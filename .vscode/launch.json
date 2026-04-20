@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug: Backend",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "src/backend/index.ts"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PORT": "3001"
+      }
+    },
+    {
+      "name": "Debug: Open Browser",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src/frontend"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug: Full Stack (Backend + Browser)",
+      "configurations": ["Debug: Backend", "Debug: Open Browser"],
+      "preLaunchTask": "Dev: Frontend Only"
+    }
+  ]
+}

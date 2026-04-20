@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0a0b10;
+  --color-background-mesh: #0d0e18;
+  --color-surface: rgba(255, 255, 255, 0.03);
+  --color-surface-solid: #12131a;
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-surface-active: rgba(255, 255, 255, 0.08);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-border-glow: rgba(59, 130, 246, 0.15);
+
+  --color-foreground: #e4e4e7;
+  --color-foreground-muted: #8b8b98;
+  --color-foreground-subtle: #52525b;
+
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-accent-muted: rgba(59, 130, 246, 0.12);
+  --color-accent-glow: rgba(59, 130, 246, 0.25);
+
+  --color-success: #22c55e;
+  --color-success-muted: rgba(34, 197, 94, 0.12);
+  --color-warning: #f59e0b;
+  --color-warning-muted: rgba(245, 158, 11, 0.12);
+  --color-danger: #ef4444;
+  --color-danger-muted: rgba(239, 68, 68, 0.12);
+  --color-info: #8b5cf6;
+  --color-info-muted: rgba(139, 92, 246, 0.12);
+
+  /* Node colors — glassy */
+  --color-node-package-bg: rgba(30, 64, 175, 0.3);
+  --color-node-package-border: rgba(59, 130, 246, 0.5);
+  --color-node-file-bg: rgba(255, 255, 255, 0.03);
+  --color-node-file-border: rgba(255, 255, 255, 0.1);
+  --color-node-class-bg: rgba(30, 58, 95, 0.3);
+  --color-node-class-border: rgba(96, 165, 250, 0.4);
+  --color-node-function-bg: rgba(26, 58, 42, 0.3);
+  --color-node-function-border: rgba(74, 222, 128, 0.4);
+  --color-node-interface-bg: rgba(46, 26, 74, 0.3);
+  --color-node-interface-border: rgba(167, 139, 250, 0.4);
+
+  --font-family-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+/* Base */
+body {
+  user-select: none;
+  overflow: hidden;
+  height: 100vh;
+  background: linear-gradient(135deg, var(--color-background) 0%, var(--color-background-mesh) 50%, var(--color-background) 100%);
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphic panel base */
+.glass-panel {
+  background: var(--color-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-color: var(--color-border);
+}
+
+/* Glow effects */
+.glow-blue {
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.15), 0 0 4px rgba(59, 130, 246, 0.1);
+}
+
+.glow-green {
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.2), 0 0 4px rgba(34, 197, 94, 0.1);
+}
+
+.glow-orange {
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.2), 0 0 4px rgba(245, 158, 11, 0.1);
+}
+
+.glow-red {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2), 0 0 4px rgba(239, 68, 68, 0.1);
+}
+
+.glow-violet {
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.2), 0 0 4px rgba(139, 92, 246, 0.1);
+}
+
+/* Loading bar animation */
+@keyframes loading {
+  0% { width: 10%; margin-left: 0; }
+  50% { width: 60%; margin-left: 20%; }
+  100% { width: 10%; margin-left: 90%; }
+}
+
+/* Pulse animation for active nodes */
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.4), 0 0 40px rgba(59, 130, 246, 0.1); }
+}
+
+.animate-node-pulse {
+  animation: node-pulse 2s ease-in-out infinite;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Allotment resize handles */
+.split-view-view .sash-container .sash {
+  background: transparent !important;
+}
+
+.split-view-view .sash-container .sash:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  transition: background 0.2s;
+}
+
+.split-view-view .sash-container .sash.active {
+  background: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* macOS title bar drag region */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
