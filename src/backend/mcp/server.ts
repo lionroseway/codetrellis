@@ -8,6 +8,7 @@ import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
 import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
+import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
 import { exportDatabase } from '../services/database';
 
@@ -354,6 +355,60 @@ export async function startMcpServer(): Promise<void> {
     async ({ plan_uid }) => {
       const devs = detectDeviations(plan_uid);
       return { content: [{ type: 'text' as const, text: JSON.stringify({ detected: devs.length, deviations: devs }, null, 2) }] };
+    }
+  );
+
+  // --- Trellis Tools ---
+
+  mcpServer.registerTool(
+    'get_drift_report',
+    {
+      description: 'Check if you are still following the plan. Compares the baseline snapshot (captured at plan approval) against the current live state. Returns what has changed, what is on track, and what has drifted.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      // Find the baseline snapshot for this plan
+      const snapshots = listSnapshots(plan_uid);
+      if (snapshots.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No baseline snapshot found for this plan. Approve the plan first to capture a baseline.' }] };
+      }
+      const diff = computeTrellisDiff(snapshots[0].id);
+      if (!diff) {
+        return { content: [{ type: 'text' as const, text: 'Could not compute diff.' }] };
+      }
+
+      // Also get plan tasks for context
+      const plan = planService.getPlan(plan_uid);
+      const completedTasks = plan?.tasks.filter((t) => t.status === 'done').length || 0;
+      const totalTasks = plan?.tasks.length || 0;
+
+      return { content: [{ type: 'text' as const, text: JSON.stringify({
+        planTitle: plan?.title,
+        taskProgress: `${completedTasks}/${totalTasks}`,
+        filesChanged: diff.addedFiles.length + diff.modifiedFiles.length,
+        addedFiles: diff.addedFiles,
+        modifiedFiles: diff.modifiedFiles,
+        removedFiles: diff.removedFiles,
+        addedEdges: diff.addedEdges.length,
+        removedEdges: diff.removedEdges.length,
+      }, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'capture_checkpoint',
+    {
+      description: 'Create a named checkpoint of the current codebase state. Useful for marking progress during long plans.',
+      inputSchema: {
+        plan_uid: z.string(),
+        name: z.string().describe('Name for this checkpoint, e.g. "After task 3"'),
+        project_path: z.string(),
+      },
+    },
+    async ({ plan_uid, name, project_path }) => {
+      const snapshot = captureCurrentTrellis(project_path, plan_uid, name);
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Checkpoint "${name}" captured (snapshot #${snapshot.id}, ${snapshot.filesJson ? JSON.parse(snapshot.filesJson).length : 0} files)` }] };
     }
   );
 

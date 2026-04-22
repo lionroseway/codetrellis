@@ -50,6 +50,8 @@ export interface ArchitectureDiff {
 
 export type ViewDepth = 'package' | 'file' | 'symbol';
 
+export type TrellisMode = 'current' | 'planned' | 'live' | 'diff';
+
 export interface ProjectionData {
   ghostFiles: Array<{ path: string; taskUid: string; taskDescription: string }>;
   modifiedFiles: Array<{ path: string; taskUid: string }>;

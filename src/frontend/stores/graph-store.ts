@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GraphNode, GraphEdge, ViewDepth, ArchitectureDiff, ProjectionData } from '@shared/types';
+import type { GraphNode, GraphEdge, ViewDepth, ArchitectureDiff, ProjectionData, TrellisMode } from '@shared/types';
 import type { LayoutMode } from '../lib/graph-builder';
 
 interface GraphState {
@@ -14,6 +14,8 @@ interface GraphState {
   };
 
   layoutMode: LayoutMode;
+  trellisMode: TrellisMode;
+  currentSnapshot: { edges: Array<{ source: string; target: string; specifiers: string[] }>; files: Array<{ path: string }> } | null;
   projectionEnabled: boolean;
   projectionData: ProjectionData | null;
 
@@ -23,6 +25,8 @@ interface GraphState {
   setFilter: (filter: Partial<GraphState['filter']>) => void;
   applyDiff: (diff: ArchitectureDiff) => void;
   setLayoutMode: (mode: LayoutMode) => void;
+  setTrellisMode: (mode: TrellisMode) => void;
+  setCurrentSnapshot: (data: GraphState['currentSnapshot']) => void;
   toggleProjection: () => void;
   setProjectionData: (data: ProjectionData | null) => void;
   clearGraph: () => void;
@@ -40,6 +44,8 @@ export const useGraphStore = create<GraphState>((set) => ({
   },
 
   layoutMode: 'map' as LayoutMode,
+  trellisMode: 'live' as TrellisMode,
+  currentSnapshot: null,
   projectionEnabled: false,
   projectionData: null,
 
@@ -74,6 +80,8 @@ export const useGraphStore = create<GraphState>((set) => ({
       return { nodes, edges };
     }),
   setLayoutMode: (mode) => set({ layoutMode: mode }),
+  setTrellisMode: (mode) => set({ trellisMode: mode }),
+  setCurrentSnapshot: (data) => set({ currentSnapshot: data }),
   toggleProjection: () => set((s) => ({ projectionEnabled: !s.projectionEnabled })),
   setProjectionData: (data) => set({ projectionData: data }),
   clearGraph: () => set({ nodes: [], edges: [], expandedNodes: new Set(), projectionData: null }),

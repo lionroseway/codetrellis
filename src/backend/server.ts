@@ -351,8 +351,21 @@ app.get('/api/plans/:uid', (req, res) => {
 // Update plan
 app.put('/api/plans/:uid', (req, res) => {
   const { title, description, status } = req.body;
+  const plan = planService.getPlan(req.params.uid);
   planService.updatePlan(req.params.uid, { title, description, status }, 'user');
-  broadcast('plan-updated', { planUid: req.params.uid });
+
+  // Auto-capture trellis snapshot when plan is approved
+  if (status === 'approved' && plan?.projectPath) {
+    try {
+      const { captureCurrentTrellis } = require('./services/trellis-service');
+      const snapshot = captureCurrentTrellis(plan.projectPath, req.params.uid, `Baseline for "${plan.title}"`);
+      broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name } });
+    } catch (err) {
+      console.warn('[API] Failed to capture trellis snapshot:', err);
+    }
+  }
+
+  broadcast('plan-updated', { planUid: req.params.uid, status });
   saveNow(() => exportDatabase());
   res.json({ ok: true });
 });
@@ -422,6 +435,38 @@ app.post('/api/plans/:uid/reconcile', (req, res) => {
     resolveDeviation(d.id, d.action);
   }
   res.json({ ok: true, resolved: deviations.length });
+});
+
+// --- Trellis Snapshots API ---
+
+app.post('/api/trellis/capture', (req, res) => {
+  const { projectPath, planUid, name } = req.body;
+  if (!projectPath) { res.status(400).json({ error: 'projectPath required' }); return; }
+  const { captureCurrentTrellis } = require('./services/trellis-service');
+  const snapshot = captureCurrentTrellis(projectPath, planUid, name);
+  broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name, snapshotType: snapshot.snapshotType } });
+  saveNow(() => exportDatabase());
+  res.json({ id: snapshot.id, name: snapshot.name, snapshotType: snapshot.snapshotType, createdAt: snapshot.createdAt });
+});
+
+app.get('/api/trellis/snapshots', (req, res) => {
+  const { listSnapshots } = require('./services/trellis-service');
+  const planUid = req.query.plan as string | undefined;
+  res.json(listSnapshots(planUid));
+});
+
+app.get('/api/trellis/:id', (req, res) => {
+  const { getSnapshot } = require('./services/trellis-service');
+  const snapshot = getSnapshot(parseInt(req.params.id));
+  if (!snapshot) { res.status(404).json({ error: 'Snapshot not found' }); return; }
+  res.json(snapshot);
+});
+
+app.get('/api/trellis/:id/diff', (req, res) => {
+  const { computeTrellisDiff } = require('./services/trellis-service');
+  const diff = computeTrellisDiff(parseInt(req.params.id));
+  if (!diff) { res.status(404).json({ error: 'Snapshot not found' }); return; }
+  res.json(diff);
 });
 
 // --- Comments API ---

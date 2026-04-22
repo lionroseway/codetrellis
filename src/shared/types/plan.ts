@@ -18,6 +18,15 @@ export interface Plan {
   completedTaskCount?: number;
 }
 
+export interface SymbolSpec {
+  name: string;
+  kind: 'function' | 'class' | 'interface' | 'type' | 'method' | 'enum';
+  action: 'add' | 'modify' | 'remove' | 'move';
+  description?: string;
+  signature?: string;    // e.g. "signToken(payload: JwtPayload, secret: string): string"
+  moveTo?: string;       // target file if action is 'move'
+}
+
 export interface Task {
   uid: string;
   planUid: string;
@@ -25,13 +34,15 @@ export interface Task {
   description: string;
   status: TaskStatus;
   assignee: string | null;
-  assigneeType: string | null; // 'claude-code', 'cursor', 'manual', etc.
-  assigneeModel: string | null; // 'claude-opus-4', 'gpt-4o', etc.
+  assigneeType: string | null;
+  assigneeModel: string | null;
   affectedFiles: string[];
   affectedSymbols: string[];
   newConnections: Array<{ from: string; to: string }>;
   removedConnections: Array<{ from: string; to: string }>;
-  dependencies: string[]; // task UIDs
+  dependencies: string[];
+  fileSpec?: string;             // Markdown description of what the file should do
+  symbolSpecs?: SymbolSpec[];    // Detailed symbol-level changes
   createdAt: number;
   updatedAt: number;
 }
@@ -90,5 +101,7 @@ export interface CreatePlanInput {
     newConnections?: Array<{ from: string; to: string }>;
     removedConnections?: Array<{ from: string; to: string }>;
     dependencies?: string[];
+    fileSpec?: string;
+    symbolSpecs?: SymbolSpec[];
   }>;
 }

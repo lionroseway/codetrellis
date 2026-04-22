@@ -97,6 +97,8 @@ export async function initDatabase(): Promise<void> {
       new_connections TEXT DEFAULT '[]',
       removed_connections TEXT DEFAULT '[]',
       dependencies TEXT DEFAULT '[]',
+      file_spec TEXT,
+      symbol_specs TEXT DEFAULT '[]',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -140,6 +142,20 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_plan_versions_plan ON plan_versions(plan_uid);
     CREATE INDEX IF NOT EXISTS idx_sessions_plan ON agent_sessions(active_plan_uid);
     CREATE INDEX IF NOT EXISTS idx_deviations_plan ON deviations(plan_uid);
+
+    CREATE TABLE IF NOT EXISTS trellis_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      snapshot_type TEXT NOT NULL,
+      plan_uid TEXT REFERENCES plans(uid),
+      git_branch TEXT,
+      files_json TEXT NOT NULL,
+      edges_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_trellis_plan ON trellis_snapshots(plan_uid);
+    CREATE INDEX IF NOT EXISTS idx_trellis_type ON trellis_snapshots(snapshot_type);
   `);
 
   console.log('[DB] SQLite initialized');

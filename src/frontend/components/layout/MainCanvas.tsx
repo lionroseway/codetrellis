@@ -12,7 +12,7 @@ import {
   getViewportForBounds,
   type NodeMouseHandler,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -20,7 +20,7 @@ import { useGraphStore } from '../../stores/graph-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { useUiStore } from '../../stores/ui-store';
-import { buildDependencyGraph, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
+import { buildDependencyGraph, buildFromSnapshot, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
 import { PackageNode } from '../graph/nodes/PackageNode';
 import { DirectoryNode } from '../graph/nodes/DirectoryNode';
 import { FileNode } from '../graph/nodes/FileNode';
@@ -44,6 +44,10 @@ export function MainCanvas() {
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
   const layoutMode = useGraphStore((s) => s.layoutMode);
   const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
+  const trellisMode = useGraphStore((s) => s.trellisMode);
+  const setTrellisMode = useGraphStore((s) => s.setTrellisMode);
+  const currentSnapshot = useGraphStore((s) => s.currentSnapshot);
+  const setCurrentSnapshot = useGraphStore((s) => s.setCurrentSnapshot);
   const projectionEnabled = useGraphStore((s) => s.projectionEnabled);
   const projectionData = useGraphStore((s) => s.projectionData);
   const toggleProjection = useGraphStore((s) => s.toggleProjection);
@@ -115,6 +119,29 @@ export function MainCanvas() {
       .catch(() => setProjectionData(null));
   }, [activePlanUid, projectionEnabled, setProjectionData]);
 
+  // Fetch snapshot when switching to current/diff mode
+  useEffect(() => {
+    if (trellisMode !== 'current' && trellisMode !== 'diff' && trellisMode !== 'planned') return;
+    if (!activePlanUid) {
+      setCurrentSnapshot(null);
+      return;
+    }
+    // Find snapshot for this plan
+    fetch(`/api/trellis/snapshots?plan=${activePlanUid}`)
+      .then((r) => r.json())
+      .then((snapshots: any[]) => {
+        if (snapshots.length === 0) { setCurrentSnapshot(null); return; }
+        const snapshotId = snapshots[0].id;
+        return fetch(`/api/trellis/${snapshotId}`).then((r) => r.json());
+      })
+      .then((snapshot: any) => {
+        if (snapshot?.data) {
+          setCurrentSnapshot({ edges: snapshot.data.edges, files: snapshot.data.files });
+        }
+      })
+      .catch(() => setCurrentSnapshot(null));
+  }, [trellisMode, activePlanUid, setCurrentSnapshot]);
+
   // Fetch symbols for expanded files in symbol view
   useEffect(() => {
     if (viewDepth !== 'symbol') return;
@@ -143,9 +170,35 @@ export function MainCanvas() {
 
   // Build the graph
   const graphData = useMemo(() => {
+    // Current mode: render from frozen snapshot
+    if (trellisMode === 'current' && currentSnapshot) {
+      return buildFromSnapshot(currentSnapshot.edges, viewDepth, layoutMode, null, true);
+    }
+
+    // Planned mode: render snapshot + projection overlay
+    if (trellisMode === 'planned' && currentSnapshot) {
+      return buildFromSnapshot(currentSnapshot.edges, viewDepth, layoutMode, null, false);
+      // Projection overlay added by projectionData below
+    }
+
+    // Diff mode: live graph with diff against snapshot
+    if (trellisMode === 'diff' && currentSnapshot && depEdges.length > 0) {
+      // Compute client-side diff
+      const snapshotFileSet = new Set(currentSnapshot.files.map((f: any) => f.path));
+      const liveFileSet = new Set(depEdges.flatMap((e) => [e.sourceRelative, e.targetRelative]));
+      const clientDiff = {
+        addedFiles: [...liveFileSet].filter((f) => !snapshotFileSet.has(f)),
+        removedFiles: [...snapshotFileSet].filter((f) => !liveFileSet.has(f)),
+        modifiedFiles: [] as string[], // Would need hash comparison for true modified detection
+        blastRadius: [] as string[],
+      };
+      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, clientDiff, recentlyChanged, projectionEnabled ? projectionData : null, layoutMode);
+    }
+
+    // Live mode (default): real-time dependencies
     if (depEdges.length === 0) return { nodes: [], edges: [] };
     return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionEnabled ? projectionData : null, layoutMode);
-  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionData, projectionEnabled, layoutMode]);
+  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(graphData.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graphData.edges);
@@ -221,7 +274,31 @@ export function MainCanvas() {
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
         <Panel position="top-right">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            {/* Trellis mode selector */}
+            <div className="flex items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+              {([
+                { mode: 'live' as const, icon: Radio, label: 'Live', color: 'text-green-400' },
+                { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-blue-400' },
+                { mode: 'planned' as const, icon: Target, label: 'Planned', color: 'text-amber-400' },
+                { mode: 'diff' as const, icon: GitCompare, label: 'Diff', color: 'text-violet-400' },
+              ] as const).map(({ mode, icon: Icon, label, color }) => (
+                <button
+                  key={mode}
+                  onClick={() => setTrellisMode(mode)}
+                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
+                    trellisMode === mode
+                      ? `bg-white/[0.08] ${color} shadow-[0_0_6px_currentColor]`
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                  title={`${label} view`}
+                >
+                  <Icon size={11} />
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {/* Layout toggle */}
             <div className="flex items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
               <button

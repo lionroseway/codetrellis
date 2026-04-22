@@ -336,6 +336,119 @@ function getLanguage(filename: string): string {
   return map[ext] || '';
 }
 
+/**
+ * Build a graph from a frozen trellis snapshot.
+ * Used for "Current" (baseline) and "Diff" modes.
+ */
+export function buildFromSnapshot(
+  snapshotEdges: Array<{ source: string; target: string; specifiers: string[] }>,
+  viewDepth: ViewDepth,
+  layoutMode: LayoutMode = 'map',
+  diffData?: DiffData | null,
+  frozen = false,
+): GraphData {
+  // Convert snapshot edges to DependencyEdge format
+  const depEdges: DependencyEdge[] = snapshotEdges.map((e) => ({
+    source: e.source,
+    target: e.target,
+    sourceRelative: e.source,
+    targetRelative: e.target,
+    specifiers: e.specifiers,
+  }));
+
+  const changeMap = buildChangeMap(diffData);
+  const layout = layoutMode === 'tree' ? applyTreeLayout : applyForceLayout;
+
+  // Build file view from snapshot edges (package view groups them)
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+
+  if (viewDepth === 'package') {
+    // Group by top-level dir
+    const allFiles = new Set<string>();
+    for (const e of depEdges) {
+      allFiles.add(e.sourceRelative);
+      allFiles.add(e.targetRelative);
+    }
+
+    const groups = new Map<string, Set<string>>();
+    for (const file of allFiles) {
+      const parts = file.split('/');
+      const group = parts.length >= 3 ? `${parts[0]}/${parts[1]}` : parts[0];
+      if (!groups.has(group)) groups.set(group, new Set());
+      groups.get(group)!.add(file);
+    }
+
+    for (const [group, files] of groups) {
+      nodes.push({
+        id: group,
+        type: 'packageNode',
+        position: { x: 0, y: 0 },
+        data: { label: group, childCount: files.size, expanded: false, frozen },
+      });
+    }
+
+    const seenEdges = new Set<string>();
+    for (const dep of depEdges) {
+      const srcParts = dep.sourceRelative.split('/');
+      const tgtParts = dep.targetRelative.split('/');
+      const srcGroup = srcParts.length >= 3 ? `${srcParts[0]}/${srcParts[1]}` : srcParts[0];
+      const tgtGroup = tgtParts.length >= 3 ? `${tgtParts[0]}/${tgtParts[1]}` : tgtParts[0];
+      if (srcGroup === tgtGroup) continue;
+      const key = `${srcGroup}->${tgtGroup}`;
+      if (seenEdges.has(key)) continue;
+      seenEdges.add(key);
+      edges.push({
+        id: `snap:${key}`,
+        source: srcGroup,
+        target: tgtGroup,
+        type: 'smoothstep',
+        animated: !frozen,
+        style: { stroke: frozen ? '#3f3f46' : '#3b82f6', strokeWidth: frozen ? 1 : 1.5, opacity: frozen ? 0.5 : 1 },
+      });
+    }
+  } else {
+    // File view
+    const fileSet = new Set<string>();
+    for (const e of depEdges) {
+      fileSet.add(e.sourceRelative);
+      fileSet.add(e.targetRelative);
+    }
+
+    for (const file of fileSet) {
+      const name = file.split('/').pop() || file;
+      const lang = getLanguage(name);
+      const status = changeMap.get(file);
+      nodes.push({
+        id: file,
+        type: 'fileNode',
+        position: { x: 0, y: 0 },
+        data: {
+          label: name,
+          fullPath: file,
+          language: lang,
+          nodeType: 'file',
+          changeStatus: status,
+          frozen,
+        },
+      });
+    }
+
+    for (const dep of depEdges) {
+      edges.push({
+        id: `snap:${dep.sourceRelative}->${dep.targetRelative}`,
+        source: dep.sourceRelative,
+        target: dep.targetRelative,
+        type: 'smoothstep',
+        animated: !frozen,
+        style: { stroke: frozen ? '#3f3f46' : '#3b82f6', strokeWidth: frozen ? 1 : 1.5, opacity: frozen ? 0.5 : 1 },
+      });
+    }
+  }
+
+  return layout(nodes, edges);
+}
+
 function applyTreeLayout(nodes: Node[], edges: Edge[]): GraphData {
   if (nodes.length === 0) return { nodes, edges };
 
