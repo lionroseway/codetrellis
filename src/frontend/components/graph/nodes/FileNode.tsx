@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { ChevronRight, ChevronDown, FileCode, FileJson, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, FileCode, FileJson, FileText, Check } from 'lucide-react';
 
 interface FileNodeData {
   label: string;
@@ -8,6 +8,10 @@ interface FileNodeData {
   symbolCount?: number;
   expanded?: boolean;
   changeStatus?: string;
+  ghost?: boolean;
+  taskDescription?: string;
+  taskNumber?: number;
+  done?: boolean;
   onToggle?: () => void;
   [key: string]: unknown;
 }
@@ -28,28 +32,56 @@ const CHANGE_STYLES: Record<string, string> = {
   removed: 'ring-1 ring-red-400/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] opacity-50',
   affected: 'ring-1 ring-violet-400/30 shadow-[0_0_10px_rgba(139,92,246,0.15)]',
   active: 'ring-2 ring-accent animate-node-pulse',
-  planned_add: 'border-dashed !border-green-400/40 shadow-[0_0_12px_rgba(34,197,94,0.15)] opacity-70',
-  planned_modify: 'ring-1 ring-dashed ring-orange-400/40 shadow-[0_0_12px_rgba(249,115,22,0.15)]',
-  planned_remove: 'border-dashed !border-red-400/40 opacity-40',
-  in_progress_task: 'ring-2 ring-accent animate-node-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]',
+  planned_add: 'border-dashed !border-green-400/50 shadow-[0_0_20px_rgba(34,197,94,0.2)] bg-green-950/20',
+  planned_modify: 'ring-2 ring-amber-400/40 shadow-[0_0_20px_rgba(249,115,22,0.2)]',
+  planned_remove: 'border-dashed !border-red-400/50 opacity-30 line-through shadow-[0_0_15px_rgba(239,68,68,0.15)]',
+  in_progress_task: 'ring-2 ring-accent animate-node-pulse shadow-[0_0_25px_rgba(59,130,246,0.35)]',
+};
+
+const BADGE_STYLES: Record<string, { text: string; bg: string; label: string }> = {
+  planned_add: { text: 'text-green-300', bg: 'bg-green-500/20 border-green-500/30', label: '+ NEW' },
+  planned_modify: { text: 'text-amber-300', bg: 'bg-amber-500/20 border-amber-500/30', label: '~ MOD' },
+  planned_remove: { text: 'text-red-300', bg: 'bg-red-500/20 border-red-500/30', label: '- DEL' },
+  in_progress_task: { text: 'text-blue-300', bg: 'bg-accent/20 border-accent/30', label: 'ACTIVE' },
+  added: { text: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20', label: 'NEW' },
+  modified: { text: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', label: 'MOD' },
+  removed: { text: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', label: 'DEL' },
+  affected: { text: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/20', label: 'DEP' },
+  active: { text: 'text-blue-400', bg: 'bg-accent/10 border-accent/20', label: 'LIVE' },
 };
 
 function FileIcon({ language }: { language?: string }) {
   const color = LANG_STYLES[language || '']?.iconColor || 'text-zinc-500';
-  const glow = `drop-shadow-[0_0_3px_currentColor]`;
-  if (language === 'json') return <FileJson size={13} className={`${color} ${glow} shrink-0`} />;
+  if (language === 'json') return <FileJson size={13} className={`${color} drop-shadow-[0_0_3px_currentColor] shrink-0`} />;
   if (language === 'markdown') return <FileText size={13} className={`${color} shrink-0`} />;
-  return <FileCode size={13} className={`${color} ${glow} shrink-0`} />;
+  return <FileCode size={13} className={`${color} drop-shadow-[0_0_3px_currentColor] shrink-0`} />;
 }
 
 export function FileNode({ data }: NodeProps) {
   const d = data as unknown as FileNodeData;
+  const isGhost = d.ghost || d.changeStatus === 'planned_add';
   const style = LANG_STYLES[d.language || ''] || { border: 'border-zinc-700/30', bg: 'bg-zinc-900/30', iconColor: 'text-zinc-500', glow: '' };
   const changeStyle = d.changeStatus ? CHANGE_STYLES[d.changeStatus] || '' : '';
+  const badge = d.changeStatus ? BADGE_STYLES[d.changeStatus] : null;
 
   return (
-    <div className={`px-3 py-1.5 rounded-lg border ${style.border} ${style.bg} ${style.glow} ${changeStyle} backdrop-blur-sm min-w-[100px] hover:bg-white/[0.03] transition-all`}>
+    <div className={`relative px-3 py-1.5 rounded-lg border ${isGhost ? 'border-dashed border-green-400/40 bg-green-950/15' : `${style.border} ${style.bg}`} ${style.glow} ${changeStyle} backdrop-blur-sm min-w-[100px] hover:bg-white/[0.03] transition-all`}>
       <Handle type="target" position={Position.Top} className="!bg-zinc-400 !w-1.5 !h-1.5" />
+
+      {/* Task number badge (top-left corner) */}
+      {d.taskNumber != null && (
+        <div className="absolute -top-2 -left-2 w-4 h-4 rounded-full bg-accent/80 text-white text-[8px] font-bold flex items-center justify-center shadow-[0_0_6px_rgba(59,130,246,0.5)]">
+          {d.taskNumber}
+        </div>
+      )}
+
+      {/* Done checkmark (top-right corner) */}
+      {d.done && (
+        <div className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-green-500/80 text-white flex items-center justify-center shadow-[0_0_6px_rgba(34,197,94,0.5)]">
+          <Check size={10} />
+        </div>
+      )}
+
       <div className="flex items-center gap-1.5">
         {d.onToggle && (
           <button
@@ -60,22 +92,10 @@ export function FileNode({ data }: NodeProps) {
           </button>
         )}
         <FileIcon language={d.language} />
-        <span className="text-[11px] text-zinc-300 truncate">{d.label}</span>
-        {d.changeStatus && (
-          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-            d.changeStatus === 'added' || d.changeStatus === 'planned_add' ? 'text-green-400 bg-green-500/10 border border-green-500/20' :
-            d.changeStatus === 'modified' || d.changeStatus === 'planned_modify' ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20' :
-            d.changeStatus === 'removed' || d.changeStatus === 'planned_remove' ? 'text-red-400 bg-red-500/10 border border-red-500/20' :
-            d.changeStatus === 'in_progress_task' ? 'text-accent bg-accent/10 border border-accent/20' :
-            'text-violet-400 bg-violet-500/10 border border-violet-500/20'
-          }`}>
-            {d.changeStatus === 'planned_add' ? 'PLAN+' :
-             d.changeStatus === 'planned_modify' ? 'PLAN~' :
-             d.changeStatus === 'planned_remove' ? 'PLAN-' :
-             d.changeStatus === 'in_progress_task' ? 'ACTIVE' :
-             d.changeStatus === 'added' ? 'NEW' :
-             d.changeStatus === 'modified' ? 'MOD' :
-             d.changeStatus === 'removed' ? 'DEL' : 'DEP'}
+        <span className={`text-[11px] truncate ${isGhost ? 'text-green-300/70 italic' : 'text-zinc-300'}`}>{d.label}</span>
+        {badge && (
+          <span className={`text-[7px] font-bold px-1.5 py-0.5 rounded-full border ${badge.bg} ${badge.text}`}>
+            {badge.label}
           </span>
         )}
         {!d.changeStatus && d.symbolCount != null && d.symbolCount > 0 && (
@@ -86,6 +106,9 @@ export function FileNode({ data }: NodeProps) {
       </div>
       {d.fullPath && (
         <div className="text-[9px] text-zinc-600 truncate mt-0.5">{d.fullPath}</div>
+      )}
+      {isGhost && d.taskDescription && (
+        <div className="text-[8px] text-green-400/50 truncate mt-0.5 italic">{d.taskDescription}</div>
       )}
       <Handle type="source" position={Position.Bottom} className="!bg-zinc-400 !w-1.5 !h-1.5" />
     </div>

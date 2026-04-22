@@ -169,14 +169,32 @@ export function updateTask(taskUid: string, updates: Partial<Pick<Task, 'status'
   markDirty();
 }
 
-export function claimTask(taskUid: string, agentId: string, agentType: string, model?: string): boolean {
-  const result = getDb().exec(`SELECT status, assignee FROM tasks WHERE uid = ?`, [taskUid]);
-  if (!result[0]?.values[0]) return false;
-  const [status, assignee] = result[0].values[0];
-  if (assignee || status !== 'pending') return false;
+export function claimTask(taskUid: string, agentId: string, agentType: string, model?: string): { ok: boolean; conflicts?: string[] } {
+  const result = getDb().exec(`SELECT status, assignee, plan_uid, affected_files FROM tasks WHERE uid = ?`, [taskUid]);
+  if (!result[0]?.values[0]) return { ok: false };
+  const [status, assignee, planUid, affectedFilesJson] = result[0].values[0];
+  if (assignee || status !== 'pending') return { ok: false };
+
+  // Check for conflicts — are any other in-progress tasks touching the same files?
+  const affectedFiles: string[] = JSON.parse((affectedFilesJson as string) || '[]');
+  const conflicts: string[] = [];
+
+  if (affectedFiles.length > 0) {
+    const otherTasks = getTasksByPlan(planUid as string);
+    for (const other of otherTasks) {
+      if (other.uid === taskUid) continue;
+      if (other.status !== 'in_progress' && other.status !== 'assigned') continue;
+      if (other.assignee === agentId) continue; // Same agent, no conflict
+
+      const overlap = other.affectedFiles.filter((f) => affectedFiles.includes(f));
+      if (overlap.length > 0) {
+        conflicts.push(`Task "${other.description}" (${other.assignee}) also affects: ${overlap.join(', ')}`);
+      }
+    }
+  }
 
   updateTask(taskUid, { status: 'assigned', assignee: agentId, assigneeType: agentType, assigneeModel: model || null });
-  return true;
+  return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
 }
 
 export function getNextTask(planUid: string): Task | null {

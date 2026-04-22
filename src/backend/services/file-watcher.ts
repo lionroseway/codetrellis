@@ -3,6 +3,7 @@ import path from 'node:path';
 import { parseFile, initParser } from './ast-parser';
 import { storeParsedFile, getFileHash } from './database';
 import { broadcast } from '../server';
+import { checkFileDeviation } from './deviation-service';
 
 let watcher: FSWatcher | null = null;
 
@@ -50,11 +51,15 @@ export async function startWatching(projectRoot: string): Promise<void> {
     storeParsedFile(parsed, projectRoot);
     console.log(`[Watcher] Re-parsed: ${path.relative(projectRoot, filePath)}`);
 
+    const relativePath = path.relative(projectRoot, filePath);
     broadcast('file-changed', {
       path: filePath,
-      relativePath: path.relative(projectRoot, filePath),
+      relativePath,
       symbols: parsed.symbols.map((s) => ({ name: s.name, kind: s.kind })),
     });
+
+    // Check for plan deviations
+    try { checkFileDeviation(relativePath); } catch { /* ignore */ }
   });
 
   watcher.on('add', (filePath) => {

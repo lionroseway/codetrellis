@@ -92,6 +92,18 @@ body {
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.2), 0 0 4px rgba(139, 92, 246, 0.1);
 }
 
+/* Toast slide in */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Checkmark overlay pulse */
+@keyframes checkPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* Loading bar animation */
 @keyframes loading {
   0% { width: 10%; margin-left: 0; }

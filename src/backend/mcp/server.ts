@@ -7,6 +7,7 @@ import { z } from 'zod';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
+import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
 import { saveNow } from '../services/persistence';
 import { exportDatabase } from '../services/database';
 
@@ -194,12 +195,18 @@ export async function startMcpServer(): Promise<void> {
       },
     },
     async ({ plan_uid, task_uid, agent_type, model }) => {
-      const ok = planService.claimTask(task_uid, agent_type || 'mcp-agent', agent_type || 'mcp', model);
-      if (ok) {
+      const result = planService.claimTask(task_uid, agent_type || 'mcp-agent', agent_type || 'mcp', model);
+      if (result.ok) {
         broadcast('task-claimed', { planUid: plan_uid, taskUid: task_uid, agentId: agent_type || 'mcp-agent' });
+        if (result.conflicts) {
+          broadcast('conflict-detected', { planUid: plan_uid, taskUid: task_uid, message: result.conflicts.join('; ') });
+        }
         saveNow(() => exportDatabase());
       }
-      return { content: [{ type: 'text' as const, text: ok ? `Task ${task_uid} claimed.` : 'Task already claimed or not pending.' }] };
+      const msg = result.ok
+        ? (result.conflicts ? `Task claimed. WARNING: ${result.conflicts.join('; ')}` : `Task ${task_uid} claimed.`)
+        : 'Task already claimed or not pending.';
+      return { content: [{ type: 'text' as const, text: msg }] };
     }
   );
 
@@ -300,6 +307,53 @@ export async function startMcpServer(): Promise<void> {
         sessionService.setActivePlan(sessions[sessions.length - 1].sessionId, plan_uid);
       }
       return { content: [{ type: 'text' as const, text: `Active plan set to ${plan_uid}` }] };
+    }
+  );
+
+  // --- Deviation Tools ---
+
+  mcpServer.registerTool(
+    'get_deviations',
+    {
+      description: 'Get all deviations between a plan and the actual codebase state. Shows where reality diverges from the plan.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      const devs = getDeviations(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(devs, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'reconcile',
+    {
+      description: 'Resolve deviations from a plan. Accept (update plan to match), revert (flag for review), or ignore.',
+      inputSchema: {
+        plan_uid: z.string(),
+        deviations: z.array(z.object({
+          id: z.number(),
+          action: z.enum(['accepted', 'reverted', 'ignored']),
+        })),
+      },
+    },
+    async ({ plan_uid, deviations }) => {
+      for (const d of deviations) {
+        resolveDeviation(d.id, d.action);
+      }
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Resolved ${deviations.length} deviations for plan ${plan_uid}` }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'detect_deviations',
+    {
+      description: 'Run deviation detection for a plan — compares plan expectations against actual codebase state.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      const devs = detectDeviations(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ detected: devs.length, deviations: devs }, null, 2) }] };
     }
   );
 

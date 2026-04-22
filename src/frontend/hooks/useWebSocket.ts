@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAgentStore } from '../stores/agent-store';
 import { usePlanStore } from '../stores/plan-store';
+import { useToastStore } from '../stores/toast-store';
 import type { AgentEvent } from '../../shared/types';
 
 /**
@@ -67,15 +68,36 @@ export function useWebSocket() {
           // Plan events
           if (type === 'plan-created') {
             usePlanStore.getState().onPlanCreated(payload.plan);
+            useToastStore.getState().addToast({ type: 'info', title: 'New plan created', message: payload.plan?.title });
           }
           if (type === 'plan-updated') {
             usePlanStore.getState().onPlanUpdated(payload.planUid);
           }
-          if (type === 'task-updated' || type === 'task-claimed') {
+          if (type === 'task-updated') {
             usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, payload.status || 'assigned');
+            if (payload.status === 'done') {
+              useToastStore.getState().addToast({ type: 'success', title: 'Task completed', message: `Task marked as done` });
+            }
+            if (payload.status === 'in_progress') {
+              useToastStore.getState().addToast({ type: 'info', title: 'Task started', message: 'Agent is working on a task' });
+            }
+          }
+          if (type === 'task-claimed') {
+            usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, 'assigned');
+            useToastStore.getState().addToast({ type: 'info', title: 'Task claimed', message: `Assigned to ${payload.agentId || 'agent'}` });
           }
           if (type === 'comment-added') {
             usePlanStore.getState().onCommentAdded(payload.comment);
+            useToastStore.getState().addToast({ type: 'info', title: 'New comment', message: payload.comment?.body?.substring(0, 60) });
+          }
+          if (type === 'deviation-detected') {
+            useToastStore.getState().addToast({ type: 'warning', title: 'Deviation detected', message: payload.deviation?.description, duration: 8000 });
+          }
+          if (type === 'conflict-detected') {
+            useToastStore.getState().addToast({ type: 'error', title: 'Conflict!', message: payload.message, duration: 10000 });
+          }
+          if (type === 'session-registered') {
+            useToastStore.getState().addToast({ type: 'success', title: 'Agent connected', message: `${payload.agentType || 'Agent'} via MCP` });
           }
 
           // Execution tracking — mark files as actively being worked on

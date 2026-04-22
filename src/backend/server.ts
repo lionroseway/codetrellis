@@ -380,11 +380,14 @@ app.put('/api/plans/:uid/tasks/:taskUid', (req, res) => {
 // Claim task
 app.post('/api/plans/:uid/tasks/:taskUid/claim', (req, res) => {
   const { agentId, agentType, model } = req.body;
-  const ok = planService.claimTask(req.params.taskUid, agentId, agentType, model);
-  if (ok) {
+  const result = planService.claimTask(req.params.taskUid, agentId, agentType, model);
+  if (result.ok) {
     broadcast('task-claimed', { planUid: req.params.uid, taskUid: req.params.taskUid, agentId });
+    if (result.conflicts) {
+      broadcast('conflict-detected', { planUid: req.params.uid, taskUid: req.params.taskUid, message: result.conflicts.join('; ') });
+    }
   }
-  res.json({ ok });
+  res.json(result);
 });
 
 // Get next available task
@@ -402,6 +405,23 @@ app.get('/api/plans/:uid/versions', (req, res) => {
 app.get('/api/plans/:uid/projection', (req, res) => {
   const { computeProjection } = require('./services/projection-service');
   res.json(computeProjection(req.params.uid));
+});
+
+// Plan deviations
+app.get('/api/plans/:uid/deviations', (req, res) => {
+  const { getDeviations } = require('./services/deviation-service');
+  res.json(getDeviations(req.params.uid));
+});
+
+// Reconcile deviations
+app.post('/api/plans/:uid/reconcile', (req, res) => {
+  const { resolveDeviation } = require('./services/deviation-service');
+  const { deviations } = req.body; // [{id, action}]
+  if (!Array.isArray(deviations)) { res.status(400).json({ error: 'deviations array required' }); return; }
+  for (const d of deviations) {
+    resolveDeviation(d.id, d.action);
+  }
+  res.json({ ok: true, resolved: deviations.length });
 });
 
 // --- Comments API ---
