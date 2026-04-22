@@ -1,6 +1,9 @@
 import dagre from '@dagrejs/dagre';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
 import type { Node, Edge } from '@xyflow/react';
-import type { ViewDepth } from '../../shared/types';
+import type { ViewDepth, ProjectionData } from '../../shared/types';
+
+export type LayoutMode = 'map' | 'tree';
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 44;
@@ -48,18 +51,70 @@ export function buildDependencyGraph(
   onToggle: (nodeId: string) => void,
   diffData?: DiffData | null,
   recentlyChanged?: Set<string>,
+  projectionData?: ProjectionData | null,
+  layoutMode: LayoutMode = 'map',
 ): GraphData {
   const changeMap = buildChangeMap(diffData);
-  // Mark recently changed files as 'active' if not already in changeMap
   if (recentlyChanged) {
     for (const f of recentlyChanged) {
       if (!changeMap.has(f)) changeMap.set(f, 'active');
     }
   }
-  if (viewDepth === 'package') {
-    return buildPackageView(depEdges, expandedNodes, onToggle, changeMap);
+  // Apply projection data to change map
+  if (projectionData) {
+    for (const f of projectionData.modifiedFiles) {
+      if (!changeMap.has(f.path)) changeMap.set(f.path, 'planned_modify');
+    }
+    for (const f of projectionData.removedFiles) {
+      if (!changeMap.has(f.path)) changeMap.set(f.path, 'planned_remove');
+    }
   }
-  return buildFileView(depEdges, viewDepth, expandedNodes, symbolsMap, onToggle, changeMap);
+
+  const layout = layoutMode === 'tree' ? applyTreeLayout : applyForceLayout;
+
+  let result: GraphData;
+  if (viewDepth === 'package') {
+    result = buildPackageView(depEdges, expandedNodes, onToggle, changeMap, layout);
+  } else {
+    result = buildFileView(depEdges, viewDepth, expandedNodes, symbolsMap, onToggle, changeMap, layout);
+  }
+
+  // Add ghost nodes and edges from projection
+  if (projectionData) {
+    for (const ghost of projectionData.ghostFiles) {
+      const name = ghost.path.split('/').pop() || ghost.path;
+      result.nodes.push({
+        id: `ghost:${ghost.path}`,
+        type: 'fileNode',
+        position: { x: 0, y: 0 },
+        data: {
+          label: name,
+          fullPath: ghost.path,
+          language: getLanguage(name),
+          nodeType: 'file',
+          changeStatus: 'planned_add',
+          ghost: true,
+          taskDescription: ghost.taskDescription,
+        },
+      });
+    }
+    for (const edge of projectionData.newEdges) {
+      const sourceId = result.nodes.find((n) => n.id === edge.from || n.id === `ghost:${edge.from}`)?.id || edge.from;
+      const targetId = result.nodes.find((n) => n.id === edge.to || n.id === `ghost:${edge.to}`)?.id || edge.to;
+      result.edges.push({
+        id: `proj:${edge.from}->${edge.to}`,
+        source: sourceId,
+        target: targetId,
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: 'rgba(34, 197, 94, 0.4)', strokeWidth: 2, strokeDasharray: '6 3' },
+      });
+    }
+    // Re-layout with the new nodes
+    result = layout(result.nodes, result.edges);
+  }
+
+  return result;
 }
 
 function buildChangeMap(diffData?: DiffData | null): Map<string, string> {
@@ -83,6 +138,7 @@ function buildPackageView(
   expandedNodes: Set<string>,
   onToggle: (nodeId: string) => void,
   changeMap: Map<string, string>,
+  layoutFn: (nodes: Node[], edges: Edge[]) => GraphData = applyTreeLayout,
 ): GraphData {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -184,7 +240,7 @@ function buildPackageView(
     }
   }
 
-  return applyLayout(nodes, edges);
+  return layoutFn(nodes, edges);
 }
 
 /**
@@ -198,6 +254,7 @@ function buildFileView(
   symbolsMap: Map<string, FileSymbol[]>,
   onToggle: (nodeId: string) => void,
   changeMap: Map<string, string>,
+  layoutFn: (nodes: Node[], edges: Edge[]) => GraphData = applyTreeLayout,
 ): GraphData {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -267,7 +324,7 @@ function buildFileView(
     });
   }
 
-  return applyLayout(nodes, edges);
+  return layoutFn(nodes, edges);
 }
 
 function getLanguage(filename: string): string {
@@ -279,7 +336,7 @@ function getLanguage(filename: string): string {
   return map[ext] || '';
 }
 
-function applyLayout(nodes: Node[], edges: Edge[]): GraphData {
+function applyTreeLayout(nodes: Node[], edges: Edge[]): GraphData {
   if (nodes.length === 0) return { nodes, edges };
 
   const g = new dagre.graphlib.Graph();
@@ -302,6 +359,55 @@ function applyLayout(nodes: Node[], edges: Edge[]): GraphData {
       position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 },
     };
   });
+
+  return { nodes: layoutedNodes, edges };
+}
+
+/**
+ * Force-directed layout — organic, map-like positioning.
+ * Nodes repel each other, edges act as springs.
+ */
+function applyForceLayout(nodes: Node[], edges: Edge[]): GraphData {
+  if (nodes.length === 0) return { nodes, edges };
+
+  interface ForceNode extends SimulationNodeDatum {
+    id: string;
+    nodeIndex: number;
+  }
+
+  const forceNodes: ForceNode[] = nodes.map((n, i) => ({
+    id: n.id,
+    nodeIndex: i,
+    x: Math.random() * 800 - 400,
+    y: Math.random() * 800 - 400,
+  }));
+
+  const nodeIdToIndex = new Map(forceNodes.map((n, i) => [n.id, i]));
+
+  const forceEdges: SimulationLinkDatum<ForceNode>[] = edges
+    .filter((e) => nodeIdToIndex.has(e.source) && nodeIdToIndex.has(e.target))
+    .map((e) => ({
+      source: nodeIdToIndex.get(e.source)!,
+      target: nodeIdToIndex.get(e.target)!,
+    }));
+
+  const sim = forceSimulation(forceNodes)
+    .force('link', forceLink(forceEdges).distance(120).strength(0.3))
+    .force('charge', forceManyBody().strength(-300).distanceMax(500))
+    .force('center', forceCenter(0, 0))
+    .force('collide', forceCollide(NODE_WIDTH * 0.6))
+    .stop();
+
+  // Run simulation synchronously
+  for (let i = 0; i < 150; i++) sim.tick();
+
+  const layoutedNodes = nodes.map((node, i) => ({
+    ...node,
+    position: {
+      x: (forceNodes[i].x || 0) - NODE_WIDTH / 2,
+      y: (forceNodes[i].y || 0) - NODE_HEIGHT / 2,
+    },
+  }));
 
   return { nodes: layoutedNodes, edges };
 }

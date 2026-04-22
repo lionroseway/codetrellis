@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { GraphNode, GraphEdge, ViewDepth, ArchitectureDiff } from '@shared/types';
+import type { GraphNode, GraphEdge, ViewDepth, ArchitectureDiff, ProjectionData } from '@shared/types';
+import type { LayoutMode } from '../lib/graph-builder';
 
 interface GraphState {
   nodes: GraphNode[];
@@ -12,11 +13,18 @@ interface GraphState {
     searchQuery: string;
   };
 
+  layoutMode: LayoutMode;
+  projectionEnabled: boolean;
+  projectionData: ProjectionData | null;
+
   setGraphData: (nodes: GraphNode[], edges: GraphEdge[]) => void;
   setViewDepth: (depth: ViewDepth) => void;
   toggleExpand: (nodeId: string) => void;
   setFilter: (filter: Partial<GraphState['filter']>) => void;
   applyDiff: (diff: ArchitectureDiff) => void;
+  setLayoutMode: (mode: LayoutMode) => void;
+  toggleProjection: () => void;
+  setProjectionData: (data: ProjectionData | null) => void;
   clearGraph: () => void;
 }
 
@@ -30,6 +38,10 @@ export const useGraphStore = create<GraphState>((set) => ({
     packageScope: null,
     searchQuery: '',
   },
+
+  layoutMode: 'map' as LayoutMode,
+  projectionEnabled: false,
+  projectionData: null,
 
   setGraphData: (nodes, edges) => set({ nodes, edges }),
   setViewDepth: (depth) => set({ viewDepth: depth }),
@@ -61,5 +73,8 @@ export const useGraphStore = create<GraphState>((set) => ({
 
       return { nodes, edges };
     }),
-  clearGraph: () => set({ nodes: [], edges: [], expandedNodes: new Set() }),
+  setLayoutMode: (mode) => set({ layoutMode: mode }),
+  toggleProjection: () => set((s) => ({ projectionEnabled: !s.projectionEnabled })),
+  setProjectionData: (data) => set({ projectionData: data }),
+  clearGraph: () => set({ nodes: [], edges: [], expandedNodes: new Set(), projectionData: null }),
 }));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -12,12 +12,13 @@ import {
   getViewportForBounds,
   type NodeMouseHandler,
 } from '@xyflow/react';
-import { Download } from 'lucide-react';
+import { Download, Layers, Network, GitFork } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useAgentStore } from '../../stores/agent-store';
+import { usePlanStore } from '../../stores/plan-store';
 import { useUiStore } from '../../stores/ui-store';
 import { buildDependencyGraph, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
 import { PackageNode } from '../graph/nodes/PackageNode';
@@ -41,6 +42,13 @@ export function MainCanvas() {
   const toggleExpand = useGraphStore((s) => s.toggleExpand);
   const setSelectedNode = useUiStore((s) => s.setSelectedNode);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
+  const layoutMode = useGraphStore((s) => s.layoutMode);
+  const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
+  const projectionEnabled = useGraphStore((s) => s.projectionEnabled);
+  const projectionData = useGraphStore((s) => s.projectionData);
+  const toggleProjection = useGraphStore((s) => s.toggleProjection);
+  const setProjectionData = useGraphStore((s) => s.setProjectionData);
+  const activePlanUid = usePlanStore((s) => s.activePlanUid);
 
   // Dependency edges from backend
   const [depEdges, setDepEdges] = useState<DependencyEdge[]>([]);
@@ -53,26 +61,25 @@ export function MainCanvas() {
     blastRadius: string[];
   } | null>(null);
 
-  // Fetch dependency edges when scan completes or tab changes
+  // Fetch dependency edges when scan completes
+  const hasFetchedRef = useRef<string | null>(null);
   useEffect(() => {
     if (scanStatus !== 'ready' || !root) return;
+    // Don't re-fetch if we already fetched for this project
+    if (hasFetchedRef.current === root && depEdges.length > 0) return;
 
-    let cancelled = false;
     setLoadingGraph(true);
+    hasFetchedRef.current = root;
 
     fetch('/api/dependencies')
       .then((r) => r.json())
       .then((edges) => {
-        if (!cancelled) {
-          setDepEdges(edges);
-          setLoadingGraph(false);
-        }
+        setDepEdges(edges);
+        setLoadingGraph(false);
       })
       .catch(() => {
-        if (!cancelled) setLoadingGraph(false);
+        setLoadingGraph(false);
       });
-
-    return () => { cancelled = true; };
   }, [scanStatus, root]);
 
   // Poll for diffs every 10 seconds
@@ -95,6 +102,18 @@ export function MainCanvas() {
     const interval = setInterval(fetchDiff, 10000);
     return () => clearInterval(interval);
   }, [scanStatus, root]);
+
+  // Fetch projection data when a plan is active
+  useEffect(() => {
+    if (!activePlanUid || !projectionEnabled) {
+      setProjectionData(null);
+      return;
+    }
+    fetch(`/api/plans/${activePlanUid}/projection`)
+      .then((r) => r.json())
+      .then((data) => setProjectionData(data))
+      .catch(() => setProjectionData(null));
+  }, [activePlanUid, projectionEnabled, setProjectionData]);
 
   // Fetch symbols for expanded files in symbol view
   useEffect(() => {
@@ -125,8 +144,8 @@ export function MainCanvas() {
   // Build the graph
   const graphData = useMemo(() => {
     if (depEdges.length === 0) return { nodes: [], edges: [] };
-    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged);
-  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged]);
+    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionEnabled ? projectionData : null, layoutMode);
+  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionData, projectionEnabled, layoutMode]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(graphData.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graphData.edges);
@@ -202,7 +221,47 @@ export function MainCanvas() {
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
         <Panel position="top-right">
-          <ExportButton />
+          <div className="flex items-center gap-1.5">
+            {/* Layout toggle */}
+            <div className="flex items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+              <button
+                onClick={() => setLayoutMode('map')}
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
+                  layoutMode === 'map' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Map view (force-directed)"
+              >
+                <Network size={11} />
+                Map
+              </button>
+              <button
+                onClick={() => setLayoutMode('tree')}
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
+                  layoutMode === 'tree' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Tree view (hierarchical)"
+              >
+                <GitFork size={11} />
+                Tree
+              </button>
+            </div>
+
+            {activePlanUid && (
+              <button
+                onClick={toggleProjection}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg backdrop-blur-md border transition-all shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
+                  projectionEnabled
+                    ? 'bg-accent/20 border-accent/30 text-accent shadow-[0_0_12px_rgba(59,130,246,0.2)]'
+                    : 'bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]'
+                }`}
+                title={projectionEnabled ? 'Hide plan projection' : 'Show plan projection on graph'}
+              >
+                <Layers size={12} />
+                Projection
+              </button>
+            )}
+            <ExportButton />
+          </div>
         </Panel>
       </ReactFlow>
     </div>

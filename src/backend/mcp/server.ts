@@ -4,12 +4,19 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { searchSymbols, getDependencyEdges, getFileDependencies, getDbStats } from '../services/database';
 import { broadcast } from '../server';
 import { z } from 'zod';
+import * as planService from '../services/plan-service';
+import * as commentService from '../services/comment-service';
+import * as sessionService from '../services/session-service';
+import { saveNow } from '../services/persistence';
+import { exportDatabase } from '../services/database';
 
 const MCP_PORT = 19432;
 
 let mcpServer: McpServer | null = null;
 let httpServer: http.Server | null = null;
 let connectedTransports = new Map<string, SSEServerTransport>();
+// Maps MCP transport sessionId → registered agent sessionId
+let transportToAgent = new Map<string, string>();
 
 export async function startMcpServer(): Promise<void> {
   if (mcpServer) return;
@@ -90,46 +97,234 @@ export async function startMcpServer(): Promise<void> {
     }
   );
 
+  // --- Plan Management Tools ---
+
+  mcpServer.registerTool(
+    'create_plan',
+    {
+      description: 'Create a structured plan in CodeTrellis describing what you intend to do. The plan will be displayed in the UI for the user to review, comment on, and approve. Returns the plan UID.',
+      inputSchema: {
+        title: z.string().describe('Brief title of the plan'),
+        description: z.string().optional().describe('Detailed description of what this plan achieves'),
+        project_path: z.string().describe('Absolute path to the project this plan is for'),
+        tasks: z.array(z.object({
+          description: z.string().describe('What this task does'),
+          affected_files: z.array(z.string()).optional().describe('Files this task will create/modify/delete'),
+          affected_symbols: z.array(z.string()).optional().describe('Functions/classes this task will add/change'),
+          new_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('New import relationships'),
+          removed_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('Import relationships to remove'),
+        })).describe('Ordered list of tasks'),
+      },
+    },
+    async ({ title, description, project_path, tasks }) => {
+      const plan = planService.createPlan(
+        { title, description: description || '', tasks: tasks.map((t: any) => ({
+          description: t.description,
+          affectedFiles: t.affected_files,
+          affectedSymbols: t.affected_symbols,
+          newConnections: t.new_connections,
+          removedConnections: t.removed_connections,
+        })) },
+        'agent', 'mcp', project_path,
+      );
+      broadcast('plan-created', { plan });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(plan, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'get_plan',
+    {
+      description: 'Read a plan by its UID. Returns the full plan with all tasks, status, and metadata.',
+      inputSchema: { plan_uid: z.string().describe('Plan UID') },
+    },
+    async ({ plan_uid }) => {
+      const plan = planService.getPlan(plan_uid);
+      if (!plan) return { content: [{ type: 'text' as const, text: 'Plan not found' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(plan, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'update_plan',
+    {
+      description: 'Update a plan (title, description, or status). Creates a new version snapshot.',
+      inputSchema: {
+        plan_uid: z.string(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        status: z.enum(['draft', 'review', 'approved', 'in_progress', 'completed', 'archived']).optional(),
+      },
+    },
+    async ({ plan_uid, title, description, status }) => {
+      planService.updatePlan(plan_uid, { title, description, status }, 'agent');
+      broadcast('plan-updated', { planUid: plan_uid });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Plan ${plan_uid} updated.` }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'list_plans',
+    {
+      description: 'List all plans, optionally filtered by project path or status.',
+      inputSchema: {
+        project_path: z.string().optional(),
+        status: z.string().optional(),
+      },
+    },
+    async ({ project_path, status }) => {
+      const plans = planService.listPlans(project_path, status);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(plans, null, 2) }] };
+    }
+  );
+
+  // --- Task Management Tools ---
+
+  mcpServer.registerTool(
+    'claim_task',
+    {
+      description: 'Claim a task from a plan. Only succeeds if the task is unclaimed and pending.',
+      inputSchema: {
+        plan_uid: z.string(),
+        task_uid: z.string(),
+        agent_type: z.string().optional().describe('e.g. claude-code, cursor'),
+        model: z.string().optional().describe('e.g. claude-opus-4'),
+      },
+    },
+    async ({ plan_uid, task_uid, agent_type, model }) => {
+      const ok = planService.claimTask(task_uid, agent_type || 'mcp-agent', agent_type || 'mcp', model);
+      if (ok) {
+        broadcast('task-claimed', { planUid: plan_uid, taskUid: task_uid, agentId: agent_type || 'mcp-agent' });
+        saveNow(() => exportDatabase());
+      }
+      return { content: [{ type: 'text' as const, text: ok ? `Task ${task_uid} claimed.` : 'Task already claimed or not pending.' }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'update_task',
+    {
+      description: 'Update task status. Use this to report progress: pending → in_progress → done.',
+      inputSchema: {
+        plan_uid: z.string(),
+        task_uid: z.string(),
+        status: z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']),
+      },
+    },
+    async ({ plan_uid, task_uid, status }) => {
+      planService.updateTask(task_uid, { status });
+      broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid, status });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Task ${task_uid} → ${status}` }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'get_next_task',
+    {
+      description: 'Get the next available unclaimed task from a plan, respecting dependency order.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      const task = planService.getNextTask(plan_uid);
+      if (!task) return { content: [{ type: 'text' as const, text: 'No tasks available — all claimed, completed, or blocked by dependencies.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }] };
+    }
+  );
+
+  // --- Comment Tools ---
+
+  mcpServer.registerTool(
+    'add_comment',
+    {
+      description: 'Leave a comment on a plan or task. Use this to communicate with the user or other agents.',
+      inputSchema: {
+        target_uid: z.string().describe('Plan UID or Task UID to comment on'),
+        body: z.string().describe('Comment text (markdown supported)'),
+        comment_type: z.enum(['comment', 'suggestion', 'approval', 'concern', 'status_update']).optional(),
+        parent_uid: z.string().optional().describe('Parent comment UID for threading'),
+      },
+    },
+    async ({ target_uid, body, comment_type, parent_uid }) => {
+      const comment = commentService.addComment('plan', target_uid, 'agent', 'mcp', body, comment_type || 'comment', parent_uid);
+      broadcast('comment-added', { comment });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Comment added to ${target_uid}` }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'get_comments',
+    {
+      description: 'Read all comments on a plan or task.',
+      inputSchema: { target_uid: z.string() },
+    },
+    async ({ target_uid }) => {
+      const comments = commentService.getComments(target_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(comments, null, 2) }] };
+    }
+  );
+
+  // --- Session Tools ---
+
+  mcpServer.registerTool(
+    'register_session',
+    {
+      description: 'Register this agent connection with CodeTrellis. Identifies who you are and what model you use.',
+      inputSchema: {
+        agent_type: z.string().describe('Agent type, e.g. claude-code, cursor, aider'),
+        model: z.string().optional().describe('Model name, e.g. claude-opus-4, gpt-4o'),
+      },
+    },
+    async ({ agent_type, model }) => {
+      const sessionId = `mcp-${Date.now()}`;
+      sessionService.registerSession(sessionId, agent_type, model);
+      broadcast('session-registered', { sessionId, agentType: agent_type, model });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Session registered: ${sessionId}` }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'set_active_plan',
+    {
+      description: 'Associate this agent session with a plan, indicating you are working on it.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      // Find the most recent session for this transport
+      const sessions = sessionService.getActiveSessions();
+      if (sessions.length > 0) {
+        sessionService.setActivePlan(sessions[sessions.length - 1].sessionId, plan_uid);
+      }
+      return { content: [{ type: 'text' as const, text: `Active plan set to ${plan_uid}` }] };
+    }
+  );
+
+  // Legacy tool — kept for backward compatibility
   mcpServer.registerTool(
     'report_plan',
     {
-      description: 'Report your intended plan to CodeTrellis so the user can see what you plan to do. The plan will be displayed in the CodeTrellis UI.',
+      description: '[Legacy] Report a plan. Prefer create_plan instead.',
       inputSchema: {
-        title: z.string().describe('Brief title of the plan'),
+        title: z.string(),
         steps: z.array(z.object({
-          description: z.string().describe('What this step does'),
-          files: z.array(z.string()).optional().describe('Files this step will affect'),
-        })).describe('Ordered list of steps'),
+          description: z.string(),
+          files: z.array(z.string()).optional(),
+        })),
       },
     },
     async ({ title, steps }) => {
-      const plan = {
-        id: `mcp-${Date.now()}`,
-        title,
-        steps: steps.map((s: { description: string; files?: string[] }) => ({
-          description: s.description,
-          status: 'pending' as const,
-          files: s.files || [],
-        })),
-        status: 'proposed' as const,
-        affectedFiles: steps.flatMap((s: { files?: string[] }) => s.files || []),
-        estimatedImpact: null,
-      };
-
-      broadcast('agent-event', {
-        id: `mcp-plan-${Date.now()}`,
-        timestamp: Date.now(),
-        source: 'mcp',
-        type: 'plan_reported',
-        payload: { plan },
-      });
-
-      return {
-        content: [{
-          type: 'text' as const,
-          text: `Plan "${title}" with ${steps.length} steps reported to CodeTrellis UI.`,
-        }],
-      };
+      // Delegate to create_plan
+      const plan = planService.createPlan(
+        { title, description: '', tasks: steps.map((s: any) => ({ description: s.description, affectedFiles: s.files })) },
+        'agent', 'mcp', '',
+      );
+      broadcast('plan-created', { plan });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Plan "${title}" created with UID: ${plan.uid}` }] };
     }
   );
 
@@ -193,6 +388,38 @@ export async function startMcpServer(): Promise<void> {
         }],
       };
     }
+  );
+
+  mcpServer.registerResource(
+    'codetrellis://plans',
+    'codetrellis://plans',
+    {
+      description: 'List of all plans in CodeTrellis',
+      mimeType: 'application/json',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://plans',
+        mimeType: 'application/json',
+        text: JSON.stringify(planService.listPlans(), null, 2),
+      }],
+    })
+  );
+
+  mcpServer.registerResource(
+    'codetrellis://sessions',
+    'codetrellis://sessions',
+    {
+      description: 'Active agent sessions connected to CodeTrellis',
+      mimeType: 'application/json',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://sessions',
+        mimeType: 'application/json',
+        text: JSON.stringify(sessionService.getActiveSessions(), null, 2),
+      }],
+    })
   );
 
   mcpServer.registerResource(

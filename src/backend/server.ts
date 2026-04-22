@@ -12,6 +12,11 @@ import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
 import { startMcpServer, getMcpStatus, getMcpConfig } from './mcp/server';
+import { startAutoSave, saveNow } from './services/persistence';
+import { exportDatabase } from './services/database';
+import * as planService from './services/plan-service';
+import * as commentService from './services/comment-service';
+import * as sessionService from './services/session-service';
 
 const app = express();
 app.use(express.json());
@@ -317,6 +322,111 @@ app.get('/api/diff', async (req, res) => {
   res.json(diff || { summary: { added: 0, removed: 0, modified: 0, edgesAdded: 0, edgesRemoved: 0 } });
 });
 
+// --- Plan API ---
+
+// List plans
+app.get('/api/plans', (req, res) => {
+  const projectPath = req.query.project as string | undefined;
+  const status = req.query.status as string | undefined;
+  res.json(planService.listPlans(projectPath, status));
+});
+
+// Create plan
+app.post('/api/plans', (req, res) => {
+  const { title, description, tasks, projectPath } = req.body;
+  if (!title || !projectPath) { res.status(400).json({ error: 'title and projectPath required' }); return; }
+  const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, 'user', 'human', projectPath);
+  broadcast('plan-created', { plan });
+  saveNow(() => exportDatabase());
+  res.json(plan);
+});
+
+// Get plan
+app.get('/api/plans/:uid', (req, res) => {
+  const plan = planService.getPlan(req.params.uid);
+  if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(plan);
+});
+
+// Update plan
+app.put('/api/plans/:uid', (req, res) => {
+  const { title, description, status } = req.body;
+  planService.updatePlan(req.params.uid, { title, description, status }, 'user');
+  broadcast('plan-updated', { planUid: req.params.uid });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+// Delete (archive) plan
+app.delete('/api/plans/:uid', (req, res) => {
+  planService.deletePlan(req.params.uid);
+  res.json({ ok: true });
+});
+
+// List tasks for a plan
+app.get('/api/plans/:uid/tasks', (req, res) => {
+  res.json(planService.getTasksByPlan(req.params.uid));
+});
+
+// Update task
+app.put('/api/plans/:uid/tasks/:taskUid', (req, res) => {
+  const { status, assignee, assigneeType, assigneeModel, description } = req.body;
+  planService.updateTask(req.params.taskUid, { status, assignee, assigneeType, assigneeModel, description });
+  broadcast('task-updated', { planUid: req.params.uid, taskUid: req.params.taskUid, status });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+// Claim task
+app.post('/api/plans/:uid/tasks/:taskUid/claim', (req, res) => {
+  const { agentId, agentType, model } = req.body;
+  const ok = planService.claimTask(req.params.taskUid, agentId, agentType, model);
+  if (ok) {
+    broadcast('task-claimed', { planUid: req.params.uid, taskUid: req.params.taskUid, agentId });
+  }
+  res.json({ ok });
+});
+
+// Get next available task
+app.get('/api/plans/:uid/next-task', (req, res) => {
+  const task = planService.getNextTask(req.params.uid);
+  res.json(task || { none: true });
+});
+
+// Plan versions
+app.get('/api/plans/:uid/versions', (req, res) => {
+  res.json(planService.getPlanVersions(req.params.uid));
+});
+
+// Plan projection
+app.get('/api/plans/:uid/projection', (req, res) => {
+  const { computeProjection } = require('./services/projection-service');
+  res.json(computeProjection(req.params.uid));
+});
+
+// --- Comments API ---
+
+app.get('/api/comments', (req, res) => {
+  const target = req.query.target as string;
+  if (!target) { res.json([]); return; }
+  res.json(commentService.getComments(target));
+});
+
+app.post('/api/comments', (req, res) => {
+  const { targetType, targetUid, body, commentType, parentUid } = req.body;
+  if (!targetUid || !body) { res.status(400).json({ error: 'targetUid and body required' }); return; }
+  const comment = commentService.addComment(targetType || 'plan', targetUid, 'user', 'human', body, commentType, parentUid);
+  broadcast('comment-added', { comment });
+  saveNow(() => exportDatabase());
+  res.json(comment);
+});
+
+// --- Sessions API ---
+
+app.get('/api/sessions', (_req, res) => {
+  res.json(sessionService.getActiveSessions());
+});
+
 // Database stats
 app.get('/api/stats', (_req, res) => {
   res.json(getDbStats());
@@ -344,6 +454,9 @@ const DEFAULT_PORT = 3001;
 export async function startServer(port = DEFAULT_PORT): Promise<http.Server> {
   await initDatabase();
   await initParser();
+
+  // Start persistent auto-save for plan data
+  startAutoSave(() => exportDatabase(), 30000);
 
   // Start MCP server for agent integration
   try {

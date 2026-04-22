@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAgentStore } from '../stores/agent-store';
+import { usePlanStore } from '../stores/plan-store';
 import type { AgentEvent } from '../../shared/types';
 
 /**
@@ -61,6 +62,38 @@ export function useWebSocket() {
             if (relPath) {
               useAgentStore.getState().markFileChanged(relPath);
             }
+          }
+
+          // Plan events
+          if (type === 'plan-created') {
+            usePlanStore.getState().onPlanCreated(payload.plan);
+          }
+          if (type === 'plan-updated') {
+            usePlanStore.getState().onPlanUpdated(payload.planUid);
+          }
+          if (type === 'task-updated' || type === 'task-claimed') {
+            usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, payload.status || 'assigned');
+          }
+          if (type === 'comment-added') {
+            usePlanStore.getState().onCommentAdded(payload.comment);
+          }
+
+          // Execution tracking — mark files as actively being worked on
+          if (type === 'task-updated' && payload.status === 'in_progress') {
+            // Fetch task details to get affected files
+            const planUid = payload.planUid as string;
+            const taskUid = payload.taskUid as string;
+            fetch(`/api/plans/${planUid}`)
+              .then((r) => r.json())
+              .then((plan) => {
+                const task = plan.tasks?.find((t: any) => t.uid === taskUid);
+                if (task?.affectedFiles) {
+                  for (const file of task.affectedFiles) {
+                    useAgentStore.getState().markFileChanged(file);
+                  }
+                }
+              })
+              .catch(() => {});
           }
         } catch {
           // ignore malformed messages

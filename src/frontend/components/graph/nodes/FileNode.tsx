@@ -28,6 +28,10 @@ const CHANGE_STYLES: Record<string, string> = {
   removed: 'ring-1 ring-red-400/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] opacity-50',
   affected: 'ring-1 ring-violet-400/30 shadow-[0_0_10px_rgba(139,92,246,0.15)]',
   active: 'ring-2 ring-accent animate-node-pulse',
+  planned_add: 'border-dashed !border-green-400/40 shadow-[0_0_12px_rgba(34,197,94,0.15)] opacity-70',
+  planned_modify: 'ring-1 ring-dashed ring-orange-400/40 shadow-[0_0_12px_rgba(249,115,22,0.15)]',
+  planned_remove: 'border-dashed !border-red-400/40 opacity-40',
+  in_progress_task: 'ring-2 ring-accent animate-node-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]',
 };
 
 function FileIcon({ language }: { language?: string }) {
@@ -59,12 +63,19 @@ export function FileNode({ data }: NodeProps) {
         <span className="text-[11px] text-zinc-300 truncate">{d.label}</span>
         {d.changeStatus && (
           <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-            d.changeStatus === 'added' ? 'text-green-400 bg-green-500/10 border border-green-500/20' :
-            d.changeStatus === 'modified' ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20' :
-            d.changeStatus === 'removed' ? 'text-red-400 bg-red-500/10 border border-red-500/20' :
+            d.changeStatus === 'added' || d.changeStatus === 'planned_add' ? 'text-green-400 bg-green-500/10 border border-green-500/20' :
+            d.changeStatus === 'modified' || d.changeStatus === 'planned_modify' ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20' :
+            d.changeStatus === 'removed' || d.changeStatus === 'planned_remove' ? 'text-red-400 bg-red-500/10 border border-red-500/20' :
+            d.changeStatus === 'in_progress_task' ? 'text-accent bg-accent/10 border border-accent/20' :
             'text-violet-400 bg-violet-500/10 border border-violet-500/20'
           }`}>
-            {d.changeStatus === 'added' ? 'NEW' : d.changeStatus === 'modified' ? 'MOD' : d.changeStatus === 'removed' ? 'DEL' : 'DEP'}
+            {d.changeStatus === 'planned_add' ? 'PLAN+' :
+             d.changeStatus === 'planned_modify' ? 'PLAN~' :
+             d.changeStatus === 'planned_remove' ? 'PLAN-' :
+             d.changeStatus === 'in_progress_task' ? 'ACTIVE' :
+             d.changeStatus === 'added' ? 'NEW' :
+             d.changeStatus === 'modified' ? 'MOD' :
+             d.changeStatus === 'removed' ? 'DEL' : 'DEP'}
           </span>
         )}
         {!d.changeStatus && d.symbolCount != null && d.symbolCount > 0 && (

@@ -73,6 +73,20 @@
       "problemMatcher": ["$eslint-stylish"]
     },
     {
+      "label": "Test: E2E (Playwright)",
+      "type": "shell",
+      "command": "npm test",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: E2E (Headed)",
+      "type": "shell",
+      "command": "npm run test:headed",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
       "label": "Install Dependencies",
       "type": "shell",
       "command": "npm install",

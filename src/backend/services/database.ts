@@ -2,6 +2,7 @@ import initSqlJs, { type Database } from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ParsedFile, ParsedSymbol } from '../../shared/types';
+import { loadFromDisk } from './persistence';
 
 let db: Database | null = null;
 
@@ -9,8 +10,17 @@ export async function initDatabase(): Promise<void> {
   if (db) return;
 
   const SQL = await initSqlJs();
-  db = new SQL.Database();
 
+  // Try loading persisted database
+  const savedData = loadFromDisk();
+  if (savedData) {
+    db = new SQL.Database(savedData);
+    console.log('[DB] Loaded persisted database');
+  } else {
+    db = new SQL.Database();
+  }
+
+  // AST tables (ephemeral — rebuilt on scan)
   db.run(`
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,12 +58,103 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
   `);
 
-  console.log('[DB] SQLite initialized (in-memory)');
+  // Plan tables (persistent — survive restarts)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS plans (
+      uid TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      author TEXT NOT NULL,
+      author_type TEXT NOT NULL DEFAULT 'human',
+      project_path TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS plan_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_uid TEXT NOT NULL REFERENCES plans(uid),
+      version INTEGER NOT NULL,
+      snapshot TEXT NOT NULL,
+      change_summary TEXT,
+      author TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(plan_uid, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      uid TEXT PRIMARY KEY,
+      plan_uid TEXT NOT NULL REFERENCES plans(uid),
+      sort_order INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      assignee TEXT,
+      assignee_type TEXT,
+      assignee_model TEXT,
+      affected_files TEXT DEFAULT '[]',
+      affected_symbols TEXT DEFAULT '[]',
+      new_connections TEXT DEFAULT '[]',
+      removed_connections TEXT DEFAULT '[]',
+      dependencies TEXT DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS comments (
+      uid TEXT PRIMARY KEY,
+      target_type TEXT NOT NULL,
+      target_uid TEXT NOT NULL,
+      parent_uid TEXT,
+      author TEXT NOT NULL,
+      author_type TEXT NOT NULL DEFAULT 'human',
+      body TEXT NOT NULL,
+      comment_type TEXT NOT NULL DEFAULT 'comment',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_sessions (
+      session_id TEXT PRIMARY KEY,
+      agent_type TEXT NOT NULL,
+      model TEXT,
+      active_plan_uid TEXT REFERENCES plans(uid),
+      connected_at INTEGER NOT NULL,
+      last_seen INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active'
+    );
+
+    CREATE TABLE IF NOT EXISTS deviations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_uid TEXT NOT NULL REFERENCES plans(uid),
+      deviation_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'warning',
+      description TEXT NOT NULL,
+      resolution TEXT NOT NULL DEFAULT 'pending',
+      detected_at INTEGER NOT NULL,
+      resolved_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_plan ON tasks(plan_uid);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_uid);
+    CREATE INDEX IF NOT EXISTS idx_plan_versions_plan ON plan_versions(plan_uid);
+    CREATE INDEX IF NOT EXISTS idx_sessions_plan ON agent_sessions(active_plan_uid);
+    CREATE INDEX IF NOT EXISTS idx_deviations_plan ON deviations(plan_uid);
+  `);
+
+  console.log('[DB] SQLite initialized');
 }
 
-function getDb(): Database {
+export function getDb(): Database {
   if (!db) throw new Error('Database not initialized');
   return db;
+}
+
+/**
+ * Export the database as a binary buffer for persistence.
+ */
+export function exportDatabase(): Uint8Array {
+  return getDb().export();
 }
 
 /**
@@ -263,14 +364,20 @@ export function getDependencyEdges(): Array<{
   specifiers: string[];
 }> {
   const d = getDb();
-  const results = d.exec(`
-    SELECT f1.path, f2.path, f1.relative_path, f2.relative_path, i.specifiers
-    FROM imports i
-    JOIN files f1 ON i.file_id = f1.id
-    JOIN files f2 ON i.resolved_path = f2.path
-    WHERE i.resolved_path IS NOT NULL
-    ORDER BY f1.path
-  `);
+  let results;
+  try {
+    results = d.exec(`
+      SELECT f1.path, f2.path, f1.relative_path, f2.relative_path, i.specifiers
+      FROM imports i
+      JOIN files f1 ON i.file_id = f1.id
+      JOIN files f2 ON i.resolved_path = f2.path
+      WHERE i.resolved_path IS NOT NULL
+      ORDER BY f1.path
+    `);
+  } catch {
+    // resolved_path column might not exist yet (no scan done)
+    return [];
+  }
 
   if (!results[0]) return [];
 

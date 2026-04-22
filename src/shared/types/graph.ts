@@ -9,7 +9,8 @@ export type NodeKind =
   | 'interface'
   | 'type';
 
-export type ChangeStatus = 'added' | 'modified' | 'removed' | 'unchanged';
+export type ChangeStatus = 'added' | 'modified' | 'removed' | 'unchanged'
+  | 'planned_add' | 'planned_modify' | 'planned_remove' | 'in_progress_task' | 'active' | 'affected';
 
 export interface GraphNode {
   id: string;
@@ -48,3 +49,11 @@ export interface ArchitectureDiff {
 }
 
 export type ViewDepth = 'package' | 'file' | 'symbol';
+
+export interface ProjectionData {
+  ghostFiles: Array<{ path: string; taskUid: string; taskDescription: string }>;
+  modifiedFiles: Array<{ path: string; taskUid: string }>;
+  removedFiles: Array<{ path: string; taskUid: string }>;
+  newEdges: Array<{ from: string; to: string; taskUid: string }>;
+  removedEdges: Array<{ from: string; to: string; taskUid: string }>;
+}
