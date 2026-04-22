@@ -90,6 +90,22 @@ Overall completion: ~55% against core vision (docs/CORE-VISION.md)
 
 ## Remaining Gaps by Priority
 
+### Priority 0: Three Trellis State System (THE core product)
+The entire product hinges on showing three states simultaneously:
+- **Current Trellis** — git HEAD snapshot, frozen when plan starts
+- **Planned Trellis** — the spec/goal state, shows what SHOULD exist after plan completion
+- **Live Trellis** — real-time state as agent works, compared against planned
+
+**What to build:**
+- Graph mode toggle: Current / Planned / Live / Diff
+- Current state captured as immutable snapshot when plan is approved
+- Planned state computed from plan tasks (new files, new connections, removals)
+- Live state is the actual AST/dependency graph, updated in real-time
+- Diff overlay: shows delta between any two states
+- Drift detection: continuous comparison of Live vs Planned, alerts on divergence
+**Effort:** High (5-7 days)
+**Impact:** THIS IS THE PRODUCT. Without this, CodeTrellis is just a viewer.
+
 ### Priority 1: Graph Visual Overhaul (THE main gap)
 - Rich node rendering with variable size, content preview, connection count
 - Curved glowing edges with direction indicators
