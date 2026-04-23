@@ -22,8 +22,18 @@ export function PlanCreateModal({ onClose }: { onClose: () => void }) {
     setTasks(tasks.map((t, j) => j === i ? { ...t, [field]: value } : t));
   };
 
+  const [error, setError] = useState('');
+
   const handleSubmit = async () => {
-    if (!title.trim() || !root) return;
+    if (!title.trim()) {
+      setError('Title is required');
+      return;
+    }
+    if (!root) {
+      setError('Open a project first');
+      return;
+    }
+    setError('');
     setSubmitting(true);
 
     await fetch('/api/plans', {
@@ -118,6 +128,7 @@ export function PlanCreateModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-white/[0.06]">
+          {error && <span className="text-[11px] text-red-400 mr-auto">{error}</span>}
           <button onClick={onClose} className="px-4 py-1.5 text-[11px] rounded-lg border border-border text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors">
             Cancel
           </button>

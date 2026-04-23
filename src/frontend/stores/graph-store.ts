@@ -50,7 +50,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   projectionData: null,
 
   setGraphData: (nodes, edges) => set({ nodes, edges }),
-  setViewDepth: (depth) => set({ viewDepth: depth }),
+  setViewDepth: (depth) => set({ viewDepth: depth, expandedNodes: new Set() }), // Reset expanded when switching depth
   toggleExpand: (nodeId) =>
     set((s) => {
       const next = new Set(s.expandedNodes);

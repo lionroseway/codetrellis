@@ -10,6 +10,7 @@ import {
   useReactFlow,
   getNodesBounds,
   getViewportForBounds,
+  type Node,
   type NodeMouseHandler,
 } from '@xyflow/react';
 import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare } from 'lucide-react';
@@ -142,60 +143,52 @@ export function MainCanvas() {
       .catch(() => setCurrentSnapshot(null));
   }, [trellisMode, activePlanUid, setCurrentSnapshot]);
 
-  // Fetch symbols for expanded files in symbol view
+  // Fetch symbols for focused file in symbol view
   useEffect(() => {
     if (viewDepth !== 'symbol') return;
-    const expandedFiles = [...expandedNodes].filter((id) => id.includes('.'));
-    if (expandedFiles.length === 0) return;
+    const focusedFiles = [...expandedNodes].filter((id) => id.includes('.'));
+    if (focusedFiles.length === 0) return;
 
-    Promise.all(
-      expandedFiles
-        .filter((fp) => !symbolsMap.has(fp))
-        .map(async (relPath) => {
-          // Need to get the absolute path — use the file from depEdges
-          const edge = depEdges.find((e) => e.sourceRelative === relPath || e.targetRelative === relPath);
-          const absPath = edge?.sourceRelative === relPath ? edge.source : edge?.target;
-          if (!absPath) return null;
-          const res = await fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`);
-          return { relPath, symbols: await res.json() as FileSymbol[] };
+    for (const relPath of focusedFiles) {
+      if (symbolsMap.has(relPath)) continue;
+      // Find absolute path from dep edges
+      const edge = depEdges.find((e) => e.sourceRelative === relPath || e.targetRelative === relPath);
+      const absPath = edge ? (edge.sourceRelative === relPath ? edge.source : edge.target) : null;
+      if (!absPath) continue;
+
+      fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`)
+        .then((r) => r.json())
+        .then((symbols: FileSymbol[]) => {
+          setSymbolsMap((prev) => new Map(prev).set(relPath, symbols));
         })
-    ).then((results) => {
-      const newMap = new Map(symbolsMap);
-      for (const r of results) {
-        if (r) newMap.set(r.relPath, r.symbols);
-      }
-      setSymbolsMap(newMap);
-    });
+        .catch(() => {});
+    }
   }, [viewDepth, expandedNodes, depEdges]);
 
   // Build the graph
   const graphData = useMemo(() => {
-    // Current mode: render from frozen snapshot
-    if (trellisMode === 'current' && currentSnapshot) {
-      return buildFromSnapshot(currentSnapshot.edges, viewDepth, layoutMode, null, true);
-    }
-
-    // Planned mode: render snapshot + projection overlay
-    if (trellisMode === 'planned' && currentSnapshot) {
-      return buildFromSnapshot(currentSnapshot.edges, viewDepth, layoutMode, null, false);
-      // Projection overlay added by projectionData below
+    // Current/Planned mode: render from frozen snapshot
+    if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
+      return buildFromSnapshot(
+        currentSnapshot.edges, viewDepth, layoutMode, null,
+        trellisMode === 'current', // frozen = true for current
+      );
     }
 
     // Diff mode: live graph with diff against snapshot
     if (trellisMode === 'diff' && currentSnapshot && depEdges.length > 0) {
-      // Compute client-side diff
       const snapshotFileSet = new Set(currentSnapshot.files.map((f: any) => f.path));
       const liveFileSet = new Set(depEdges.flatMap((e) => [e.sourceRelative, e.targetRelative]));
       const clientDiff = {
         addedFiles: [...liveFileSet].filter((f) => !snapshotFileSet.has(f)),
         removedFiles: [...snapshotFileSet].filter((f) => !liveFileSet.has(f)),
-        modifiedFiles: [] as string[], // Would need hash comparison for true modified detection
+        modifiedFiles: [] as string[],
         blastRadius: [] as string[],
       };
       return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, clientDiff, recentlyChanged, projectionEnabled ? projectionData : null, layoutMode);
     }
 
-    // Live mode (default): real-time dependencies
+    // Live mode (default)
     if (depEdges.length === 0) return { nodes: [], edges: [] };
     return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionEnabled ? projectionData : null, layoutMode);
   }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot]);
@@ -270,6 +263,7 @@ export function MainCanvas() {
         proOptions={{ hideAttribution: true }}
         className="!bg-transparent"
       >
+        <AutoFitView nodes={nodes} />
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
@@ -343,6 +337,20 @@ export function MainCanvas() {
       </ReactFlow>
     </div>
   );
+}
+
+function AutoFitView({ nodes }: { nodes: Node[] }) {
+  const { fitView } = useReactFlow();
+  const prevCountRef = useRef(0);
+
+  useEffect(() => {
+    if (nodes.length > 0 && nodes.length !== prevCountRef.current) {
+      prevCountRef.current = nodes.length;
+      setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+    }
+  }, [nodes, fitView]);
+
+  return null;
 }
 
 function ExportButton() {

@@ -34,7 +34,8 @@ function FileTreeItem({ node, depth = 0 }: { node: FileTreeNode; depth?: number 
         onClick={() => {
           if (isDir && hasChildren) setSidebarExpanded(!sidebarExpanded);
           setSelectedNode(node.path);
-          if (isDir) toggleGraphExpand(node.path);
+          // Only toggle graph expand for files (focus mode), not directories
+          if (!isDir) toggleGraphExpand(node.path);
         }}
         className={`w-full flex items-center gap-1 px-1.5 py-[3px] text-[12px] transition-all rounded-md ${
           isSelected
