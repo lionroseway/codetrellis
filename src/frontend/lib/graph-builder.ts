@@ -2,13 +2,9 @@ import dagre from '@dagrejs/dagre';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
 import type { Node, Edge } from '@xyflow/react';
 import type { ViewDepth, ProjectionData } from '../../shared/types';
+import { getNodeDimensions, type GraphNodeVisualData } from './graph-visuals';
 
 export type LayoutMode = 'map' | 'tree';
-
-const NODE_WIDTH = 220;
-const NODE_HEIGHT = 50;
-const HUB_NODE_WIDTH = 260;
-const HUB_NODE_HEIGHT = 70;
 
 export interface DependencyEdge {
   source: string;
@@ -220,9 +216,13 @@ export function buildDependencyGraph(
         id: `proj:${edge.from}->${edge.to}`,
         source: result.nodes.find((n) => n.id === edge.from || n.id === `ghost:${edge.from}`)?.id || edge.from,
         target: result.nodes.find((n) => n.id === edge.to || n.id === `ghost:${edge.to}`)?.id || edge.to,
-        type: 'smoothstep',
+        type: 'importEdge',
         animated: true,
         style: { stroke: 'rgba(34, 197, 94, 0.5)', strokeWidth: 2, strokeDasharray: '8 4' },
+        data: {
+          importState: 'planned_add',
+          symbolCount: 1,
+        },
       });
     }
   }
@@ -290,7 +290,7 @@ function buildClusterView(
       id: `cluster:${key}`,
       source,
       target,
-      type: 'smoothstep',
+      type: 'importEdge',
       animated: true,
       style: {
         stroke: 'rgba(59, 130, 246, 0.4)',
@@ -298,6 +298,10 @@ function buildClusterView(
       },
       label: count > 1 ? `${count}` : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
+      data: {
+        importState: 'regular',
+        symbolCount: count,
+      },
     });
   }
 
@@ -386,11 +390,16 @@ function buildHubView(
       id: `hub:${edge.sourceRelative}->${edge.targetRelative}`,
       source: edge.sourceRelative,
       target: edge.targetRelative,
-      type: 'smoothstep',
+      type: 'importEdge',
       animated: true,
       style: { stroke: 'rgba(59, 130, 246, 0.3)', strokeWidth: 1.5 },
       label: edge.specifiers.length > 0 ? edge.specifiers.slice(0, 2).join(', ') : undefined,
       labelStyle: { fontSize: 8, fill: '#6b6b78' },
+      data: {
+        importState: 'regular',
+        symbols: edge.specifiers,
+        symbolCount: edge.specifiers.length,
+      },
     });
   }
 
@@ -446,14 +455,18 @@ function buildFocusView(
         id: symId,
         type: 'symbolNode',
         position: { x: 0, y: 0 },
-        data: { label: sym.name, symbolKind: sym.kind },
+        data: { label: sym.name, symbolKind: sym.kind, nodeType: 'symbol' },
       });
       edges.push({
         id: `${focusPath}->${symId}`,
         source: focusPath,
         target: symId,
-        type: 'smoothstep',
+        type: 'importEdge',
         style: { stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1 },
+        data: {
+          importState: 'symbol_link',
+          symbolCount: 1,
+        },
       });
     }
   }
@@ -484,11 +497,17 @@ function buildFocusView(
       id: `focus:${focusPath}->${imp}`,
       source: focusPath,
       target: imp,
-      type: 'smoothstep',
+      type: 'importEdge',
       animated: true,
       style: { stroke: 'rgba(59, 130, 246, 0.5)', strokeWidth: 2 },
       label: specifiers.length > 0 ? specifiers.slice(0, 3).join(', ') : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
+      data: {
+        importState: changeMap.get(imp) === 'planned_add' ? 'planned_add' : 'regular',
+        symbols: specifiers,
+        symbolCount: specifiers.length,
+        alwaysShowLabel: true,
+      },
     });
   }
 
@@ -519,11 +538,17 @@ function buildFocusView(
       id: `focus:${imp}->${focusPath}`,
       source: imp,
       target: focusPath,
-      type: 'smoothstep',
+      type: 'importEdge',
       animated: true,
       style: { stroke: 'rgba(245, 158, 11, 0.5)', strokeWidth: 2 },
       label: specifiers.length > 0 ? specifiers.slice(0, 3).join(', ') : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
+      data: {
+        importState: changeMap.get(imp) === 'planned_remove' ? 'planned_remove' : 'regular',
+        symbols: specifiers,
+        symbolCount: specifiers.length,
+        alwaysShowLabel: true,
+      },
     });
   }
 
@@ -568,8 +593,7 @@ function applyTreeLayout(nodes: Node[], edges: Edge[]): GraphData {
   for (const node of nodes) {
     const isHub = (node.data as any)?.isHub || (node.data as any)?.isFocused;
     g.setNode(node.id, {
-      width: isHub ? HUB_NODE_WIDTH : NODE_WIDTH,
-      height: isHub ? HUB_NODE_HEIGHT : NODE_HEIGHT,
+      ...getNodeDimensions((node.data || {}) as GraphNodeVisualData),
     });
   }
   for (const edge of edges) {
@@ -581,9 +605,7 @@ function applyTreeLayout(nodes: Node[], edges: Edge[]): GraphData {
   return {
     nodes: nodes.map((node) => {
       const pos = g.node(node.id);
-      const isHub = (node.data as any)?.isHub || (node.data as any)?.isFocused;
-      const w = isHub ? HUB_NODE_WIDTH : NODE_WIDTH;
-      const h = isHub ? HUB_NODE_HEIGHT : NODE_HEIGHT;
+      const { width: w, height: h } = getNodeDimensions((node.data || {}) as GraphNodeVisualData);
       return { ...node, position: { x: pos.x - w / 2, y: pos.y - h / 2 } };
     }),
     edges,
@@ -615,16 +637,18 @@ function applyForceLayout(nodes: Node[], edges: Edge[]): GraphData {
     .force('link', forceLink(forceEdges).distance(150).strength(0.4))
     .force('charge', forceManyBody().strength(-400).distanceMax(600))
     .force('center', forceCenter(0, 0))
-    .force('collide', forceCollide((d: any) => d.isHub ? HUB_NODE_WIDTH * 0.7 : NODE_WIDTH * 0.6))
+    .force('collide', forceCollide((d: any) => {
+      const node = nodes[d.idx];
+      const { width } = getNodeDimensions((node.data || {}) as GraphNodeVisualData);
+      return width * 0.56;
+    }))
     .stop();
 
   for (let i = 0; i < 200; i++) sim.tick();
 
   return {
     nodes: nodes.map((node, i) => {
-      const isHub = (node.data as any)?.isHub || (node.data as any)?.isFocused;
-      const w = isHub ? HUB_NODE_WIDTH : NODE_WIDTH;
-      const h = isHub ? HUB_NODE_HEIGHT : NODE_HEIGHT;
+      const { width: w, height: h } = getNodeDimensions((node.data || {}) as GraphNodeVisualData);
       return {
         ...node,
         position: {

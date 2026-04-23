@@ -1,166 +1,182 @@
+import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { FileCode, FileJson, FileText, Check, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Check, FileCode, FileJson, FileText } from 'lucide-react';
 
-interface FileNodeData {
+import { getChangeVisual, getLanguageLabel, getLanguageVisual, type GraphNodeVisualData } from '../../../lib/graph-visuals';
+
+interface FileNodeData extends GraphNodeVisualData {
   label: string;
-  fullPath?: string;
-  language?: string;
-  symbolCount?: number;
-  connectionCount?: number;
-  isHub?: boolean;
-  isFocused?: boolean;
-  direction?: 'inbound' | 'outbound';
-  exports?: string[];
-  changeStatus?: string;
-  ghost?: boolean;
-  taskDescription?: string;
-  taskNumber?: number;
-  done?: boolean;
-  frozen?: boolean;
   onToggle?: () => void;
-  [key: string]: unknown;
 }
 
-const LANG_STYLES: Record<string, { border: string; bg: string; iconColor: string; glow: string }> = {
-  typescript: { border: 'border-blue-500/30', bg: 'bg-blue-950/40', iconColor: 'text-blue-400', glow: 'shadow-[0_0_10px_rgba(59,130,246,0.12)]' },
-  javascript: { border: 'border-yellow-500/30', bg: 'bg-yellow-950/40', iconColor: 'text-yellow-400', glow: 'shadow-[0_0_10px_rgba(234,179,8,0.12)]' },
-  python: { border: 'border-green-500/30', bg: 'bg-green-950/40', iconColor: 'text-green-400', glow: 'shadow-[0_0_10px_rgba(34,197,94,0.12)]' },
-  rust: { border: 'border-orange-500/30', bg: 'bg-orange-950/40', iconColor: 'text-orange-400', glow: '' },
-  css: { border: 'border-purple-500/30', bg: 'bg-purple-950/40', iconColor: 'text-purple-400', glow: '' },
-  json: { border: 'border-zinc-500/20', bg: 'bg-zinc-900/40', iconColor: 'text-zinc-400', glow: '' },
-  markdown: { border: 'border-zinc-600/20', bg: 'bg-zinc-900/30', iconColor: 'text-zinc-500', glow: '' },
-};
+function FileIcon({ language, size = 18 }: { language?: string; size?: number }) {
+  const color = getLanguageVisual(language).accent;
+  const className = 'shrink-0 drop-shadow-[0_0_8px_currentColor]';
 
-const CHANGE_STYLES: Record<string, string> = {
-  added: 'ring-1 ring-green-400/50 shadow-[0_0_15px_rgba(34,197,94,0.2)]',
-  modified: 'ring-1 ring-amber-400/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]',
-  removed: 'ring-1 ring-red-400/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] opacity-50',
-  affected: 'ring-1 ring-violet-400/30 shadow-[0_0_10px_rgba(139,92,246,0.15)]',
-  active: 'ring-2 ring-accent animate-node-pulse',
-  planned_add: 'border-dashed !border-green-400/50 shadow-[0_0_20px_rgba(34,197,94,0.2)] bg-green-950/20',
-  planned_modify: 'ring-2 ring-amber-400/40 shadow-[0_0_20px_rgba(249,115,22,0.2)]',
-  planned_remove: 'border-dashed !border-red-400/50 opacity-30',
-  in_progress_task: 'ring-2 ring-accent animate-node-pulse shadow-[0_0_25px_rgba(59,130,246,0.35)]',
-};
-
-function FileIcon({ language, size = 14 }: { language?: string; size?: number }) {
-  const color = LANG_STYLES[language || '']?.iconColor || 'text-zinc-500';
-  if (language === 'json') return <FileJson size={size} className={`${color} drop-shadow-[0_0_3px_currentColor] shrink-0`} />;
-  if (language === 'markdown') return <FileText size={size} className={`${color} shrink-0`} />;
-  return <FileCode size={size} className={`${color} drop-shadow-[0_0_3px_currentColor] shrink-0`} />;
+  if (language === 'json') return <FileJson size={size} className={className} style={{ color }} />;
+  if (language === 'markdown') return <FileText size={size} className={className} style={{ color }} />;
+  return <FileCode size={size} className={className} style={{ color }} />;
 }
 
-export function FileNode({ data }: NodeProps) {
-  const d = data as unknown as FileNodeData;
+function FileNodeComponent({ data }: NodeProps) {
+  const d = data as FileNodeData;
+  const language = getLanguageVisual(d.language);
+  const change = getChangeVisual(d.changeStatus);
   const isGhost = d.ghost || d.changeStatus === 'planned_add';
-  const isFocused = d.isFocused;
-  const isHub = d.isHub;
-  const style = LANG_STYLES[d.language || ''] || { border: 'border-zinc-700/30', bg: 'bg-zinc-900/40', iconColor: 'text-zinc-500', glow: '' };
-  const changeStyle = d.changeStatus ? CHANGE_STYLES[d.changeStatus] || '' : '';
-  const frozenStyle = d.frozen ? 'opacity-60 grayscale-[30%]' : '';
-
-  // Hub/focused nodes are larger
-  const padding = isFocused ? 'px-4 py-3' : isHub ? 'px-3.5 py-2.5' : 'px-3 py-1.5';
-  const minWidth = isFocused ? 'min-w-[200px]' : isHub ? 'min-w-[160px]' : 'min-w-[100px]';
-  const borderWidth = isFocused ? 'border-2' : 'border';
+  const isFocused = Boolean(d.isFocused);
+  const isHub = Boolean(d.isHub);
+  const isRemoved = d.changeStatus === 'removed' || d.changeStatus === 'planned_remove';
+  const exportsList = d.exports?.slice(0, isFocused ? 8 : 4) || [];
+  const showRichMeta = isFocused || isHub || isGhost;
+  const wrapperClass = isFocused
+    ? 'w-[280px] min-h-[196px] px-4 py-4'
+    : isHub
+      ? 'w-[232px] min-h-[118px] px-3.5 py-3'
+      : isGhost
+        ? 'w-[210px] min-h-[92px] px-3 py-2.5'
+        : 'w-[176px] min-h-[68px] px-3 py-2.5';
 
   return (
     <div
-      className={`relative ${padding} rounded-xl ${borderWidth} ${
-        isGhost ? 'border-dashed border-green-400/40 bg-green-950/15'
-        : `${style.border} ${style.bg}`
-      } ${style.glow} ${changeStyle} ${frozenStyle} backdrop-blur-sm ${minWidth} cursor-pointer hover:brightness-110 transition-all`}
+      className={[
+        'group relative overflow-hidden rounded-[22px] border border-white/10',
+        'bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.03))]',
+        'backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-white/18',
+        'shadow-[0_22px_48px_rgba(4,8,20,0.45)]',
+        wrapperClass,
+        d.frozen ? 'opacity-65 saturate-75' : '',
+        isGhost ? 'border-dashed border-emerald-300/30 bg-[linear-gradient(180deg,rgba(34,197,94,0.14),rgba(11,26,18,0.52))] opacity-80' : '',
+        isRemoved ? 'opacity-55' : '',
+      ].join(' ')}
       onClick={() => d.onToggle?.()}
+      style={{
+        boxShadow: `0 24px 60px rgba(3,7,18,0.48), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 36px ${change?.glow || language.glow}`,
+      }}
     >
-      <Handle type="target" position={Position.Top} className="!bg-zinc-400 !w-2 !h-2" />
+      <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-0 !bg-white/70 !shadow-[0_0_10px_rgba(255,255,255,0.4)]" />
+      <div className="pointer-events-none absolute inset-0 rounded-[22px] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_38%),radial-gradient(circle_at_bottom_right,var(--node-glow),transparent_44%)] opacity-90" style={{ ['--node-glow' as string]: change?.glow || language.glow }} />
+      <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80" />
 
-      {/* Task number badge */}
+      {(isFocused || d.changeStatus === 'in_progress_task' || d.changeStatus === 'active') && (
+        <div
+          className={[
+            'pointer-events-none absolute inset-[-1px] rounded-[22px] border border-white/12',
+            isFocused ? 'animate-graph-glow-pulse' : 'animate-node-pulse',
+          ].join(' ')}
+          style={{ boxShadow: `0 0 0 1px rgba(255,255,255,0.05) inset, 0 0 28px ${change?.glow || language.glow}` }}
+        />
+      )}
+
       {d.taskNumber != null && (
-        <div className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-accent/80 text-white text-[9px] font-bold flex items-center justify-center shadow-[0_0_6px_rgba(59,130,246,0.5)]">
+        <div className="absolute left-3 top-3 flex h-6 min-w-6 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/14 px-2 text-[10px] font-semibold text-blue-100 shadow-[0_0_18px_rgba(59,130,246,0.25)]">
           {d.taskNumber}
         </div>
       )}
 
-      {/* Done checkmark */}
       {d.done && (
-        <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-green-500/80 text-white flex items-center justify-center shadow-[0_0_6px_rgba(34,197,94,0.5)]">
-          <Check size={11} />
+        <div className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full border border-emerald-300/25 bg-emerald-500/16 text-emerald-50 shadow-[0_0_18px_rgba(34,197,94,0.28)]">
+          <Check size={12} />
         </div>
       )}
 
-      {/* Direction indicator */}
       {d.direction && (
-        <div className={`absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center ${
-          d.direction === 'outbound' ? 'bg-blue-500/60' : 'bg-amber-500/60'
+        <div className={`absolute ${d.done ? 'right-11' : 'right-3'} top-3 flex h-6 min-w-6 items-center justify-center rounded-full border px-2 ${
+          d.direction === 'outbound'
+            ? 'border-blue-300/25 bg-blue-500/14 text-blue-100 shadow-[0_0_14px_rgba(59,130,246,0.26)]'
+            : 'border-amber-300/25 bg-amber-500/14 text-amber-100 shadow-[0_0_14px_rgba(245,158,11,0.26)]'
         }`}>
-          {d.direction === 'outbound'
-            ? <ArrowUpRight size={9} className="text-white" />
-            : <ArrowDownLeft size={9} className="text-white" />
-          }
+          {d.direction === 'outbound' ? <ArrowUpRight size={12} /> : <ArrowDownLeft size={12} />}
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex items-center gap-2">
-        <FileIcon language={d.language} size={isFocused ? 18 : isHub ? 16 : 13} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={`font-medium truncate ${
-              isFocused ? 'text-[13px] text-foreground' :
-              isHub ? 'text-[12px] text-zinc-200' :
-              isGhost ? 'text-[11px] text-green-300/70 italic' :
-              'text-[11px] text-zinc-300'
-            }`}>{d.label}</span>
-
-            {d.connectionCount != null && d.connectionCount > 0 && (
-              <span className="text-[9px] text-zinc-500 bg-white/[0.06] px-1.5 py-0.5 rounded-full shrink-0">
-                {d.connectionCount}
-              </span>
-            )}
+      <div className="relative z-10 flex h-full flex-col gap-3">
+        <div className="flex items-start gap-3">
+          <div
+            className="flex shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/8"
+            style={{
+              width: isFocused ? 44 : 36,
+              height: isFocused ? 44 : 36,
+              boxShadow: `0 0 18px ${language.glow}`,
+              backgroundColor: language.bg,
+            }}
+          >
+            <FileIcon language={d.language} size={isFocused ? 22 : 18} />
           </div>
 
-          {/* Show exports for hub/focused nodes */}
-          {(isHub || isFocused) && d.exports && d.exports.length > 0 && (
-            <div className="text-[9px] text-zinc-500 mt-0.5 truncate">
-              {d.exports.slice(0, 4).join(' · ')}
-              {d.exports.length > 4 && ` +${d.exports.length - 4}`}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className={`truncate font-semibold tracking-[0.01em] text-zinc-50 ${isFocused ? 'text-[15px]' : isHub ? 'text-[13px]' : 'text-[12px]'} ${isRemoved ? 'line-through' : ''}`}>
+                  {d.label}
+                </div>
+                {(isFocused || isHub) && d.fullPath && (
+                  <div className="mt-1 truncate font-mono text-[10px] text-zinc-400/85">
+                    {d.fullPath}
+                  </div>
+                )}
+              </div>
+
+              {showRichMeta && (
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`rounded-full border px-2 py-1 text-[9px] font-semibold tracking-[0.14em] ${language.badge}`}>
+                    {getLanguageLabel(d.language)}
+                  </span>
+                  {typeof d.connectionCount === 'number' && (
+                    <span className="rounded-full border border-white/10 bg-white/6 px-2 py-1 text-[10px] font-medium text-zinc-100">
+                      {d.connectionCount} links
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Change status badge */}
-        {d.changeStatus && (
-          <span className={`text-[7px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${
-            d.changeStatus.startsWith('planned_add') ? 'text-green-300 bg-green-500/10 border-green-500/20' :
-            d.changeStatus.startsWith('planned_modify') ? 'text-amber-300 bg-amber-500/10 border-amber-500/20' :
-            d.changeStatus.startsWith('planned_remove') ? 'text-red-300 bg-red-500/10 border-red-500/20' :
-            d.changeStatus === 'in_progress_task' ? 'text-blue-300 bg-accent/10 border-accent/20' :
-            d.changeStatus === 'added' ? 'text-green-400 bg-green-500/10 border-green-500/20' :
-            d.changeStatus === 'modified' ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' :
-            'text-violet-400 bg-violet-500/10 border-violet-500/20'
-          }`}>
-            {d.changeStatus === 'planned_add' ? '+' :
-             d.changeStatus === 'planned_modify' ? '~' :
-             d.changeStatus === 'planned_remove' ? '-' :
-             d.changeStatus === 'in_progress_task' ? '▸' :
-             d.changeStatus === 'added' ? '+' :
-             d.changeStatus === 'modified' ? '~' :
-             d.changeStatus === 'removed' ? '-' : '!'}
+        {(isFocused || isHub) && exportsList.length > 0 && (
+          <div className="rounded-2xl border border-white/8 bg-black/16 px-3 py-2">
+            <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-400/80">
+              <span>Exports</span>
+              {typeof d.symbolCount === 'number' && <span>{d.symbolCount} symbols</span>}
+            </div>
+            <div className={`space-y-1 ${isFocused ? 'max-h-24 overflow-y-auto pr-1' : ''}`}>
+              {exportsList.map((name) => (
+                <div key={name} className="truncate text-[11px] text-zinc-100/92">
+                  {name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isGhost && d.taskDescription && (
+          <div className="mt-auto rounded-2xl border border-emerald-300/15 bg-emerald-500/10 px-3 py-2 text-[11px] italic text-emerald-100/88">
+            {d.taskDescription}
+          </div>
+        )}
+      </div>
+
+      <div className="absolute bottom-3 left-3 flex items-center gap-2">
+        {change && (
+          <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${change.tone}`}>
+            {change.symbol}
+          </span>
+        )}
+        {isGhost && (
+          <span className="rounded-full border border-emerald-300/20 bg-emerald-500/12 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+            NEW
+          </span>
+        )}
+        {!showRichMeta && typeof d.connectionCount === 'number' && d.connectionCount > 0 && (
+          <span className="rounded-full border border-white/8 bg-white/6 px-2 py-1 text-[10px] text-zinc-100/90">
+            {d.connectionCount}
           </span>
         )}
       </div>
 
-      {/* Ghost node task description */}
-      {isGhost && d.taskDescription && (
-        <div className="text-[8px] text-green-400/40 truncate mt-1 italic">{d.taskDescription}</div>
-      )}
-
-      {/* Full path for focused node */}
-      {isFocused && d.fullPath && (
-        <div className="text-[9px] text-zinc-600 truncate mt-1 font-mono">{d.fullPath}</div>
-      )}
-
-      <Handle type="source" position={Position.Bottom} className="!bg-zinc-400 !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} className="!h-2.5 !w-2.5 !border-0 !bg-white/70 !shadow-[0_0_10px_rgba(255,255,255,0.4)]" />
     </div>
   );
 }
+
+export const FileNode = memo(FileNodeComponent);
+FileNode.displayName = 'FileNode';

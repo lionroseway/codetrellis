@@ -117,8 +117,36 @@ body {
   50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.4), 0 0 40px rgba(59, 130, 246, 0.1); }
 }
 
+@keyframes graph-glow-pulse {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(0.995);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+}
+
+@keyframes flow-dots {
+  from { stroke-dashoffset: 22; }
+  to { stroke-dashoffset: 0; }
+}
+
 .animate-node-pulse {
   animation: node-pulse 2s ease-in-out infinite;
+}
+
+.animate-graph-glow-pulse {
+  animation: graph-glow-pulse 2.8s ease-in-out infinite;
+}
+
+.react-flow__edge-path {
+  transition: stroke 180ms ease, stroke-width 180ms ease, filter 180ms ease, opacity 180ms ease;
+}
+
+.react-flow__edge-textbg {
+  fill: transparent;
 }
 
 /* Scrollbar */

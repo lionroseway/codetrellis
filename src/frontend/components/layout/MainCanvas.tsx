@@ -26,6 +26,7 @@ import { PackageNode } from '../graph/nodes/PackageNode';
 import { DirectoryNode } from '../graph/nodes/DirectoryNode';
 import { FileNode } from '../graph/nodes/FileNode';
 import { SymbolNode } from '../graph/nodes/SymbolNode';
+import { ImportEdge } from '../graph/edges/ImportEdge';
 import { WelcomeScreen } from '../WelcomeScreen';
 
 const nodeTypes = {
@@ -33,6 +34,10 @@ const nodeTypes = {
   directoryNode: DirectoryNode,
   fileNode: FileNode,
   symbolNode: SymbolNode,
+};
+
+const edgeTypes = {
+  importEdge: ImportEdge,
 };
 
 export function MainCanvas() {
@@ -248,6 +253,7 @@ export function MainCanvas() {
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
+      <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_center,rgba(59,130,246,0.08)_0,transparent_46%),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:100%_100%,28px_28px,28px_28px]" />
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -255,6 +261,7 @@ export function MainCanvas() {
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesDraggable={false}
         fitView
         fitViewOptions={{ padding: 0.2 }}
