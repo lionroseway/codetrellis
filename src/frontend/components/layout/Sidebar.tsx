@@ -152,6 +152,13 @@ export function Sidebar() {
     }
 
     setStableGitStatus((previous) => {
+      const headAdvanced = Boolean(
+        gitStatus?.commitHash &&
+        previous?.commitHash &&
+        gitStatus.commitHash !== previous.commitHash,
+      );
+
+      if (headAdvanced && !hasGitStatusChanges(gitStatus)) return gitStatus;
       if (hasGitStatusChanges(gitStatus)) return gitStatus;
       if (hasGitStatusChanges(previous)) return previous;
       return gitStatus;

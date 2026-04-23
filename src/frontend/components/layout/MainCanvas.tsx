@@ -251,9 +251,17 @@ export function MainCanvas() {
           const previousGit = previous?.git || null;
           const incomingGitHasChanges = hasGitChanges(incomingGit);
           const previousGitHadChanges = hasGitChanges(previousGit);
+          const headAdvanced = Boolean(
+            incomingGit?.commitHash &&
+            previousGit?.commitHash &&
+            incomingGit.commitHash !== previousGit.commitHash,
+          );
 
           let effectiveGit = incomingGit;
-          if (incomingGitHasChanges) {
+          if (!incomingGitHasChanges && headAdvanced) {
+            gitCleanRefreshStreakRef.current = 0;
+            effectiveGit = incomingGit;
+          } else if (incomingGitHasChanges) {
             gitCleanRefreshStreakRef.current = 0;
           } else if (previousGitHadChanges) {
             if (gitCleanRefreshStreakRef.current < DIRTY_STATE_CLEAR_CONFIRMATIONS - 1) {
@@ -281,7 +289,7 @@ export function MainCanvas() {
               diff.summary?.removed ||
               diff.summary?.modified,
             );
-            if (!nextDiffHasChanges && !nextGitHasChanges && previous) {
+            if (!nextDiffHasChanges && !nextGitHasChanges && previous && !headAdvanced) {
               const previousHadChanges = Boolean(
                 previous.addedFiles.length ||
                 previous.removedFiles.length ||

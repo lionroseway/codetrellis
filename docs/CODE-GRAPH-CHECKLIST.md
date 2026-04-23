@@ -134,6 +134,7 @@ It should answer:
 - [x] Refresh interval can be adjusted
 - [ ] Refresh behavior feels monitoring-grade and non-disruptive
 - [ ] Diff refresh and graph refresh feel coordinated rather than confusing
+- [ ] Auto-track `HEAD` updates the sidebar and canvas correctly after new commits
 
 ### 7. Cluster-First Graph Structure
 
@@ -189,12 +190,19 @@ These are the highest-priority items for the next passes on the graph:
 
 - [x] Introduced cluster-first overview language
 - [x] Added inferred architectural cluster cards
+- [x] Added baseline mode controls for pinned, auto-track, and recent commit selection
 - [x] Added custom import edges
 - [x] Added draggable graph cards
 - [x] Added selection emphasis for node neighborhoods
 - [x] Added pause / check now / interval controls for refresh
 - [x] Added Git-backed staged / unstaged / untracked summary
 - [x] Included standalone changed files in graph eligibility
+
+---
+
+## Current Known Gaps
+
+- [ ] After a new commit while using auto-track `HEAD`, the sidebar and canvas do not always refresh into the new clean baseline correctly
 
 ---
 
