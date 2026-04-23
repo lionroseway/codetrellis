@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { GraphNode, GraphEdge, ViewDepth, ArchitectureDiff, ProjectionData, TrellisMode } from '@shared/types';
 import type { LayoutMode } from '../lib/graph-builder';
 
+export type BaselineMode = 'pinned' | 'auto';
+
 interface GraphState {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -15,9 +17,14 @@ interface GraphState {
 
   layoutMode: LayoutMode;
   trellisMode: TrellisMode;
+  baselineMode: BaselineMode;
+  baselineCommitHash: string | null;
+  baselineShortCommitHash: string | null;
   currentSnapshot: {
     id: number;
     name?: string;
+    commitHash?: string | null;
+    shortCommitHash?: string | null;
     edges: Array<{ source: string; target: string; specifiers: string[] }>;
     files: Array<{ path: string }>;
   } | null;
@@ -31,6 +38,8 @@ interface GraphState {
   applyDiff: (diff: ArchitectureDiff) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   setTrellisMode: (mode: TrellisMode) => void;
+  setBaselineMode: (mode: BaselineMode) => void;
+  setBaselineReference: (data: { commitHash: string | null; shortCommitHash: string | null }) => void;
   setCurrentSnapshot: (data: GraphState['currentSnapshot']) => void;
   toggleProjection: () => void;
   setProjectionData: (data: ProjectionData | null) => void;
@@ -50,6 +59,9 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   layoutMode: 'map' as LayoutMode,
   trellisMode: 'live' as TrellisMode,
+  baselineMode: 'pinned' as BaselineMode,
+  baselineCommitHash: null,
+  baselineShortCommitHash: null,
   currentSnapshot: null,
   projectionEnabled: false,
   projectionData: null,
@@ -86,8 +98,25 @@ export const useGraphStore = create<GraphState>((set) => ({
     }),
   setLayoutMode: (mode) => set({ layoutMode: mode }),
   setTrellisMode: (mode) => set({ trellisMode: mode }),
-  setCurrentSnapshot: (data) => set({ currentSnapshot: data }),
+  setBaselineMode: (mode) => set({ baselineMode: mode }),
+  setBaselineReference: (data) => set({
+    baselineCommitHash: data.commitHash,
+    baselineShortCommitHash: data.shortCommitHash,
+  }),
+  setCurrentSnapshot: (data) => set({
+    currentSnapshot: data,
+    baselineCommitHash: data?.commitHash ?? null,
+    baselineShortCommitHash: data?.shortCommitHash ?? null,
+  }),
   toggleProjection: () => set((s) => ({ projectionEnabled: !s.projectionEnabled })),
   setProjectionData: (data) => set({ projectionData: data }),
-  clearGraph: () => set({ nodes: [], edges: [], expandedNodes: new Set(), projectionData: null }),
+  clearGraph: () => set({
+    nodes: [],
+    edges: [],
+    expandedNodes: new Set(),
+    projectionData: null,
+    currentSnapshot: null,
+    baselineCommitHash: null,
+    baselineShortCommitHash: null,
+  }),
 }));

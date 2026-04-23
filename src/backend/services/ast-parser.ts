@@ -60,19 +60,9 @@ function getParserForFile(filePath: string): { parser: any; language: SupportedL
   return null;
 }
 
-/**
- * Parse a single file and extract symbols + imports.
- */
-export function parseFile(filePath: string): ParsedFile | null {
+function parseSource(filePath: string, content: string): ParsedFile | null {
   const match = getParserForFile(filePath);
   if (!match) return null;
-
-  let content: string;
-  try {
-    content = fs.readFileSync(filePath, 'utf-8');
-  } catch {
-    return null;
-  }
 
   const { parser, language } = match;
   const tree = parser.parse(content);
@@ -84,6 +74,28 @@ export function parseFile(filePath: string): ParsedFile | null {
   const exports = extractExports(root);
 
   return { path: filePath, contentHash, language, symbols, imports, exports };
+}
+
+/**
+ * Parse a single file and extract symbols + imports.
+ */
+export function parseFile(filePath: string): ParsedFile | null {
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
+
+  return parseSource(filePath, content);
+}
+
+/**
+ * Parse source code that does not exist on disk, while still using the
+ * filepath to infer language and relative import resolution.
+ */
+export function parseVirtualFile(filePath: string, content: string): ParsedFile | null {
+  return parseSource(filePath, content);
 }
 
 /**

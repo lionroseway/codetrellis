@@ -41,6 +41,14 @@ const edgeTypes = {
   importEdge: ImportEdge,
 };
 
+const DIRTY_STATE_CLEAR_CONFIRMATIONS = 3;
+const recentCommitsCache = new Map<string, Array<{
+  commitHash: string;
+  shortCommitHash: string;
+  subject: string;
+  committedAt: string;
+}>>();
+
 export function MainCanvas() {
   const root = useProjectStore((s) => s.root);
   const scanStatus = useProjectStore((s) => s.scanStatus);
@@ -55,6 +63,11 @@ export function MainCanvas() {
   const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
   const trellisMode = useGraphStore((s) => s.trellisMode);
   const setTrellisMode = useGraphStore((s) => s.setTrellisMode);
+  const baselineMode = useGraphStore((s) => s.baselineMode);
+  const setBaselineMode = useGraphStore((s) => s.setBaselineMode);
+  const baselineCommitHash = useGraphStore((s) => s.baselineCommitHash);
+  const baselineShortCommitHash = useGraphStore((s) => s.baselineShortCommitHash);
+  const setBaselineReference = useGraphStore((s) => s.setBaselineReference);
   const currentSnapshot = useGraphStore((s) => s.currentSnapshot);
   const setCurrentSnapshot = useGraphStore((s) => s.setCurrentSnapshot);
   const projectionEnabled = useGraphStore((s) => s.projectionEnabled);
@@ -81,6 +94,8 @@ export function MainCanvas() {
       stagedDeleted: string[];
       unstagedModified: string[];
       unstagedDeleted: string[];
+      commitHash?: string | null;
+      shortCommitHash?: string | null;
     } | null;
   } | null>(null);
   const [snapshotDiff, setSnapshotDiff] = useState<{
@@ -93,8 +108,108 @@ export function MainCanvas() {
   } | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [refreshIntervalMs, setRefreshIntervalMs] = useState(10000);
+  const [recentCommits, setRecentCommits] = useState<Array<{
+    commitHash: string;
+    shortCommitHash: string;
+    subject: string;
+    committedAt: string;
+  }>>(() => (root ? recentCommitsCache.get(root) || [] : []));
+  const [commitsState, setCommitsState] = useState<'idle' | 'loading' | 'ready' | 'error'>(() => (
+    root && recentCommitsCache.has(root) ? 'ready' : 'idle'
+  ));
   const cleanRefreshStreakRef = useRef(0);
   const gitCleanRefreshStreakRef = useRef(0);
+
+  const fetchBaselineSnapshot = useCallback(() => {
+    fetch('/api/baseline')
+      .then((r) => r.json())
+      .then((snapshot: any) => {
+        if (snapshot?.data) {
+          setCurrentSnapshot({
+            id: snapshot.id,
+            name: snapshot.name,
+            commitHash: snapshot.commitHash,
+            shortCommitHash: snapshot.shortCommitHash,
+            edges: snapshot.data.edges,
+            files: snapshot.data.files,
+          });
+          setBaselineReference({
+            commitHash: snapshot.commitHash ?? null,
+            shortCommitHash: snapshot.shortCommitHash ?? null,
+          });
+          return;
+        }
+        setCurrentSnapshot(null);
+      })
+      .catch(() => setCurrentSnapshot(null));
+  }, [setBaselineReference, setCurrentSnapshot]);
+
+  const captureBaseline = useCallback((commitHash?: string | null) => {
+    if (!root) return Promise.resolve();
+    return fetch('/api/baseline/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectPath: root, commitHash: commitHash || undefined }),
+    })
+      .then((r) => r.json())
+      .then((snapshot) => {
+        if (snapshot?.data) {
+          setCurrentSnapshot({
+            id: snapshot.id,
+            name: snapshot.name,
+            commitHash: snapshot.commitHash,
+            shortCommitHash: snapshot.shortCommitHash,
+            edges: snapshot.data.edges,
+            files: snapshot.data.files,
+          });
+          setBaselineReference({
+            commitHash: snapshot.commitHash ?? null,
+            shortCommitHash: snapshot.shortCommitHash ?? null,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [root, setBaselineReference, setCurrentSnapshot]);
+
+  useEffect(() => {
+    if (!root) {
+      setRecentCommits([]);
+      setCommitsState('idle');
+      return;
+    }
+
+    const cachedCommits = recentCommitsCache.get(root) || [];
+    if (cachedCommits.length > 0) {
+      setRecentCommits(cachedCommits);
+      setCommitsState('ready');
+    } else {
+      setRecentCommits([]);
+      setCommitsState('loading');
+    }
+
+    fetch(`/api/git/commits?path=${encodeURIComponent(root)}&limit=20`)
+      .then((r) => r.json())
+      .then((data) => {
+        const commits = Array.isArray(data?.commits) ? data.commits : [];
+        if (commits.length > 0) {
+          recentCommitsCache.set(root, commits);
+          setRecentCommits(commits);
+          setCommitsState('ready');
+          return;
+        }
+
+        if (cachedCommits.length === 0) {
+          setRecentCommits([]);
+          setCommitsState('ready');
+        }
+      })
+      .catch(() => {
+        if (cachedCommits.length === 0) {
+          setRecentCommits([]);
+          setCommitsState('error');
+        }
+      });
+  }, [root]);
 
   // Fetch dependency edges when scan completes
   const hasFetchedRef = useRef<string | null>(null);
@@ -127,6 +242,7 @@ export function MainCanvas() {
       .then(([diff, gitStatus]) => {
         let nextDiffHasChanges = false;
         let nextGitHasChanges = false;
+        let latestCommitHash: string | null = null;
 
         setDiffData((previous) => {
           const incomingGit = gitStatus && !gitStatus.error
@@ -140,7 +256,7 @@ export function MainCanvas() {
           if (incomingGitHasChanges) {
             gitCleanRefreshStreakRef.current = 0;
           } else if (previousGitHadChanges) {
-            if (gitCleanRefreshStreakRef.current < 1) {
+            if (gitCleanRefreshStreakRef.current < DIRTY_STATE_CLEAR_CONFIRMATIONS - 1) {
               gitCleanRefreshStreakRef.current += 1;
               effectiveGit = previousGit;
             } else {
@@ -155,6 +271,7 @@ export function MainCanvas() {
             effectiveGit?.unstaged?.length ||
             effectiveGit?.untracked?.length,
           );
+          latestCommitHash = effectiveGit?.commitHash ?? null;
           setProjectGitStatus(effectiveGit || null);
 
           if (diff && !diff.error) {
@@ -173,7 +290,7 @@ export function MainCanvas() {
                 previous.git?.unstaged?.length ||
                 previous.git?.untracked?.length,
               );
-              if (previousHadChanges && cleanRefreshStreakRef.current < 1) {
+              if (previousHadChanges && cleanRefreshStreakRef.current < DIRTY_STATE_CLEAR_CONFIRMATIONS - 1) {
                 cleanRefreshStreakRef.current += 1;
                 nextDiffHasChanges = true;
                 nextGitHasChanges = true;
@@ -231,9 +348,18 @@ export function MainCanvas() {
             })
             .catch(() => {});
         }
+
+        if (
+          baselineMode === 'auto' &&
+          latestCommitHash &&
+          latestCommitHash !== baselineCommitHash &&
+          !nextGitHasChanges
+        ) {
+          captureBaseline();
+        }
       })
       .catch(() => {});
-  }, [scanStatus, root, setProjectGitStatus]);
+  }, [scanStatus, root, setProjectGitStatus, baselineMode, baselineCommitHash, captureBaseline]);
 
   useEffect(() => {
     if (scanStatus !== 'ready' || !root) return;
@@ -258,19 +384,6 @@ export function MainCanvas() {
   // Fetch snapshot when switching to current/diff mode
   useEffect(() => {
     if (trellisMode !== 'current' && trellisMode !== 'diff' && trellisMode !== 'planned') return;
-    const fetchBaselineSnapshot = () => {
-      fetch('/api/baseline')
-        .then((r) => r.json())
-        .then((snapshot: any) => {
-          if (snapshot?.data) {
-            setCurrentSnapshot({ id: snapshot.id, name: snapshot.name, edges: snapshot.data.edges, files: snapshot.data.files });
-            return;
-          }
-          setCurrentSnapshot(null);
-        })
-        .catch(() => setCurrentSnapshot(null));
-    };
-
     if (!activePlanUid) {
       fetchBaselineSnapshot();
       setSnapshotDiff(null);
@@ -289,11 +402,18 @@ export function MainCanvas() {
       })
       .then((snapshot: any) => {
         if (snapshot?.data) {
-          setCurrentSnapshot({ id: snapshot.id, name: snapshot.name, edges: snapshot.data.edges, files: snapshot.data.files });
+          setCurrentSnapshot({
+            id: snapshot.id,
+            name: snapshot.name,
+            commitHash: snapshot.commitHash,
+            shortCommitHash: snapshot.shortCommitHash,
+            edges: snapshot.data.edges,
+            files: snapshot.data.files,
+          });
         }
       })
       .catch(() => fetchBaselineSnapshot());
-  }, [trellisMode, activePlanUid, setCurrentSnapshot]);
+  }, [trellisMode, activePlanUid, setCurrentSnapshot, fetchBaselineSnapshot]);
 
   useEffect(() => {
     if (trellisMode !== 'diff' || !currentSnapshot?.id) {
@@ -398,6 +518,16 @@ export function MainCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData.edges);
 
+  const selectedCommitLabel = useMemo(() => {
+    if (baselineMode === 'auto') return 'Track HEAD';
+    if (!baselineCommitHash) return 'Pin current HEAD';
+    const matchingCommit = recentCommits.find((commit) => commit.commitHash === baselineCommitHash);
+    if (matchingCommit) {
+      return `${matchingCommit.shortCommitHash} · ${matchingCommit.subject}`;
+    }
+    return baselineShortCommitHash ? `${baselineShortCommitHash} · pinned` : 'Pinned baseline';
+  }, [baselineMode, baselineCommitHash, baselineShortCommitHash, recentCommits]);
+
   useEffect(() => {
     setNodes((prev) => preserveNodePositions(prev, displayGraphData.nodes));
     setEdges(displayGraphData.edges);
@@ -472,9 +602,9 @@ export function MainCanvas() {
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
         <Panel position="top-right">
-          <div className="flex items-center gap-2">
+          <div className="flex max-w-[min(880px,calc(100vw-620px))] flex-wrap items-center justify-end gap-2">
             {/* Trellis mode selector */}
-            <div className="flex items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+            <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
               {([
                 { mode: 'live' as const, icon: Radio, label: 'Live', color: 'text-green-400' },
                 { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-blue-400' },
@@ -497,8 +627,67 @@ export function MainCanvas() {
               ))}
             </div>
 
+            <div className="flex min-w-0 shrink items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+              <button
+                onClick={() => {
+                  setBaselineMode('pinned');
+                  captureBaseline();
+                }}
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${baselineMode === 'pinned' ? 'bg-blue-500/14 text-blue-200' : 'text-zinc-400 hover:text-zinc-200'}`}
+                title="Pin baseline to the current commit/state"
+              >
+                Pin
+              </button>
+              <button
+                onClick={() => setBaselineMode('auto')}
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${baselineMode === 'auto' ? 'bg-emerald-500/14 text-emerald-200' : 'text-zinc-400 hover:text-zinc-200'}`}
+                title="Automatically move baseline forward when HEAD advances cleanly"
+              >
+                Auto-track
+              </button>
+              <span className="rounded-md border border-white/8 bg-black/12 px-2 py-1 text-[10px] text-zinc-300">
+                {baselineMode === 'auto' ? 'HEAD' : baselineShortCommitHash ? baselineShortCommitHash : 'baseline'}
+              </span>
+              <select
+                value={baselineMode === 'auto' ? '__AUTO__' : (baselineCommitHash || '__CURRENT__')}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === '__AUTO__') {
+                    setBaselineMode('auto');
+                    return;
+                  }
+
+                  setBaselineMode('pinned');
+                  if (value === '__CURRENT__') {
+                    captureBaseline();
+                    return;
+                  }
+                  captureBaseline(value);
+                }}
+                className="w-[140px] rounded-md border border-white/8 bg-black/20 px-2 py-1 text-[10px] text-zinc-200 outline-none transition-all hover:border-white/15 sm:w-[180px] lg:w-[240px] xl:w-[320px]"
+                title="Choose which commit the baseline should be pinned to"
+              >
+                <option value="__AUTO__">Track HEAD</option>
+                <option value="__CURRENT__">Pin current HEAD</option>
+                {commitsState === 'loading' && (
+                  <option disabled value="__LOADING__">Loading recent commits...</option>
+                )}
+                {commitsState === 'error' && (
+                  <option disabled value="__ERROR__">Recent commits unavailable</option>
+                )}
+                {commitsState === 'ready' && recentCommits.length === 0 && (
+                  <option disabled value="__EMPTY__">No recent commits found</option>
+                )}
+                {recentCommits.map((commit) => (
+                  <option key={commit.commitHash} value={commit.commitHash}>
+                    {commit.shortCommitHash} · {commit.subject} · {commit.committedAt}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Layout toggle */}
-            <div className="flex items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+            <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
               <button
                 onClick={() => setLayoutMode('map')}
                 className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
@@ -535,7 +724,7 @@ export function MainCanvas() {
                 Projection
               </button>
             )}
-            <div className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
               <button
                 onClick={() => setAutoRefreshEnabled((value) => !value)}
                 className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${autoRefreshEnabled ? 'text-green-300 bg-green-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
@@ -563,7 +752,9 @@ export function MainCanvas() {
                 <option value={30000}>30s</option>
               </select>
             </div>
-            <ExportButton />
+            <div className="shrink-0">
+              <ExportButton />
+            </div>
           </div>
         </Panel>
         <Panel position="top-left">

@@ -80,6 +80,7 @@ It should answer:
 ### 1. State Meaning And Mode Behavior
 
 - [ ] `Baseline` visually reads as frozen reference state
+- [x] Baseline can be pinned, auto-tracked, or pinned to a recent commit
 - [ ] `Live` visually reads as current truth, including local dirty state
 - [ ] `Planned` visually reads as target state for the selected branch/worktree
 - [ ] `Diff` visually reads as live-vs-plan comparison, not just generic file diff

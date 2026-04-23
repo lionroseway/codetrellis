@@ -10,6 +10,8 @@ export interface ProjectGitStatus {
   stagedDeleted: string[];
   unstagedModified: string[];
   unstagedDeleted: string[];
+  commitHash?: string | null;
+  shortCommitHash?: string | null;
 }
 
 export interface ProjectTab {

@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { WebSocketServer, WebSocket } from 'ws';
 import { scanDirectory, countFiles, collectFilePaths } from './services/project-scanner';
 import { detectMonorepo } from './services/monorepo-detector';
-import { initParser, parseFiles } from './services/ast-parser';
+import { initParser, parseFiles, parseVirtualFile } from './services/ast-parser';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, resolveImports, getDependencyEdges, getFileDependencies } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -158,6 +158,31 @@ app.get('/api/git/status', (req, res) => {
     stagedDeleted: [],
     unstagedModified: [],
     unstagedDeleted: [],
+    commitHash: null,
+    shortCommitHash: null,
+  });
+});
+
+app.get('/api/git/head', (req, res) => {
+  const projectPath = req.query.path as string;
+  if (!projectPath) {
+    res.status(400).json({ error: 'path query param required' });
+    return;
+  }
+
+  res.json(getGitHeadCommit(projectPath) || { commitHash: null, shortCommitHash: null });
+});
+
+app.get('/api/git/commits', (req, res) => {
+  const projectPath = req.query.path as string;
+  const limitParam = Number(req.query.limit);
+  if (!projectPath) {
+    res.status(400).json({ error: 'path query param required' });
+    return;
+  }
+
+  res.json({
+    commits: getRecentGitCommits(projectPath, Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 20),
   });
 });
 
@@ -259,7 +284,7 @@ app.post('/api/project/scan', async (req, res) => {
     hash: f.contentHash,
     symbolCount: f.symbols.length,
   }));
-  setBaseline(captureSnapshot(fileData, depEdges));
+  setBaseline(captureSnapshot(fileData, depEdges), getGitHeadCommit(projectPath) || undefined);
 
   // Start watching for file changes
   startWatching(projectPath);
@@ -355,6 +380,8 @@ app.get('/api/baseline', (_req, res) => {
   res.json({
     id: 0,
     name: 'Baseline',
+    commitHash: baseline.commitHash || null,
+    shortCommitHash: baseline.shortCommitHash || null,
     data: {
       files: [...baseline.files.entries()].map(([path, info]) => ({
         path,
@@ -362,6 +389,69 @@ app.get('/api/baseline', (_req, res) => {
         symbolCount: info.symbolCount,
       })),
       edges: [...baseline.edges].map((edge) => {
+        const [source, target] = edge.split('->');
+        return { source, target, specifiers: [] };
+      }),
+    },
+  });
+});
+
+app.post('/api/baseline/capture', async (req, res) => {
+  const { projectPath, commitHash } = req.body || {};
+  if (!projectPath || typeof projectPath !== 'string') {
+    res.status(400).json({ error: 'projectPath is required' });
+    return;
+  }
+
+  if (commitHash && typeof commitHash !== 'string') {
+    res.status(400).json({ error: 'commitHash must be a string when provided' });
+    return;
+  }
+
+  if (commitHash) {
+    const commitSnapshot = await captureGitCommitSnapshot(projectPath, commitHash);
+    if (!commitSnapshot) {
+      res.status(400).json({ error: 'Unable to capture baseline for the selected commit' });
+      return;
+    }
+    setBaseline(commitSnapshot.snapshot, {
+      commitHash: commitSnapshot.commitHash,
+      shortCommitHash: commitSnapshot.shortCommitHash,
+    });
+  } else {
+    const fileTree = scanDirectory(projectPath);
+    const filePaths = collectFilePaths(fileTree);
+    const parsedFiles = await parseFiles(filePaths);
+
+    for (const parsed of parsedFiles) {
+      storeParsedFile(parsed, projectPath);
+    }
+    resolveImports(projectPath);
+
+    const depEdges = getDependencyEdges();
+    const fileData = parsedFiles.map((f) => ({
+      path: path.relative(projectPath, f.path),
+      hash: f.contentHash,
+      symbolCount: f.symbols.length,
+    }));
+    const snapshot = captureSnapshot(fileData, depEdges);
+    const head = getGitHeadCommit(projectPath);
+    setBaseline(snapshot, head || undefined);
+  }
+
+  const baseline = getBaseline();
+  res.json({
+    id: 0,
+    name: 'Baseline',
+    commitHash: baseline?.commitHash || null,
+    shortCommitHash: baseline?.shortCommitHash || null,
+    data: {
+      files: [...(baseline?.files.entries() || [])].map(([filePath, info]) => ({
+        path: filePath,
+        contentHash: info.hash,
+        symbolCount: info.symbolCount,
+      })),
+      edges: [...(baseline?.edges || [])].map((edge) => {
         const [source, target] = edge.split('->');
         return { source, target, specifiers: [] };
       }),
@@ -592,6 +682,151 @@ if (require.main === module) {
   startServer().catch(console.error);
 }
 
+type GitCommitSummary = {
+  commitHash: string;
+  shortCommitHash: string;
+  subject: string;
+  committedAt: string;
+};
+
+type GitCommitSnapshotResult = {
+  snapshot: ReturnType<typeof captureSnapshot>;
+  commitHash: string;
+  shortCommitHash: string;
+};
+
+function getRecentGitCommits(projectPath: string, limit = 20): GitCommitSummary[] {
+  try {
+    const output = execFileSync(
+      'git',
+      ['-C', projectPath, 'log', `--max-count=${limit}`, '--date=short', '--pretty=format:%H%x09%h%x09%cs%x09%s'],
+      { encoding: 'utf8' },
+    );
+
+    return output
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [commitHash, shortCommitHash, committedAt, ...subjectParts] = line.split('\t');
+        return {
+          commitHash,
+          shortCommitHash,
+          committedAt,
+          subject: subjectParts.join('\t') || shortCommitHash,
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+async function captureGitCommitSnapshot(projectPath: string, commitHash: string): Promise<GitCommitSnapshotResult | null> {
+  try {
+    const commitMeta = execFileSync(
+      'git',
+      ['-C', projectPath, 'show', '-s', '--format=%H\t%h', commitHash],
+      { encoding: 'utf8' },
+    ).trim();
+
+    if (!commitMeta) return null;
+
+    const [resolvedCommitHash, shortCommitHash] = commitMeta.split('\t');
+    const fileListOutput = execFileSync(
+      'git',
+      ['-C', projectPath, 'ls-tree', '-r', '--name-only', resolvedCommitHash],
+      { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
+    );
+
+    const relativePaths = fileListOutput
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const parsedFiles = relativePaths
+      .map((relativePath) => {
+        const absolutePath = path.join(projectPath, relativePath);
+        try {
+          const content = execFileSync(
+            'git',
+            ['-C', projectPath, 'show', `${resolvedCommitHash}:${relativePath}`],
+            { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 },
+          );
+          return parseVirtualFile(absolutePath, content);
+        } catch {
+          return null;
+        }
+      })
+      .filter((file): file is NonNullable<typeof file> => Boolean(file));
+
+    const parsedByRelativePath = new Map(
+      parsedFiles.map((file) => [path.relative(projectPath, file.path), file]),
+    );
+
+    const depEdges = parsedFiles.flatMap((file) => {
+      const sourceRelative = path.relative(projectPath, file.path);
+      return file.imports
+        .map((imp) => resolveImportInSnapshot(sourceRelative, imp.source, parsedByRelativePath))
+        .filter((targetRelative): targetRelative is string => Boolean(targetRelative))
+        .map((targetRelative) => ({
+          sourceRelative,
+          targetRelative,
+        }));
+    });
+
+    const fileData = parsedFiles.map((file) => ({
+      path: path.relative(projectPath, file.path),
+      hash: file.contentHash,
+      symbolCount: file.symbols.length,
+    }));
+
+    return {
+      snapshot: captureSnapshot(fileData, depEdges),
+      commitHash: resolvedCommitHash,
+      shortCommitHash: shortCommitHash || resolvedCommitHash.slice(0, 7),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveImportInSnapshot(
+  sourceRelativePath: string,
+  importSource: string,
+  parsedByRelativePath: Map<string, { path: string }>,
+): string | null {
+  if (!importSource.startsWith('.')) return null;
+
+  const sourceDir = path.posix.dirname(sourceRelativePath.replace(/\\/g, '/'));
+  const normalizedImport = importSource.replace(/\\/g, '/');
+  const basePath = path.posix.normalize(path.posix.join(sourceDir, normalizedImport));
+  const candidates = [
+    basePath,
+    `${basePath}.ts`,
+    `${basePath}.tsx`,
+    `${basePath}.js`,
+    `${basePath}.jsx`,
+    `${basePath}.mjs`,
+    `${basePath}.cjs`,
+    `${basePath}.py`,
+    `${basePath}.rs`,
+    `${basePath}.java`,
+    `${basePath}.php`,
+    `${basePath}/index.ts`,
+    `${basePath}/index.tsx`,
+    `${basePath}/index.js`,
+    `${basePath}/index.jsx`,
+  ];
+
+  for (const candidate of candidates) {
+    if (parsedByRelativePath.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function getGitWorkingTreeStatus(projectPath: string): {
   staged: string[];
   unstaged: string[];
@@ -601,6 +836,8 @@ function getGitWorkingTreeStatus(projectPath: string): {
   stagedDeleted: string[];
   unstagedModified: string[];
   unstagedDeleted: string[];
+  commitHash: string | null;
+  shortCommitHash: string | null;
 } | null {
   try {
     const output = execFileSync(
@@ -645,6 +882,8 @@ function getGitWorkingTreeStatus(projectPath: string): {
       }
     }
 
+    const head = getGitHeadCommit(projectPath);
+
     return {
       staged: [...staged],
       unstaged: [...unstaged],
@@ -654,8 +893,31 @@ function getGitWorkingTreeStatus(projectPath: string): {
       stagedDeleted: [...stagedDeleted],
       unstagedModified: [...unstagedModified],
       unstagedDeleted: [...unstagedDeleted],
+      commitHash: head?.commitHash || null,
+      shortCommitHash: head?.shortCommitHash || null,
     };
   } catch {
     return null;
+  }
+}
+
+function getGitHeadCommit(projectPath: string): { commitHash: string | null; shortCommitHash: string | null } | null {
+  try {
+    const commitHash = execFileSync(
+      'git',
+      ['-C', projectPath, 'rev-parse', 'HEAD'],
+      { encoding: 'utf8' },
+    ).trim();
+
+    if (!commitHash) {
+      return { commitHash: null, shortCommitHash: null };
+    }
+
+    return {
+      commitHash,
+      shortCommitHash: commitHash.slice(0, 7),
+    };
+  } catch {
+    return { commitHash: null, shortCommitHash: null };
   }
 }

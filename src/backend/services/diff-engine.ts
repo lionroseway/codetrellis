@@ -4,6 +4,8 @@ export interface GraphSnapshot {
   timestamp: number;
   files: Map<string, { hash: string; symbolCount: number }>;
   edges: Set<string>; // "source->target"
+  commitHash?: string | null;
+  shortCommitHash?: string | null;
 }
 
 export interface ArchDiff {
@@ -41,8 +43,15 @@ export function captureSnapshot(
 /**
  * Save current state as the baseline snapshot.
  */
-export function setBaseline(snapshot: GraphSnapshot): void {
-  baselineSnapshot = snapshot;
+export function setBaseline(
+  snapshot: GraphSnapshot,
+  metadata?: { commitHash?: string | null; shortCommitHash?: string | null },
+): void {
+  baselineSnapshot = {
+    ...snapshot,
+    commitHash: metadata?.commitHash ?? snapshot.commitHash ?? null,
+    shortCommitHash: metadata?.shortCommitHash ?? snapshot.shortCommitHash ?? null,
+  };
   console.log(`[Diff] Baseline set: ${snapshot.files.size} files, ${snapshot.edges.size} edges`);
 }
 
