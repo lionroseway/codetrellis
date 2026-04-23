@@ -148,15 +148,104 @@ function analyzeArchitecture(depEdges: DependencyEdge[], extraPaths: string[] = 
 }
 
 /**
- * Simple cluster discovery: group files by their strongest connection neighborhood.
- * Uses the dominant shared-neighbor heuristic.
+ * Cluster discovery using dependency relationships + path heuristics.
+ *
+ * Strategy:
+ * 1. Start with path-inferred clusters as seeds
+ * 2. For each file, check if it imports MORE from a different cluster than its own
+ * 3. If so, move it to the cluster it's most connected to
+ * 4. This creates "virtual folders" based on actual code relationships
  */
 function discoverClusters(files: Map<string, FileInfo>): void {
+  // Phase 1: Seed clusters from path inference
   for (const info of files.values()) {
     const cluster = inferCluster(info.path);
     info.clusterId = cluster.id;
     info.clusterName = cluster.name;
     info.clusterDescription = cluster.description;
+  }
+
+  // Phase 2: Refine clusters based on dependency connections
+  // If a file is more connected to files in another cluster, move it there
+  let moved = true;
+  let iterations = 0;
+  const maxIterations = 5; // Prevent infinite loops
+
+  while (moved && iterations < maxIterations) {
+    moved = false;
+    iterations++;
+
+    for (const info of files.values()) {
+      // Count connections to each cluster
+      const clusterConnections = new Map<string, number>();
+      const allConnections = [...info.imports, ...info.importedBy];
+
+      for (const connPath of allConnections) {
+        const connFile = files.get(connPath);
+        if (!connFile) continue;
+        const cid = connFile.clusterId;
+        clusterConnections.set(cid, (clusterConnections.get(cid) || 0) + 1);
+      }
+
+      if (clusterConnections.size === 0) continue;
+
+      // Find the cluster this file is most connected to
+      const ownClusterCount = clusterConnections.get(info.clusterId) || 0;
+      let bestCluster = info.clusterId;
+      let bestCount = ownClusterCount;
+
+      for (const [cid, count] of clusterConnections) {
+        if (cid !== info.clusterId && count > bestCount) {
+          bestCount = count;
+          bestCluster = cid;
+        }
+      }
+
+      // Only move if the other cluster has significantly more connections (>= 2x)
+      if (bestCluster !== info.clusterId && bestCount >= ownClusterCount * 2 && bestCount >= 3) {
+        // Find a file in the target cluster to get its name/description
+        const targetFile = [...files.values()].find((f) => f.clusterId === bestCluster);
+        if (targetFile) {
+          info.clusterId = targetFile.clusterId;
+          info.clusterName = targetFile.clusterName;
+          info.clusterDescription = targetFile.clusterDescription;
+          moved = true;
+        }
+      }
+    }
+  }
+
+  // Phase 3: Merge tiny clusters (< 2 files) into their most-connected neighbor
+  const clusterSizes = new Map<string, number>();
+  for (const info of files.values()) {
+    clusterSizes.set(info.clusterId, (clusterSizes.get(info.clusterId) || 0) + 1);
+  }
+
+  for (const info of files.values()) {
+    if ((clusterSizes.get(info.clusterId) || 0) >= 2) continue;
+
+    // This is a singleton cluster — merge into the cluster it's most connected to
+    const clusterConnections = new Map<string, number>();
+    for (const connPath of [...info.imports, ...info.importedBy]) {
+      const connFile = files.get(connPath);
+      if (!connFile || connFile.clusterId === info.clusterId) continue;
+      clusterConnections.set(connFile.clusterId, (clusterConnections.get(connFile.clusterId) || 0) + 1);
+    }
+
+    let bestCluster = '';
+    let bestCount = 0;
+    for (const [cid, count] of clusterConnections) {
+      if (count > bestCount) { bestCluster = cid; bestCount = count; }
+    }
+
+    if (bestCluster) {
+      const targetFile = [...files.values()].find((f) => f.clusterId === bestCluster);
+      if (targetFile) {
+        info.clusterId = targetFile.clusterId;
+        info.clusterName = targetFile.clusterName;
+        info.clusterDescription = targetFile.clusterDescription;
+      }
+    }
   }
 }
 

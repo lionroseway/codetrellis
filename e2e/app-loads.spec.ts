@@ -10,7 +10,7 @@ test.describe('App loading', () => {
 
   test('shows the top bar with depth selector', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('button', { name: 'Packages' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clusters' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Files' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Symbols' })).toBeVisible();
   });

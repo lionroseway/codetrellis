@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAgentStore } from '../stores/agent-store';
 import { usePlanStore } from '../stores/plan-store';
 import { useToastStore } from '../stores/toast-store';
+import { useProjectStore } from '../stores/project-store';
 import type { AgentEvent } from '../../shared/types';
 
 /**
@@ -63,6 +64,7 @@ export function useWebSocket() {
             if (relPath) {
               useAgentStore.getState().markFileChanged(relPath);
             }
+            useProjectStore.getState().bumpRefreshVersion();
           }
 
           // Plan events

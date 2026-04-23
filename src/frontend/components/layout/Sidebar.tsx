@@ -143,19 +143,20 @@ export function Sidebar() {
   const root = useProjectStore((s) => s.root);
   const scanStatus = useProjectStore((s) => s.scanStatus);
   const sharedGitStatus = useProjectStore((s) => s.gitStatus);
+  const refreshVersion = useProjectStore((s) => s.refreshVersion);
   const [searchQuery, setSearchQuery] = useState('');
+  const [polledGitStatus, setPolledGitStatus] = useState<ProjectGitStatus | null>(null);
   const [stableGitStatus, setStableGitStatus] = useState<ProjectGitStatus | null>(null);
   const cleanRefreshStreakRef = useRef(0);
 
   useEffect(() => {
     if (!root || scanStatus !== 'ready') {
+      setPolledGitStatus(null);
       setStableGitStatus(null);
       cleanRefreshStreakRef.current = 0;
       return;
     }
-
-    setStableGitStatus((previous) => reconcileGitStatus(previous, sharedGitStatus, cleanRefreshStreakRef));
-  }, [sharedGitStatus, root, scanStatus]);
+  }, [root, scanStatus]);
 
   useEffect(() => {
     if (!root || scanStatus !== 'ready') return;
@@ -165,7 +166,7 @@ export function Sidebar() {
         .then((response) => response.json())
         .then((gitStatus) => {
           if (!gitStatus || gitStatus.error) return;
-          setStableGitStatus((previous) => reconcileGitStatus(previous, gitStatus, cleanRefreshStreakRef));
+          setPolledGitStatus(gitStatus);
         })
         .catch(() => {});
     };
@@ -174,6 +175,23 @@ export function Sidebar() {
     const interval = setInterval(refreshSidebarGitStatus, 10000);
     return () => clearInterval(interval);
   }, [root, scanStatus]);
+
+  useEffect(() => {
+    if (!root || scanStatus !== 'ready') return;
+    fetch(`/api/git/status?path=${encodeURIComponent(root)}`)
+      .then((response) => response.json())
+      .then((gitStatus) => {
+        if (!gitStatus || gitStatus.error) return;
+        setPolledGitStatus(gitStatus);
+      })
+      .catch(() => {});
+  }, [refreshVersion, root, scanStatus]);
+
+  useEffect(() => {
+    if (!root || scanStatus !== 'ready') return;
+    const mergedGitStatus = mergeGitSources(sharedGitStatus, polledGitStatus);
+    setStableGitStatus((previous) => reconcileGitStatus(previous, mergedGitStatus, cleanRefreshStreakRef));
+  }, [sharedGitStatus, polledGitStatus, root, scanStatus]);
 
   const gitStatesByPath = useMemo(() => buildGitStatesByPath(root, stableGitStatus), [root, stableGitStatus]);
   const treeWithGitEntries = useMemo(() => mergeGitStatusIntoTree(fileTree, root, stableGitStatus), [fileTree, root, stableGitStatus]);
@@ -365,6 +383,29 @@ function reconcileGitStatus(
   }
 
   return incoming;
+}
+
+function mergeGitSources(
+  shared: ProjectGitStatus | null,
+  polled: ProjectGitStatus | null,
+): ProjectGitStatus | null {
+  if (!shared) return polled;
+  if (!polled) return shared;
+
+  const combined = {
+    staged: [...new Set([...shared.staged, ...polled.staged])],
+    unstaged: [...new Set([...shared.unstaged, ...polled.unstaged])],
+    untracked: [...new Set([...shared.untracked, ...polled.untracked])],
+    stagedAdded: [...new Set([...shared.stagedAdded, ...polled.stagedAdded])],
+    stagedModified: [...new Set([...shared.stagedModified, ...polled.stagedModified])],
+    stagedDeleted: [...new Set([...shared.stagedDeleted, ...polled.stagedDeleted])],
+    unstagedModified: [...new Set([...shared.unstagedModified, ...polled.unstagedModified])],
+    unstagedDeleted: [...new Set([...shared.unstagedDeleted, ...polled.unstagedDeleted])],
+    commitHash: polled.commitHash ?? shared.commitHash ?? null,
+    shortCommitHash: polled.shortCommitHash ?? shared.shortCommitHash ?? null,
+  };
+
+  return combined;
 }
 
 function insertFileNode(tree: FileTreeNode[], root: string, absolutePath: string): void {

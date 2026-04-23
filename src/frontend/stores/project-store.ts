@@ -38,6 +38,7 @@ interface ProjectState {
   scanStatus: ScanStatus;
   scanProgress: number;
   error: string | null;
+  refreshVersion: number;
 
   // Tab management
   addTab: (root: string, branch?: string | null) => string;
@@ -52,6 +53,7 @@ interface ProjectState {
   setScanStatus: (status: ScanStatus) => void;
   setScanProgress: (progress: number) => void;
   setError: (error: string | null) => void;
+  bumpRefreshVersion: () => void;
   reset: () => void;
 }
 
@@ -87,6 +89,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   scanStatus: 'idle',
   scanProgress: 0,
   error: null,
+  refreshVersion: 0,
 
   addTab: (root, branch = null) => {
     const id = `tab-${++tabCounter}`;
@@ -162,8 +165,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ tabs, error, scanStatus: 'error' });
   },
 
+  bumpRefreshVersion: () => set((s) => ({ refreshVersion: s.refreshVersion + 1 })),
+
   reset: () => set({
     tabs: [], activeTabId: null, root: null, monorepoConfig: null,
-    fileTree: [], gitStatus: null, scanStatus: 'idle', scanProgress: 0, error: null,
+    fileTree: [], gitStatus: null, scanStatus: 'idle', scanProgress: 0, error: null, refreshVersion: 0,
   }),
 }));

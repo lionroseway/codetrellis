@@ -53,6 +53,7 @@ export function MainCanvas() {
   const root = useProjectStore((s) => s.root);
   const scanStatus = useProjectStore((s) => s.scanStatus);
   const setProjectGitStatus = useProjectStore((s) => s.setGitStatus);
+  const refreshVersion = useProjectStore((s) => s.refreshVersion);
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const expandedNodes = useGraphStore((s) => s.expandedNodes);
   const toggleExpand = useGraphStore((s) => s.toggleExpand);
@@ -414,6 +415,11 @@ export function MainCanvas() {
     const interval = setInterval(refreshWorkingTreeDiff, refreshIntervalMs);
     return () => clearInterval(interval);
   }, [scanStatus, root, autoRefreshEnabled, refreshIntervalMs, refreshWorkingTreeDiff]);
+
+  useEffect(() => {
+    if (scanStatus !== 'ready' || !root) return;
+    refreshWorkingTreeDiff();
+  }, [refreshVersion, scanStatus, root, refreshWorkingTreeDiff]);
 
   // Fetch projection data when a plan is active
   useEffect(() => {
