@@ -142,7 +142,7 @@ export function Sidebar() {
   const fileTree = useProjectStore((s) => s.fileTree) || [];
   const root = useProjectStore((s) => s.root);
   const scanStatus = useProjectStore((s) => s.scanStatus);
-  const gitStatus = useProjectStore((s) => s.gitStatus);
+  const sharedGitStatus = useProjectStore((s) => s.gitStatus);
   const [searchQuery, setSearchQuery] = useState('');
   const [stableGitStatus, setStableGitStatus] = useState<ProjectGitStatus | null>(null);
   const cleanRefreshStreakRef = useRef(0);
@@ -150,40 +150,30 @@ export function Sidebar() {
   useEffect(() => {
     if (!root || scanStatus !== 'ready') {
       setStableGitStatus(null);
+      cleanRefreshStreakRef.current = 0;
       return;
     }
 
-    setStableGitStatus((previous) => {
-      const headAdvanced = Boolean(
-        gitStatus?.commitHash &&
-        previous?.commitHash &&
-        gitStatus.commitHash !== previous.commitHash,
-      );
+    setStableGitStatus((previous) => reconcileGitStatus(previous, sharedGitStatus, cleanRefreshStreakRef));
+  }, [sharedGitStatus, root, scanStatus]);
 
-      if (headAdvanced && !hasGitStatusChanges(gitStatus)) {
-        cleanRefreshStreakRef.current = 0;
-        return gitStatus;
-      }
+  useEffect(() => {
+    if (!root || scanStatus !== 'ready') return;
 
-      if (hasGitStatusChanges(gitStatus)) {
-        cleanRefreshStreakRef.current = 0;
-        return gitStatus;
-      }
+    const refreshSidebarGitStatus = () => {
+      fetch(`/api/git/status?path=${encodeURIComponent(root)}`)
+        .then((response) => response.json())
+        .then((gitStatus) => {
+          if (!gitStatus || gitStatus.error) return;
+          setStableGitStatus((previous) => reconcileGitStatus(previous, gitStatus, cleanRefreshStreakRef));
+        })
+        .catch(() => {});
+    };
 
-      if (hasGitStatusChanges(previous)) {
-        if (cleanRefreshStreakRef.current < SIDEBAR_DIRTY_STATE_CLEAR_CONFIRMATIONS - 1) {
-          cleanRefreshStreakRef.current += 1;
-          return previous;
-        }
-
-        cleanRefreshStreakRef.current = 0;
-        return gitStatus;
-      }
-
-      cleanRefreshStreakRef.current = 0;
-      return gitStatus;
-    });
-  }, [gitStatus, root, scanStatus]);
+    refreshSidebarGitStatus();
+    const interval = setInterval(refreshSidebarGitStatus, 10000);
+    return () => clearInterval(interval);
+  }, [root, scanStatus]);
 
   const gitStatesByPath = useMemo(() => buildGitStatesByPath(root, stableGitStatus), [root, stableGitStatus]);
   const treeWithGitEntries = useMemo(() => mergeGitStatusIntoTree(fileTree, root, stableGitStatus), [fileTree, root, stableGitStatus]);
@@ -248,7 +238,7 @@ function buildGitStatesByPath(root: string | null, gitStatus: ProjectGitStatus |
 
   const add = (filePath: string, state: SidebarGitState) => {
     const absolutePath = toAbsoluteGitPath(root, filePath);
-    const existing = statesByPath.get(filePath) || [];
+    const existing = statesByPath.get(absolutePath) || [];
     if (!existing.includes(state)) existing.push(state);
     statesByPath.set(absolutePath, existing);
   };
@@ -335,6 +325,48 @@ function mergeGitStatusIntoTree(fileTree: FileTreeNode[], root: string | null, g
   return nextTree;
 }
 
+function hasGitStatusChanges(gitStatus: ProjectGitStatus | null | undefined): boolean {
+  return Boolean(
+    gitStatus?.staged?.length ||
+    gitStatus?.unstaged?.length ||
+    gitStatus?.untracked?.length ||
+    gitStatus?.stagedDeleted?.length ||
+    gitStatus?.unstagedDeleted?.length,
+  );
+}
+
+function reconcileGitStatus(
+  previous: ProjectGitStatus | null,
+  incoming: ProjectGitStatus | null,
+  cleanRefreshStreakRef: { current: number },
+): ProjectGitStatus | null {
+  const headAdvanced = Boolean(
+    incoming?.commitHash &&
+    previous?.commitHash &&
+    incoming.commitHash !== previous.commitHash,
+  );
+
+  if (headAdvanced && !hasGitStatusChanges(incoming)) {
+    cleanRefreshStreakRef.current = 0;
+    return incoming;
+  }
+
+  if (hasGitStatusChanges(incoming)) {
+    cleanRefreshStreakRef.current = 0;
+    return incoming;
+  }
+
+  if (hasGitStatusChanges(previous)) {
+    if (cleanRefreshStreakRef.current < SIDEBAR_DIRTY_STATE_CLEAR_CONFIRMATIONS - 1) {
+      cleanRefreshStreakRef.current += 1;
+      return previous;
+    }
+    cleanRefreshStreakRef.current = 0;
+  }
+
+  return incoming;
+}
+
 function insertFileNode(tree: FileTreeNode[], root: string, absolutePath: string): void {
   const normalizedRoot = normalizePath(root);
   const normalizedAbsolutePath = normalizePath(absolutePath);
@@ -400,16 +432,6 @@ function getLanguageFromName(name: string): string | undefined {
     '.md': 'markdown',
   };
   return languageMap[extension];
-}
-
-function hasGitStatusChanges(gitStatus: ProjectGitStatus | null | undefined): boolean {
-  return Boolean(
-    gitStatus?.staged?.length ||
-    gitStatus?.unstaged?.length ||
-    gitStatus?.untracked?.length ||
-    gitStatus?.stagedDeleted?.length ||
-    gitStatus?.unstagedDeleted?.length,
-  );
 }
 
 function hasAnyCounts(counts: Record<SidebarGitState, number>): boolean {

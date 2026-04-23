@@ -119,6 +119,7 @@ export function MainCanvas() {
   ));
   const cleanRefreshStreakRef = useRef(0);
   const gitCleanRefreshStreakRef = useRef(0);
+  const baselineCaptureCommitRef = useRef<string | null>(null);
 
   const fetchBaselineSnapshot = useCallback(() => {
     fetch('/api/baseline')
@@ -376,7 +377,31 @@ export function MainCanvas() {
           latestCommitHash !== baselineCommitHash &&
           !nextGitHasChanges
         ) {
-          captureBaseline();
+          if (baselineCaptureCommitRef.current !== latestCommitHash) {
+            baselineCaptureCommitRef.current = latestCommitHash;
+            captureBaseline(latestCommitHash)
+              .then(() => {
+                setDiffData((previous) => ({
+                  addedFiles: [],
+                  removedFiles: [],
+                  modifiedFiles: [],
+                  blastRadius: [],
+                  git: previous?.git || null,
+                }));
+
+                fetch('/api/dependencies')
+                  .then((r) => r.json())
+                  .then((edges) => {
+                    if (Array.isArray(edges)) {
+                      setDepEdges(edges);
+                    }
+                  })
+                  .catch(() => {});
+              })
+              .finally(() => {
+                baselineCaptureCommitRef.current = null;
+              });
+          }
         }
       })
       .catch(() => {});

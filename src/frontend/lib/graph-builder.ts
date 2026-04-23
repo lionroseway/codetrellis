@@ -424,11 +424,15 @@ function buildHubView(
 
   // Cap at ~40 nodes to keep it readable
   if (visibleFiles.size > 40) {
+    const changedFiles = [...visibleFiles].filter((path) => changeMap.has(path));
+    const remainingSlots = Math.max(40 - changedFiles.length, 0);
     const sorted = [...visibleFiles]
+      .filter((path) => !changeMap.has(path))
       .map((p) => ({ path: p, total: arch.get(p)?.total || 0 }))
       .sort((a, b) => b.total - a.total)
-      .slice(0, 40);
+      .slice(0, remainingSlots);
     visibleFiles.clear();
+    for (const path of changedFiles) visibleFiles.add(path);
     for (const s of sorted) visibleFiles.add(s.path);
   }
 
