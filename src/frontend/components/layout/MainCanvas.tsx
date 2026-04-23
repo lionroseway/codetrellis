@@ -44,6 +44,7 @@ const edgeTypes = {
 export function MainCanvas() {
   const root = useProjectStore((s) => s.root);
   const scanStatus = useProjectStore((s) => s.scanStatus);
+  const setProjectGitStatus = useProjectStore((s) => s.setGitStatus);
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const expandedNodes = useGraphStore((s) => s.expandedNodes);
   const toggleExpand = useGraphStore((s) => s.toggleExpand);
@@ -154,6 +155,7 @@ export function MainCanvas() {
             effectiveGit?.unstaged?.length ||
             effectiveGit?.untracked?.length,
           );
+          setProjectGitStatus(effectiveGit || null);
 
           if (diff && !diff.error) {
             const nextDiff = { ...diff, git: effectiveGit };
@@ -231,7 +233,7 @@ export function MainCanvas() {
         }
       })
       .catch(() => {});
-  }, [scanStatus, root]);
+  }, [scanStatus, root, setProjectGitStatus]);
 
   useEffect(() => {
     if (scanStatus !== 'ready' || !root) return;

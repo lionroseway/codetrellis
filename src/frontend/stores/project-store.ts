@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 import type { MonorepoConfig, ScanStatus, FileTreeNode } from '@shared/types';
 
+export interface ProjectGitStatus {
+  staged: string[];
+  unstaged: string[];
+  untracked: string[];
+  stagedAdded: string[];
+  stagedModified: string[];
+  stagedDeleted: string[];
+  unstagedModified: string[];
+  unstagedDeleted: string[];
+}
+
 export interface ProjectTab {
   id: string;
   root: string;
@@ -8,6 +19,7 @@ export interface ProjectTab {
   branch: string | null;
   monorepoConfig: MonorepoConfig | null;
   fileTree: FileTreeNode[];
+  gitStatus: ProjectGitStatus | null;
   scanStatus: ScanStatus;
   error: string | null;
 }
@@ -20,6 +32,7 @@ interface ProjectState {
   root: string | null;
   monorepoConfig: MonorepoConfig | null;
   fileTree: FileTreeNode[];
+  gitStatus: ProjectGitStatus | null;
   scanStatus: ScanStatus;
   scanProgress: number;
   error: string | null;
@@ -33,6 +46,7 @@ interface ProjectState {
   setRoot: (path: string) => void;
   setMonorepoConfig: (config: MonorepoConfig) => void;
   setFileTree: (tree: FileTreeNode[]) => void;
+  setGitStatus: (gitStatus: ProjectGitStatus | null) => void;
   setScanStatus: (status: ScanStatus) => void;
   setScanProgress: (progress: number) => void;
   setError: (error: string | null) => void;
@@ -47,6 +61,7 @@ function deriveActiveState(tabs: ProjectTab[], activeTabId: string | null) {
     root: active?.root || null,
     monorepoConfig: active?.monorepoConfig || null,
     fileTree: active?.fileTree || [],
+    gitStatus: active?.gitStatus || null,
     scanStatus: (active?.scanStatus || 'idle') as ScanStatus,
     error: active?.error || null,
   };
@@ -66,6 +81,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   root: null,
   monorepoConfig: null,
   fileTree: [],
+  gitStatus: null,
   scanStatus: 'idle',
   scanProgress: 0,
   error: null,
@@ -75,7 +91,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const name = root.split('/').pop() || 'project';
     const tab: ProjectTab = {
       id, root, name, branch,
-      monorepoConfig: null, fileTree: [], scanStatus: 'idle', error: null,
+      monorepoConfig: null, fileTree: [], gitStatus: null, scanStatus: 'idle', error: null,
     };
     set((s) => {
       const tabs = [...s.tabs, tab];
@@ -101,14 +117,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setRoot: (path) => {
     const state = get();
     if (state.activeTabId) {
-      const tabs = updateActiveTab(state.tabs, state.activeTabId, { root: path, scanStatus: 'idle', error: null });
-      set({ tabs, root: path, scanStatus: 'idle', error: null });
+      const tabs = updateActiveTab(state.tabs, state.activeTabId, { root: path, gitStatus: null, scanStatus: 'idle', error: null });
+      set({ tabs, root: path, gitStatus: null, scanStatus: 'idle', error: null });
     } else {
       // No tabs — create one
       const id = `tab-${++tabCounter}`;
       const name = path.split('/').pop() || 'project';
-      const tab: ProjectTab = { id, root: path, name, branch: null, monorepoConfig: null, fileTree: [], scanStatus: 'idle', error: null };
-      set({ tabs: [tab], activeTabId: id, root: path, scanStatus: 'idle', error: null });
+      const tab: ProjectTab = { id, root: path, name, branch: null, monorepoConfig: null, fileTree: [], gitStatus: null, scanStatus: 'idle', error: null };
+      set({ tabs: [tab], activeTabId: id, root: path, gitStatus: null, scanStatus: 'idle', error: null });
     }
   },
 
@@ -122,6 +138,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const s = get();
     const tabs = updateActiveTab(s.tabs, s.activeTabId, { fileTree: tree });
     set({ tabs, fileTree: tree });
+  },
+
+  setGitStatus: (gitStatus) => {
+    const s = get();
+    const tabs = updateActiveTab(s.tabs, s.activeTabId, { gitStatus });
+    set({ tabs, gitStatus });
   },
 
   setScanStatus: (status) => {
@@ -140,6 +162,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   reset: () => set({
     tabs: [], activeTabId: null, root: null, monorepoConfig: null,
-    fileTree: [], scanStatus: 'idle', scanProgress: 0, error: null,
+    fileTree: [], gitStatus: null, scanStatus: 'idle', scanProgress: 0, error: null,
   }),
 }));

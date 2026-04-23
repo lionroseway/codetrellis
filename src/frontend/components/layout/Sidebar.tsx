@@ -3,7 +3,10 @@ import { useUiStore } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import type { FileTreeNode } from '@shared/types';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ProjectGitStatus } from '../../stores/project-store';
+
+type SidebarGitState = 'staged' | 'unstaged' | 'untracked' | 'deleted';
 
 function getFileIcon(node: FileTreeNode) {
   if (node.type === 'package') return <Package size={13} className="text-accent shrink-0 drop-shadow-[0_0_3px_rgba(59,130,246,0.4)]" />;
@@ -18,7 +21,15 @@ function getFileIcon(node: FileTreeNode) {
   }
 }
 
-function FileTreeItem({ node, depth = 0 }: { node: FileTreeNode; depth?: number }) {
+function FileTreeItem({
+  node,
+  depth = 0,
+  gitStatesByPath,
+}: {
+  node: FileTreeNode;
+  depth?: number;
+  gitStatesByPath: Map<string, SidebarGitState[]>;
+}) {
   const [sidebarExpanded, setSidebarExpanded] = useState(depth < 1);
   const selectedNodeId = useUiStore((s) => s.selectedNodeId);
   const setSelectedNode = useUiStore((s) => s.setSelectedNode);
@@ -27,6 +38,12 @@ function FileTreeItem({ node, depth = 0 }: { node: FileTreeNode; depth?: number 
   const isSelected = selectedNodeId === node.path;
   const hasChildren = node.children && node.children.length > 0;
   const isDir = node.type === 'directory' || node.type === 'package';
+  const ownGitStates = gitStatesByPath.get(node.path) || [];
+  const descendantGitStates = isDir ? collectDescendantGitStates(node, gitStatesByPath) : ownGitStates;
+  const displayGitStates = isDir ? descendantGitStates : ownGitStates;
+  const toneClass = getTreeToneClass(displayGitStates, Boolean(isSelected));
+  const stateCounts = isDir ? collectDescendantGitStateCounts(node, gitStatesByPath) : null;
+  const fileMarker = !isDir ? getPrimaryMarker(ownGitStates) : null;
 
   return (
     <div>
@@ -41,7 +58,7 @@ function FileTreeItem({ node, depth = 0 }: { node: FileTreeNode; depth?: number 
           isSelected
             ? 'bg-accent-muted text-accent border-l-2 border-accent shadow-[inset_0_0_12px_rgba(59,130,246,0.06)]'
             : 'text-foreground-muted hover:bg-surface-hover border-l-2 border-transparent'
-        }`}
+        } ${toneClass}`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
       >
         {isDir && hasChildren ? (
@@ -59,11 +76,40 @@ function FileTreeItem({ node, depth = 0 }: { node: FileTreeNode; depth?: number 
           getFileIcon(node)
         )}
         <span className="truncate ml-0.5">{node.name}</span>
+        {isDir && stateCounts && hasAnyCounts(stateCounts) && (
+          <div className="ml-auto flex items-center gap-1 pl-2">
+            {stateCounts.unstaged > 0 && (
+              <span className="text-[10px] font-semibold text-orange-300">
+                {stateCounts.unstaged}M
+              </span>
+            )}
+            {stateCounts.untracked > 0 && (
+              <span className="text-[10px] font-semibold text-emerald-300">
+                {stateCounts.untracked}U
+              </span>
+            )}
+            {stateCounts.staged > 0 && (
+              <span className="text-[10px] font-semibold text-sky-300">
+                {stateCounts.staged}A
+              </span>
+            )}
+            {stateCounts.deleted > 0 && (
+              <span className="text-[10px] font-semibold text-red-300">
+                {stateCounts.deleted}D
+              </span>
+            )}
+          </div>
+        )}
+        {!isDir && fileMarker && (
+          <span className={`ml-auto pl-2 text-[11px] font-semibold ${fileMarker.color}`}>
+            {fileMarker.label}
+          </span>
+        )}
       </button>
       {sidebarExpanded && hasChildren && (
         <div>
           {node.children!.map((child) => (
-            <FileTreeItem key={child.path} node={child} depth={depth + 1} />
+            <FileTreeItem key={child.path} node={child} depth={depth + 1} gitStatesByPath={gitStatesByPath} />
           ))}
         </div>
       )}
@@ -92,15 +138,31 @@ function filterTree(nodes: FileTreeNode[], query: string): FileTreeNode[] {
 
 export function Sidebar() {
   const visible = useUiStore((s) => s.sidebarVisible);
-  const width = useUiStore((s) => s.sidebarWidth);
   const fileTree = useProjectStore((s) => s.fileTree) || [];
   const root = useProjectStore((s) => s.root);
   const scanStatus = useProjectStore((s) => s.scanStatus);
+  const gitStatus = useProjectStore((s) => s.gitStatus);
   const [searchQuery, setSearchQuery] = useState('');
+  const [stableGitStatus, setStableGitStatus] = useState<ProjectGitStatus | null>(null);
+
+  useEffect(() => {
+    if (!root || scanStatus !== 'ready') {
+      setStableGitStatus(null);
+      return;
+    }
+
+    setStableGitStatus((previous) => {
+      if (hasGitStatusChanges(gitStatus)) return gitStatus;
+      if (hasGitStatusChanges(previous)) return previous;
+      return gitStatus;
+    });
+  }, [gitStatus, root, scanStatus]);
+
+  const gitStatesByPath = useMemo(() => buildGitStatesByPath(root, stableGitStatus), [root, stableGitStatus]);
+  const treeWithGitEntries = useMemo(() => mergeGitStatusIntoTree(fileTree, root, stableGitStatus), [fileTree, root, stableGitStatus]);
+  const displayTree = filterTree(treeWithGitEntries, searchQuery);
 
   if (!visible) return null;
-
-  const displayTree = filterTree(fileTree, searchQuery);
 
   return (
     <div className="glass-panel flex flex-col border-r h-full overflow-hidden">
@@ -146,9 +208,221 @@ export function Sidebar() {
           </div>
         )}
         {displayTree.map((node) => (
-          <FileTreeItem key={node.path} node={node} />
+          <FileTreeItem key={node.path} node={node} gitStatesByPath={gitStatesByPath} />
         ))}
       </div>
     </div>
   );
+}
+
+function buildGitStatesByPath(root: string | null, gitStatus: ProjectGitStatus | null): Map<string, SidebarGitState[]> {
+  const statesByPath = new Map<string, SidebarGitState[]>();
+  if (!gitStatus) return statesByPath;
+
+  const add = (filePath: string, state: SidebarGitState) => {
+    const absolutePath = toAbsoluteGitPath(root, filePath);
+    const existing = statesByPath.get(filePath) || [];
+    if (!existing.includes(state)) existing.push(state);
+    statesByPath.set(absolutePath, existing);
+  };
+
+  for (const filePath of gitStatus.staged) add(filePath, 'staged');
+  for (const filePath of gitStatus.unstaged) add(filePath, 'unstaged');
+  for (const filePath of gitStatus.untracked) add(filePath, 'untracked');
+  for (const filePath of gitStatus.stagedDeleted) add(filePath, 'deleted');
+  for (const filePath of gitStatus.unstagedDeleted) add(filePath, 'deleted');
+
+  return statesByPath;
+}
+
+function collectDescendantGitStates(node: FileTreeNode, gitStatesByPath: Map<string, SidebarGitState[]>): SidebarGitState[] {
+  const states = new Set<SidebarGitState>(gitStatesByPath.get(node.path) || []);
+
+  const visit = (current: FileTreeNode) => {
+    for (const state of gitStatesByPath.get(current.path) || []) {
+      states.add(state);
+    }
+    for (const child of current.children || []) {
+      visit(child);
+    }
+  };
+
+  visit(node);
+  return [...states];
+}
+
+function collectDescendantGitStateCounts(
+  node: FileTreeNode,
+  gitStatesByPath: Map<string, SidebarGitState[]>,
+): Record<SidebarGitState, number> {
+  const counts: Record<SidebarGitState, number> = {
+    staged: 0,
+    unstaged: 0,
+    untracked: 0,
+    deleted: 0,
+  };
+
+  const visit = (current: FileTreeNode) => {
+    const states = gitStatesByPath.get(current.path) || [];
+    for (const state of states) {
+      counts[state] += 1;
+    }
+    for (const child of current.children || []) {
+      visit(child);
+    }
+  };
+
+  visit(node);
+  return counts;
+}
+
+function getTreeToneClass(states: SidebarGitState[], isSelected: boolean): string {
+  if (isSelected || states.length === 0) return '';
+  if (states.includes('untracked')) return 'text-emerald-100/95 bg-emerald-500/6';
+  if (states.includes('deleted')) return 'text-red-100/95 bg-red-500/6';
+  if (states.includes('staged')) return 'text-sky-100/95 bg-sky-500/6';
+  if (states.includes('unstaged')) return 'text-orange-100/95 bg-orange-500/6';
+  return '';
+}
+
+function toAbsoluteGitPath(root: string | null, filePath: string): string {
+  if (!root) return filePath;
+  if (isAbsolutePath(filePath)) return normalizePath(filePath);
+  return joinPath(root, filePath);
+}
+
+function mergeGitStatusIntoTree(fileTree: FileTreeNode[], root: string | null, gitStatus: ProjectGitStatus | null): FileTreeNode[] {
+  if (!root || !gitStatus) return fileTree;
+
+  const nextTree = structuredClone(fileTree);
+  const gitOnlyPaths = new Set<string>([
+    ...gitStatus.untracked,
+    ...gitStatus.stagedDeleted,
+    ...gitStatus.unstagedDeleted,
+  ]);
+
+  for (const gitPath of gitOnlyPaths) {
+    insertFileNode(nextTree, root, toAbsoluteGitPath(root, gitPath));
+  }
+
+  return nextTree;
+}
+
+function insertFileNode(tree: FileTreeNode[], root: string, absolutePath: string): void {
+  const normalizedRoot = normalizePath(root);
+  const normalizedAbsolutePath = normalizePath(absolutePath);
+  if (!normalizedAbsolutePath.startsWith(normalizedRoot)) return;
+
+  const relativePath = relativePathFromRoot(normalizedRoot, normalizedAbsolutePath);
+  if (!relativePath || relativePath.startsWith('..')) return;
+
+  const segments = relativePath.split('/').filter(Boolean);
+  let currentLevel = tree;
+  let currentPath = normalizedRoot;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    currentPath = joinPath(currentPath, segment);
+    const isLeaf = index === segments.length - 1;
+    const existing = currentLevel.find((node) => node.path === currentPath);
+
+    if (existing) {
+      if (!isLeaf) {
+        existing.children = existing.children || [];
+        currentLevel = existing.children;
+      }
+      continue;
+    }
+
+    const newNode: FileTreeNode = isLeaf
+      ? {
+          name: segment,
+          path: currentPath,
+          type: 'file',
+          language: getLanguageFromName(segment),
+        }
+      : {
+          name: segment,
+          path: currentPath,
+          type: 'directory',
+          children: [],
+        };
+
+    currentLevel.push(newNode);
+    currentLevel.sort((a, b) => {
+      if ((a.type === 'directory') !== (b.type === 'directory')) return a.type === 'directory' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    if (!isLeaf) {
+      currentLevel = newNode.children || [];
+    }
+  }
+}
+
+function getLanguageFromName(name: string): string | undefined {
+  const extension = getFileExtension(name);
+  const languageMap: Record<string, string> = {
+    '.ts': 'typescript',
+    '.tsx': 'typescript',
+    '.js': 'javascript',
+    '.jsx': 'javascript',
+    '.json': 'json',
+    '.css': 'css',
+    '.py': 'python',
+    '.md': 'markdown',
+  };
+  return languageMap[extension];
+}
+
+function hasGitStatusChanges(gitStatus: ProjectGitStatus | null | undefined): boolean {
+  return Boolean(
+    gitStatus?.staged?.length ||
+    gitStatus?.unstaged?.length ||
+    gitStatus?.untracked?.length ||
+    gitStatus?.stagedDeleted?.length ||
+    gitStatus?.unstagedDeleted?.length,
+  );
+}
+
+function hasAnyCounts(counts: Record<SidebarGitState, number>): boolean {
+  return counts.staged > 0 || counts.unstaged > 0 || counts.untracked > 0 || counts.deleted > 0;
+}
+
+function getPrimaryMarker(states: SidebarGitState[]): { label: string; color: string } | null {
+  if (states.includes('deleted')) return { label: 'D', color: 'text-red-300' };
+  if (states.includes('untracked')) return { label: 'U', color: 'text-emerald-300' };
+  if (states.includes('unstaged')) return { label: 'M', color: 'text-orange-300' };
+  if (states.includes('staged')) return { label: 'A', color: 'text-sky-300' };
+  return null;
+}
+
+
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, '/').replace(/\/+/g, '/');
+}
+
+function isAbsolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:\//.test(normalizePath(value));
+}
+
+function joinPath(base: string, segment: string): string {
+  const normalizedBase = normalizePath(base).replace(/\/$/, '');
+  const normalizedSegment = normalizePath(segment).replace(/^\/+/, '');
+  return `${normalizedBase}/${normalizedSegment}`;
+}
+
+function relativePathFromRoot(root: string, absolutePath: string): string {
+  const normalizedRoot = normalizePath(root).replace(/\/$/, '');
+  const normalizedAbsolute = normalizePath(absolutePath);
+  if (normalizedAbsolute === normalizedRoot) return '';
+  if (!normalizedAbsolute.startsWith(`${normalizedRoot}/`)) return '../';
+  return normalizedAbsolute.slice(normalizedRoot.length + 1);
+}
+
+function getFileExtension(name: string): string {
+  const normalizedName = normalizePath(name);
+  const lastDot = normalizedName.lastIndexOf('.');
+  if (lastDot === -1) return '';
+  return normalizedName.slice(lastDot).toLowerCase();
 }
