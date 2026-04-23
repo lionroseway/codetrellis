@@ -8,7 +8,7 @@ import { getAPI } from '../../bridge';
 import type { ViewDepth } from '../../../shared/types';
 
 const depthOptions: { value: ViewDepth; label: string }[] = [
-  { value: 'package', label: 'Packages' },
+  { value: 'package', label: 'Clusters' },
   { value: 'file', label: 'Files' },
   { value: 'symbol', label: 'Symbols' },
 ];

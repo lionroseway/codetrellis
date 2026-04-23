@@ -11,9 +11,10 @@ import {
   getNodesBounds,
   getViewportForBounds,
   type Node,
+  type Edge,
   type NodeMouseHandler,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -47,6 +48,7 @@ export function MainCanvas() {
   const expandedNodes = useGraphStore((s) => s.expandedNodes);
   const toggleExpand = useGraphStore((s) => s.toggleExpand);
   const setSelectedNode = useUiStore((s) => s.setSelectedNode);
+  const selectedNodeId = useUiStore((s) => s.selectedNodeId);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
   const layoutMode = useGraphStore((s) => s.layoutMode);
   const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
@@ -69,7 +71,29 @@ export function MainCanvas() {
     removedFiles: string[];
     modifiedFiles: string[];
     blastRadius: string[];
+    git?: {
+      staged: string[];
+      unstaged: string[];
+      untracked: string[];
+      stagedAdded: string[];
+      stagedModified: string[];
+      stagedDeleted: string[];
+      unstagedModified: string[];
+      unstagedDeleted: string[];
+    } | null;
   } | null>(null);
+  const [snapshotDiff, setSnapshotDiff] = useState<{
+    addedFiles: string[];
+    removedFiles: string[];
+    modifiedFiles: string[];
+    addedEdges?: Array<{ source: string; target: string }>;
+    removedEdges?: Array<{ source: string; target: string }>;
+    progress?: number;
+  } | null>(null);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [refreshIntervalMs, setRefreshIntervalMs] = useState(10000);
+  const cleanRefreshStreakRef = useRef(0);
+  const gitCleanRefreshStreakRef = useRef(0);
 
   // Fetch dependency edges when scan completes
   const hasFetchedRef = useRef<string | null>(null);
@@ -93,29 +117,133 @@ export function MainCanvas() {
   }, [scanStatus, root]);
 
   // Poll for diffs every 10 seconds
+  const refreshWorkingTreeDiff = useCallback(() => {
+    if (scanStatus !== 'ready' || !root) return;
+    Promise.all([
+      fetch(`/api/diff?project=${encodeURIComponent(root)}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/git/status?path=${encodeURIComponent(root)}`).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([diff, gitStatus]) => {
+        let nextDiffHasChanges = false;
+        let nextGitHasChanges = false;
+
+        setDiffData((previous) => {
+          const incomingGit = gitStatus && !gitStatus.error
+            ? gitStatus
+            : diff?.git || null;
+          const previousGit = previous?.git || null;
+          const incomingGitHasChanges = hasGitChanges(incomingGit);
+          const previousGitHadChanges = hasGitChanges(previousGit);
+
+          let effectiveGit = incomingGit;
+          if (incomingGitHasChanges) {
+            gitCleanRefreshStreakRef.current = 0;
+          } else if (previousGitHadChanges) {
+            if (gitCleanRefreshStreakRef.current < 1) {
+              gitCleanRefreshStreakRef.current += 1;
+              effectiveGit = previousGit;
+            } else {
+              gitCleanRefreshStreakRef.current = 0;
+            }
+          } else {
+            gitCleanRefreshStreakRef.current = 0;
+          }
+
+          nextGitHasChanges = Boolean(
+            effectiveGit?.staged?.length ||
+            effectiveGit?.unstaged?.length ||
+            effectiveGit?.untracked?.length,
+          );
+
+          if (diff && !diff.error) {
+            const nextDiff = { ...diff, git: effectiveGit };
+            nextDiffHasChanges = Boolean(
+              diff.summary?.added ||
+              diff.summary?.removed ||
+              diff.summary?.modified,
+            );
+            if (!nextDiffHasChanges && !nextGitHasChanges && previous) {
+              const previousHadChanges = Boolean(
+                previous.addedFiles.length ||
+                previous.removedFiles.length ||
+                previous.modifiedFiles.length ||
+                previous.git?.staged?.length ||
+                previous.git?.unstaged?.length ||
+                previous.git?.untracked?.length,
+              );
+              if (previousHadChanges && cleanRefreshStreakRef.current < 1) {
+                cleanRefreshStreakRef.current += 1;
+                nextDiffHasChanges = true;
+                nextGitHasChanges = true;
+                return previous;
+              }
+            }
+            cleanRefreshStreakRef.current = 0;
+            return nextDiff;
+          }
+
+          if (effectiveGit) {
+            nextDiffHasChanges = Boolean(
+              previous?.addedFiles.length ||
+              previous?.removedFiles.length ||
+              previous?.modifiedFiles.length,
+            );
+            cleanRefreshStreakRef.current = nextGitHasChanges || nextDiffHasChanges ? 0 : cleanRefreshStreakRef.current;
+            return previous
+              ? { ...previous, git: effectiveGit }
+              : {
+                  addedFiles: [],
+                  removedFiles: [],
+                  modifiedFiles: [],
+                  blastRadius: [],
+                  git: effectiveGit,
+                };
+          }
+
+          nextDiffHasChanges = Boolean(
+            previous?.addedFiles.length ||
+            previous?.removedFiles.length ||
+            previous?.modifiedFiles.length,
+          );
+          nextGitHasChanges = Boolean(
+            previous?.git?.staged?.length ||
+            previous?.git?.unstaged?.length ||
+            previous?.git?.untracked?.length,
+          );
+          if (nextDiffHasChanges || nextGitHasChanges) {
+            cleanRefreshStreakRef.current = 0;
+          }
+          return previous;
+        });
+
+        if (
+          nextDiffHasChanges ||
+          nextGitHasChanges
+        ) {
+          fetch('/api/dependencies')
+            .then((r) => r.json())
+            .then((edges) => {
+              if (Array.isArray(edges) && edges.length > 0) {
+                setDepEdges(edges);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [scanStatus, root]);
+
   useEffect(() => {
     if (scanStatus !== 'ready' || !root) return;
-    const fetchDiff = () => {
-      fetch(`/api/diff?project=${encodeURIComponent(root)}`)
-        .then((r) => r.json())
-        .then((diff) => {
-          if (diff && !diff.error) {
-            setDiffData(diff);
-            // Also refresh edges if there are changes
-            if (diff.summary?.added > 0 || diff.summary?.removed > 0 || diff.summary?.modified > 0) {
-              fetch('/api/dependencies').then((r) => r.json()).then(setDepEdges);
-            }
-          }
-        })
-        .catch(() => {});
-    };
-    const interval = setInterval(fetchDiff, 10000);
+    refreshWorkingTreeDiff();
+    if (!autoRefreshEnabled) return;
+    const interval = setInterval(refreshWorkingTreeDiff, refreshIntervalMs);
     return () => clearInterval(interval);
-  }, [scanStatus, root]);
+  }, [scanStatus, root, autoRefreshEnabled, refreshIntervalMs, refreshWorkingTreeDiff]);
 
   // Fetch projection data when a plan is active
   useEffect(() => {
-    if (!activePlanUid || !projectionEnabled) {
+    if (!activePlanUid || (!projectionEnabled && trellisMode !== 'planned' && trellisMode !== 'diff')) {
       setProjectionData(null);
       return;
     }
@@ -123,30 +251,67 @@ export function MainCanvas() {
       .then((r) => r.json())
       .then((data) => setProjectionData(data))
       .catch(() => setProjectionData(null));
-  }, [activePlanUid, projectionEnabled, setProjectionData]);
+  }, [activePlanUid, projectionEnabled, trellisMode, setProjectionData]);
 
   // Fetch snapshot when switching to current/diff mode
   useEffect(() => {
     if (trellisMode !== 'current' && trellisMode !== 'diff' && trellisMode !== 'planned') return;
+    const fetchBaselineSnapshot = () => {
+      fetch('/api/baseline')
+        .then((r) => r.json())
+        .then((snapshot: any) => {
+          if (snapshot?.data) {
+            setCurrentSnapshot({ id: snapshot.id, name: snapshot.name, edges: snapshot.data.edges, files: snapshot.data.files });
+            return;
+          }
+          setCurrentSnapshot(null);
+        })
+        .catch(() => setCurrentSnapshot(null));
+    };
+
     if (!activePlanUid) {
-      setCurrentSnapshot(null);
+      fetchBaselineSnapshot();
+      setSnapshotDiff(null);
       return;
     }
-    // Find snapshot for this plan
+
     fetch(`/api/trellis/snapshots?plan=${activePlanUid}`)
       .then((r) => r.json())
       .then((snapshots: any[]) => {
-        if (snapshots.length === 0) { setCurrentSnapshot(null); return; }
+        if (snapshots.length === 0) {
+          fetchBaselineSnapshot();
+          return null;
+        }
         const snapshotId = snapshots[0].id;
         return fetch(`/api/trellis/${snapshotId}`).then((r) => r.json());
       })
       .then((snapshot: any) => {
         if (snapshot?.data) {
-          setCurrentSnapshot({ edges: snapshot.data.edges, files: snapshot.data.files });
+          setCurrentSnapshot({ id: snapshot.id, name: snapshot.name, edges: snapshot.data.edges, files: snapshot.data.files });
         }
       })
-      .catch(() => setCurrentSnapshot(null));
+      .catch(() => fetchBaselineSnapshot());
   }, [trellisMode, activePlanUid, setCurrentSnapshot]);
+
+  useEffect(() => {
+    if (trellisMode !== 'diff' || !currentSnapshot?.id) {
+      setSnapshotDiff(null);
+      return;
+    }
+
+    const fetchSnapshotDiff = () => {
+      fetch(`/api/trellis/${currentSnapshot.id}/diff`)
+        .then((r) => r.json())
+        .then((diff) => {
+          if (diff && !diff.error) setSnapshotDiff(diff);
+        })
+        .catch(() => {});
+    };
+
+    fetchSnapshotDiff();
+    const interval = setInterval(fetchSnapshotDiff, 5000);
+    return () => clearInterval(interval);
+  }, [trellisMode, currentSnapshot?.id]);
 
   // Fetch symbols for focused file in symbol view
   useEffect(() => {
@@ -171,40 +336,70 @@ export function MainCanvas() {
   }, [viewDepth, expandedNodes, depEdges]);
 
   // Build the graph
+  const workingTreeDiff = useMemo(() => mergeLiveDiff(null, diffData), [diffData]);
+  const liveWorkingTreeDiff = useMemo(() => mergeLiveDiff(snapshotDiff, diffData), [snapshotDiff, diffData]);
+
   const graphData = useMemo(() => {
     // Current/Planned mode: render from frozen snapshot
     if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
       return buildFromSnapshot(
-        currentSnapshot.edges, viewDepth, layoutMode, null,
+        currentSnapshot.edges,
+        viewDepth,
+        layoutMode,
+        trellisMode === 'planned'
+          ? {
+              addedFiles: [],
+              removedFiles: [],
+              modifiedFiles: [],
+              blastRadius: [],
+            }
+          : null,
         trellisMode === 'current', // frozen = true for current
+        trellisMode === 'planned' ? projectionData : null,
       );
     }
 
     // Diff mode: live graph with diff against snapshot
     if (trellisMode === 'diff' && currentSnapshot && depEdges.length > 0) {
-      const snapshotFileSet = new Set(currentSnapshot.files.map((f: any) => f.path));
-      const liveFileSet = new Set(depEdges.flatMap((e) => [e.sourceRelative, e.targetRelative]));
-      const clientDiff = {
-        addedFiles: [...liveFileSet].filter((f) => !snapshotFileSet.has(f)),
-        removedFiles: [...snapshotFileSet].filter((f) => !liveFileSet.has(f)),
-        modifiedFiles: [] as string[],
-        blastRadius: [] as string[],
-      };
-      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, clientDiff, recentlyChanged, projectionEnabled ? projectionData : null, layoutMode);
+      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, liveWorkingTreeDiff, recentlyChanged, projectionData, layoutMode, trellisMode);
     }
 
     // Live mode (default)
     if (depEdges.length === 0) return { nodes: [], edges: [] };
-    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionEnabled ? projectionData : null, layoutMode);
-  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, diffData, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot]);
+    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || projectionEnabled ? projectionData : null, layoutMode, trellisMode);
+  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(graphData.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(graphData.edges);
+  const activeDiff = trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff;
+
+  const displayGraphData = useMemo(() => {
+    if (!selectedNodeId) return graphData;
+
+    return {
+      nodes: graphData.nodes.map((node) => ({
+        ...node,
+        data: {
+          ...(node.data || {}),
+          relatedToSelection: node.id === selectedNodeId || graphData.edges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id)),
+        },
+      })),
+      edges: graphData.edges.map((edge) => ({
+        ...edge,
+        data: {
+          ...(edge.data || {}),
+          emphasized: edge.source === selectedNodeId || edge.target === selectedNodeId,
+          muted: edge.source !== selectedNodeId && edge.target !== selectedNodeId,
+        },
+      })),
+    };
+  }, [graphData, selectedNodeId]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData.edges);
 
   useEffect(() => {
-    setNodes(graphData.nodes);
-    setEdges(graphData.edges);
-  }, [graphData, setNodes, setEdges]);
+    setNodes((prev) => preserveNodePositions(prev, displayGraphData.nodes));
+    setEdges(displayGraphData.edges);
+  }, [displayGraphData, setNodes, setEdges]);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
@@ -262,7 +457,7 @@ export function MainCanvas() {
         onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        nodesDraggable={false}
+        nodesDraggable
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
@@ -338,12 +533,58 @@ export function MainCanvas() {
                 Projection
               </button>
             )}
+            <div className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+              <button
+                onClick={() => setAutoRefreshEnabled((value) => !value)}
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${autoRefreshEnabled ? 'text-green-300 bg-green-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
+                title={autoRefreshEnabled ? 'Pause automatic refresh checks' : 'Resume automatic refresh checks'}
+              >
+                {autoRefreshEnabled ? <Pause size={11} /> : <Play size={11} />}
+                {autoRefreshEnabled ? 'Auto' : 'Paused'}
+              </button>
+              <button
+                onClick={refreshWorkingTreeDiff}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md text-zinc-400 transition-all hover:text-zinc-200"
+                title="Check for changes now"
+              >
+                <RefreshCw size={11} />
+                Check now
+              </button>
+              <select
+                value={refreshIntervalMs}
+                onChange={(event) => setRefreshIntervalMs(Number(event.target.value))}
+                className="rounded-md border-0 bg-transparent px-2 py-1 text-[10px] text-zinc-300 outline-none"
+                title="Automatic refresh interval"
+              >
+                <option value={5000}>5s</option>
+                <option value={10000}>10s</option>
+                <option value={30000}>30s</option>
+              </select>
+            </div>
             <ExportButton />
           </div>
+        </Panel>
+        <Panel position="top-left">
+          <DiffSummary
+            trellisMode={trellisMode}
+            diff={activeDiff}
+            progress={snapshotDiff?.progress}
+            gitStatus={diffData?.git || null}
+            planSummary={summarizePlanVsLive(activeDiff, projectionData)}
+            snapshotName={currentSnapshot?.name}
+          />
         </Panel>
       </ReactFlow>
     </div>
   );
+}
+
+function preserveNodePositions(previousNodes: Node[], nextNodes: Node[]): Node[] {
+  const previousPositions = new Map(previousNodes.map((node) => [node.id, node.position]));
+  return nextNodes.map((node) => {
+    const previousPosition = previousPositions.get(node.id);
+    return previousPosition ? { ...node, position: previousPosition } : node;
+  });
 }
 
 function AutoFitView({ nodes }: { nodes: Node[] }) {
@@ -358,6 +599,262 @@ function AutoFitView({ nodes }: { nodes: Node[] }) {
   }, [nodes, fitView]);
 
   return null;
+}
+
+function DiffSummary({
+  trellisMode,
+  diff,
+  progress,
+  gitStatus,
+  planSummary,
+  snapshotName,
+}: {
+  trellisMode: string;
+  diff: { addedFiles: string[]; removedFiles: string[]; modifiedFiles: string[] } | null;
+  progress?: number;
+  gitStatus: {
+    staged: string[];
+    unstaged: string[];
+    untracked: string[];
+    stagedAdded: string[];
+    stagedModified: string[];
+    stagedDeleted: string[];
+    unstagedModified: string[];
+    unstagedDeleted: string[];
+  } | null;
+  planSummary: {
+    planned: number;
+    onTrack: number;
+    pending: number;
+    unexpected: number;
+    liveChanged: number;
+  } | null;
+  snapshotName?: string;
+}) {
+  const hasDiff = Boolean(diff && (diff.addedFiles.length || diff.removedFiles.length || diff.modifiedFiles.length));
+  const hasGitStatus = Boolean(gitStatus && (gitStatus.staged.length || gitStatus.unstaged.length || gitStatus.untracked.length));
+  const totalChangedFiles = countUniqueChangedFiles(diff, gitStatus);
+  if (!hasDiff && !hasGitStatus && trellisMode !== 'diff') return null;
+
+  return (
+    <div className="min-w-[220px] rounded-xl border border-white/[0.08] bg-[#0b1020]/80 px-3 py-2.5 backdrop-blur-md shadow-[0_0_18px_rgba(0,0,0,0.35)]">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">
+            {trellisMode === 'diff'
+              ? planSummary ? 'Plan vs Live' : 'Baseline vs Live'
+              : trellisMode === 'planned'
+                ? 'Planned Target'
+                : trellisMode === 'current'
+                  ? 'Baseline Reference'
+                  : 'Working Tree Changes'}
+          </div>
+          <div className="mt-1 text-[12px] font-medium text-zinc-100">
+            {trellisMode === 'diff'
+              ? planSummary
+                ? 'Monitoring live work against the plan'
+                : 'Comparing live workspace to the baseline'
+              : totalChangedFiles > 0
+                ? `${totalChangedFiles} changes detected`
+                : 'No tracked changes yet'}
+          </div>
+          {snapshotName && (trellisMode === 'current' || trellisMode === 'diff') && (
+            <div className="mt-1 text-[10px] text-zinc-400/80">
+              source: {snapshotName}
+            </div>
+          )}
+        </div>
+        {typeof progress === 'number' && (
+          <div className="rounded-full border border-blue-300/18 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-100">
+            {progress}% changed
+          </div>
+        )}
+      </div>
+
+      {trellisMode === 'diff' && planSummary && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
+            on track {planSummary.onTrack}
+          </span>
+          <span className="rounded-full border border-blue-300/18 bg-blue-500/10 px-2 py-1 text-blue-100">
+            planned {planSummary.planned}
+          </span>
+          <span className="rounded-full border border-amber-300/18 bg-amber-500/10 px-2 py-1 text-amber-100">
+            pending {planSummary.pending}
+          </span>
+          <span className="rounded-full border border-fuchsia-300/18 bg-fuchsia-500/10 px-2 py-1 text-fuchsia-100">
+            unexpected {planSummary.unexpected}
+          </span>
+        </div>
+      )}
+
+      {diff && (
+        <div className="mt-3 flex items-center gap-2 text-[11px]">
+          <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
+            + {diff.addedFiles.length} added
+          </span>
+          <span className="rounded-full border border-amber-300/18 bg-amber-500/10 px-2 py-1 text-amber-100">
+            ~ {diff.modifiedFiles.length} modified
+          </span>
+          <span className="rounded-full border border-red-300/18 bg-red-500/10 px-2 py-1 text-red-100">
+            - {diff.removedFiles.length} removed
+          </span>
+        </div>
+      )}
+
+      {gitStatus && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="rounded-full border border-sky-300/18 bg-sky-500/10 px-2 py-1 text-sky-100">
+            staged {gitStatus.staged.length}
+          </span>
+          <span className="rounded-full border border-orange-300/18 bg-orange-500/10 px-2 py-1 text-orange-100">
+            unstaged {gitStatus.unstaged.length}
+          </span>
+          <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
+            untracked {gitStatus.untracked.length}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function mergeLiveDiff(
+  snapshotDiff: {
+    addedFiles: string[];
+    removedFiles: string[];
+    modifiedFiles: string[];
+    addedEdges?: Array<{ source: string; target: string }>;
+    removedEdges?: Array<{ source: string; target: string }>;
+  } | null,
+  diffData: {
+    addedFiles: string[];
+    removedFiles: string[];
+    modifiedFiles: string[];
+    blastRadius: string[];
+    addedEdges?: Array<{ source: string; target: string }>;
+    removedEdges?: Array<{ source: string; target: string }>;
+    git?: {
+      staged: string[];
+      unstaged: string[];
+      untracked: string[];
+      stagedAdded: string[];
+      stagedModified: string[];
+      stagedDeleted: string[];
+      unstagedModified: string[];
+      unstagedDeleted: string[];
+    } | null;
+  } | null,
+) {
+  if (!snapshotDiff && !diffData) return null;
+
+  const addedFiles = new Set<string>([
+    ...(snapshotDiff?.addedFiles || []),
+    ...(diffData?.addedFiles || []),
+    ...(diffData?.git?.untracked || []),
+    ...(diffData?.git?.stagedAdded || []),
+  ]);
+  const removedFiles = new Set<string>([
+    ...(snapshotDiff?.removedFiles || []),
+    ...(diffData?.removedFiles || []),
+    ...(diffData?.git?.stagedDeleted || []),
+    ...(diffData?.git?.unstagedDeleted || []),
+  ]);
+  const modifiedFiles = new Set<string>([
+    ...(snapshotDiff?.modifiedFiles || []),
+    ...(diffData?.modifiedFiles || []),
+    ...(diffData?.git?.stagedModified || []),
+    ...(diffData?.git?.unstagedModified || []),
+  ]);
+
+  return {
+    addedFiles: [...addedFiles],
+    removedFiles: [...removedFiles],
+    modifiedFiles: [...modifiedFiles].filter((path) => !addedFiles.has(path) && !removedFiles.has(path)),
+    blastRadius: diffData?.blastRadius || [],
+    addedEdges: snapshotDiff?.addedEdges || diffData?.addedEdges || [],
+    removedEdges: snapshotDiff?.removedEdges || diffData?.removedEdges || [],
+    git: diffData?.git || null,
+  };
+}
+
+function summarizePlanVsLive(
+  diff: {
+    addedFiles: string[];
+    removedFiles: string[];
+    modifiedFiles: string[];
+  } | null,
+  projectionData: {
+    ghostFiles: Array<{ path: string }>;
+    modifiedFiles: Array<{ path: string }>;
+    removedFiles: Array<{ path: string }>;
+  } | null,
+) {
+  if (!projectionData) return null;
+
+  const plannedFiles = new Set<string>([
+    ...projectionData.ghostFiles.map((file) => file.path),
+    ...projectionData.modifiedFiles.map((file) => file.path),
+    ...projectionData.removedFiles.map((file) => file.path),
+  ]);
+  const liveFiles = new Set<string>([
+    ...(diff?.addedFiles || []),
+    ...(diff?.removedFiles || []),
+    ...(diff?.modifiedFiles || []),
+  ]);
+
+  let onTrack = 0;
+  let unexpected = 0;
+
+  for (const file of liveFiles) {
+    if (plannedFiles.has(file)) {
+      onTrack += 1;
+    } else {
+      unexpected += 1;
+    }
+  }
+
+  return {
+    planned: plannedFiles.size,
+    onTrack,
+    pending: Math.max(plannedFiles.size - onTrack, 0),
+    unexpected,
+    liveChanged: liveFiles.size,
+  };
+}
+
+function countUniqueChangedFiles(
+  diff: {
+    addedFiles: string[];
+    removedFiles: string[];
+    modifiedFiles: string[];
+  } | null,
+  gitStatus: {
+    staged: string[];
+    unstaged: string[];
+    untracked: string[];
+  } | null,
+) {
+  return new Set([
+    ...(diff?.addedFiles || []),
+    ...(diff?.removedFiles || []),
+    ...(diff?.modifiedFiles || []),
+    ...(gitStatus?.staged || []),
+    ...(gitStatus?.unstaged || []),
+    ...(gitStatus?.untracked || []),
+  ]).size;
+}
+
+function hasGitChanges(gitStatus: {
+  staged: string[];
+  unstaged: string[];
+  untracked: string[];
+} | null | undefined) {
+  return Boolean(
+    gitStatus?.staged?.length ||
+    gitStatus?.unstaged?.length ||
+    gitStatus?.untracked?.length,
+  );
 }
 
 function ExportButton() {

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { ArrowDownLeft, ArrowUpRight, Check, FileCode, FileJson, FileText } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Check, FileCode, FileJson, FileText, Focus } from 'lucide-react';
 
 import { getChangeVisual, getLanguageLabel, getLanguageVisual, type GraphNodeVisualData } from '../../../lib/graph-visuals';
 
@@ -28,6 +28,9 @@ function FileNodeComponent({ data }: NodeProps) {
   const isRemoved = d.changeStatus === 'removed' || d.changeStatus === 'planned_remove';
   const exportsList = d.exports?.slice(0, isFocused ? 8 : 4) || [];
   const showRichMeta = isFocused || isHub || isGhost;
+  const isRelatedToSelection = Boolean(d.relatedToSelection);
+  const gitStates = Array.isArray(d.gitStates) ? d.gitStates : [];
+  const mode = typeof d.mode === 'string' ? d.mode : undefined;
   const wrapperClass = isFocused
     ? 'w-[280px] min-h-[196px] px-4 py-4'
     : isHub
@@ -47,10 +50,19 @@ function FileNodeComponent({ data }: NodeProps) {
         d.frozen ? 'opacity-65 saturate-75' : '',
         isGhost ? 'border-dashed border-emerald-300/30 bg-[linear-gradient(180deg,rgba(34,197,94,0.14),rgba(11,26,18,0.52))] opacity-80' : '',
         isRemoved ? 'opacity-55' : '',
+        !isRelatedToSelection && d.relatedToSelection != null ? 'opacity-50' : '',
+        d.changeStatus === 'added' ? 'border-emerald-300/55 bg-[linear-gradient(180deg,rgba(34,197,94,0.26),rgba(10,20,14,0.58))]' : '',
+        d.changeStatus === 'modified' ? 'border-amber-300/55 bg-[linear-gradient(180deg,rgba(245,158,11,0.24),rgba(24,15,6,0.56))]' : '',
+        d.changeStatus === 'removed' ? 'border-red-300/50 bg-[linear-gradient(180deg,rgba(239,68,68,0.24),rgba(24,8,8,0.58))]' : '',
+        d.changeStatus === 'planned_modify' ? 'border-orange-300/48 bg-[linear-gradient(180deg,rgba(249,115,22,0.2),rgba(24,12,6,0.56))]' : '',
+        d.changeStatus === 'planned_remove' ? 'border-red-300/45 bg-[linear-gradient(180deg,rgba(239,68,68,0.2),rgba(24,8,8,0.5))]' : '',
+        d.changeStatus === 'unexpected_live' ? 'border-fuchsia-300/45 bg-[linear-gradient(180deg,rgba(217,70,239,0.22),rgba(24,8,24,0.52))]' : '',
+        mode === 'current' ? 'border-blue-200/22 bg-[linear-gradient(180deg,rgba(59,130,246,0.14),rgba(7,11,22,0.54))] grayscale-[0.18]' : '',
+        mode === 'planned' ? 'border-emerald-200/20 bg-[linear-gradient(180deg,rgba(34,197,94,0.12),rgba(7,14,12,0.5))]' : '',
+        mode === 'diff' ? 'border-fuchsia-200/18 bg-[linear-gradient(180deg,rgba(168,85,247,0.12),rgba(16,8,24,0.5))]' : '',
       ].join(' ')}
-      onClick={() => d.onToggle?.()}
       style={{
-        boxShadow: `0 24px 60px rgba(3,7,18,0.48), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 36px ${change?.glow || language.glow}`,
+        boxShadow: `0 24px 60px rgba(3,7,18,0.48), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 ${isRelatedToSelection ? 52 : 36}px ${change?.glow || language.glow}`,
       }}
     >
       <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-0 !bg-white/70 !shadow-[0_0_10px_rgba(255,255,255,0.4)]" />
@@ -118,6 +130,16 @@ function FileNodeComponent({ data }: NodeProps) {
 
               {showRichMeta && (
                 <div className="flex flex-col items-end gap-1">
+                  {mode && (
+                    <span className={`rounded-full border px-2 py-1 text-[9px] font-semibold tracking-[0.14em] ${
+                      mode === 'current' ? 'border-blue-300/20 bg-blue-500/8 text-blue-100/90' :
+                      mode === 'planned' ? 'border-emerald-300/20 bg-emerald-500/8 text-emerald-100/90' :
+                      mode === 'diff' ? 'border-fuchsia-300/20 bg-fuchsia-500/8 text-fuchsia-100/90' :
+                      'border-green-300/20 bg-green-500/8 text-green-100/90'
+                    }`}>
+                      {mode === 'current' ? 'baseline' : mode}
+                    </span>
+                  )}
                   <span className={`rounded-full border px-2 py-1 text-[9px] font-semibold tracking-[0.14em] ${language.badge}`}>
                     {getLanguageLabel(d.language)}
                   </span>
@@ -171,6 +193,31 @@ function FileNodeComponent({ data }: NodeProps) {
             {d.connectionCount}
           </span>
         )}
+        {gitStates.map((state) => (
+          <span
+            key={state}
+            className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
+              state === 'untracked' ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100' :
+              state === 'staged' ? 'border-sky-300/20 bg-sky-500/10 text-sky-100' :
+              'border-orange-300/20 bg-orange-500/10 text-orange-100'
+            }`}
+          >
+            {state}
+          </span>
+        ))}
+      </div>
+
+      <div className="absolute bottom-3 right-3">
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            d.onToggle?.();
+          }}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/8 text-zinc-100/82 transition-all hover:bg-white/14 hover:text-white"
+          title={isFocused ? 'Return to map view' : 'Focus this file'}
+        >
+          <Focus size={14} />
+        </button>
       </div>
 
       <Handle type="source" position={Position.Bottom} className="!h-2.5 !w-2.5 !border-0 !bg-white/70 !shadow-[0_0_10px_rgba(255,255,255,0.4)]" />

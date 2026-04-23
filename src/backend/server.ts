@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { WebSocketServer, WebSocket } from 'ws';
 import { scanDirectory, countFiles, collectFilePaths } from './services/project-scanner';
 import { detectMonorepo } from './services/monorepo-detector';
@@ -139,6 +140,25 @@ app.get('/api/git/info', (req, res) => {
   } catch { /* ignore */ }
 
   res.json({ currentBranch, branches, worktrees, hasCommits: untracked !== -1 });
+});
+
+app.get('/api/git/status', (req, res) => {
+  const projectPath = req.query.path as string;
+  if (!projectPath) {
+    res.status(400).json({ error: 'path query param required' });
+    return;
+  }
+
+  res.json(getGitWorkingTreeStatus(projectPath) || {
+    staged: [],
+    unstaged: [],
+    untracked: [],
+    stagedAdded: [],
+    stagedModified: [],
+    stagedDeleted: [],
+    unstagedModified: [],
+    unstagedDeleted: [],
+  });
 });
 
 // Auto-detect ALL active Claude Code sessions
@@ -318,8 +338,35 @@ app.get('/api/diff', async (req, res) => {
 
   const currentSnapshot = captureSnapshot(currentFileData, currentEdges);
   const diff = computeDiff(currentSnapshot);
+  res.json({
+    ...(diff || { summary: { added: 0, removed: 0, modified: 0, edgesAdded: 0, edgesRemoved: 0 } }),
+    git: getGitWorkingTreeStatus(projectPath),
+  });
+});
 
-  res.json(diff || { summary: { added: 0, removed: 0, modified: 0, edgesAdded: 0, edgesRemoved: 0 } });
+// Baseline snapshot captured during scan
+app.get('/api/baseline', (_req, res) => {
+  const baseline = getBaseline();
+  if (!baseline) {
+    res.status(404).json({ error: 'No baseline captured yet. Scan a project first.' });
+    return;
+  }
+
+  res.json({
+    id: 0,
+    name: 'Baseline',
+    data: {
+      files: [...baseline.files.entries()].map(([path, info]) => ({
+        path,
+        contentHash: info.hash,
+        symbolCount: info.symbolCount,
+      })),
+      edges: [...baseline.edges].map((edge) => {
+        const [source, target] = edge.split('->');
+        return { source, target, specifiers: [] };
+      }),
+    },
+  });
 });
 
 // --- Plan API ---
@@ -543,4 +590,72 @@ export { app, server };
 // If run directly (web mode), start the server
 if (require.main === module) {
   startServer().catch(console.error);
+}
+
+function getGitWorkingTreeStatus(projectPath: string): {
+  staged: string[];
+  unstaged: string[];
+  untracked: string[];
+  stagedAdded: string[];
+  stagedModified: string[];
+  stagedDeleted: string[];
+  unstagedModified: string[];
+  unstagedDeleted: string[];
+} | null {
+  try {
+    const output = execFileSync(
+      'git',
+      ['-C', projectPath, 'status', '--porcelain=v1', '--untracked-files=all'],
+      { encoding: 'utf8' },
+    );
+
+    const staged = new Set<string>();
+    const unstaged = new Set<string>();
+    const untracked = new Set<string>();
+    const stagedAdded = new Set<string>();
+    const stagedModified = new Set<string>();
+    const stagedDeleted = new Set<string>();
+    const unstagedModified = new Set<string>();
+    const unstagedDeleted = new Set<string>();
+
+    for (const line of output.split('\n')) {
+      if (!line.trim()) continue;
+
+      const x = line[0];
+      const y = line[1];
+      const rawPath = line.slice(3).trim();
+      const filePath = rawPath.includes('->') ? rawPath.split('->').pop()?.trim() || rawPath : rawPath;
+
+      if (x === '?' && y === '?') {
+        untracked.add(filePath);
+        continue;
+      }
+
+      if (x !== ' ') {
+        staged.add(filePath);
+        if (x === 'A' || x === 'C') stagedAdded.add(filePath);
+        else if (x === 'D') stagedDeleted.add(filePath);
+        else stagedModified.add(filePath);
+      }
+
+      if (y !== ' ') {
+        unstaged.add(filePath);
+        if (y === 'D') unstagedDeleted.add(filePath);
+        else unstagedModified.add(filePath);
+      }
+    }
+
+    return {
+      staged: [...staged],
+      unstaged: [...unstaged],
+      untracked: [...untracked],
+      stagedAdded: [...stagedAdded],
+      stagedModified: [...stagedModified],
+      stagedDeleted: [...stagedDeleted],
+      unstagedModified: [...unstagedModified],
+      unstagedDeleted: [...unstagedDeleted],
+    };
+  } catch {
+    return null;
+  }
 }

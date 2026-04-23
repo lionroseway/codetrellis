@@ -15,7 +15,12 @@ interface GraphState {
 
   layoutMode: LayoutMode;
   trellisMode: TrellisMode;
-  currentSnapshot: { edges: Array<{ source: string; target: string; specifiers: string[] }>; files: Array<{ path: string }> } | null;
+  currentSnapshot: {
+    id: number;
+    name?: string;
+    edges: Array<{ source: string; target: string; specifiers: string[] }>;
+    files: Array<{ path: string }>;
+  } | null;
   projectionEnabled: boolean;
   projectionData: ProjectionData | null;
 

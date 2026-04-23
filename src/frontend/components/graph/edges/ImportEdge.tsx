@@ -2,10 +2,12 @@ import { memo, useId, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
 
 interface ImportEdgeData {
-  importState?: 'regular' | 'planned_add' | 'planned_remove' | 'active' | 'symbol_link';
+  importState?: 'regular' | 'planned_add' | 'planned_remove' | 'active' | 'symbol_link' | 'added' | 'removed';
   symbols?: string[];
   alwaysShowLabel?: boolean;
   symbolCount?: number;
+  emphasized?: boolean;
+  muted?: boolean;
 }
 
 function edgeVisuals(state: ImportEdgeData['importState']) {
@@ -23,6 +25,20 @@ function edgeVisuals(state: ImportEdgeData['importState']) {
         glow: 'rgba(239, 68, 68, 0.34)',
         dashArray: '5 8',
         flow: '#f87171',
+      };
+    case 'added':
+      return {
+        color: 'rgba(52, 211, 153, 0.9)',
+        glow: 'rgba(16, 185, 129, 0.42)',
+        dashArray: undefined,
+        flow: '#6ee7b7',
+      };
+    case 'removed':
+      return {
+        color: 'rgba(248, 113, 113, 0.9)',
+        glow: 'rgba(239, 68, 68, 0.4)',
+        dashArray: '6 6',
+        flow: '#fca5a5',
       };
     case 'active':
       return {
@@ -66,9 +82,10 @@ function ImportEdgeComponent(props: EdgeProps) {
 
   const symbolNames = edgeData.symbols && edgeData.symbols.length > 0 ? edgeData.symbols : typeof label === 'string' && label.length > 0 ? label.split(',').map((item) => item.trim()) : [];
   const symbolCount = Math.max(edgeData.symbolCount || symbolNames.length, 1);
-  const strokeWidth = Math.min(1.2 + symbolCount * 0.55, 4.4);
+  const baseStrokeWidth = Math.min(1.2 + symbolCount * 0.55, 4.4);
+  const strokeWidth = edgeData.emphasized ? baseStrokeWidth + 1.5 : baseStrokeWidth;
   const labelText = symbolNames.length > 0 ? `{ ${symbolNames.slice(0, 4).join(', ')}${symbolNames.length > 4 ? ', ...' : ''} }` : typeof label === 'string' ? label : '';
-  const showLabel = Boolean(labelText && (edgeData.alwaysShowLabel || selected || isHovered));
+  const showLabel = Boolean(labelText && (edgeData.alwaysShowLabel || selected || isHovered || edgeData.emphasized));
 
   return (
     <>
@@ -83,7 +100,7 @@ function ImportEdgeComponent(props: EdgeProps) {
             strokeWidth,
             strokeDasharray: visual.dashArray,
             filter: `drop-shadow(0 0 ${isHovered || selected ? 10 : 6}px ${visual.glow})`,
-            opacity: edgeData.importState === 'planned_remove' ? 0.78 : 1,
+            opacity: edgeData.muted ? 0.18 : edgeData.importState === 'planned_remove' ? 0.78 : 1,
           }}
         />
 
@@ -107,9 +124,9 @@ function ImportEdgeComponent(props: EdgeProps) {
         <EdgeLabelRenderer>
           <div
             className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[10px] font-medium backdrop-blur-md ${
-              edgeData.importState === 'planned_remove'
+              edgeData.importState === 'planned_remove' || edgeData.importState === 'removed'
                 ? 'border-red-300/20 bg-red-500/12 text-red-100 line-through'
-                : edgeData.importState === 'planned_add'
+                : edgeData.importState === 'planned_add' || edgeData.importState === 'added'
                   ? 'border-emerald-300/20 bg-emerald-500/12 text-emerald-100'
                   : 'border-white/10 bg-[#0b1120]/78 text-zinc-100'
             }`}

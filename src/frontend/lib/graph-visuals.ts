@@ -21,6 +21,8 @@ export interface GraphNodeVisualData {
   topFiles?: string[];
   expanded?: boolean;
   symbolKind?: string;
+  mode?: string;
+  gitStates?: string[];
   [key: string]: unknown;
 }
 
@@ -115,6 +117,7 @@ const CHANGE_VISUALS: Record<string, ChangeVisual> = {
   in_progress_task: { symbol: '>', tone: 'border-blue-400/25 bg-blue-500/15 text-blue-100', glow: 'rgba(59, 130, 246, 0.36)' },
   active: { symbol: '*', tone: 'border-blue-300/30 bg-blue-500/12 text-blue-100', glow: 'rgba(96, 165, 250, 0.34)' },
   affected: { symbol: '!', tone: 'border-violet-400/25 bg-violet-500/15 text-violet-100', glow: 'rgba(139, 92, 246, 0.32)' },
+  unexpected_live: { symbol: '!', tone: 'border-fuchsia-300/30 bg-fuchsia-500/14 text-fuchsia-100', glow: 'rgba(217, 70, 239, 0.34)' },
 };
 
 export function getLanguageVisual(language?: string): LanguageVisual {

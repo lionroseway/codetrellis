@@ -10,7 +10,7 @@ export type NodeKind =
   | 'type';
 
 export type ChangeStatus = 'added' | 'modified' | 'removed' | 'unchanged'
-  | 'planned_add' | 'planned_modify' | 'planned_remove' | 'in_progress_task' | 'active' | 'affected';
+  | 'planned_add' | 'planned_modify' | 'planned_remove' | 'in_progress_task' | 'active' | 'affected' | 'unexpected_live';
 
 export interface GraphNode {
   id: string;

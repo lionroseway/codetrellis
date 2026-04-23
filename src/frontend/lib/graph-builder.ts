@@ -1,7 +1,7 @@
 import dagre from '@dagrejs/dagre';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
 import type { Node, Edge } from '@xyflow/react';
-import type { ViewDepth, ProjectionData } from '../../shared/types';
+import type { ViewDepth, ProjectionData, TrellisMode } from '../../shared/types';
 import { getNodeDimensions, type GraphNodeVisualData } from './graph-visuals';
 
 export type LayoutMode = 'map' | 'tree';
@@ -32,7 +32,21 @@ export interface DiffData {
   removedFiles: string[];
   modifiedFiles: string[];
   blastRadius: string[];
+  addedEdges?: Array<{ source: string; target: string }>;
+  removedEdges?: Array<{ source: string; target: string }>;
+  git?: {
+    staged: string[];
+    unstaged: string[];
+    untracked: string[];
+    stagedAdded: string[];
+    stagedModified: string[];
+    stagedDeleted: string[];
+    unstagedModified: string[];
+    unstagedDeleted: string[];
+  } | null;
 }
+
+const forceLayoutPositions = new Map<string, { x: number; y: number }>();
 
 // ============================================================
 // ARCHITECTURE ANALYSIS — discover clusters from dependencies
@@ -49,13 +63,31 @@ interface FileInfo {
   importedBy: string[]; // files that import this
   specifiersIn: Map<string, string[]>;  // who imports what from this
   specifiersOut: Map<string, string[]>; // what this imports from whom
-  cluster: string;    // discovered cluster name
+  clusterId: string;
+  clusterName: string;
+  clusterDescription: string;
 }
+
+interface ClusterInfo {
+  id: string;
+  name: string;
+  description: string;
+  source: 'inferred';
+}
+
+const GENERIC_PATH_SEGMENTS = new Set([
+  'src', 'lib', 'app', 'apps', 'packages', 'pkg', 'server', 'client',
+  'frontend', 'backend', 'shared', 'common', 'core', 'internal',
+]);
+
+const GENERIC_FILE_STEMS = new Set([
+  'index', 'main', 'app', 'types', 'utils', 'helpers', 'constants',
+]);
 
 /**
  * Analyze dependency edges to discover file importance and clusters.
  */
-function analyzeArchitecture(depEdges: DependencyEdge[]): Map<string, FileInfo> {
+function analyzeArchitecture(depEdges: DependencyEdge[], extraPaths: string[] = []): Map<string, FileInfo> {
   const files = new Map<string, FileInfo>();
 
   // Initialize all files
@@ -69,10 +101,27 @@ function analyzeArchitecture(depEdges: DependencyEdge[]): Map<string, FileInfo> 
           inbound: 0, outbound: 0, total: 0,
           imports: [], importedBy: [],
           specifiersIn: new Map(), specifiersOut: new Map(),
-          cluster: '',
+          clusterId: '',
+          clusterName: '',
+          clusterDescription: '',
         });
       }
     }
+  }
+
+  for (const path of extraPaths) {
+    if (!path || files.has(path)) continue;
+    const name = path.split('/').pop() || path;
+    files.set(path, {
+      path, name,
+      language: getLanguage(name),
+      inbound: 0, outbound: 0, total: 0,
+      imports: [], importedBy: [],
+      specifiersIn: new Map(), specifiersOut: new Map(),
+      clusterId: '',
+      clusterName: '',
+      clusterDescription: '',
+    });
   }
 
   // Count connections
@@ -93,7 +142,7 @@ function analyzeArchitecture(depEdges: DependencyEdge[]): Map<string, FileInfo> 
 
   // Discover clusters using simple community detection:
   // Files that share many imports/importedBy are in the same cluster
-  discoverClusters(files, depEdges);
+  discoverClusters(files);
 
   return files;
 }
@@ -102,39 +151,12 @@ function analyzeArchitecture(depEdges: DependencyEdge[]): Map<string, FileInfo> 
  * Simple cluster discovery: group files by their strongest connection neighborhood.
  * Uses the dominant shared-neighbor heuristic.
  */
-function discoverClusters(files: Map<string, FileInfo>, depEdges: DependencyEdge[]): void {
-  // Strategy: use the 2-segment directory path as a starting point,
-  // but merge clusters that are tightly connected
+function discoverClusters(files: Map<string, FileInfo>): void {
   for (const info of files.values()) {
-    const parts = info.path.split('/');
-    if (parts.length >= 3) {
-      info.cluster = `${parts[0]}/${parts[1]}`;
-    } else if (parts.length >= 2) {
-      info.cluster = parts[0];
-    } else {
-      info.cluster = 'root';
-    }
-  }
-
-  // Refine: if a file imports more from a different cluster than its own,
-  // move it to that cluster
-  for (const info of files.values()) {
-    const clusterCounts = new Map<string, number>();
-    for (const imp of [...info.imports, ...info.importedBy]) {
-      const other = files.get(imp);
-      if (!other) continue;
-      clusterCounts.set(other.cluster, (clusterCounts.get(other.cluster) || 0) + 1);
-    }
-    // Find dominant cluster (excluding own)
-    let maxCount = 0;
-    let ownCount = clusterCounts.get(info.cluster) || 0;
-    for (const [cluster, count] of clusterCounts) {
-      if (cluster !== info.cluster && count > maxCount) {
-        maxCount = count;
-      }
-    }
-    // Only move if the other cluster has significantly more connections
-    // (this prevents unnecessary churn)
+    const cluster = inferCluster(info.path);
+    info.clusterId = cluster.id;
+    info.clusterName = cluster.name;
+    info.clusterDescription = cluster.description;
   }
 }
 
@@ -158,16 +180,21 @@ export function buildDependencyGraph(
   recentlyChanged?: Set<string>,
   projectionData?: ProjectionData | null,
   layoutMode: LayoutMode = 'map',
+  trellisMode: TrellisMode = 'live',
 ): GraphData {
   if (depEdges.length === 0) return { nodes: [], edges: [] };
 
   const changeMap = buildChangeMap(diffData);
+  const edgeChangeMap = buildEdgeChangeMap(diffData, projectionData);
+  const gitStateMap = buildGitStateMap(diffData);
+  const liveChangedFiles = collectLiveChangedFiles(diffData);
+  const plannedStateMap = buildPlannedStateMap(projectionData);
   if (recentlyChanged) {
     for (const f of recentlyChanged) {
       if (!changeMap.has(f)) changeMap.set(f, 'active');
     }
   }
-  if (projectionData) {
+  if (projectionData && trellisMode !== 'diff') {
     for (const f of projectionData.modifiedFiles) {
       if (!changeMap.has(f.path)) changeMap.set(f.path, 'planned_modify');
     }
@@ -176,24 +203,41 @@ export function buildDependencyGraph(
     }
   }
 
-  const arch = analyzeArchitecture(depEdges);
+  if (trellisMode === 'diff' && projectionData) {
+    for (const [path, plannedState] of plannedStateMap) {
+      if (liveChangedFiles.has(path)) {
+        changeMap.set(path, 'active');
+      } else if (!changeMap.has(path)) {
+        changeMap.set(path, plannedState);
+      }
+    }
+
+    for (const path of liveChangedFiles) {
+      if (!plannedStateMap.has(path)) {
+        changeMap.set(path, 'unexpected_live');
+      }
+    }
+  }
+
+  const extraPaths = collectStandalonePaths(diffData);
+  const arch = analyzeArchitecture(depEdges, extraPaths);
 
   // Check if a specific file is focused (clicked)
   const focusedFile = [...expandedNodes].find((id) => arch.has(id));
   // Check if a cluster is expanded
-  const expandedClusters = new Set([...expandedNodes].filter((id) => !arch.has(id) && id.includes('/')));
+  const expandedClusters = new Set([...expandedNodes].filter((id) => id.startsWith('cluster:')));
 
   let result: GraphData;
 
   if (focusedFile) {
     // Focus mode: show one file and all its connections
-    result = buildFocusView(focusedFile, arch, depEdges, changeMap, onToggle, symbolsMap, viewDepth);
+    result = buildFocusView(focusedFile, arch, depEdges, changeMap, edgeChangeMap, onToggle, symbolsMap, viewDepth);
   } else if (viewDepth === 'file' || expandedClusters.size > 0) {
     // Hub/file view: show important files, with expanded clusters showing their files
-    result = buildHubView(arch, depEdges, changeMap, onToggle, expandedClusters);
+    result = buildHubView(arch, depEdges, changeMap, edgeChangeMap, onToggle, expandedClusters);
   } else {
     // Cluster overview (default)
-    result = buildClusterView(arch, depEdges, changeMap, onToggle);
+    result = buildClusterView(arch, depEdges, changeMap, edgeChangeMap, onToggle);
   }
 
   // Add ghost nodes from projection
@@ -229,7 +273,21 @@ export function buildDependencyGraph(
 
   // Apply layout
   const layout = layoutMode === 'tree' ? applyTreeLayout : applyForceLayout;
-  return layout(result.nodes, result.edges);
+  const laidOut = layout(result.nodes, result.edges);
+  return {
+    nodes: laidOut.nodes.map((node) => {
+      const fullPath = ((node.data || {}) as any).fullPath || '';
+      return {
+        ...node,
+        data: {
+          ...(node.data || {}),
+          mode: trellisMode,
+          gitStates: gitStateMap.get(node.id) || (fullPath ? gitStateMap.get(fullPath) : []) || [],
+        },
+      };
+    }),
+    edges: laidOut.edges,
+  };
 }
 
 // ============================================================
@@ -240,6 +298,7 @@ function buildClusterView(
   arch: Map<string, FileInfo>,
   depEdges: DependencyEdge[],
   changeMap: Map<string, string>,
+  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>,
   onToggle: (nodeId: string) => void,
 ): GraphData {
   const nodes: Node[] = [];
@@ -248,28 +307,42 @@ function buildClusterView(
   // Group files by cluster
   const clusters = new Map<string, FileInfo[]>();
   for (const info of arch.values()) {
-    if (!clusters.has(info.cluster)) clusters.set(info.cluster, []);
-    clusters.get(info.cluster)!.push(info);
+    if (!clusters.has(info.clusterId)) clusters.set(info.clusterId, []);
+    clusters.get(info.clusterId)!.push(info);
   }
 
   // Create cluster nodes
-  for (const [clusterName, files] of clusters) {
+  for (const [clusterId, files] of clusters) {
+    const primary = files[0];
     const totalConnections = files.reduce((sum, f) => sum + f.total, 0);
-    const topFiles = files.sort((a, b) => b.total - a.total).slice(0, 5);
+    const topFiles = [...files].sort((a, b) => b.total - a.total).slice(0, 5);
     const hasChanges = files.some((f) => changeMap.has(f.path));
+    const clusterStatuses = files
+      .map((f) => changeMap.get(f.path))
+      .filter((status): status is string => Boolean(status));
+    const localChangeCount = files.filter((f) => {
+      const status = changeMap.get(f.path);
+      return status != null && !status.startsWith('planned_');
+    }).length;
+    const plannedChangeCount = files.filter((f) => changeMap.get(f.path)?.startsWith('planned_')).length;
 
     nodes.push({
-      id: clusterName,
+      id: clusterId,
       type: 'packageNode',
       position: { x: 0, y: 0 },
       data: {
-        label: clusterName,
+        label: primary.clusterName,
         childCount: files.length,
         expanded: false,
-        onToggle: () => onToggle(clusterName),
+        onToggle: () => onToggle(clusterId),
         topFiles: topFiles.map((f) => f.name),
         connectionCount: totalConnections,
-        changeStatus: hasChanges ? 'modified' : undefined,
+        changeStatus: hasChanges ? summarizeClusterChange(clusterStatuses) : undefined,
+        nodeType: 'package',
+        description: primary.clusterDescription,
+        sourceLabel: 'Inferred cluster',
+        plannedChangeCount,
+        localChangeCount,
       },
     });
   }
@@ -279,8 +352,8 @@ function buildClusterView(
   for (const edge of depEdges) {
     const srcInfo = arch.get(edge.sourceRelative);
     const tgtInfo = arch.get(edge.targetRelative);
-    if (!srcInfo || !tgtInfo || srcInfo.cluster === tgtInfo.cluster) continue;
-    const key = `${srcInfo.cluster}->${tgtInfo.cluster}`;
+    if (!srcInfo || !tgtInfo || srcInfo.clusterId === tgtInfo.clusterId) continue;
+    const key = `${srcInfo.clusterId}->${tgtInfo.clusterId}`;
     clusterEdges.set(key, (clusterEdges.get(key) || 0) + 1);
   }
 
@@ -299,7 +372,7 @@ function buildClusterView(
       label: count > 1 ? `${count}` : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
       data: {
-        importState: 'regular',
+        importState: edgeChangeMap.get(`${source}->${target}`) || 'regular',
         symbolCount: count,
       },
     });
@@ -316,6 +389,7 @@ function buildHubView(
   arch: Map<string, FileInfo>,
   depEdges: DependencyEdge[],
   changeMap: Map<string, string>,
+  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>,
   onToggle: (nodeId: string) => void,
   expandedClusters?: Set<string>,
 ): GraphData {
@@ -328,7 +402,7 @@ function buildHubView(
   if (expandedClusters && expandedClusters.size > 0) {
     // Show all files from expanded clusters
     for (const [path, info] of arch) {
-      if (expandedClusters.has(info.cluster)) {
+      if (expandedClusters.has(info.clusterId)) {
         visibleFiles.add(path);
       }
     }
@@ -396,7 +470,7 @@ function buildHubView(
       label: edge.specifiers.length > 0 ? edge.specifiers.slice(0, 2).join(', ') : undefined,
       labelStyle: { fontSize: 8, fill: '#6b6b78' },
       data: {
-        importState: 'regular',
+        importState: edgeChangeMap.get(`${edge.sourceRelative}->${edge.targetRelative}`) || 'regular',
         symbols: edge.specifiers,
         symbolCount: edge.specifiers.length,
       },
@@ -415,6 +489,7 @@ function buildFocusView(
   arch: Map<string, FileInfo>,
   depEdges: DependencyEdge[],
   changeMap: Map<string, string>,
+  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>,
   onToggle: (nodeId: string) => void,
   symbolsMap: Map<string, FileSymbol[]>,
   viewDepth: ViewDepth,
@@ -503,7 +578,7 @@ function buildFocusView(
       label: specifiers.length > 0 ? specifiers.slice(0, 3).join(', ') : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
       data: {
-        importState: changeMap.get(imp) === 'planned_add' ? 'planned_add' : 'regular',
+        importState: edgeChangeMap.get(`${focusPath}->${imp}`) || (changeMap.get(imp) === 'planned_add' ? 'planned_add' : 'regular'),
         symbols: specifiers,
         symbolCount: specifiers.length,
         alwaysShowLabel: true,
@@ -544,7 +619,7 @@ function buildFocusView(
       label: specifiers.length > 0 ? specifiers.slice(0, 3).join(', ') : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
       data: {
-        importState: changeMap.get(imp) === 'planned_remove' ? 'planned_remove' : 'regular',
+        importState: edgeChangeMap.get(`${imp}->${focusPath}`) || (changeMap.get(imp) === 'planned_remove' ? 'planned_remove' : 'regular'),
         symbols: specifiers,
         symbolCount: specifiers.length,
         alwaysShowLabel: true,
@@ -552,7 +627,7 @@ function buildFocusView(
     });
   }
 
-  return { nodes, edges };
+  return applyFocusedLayout(nodes, edges, focusPath, viewDepth);
 }
 
 // ============================================================
@@ -565,6 +640,7 @@ export function buildFromSnapshot(
   layoutMode: LayoutMode = 'map',
   diffData?: DiffData | null,
   frozen = false,
+  projectionData?: ProjectionData | null,
 ): GraphData {
   const depEdges: DependencyEdge[] = snapshotEdges.map((e) => ({
     source: e.source, target: e.target,
@@ -573,10 +649,23 @@ export function buildFromSnapshot(
   }));
 
   // Reuse the main builder but with empty expanded set (overview mode)
-  return buildDependencyGraph(
+  const graph = buildDependencyGraph(
     depEdges, viewDepth, new Set(), new Map(), () => {},
-    diffData, undefined, undefined, layoutMode,
+    diffData, undefined, projectionData, layoutMode, frozen ? 'current' : projectionData ? 'planned' : 'live',
   );
+
+  if (!frozen) return graph;
+
+  return {
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      data: {
+        ...(node.data || {}),
+        frozen: true,
+      },
+    })),
+    edges: graph.edges,
+  };
 }
 
 // ============================================================
@@ -620,8 +709,8 @@ function applyForceLayout(nodes: Node[], edges: Edge[]): GraphData {
   const forceNodes: ForceNode[] = nodes.map((n, i) => ({
     id: n.id, idx: i,
     isHub: (n.data as any)?.isHub || (n.data as any)?.isFocused,
-    x: Math.random() * 600 - 300,
-    y: Math.random() * 600 - 300,
+    x: forceLayoutPositions.get(n.id)?.x ?? deterministicPosition(n.id, 0),
+    y: forceLayoutPositions.get(n.id)?.y ?? deterministicPosition(n.id, 1),
   }));
 
   const nodeIdToIndex = new Map(forceNodes.map((n, i) => [n.id, i]));
@@ -634,26 +723,37 @@ function applyForceLayout(nodes: Node[], edges: Edge[]): GraphData {
     }));
 
   const sim = forceSimulation(forceNodes)
-    .force('link', forceLink(forceEdges).distance(150).strength(0.4))
-    .force('charge', forceManyBody().strength(-400).distanceMax(600))
+    .force('link', forceLink(forceEdges).distance((link: any) => {
+      const source = forceNodes[typeof link.source === 'number' ? link.source : link.source.idx];
+      const target = forceNodes[typeof link.target === 'number' ? link.target : link.target.idx];
+      const sourceNode = nodes[source.idx];
+      const targetNode = nodes[target.idx];
+      const sourceWidth = getNodeDimensions((sourceNode.data || {}) as GraphNodeVisualData).width;
+      const targetWidth = getNodeDimensions((targetNode.data || {}) as GraphNodeVisualData).width;
+      return Math.max(220, (sourceWidth + targetWidth) * 0.62);
+    }).strength(0.32))
+    .force('charge', forceManyBody().strength(-760).distanceMax(900))
     .force('center', forceCenter(0, 0))
     .force('collide', forceCollide((d: any) => {
       const node = nodes[d.idx];
       const { width } = getNodeDimensions((node.data || {}) as GraphNodeVisualData);
-      return width * 0.56;
+      return width * 0.76;
     }))
     .stop();
 
-  for (let i = 0; i < 200; i++) sim.tick();
+  for (let i = 0; i < 260; i++) sim.tick();
 
   return {
     nodes: nodes.map((node, i) => {
       const { width: w, height: h } = getNodeDimensions((node.data || {}) as GraphNodeVisualData);
+      const x = forceNodes[i].x || 0;
+      const y = forceNodes[i].y || 0;
+      forceLayoutPositions.set(node.id, { x, y });
       return {
         ...node,
         position: {
-          x: (forceNodes[i].x || 0) - w / 2,
-          y: (forceNodes[i].y || 0) - h / 2,
+          x: x - w / 2,
+          y: y - h / 2,
         },
       };
     }),
@@ -671,10 +771,143 @@ function buildChangeMap(diffData?: DiffData | null): Map<string, string> {
   for (const f of diffData.addedFiles) map.set(f, 'added');
   for (const f of diffData.removedFiles) map.set(f, 'removed');
   for (const f of diffData.modifiedFiles) map.set(f, 'modified');
+  for (const f of diffData.git?.untracked || []) map.set(f, 'added');
+  for (const f of diffData.git?.stagedAdded || []) map.set(f, 'added');
+  for (const f of diffData.git?.stagedDeleted || []) map.set(f, 'removed');
+  for (const f of diffData.git?.unstagedDeleted || []) map.set(f, 'removed');
+  for (const f of diffData.git?.stagedModified || []) {
+    if (!map.has(f)) map.set(f, 'modified');
+  }
+  for (const f of diffData.git?.unstagedModified || []) {
+    if (!map.has(f)) map.set(f, 'modified');
+  }
   for (const f of diffData.blastRadius) {
     if (!map.has(f)) map.set(f, 'affected');
   }
   return map;
+}
+
+function buildGitStateMap(diffData?: DiffData | null): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  if (!diffData?.git) return map;
+
+  const add = (file: string, state: string) => {
+    const existing = map.get(file) || [];
+    if (!existing.includes(state)) existing.push(state);
+    map.set(file, existing);
+  };
+
+  for (const file of diffData.git.staged) add(file, 'staged');
+  for (const file of diffData.git.unstaged) add(file, 'unstaged');
+  for (const file of diffData.git.untracked) add(file, 'untracked');
+
+  return map;
+}
+
+function collectLiveChangedFiles(diffData?: DiffData | null): Set<string> {
+  return new Set([
+    ...(diffData?.addedFiles || []),
+    ...(diffData?.removedFiles || []),
+    ...(diffData?.modifiedFiles || []),
+    ...(diffData?.git?.staged || []),
+    ...(diffData?.git?.unstaged || []),
+    ...(diffData?.git?.untracked || []),
+  ]);
+}
+
+function buildPlannedStateMap(projectionData?: ProjectionData | null): Map<string, 'planned_add' | 'planned_modify' | 'planned_remove'> {
+  const map = new Map<string, 'planned_add' | 'planned_modify' | 'planned_remove'>();
+  if (!projectionData) return map;
+  for (const file of projectionData.ghostFiles) map.set(file.path, 'planned_add');
+  for (const file of projectionData.modifiedFiles) map.set(file.path, 'planned_modify');
+  for (const file of projectionData.removedFiles) map.set(file.path, 'planned_remove');
+  return map;
+}
+
+function buildEdgeChangeMap(
+  diffData?: DiffData | null,
+  projectionData?: ProjectionData | null,
+): Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'> {
+  const map = new Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>();
+  for (const edge of diffData?.addedEdges || []) map.set(`${edge.source}->${edge.target}`, 'added');
+  for (const edge of diffData?.removedEdges || []) map.set(`${edge.source}->${edge.target}`, 'removed');
+  for (const edge of projectionData?.newEdges || []) map.set(`${edge.from}->${edge.to}`, 'planned_add');
+  for (const edge of projectionData?.removedEdges || []) map.set(`${edge.from}->${edge.to}`, 'planned_remove');
+  return map;
+}
+
+function applyFocusedLayout(nodes: Node[], edges: Edge[], focusPath: string, viewDepth: ViewDepth): GraphData {
+  const focusNode = nodes.find((node) => node.id === focusPath);
+  if (!focusNode) return { nodes, edges };
+
+  const inbound = nodes.filter((node) => edges.some((edge) => edge.source === node.id && edge.target === focusPath));
+  const outbound = nodes.filter((node) => edges.some((edge) => edge.source === focusPath && edge.target === node.id));
+  const symbols = viewDepth === 'symbol'
+    ? nodes.filter((node) => typeof node.id === 'string' && node.id.startsWith(`${focusPath}::`))
+    : [];
+
+  const positioned = new Map<string, { x: number; y: number }>();
+  positioned.set(focusPath, { x: 0, y: 0 });
+
+  const verticalGap = 168;
+  const leftX = -360;
+  const rightX = 360;
+  const symbolY = 260;
+
+  inbound.forEach((node, index) => {
+    const centeredIndex = index - (inbound.length - 1) / 2;
+    positioned.set(node.id, { x: leftX, y: centeredIndex * verticalGap });
+  });
+
+  outbound.forEach((node, index) => {
+    const centeredIndex = index - (outbound.length - 1) / 2;
+    positioned.set(node.id, { x: rightX, y: centeredIndex * verticalGap });
+  });
+
+  symbols.forEach((node, index) => {
+    const centeredIndex = index - (symbols.length - 1) / 2;
+    positioned.set(node.id, { x: centeredIndex * 220, y: symbolY });
+  });
+
+  return {
+    nodes: nodes.map((node) => {
+      const coords = positioned.get(node.id) || { x: 0, y: 0 };
+      const { width, height } = getNodeDimensions((node.data || {}) as GraphNodeVisualData);
+      return {
+        ...node,
+        position: {
+          x: coords.x - width / 2,
+          y: coords.y - height / 2,
+        },
+      };
+    }),
+    edges,
+  };
+}
+
+function collectStandalonePaths(diffData?: DiffData | null): string[] {
+  if (!diffData) return [];
+  return [
+    ...diffData.addedFiles,
+    ...diffData.removedFiles,
+    ...diffData.modifiedFiles,
+    ...(diffData.git?.staged || []),
+    ...(diffData.git?.unstaged || []),
+    ...(diffData.git?.untracked || []),
+  ];
+}
+
+function summarizeClusterChange(statuses: string[]): string {
+  if (statuses.includes('unexpected_live')) return 'unexpected_live';
+  if (statuses.includes('removed')) return 'removed';
+  if (statuses.includes('added')) return 'added';
+  if (statuses.includes('modified')) return 'modified';
+  if (statuses.includes('active')) return 'active';
+  if (statuses.includes('planned_remove')) return 'planned_remove';
+  if (statuses.includes('planned_add')) return 'planned_add';
+  if (statuses.includes('planned_modify')) return 'planned_modify';
+  if (statuses.includes('affected')) return 'affected';
+  return 'modified';
 }
 
 function getLanguage(filename: string): string {
@@ -684,4 +917,74 @@ function getLanguage(filename: string): string {
     py: 'python', rs: 'rust', go: 'go', css: 'css', json: 'json', md: 'markdown',
   };
   return map[ext] || '';
+}
+
+function inferCluster(path: string): ClusterInfo {
+  const segments = path.split('/').filter(Boolean);
+  const fileName = segments[segments.length - 1] || path;
+  const fileStem = fileName.replace(/\.[^.]+$/, '');
+  const normalizedStem = fileStem
+    .replace(/\.(spec|test)$/, '')
+    .replace(/[-_.]/g, ' ')
+    .trim();
+
+  const parent = [...segments]
+    .reverse()
+    .find((segment) => !GENERIC_PATH_SEGMENTS.has(segment.toLowerCase()) && segment !== fileName);
+
+  const meaningfulStem = !GENERIC_FILE_STEMS.has(normalizedStem.toLowerCase())
+    ? normalizedStem
+    : '';
+
+  const seed = meaningfulStem || parent || segments.find((segment) => !GENERIC_PATH_SEGMENTS.has(segment.toLowerCase())) || 'system';
+  const cleanedSeed = seed
+    .replace(/[-_.]/g, ' ')
+    .replace(/\b(service|store|watcher|manager|controller|handler|provider|scanner|parser|modal|panel|view|builder)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'system';
+
+  const key = slugify(cleanedSeed);
+  return {
+    id: `cluster:${key}`,
+    name: toClusterName(cleanedSeed),
+    description: describeCluster(cleanedSeed),
+    source: 'inferred',
+  };
+}
+
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'system';
+}
+
+function toClusterName(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function describeCluster(seed: string): string {
+  const lowered = seed.toLowerCase();
+
+  if (lowered.includes('auth')) return 'Authentication, sessions, and identity flow';
+  if (lowered.includes('plan')) return 'Planning, task orchestration, and execution guidance';
+  if (lowered.includes('trellis')) return 'Snapshots, baseline state, and architectural comparison';
+  if (lowered.includes('graph')) return 'Graph rendering, layout, and visual structure';
+  if (lowered.includes('agent')) return 'Agent communication, activity, and runtime coordination';
+  if (lowered.includes('diff') || lowered.includes('deviation')) return 'Change comparison, drift detection, and verification';
+  if (lowered.includes('project') || lowered.includes('scan')) return 'Project scanning, discovery, and file analysis';
+  if (lowered.includes('persist') || lowered.includes('database')) return 'Persistence, storage, and state tracking';
+  if (lowered.includes('ui') || lowered.includes('layout')) return 'User interface, layout, and interaction flow';
+
+  return `Files that work together around ${seed.toLowerCase()}`;
+}
+
+function deterministicPosition(id: string, axis: 0 | 1): number {
+  let hash = axis === 0 ? 17 : 31;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 33 + id.charCodeAt(i)) % 1000003;
+  }
+  const spread = axis === 0 ? 720 : 560;
+  return (hash % spread) - spread / 2;
 }
