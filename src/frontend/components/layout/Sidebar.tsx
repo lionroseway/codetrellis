@@ -3,10 +3,11 @@ import { useUiStore } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import type { FileTreeNode } from '@shared/types';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectGitStatus } from '../../stores/project-store';
 
 type SidebarGitState = 'staged' | 'unstaged' | 'untracked' | 'deleted';
+const SIDEBAR_DIRTY_STATE_CLEAR_CONFIRMATIONS = 3;
 
 function getFileIcon(node: FileTreeNode) {
   if (node.type === 'package') return <Package size={13} className="text-accent shrink-0 drop-shadow-[0_0_3px_rgba(59,130,246,0.4)]" />;
@@ -144,6 +145,7 @@ export function Sidebar() {
   const gitStatus = useProjectStore((s) => s.gitStatus);
   const [searchQuery, setSearchQuery] = useState('');
   const [stableGitStatus, setStableGitStatus] = useState<ProjectGitStatus | null>(null);
+  const cleanRefreshStreakRef = useRef(0);
 
   useEffect(() => {
     if (!root || scanStatus !== 'ready') {
@@ -158,9 +160,27 @@ export function Sidebar() {
         gitStatus.commitHash !== previous.commitHash,
       );
 
-      if (headAdvanced && !hasGitStatusChanges(gitStatus)) return gitStatus;
-      if (hasGitStatusChanges(gitStatus)) return gitStatus;
-      if (hasGitStatusChanges(previous)) return previous;
+      if (headAdvanced && !hasGitStatusChanges(gitStatus)) {
+        cleanRefreshStreakRef.current = 0;
+        return gitStatus;
+      }
+
+      if (hasGitStatusChanges(gitStatus)) {
+        cleanRefreshStreakRef.current = 0;
+        return gitStatus;
+      }
+
+      if (hasGitStatusChanges(previous)) {
+        if (cleanRefreshStreakRef.current < SIDEBAR_DIRTY_STATE_CLEAR_CONFIRMATIONS - 1) {
+          cleanRefreshStreakRef.current += 1;
+          return previous;
+        }
+
+        cleanRefreshStreakRef.current = 0;
+        return gitStatus;
+      }
+
+      cleanRefreshStreakRef.current = 0;
       return gitStatus;
     });
   }, [gitStatus, root, scanStatus]);

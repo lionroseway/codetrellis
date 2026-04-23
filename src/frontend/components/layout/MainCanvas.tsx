@@ -282,6 +282,19 @@ export function MainCanvas() {
           latestCommitHash = effectiveGit?.commitHash ?? null;
           setProjectGitStatus(effectiveGit || null);
 
+          if (baselineMode === 'auto' && headAdvanced && !incomingGitHasChanges) {
+            cleanRefreshStreakRef.current = 0;
+            nextDiffHasChanges = false;
+            nextGitHasChanges = false;
+            return {
+              addedFiles: [],
+              removedFiles: [],
+              modifiedFiles: [],
+              blastRadius: [],
+              git: effectiveGit,
+            };
+          }
+
           if (diff && !diff.error) {
             const nextDiff = { ...diff, git: effectiveGit };
             nextDiffHasChanges = Boolean(
