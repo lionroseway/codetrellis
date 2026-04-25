@@ -54,6 +54,7 @@ export function MainCanvas() {
   const scanStatus = useProjectStore((s) => s.scanStatus);
   const setProjectGitStatus = useProjectStore((s) => s.setGitStatus);
   const refreshVersion = useProjectStore((s) => s.refreshVersion);
+  const bumpRefreshVersion = useProjectStore((s) => s.bumpRefreshVersion);
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const expandedNodes = useGraphStore((s) => s.expandedNodes);
   const toggleExpand = useGraphStore((s) => s.toggleExpand);
@@ -398,6 +399,11 @@ export function MainCanvas() {
                     }
                   })
                   .catch(() => {});
+
+                // Force subscribers (sidebar, etc.) to re-poll immediately so
+                // they pick up the post-commit clean state instead of waiting
+                // for the next interval tick.
+                bumpRefreshVersion();
               })
               .finally(() => {
                 baselineCaptureCommitRef.current = null;
@@ -406,7 +412,7 @@ export function MainCanvas() {
         }
       })
       .catch(() => {});
-  }, [scanStatus, root, setProjectGitStatus, baselineMode, baselineCommitHash, captureBaseline]);
+  }, [scanStatus, root, setProjectGitStatus, baselineMode, baselineCommitHash, captureBaseline, bumpRefreshVersion]);
 
   useEffect(() => {
     if (scanStatus !== 'ready' || !root) return;

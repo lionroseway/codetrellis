@@ -18,6 +18,12 @@ import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
 import * as commentService from './services/comment-service';
 import * as sessionService from './services/session-service';
+import {
+  recordProjectOpen,
+  listRecentProjects,
+  removeRecentProject,
+  setRecentProjectPinned,
+} from './services/recent-projects-service';
 
 const app = express();
 app.use(express.json());
@@ -173,6 +179,32 @@ app.get('/api/git/head', (req, res) => {
   res.json(getGitHeadCommit(projectPath) || { commitHash: null, shortCommitHash: null });
 });
 
+// Resolve a branch name to its tip commit. Used by the branch popover to set
+// the diff baseline to "branch X's HEAD" without checking it out.
+app.get('/api/git/branch-tip', (req, res) => {
+  const projectPath = req.query.path as string;
+  const branch = req.query.branch as string;
+  if (!projectPath || !branch) {
+    res.status(400).json({ error: 'path and branch query params required' });
+    return;
+  }
+
+  try {
+    const commitHash = execFileSync(
+      'git',
+      ['-C', projectPath, 'rev-parse', branch],
+      { encoding: 'utf8' },
+    ).trim();
+    if (!commitHash) {
+      res.json({ commitHash: null, shortCommitHash: null });
+      return;
+    }
+    res.json({ commitHash, shortCommitHash: commitHash.slice(0, 7) });
+  } catch {
+    res.json({ commitHash: null, shortCommitHash: null });
+  }
+});
+
 app.get('/api/git/commits', (req, res) => {
   const projectPath = req.query.path as string;
   const limitParam = Number(req.query.limit);
@@ -226,6 +258,53 @@ app.get('/api/auto-detect', (_req, res) => {
   res.json({ sessions: activeSessions });
 });
 
+// Recent projects — list, remove, pin
+app.get('/api/recent-projects', (_req, res) => {
+  res.json({ projects: listRecentProjects() });
+});
+
+app.delete('/api/recent-projects', (req, res) => {
+  const { projectPath } = req.body || {};
+  if (!projectPath || typeof projectPath !== 'string') {
+    res.status(400).json({ error: 'projectPath is required' });
+    return;
+  }
+  removeRecentProject(projectPath);
+  res.json({ ok: true });
+});
+
+app.post('/api/recent-projects/pin', (req, res) => {
+  const { projectPath, pinned } = req.body || {};
+  if (!projectPath || typeof projectPath !== 'string') {
+    res.status(400).json({ error: 'projectPath is required' });
+    return;
+  }
+  setRecentProjectPinned(projectPath, Boolean(pinned));
+  res.json({ ok: true });
+});
+
+// Onboarding state — what steps the user has completed for a given project.
+// Used by the Getting Started checklist to reflect real backend state instead
+// of static brochure steps.
+app.get('/api/onboarding-state', (req, res) => {
+  const projectPath = req.query.project as string;
+  if (!projectPath) {
+    res.status(400).json({ error: 'project query param required' });
+    return;
+  }
+
+  sessionService.cleanStaleSessions();
+  const sessions = sessionService.getActiveSessions();
+  const plans = planService.listPlans(projectPath);
+
+  res.json({
+    hasMcpSession: sessions.length > 0,
+    activeMcpSessionCount: sessions.length,
+    hasPlan: plans.length > 0,
+    planCount: plans.length,
+  });
+});
+
 
 // Browse directories (for folder picker)
 app.get('/api/fs/browse', (req, res) => {
@@ -258,6 +337,14 @@ app.post('/api/project/scan', async (req, res) => {
   }
 
   console.log(`[API] Scanning project: ${projectPath}`);
+
+  // Record this project as recently opened (best-effort — don't fail scan if it errors)
+  try {
+    const branchInfo = getGitBranchName(projectPath);
+    recordProjectOpen(projectPath, branchInfo);
+  } catch (err) {
+    console.warn('[API] Failed to record recent project:', err);
+  }
 
   const monorepoConfig = detectMonorepo(projectPath);
   const fileTree = scanDirectory(projectPath);
@@ -896,6 +983,18 @@ function getGitWorkingTreeStatus(projectPath: string): {
       commitHash: head?.commitHash || null,
       shortCommitHash: head?.shortCommitHash || null,
     };
+  } catch {
+    return null;
+  }
+}
+
+function getGitBranchName(projectPath: string): string | null {
+  try {
+    const headPath = path.join(projectPath, '.git', 'HEAD');
+    if (!fs.existsSync(headPath)) return null;
+    const head = fs.readFileSync(headPath, 'utf-8').trim();
+    const match = head.match(/^ref: refs\/heads\/(.+)$/);
+    return match ? match[1] : 'detached';
   } catch {
     return null;
   }

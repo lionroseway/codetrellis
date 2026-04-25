@@ -24,19 +24,23 @@ export function createPlan(
     const t = input.tasks[i];
     const taskUid = randomUUID();
     db.run(
-      `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, affected_files, affected_symbols, new_connections, removed_connections, dependencies, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [taskUid, uid, i, t.description,
         JSON.stringify(t.affectedFiles || []), JSON.stringify(t.affectedSymbols || []),
         JSON.stringify(t.newConnections || []), JSON.stringify(t.removedConnections || []),
-        JSON.stringify(t.dependencies || []), now, now]
+        JSON.stringify(t.dependencies || []),
+        t.fileSpec ?? null, JSON.stringify(t.symbolSpecs || []),
+        now, now]
     );
     tasks.push({
       uid: taskUid, planUid: uid, sortOrder: i, description: t.description,
       status: 'pending', assignee: null, assigneeType: null, assigneeModel: null,
       affectedFiles: t.affectedFiles || [], affectedSymbols: t.affectedSymbols || [],
       newConnections: t.newConnections || [], removedConnections: t.removedConnections || [],
-      dependencies: t.dependencies || [], createdAt: now, updatedAt: now,
+      dependencies: t.dependencies || [],
+      fileSpec: t.fileSpec, symbolSpecs: t.symbolSpecs || [],
+      createdAt: now, updatedAt: now,
     });
   }
 
@@ -138,7 +142,8 @@ export function deletePlan(planUid: string): void {
 export function getTasksByPlan(planUid: string): Task[] {
   const result = getDb().exec(
     `SELECT uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model,
-            affected_files, affected_symbols, new_connections, removed_connections, dependencies, created_at, updated_at
+            affected_files, affected_symbols, new_connections, removed_connections, dependencies,
+            file_spec, symbol_specs, created_at, updated_at
      FROM tasks WHERE plan_uid = ? ORDER BY sort_order`,
     [planUid]
   );
@@ -149,7 +154,10 @@ export function getTasksByPlan(planUid: string): Task[] {
     status: r[4] as Task['status'], assignee: r[5], assigneeType: r[6], assigneeModel: r[7],
     affectedFiles: JSON.parse(r[8] || '[]'), affectedSymbols: JSON.parse(r[9] || '[]'),
     newConnections: JSON.parse(r[10] || '[]'), removedConnections: JSON.parse(r[11] || '[]'),
-    dependencies: JSON.parse(r[12] || '[]'), createdAt: r[13], updatedAt: r[14],
+    dependencies: JSON.parse(r[12] || '[]'),
+    fileSpec: (r[13] as string | null) ?? undefined,
+    symbolSpecs: JSON.parse(r[14] || '[]'),
+    createdAt: r[15], updatedAt: r[16],
   }));
 }
 

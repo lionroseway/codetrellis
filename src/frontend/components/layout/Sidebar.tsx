@@ -392,6 +392,18 @@ function mergeGitSources(
   if (!shared) return polled;
   if (!polled) return shared;
 
+  // If the two sources disagree on commit hash, one of them is mid-transition
+  // (e.g. just after a commit). Don't union their dirty paths — that would
+  // carry stale pre-commit changes into the post-commit view. Prefer the
+  // source whose dirty state matches a post-commit world (clean).
+  if (shared.commitHash && polled.commitHash && shared.commitHash !== polled.commitHash) {
+    const sharedDirty = hasGitStatusChanges(shared);
+    const polledDirty = hasGitStatusChanges(polled);
+    if (!sharedDirty && polledDirty) return shared;
+    if (!polledDirty && sharedDirty) return polled;
+    return polled;
+  }
+
   const combined = {
     staged: [...new Set([...shared.staged, ...polled.staged])],
     unstaged: [...new Set([...shared.unstaged, ...polled.unstaged])],

@@ -11,6 +11,7 @@ import { PlanPanel } from './components/layout/PlanPanel';
 import { StatusBar } from './components/layout/StatusBar';
 import { FolderPickerModal } from './components/FolderPickerModal';
 import { McpGuideModal } from './components/McpGuideModal';
+import { GettingStarted } from './components/GettingStarted';
 import { ToastContainer } from './components/Toast';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -57,6 +58,7 @@ export function App() {
       <StatusBar />
       <FolderPickerModal />
       <McpGuideModal />
+      <GettingStarted />
       <ToastContainer />
     </div>
   );

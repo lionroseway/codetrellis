@@ -156,6 +156,17 @@ export async function initDatabase(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_trellis_plan ON trellis_snapshots(plan_uid);
     CREATE INDEX IF NOT EXISTS idx_trellis_type ON trellis_snapshots(snapshot_type);
+
+    CREATE TABLE IF NOT EXISTS recent_projects (
+      path TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      branch TEXT,
+      pinned INTEGER NOT NULL DEFAULT 0,
+      last_opened_at INTEGER NOT NULL,
+      first_opened_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_recent_projects_opened ON recent_projects(last_opened_at DESC);
   `);
 
   console.log('[DB] SQLite initialized');

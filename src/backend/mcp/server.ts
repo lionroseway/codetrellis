@@ -101,10 +101,19 @@ export async function startMcpServer(): Promise<void> {
 
   // --- Plan Management Tools ---
 
+  const symbolSpecSchema = z.object({
+    name: z.string().describe('Symbol name (e.g. "verifyToken")'),
+    kind: z.enum(['function', 'class', 'interface', 'type', 'method', 'enum']),
+    action: z.enum(['add', 'modify', 'remove', 'move']),
+    description: z.string().optional().describe('What the symbol does or why it changes'),
+    signature: z.string().optional().describe('Type signature, e.g. "verifyToken(token: string, secret: string): JwtPayload"'),
+    moveTo: z.string().optional().describe('Target file path if action is "move"'),
+  });
+
   mcpServer.registerTool(
     'create_plan',
     {
-      description: 'Create a structured plan in CodeTrellis describing what you intend to do. The plan will be displayed in the UI for the user to review, comment on, and approve. Returns the plan UID.',
+      description: 'Create a structured plan in CodeTrellis describing what you intend to do. Express architectural intent at the file, symbol, and edge level — agents and humans both read this as the spec. Returns the plan UID.',
       inputSchema: {
         title: z.string().describe('Brief title of the plan'),
         description: z.string().optional().describe('Detailed description of what this plan achieves'),
@@ -112,9 +121,12 @@ export async function startMcpServer(): Promise<void> {
         tasks: z.array(z.object({
           description: z.string().describe('What this task does'),
           affected_files: z.array(z.string()).optional().describe('Files this task will create/modify/delete'),
-          affected_symbols: z.array(z.string()).optional().describe('Functions/classes this task will add/change'),
+          affected_symbols: z.array(z.string()).optional().describe('Functions/classes this task will add/change (names only — use symbol_specs for richer intent)'),
           new_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('New import relationships'),
           removed_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('Import relationships to remove'),
+          dependencies: z.array(z.string()).optional().describe('Task UIDs that must complete before this one starts'),
+          file_spec: z.string().optional().describe('Markdown describing what the file should do, its responsibility, exports, etc.'),
+          symbol_specs: z.array(symbolSpecSchema).optional().describe('Per-symbol intent: name, kind, action, signature, etc. Richer than affected_symbols.'),
         })).describe('Ordered list of tasks'),
       },
     },
@@ -126,6 +138,9 @@ export async function startMcpServer(): Promise<void> {
           affectedSymbols: t.affected_symbols,
           newConnections: t.new_connections,
           removedConnections: t.removed_connections,
+          dependencies: t.dependencies,
+          fileSpec: t.file_spec,
+          symbolSpecs: t.symbol_specs,
         })) },
         'agent', 'mcp', project_path,
       );

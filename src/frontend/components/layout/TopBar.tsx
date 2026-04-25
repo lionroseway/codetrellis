@@ -1,11 +1,45 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Cpu, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle } from 'lucide-react';
+import { FolderOpen, Cpu, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { getAPI } from '../../bridge';
 import type { ViewDepth } from '../../../shared/types';
+
+async function captureBaselineFromBranch(projectPath: string, branch: string): Promise<boolean> {
+  try {
+    const tipRes = await fetch(`/api/git/branch-tip?path=${encodeURIComponent(projectPath)}&branch=${encodeURIComponent(branch)}`);
+    const tipData = await tipRes.json();
+    if (!tipData?.commitHash) return false;
+
+    const captureRes = await fetch('/api/baseline/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectPath, commitHash: tipData.commitHash }),
+    });
+    const snapshot = await captureRes.json();
+    if (!snapshot?.data) return false;
+
+    const graphStore = useGraphStore.getState();
+    graphStore.setBaselineMode('pinned');
+    graphStore.setBaselineReference({
+      commitHash: snapshot.commitHash ?? tipData.commitHash,
+      shortCommitHash: snapshot.shortCommitHash ?? tipData.shortCommitHash,
+    });
+    graphStore.setCurrentSnapshot({
+      id: snapshot.id,
+      name: snapshot.name,
+      commitHash: snapshot.commitHash,
+      shortCommitHash: snapshot.shortCommitHash,
+      edges: snapshot.data.edges,
+      files: snapshot.data.files,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const depthOptions: { value: ViewDepth; label: string }[] = [
   { value: 'package', label: 'Clusters' },
@@ -138,22 +172,44 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
 
           <div className="px-2 py-1">
             <span className="text-[9px] text-foreground-subtle uppercase tracking-wider px-1">Branches</span>
+            <div className="text-[9px] text-foreground-subtle px-1 mb-0.5 leading-snug">
+              Click a branch to pin it as the diff baseline.
+            </div>
             {/* Always show current branch */}
             {gitInfo.currentBranch && (
-              <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-accent">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(false);
+                  captureBaselineFromBranch(projectPath, gitInfo.currentBranch!);
+                }}
+                className="group w-full flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-accent hover:bg-accent/10 transition-colors text-left"
+                title="Pin baseline to current branch's HEAD"
+              >
                 <GitBranch size={10} />
                 <span className="truncate">{gitInfo.currentBranch}</span>
                 <span className="text-[8px] text-accent ml-auto">current</span>
-              </div>
+                <Camera size={9} className="opacity-0 group-hover:opacity-70" />
+              </button>
             )}
-            {/* Show other branches */}
+            {/* Show other branches — clickable to pin as baseline */}
             {gitInfo.branches
               .filter((b) => b !== gitInfo.currentBranch)
               .map((b) => (
-                <div key={b} className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-foreground-muted">
+                <button
+                  key={b}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                    captureBaselineFromBranch(projectPath, b);
+                  }}
+                  className="group w-full flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors text-left"
+                  title={`Pin baseline to ${b}'s HEAD — see diff against this branch`}
+                >
                   <GitBranch size={10} />
                   <span className="truncate">{b}</span>
-                </div>
+                  <GitCompare size={9} className="ml-auto opacity-0 group-hover:opacity-70" />
+                </button>
               ))}
           </div>
 
