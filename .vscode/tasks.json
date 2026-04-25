@@ -13,7 +13,7 @@
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "new",
+        "panel": "dedicated",
         "group": "dev"
       }
     },
@@ -91,6 +91,16 @@
       "type": "shell",
       "command": "npm install",
       "problemMatcher": []
+    },
+    {
+      "label": "Kill Dev Servers",
+      "type": "shell",
+      "command": "bash scripts/free-dev-ports.sh",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
     }
   ]
 }

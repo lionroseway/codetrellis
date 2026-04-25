@@ -5,8 +5,11 @@
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
   "main": ".vite/build/main.js",
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "predev": "bash scripts/free-dev-ports.sh",
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "predev:frontend": "bash scripts/free-dev-ports.sh 5173",
     "dev:frontend": "vite --config vite.web.config.ts",
+    "predev:backend": "bash scripts/free-dev-ports.sh 19432 3001",
     "dev:backend": "tsx watch src/backend/index.ts",
     "start:electron": "electron-forge start",
     "package": "electron-forge package",
