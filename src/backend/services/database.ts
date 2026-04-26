@@ -1,8 +1,9 @@
 import initSqlJs, { type Database } from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ParsedFile, ParsedSymbol, AliasMapping } from '../../shared/types';
+import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
 import { loadFromDisk } from './persistence';
+import { getResolverForLanguage } from './resolvers';
 
 let db: Database | null = null;
 
@@ -214,6 +215,21 @@ export function exportDatabase(): Uint8Array {
 }
 
 /**
+ * Drop all AST data (files / symbols / imports). Called at the start of
+ * every project scan so a project switch doesn't leave behind stale
+ * rows from a previously-scanned project. The AST tables are
+ * "ephemeral — rebuilt on scan" by design; the persistent stuff
+ * (plans, spec docs, comments, agent sessions, snapshots, recent
+ * projects) is in separate tables and is preserved.
+ */
+export function clearAstData(): void {
+  const d = getDb();
+  d.run(`DELETE FROM imports`);
+  d.run(`DELETE FROM symbols`);
+  d.run(`DELETE FROM files`);
+}
+
+/**
  * Store a parsed file's data. Replaces existing data for that file.
  */
 export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
@@ -336,29 +352,31 @@ export function getFileHash(filePath: string): string | null {
 
 /**
  * Resolve import paths to absolute file paths and update the database.
- * e.g. "./services/project-scanner" → "/abs/path/src/backend/services/project-scanner.ts"
  *
- * Accepts an optional `aliasMap` — workspace package aliases like
- * `@swf/ui` → `/abs/path/packages/ui`, plus tsconfig.json `paths`
- * mappings. Without this, only relative imports resolve.
+ * Dispatches per-language: TS imports go through resolvers/typescript,
+ * Python through resolvers/python, etc. The importer's language is
+ * pulled from the files table so each row gets the right resolver.
+ *
+ * Without per-language dispatch the resolver was TS-only and Python /
+ * Rust / PHP / Java imports silently dropped.
  */
 export function resolveImports(
   projectRoot: string,
   aliasMap: AliasMapping[] = [],
+  systems: DiscoveredSystem[] = [],
 ): void {
   const d = getDb();
 
   // Get all files so we can build a lookup
-  const filesResult = d.exec(`SELECT id, path FROM files`);
+  const filesResult = d.exec(`SELECT id, path, language FROM files`);
   if (!filesResult[0]) return;
 
   const filePathSet = new Set<string>();
-  const fileIdByPath = new Map<string, number>();
+  const fileLangByPath = new Map<string, SupportedLanguage>();
   for (const row of filesResult[0].values) {
-    const id = row[0] as number;
     const fp = row[1] as string;
     filePathSet.add(fp);
-    fileIdByPath.set(fp, id);
+    fileLangByPath.set(fp, row[2] as SupportedLanguage);
   }
 
   // Add resolved_file_id column if it doesn't exist
@@ -376,7 +394,18 @@ export function resolveImports(
     const sourcePath = row[1] as string;
     const importerPath = row[2] as string;
 
-    const resolvedPath = resolveImportPath(sourcePath, importerPath, projectRoot, filePathSet, aliasMap);
+    const language = fileLangByPath.get(importerPath);
+    const resolver = language ? getResolverForLanguage(language) : null;
+    const resolvedPath = resolver
+      ? resolver.resolve({
+          importSource: sourcePath,
+          importerPath,
+          projectRoot,
+          knownFiles: filePathSet,
+          aliasMap,
+          systems,
+        })
+      : null;
     if (resolvedPath) {
       d.run(`UPDATE imports SET resolved_path = ? WHERE id = ?`, [resolvedPath, importId]);
       resolved++;
@@ -384,64 +413,6 @@ export function resolveImports(
   }
 
   console.log(`[DB] Resolved ${resolved} import paths`);
-}
-
-function resolveImportPath(
-  importSource: string,
-  importerPath: string,
-  projectRoot: string,
-  knownFiles: Set<string>,
-  aliasMap: AliasMapping[] = [],
-): string | null {
-  // 1. Relative or absolute paths — file-system relative resolution
-  if (importSource.startsWith('.') || importSource.startsWith('/')) {
-    const importerDir = path.dirname(importerPath);
-    const basePath = importSource.startsWith('/')
-      ? importSource
-      : path.resolve(importerDir, importSource);
-    return tryExtensions(basePath, knownFiles);
-  }
-
-  // 2. Workspace alias / tsconfig paths — try longest prefix first.
-  //    The alias map is already sorted by alias length descending.
-  for (const mapping of aliasMap) {
-    const { alias, rootPath, entries } = mapping;
-    if (importSource === alias) {
-      // Exact match → try the package's entry hints first, then index
-      if (entries) {
-        for (const e of entries) {
-          const candidate = path.resolve(rootPath, e);
-          if (knownFiles.has(candidate)) return candidate;
-        }
-      }
-      const indexHit = tryExtensions(path.join(rootPath, 'index'), knownFiles)
-        ?? tryExtensions(path.join(rootPath, 'src/index'), knownFiles);
-      if (indexHit) return indexHit;
-      continue;
-    }
-    if (importSource.startsWith(alias + '/')) {
-      const subpath = importSource.slice(alias.length + 1);
-      const basePath = path.resolve(rootPath, subpath);
-      const hit = tryExtensions(basePath, knownFiles);
-      if (hit) return hit;
-    }
-  }
-
-  // 3. Package imports (e.g. 'react') — skip; not in this repo
-  return null;
-}
-
-function tryExtensions(basePath: string, knownFiles: Set<string>): string | null {
-  const extensions = [
-    '',
-    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-    '/index.ts', '/index.tsx', '/index.js', '/index.jsx',
-  ];
-  for (const ext of extensions) {
-    const candidate = basePath + ext;
-    if (knownFiles.has(candidate)) return candidate;
-  }
-  return null;
 }
 
 /**

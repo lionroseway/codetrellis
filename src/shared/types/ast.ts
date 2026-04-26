@@ -4,7 +4,9 @@ export type SupportedLanguage =
   | 'python'
   | 'rust'
   | 'go'
-  | 'java';
+  | 'java'
+  | 'php'
+  | 'ruby';
 
 export type SymbolKind =
   | 'function'

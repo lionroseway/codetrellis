@@ -8,7 +8,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { scanDirectory, countFiles, collectFilePaths } from './services/project-scanner';
 import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile } from './services/ast-parser';
-import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, resolveImports, getDependencyEdges, getFileDependencies } from './services/database';
+import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, resolveImports, getDependencyEdges, getFileDependencies, clearAstData } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
@@ -339,6 +339,11 @@ app.post('/api/project/scan', async (req, res) => {
 
   console.log(`[API] Scanning project: ${projectPath}`);
 
+  // Drop AST data from any previously-scanned project. Without this,
+  // files/symbols/imports accumulate across project switches and queries
+  // like search return the union of every project ever opened.
+  clearAstData();
+
   // Record this project as recently opened (best-effort — don't fail scan if it errors)
   try {
     const branchInfo = getGitBranchName(projectPath);
@@ -366,9 +371,15 @@ app.post('/api/project/scan', async (req, res) => {
   const systems = discoverSystems(projectPath);
   const aliasMap = buildAliasMap(systems);
   console.log(`[API] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
+  for (const sys of systems) {
+    console.log(`[API]   · ${sys.relativeRoot || '(root)'} · ${sys.manifestKind} · ${sys.language} · ${sys.packageName ?? sys.name}`);
+  }
 
-  // Resolve import paths to actual files
-  resolveImports(projectPath, aliasMap);
+  // Resolve import paths to actual files. Per-language dispatch: each
+  // file's language picks the right resolver (TS / Python / Rust /
+  // PHP / Java / ...). Systems list is needed by Python / Rust / PHP /
+  // Java to anchor absolute imports at the importer's project root.
+  resolveImports(projectPath, aliasMap, systems);
 
   const stats = getDbStats();
   console.log(`[API] Parsed ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports, ${stats.resolvedImports} resolved`);

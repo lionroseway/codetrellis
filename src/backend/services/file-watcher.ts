@@ -28,20 +28,46 @@ export async function startWatching(projectRoot: string): Promise<void> {
     await watcher.close();
   }
 
+  // Function-based ignore — globs in chokidar aren't reliable for
+  // dotdir / node_modules in nested layouts. A function tested against
+  // every path is foolproof. Mirrors project-scanner's ALWAYS_IGNORED.
+  const HEAVY_DIRS = new Set([
+    'node_modules', 'dist', 'out', 'build',
+    '__pycache__', 'venv', 'env',
+    'target',
+    'vendor',
+    'coverage', 'test-results', 'playwright-report', 'cypress',
+  ]);
+  const isIgnoredPath = (p: string): boolean => {
+    // Any segment starting with '.' (dotdir / dotfile) is skipped.
+    if (/[\\/]\.[^\\/]/.test(p)) return true;
+    // Any segment matching a heavy non-source directory.
+    const segs = p.split(/[\\/]/);
+    for (const seg of segs) {
+      if (HEAVY_DIRS.has(seg)) return true;
+    }
+    // Tail-only filters
+    if (p.endsWith('.log')) return true;
+    return false;
+  };
+
   watcher = watch(projectRoot, {
-    ignored: [
-      '**/node_modules/**',
-      '**/.git/**',
-      '**/.vite/**',
-      '**/dist/**',
-      '**/out/**',
-      '**/coverage/**',
-    ],
+    ignored: isIgnoredPath,
     ignoreInitial: true,
     awaitWriteFinish: {
       stabilityThreshold: 300,
       pollInterval: 100,
     },
+    // Don't traverse symlinks — they often point into massive shared
+    // dirs (homebrew prefixes, system Python) and explode the watch.
+    followSymlinks: false,
+  });
+
+  watcher.on('error', (err) => {
+    // chokidar surfaces EMFILE / EACCES etc. via this event. Logging
+    // beats crashing the whole backend — the watcher just stops
+    // updating for that subtree, the scan-time data is still valid.
+    console.warn('[Watcher] error (continuing):', err);
   });
 
   watcher.on('change', (filePath) => {
