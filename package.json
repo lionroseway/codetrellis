@@ -65,6 +65,7 @@
     "express": "^5.0.0",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.460.0",
+    "prism-react-renderer": "^2.4.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sql.js": "^1.11.0",

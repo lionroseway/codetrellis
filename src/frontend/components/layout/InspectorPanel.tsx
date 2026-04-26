@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useUiStore, type SelectedNodeKind, type SelectedNodeMeta } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
+import { CodePreview, type FileContent } from '../inspector/CodePreview';
 
 interface SymbolInfo {
   name: string;
@@ -18,14 +19,6 @@ interface SymbolInfo {
 interface FileDeps {
   imports: Array<{ path: string; relativePath: string; specifiers: string[] }>;
   importedBy: Array<{ path: string; relativePath: string; specifiers: string[] }>;
-}
-
-interface FileContent {
-  content: string;
-  startLine: number;
-  lineCount: number;
-  bytes: number;
-  truncated: boolean;
 }
 
 const KIND_ICON_MAP: Record<string, typeof Braces> = {
@@ -231,7 +224,8 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
     if (!absPath) return;
     setShowCode(true);
     if (content) return;
-    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}`)
+    const projectQuery = root ? `&project=${encodeURIComponent(root)}` : '';
+    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}${projectQuery}`)
       .then((r) => r.json())
       .then((data) => {
         if (data?.error) {
@@ -376,7 +370,8 @@ function SymbolView({
     setContentError(null);
     const start = Math.max(1, target.startLine - 2);
     const end = target.endLine + 2;
-    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}&start=${start}&end=${end}`)
+    const projectQuery = root ? `&project=${encodeURIComponent(root)}` : '';
+    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}&start=${start}&end=${end}${projectQuery}`)
       .then((r) => r.json())
       .then((data) => {
         if (data?.error) { setContentError(data.error); return; }
@@ -442,60 +437,3 @@ function Section({
   );
 }
 
-function CodePreview({
-  content,
-  error,
-  highlightLine,
-  onClose,
-}: {
-  content: FileContent | null;
-  error: string | null;
-  highlightLine?: number;
-  onClose?: () => void;
-}) {
-  if (error) {
-    return (
-      <div className="rounded-md border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-[10.5px] text-red-200">
-        Failed to load source: {error}
-      </div>
-    );
-  }
-  if (!content) {
-    return (
-      <div className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-3 text-[10.5px] text-foreground-subtle italic">
-        Loading source…
-      </div>
-    );
-  }
-
-  const lines = content.content.split('\n');
-  return (
-    <div className="rounded-md border border-white/[0.06] bg-black/30 overflow-hidden">
-      <div className="flex items-center justify-between px-2 py-1 border-b border-white/[0.04] text-[9px] text-foreground-subtle uppercase tracking-wider">
-        <span>{content.lineCount} line{content.lineCount === 1 ? '' : 's'}{content.truncated ? ' · truncated' : ''}</span>
-        {onClose && (
-          <button onClick={onClose} className="hover:text-foreground transition-colors normal-case tracking-normal text-[10px]">
-            Hide
-          </button>
-        )}
-      </div>
-      <pre className="text-[11px] font-mono leading-snug max-h-[420px] overflow-auto">
-        {lines.map((line, i) => {
-          const lineNum = (content.startLine || 1) + i;
-          const isHighlight = highlightLine != null && lineNum === highlightLine;
-          return (
-            <div
-              key={i}
-              className={`flex ${isHighlight ? 'bg-accent/10' : ''}`}
-            >
-              <span className="select-none text-foreground-subtle/50 w-10 text-right pr-2 shrink-0 border-r border-white/[0.04]">
-                {lineNum}
-              </span>
-              <code className="px-2 whitespace-pre text-foreground/90">{line || ' '}</code>
-            </div>
-          );
-        })}
-      </pre>
-    </div>
-  );
-}

@@ -405,9 +405,9 @@ app.get('/api/symbols/file', (req, res) => {
   res.json(getFileSymbols(filePath));
 });
 
-// Read raw file content for the inspector code preview. Caps at 256KB so we
-// never blow up the renderer with a giant file. Caller can pass start/end
-// line numbers to slice (1-indexed, inclusive) — used to scope a symbol view.
+// Read raw file content for the inspector code preview. Caps at 256KB.
+// Optional ?start=&end= slices to a 1-indexed inclusive line range.
+// Optional ?project= triggers per-line git annotations + plan drift status.
 app.get('/api/file/content', (req, res) => {
   const filePath = req.query.path as string;
   if (!filePath || typeof filePath !== 'string') {
@@ -432,29 +432,192 @@ app.get('/api/file/content', (req, res) => {
 
     const startParam = req.query.start ? parseInt(String(req.query.start), 10) : undefined;
     const endParam = req.query.end ? parseInt(String(req.query.end), 10) : undefined;
+    const projectPath = (req.query.project as string) || undefined;
+
+    const allLines = content.split('\n');
+    const fullLineCount = allLines.length;
 
     let body = content;
     let start = 1;
+    let end = fullLineCount;
     if (Number.isFinite(startParam) && Number.isFinite(endParam)) {
-      const lines = content.split('\n');
       const s = Math.max(1, startParam!);
-      const e = Math.min(lines.length, endParam!);
-      body = lines.slice(s - 1, e).join('\n');
+      const e = Math.min(fullLineCount, endParam!);
+      body = allLines.slice(s - 1, e).join('\n');
       start = s;
+      end = e;
+    }
+
+    const language = detectLanguage(filePath);
+
+    // Compute git per-line annotations vs HEAD if a project root is known.
+    let annotations: Array<'unchanged' | 'added' | 'modified'> | undefined;
+    let isDirty = false;
+    if (projectPath) {
+      const fullAnnotations = computeGitLineAnnotations(projectPath, filePath, fullLineCount);
+      if (fullAnnotations) {
+        annotations = fullAnnotations.slice(start - 1, end);
+        isDirty = fullAnnotations.some((a) => a !== 'unchanged');
+      }
+    }
+
+    // Compute plan drift status — is this file expected by any active plan?
+    let drift: undefined | {
+      status: 'on_track' | 'pending' | 'unexpected' | 'untouched' | 'no_plan';
+      activePlanUids: string[];
+      activeTaskUids: string[];
+      hasActivePlan: boolean;
+    };
+    if (projectPath) {
+      drift = computeFileDrift(projectPath, filePath, isDirty);
     }
 
     res.json({
       path: filePath,
       content: body,
       startLine: start,
+      endLine: end,
       lineCount: body.split('\n').length,
       bytes: stat.size,
       truncated,
+      language,
+      annotations,
+      drift,
     });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
 });
+
+function detectLanguage(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const map: Record<string, string> = {
+    '.ts': 'typescript', '.tsx': 'tsx', '.js': 'javascript', '.jsx': 'jsx',
+    '.json': 'json', '.css': 'css', '.scss': 'scss', '.html': 'markup',
+    '.py': 'python', '.rs': 'rust', '.go': 'go', '.java': 'java',
+    '.php': 'php', '.rb': 'ruby', '.sh': 'bash', '.md': 'markdown',
+    '.yml': 'yaml', '.yaml': 'yaml', '.toml': 'toml', '.sql': 'sql',
+  };
+  return map[ext] || 'plaintext';
+}
+
+/**
+ * Returns a status array (one entry per line in the working-tree file) marking
+ * lines added or modified relative to HEAD. Returns null if the file isn't
+ * tracked yet (whole file is implicitly 'added' — caller can detect via
+ * isDirty=true) or if git fails.
+ */
+function computeGitLineAnnotations(
+  projectPath: string,
+  filePath: string,
+  lineCount: number,
+): Array<'unchanged' | 'added' | 'modified'> | null {
+  try {
+    const relative = path.relative(projectPath, filePath);
+    if (relative.startsWith('..')) return null;
+
+    // Untracked files: every line is "added"
+    try {
+      const lsOut = execFileSync(
+        'git',
+        ['-C', projectPath, 'ls-files', '--error-unmatch', relative],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+      if (!lsOut) {
+        return Array(lineCount).fill('added');
+      }
+    } catch {
+      return Array(lineCount).fill('added');
+    }
+
+    // Diff against HEAD (working tree, not index) with zero context
+    const diffOut = execFileSync(
+      'git',
+      ['-C', projectPath, 'diff', '--no-color', '-U0', 'HEAD', '--', relative],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+
+    const annotations: Array<'unchanged' | 'added' | 'modified'> = Array(lineCount).fill('unchanged');
+    const HUNK_RE = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm;
+    let match: RegExpExecArray | null;
+    while ((match = HUNK_RE.exec(diffOut)) !== null) {
+      const startLine = parseInt(match[1], 10);
+      const lineCountInHunk = match[2] != null ? parseInt(match[2], 10) : 1;
+      // Was the hunk preceded by deletions? Crude heuristic: scan the hunk body
+      // for both '+' and '-' lines to decide added vs modified.
+      const blockStart = match.index + match[0].length;
+      const nextHunk = diffOut.indexOf('\n@@', blockStart);
+      const block = diffOut.slice(blockStart, nextHunk === -1 ? undefined : nextHunk);
+      const hasRemoval = /^-/m.test(block);
+      const status = hasRemoval ? 'modified' : 'added';
+
+      for (let i = 0; i < lineCountInHunk; i += 1) {
+        const idx = startLine - 1 + i;
+        if (idx >= 0 && idx < annotations.length) {
+          annotations[idx] = status;
+        }
+      }
+    }
+    return annotations;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decide whether this file's working-tree state is on-plan, off-plan, or just
+ * untouched. For v1 we work at the file level (no per-line drift).
+ */
+function computeFileDrift(projectPath: string, filePath: string, isDirty: boolean): {
+  status: 'on_track' | 'pending' | 'unexpected' | 'untouched' | 'no_plan';
+  activePlanUids: string[];
+  activeTaskUids: string[];
+  hasActivePlan: boolean;
+} {
+  const relative = path.relative(projectPath, filePath);
+  const plans = planService.listPlans(projectPath).filter(
+    (p) => p.status === 'approved' || p.status === 'in_progress' || p.status === 'review' || p.status === 'draft',
+  );
+
+  if (plans.length === 0) {
+    return {
+      status: isDirty ? 'unexpected' : 'no_plan',
+      activePlanUids: [],
+      activeTaskUids: [],
+      hasActivePlan: false,
+    };
+  }
+
+  const planUids: string[] = [];
+  const taskUids: string[] = [];
+  for (const plan of plans) {
+    const tasks = planService.getTasksByPlan(plan.uid);
+    const matching = tasks.filter(
+      (t) => t.affectedFiles.some((f) => f === relative || f === filePath),
+    );
+    if (matching.length > 0) {
+      planUids.push(plan.uid);
+      for (const t of matching) taskUids.push(t.uid);
+    }
+  }
+
+  if (planUids.length === 0) {
+    // Live changes outside any plan
+    return {
+      status: isDirty ? 'unexpected' : 'untouched',
+      activePlanUids: [],
+      activeTaskUids: [],
+      hasActivePlan: true,
+    };
+  }
+
+  return {
+    status: isDirty ? 'on_track' : 'pending',
+    activePlanUids: planUids,
+    activeTaskUids: taskUids,
+    hasActivePlan: true,
+  };
+}
 
 // File-to-file dependency edges
 app.get('/api/dependencies', (_req, res) => {
@@ -656,13 +819,59 @@ app.get('/api/plans/:uid/tasks', (req, res) => {
   res.json(planService.getTasksByPlan(req.params.uid));
 });
 
-// Update task
+// Update task — accepts the full set of task fields.
 app.put('/api/plans/:uid/tasks/:taskUid', (req, res) => {
-  const { status, assignee, assigneeType, assigneeModel, description } = req.body;
-  planService.updateTask(req.params.taskUid, { status, assignee, assigneeType, assigneeModel, description });
+  const {
+    status, assignee, assigneeType, assigneeModel, description,
+    affectedFiles, affectedSymbols, newConnections, removedConnections,
+    dependencies, fileSpec, symbolSpecs,
+  } = req.body;
+  planService.updateTask(req.params.taskUid, {
+    status, assignee, assigneeType, assigneeModel, description,
+    affectedFiles, affectedSymbols, newConnections, removedConnections,
+    dependencies, fileSpec, symbolSpecs,
+  });
   broadcast('task-updated', { planUid: req.params.uid, taskUid: req.params.taskUid, status });
   saveNow(() => exportDatabase());
   res.json({ ok: true });
+});
+
+// Append a code reference (path + line range + note) to an existing task.
+app.post('/api/plans/:uid/tasks/:taskUid/code-reference', (req, res) => {
+  const { filePath, startLine, endLine, note, codeSnippet } = req.body || {};
+  if (!filePath || typeof filePath !== 'string') {
+    res.status(400).json({ error: 'filePath is required' });
+    return;
+  }
+  const task = planService.appendTaskCodeReference(req.params.taskUid, {
+    filePath, startLine, endLine, note, codeSnippet,
+  });
+  if (!task) {
+    res.status(404).json({ error: 'Task not found' });
+    return;
+  }
+  broadcast('task-updated', { planUid: req.params.uid, taskUid: req.params.taskUid });
+  saveNow(() => exportDatabase());
+  res.json(task);
+});
+
+// Append a brand-new task to a plan (used by the "Add to plan as new task" flow).
+app.post('/api/plans/:uid/tasks', (req, res) => {
+  const { description, affectedFiles, affectedSymbols, fileSpec } = req.body || {};
+  if (!description || typeof description !== 'string') {
+    res.status(400).json({ error: 'description is required' });
+    return;
+  }
+  const task = planService.appendTaskToPlan(req.params.uid, {
+    description, affectedFiles, affectedSymbols, fileSpec,
+  });
+  if (!task) {
+    res.status(404).json({ error: 'Plan not found' });
+    return;
+  }
+  broadcast('task-updated', { planUid: req.params.uid, taskUid: task.uid });
+  saveNow(() => exportDatabase());
+  res.json(task);
 });
 
 // Claim task

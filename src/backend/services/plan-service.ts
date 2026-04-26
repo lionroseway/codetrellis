@@ -161,7 +161,14 @@ export function getTasksByPlan(planUid: string): Task[] {
   }));
 }
 
-export function updateTask(taskUid: string, updates: Partial<Pick<Task, 'status' | 'assignee' | 'assigneeType' | 'assigneeModel' | 'description'>>): void {
+export function updateTask(
+  taskUid: string,
+  updates: Partial<Pick<Task,
+    'status' | 'assignee' | 'assigneeType' | 'assigneeModel' | 'description'
+    | 'affectedFiles' | 'affectedSymbols' | 'newConnections' | 'removedConnections'
+    | 'dependencies' | 'fileSpec' | 'symbolSpecs'
+  >>,
+): void {
   const now = Date.now();
   const sets: string[] = ['updated_at = ?'];
   const params: any[] = [now];
@@ -171,10 +178,121 @@ export function updateTask(taskUid: string, updates: Partial<Pick<Task, 'status'
   if (updates.assigneeType !== undefined) { sets.push('assignee_type = ?'); params.push(updates.assigneeType); }
   if (updates.assigneeModel !== undefined) { sets.push('assignee_model = ?'); params.push(updates.assigneeModel); }
   if (updates.description !== undefined) { sets.push('description = ?'); params.push(updates.description); }
+  if (updates.affectedFiles !== undefined) { sets.push('affected_files = ?'); params.push(JSON.stringify(updates.affectedFiles)); }
+  if (updates.affectedSymbols !== undefined) { sets.push('affected_symbols = ?'); params.push(JSON.stringify(updates.affectedSymbols)); }
+  if (updates.newConnections !== undefined) { sets.push('new_connections = ?'); params.push(JSON.stringify(updates.newConnections)); }
+  if (updates.removedConnections !== undefined) { sets.push('removed_connections = ?'); params.push(JSON.stringify(updates.removedConnections)); }
+  if (updates.dependencies !== undefined) { sets.push('dependencies = ?'); params.push(JSON.stringify(updates.dependencies)); }
+  if (updates.fileSpec !== undefined) { sets.push('file_spec = ?'); params.push(updates.fileSpec); }
+  if (updates.symbolSpecs !== undefined) { sets.push('symbol_specs = ?'); params.push(JSON.stringify(updates.symbolSpecs)); }
 
   params.push(taskUid);
   getDb().run(`UPDATE tasks SET ${sets.join(', ')} WHERE uid = ?`, params);
   markDirty();
+}
+
+/**
+ * Append a code reference (file path + optional line range + optional note) to
+ * a task. Adds the file to affectedFiles (deduped) and appends a markdown
+ * snippet to fileSpec describing the reference. Used by the inspector's
+ * "Add to task" action.
+ */
+export function appendTaskCodeReference(taskUid: string, ref: {
+  filePath: string;          // path relative to project, or absolute
+  startLine?: number;
+  endLine?: number;
+  note?: string;
+  codeSnippet?: string;
+}): Task | null {
+  const db = getDb();
+  const result = db.exec(
+    `SELECT affected_files, file_spec FROM tasks WHERE uid = ?`,
+    [taskUid],
+  );
+  if (!result[0]?.values[0]) return null;
+
+  const [filesJson, currentSpec] = result[0].values[0] as [string, string | null];
+  const existingFiles: string[] = JSON.parse((filesJson as string) || '[]');
+  const nextFiles = existingFiles.includes(ref.filePath)
+    ? existingFiles
+    : [...existingFiles, ref.filePath];
+
+  const range = ref.startLine != null && ref.endLine != null
+    ? `${ref.filePath}:${ref.startLine}-${ref.endLine}`
+    : ref.filePath;
+  const lines: string[] = [];
+  lines.push('');
+  lines.push(`### Reference: \`${range}\``);
+  if (ref.note?.trim()) {
+    lines.push('');
+    lines.push(ref.note.trim());
+  }
+  if (ref.codeSnippet?.trim()) {
+    lines.push('');
+    lines.push('```');
+    lines.push(ref.codeSnippet.replace(/```/g, '`​``'));
+    lines.push('```');
+  }
+  const appended = (currentSpec || '') + lines.join('\n');
+
+  updateTask(taskUid, { affectedFiles: nextFiles, fileSpec: appended });
+
+  return getTaskByUid(taskUid);
+}
+
+export function getTaskByUid(taskUid: string): Task | null {
+  const result = getDb().exec(
+    `SELECT uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model,
+            affected_files, affected_symbols, new_connections, removed_connections, dependencies,
+            file_spec, symbol_specs, created_at, updated_at
+     FROM tasks WHERE uid = ?`,
+    [taskUid],
+  );
+  if (!result[0]?.values[0]) return null;
+  const r = result[0].values[0] as any[];
+  return {
+    uid: r[0], planUid: r[1], sortOrder: r[2], description: r[3],
+    status: r[4] as Task['status'], assignee: r[5], assigneeType: r[6], assigneeModel: r[7],
+    affectedFiles: JSON.parse(r[8] || '[]'), affectedSymbols: JSON.parse(r[9] || '[]'),
+    newConnections: JSON.parse(r[10] || '[]'), removedConnections: JSON.parse(r[11] || '[]'),
+    dependencies: JSON.parse(r[12] || '[]'),
+    fileSpec: (r[13] as string | null) ?? undefined,
+    symbolSpecs: JSON.parse(r[14] || '[]'),
+    createdAt: r[15], updatedAt: r[16],
+  };
+}
+
+/**
+ * Append a task to a plan and optionally seed it with a code reference. The
+ * task gets appended to the end of the existing task list.
+ */
+export function appendTaskToPlan(planUid: string, input: {
+  description: string;
+  affectedFiles?: string[];
+  fileSpec?: string;
+  affectedSymbols?: string[];
+}): Task | null {
+  const db = getDb();
+  const planExists = db.exec(`SELECT uid FROM plans WHERE uid = ?`, [planUid]);
+  if (!planExists[0]?.values[0]) return null;
+
+  const orderResult = db.exec(`SELECT COALESCE(MAX(sort_order), -1) FROM tasks WHERE plan_uid = ?`, [planUid]);
+  const nextOrder = ((orderResult[0]?.values[0]?.[0] as number) ?? -1) + 1;
+  const taskUid = randomUUID();
+  const now = Date.now();
+
+  db.run(
+    `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, '[]', '[]', '[]', ?, '[]', ?, ?)`,
+    [taskUid, planUid, nextOrder, input.description,
+      JSON.stringify(input.affectedFiles || []),
+      JSON.stringify(input.affectedSymbols || []),
+      input.fileSpec ?? null,
+      now, now],
+  );
+
+  markDirty();
+  return getTaskByUid(taskUid);
 }
 
 export function claimTask(taskUid: string, agentId: string, agentType: string, model?: string): { ok: boolean; conflicts?: string[] } {
