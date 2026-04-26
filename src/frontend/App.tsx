@@ -46,28 +46,56 @@ export function App() {
     return () => window.removeEventListener('__test_open_project__', handler);
   }, []);
 
-  // Programmatically resize the bottom plan panel when expand state changes.
+  // Skip the very first effect run — Allotment is still wiring up its
+  // internal views and calling resize() too early throws "Cannot read
+  // properties of undefined (reading 'minimumSize')". On mount we let
+  // Allotment use the Pane preferredSize/minSize props.
+  const planResizeMounted = useRef(false);
+  const inspectorResizeMounted = useRef(false);
+
   useEffect(() => {
+    if (!planResizeMounted.current) {
+      planResizeMounted.current = true;
+      return;
+    }
     const handle = verticalRef.current;
     if (!handle) return;
-    const total = window.innerHeight - 11 * 16 /* TopBar + StatusBar approx */;
-    const planHeight = planPanelExpanded
-      ? Math.round(total * PLAN_PANEL_EXPANDED_RATIO)
-      : PLAN_PANEL_DEFAULT;
-    const canvasHeight = Math.max(total - planHeight, 120);
-    handle.resize([canvasHeight, planHeight]);
+    // Defer one frame so Allotment finishes any in-flight layout work.
+    const raf = requestAnimationFrame(() => {
+      try {
+        const total = window.innerHeight - 11 * 16 /* TopBar + StatusBar approx */;
+        const planHeight = planPanelExpanded
+          ? Math.round(total * PLAN_PANEL_EXPANDED_RATIO)
+          : PLAN_PANEL_DEFAULT;
+        const canvasHeight = Math.max(total - planHeight, 120);
+        handle.resize([canvasHeight, planHeight]);
+      } catch (err) {
+        console.warn('[App] plan panel resize failed', err);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [planPanelExpanded]);
 
-  // Programmatically resize the inspector panel when expand state changes.
   useEffect(() => {
+    if (!inspectorResizeMounted.current) {
+      inspectorResizeMounted.current = true;
+      return;
+    }
     const handle = horizontalRef.current;
     if (!handle) return;
-    const total = window.innerWidth;
-    const inspectorWidth = inspectorExpanded
-      ? Math.round(total * INSPECTOR_EXPANDED_RATIO)
-      : INSPECTOR_DEFAULT;
-    const center = Math.max(total - SIDEBAR_DEFAULT - inspectorWidth, 320);
-    handle.resize([SIDEBAR_DEFAULT, center, inspectorWidth]);
+    const raf = requestAnimationFrame(() => {
+      try {
+        const total = window.innerWidth;
+        const inspectorWidth = inspectorExpanded
+          ? Math.round(total * INSPECTOR_EXPANDED_RATIO)
+          : INSPECTOR_DEFAULT;
+        const center = Math.max(total - SIDEBAR_DEFAULT - inspectorWidth, 320);
+        handle.resize([SIDEBAR_DEFAULT, center, inspectorWidth]);
+      } catch (err) {
+        console.warn('[App] inspector resize failed', err);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [inspectorExpanded]);
 
   return (
