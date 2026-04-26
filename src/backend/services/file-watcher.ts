@@ -7,7 +7,14 @@ import { checkFileDeviation } from './deviation-service';
 
 let watcher: FSWatcher | null = null;
 
-const PARSEABLE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx']);
+// Match the languages the AST parser actually supports — earlier this was
+// limited to the TS/JS family, which meant agent edits to .py / .rs / .php
+// / .java files never triggered a re-parse and the dependency graph went
+// stale. Keep this list in sync with ast-parser.ts grammar registrations.
+const PARSEABLE_EXTS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.py', '.rs', '.php', '.java',
+]);
 
 /**
  * Start watching a project directory for file changes.
@@ -76,6 +83,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
       path: filePath,
       relativePath: path.relative(projectRoot, filePath),
     });
+
+    // Newly added files create new edges — flag for plan deviation too.
+    try { checkFileDeviation(path.relative(projectRoot, filePath)); } catch { /* ignore */ }
   });
 
   watcher.on('unlink', (filePath) => {

@@ -387,7 +387,7 @@ function buildClusterView(
   arch: Map<string, FileInfo>,
   depEdges: DependencyEdge[],
   changeMap: Map<string, string>,
-  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>,
+  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed' | 'unexpected'>,
   onToggle: (nodeId: string) => void,
 ): GraphData {
   const nodes: Node[] = [];
@@ -480,7 +480,7 @@ function buildHubView(
   arch: Map<string, FileInfo>,
   depEdges: DependencyEdge[],
   changeMap: Map<string, string>,
-  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>,
+  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed' | 'unexpected'>,
   onToggle: (nodeId: string) => void,
   expandedClusters?: Set<string>,
 ): GraphData {
@@ -584,7 +584,7 @@ function buildFocusView(
   arch: Map<string, FileInfo>,
   depEdges: DependencyEdge[],
   changeMap: Map<string, string>,
-  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>,
+  edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed' | 'unexpected'>,
   onToggle: (nodeId: string) => void,
   symbolsMap: Map<string, FileSymbol[]>,
   viewDepth: ViewDepth,
@@ -919,15 +919,63 @@ function buildPlannedStateMap(projectionData?: ProjectionData | null): Map<strin
   return map;
 }
 
+/**
+ * For every edge that appears in the live graph (or in baseline-but-removed),
+ * compute its drift state by crossing live changes with planned changes.
+ *
+ *   Inputs per "from->to" pair:
+ *     liveAdded:   in current live graph but not in baseline (live appearance)
+ *     liveRemoved: in baseline but not in current live graph (live deletion)
+ *     plannedAdd:  plan says this edge should appear
+ *     plannedRemove: plan says this edge should disappear
+ *
+ *   Output state:
+ *     liveAdded   + plannedAdd     => 'added'        (planned and realized — on track)
+ *     liveAdded   + !plannedAdd    => 'unexpected'   (drift — appeared without a plan)
+ *     liveRemoved + plannedRemove  => 'removed'      (planned and realized — on track)
+ *     liveRemoved + !plannedRemove => 'removed'      (drift removal — same red treatment;
+ *                                                     not separately rendered today)
+ *     plannedAdd alone              => 'planned_add'  (ghost; rendered separately)
+ *     plannedRemove (live + base)   => 'planned_remove' (still present, should go)
+ *     otherwise                     => no entry → 'regular'
+ */
 function buildEdgeChangeMap(
   diffData?: DiffData | null,
   projectionData?: ProjectionData | null,
-): Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'> {
-  const map = new Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed'>();
-  for (const edge of diffData?.addedEdges || []) map.set(`${edge.source}->${edge.target}`, 'added');
-  for (const edge of diffData?.removedEdges || []) map.set(`${edge.source}->${edge.target}`, 'removed');
-  for (const edge of projectionData?.newEdges || []) map.set(`${edge.from}->${edge.to}`, 'planned_add');
-  for (const edge of projectionData?.removedEdges || []) map.set(`${edge.from}->${edge.to}`, 'planned_remove');
+): Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed' | 'unexpected'> {
+  const map = new Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed' | 'unexpected'>();
+
+  const plannedAddSet = new Set((projectionData?.newEdges || []).map((e) => `${e.from}->${e.to}`));
+  const plannedRemoveSet = new Set((projectionData?.removedEdges || []).map((e) => `${e.from}->${e.to}`));
+
+  // Live appearances: split into "planned & realized" vs "unexpected drift"
+  for (const edge of diffData?.addedEdges || []) {
+    const key = `${edge.source}->${edge.target}`;
+    map.set(key, plannedAddSet.has(key) ? 'added' : 'unexpected');
+  }
+
+  // Live removals: keep 'removed' label for both on-track and drift, since
+  // absent edges aren't rendered in the live graph today. (Future: render
+  // ghost-removed edges in red dashed for unplanned removals.)
+  for (const edge of diffData?.removedEdges || []) {
+    const key = `${edge.source}->${edge.target}`;
+    if (!map.has(key)) map.set(key, 'removed');
+  }
+
+  // Planned additions that the agent hasn't done yet — only mark if the edge
+  // isn't already in the live state. Ghost rendering handles drawing them.
+  for (const edge of projectionData?.newEdges || []) {
+    const key = `${edge.from}->${edge.to}`;
+    if (!map.has(key)) map.set(key, 'planned_add');
+  }
+
+  // Planned removals that are still present — surface as planned_remove so
+  // the user sees "should go" without losing visibility of the live state.
+  for (const edge of projectionData?.removedEdges || []) {
+    const key = `${edge.from}->${edge.to}`;
+    if (!map.has(key)) map.set(key, 'planned_remove');
+  }
+
   return map;
 }
 

@@ -2,7 +2,7 @@ import { memo, useId, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
 
 interface ImportEdgeData {
-  importState?: 'regular' | 'planned_add' | 'planned_remove' | 'active' | 'symbol_link' | 'added' | 'removed';
+  importState?: 'regular' | 'planned_add' | 'planned_remove' | 'active' | 'symbol_link' | 'added' | 'removed' | 'unexpected';
   symbols?: string[];
   alwaysShowLabel?: boolean;
   symbolCount?: number;
@@ -32,6 +32,15 @@ function edgeVisuals(state: ImportEdgeData['importState']) {
         glow: 'rgba(16, 185, 129, 0.42)',
         dashArray: undefined,
         flow: '#6ee7b7',
+      };
+    case 'unexpected':
+      // Drift — a new edge that no plan called for. Solid magenta-red so it
+      // pops next to the green planned/realized adds.
+      return {
+        color: 'rgba(244, 63, 94, 0.95)',
+        glow: 'rgba(244, 63, 94, 0.5)',
+        dashArray: undefined,
+        flow: '#fb7185',
       };
     case 'removed':
       return {
@@ -126,9 +135,11 @@ function ImportEdgeComponent(props: EdgeProps) {
             className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[10px] font-medium backdrop-blur-md ${
               edgeData.importState === 'planned_remove' || edgeData.importState === 'removed'
                 ? 'border-red-300/20 bg-red-500/12 text-red-100 line-through'
-                : edgeData.importState === 'planned_add' || edgeData.importState === 'added'
-                  ? 'border-emerald-300/20 bg-emerald-500/12 text-emerald-100'
-                  : 'border-white/10 bg-[#0b1120]/78 text-zinc-100'
+                : edgeData.importState === 'unexpected'
+                  ? 'border-rose-300/30 bg-rose-500/15 text-rose-100'
+                  : edgeData.importState === 'planned_add' || edgeData.importState === 'added'
+                    ? 'border-emerald-300/20 bg-emerald-500/12 text-emerald-100'
+                    : 'border-white/10 bg-[#0b1120]/78 text-zinc-100'
             }`}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
