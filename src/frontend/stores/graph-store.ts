@@ -17,6 +17,17 @@ interface GraphState {
 
   layoutMode: LayoutMode;
   trellisMode: TrellisMode;
+  /**
+   * Graph scope — limits which files appear in the graph. Real
+   * monorepos have thousands of files; rendering everything pegs
+   * RAM and is unreadable. Picking a system / directory here cuts
+   * the canvas down to one focus area.
+   *
+   * `null` = show everything; otherwise a relative path prefix
+   * (e.g. "apps/admin" or "backend/fastapi") — only files whose
+   * relative path starts with this prefix appear.
+   */
+  scopePath: string | null;
   baselineMode: BaselineMode;
   baselineCommitHash: string | null;
   baselineShortCommitHash: string | null;
@@ -38,6 +49,7 @@ interface GraphState {
   applyDiff: (diff: ArchitectureDiff) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   setTrellisMode: (mode: TrellisMode) => void;
+  setScopePath: (scopePath: string | null) => void;
   setBaselineMode: (mode: BaselineMode) => void;
   setBaselineReference: (data: { commitHash: string | null; shortCommitHash: string | null }) => void;
   setCurrentSnapshot: (data: GraphState['currentSnapshot']) => void;
@@ -59,6 +71,7 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   layoutMode: 'map' as LayoutMode,
   trellisMode: 'live' as TrellisMode,
+  scopePath: null,
   baselineMode: 'pinned' as BaselineMode,
   baselineCommitHash: null,
   baselineShortCommitHash: null,
@@ -98,6 +111,7 @@ export const useGraphStore = create<GraphState>((set) => ({
     }),
   setLayoutMode: (mode) => set({ layoutMode: mode }),
   setTrellisMode: (mode) => set({ trellisMode: mode }),
+  setScopePath: (scopePath) => set({ scopePath }),
   setBaselineMode: (mode) => set({ baselineMode: mode }),
   setBaselineReference: (data) => set({
     baselineCommitHash: data.commitHash,

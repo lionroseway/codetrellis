@@ -270,7 +270,20 @@ export function buildDependencyGraph(
   projectionData?: ProjectionData | null,
   layoutMode: LayoutMode = 'map',
   trellisMode: TrellisMode = 'live',
+  scopePath?: string | null,
 ): GraphData {
+  // Pre-filter edges by scope (relative-path prefix). Cuts the graph
+  // to a single subtree before any clustering / layout — drops the
+  // visible node + edge counts proportionally and stops the canvas
+  // from churning on a whole monorepo at once.
+  if (scopePath) {
+    const prefix = scopePath.replace(/\/+$/, '') + '/';
+    const exact = scopePath.replace(/\/+$/, '');
+    depEdges = depEdges.filter((e) =>
+      e.sourceRelative === exact || e.sourceRelative.startsWith(prefix)
+      || e.targetRelative === exact || e.targetRelative.startsWith(prefix),
+    );
+  }
   if (depEdges.length === 0) return { nodes: [], edges: [] };
 
   const changeMap = buildChangeMap(diffData);

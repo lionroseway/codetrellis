@@ -307,6 +307,20 @@ app.get('/api/onboarding-state', (req, res) => {
 });
 
 
+// Discovered systems for a project — npm packages, Python projects,
+// Rust crates, etc. Used by the graph scope picker so the user can
+// focus the canvas on one system at a time instead of trying to
+// render a whole monorepo.
+app.get('/api/systems', (req, res) => {
+  const projectPath = req.query.project as string;
+  if (!projectPath) {
+    res.status(400).json({ error: 'project query param required' });
+    return;
+  }
+  const systems = discoverSystems(projectPath);
+  res.json({ systems });
+});
+
 // Browse directories (for folder picker)
 app.get('/api/fs/browse', (req, res) => {
   const dirPath = (req.query.path as string) || os.homedir();

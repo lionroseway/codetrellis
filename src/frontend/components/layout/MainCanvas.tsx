@@ -14,7 +14,7 @@ import {
   type Edge,
   type NodeMouseHandler,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -65,6 +65,8 @@ export function MainCanvas() {
   const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
   const trellisMode = useGraphStore((s) => s.trellisMode);
   const setTrellisMode = useGraphStore((s) => s.setTrellisMode);
+  const scopePath = useGraphStore((s) => s.scopePath);
+  const setScopePath = useGraphStore((s) => s.setScopePath);
   const baselineMode = useGraphStore((s) => s.baselineMode);
   const setBaselineMode = useGraphStore((s) => s.setBaselineMode);
   const baselineCommitHash = useGraphStore((s) => s.baselineCommitHash);
@@ -122,6 +124,16 @@ export function MainCanvas() {
   const cleanRefreshStreakRef = useRef(0);
   const gitCleanRefreshStreakRef = useRef(0);
   const baselineCaptureCommitRef = useRef<string | null>(null);
+
+  // Discovered systems for the scope picker. Fetched once per project.
+  const [systems, setSystems] = useState<Array<{ id: string; name: string; rootPath: string; relativeRoot: string; language: string; manifestKind: string; packageName?: string }>>([]);
+  useEffect(() => {
+    if (!root || scanStatus !== 'ready') { setSystems([]); return; }
+    fetch(`/api/systems?project=${encodeURIComponent(root)}`)
+      .then((r) => r.json())
+      .then((data) => setSystems(Array.isArray(data?.systems) ? data.systems : []))
+      .catch(() => setSystems([]));
+  }, [root, scanStatus]);
 
   const fetchBaselineSnapshot = useCallback(() => {
     fetch('/api/baseline')
@@ -541,13 +553,13 @@ export function MainCanvas() {
 
     // Diff mode: live graph with diff against snapshot
     if (trellisMode === 'diff' && currentSnapshot && depEdges.length > 0) {
-      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, liveWorkingTreeDiff, recentlyChanged, projectionData, layoutMode, trellisMode);
+      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, liveWorkingTreeDiff, recentlyChanged, projectionData, layoutMode, trellisMode, scopePath);
     }
 
     // Live mode (default)
     if (depEdges.length === 0) return { nodes: [], edges: [] };
-    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || projectionEnabled ? projectionData : null, layoutMode, trellisMode);
-  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot]);
+    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || projectionEnabled ? projectionData : null, layoutMode, trellisMode, scopePath);
+  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot, scopePath]);
 
   const activeDiff = trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff;
 
@@ -761,6 +773,45 @@ export function MainCanvas() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Scope picker — limit graph to one system / dir */}
+            <div
+              className={`flex shrink-0 items-center gap-1 rounded-lg border p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
+                scopePath ? 'border-accent/40 bg-accent/10' : 'border-white/[0.08] bg-white/[0.03]'
+              }`}
+              title="Filter the graph to a single system / directory"
+            >
+              <Filter size={11} className={`ml-1.5 ${scopePath ? 'text-accent' : 'text-zinc-400'}`} />
+              <select
+                value={scopePath ?? ''}
+                onChange={(e) => setScopePath(e.target.value || null)}
+                className={`bg-transparent border-0 px-1 py-1 text-[10px] outline-none cursor-pointer max-w-[180px] ${
+                  scopePath ? 'text-accent' : 'text-zinc-300'
+                }`}
+              >
+                <option value="" className="bg-[#0b1020]">All systems</option>
+                {systems.length > 0 && (
+                  <optgroup label="Discovered systems" className="bg-[#0b1020]">
+                    {systems
+                      .filter((s) => s.relativeRoot)
+                      .map((s) => (
+                        <option key={s.id} value={s.relativeRoot} className="bg-[#0b1020]">
+                          {s.relativeRoot} {s.packageName ? `· ${s.packageName}` : ''} · {s.language}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+              </select>
+              {scopePath && (
+                <button
+                  onClick={() => setScopePath(null)}
+                  className="px-1.5 text-[10px] text-accent hover:text-foreground transition-colors"
+                  title="Clear scope"
+                >
+                  ×
+                </button>
+              )}
             </div>
 
             {/* Layout toggle */}
