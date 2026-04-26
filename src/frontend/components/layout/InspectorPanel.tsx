@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useUiStore, type SelectedNodeKind, type SelectedNodeMeta } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
+import { usePlanStore } from '../../stores/plan-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
 
 interface SymbolInfo {
@@ -195,6 +196,10 @@ function ClusterView({
 
 function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (path: string) => void }) {
   const root = useProjectStore((s) => s.root);
+  const driftComparePlanUid = useUiStore((s) => s.driftComparePlanUid);
+  const activePlanUid = usePlanStore((s) => s.activePlanUid);
+  const effectivePlanUid = driftComparePlanUid ?? activePlanUid ?? null;
+
   const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
   const [deps, setDeps] = useState<FileDeps | null>(null);
   const [content, setContent] = useState<FileContent | null>(null);
@@ -220,22 +225,24 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
       .then((r) => r.json()).then(setDeps).catch(() => setDeps(null));
   }, [absPath]);
 
-  const loadCode = () => {
-    if (!absPath) return;
-    setShowCode(true);
-    if (content) return;
+  // Re-fetch file content (and embedded drift) whenever the file or the
+  // selected drift comparison plan changes — but only if the user has chosen
+  // to view the source.
+  useEffect(() => {
+    if (!showCode || !absPath) return;
+    setContentError(null);
     const projectQuery = root ? `&project=${encodeURIComponent(root)}` : '';
-    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}${projectQuery}`)
+    const planQuery = effectivePlanUid ? `&plan=${encodeURIComponent(effectivePlanUid)}` : '';
+    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}${projectQuery}${planQuery}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data?.error) {
-          setContentError(data.error);
-          return;
-        }
+        if (data?.error) { setContentError(data.error); return; }
         setContent(data);
       })
       .catch((err) => setContentError(String(err)));
-  };
+  }, [showCode, absPath, root, effectivePlanUid]);
+
+  const loadCode = () => setShowCode(true);
 
   const fileName = nodeId.split('/').pop() || nodeId;
 
@@ -337,6 +344,9 @@ function SymbolView({
   onSelectFile: (path: string) => void;
 }) {
   const root = useProjectStore((s) => s.root);
+  const driftComparePlanUid = useUiStore((s) => s.driftComparePlanUid);
+  const activePlanUid = usePlanStore((s) => s.activePlanUid);
+  const effectivePlanUid = driftComparePlanUid ?? activePlanUid ?? null;
   const parentPath = meta.parentFilePath;
   const symbolName = meta.symbolName;
   const symbolKind = meta.symbolKind;
@@ -371,14 +381,15 @@ function SymbolView({
     const start = Math.max(1, target.startLine - 2);
     const end = target.endLine + 2;
     const projectQuery = root ? `&project=${encodeURIComponent(root)}` : '';
-    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}&start=${start}&end=${end}${projectQuery}`)
+    const planQuery = effectivePlanUid ? `&plan=${encodeURIComponent(effectivePlanUid)}` : '';
+    fetch(`/api/file/content?path=${encodeURIComponent(absPath)}&start=${start}&end=${end}${projectQuery}${planQuery}`)
       .then((r) => r.json())
       .then((data) => {
         if (data?.error) { setContentError(data.error); return; }
         setContent(data);
       })
       .catch((err) => setContentError(String(err)));
-  }, [absPath, target]);
+  }, [absPath, target, root, effectivePlanUid]);
 
   const Icon = symbolKind ? (KIND_ICON_MAP[symbolKind] || Hash) : Hash;
   const color = symbolKind ? (KIND_COLORS[symbolKind] || 'text-zinc-400') : 'text-zinc-400';

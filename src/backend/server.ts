@@ -461,15 +461,20 @@ app.get('/api/file/content', (req, res) => {
       }
     }
 
-    // Compute plan drift status — is this file expected by any active plan?
+    // Compute plan drift status. If ?plan= is given, scope drift to that one
+    // plan (the user explicitly picked a comparison target). Otherwise fall
+    // back to "any active plan" — useful when no plan is selected yet.
+    const planScope = (req.query.plan as string) || undefined;
     let drift: undefined | {
       status: 'on_track' | 'pending' | 'unexpected' | 'untouched' | 'no_plan';
       activePlanUids: string[];
       activeTaskUids: string[];
       hasActivePlan: boolean;
+      comparedAgainstPlanUid: string | null;
+      comparedAgainstPlanTitle: string | null;
     };
     if (projectPath) {
-      drift = computeFileDrift(projectPath, filePath, isDirty);
+      drift = computeFileDrift(projectPath, filePath, isDirty, planScope);
     }
 
     res.json({
@@ -566,18 +571,35 @@ function computeGitLineAnnotations(
 
 /**
  * Decide whether this file's working-tree state is on-plan, off-plan, or just
- * untouched. For v1 we work at the file level (no per-line drift).
+ * untouched. If `planScopeUid` is provided, drift is scoped to that single
+ * plan only (the user explicitly picked a comparison target). Otherwise we
+ * fall back to "any active plan." File-level for v1 — no per-line drift.
  */
-function computeFileDrift(projectPath: string, filePath: string, isDirty: boolean): {
+function computeFileDrift(
+  projectPath: string,
+  filePath: string,
+  isDirty: boolean,
+  planScopeUid?: string,
+): {
   status: 'on_track' | 'pending' | 'unexpected' | 'untouched' | 'no_plan';
   activePlanUids: string[];
   activeTaskUids: string[];
   hasActivePlan: boolean;
+  comparedAgainstPlanUid: string | null;
+  comparedAgainstPlanTitle: string | null;
 } {
   const relative = path.relative(projectPath, filePath);
-  const plans = planService.listPlans(projectPath).filter(
-    (p) => p.status === 'approved' || p.status === 'in_progress' || p.status === 'review' || p.status === 'draft',
-  );
+
+  // Resolve which plans to consider
+  let plans;
+  if (planScopeUid) {
+    const single = planService.getPlan(planScopeUid);
+    plans = single ? [single] : [];
+  } else {
+    plans = planService.listPlans(projectPath).filter(
+      (p) => p.status === 'approved' || p.status === 'in_progress' || p.status === 'review' || p.status === 'draft',
+    );
+  }
 
   if (plans.length === 0) {
     return {
@@ -585,6 +607,8 @@ function computeFileDrift(projectPath: string, filePath: string, isDirty: boolea
       activePlanUids: [],
       activeTaskUids: [],
       hasActivePlan: false,
+      comparedAgainstPlanUid: planScopeUid ?? null,
+      comparedAgainstPlanTitle: null,
     };
   }
 
@@ -601,13 +625,21 @@ function computeFileDrift(projectPath: string, filePath: string, isDirty: boolea
     }
   }
 
+  // When the user picked a single plan, the comparison label always reflects
+  // that plan even if the file isn't in it. When unscoped, label tracks the
+  // first matching plan (or null if none matched).
+  const comparedPlan = planScopeUid
+    ? plans[0]
+    : (planUids[0] ? plans.find((p) => p.uid === planUids[0]) || null : null);
+
   if (planUids.length === 0) {
-    // Live changes outside any plan
     return {
       status: isDirty ? 'unexpected' : 'untouched',
       activePlanUids: [],
       activeTaskUids: [],
       hasActivePlan: true,
+      comparedAgainstPlanUid: comparedPlan?.uid ?? planScopeUid ?? null,
+      comparedAgainstPlanTitle: comparedPlan?.title ?? null,
     };
   }
 
@@ -616,6 +648,8 @@ function computeFileDrift(projectPath: string, filePath: string, isDirty: boolea
     activePlanUids: planUids,
     activeTaskUids: taskUids,
     hasActivePlan: true,
+    comparedAgainstPlanUid: comparedPlan?.uid ?? null,
+    comparedAgainstPlanTitle: comparedPlan?.title ?? null,
   };
 }
 

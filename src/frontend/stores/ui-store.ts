@@ -28,6 +28,12 @@ interface UiState {
   planPanelExpanded: boolean;
   /** When true, the right inspector panel grows wider for code/file inspection. */
   inspectorExpanded: boolean;
+  /**
+   * Override for which plan drift comparisons should be scoped to. `null`
+   * means "follow the active plan from plan-store". Set to a uid to pin
+   * drift to that specific plan even if the active plan changes.
+   */
+  driftComparePlanUid: string | null;
 
   toggleSidebar: () => void;
   toggleInspector: () => void;
@@ -40,6 +46,7 @@ interface UiState {
   toggleInspectorExpanded: () => void;
   setPlanPanelExpanded: (v: boolean) => void;
   setInspectorExpanded: (v: boolean) => void;
+  setDriftComparePlanUid: (uid: string | null) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -55,6 +62,7 @@ export const useUiStore = create<UiState>((set) => ({
 
   planPanelExpanded: false,
   inspectorExpanded: false,
+  driftComparePlanUid: null,
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleInspector: () => set((s) => ({ inspectorVisible: !s.inspectorVisible })),
@@ -67,4 +75,5 @@ export const useUiStore = create<UiState>((set) => ({
   toggleInspectorExpanded: () => set((s) => ({ inspectorExpanded: !s.inspectorExpanded })),
   setPlanPanelExpanded: (v) => set({ planPanelExpanded: v }),
   setInspectorExpanded: (v) => set({ inspectorExpanded: v }),
+  setDriftComparePlanUid: (uid) => set({ driftComparePlanUid: uid }),
 }));

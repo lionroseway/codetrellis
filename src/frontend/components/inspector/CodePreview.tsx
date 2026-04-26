@@ -1,7 +1,11 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Highlight, themes } from 'prism-react-renderer';
-import { Plus, AlertTriangle, ShieldCheck, Hourglass, MinusCircle } from 'lucide-react';
+import { Plus, AlertTriangle, ShieldCheck, Hourglass, MinusCircle, ChevronDown, Check } from 'lucide-react';
 import { AddToTaskPopover } from './AddToTaskPopover';
+import { usePlanStore } from '../../stores/plan-store';
+import { useUiStore } from '../../stores/ui-store';
+import { useProjectStore } from '../../stores/project-store';
 
 export type LineAnnotation = 'unchanged' | 'added' | 'modified';
 
@@ -22,6 +26,8 @@ export interface FileContent {
     activePlanUids: string[];
     activeTaskUids: string[];
     hasActivePlan: boolean;
+    comparedAgainstPlanUid?: string | null;
+    comparedAgainstPlanTitle?: string | null;
   };
 }
 
@@ -172,14 +178,126 @@ function Header({ content, onClose }: { content: FileContent; onClose?: () => vo
 }
 
 function DriftBadge({ drift }: { drift?: FileContent['drift'] }) {
+  const root = useProjectStore((s) => s.root);
+  const plans = usePlanStore((s) => s.plans);
+  const fetchPlans = usePlanStore((s) => s.fetchPlans);
+  const activePlanUid = usePlanStore((s) => s.activePlanUid);
+  const driftComparePlanUid = useUiStore((s) => s.driftComparePlanUid);
+  const setDriftComparePlanUid = useUiStore((s) => s.setDriftComparePlanUid);
+
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Lazy-load plans the first time the popover opens, in case the user
+  // hasn't visited the Plans tab yet.
+  useEffect(() => {
+    if (open && root && plans.length === 0) {
+      fetchPlans(root);
+    }
+  }, [open, root, plans.length, fetchPlans]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPopoverPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const popover = document.querySelector('[data-drift-popover]');
+      if (
+        buttonRef.current && !buttonRef.current.contains(target) &&
+        (!popover || !popover.contains(target))
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
   if (!drift) return null;
   const meta = driftBadgeMeta(drift.status);
   if (!meta) return null;
+
+  const effectivePlanUid = driftComparePlanUid ?? activePlanUid ?? null;
+  const comparedTitle = drift.comparedAgainstPlanTitle
+    ?? plans.find((p) => p.uid === effectivePlanUid)?.title
+    ?? null;
+
   return (
-    <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border normal-case tracking-normal text-[9.5px] ${meta.className}`}>
-      <meta.icon size={9} />
-      {meta.label}
-    </span>
+    <>
+      <button
+        ref={buttonRef}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className={`flex items-center gap-1 px-1.5 py-0.5 rounded border normal-case tracking-normal text-[9.5px] hover:brightness-125 transition-all ${meta.className}`}
+        title="Click to pick which plan drift compares against"
+      >
+        <meta.icon size={9} />
+        <span>{meta.label}</span>
+        {comparedTitle && (
+          <span className="opacity-70 max-w-[100px] truncate">· {comparedTitle}</span>
+        )}
+        <ChevronDown size={9} className="opacity-70" />
+      </button>
+
+      {open && popoverPos && createPortal(
+        <div
+          data-drift-popover
+          style={{ position: 'fixed', top: popoverPos.top, left: popoverPos.left, zIndex: 9999 }}
+          className="w-[260px] bg-[#0b1020]/95 backdrop-blur-md border border-white/[0.08] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] py-1"
+        >
+          <div className="px-3 py-1.5 text-[9px] text-foreground-subtle uppercase tracking-wider border-b border-white/[0.04]">
+            Compare drift against
+          </div>
+
+          <button
+            onClick={() => { setDriftComparePlanUid(null); setOpen(false); }}
+            className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left hover:bg-white/[0.04] transition-colors ${
+              driftComparePlanUid == null ? 'text-accent' : 'text-foreground-muted'
+            }`}
+          >
+            {driftComparePlanUid == null ? <Check size={11} /> : <span className="w-[11px]" />}
+            <span className="flex-1 truncate">
+              Follow active plan
+              {activePlanUid && (
+                <span className="text-foreground-subtle ml-1">
+                  · {plans.find((p) => p.uid === activePlanUid)?.title || activePlanUid.slice(0, 6)}
+                </span>
+              )}
+            </span>
+          </button>
+
+          {plans.length > 0 && (
+            <div className="border-t border-white/[0.04] py-1 max-h-[260px] overflow-y-auto">
+              {plans.map((p) => (
+                <button
+                  key={p.uid}
+                  onClick={() => { setDriftComparePlanUid(p.uid); setOpen(false); }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left hover:bg-white/[0.04] transition-colors ${
+                    driftComparePlanUid === p.uid ? 'text-accent' : 'text-foreground-muted'
+                  }`}
+                >
+                  {driftComparePlanUid === p.uid ? <Check size={11} /> : <span className="w-[11px]" />}
+                  <span className="flex-1 truncate">{p.title}</span>
+                  <span className="text-[9px] text-foreground-subtle shrink-0">
+                    {p.completedTaskCount ?? 0}/{p.taskCount ?? 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {plans.length === 0 && (
+            <div className="px-3 py-2 text-[10.5px] text-foreground-subtle italic">
+              No plans yet — drift will fall back to "any active plan."
+            </div>
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
