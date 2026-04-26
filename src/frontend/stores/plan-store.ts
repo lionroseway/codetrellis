@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Plan, Task, Comment, AgentSessionInfo, Deviation } from '@shared/types';
+import type { Plan, Task, Comment, AgentSessionInfo, Deviation, PlanDocument } from '@shared/types';
 
 interface PlanState {
   plans: Plan[];
@@ -9,6 +9,8 @@ interface PlanState {
   comments: Comment[];
   sessions: AgentSessionInfo[];
   deviations: Deviation[];
+  planDocs: PlanDocument[];
+  selectedDocUid: string | null;
 
   fetchPlans: (projectPath?: string) => Promise<void>;
   fetchPlan: (uid: string) => Promise<void>;
@@ -17,11 +19,20 @@ interface PlanState {
   fetchComments: (targetUid: string) => Promise<void>;
   fetchSessions: () => Promise<void>;
 
+  fetchPlanDocs: (planUid: string) => Promise<void>;
+  createPlanDoc: (planUid: string, input: { docType: string; title: string; body: string }) => Promise<PlanDocument | null>;
+  updatePlanDoc: (docUid: string, updates: { title?: string; body?: string; docType?: string; changeSummary?: string }) => Promise<PlanDocument | null>;
+  deletePlanDoc: (docUid: string) => Promise<void>;
+  setSelectedDoc: (uid: string | null) => void;
+
   // Called by WebSocket handler
   onPlanCreated: (plan: Plan) => void;
   onPlanUpdated: (planUid: string) => void;
   onTaskUpdated: (planUid: string, taskUid: string, status: string) => void;
   onCommentAdded: (comment: Comment) => void;
+  onPlanDocCreated: (doc: PlanDocument) => void;
+  onPlanDocUpdated: (doc: PlanDocument) => void;
+  onPlanDocDeleted: (docUid: string) => void;
 }
 
 export const usePlanStore = create<PlanState>((set, get) => ({
@@ -32,6 +43,8 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   comments: [],
   sessions: [],
   deviations: [],
+  planDocs: [],
+  selectedDocUid: null,
 
   fetchPlans: async (projectPath) => {
     const url = projectPath ? `/api/plans?project=${encodeURIComponent(projectPath)}` : '/api/plans';
@@ -44,8 +57,9 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     const res = await fetch(`/api/plans/${uid}`);
     const plan = await res.json();
     set({ activePlan: plan, activePlanUid: uid });
-    // Also fetch comments
+    // Also fetch comments + spec docs
     get().fetchComments(uid);
+    get().fetchPlanDocs(uid);
   },
 
   setActivePlan: async (uid) => {
@@ -90,7 +104,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         }
       }
     } else {
-      set({ activePlanUid: null, activePlan: null, comments: [] });
+      set({ activePlanUid: null, activePlan: null, comments: [], planDocs: [], selectedDocUid: null });
     }
   },
 
@@ -107,6 +121,66 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     const sessions = await res.json();
     set({ sessions });
   },
+
+  fetchPlanDocs: async (planUid) => {
+    try {
+      const res = await fetch(`/api/plans/${planUid}/docs`);
+      const docs = await res.json();
+      set({ planDocs: Array.isArray(docs) ? docs : [] });
+    } catch {
+      set({ planDocs: [] });
+    }
+  },
+
+  createPlanDoc: async (planUid, input) => {
+    try {
+      const res = await fetch(`/api/plans/${planUid}/docs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) return null;
+      const doc: PlanDocument = await res.json();
+      set((s) => ({
+        planDocs: get().activePlanUid === planUid ? [...s.planDocs, doc] : s.planDocs,
+      }));
+      return doc;
+    } catch {
+      return null;
+    }
+  },
+
+  updatePlanDoc: async (docUid, updates) => {
+    try {
+      const res = await fetch(`/api/plan-docs/${docUid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) return null;
+      const doc: PlanDocument = await res.json();
+      set((s) => ({
+        planDocs: s.planDocs.map((d) => (d.uid === docUid ? doc : d)),
+      }));
+      return doc;
+    } catch {
+      return null;
+    }
+  },
+
+  deletePlanDoc: async (docUid) => {
+    try {
+      await fetch(`/api/plan-docs/${docUid}`, { method: 'DELETE' });
+      set((s) => ({
+        planDocs: s.planDocs.filter((d) => d.uid !== docUid),
+        selectedDocUid: s.selectedDocUid === docUid ? null : s.selectedDocUid,
+      }));
+    } catch {
+      // ignore — WS event will reconcile
+    }
+  },
+
+  setSelectedDoc: (uid) => set({ selectedDocUid: uid }),
 
   onPlanCreated: (plan) => {
     set((s) => ({ plans: [plan, ...s.plans] }));
@@ -142,5 +216,27 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       }
       return s;
     });
+  },
+
+  onPlanDocCreated: (doc) => {
+    set((s) => {
+      if (s.activePlanUid !== doc.planUid) return s;
+      if (s.planDocs.some((d) => d.uid === doc.uid)) return s;
+      return { planDocs: [...s.planDocs, doc] };
+    });
+  },
+
+  onPlanDocUpdated: (doc) => {
+    set((s) => {
+      if (s.activePlanUid !== doc.planUid) return s;
+      return { planDocs: s.planDocs.map((d) => (d.uid === doc.uid ? doc : d)) };
+    });
+  },
+
+  onPlanDocDeleted: (docUid) => {
+    set((s) => ({
+      planDocs: s.planDocs.filter((d) => d.uid !== docUid),
+      selectedDocUid: s.selectedDocUid === docUid ? null : s.selectedDocUid,
+    }));
   },
 }));

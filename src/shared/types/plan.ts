@@ -91,6 +91,48 @@ export interface Deviation {
   resolvedAt: number | null;
 }
 
+/**
+ * Canonical doc-type taxonomy for the plan spec room. Agents can also pass
+ * any string (treated as 'custom') so the taxonomy stays extensible — the
+ * canonical types just get nicer chips in the UI.
+ */
+export type PlanDocType =
+  | 'executive_summary'
+  | 'architecture'
+  | 'patterns'
+  | 'examples'
+  | 'research'
+  | 'testing'
+  | 'security'
+  | 'ux_ui'
+  | 'constraints'
+  | 'acceptance_criteria'
+  | 'rollout'
+  | 'custom';
+
+export interface PlanDocument {
+  uid: string;
+  planUid: string;
+  docType: PlanDocType | string;
+  title: string;
+  body: string;
+  version: number;
+  author: string;
+  authorType: 'human' | string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PlanDocumentVersion {
+  id: number;
+  docUid: string;
+  version: number;
+  body: string;
+  changeSummary: string | null;
+  author: string;
+  createdAt: number;
+}
+
 export interface CreatePlanInput {
   title: string;
   description: string;

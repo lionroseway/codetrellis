@@ -157,6 +157,35 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_trellis_plan ON trellis_snapshots(plan_uid);
     CREATE INDEX IF NOT EXISTS idx_trellis_type ON trellis_snapshots(snapshot_type);
 
+    CREATE TABLE IF NOT EXISTS plan_documents (
+      uid TEXT PRIMARY KEY,
+      plan_uid TEXT NOT NULL REFERENCES plans(uid),
+      doc_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      version INTEGER NOT NULL DEFAULT 1,
+      author TEXT NOT NULL,
+      author_type TEXT NOT NULL DEFAULT 'human',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_plan_docs_plan ON plan_documents(plan_uid);
+    CREATE INDEX IF NOT EXISTS idx_plan_docs_type ON plan_documents(doc_type);
+
+    CREATE TABLE IF NOT EXISTS plan_document_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_uid TEXT NOT NULL REFERENCES plan_documents(uid),
+      version INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      change_summary TEXT,
+      author TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(doc_uid, version)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_plan_doc_versions ON plan_document_versions(doc_uid);
+
     CREATE TABLE IF NOT EXISTS recent_projects (
       path TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,

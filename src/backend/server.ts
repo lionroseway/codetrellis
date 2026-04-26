@@ -405,6 +405,57 @@ app.get('/api/symbols/file', (req, res) => {
   res.json(getFileSymbols(filePath));
 });
 
+// Read raw file content for the inspector code preview. Caps at 256KB so we
+// never blow up the renderer with a giant file. Caller can pass start/end
+// line numbers to slice (1-indexed, inclusive) — used to scope a symbol view.
+app.get('/api/file/content', (req, res) => {
+  const filePath = req.query.path as string;
+  if (!filePath || typeof filePath !== 'string') {
+    res.status(400).json({ error: 'path query param required' });
+    return;
+  }
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      res.status(400).json({ error: 'Path is a directory' });
+      return;
+    }
+    const MAX_BYTES = 256 * 1024;
+    const truncated = stat.size > MAX_BYTES;
+    const buffer = fs.readFileSync(filePath);
+    const content = (truncated ? buffer.subarray(0, MAX_BYTES) : buffer).toString('utf-8');
+
+    const startParam = req.query.start ? parseInt(String(req.query.start), 10) : undefined;
+    const endParam = req.query.end ? parseInt(String(req.query.end), 10) : undefined;
+
+    let body = content;
+    let start = 1;
+    if (Number.isFinite(startParam) && Number.isFinite(endParam)) {
+      const lines = content.split('\n');
+      const s = Math.max(1, startParam!);
+      const e = Math.min(lines.length, endParam!);
+      body = lines.slice(s - 1, e).join('\n');
+      start = s;
+    }
+
+    res.json({
+      path: filePath,
+      content: body,
+      startLine: start,
+      lineCount: body.split('\n').length,
+      bytes: stat.size,
+      truncated,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // File-to-file dependency edges
 app.get('/api/dependencies', (_req, res) => {
   res.json(getDependencyEdges());
@@ -659,6 +710,80 @@ app.post('/api/plans/:uid/reconcile', (req, res) => {
     resolveDeviation(d.id, d.action);
   }
   res.json({ ok: true, resolved: deviations.length });
+});
+
+// --- Plan Spec Documents API ---
+
+app.get('/api/plans/:uid/docs', (req, res) => {
+  const { listPlanDocuments, listPlanDocumentSummaries } = require('./services/plan-documents-service');
+  if (req.query.summary === '1') {
+    res.json(listPlanDocumentSummaries(req.params.uid));
+  } else {
+    res.json(listPlanDocuments(req.params.uid));
+  }
+});
+
+app.post('/api/plans/:uid/docs', (req, res) => {
+  const { createPlanDocument } = require('./services/plan-documents-service');
+  const { docType, title, body, author, authorType } = req.body || {};
+  if (!docType || !title) {
+    res.status(400).json({ error: 'docType and title are required' });
+    return;
+  }
+  const doc = createPlanDocument({
+    planUid: req.params.uid,
+    docType,
+    title,
+    body: body ?? '',
+    author: author ?? 'human',
+    authorType: authorType ?? 'human',
+  });
+  broadcast('plan-doc-created', { doc });
+  saveNow(() => exportDatabase());
+  res.json(doc);
+});
+
+app.get('/api/plans/:uid/docs/by-type/:docType', (req, res) => {
+  const { getPlanDocumentByType } = require('./services/plan-documents-service');
+  const doc = getPlanDocumentByType(req.params.uid, req.params.docType);
+  if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
+  res.json(doc);
+});
+
+app.get('/api/plans/:uid/docs/search', (req, res) => {
+  const { searchPlanDocuments } = require('./services/plan-documents-service');
+  const q = (req.query.q as string) || '';
+  res.json(searchPlanDocuments(req.params.uid, q));
+});
+
+app.get('/api/plan-docs/:docUid', (req, res) => {
+  const { getPlanDocument } = require('./services/plan-documents-service');
+  const doc = getPlanDocument(req.params.docUid);
+  if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
+  res.json(doc);
+});
+
+app.put('/api/plan-docs/:docUid', (req, res) => {
+  const { updatePlanDocument } = require('./services/plan-documents-service');
+  const { title, body, docType, changeSummary, author } = req.body || {};
+  const doc = updatePlanDocument(req.params.docUid, { title, body, docType, changeSummary, author });
+  if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
+  broadcast('plan-doc-updated', { doc });
+  saveNow(() => exportDatabase());
+  res.json(doc);
+});
+
+app.delete('/api/plan-docs/:docUid', (req, res) => {
+  const { deletePlanDocument } = require('./services/plan-documents-service');
+  deletePlanDocument(req.params.docUid);
+  broadcast('plan-doc-deleted', { docUid: req.params.docUid });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+app.get('/api/plan-docs/:docUid/versions', (req, res) => {
+  const { getPlanDocumentVersions } = require('./services/plan-documents-service');
+  res.json(getPlanDocumentVersions(req.params.docUid));
 });
 
 // --- Trellis Snapshots API ---

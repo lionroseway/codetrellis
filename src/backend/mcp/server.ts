@@ -7,6 +7,7 @@ import { z } from 'zod';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
+import * as planDocsService from '../services/plan-documents-service';
 import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
@@ -370,6 +371,120 @@ export async function startMcpServer(): Promise<void> {
     async ({ plan_uid }) => {
       const devs = detectDeviations(plan_uid);
       return { content: [{ type: 'text' as const, text: JSON.stringify({ detected: devs.length, deviations: devs }, null, 2) }] };
+    }
+  );
+
+  // --- Plan Spec Document Tools ---
+  // Spec docs let agents attach structured context (architecture, patterns,
+  // testing strategy, security notes, examples, research, etc.) to a plan
+  // without bloating the agent's context window. Fetch only what you need.
+
+  const docTypeDescription =
+    'One of: executive_summary, architecture, patterns, examples, research, testing, security, ux_ui, constraints, acceptance_criteria, rollout, custom. Custom strings are accepted.';
+
+  mcpServer.registerTool(
+    'add_plan_doc',
+    {
+      description: 'Attach a spec document to a plan — patterns to follow, security considerations, test strategy, examples, research notes, etc. Doc body is markdown. Use this instead of stuffing everything into the plan description.',
+      inputSchema: {
+        plan_uid: z.string(),
+        doc_type: z.string().describe(docTypeDescription),
+        title: z.string().describe('Short human-readable title for the doc'),
+        body: z.string().describe('Markdown body — the actual spec content'),
+      },
+    },
+    async ({ plan_uid, doc_type, title, body }) => {
+      const doc = planDocsService.createPlanDocument({
+        planUid: plan_uid,
+        docType: doc_type,
+        title,
+        body,
+        author: 'agent',
+        authorType: 'mcp',
+      });
+      broadcast('plan-doc-created', { doc });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(doc, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'update_plan_doc',
+    {
+      description: 'Update the body, title, or type of an existing spec doc. Body changes increment the version and snapshot the previous body for traceability.',
+      inputSchema: {
+        doc_uid: z.string(),
+        title: z.string().optional(),
+        body: z.string().optional(),
+        doc_type: z.string().optional().describe(docTypeDescription),
+        change_summary: z.string().optional().describe('Why this update was made — shows up in the version history'),
+      },
+    },
+    async ({ doc_uid, title, body, doc_type, change_summary }) => {
+      const doc = planDocsService.updatePlanDocument(doc_uid, {
+        title, body, docType: doc_type, changeSummary: change_summary, author: 'agent',
+      });
+      if (!doc) {
+        return { content: [{ type: 'text' as const, text: `Doc ${doc_uid} not found` }] };
+      }
+      broadcast('plan-doc-updated', { doc });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(doc, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'get_plan_doc',
+    {
+      description: 'Fetch a single spec doc, either by its uid or by (plan_uid + doc_type). Returns the full markdown body. Use list_plan_docs first if you need to know what is available.',
+      inputSchema: {
+        doc_uid: z.string().optional().describe('Direct uid of the doc to fetch'),
+        plan_uid: z.string().optional().describe('Plan uid (required if doc_uid not given)'),
+        doc_type: z.string().optional().describe('Doc type to fetch from the plan (required if doc_uid not given). ' + docTypeDescription),
+      },
+    },
+    async ({ doc_uid, plan_uid, doc_type }) => {
+      let doc = null;
+      if (doc_uid) {
+        doc = planDocsService.getPlanDocument(doc_uid);
+      } else if (plan_uid && doc_type) {
+        doc = planDocsService.getPlanDocumentByType(plan_uid, doc_type);
+      } else {
+        return { content: [{ type: 'text' as const, text: 'Provide either doc_uid or (plan_uid + doc_type).' }] };
+      }
+      if (!doc) {
+        return { content: [{ type: 'text' as const, text: 'Document not found' }] };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(doc, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'list_plan_docs',
+    {
+      description: 'List the spec docs attached to a plan. Returns a lightweight index (uid, type, title, length) — fetch full bodies separately with get_plan_doc to keep context small.',
+      inputSchema: {
+        plan_uid: z.string(),
+      },
+    },
+    async ({ plan_uid }) => {
+      const summaries = planDocsService.listPlanDocumentSummaries(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(summaries, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'search_plan_docs',
+    {
+      description: 'Substring search across the title and body of all spec docs in a plan. Returns matches with a short excerpt around the hit. Use this to find guidance on a specific topic without reading every doc.',
+      inputSchema: {
+        plan_uid: z.string(),
+        query: z.string(),
+      },
+    },
+    async ({ plan_uid, query }) => {
+      const results = planDocsService.searchPlanDocuments(plan_uid, query);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
     }
   );
 

@@ -1,6 +1,7 @@
 import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward, User } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { StatusBadge } from './StatusBadge';
+import { SpecRoom } from './SpecRoom';
 
 export function PlanDetail() {
   const plan = usePlanStore((s) => s.activePlan);
@@ -53,6 +54,9 @@ export function PlanDetail() {
         </div>
         <span className="text-[10px] text-foreground-subtle">{progress}%</span>
       </div>
+
+      {/* Spec Room — structured context docs (patterns, security, tests, etc.) */}
+      <SpecRoom planUid={plan.uid} />
 
       {/* Tasks */}
       <div>

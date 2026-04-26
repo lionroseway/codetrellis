@@ -92,6 +92,16 @@ export function useWebSocket() {
             usePlanStore.getState().onCommentAdded(payload.comment);
             useToastStore.getState().addToast({ type: 'info', title: 'New comment', message: payload.comment?.body?.substring(0, 60) });
           }
+          if (type === 'plan-doc-created') {
+            usePlanStore.getState().onPlanDocCreated(payload.doc);
+            useToastStore.getState().addToast({ type: 'info', title: 'Spec doc added', message: payload.doc?.title });
+          }
+          if (type === 'plan-doc-updated') {
+            usePlanStore.getState().onPlanDocUpdated(payload.doc);
+          }
+          if (type === 'plan-doc-deleted') {
+            usePlanStore.getState().onPlanDocDeleted(payload.docUid);
+          }
           if (type === 'deviation-detected') {
             useToastStore.getState().addToast({ type: 'warning', title: 'Deviation detected', message: payload.deviation?.description, duration: 8000 });
           }
