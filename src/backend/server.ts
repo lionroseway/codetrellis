@@ -693,36 +693,46 @@ app.get('/api/diff', async (req, res) => {
     return;
   }
 
-  // Re-scan and re-parse to get current state
   const projectPath = req.query.project as string;
   if (!projectPath) {
     res.json({ error: 'project query param required' });
     return;
   }
 
-  const fileTree = scanDirectory(projectPath);
-  const filePaths = collectFilePaths(fileTree);
-  const parsedFiles = await parseFiles(filePaths);
-
-  for (const parsed of parsedFiles) {
-    storeParsedFile(parsed, projectPath);
-  }
-  resolveImports(projectPath);
-
+  // Read current state from the DB instead of re-running a full
+  // scan + parse + resolveImports on every poll. The file watcher
+  // already keeps individual files up-to-date as they change. The
+  // old behavior re-parsed all 2k+ files every 10 seconds AND called
+  // resolveImports with no alias map (which wiped out every
+  // workspace-aliased + Python edge each cycle).
   const currentEdges = getDependencyEdges();
-  const currentFileData = parsedFiles.map((f) => ({
-    path: path.relative(projectPath, f.path),
-    hash: f.contentHash,
-    symbolCount: f.symbols.length,
-  }));
+  const fileData = readFilesSnapshot(projectPath);
 
-  const currentSnapshot = captureSnapshot(currentFileData, currentEdges);
+  const currentSnapshot = captureSnapshot(fileData, currentEdges);
   const diff = computeDiff(currentSnapshot);
   res.json({
     ...(diff || { summary: { added: 0, removed: 0, modified: 0, edgesAdded: 0, edgesRemoved: 0 } }),
     git: getGitWorkingTreeStatus(projectPath),
   });
 });
+
+/** Read current files (path + hash + symbol count) from the DB. */
+function readFilesSnapshot(projectPath: string): Array<{ path: string; hash: string; symbolCount: number }> {
+  const { getDb } = require('./services/database');
+  const d = getDb();
+  const result = d.exec(`
+    SELECT f.path, f.content_hash, COUNT(s.id) as symbol_count
+    FROM files f
+    LEFT JOIN symbols s ON s.file_id = f.id
+    GROUP BY f.id
+  `);
+  if (!result[0]) return [];
+  return result[0].values.map((row: any[]) => ({
+    path: row[0].startsWith(projectPath) ? path.relative(projectPath, row[0]) : (row[0] as string),
+    hash: row[1] as string,
+    symbolCount: (row[2] as number) || 0,
+  }));
+}
 
 // Baseline snapshot captured during scan
 app.get('/api/baseline', (_req, res) => {
