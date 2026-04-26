@@ -593,7 +593,26 @@ export function MainCanvas() {
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
-      setSelectedNode(node.id);
+      const data = (node.data || {}) as Record<string, unknown>;
+      const nodeType = data.nodeType as string | undefined;
+      const kind =
+        nodeType === 'package' ? 'cluster'
+        : nodeType === 'symbol' ? 'symbol'
+        : nodeType === 'directory' ? 'directory'
+        : node.type === 'symbolNode' ? 'symbol'
+        : 'file';
+      // For symbol nodes, the id is `${parentPath}::${kind}:${name}`
+      const parentFilePath = kind === 'symbol' && typeof node.id === 'string' && node.id.includes('::')
+        ? node.id.split('::')[0]
+        : undefined;
+      setSelectedNode(node.id, kind, {
+        label: typeof data.label === 'string' ? data.label : undefined,
+        description: typeof data.description === 'string' ? data.description : undefined,
+        files: Array.isArray(data.files) ? (data.files as string[]) : undefined,
+        symbolName: kind === 'symbol' && typeof data.label === 'string' ? data.label : undefined,
+        symbolKind: typeof data.symbolKind === 'string' ? data.symbolKind : undefined,
+        parentFilePath,
+      });
     },
     [setSelectedNode],
   );

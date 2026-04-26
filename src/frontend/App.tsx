@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
-import { Allotment } from 'allotment';
+import { useEffect, useRef } from 'react';
+import { Allotment, type AllotmentHandle } from 'allotment';
 import 'allotment/dist/style.css';
 import { TopBar } from './components/layout/TopBar';
 import { useProjectStore } from './stores/project-store';
-import { getAPI } from './bridge';
+import { useUiStore } from './stores/ui-store';
 import { Sidebar } from './components/layout/Sidebar';
 import { MainCanvas } from './components/layout/MainCanvas';
 import { InspectorPanel } from './components/layout/InspectorPanel';
@@ -16,9 +16,21 @@ import { ToastContainer } from './components/Toast';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
+const PLAN_PANEL_DEFAULT = 200;
+const PLAN_PANEL_EXPANDED_RATIO = 0.7;
+const INSPECTOR_DEFAULT = 320;
+const INSPECTOR_EXPANDED_RATIO = 0.55;
+const SIDEBAR_DEFAULT = 240;
+
 export function App() {
   useWebSocket();
   useKeyboardShortcuts();
+
+  const horizontalRef = useRef<AllotmentHandle>(null);
+  const verticalRef = useRef<AllotmentHandle>(null);
+
+  const planPanelExpanded = useUiStore((s) => s.planPanelExpanded);
+  const inspectorExpanded = useUiStore((s) => s.inspectorExpanded);
 
   // Test hook: allow e2e tests to open a project programmatically
   useEffect(() => {
@@ -34,24 +46,48 @@ export function App() {
     return () => window.removeEventListener('__test_open_project__', handler);
   }, []);
 
+  // Programmatically resize the bottom plan panel when expand state changes.
+  useEffect(() => {
+    const handle = verticalRef.current;
+    if (!handle) return;
+    const total = window.innerHeight - 11 * 16 /* TopBar + StatusBar approx */;
+    const planHeight = planPanelExpanded
+      ? Math.round(total * PLAN_PANEL_EXPANDED_RATIO)
+      : PLAN_PANEL_DEFAULT;
+    const canvasHeight = Math.max(total - planHeight, 120);
+    handle.resize([canvasHeight, planHeight]);
+  }, [planPanelExpanded]);
+
+  // Programmatically resize the inspector panel when expand state changes.
+  useEffect(() => {
+    const handle = horizontalRef.current;
+    if (!handle) return;
+    const total = window.innerWidth;
+    const inspectorWidth = inspectorExpanded
+      ? Math.round(total * INSPECTOR_EXPANDED_RATIO)
+      : INSPECTOR_DEFAULT;
+    const center = Math.max(total - SIDEBAR_DEFAULT - inspectorWidth, 320);
+    handle.resize([SIDEBAR_DEFAULT, center, inspectorWidth]);
+  }, [inspectorExpanded]);
+
   return (
     <div className="flex flex-col h-screen text-foreground bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]">
       <TopBar />
-      <Allotment className="flex-1 min-h-0">
-        <Allotment.Pane preferredSize={240} minSize={180} maxSize={400}>
+      <Allotment className="flex-1 min-h-0" ref={horizontalRef}>
+        <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
           <Sidebar />
         </Allotment.Pane>
         <Allotment.Pane>
-          <Allotment vertical>
+          <Allotment vertical ref={verticalRef}>
             <Allotment.Pane>
               <MainCanvas />
             </Allotment.Pane>
-            <Allotment.Pane preferredSize={180} minSize={100} maxSize={400}>
+            <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100}>
               <PlanPanel />
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
-        <Allotment.Pane preferredSize={280} minSize={200} maxSize={450}>
+        <Allotment.Pane preferredSize={INSPECTOR_DEFAULT} minSize={220}>
           <InspectorPanel />
         </Allotment.Pane>
       </Allotment>

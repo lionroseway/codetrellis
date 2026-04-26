@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileEdit, Search, Circle, XCircle, X, ClipboardList, MessageSquare } from 'lucide-react';
+import { FileEdit, Search, Circle, XCircle, X, ClipboardList, Maximize2, Minimize2 } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
@@ -30,6 +30,8 @@ function formatPayload(payload: Record<string, unknown>): string {
 
 export function PlanPanel() {
   const visible = useUiStore((s) => s.agentPanelVisible);
+  const expanded = useUiStore((s) => s.planPanelExpanded);
+  const togglePlanPanelExpanded = useUiStore((s) => s.togglePlanPanelExpanded);
   const [activeTab, setActiveTab] = useState<Tab>('plans');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -77,7 +79,14 @@ export function PlanPanel() {
           {status === 'active' && <span className="w-1 h-1 rounded-full bg-success shadow-[0_0_4px_rgba(34,197,94,0.6)] animate-pulse" />}
           {status === 'active' ? 'Agent active' : 'Waiting'}
         </span>
-        <button onClick={() => useUiStore.getState().toggleAgentPanel()} className="text-foreground-subtle hover:text-foreground p-1 rounded hover:bg-surface-hover transition-colors">
+        <button
+          onClick={togglePlanPanelExpanded}
+          className="text-foreground-subtle hover:text-foreground p-1 rounded hover:bg-surface-hover transition-colors"
+          title={expanded ? 'Collapse panel' : 'Expand panel'}
+        >
+          {expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+        </button>
+        <button onClick={() => useUiStore.getState().toggleAgentPanel()} className="text-foreground-subtle hover:text-foreground p-1 rounded hover:bg-surface-hover transition-colors" title="Hide panel">
           <X size={12} />
         </button>
       </div>
