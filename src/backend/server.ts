@@ -24,6 +24,7 @@ import {
   removeRecentProject,
   setRecentProjectPinned,
 } from './services/recent-projects-service';
+import { discoverSystems, buildAliasMap } from './services/system-discovery';
 
 const app = express();
 app.use(express.json());
@@ -358,8 +359,16 @@ app.post('/api/project/scan', async (req, res) => {
     storeParsedFile(parsed, projectPath);
   }
 
+  // Discover systems (npm packages, Python projects, Rust crates, ...)
+  // and use them to build the workspace-alias map. Without this, only
+  // relative imports resolve — workspace-aliased imports like `@swf/ui`
+  // get dropped, leaving apps disconnected from their package layer.
+  const systems = discoverSystems(projectPath);
+  const aliasMap = buildAliasMap(systems);
+  console.log(`[API] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
+
   // Resolve import paths to actual files
-  resolveImports(projectPath);
+  resolveImports(projectPath, aliasMap);
 
   const stats = getDbStats();
   console.log(`[API] Parsed ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports, ${stats.resolvedImports} resolved`);

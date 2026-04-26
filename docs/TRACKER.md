@@ -326,6 +326,47 @@ remove/move, signature, moveTo) · `status`, `assignee`, `assigneeType`,
 | Onboarding state API | ✅ | GET /api/onboarding-state?project=… returns hasMcpSession, hasPlan |
 | Getting Started checklist | ✅ | Floating bottom-left panel, 4 steps; per-project dismiss + collapse + tried-trellis flags in localStorage |
 
+### Phase 11 — Multi-System Ingestion ⚡ HIGH PRIORITY
+**Goal:** Treat the codebase as `Project → System → Cluster → File →
+Symbol`, where systems are detected from any manifest (npm / Python /
+Rust / PHP / Java / Go / Ruby / standalone TS), not just npm
+workspaces. Resolve workspace aliases dynamically. Extract imports for
+every supported language.
+**Status: PLANNING + Phase 1 in flight.**
+**Spec: [SYSTEM-MODEL.md](SYSTEM-MODEL.md)**
+
+#### Why this is high priority
+
+CodeTrellis was npm-shaped. Real repos aren't. Today's failures we've
+seen against real codebases:
+
+- npm packages outside the `workspaces` glob (e.g. orphan `services/realtime/`) are invisible
+- Python / Rust / PHP / Java backends have files in the tree but **zero edges** because per-language import extraction isn't wired
+- Workspace package imports (`@scope/name`) don't resolve because the resolver only knows a hardcoded `@shared` alias → an entire app like `apps/admin` shows up disconnected from `packages/*`
+- Heavy non-source dirs (`venv/`, `build/`, `vendor/`, `test-results/`) get scanned and parsed, drowning the real code
+
+| Sub-phase | Status | Notes |
+|---|---|---|
+| **1.A** Better ignore list (venv, build, vendor, test-results, playwright-report, .vercel, .netlify, .expo, .gradle, .DS_Store, ...) | ⏳ | In flight |
+| **1.B** Generic system discovery — find every manifest, not just npm `workspaces` | ⏳ | In flight — covers `package.json`, `pyproject.toml`, `setup.py`, `requirements.txt`, `Cargo.toml`, `go.mod`, `composer.json`, `pom.xml`, `build.gradle`, `Gemfile`, `tsconfig.json` standalone |
+| **1.C** Dynamic package alias map from every `package.json` | ⏳ | `@swf/ui` → `packages/ui/src/index.ts`, etc. |
+| **1.D** Read `tsconfig.json` `compilerOptions.paths` at every level | ⏳ | TS path aliases respected per-app |
+| **2.A** Python `import_statement` + `import_from_statement` extraction | ❌ | Phase 2 |
+| **2.B** Python resolver (relative + project-anchored absolute) | ❌ | Phase 2 |
+| **2.C** Rust `use_declaration` + crate-relative resolver | ❌ | Phase 2 |
+| **2.D** PHP `namespace_use_declaration` + PSR-4 from `composer.json` | ❌ | Phase 2 |
+| **2.E** Java `import_declaration` + package-dir resolver | ❌ | Phase 2 |
+| **2.F** Go `import` + `go.mod`-relative resolver | ❌ | Phase 2 |
+| **3** Systems table + `system_id` on files + MCP `list_systems` etc. + REST `/api/systems` | ❌ | Phase 3 |
+| **4** System-aware sidebar + cluster-within-system view + system-scoped Inspector + plan tasks gain `affectedSystems[]` | ❌ | Phase 4 |
+| **5** Cross-system non-import links — HTTP routes, SQL refs, env vars, subprocess, OpenAPI contracts | ❌ | Phase 5 (later) |
+| **6** Ingest selected `node_modules` packages + `.gitmodules` awareness | ❌ | Phase 6 (later) |
+
+**Acceptance after sub-phase 1:** opening a real multi-system repo
+discovers every manifest as a known system; orphan-but-named npm
+packages resolve their workspace aliases; admin-style apps light up
+their connections to shared packages.
+
 ---
 
 ## 4. Trellis State Definitions (canonical mental model)
@@ -513,9 +554,21 @@ darker); smooth transitions when expanding/collapsing.
 
 ## 7. Open Items (priority order)
 
-### Immediate Focus (graph-quality blockers)
+### ⚡ Top priority — Multi-System Ingestion (Phase 11)
+Without this, CodeTrellis can't actually visualise mixed-language /
+mixed-system real repos. See §3 Phase 11 + [SYSTEM-MODEL.md](SYSTEM-MODEL.md).
+
+1. **Phase 1.A** — Better ignore list (venv / build / vendor / test-results / etc.)
+2. **Phase 1.B** — Generic system discovery (find every manifest, not just npm `workspaces`)
+3. **Phase 1.C** — Dynamic package alias map (`@swf/ui` resolves to its source)
+4. **Phase 1.D** — `tsconfig.json` `paths` respected per-system
+5. **Phase 2** — Per-language import extractors + resolvers (Python, Rust, PHP, Java, Go)
+6. **Phase 3** — Systems table + MCP tools + REST `/api/systems`
+7. **Phase 4** — System-aware sidebar + cluster-within-system view + plan tasks `affectedSystems[]`
+
+### Graph-quality blockers (Immediate Focus from previous tracker)
 1. ❌ Make the four trellis modes visually unmistakable
-2. ❌ Make node and edge state coloring much more obvious *(edges done; nodes still need it — see §7 Quick wins #1)*
+2. ❌ Make node and edge state coloring much more obvious *(edges done; nodes still need it — see Quick wins #1 below)*
 3. ❌ Keep Git working tree context visible across modes
 4. ❌ Make Diff truly about live vs planned state *(edges done; nodes + auto-projection still open)*
 5. ❌ Improve drill-down so context is preserved cleanly

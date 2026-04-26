@@ -1,7 +1,7 @@
 import initSqlJs, { type Database } from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ParsedFile, ParsedSymbol } from '../../shared/types';
+import type { ParsedFile, ParsedSymbol, AliasMapping } from '../../shared/types';
 import { loadFromDisk } from './persistence';
 
 let db: Database | null = null;
@@ -337,8 +337,15 @@ export function getFileHash(filePath: string): string | null {
 /**
  * Resolve import paths to absolute file paths and update the database.
  * e.g. "./services/project-scanner" → "/abs/path/src/backend/services/project-scanner.ts"
+ *
+ * Accepts an optional `aliasMap` — workspace package aliases like
+ * `@swf/ui` → `/abs/path/packages/ui`, plus tsconfig.json `paths`
+ * mappings. Without this, only relative imports resolve.
  */
-export function resolveImports(projectRoot: string): void {
+export function resolveImports(
+  projectRoot: string,
+  aliasMap: AliasMapping[] = [],
+): void {
   const d = getDb();
 
   // Get all files so we can build a lookup
@@ -369,7 +376,7 @@ export function resolveImports(projectRoot: string): void {
     const sourcePath = row[1] as string;
     const importerPath = row[2] as string;
 
-    const resolvedPath = resolveImportPath(sourcePath, importerPath, projectRoot, filePathSet);
+    const resolvedPath = resolveImportPath(sourcePath, importerPath, projectRoot, filePathSet, aliasMap);
     if (resolvedPath) {
       d.run(`UPDATE imports SET resolved_path = ? WHERE id = ?`, [resolvedPath, importId]);
       resolved++;
@@ -384,28 +391,56 @@ function resolveImportPath(
   importerPath: string,
   projectRoot: string,
   knownFiles: Set<string>,
+  aliasMap: AliasMapping[] = [],
 ): string | null {
-  // Skip package imports (node_modules, built-in)
-  if (!importSource.startsWith('.') && !importSource.startsWith('/') && !importSource.startsWith('@shared')) {
-    return null;
-  }
-
-  // Handle @shared alias
-  let basePath: string;
-  if (importSource.startsWith('@shared')) {
-    basePath = path.join(projectRoot, 'src/shared', importSource.replace('@shared/', '').replace('@shared', ''));
-  } else {
+  // 1. Relative or absolute paths — file-system relative resolution
+  if (importSource.startsWith('.') || importSource.startsWith('/')) {
     const importerDir = path.dirname(importerPath);
-    basePath = path.resolve(importerDir, importSource);
+    const basePath = importSource.startsWith('/')
+      ? importSource
+      : path.resolve(importerDir, importSource);
+    return tryExtensions(basePath, knownFiles);
   }
 
-  // Try extensions
-  const extensions = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js'];
+  // 2. Workspace alias / tsconfig paths — try longest prefix first.
+  //    The alias map is already sorted by alias length descending.
+  for (const mapping of aliasMap) {
+    const { alias, rootPath, entries } = mapping;
+    if (importSource === alias) {
+      // Exact match → try the package's entry hints first, then index
+      if (entries) {
+        for (const e of entries) {
+          const candidate = path.resolve(rootPath, e);
+          if (knownFiles.has(candidate)) return candidate;
+        }
+      }
+      const indexHit = tryExtensions(path.join(rootPath, 'index'), knownFiles)
+        ?? tryExtensions(path.join(rootPath, 'src/index'), knownFiles);
+      if (indexHit) return indexHit;
+      continue;
+    }
+    if (importSource.startsWith(alias + '/')) {
+      const subpath = importSource.slice(alias.length + 1);
+      const basePath = path.resolve(rootPath, subpath);
+      const hit = tryExtensions(basePath, knownFiles);
+      if (hit) return hit;
+    }
+  }
+
+  // 3. Package imports (e.g. 'react') — skip; not in this repo
+  return null;
+}
+
+function tryExtensions(basePath: string, knownFiles: Set<string>): string | null {
+  const extensions = [
+    '',
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+    '/index.ts', '/index.tsx', '/index.js', '/index.jsx',
+  ];
   for (const ext of extensions) {
     const candidate = basePath + ext;
     if (knownFiles.has(candidate)) return candidate;
   }
-
   return null;
 }
 

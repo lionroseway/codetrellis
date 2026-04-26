@@ -1,26 +1,41 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import ignore, { type Ignore } from 'ignore';
 import type { FileTreeNode } from '../../shared/types';
 
+// Always-ignored directory names. Only used as a SAFETY FLOOR — any heavy
+// non-source dir that's commonly missing from .gitignore lives here. The
+// real ignore decisions come from .gitignore + .codetrellis-ignore via
+// the `ignore` library, which understands globs, negation (!path), and
+// nested patterns.
 const ALWAYS_IGNORED = new Set([
-  'node_modules', '.git', '.vite', 'dist', 'out',
-  '.next', '.nuxt', '.turbo', '.cache', 'coverage',
-  '__pycache__', '.pytest_cache', 'target',
+  // JS / Node
+  'node_modules',
+  // Python
+  '__pycache__', 'venv', 'env',
+  // Rust
+  'target',
+  // PHP / Go vendored deps
+  'vendor',
 ]);
 
 const LANG_MAP: Record<string, string> = {
   '.ts': 'typescript', '.tsx': 'typescript',
-  '.js': 'javascript', '.jsx': 'javascript',
+  '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
   '.py': 'python',
   '.rs': 'rust',
   '.go': 'go',
   '.java': 'java',
   '.php': 'php',
+  '.rb': 'ruby',
   '.json': 'json',
   '.css': 'css',
+  '.scss': 'css',
   '.html': 'html',
   '.md': 'markdown',
   '.yaml': 'yaml', '.yml': 'yaml',
+  '.toml': 'toml',
+  '.sql': 'sql',
 };
 
 function isSourceFile(name: string): boolean {
@@ -32,40 +47,67 @@ function getLanguage(name: string): string | undefined {
 }
 
 /**
- * Parse a .gitignore file into a set of directory/file patterns.
- * Handles basic patterns — not full glob, but covers common cases.
+ * Build an `ignore`-library matcher from any `.gitignore` and
+ * `.codetrellis-ignore` files in the directory. Returns null if the
+ * directory has no ignore files (caller falls back to the parent
+ * matcher).
+ *
+ * Why both files: `.gitignore` reflects "what isn't checked in" which
+ * is usually right for analysis but sometimes too aggressive (a project
+ * might gitignore `dist/` while still wanting to scan it). The
+ * `.codetrellis-ignore` file lets a project add CodeTrellis-specific
+ * exclusions or overrides via negation (`!some/path`).
  */
-function parseGitignore(gitignorePath: string): Set<string> {
-  const patterns = new Set<string>();
-  try {
-    const content = fs.readFileSync(gitignorePath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      // Strip trailing slashes and leading slashes
-      const clean = trimmed.replace(/^\//, '').replace(/\/$/, '');
-      patterns.add(clean);
-    }
-  } catch { /* file doesn't exist or can't read */ }
-  return patterns;
+function loadIgnoreFiles(dirPath: string): Ignore | null {
+  const ig = ignore();
+  let any = false;
+  for (const filename of ['.gitignore', '.codetrellis-ignore']) {
+    const filePath = path.join(dirPath, filename);
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      ig.add(content);
+      any = true;
+    } catch { /* file doesn't exist — skip */ }
+  }
+  return any ? ig : null;
 }
 
-function isIgnored(name: string, gitignorePatterns: Set<string>): boolean {
-  if (ALWAYS_IGNORED.has(name)) return true;
-  if (name.startsWith('.')) return true;
-  if (gitignorePatterns.has(name)) return true;
+interface ScanContext {
+  /** Project root — patterns are matched relative to this. */
+  root: string;
+  /** Stack of ignore matchers from ancestors, root-most first. */
+  matchers: Array<{ baseDir: string; ig: Ignore }>;
+}
+
+/**
+ * True if the path (relative to its matcher's baseDir) is ignored by
+ * any matcher on the stack. We test against every ancestor matcher
+ * because nested .gitignore files apply to their subtree.
+ */
+function isIgnoredByPatterns(absolutePath: string, isDir: boolean, ctx: ScanContext): boolean {
+  for (const { baseDir, ig } of ctx.matchers) {
+    let rel = path.relative(baseDir, absolutePath);
+    if (!rel || rel.startsWith('..')) continue;
+    // The `ignore` library expects directory paths to end with '/'.
+    if (isDir) rel = rel.replace(/\/?$/, '/');
+    if (ig.ignores(rel)) return true;
+  }
   return false;
 }
 
 /**
  * Recursively scans a directory and builds a FileTreeNode tree.
- * Reads .gitignore at each level and merges patterns down.
+ * Honors .gitignore + .codetrellis-ignore at every level (proper
+ * gitignore semantics including globs and negation), plus a small
+ * always-ignored safety floor.
  */
 export function scanDirectory(
   dirPath: string,
-  parentPatterns?: Set<string>,
+  parent?: ScanContext,
   maxDepth = 10,
 ): FileTreeNode[] {
+  const ctx: ScanContext = parent ?? { root: dirPath, matchers: [] };
+
   if (maxDepth <= 0) return [];
 
   let entries: fs.Dirent[];
@@ -75,11 +117,11 @@ export function scanDirectory(
     return [];
   }
 
-  // Merge parent gitignore patterns with local .gitignore
-  const localPatterns = parseGitignore(path.join(dirPath, '.gitignore'));
-  const patterns = parentPatterns
-    ? new Set([...parentPatterns, ...localPatterns])
-    : localPatterns;
+  // Stack on this directory's ignore matchers (if any) for its descendants.
+  const localIgnore = loadIgnoreFiles(dirPath);
+  const childCtx: ScanContext = localIgnore
+    ? { root: ctx.root, matchers: [...ctx.matchers, { baseDir: dirPath, ig: localIgnore }] }
+    : ctx;
 
   const nodes: FileTreeNode[] = [];
 
@@ -89,12 +131,16 @@ export function scanDirectory(
   });
 
   for (const entry of entries) {
-    if (isIgnored(entry.name, patterns)) continue;
+    // Always skip git internals and the always-ignored safety floor.
+    if (entry.name === '.git') continue;
+    if (entry.isDirectory() && ALWAYS_IGNORED.has(entry.name)) continue;
 
     const fullPath = path.join(dirPath, entry.name);
 
+    if (isIgnoredByPatterns(fullPath, entry.isDirectory(), childCtx)) continue;
+
     if (entry.isDirectory()) {
-      const children = scanDirectory(fullPath, patterns, maxDepth - 1);
+      const children = scanDirectory(fullPath, childCtx, maxDepth - 1);
       if (children.length === 0) continue;
 
       nodes.push({
