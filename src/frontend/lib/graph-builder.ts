@@ -336,7 +336,7 @@ export function buildDependencyGraph(
     result = buildFocusView(focusedFile, arch, depEdges, changeMap, edgeChangeMap, onToggle, symbolsMap, viewDepth);
   } else if (viewDepth === 'file' || expandedClusters.size > 0) {
     // Hub/file view: show important files, with expanded clusters showing their files
-    result = buildHubView(arch, depEdges, changeMap, edgeChangeMap, onToggle, expandedClusters);
+    result = buildHubView(arch, depEdges, changeMap, edgeChangeMap, onToggle, expandedClusters, Boolean(scopePath));
   } else {
     // Cluster overview (default)
     result = buildClusterView(arch, depEdges, changeMap, edgeChangeMap, onToggle);
@@ -496,6 +496,7 @@ function buildHubView(
   edgeChangeMap: Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed' | 'unexpected'>,
   onToggle: (nodeId: string) => void,
   expandedClusters?: Set<string>,
+  scoped?: boolean,
 ): GraphData {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -503,7 +504,12 @@ function buildHubView(
   const visibleFiles = new Set<string>();
   const hubThreshold = 3;
 
-  if (expandedClusters && expandedClusters.size > 0) {
+  if (scoped) {
+    // The user has narrowed to a single system / directory via the
+    // scope filter — show every file in scope, no hub threshold,
+    // no cap. The scope is what makes the count manageable.
+    for (const path of arch.keys()) visibleFiles.add(path);
+  } else if (expandedClusters && expandedClusters.size > 0) {
     // Show all files from expanded clusters
     for (const [path, info] of arch) {
       if (expandedClusters.has(info.clusterId)) {
@@ -513,23 +519,27 @@ function buildHubView(
     // Also show hubs from non-expanded clusters if they connect to expanded
     for (const [path, info] of arch) {
       if (visibleFiles.has(path)) continue;
-      if (info.total < 3) continue;
+      if (info.total < hubThreshold) continue;
       const connectsToExpanded = [...info.imports, ...info.importedBy].some((imp) => visibleFiles.has(imp));
       if (connectsToExpanded) visibleFiles.add(path);
     }
   } else {
-    // Default hub view: files with >= 3 connections + files with changes
+    // Default hub view: files with >= 2 connections OR with changes.
+    // Threshold lowered from 3 to 2 so leaf files with one importer
+    // don't silently disappear in big repos.
     for (const [path, info] of arch) {
-      if (info.total >= hubThreshold || changeMap.has(path)) {
+      if (info.total >= 2 || changeMap.has(path)) {
         visibleFiles.add(path);
       }
     }
   }
 
-  // Cap at ~40 nodes to keep it readable
-  if (visibleFiles.size > 40) {
+  // Cap to keep big repos renderable. Skip the cap when scoped — the
+  // user explicitly narrowed the view and expects everything in it.
+  const NODE_CAP = scoped ? Infinity : 200;
+  if (visibleFiles.size > NODE_CAP) {
     const changedFiles = [...visibleFiles].filter((path) => changeMap.has(path));
-    const remainingSlots = Math.max(40 - changedFiles.length, 0);
+    const remainingSlots = Math.max(NODE_CAP - changedFiles.length, 0);
     const sorted = [...visibleFiles]
       .filter((path) => !changeMap.has(path))
       .map((p) => ({ path: p, total: arch.get(p)?.total || 0 }))
