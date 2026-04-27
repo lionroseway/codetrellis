@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileEdit, Search, Circle, XCircle, X, ClipboardList, Maximize2, Minimize2 } from 'lucide-react';
+import { FileEdit, Search, Circle, XCircle, X, ClipboardList, Maximize2, Minimize2, Wrench, AlertCircle, Plug } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
@@ -11,11 +11,33 @@ import { PlanCreateModal } from '../plan/PlanCreateModal';
 type Tab = 'plans' | 'timeline' | 'changes' | 'comments';
 
 const EVENT_ICON_MAP: Record<string, typeof FileEdit> = {
-  file_changed: FileEdit, architecture_query: Search,
-  plan_reported: ClipboardList, session_start: Circle, session_end: XCircle,
+  file_changed: FileEdit,
+  architecture_query: Search,
+  plan_reported: ClipboardList,
+  session_start: Plug,
+  session_end: XCircle,
+  tool_call: Wrench,
+  tool_error: AlertCircle,
 };
 
-function formatPayload(payload: Record<string, unknown>): string {
+const EVENT_ICON_COLOR: Record<string, string> = {
+  tool_call: 'text-cyan-400',
+  tool_error: 'text-red-400',
+  session_start: 'text-emerald-400',
+  session_end: 'text-zinc-500',
+  file_changed: 'text-amber-400',
+};
+
+function formatPayload(type: string, payload: Record<string, unknown>): string {
+  // Generic MCP tool calls — any agent (Claude Code, Codex, Cursor, ...)
+  if (type === 'tool_call' || type === 'tool_error') {
+    const tool = String(payload.tool || 'tool');
+    const agent = payload.agentType ? `[${payload.agentType}] ` : '';
+    const dur = typeof payload.durationMs === 'number' ? ` · ${payload.durationMs}ms` : '';
+    const err = type === 'tool_error' && payload.error ? ` — ${String(payload.error).slice(0, 60)}` : '';
+    const args = payload.args ? ` ${String(payload.args).slice(0, 80)}` : '';
+    return `${agent}${tool}${args}${dur}${err}`;
+  }
   if (payload.action === 'read') return `Read ${payload.file}`;
   if (payload.action === 'write') return `Write ${payload.file}`;
   if (payload.action === 'edit') return `Edit ${payload.file}`;
@@ -24,6 +46,7 @@ function formatPayload(payload: Record<string, unknown>): string {
   if (payload.tool === 'Grep') return `Grep: ${payload.pattern}`;
   if (payload.text) return String(payload.text).substring(0, 100);
   if (payload.message) return String(payload.message).substring(0, 100);
+  if (payload.agentType && payload.source === 'mcp') return `${payload.agentType} via MCP`;
   if (payload.sessionId) return `Session: ${String(payload.sessionId).substring(0, 12)}...`;
   return JSON.stringify(payload).substring(0, 80);
 }
@@ -106,13 +129,14 @@ export function PlanPanel() {
               <div className="space-y-px">
                 {events.slice(-100).reverse().map((event) => {
                   const Icon = EVENT_ICON_MAP[event.type] || Circle;
+                  const iconClass = EVENT_ICON_COLOR[event.type] || 'text-foreground-subtle';
                   return (
                     <div key={event.id} className="flex items-start gap-2 py-1 px-2 hover:bg-surface-hover rounded-md transition-colors">
                       <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-50">
                         {new Date(event.timestamp).toLocaleTimeString()}
                       </span>
-                      <Icon size={11} className="text-foreground-subtle shrink-0 mt-0.5" />
-                      <span className="text-foreground-muted truncate">{formatPayload(event.payload)}</span>
+                      <Icon size={11} className={`${iconClass} shrink-0 mt-0.5`} />
+                      <span className="text-foreground-muted truncate">{formatPayload(event.type, event.payload as Record<string, unknown>)}</span>
                     </div>
                   );
                 })}

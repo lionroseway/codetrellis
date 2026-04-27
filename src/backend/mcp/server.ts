@@ -12,6 +12,7 @@ import { getDeviations, resolveDeviation, detectDeviations } from '../services/d
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
 import { exportDatabase } from '../services/database';
+import { buildSkillGuide } from './skill-guide';
 
 const MCP_PORT = 19432;
 
@@ -20,6 +21,60 @@ let httpServer: http.Server | null = null;
 let connectedTransports = new Map<string, SSEServerTransport>();
 // Maps MCP transport sessionId → registered agent sessionId
 let transportToAgent = new Map<string, string>();
+
+let toolEventCounter = 0;
+
+interface ToolEventPayload {
+  tool: string;
+  args: string;
+  phase: 'complete' | 'error';
+  durationMs: number;
+  sessionId: string | null;
+  agentType: string | null;
+  agentModel: string | null;
+  error?: string;
+}
+
+function broadcastToolEvent(payload: ToolEventPayload): void {
+  broadcast('agent-event', {
+    id: `mcp-tool-${++toolEventCounter}`,
+    timestamp: Date.now(),
+    source: 'mcp',
+    type: payload.phase === 'error' ? 'tool_error' : 'tool_call',
+    payload,
+  });
+}
+
+/**
+ * Compact JSON of the tool args for the Timeline. Truncated so a giant
+ * `body` field on a spec-doc create doesn't drown the event log.
+ */
+function summarizeArgs(args: any): string {
+  if (args == null) return '';
+  try {
+    const json = JSON.stringify(args);
+    return json.length > 240 ? json.slice(0, 240) + '…' : json;
+  } catch {
+    return '[unserializable]';
+  }
+}
+
+/**
+ * Look up agent metadata for an MCP transport session id, if it has
+ * registered itself via `register_session`. We match by the most
+ * recent active session for the transport — agents that never call
+ * register_session show up as 'mcp-agent'.
+ */
+function inferAgentFromSession(sessionId: string | null): { type: string | null; model: string | null } {
+  if (!sessionId) return { type: 'mcp-agent', model: null };
+  // The session-service indexes by its OWN sessionId. The transport
+  // session id is different. For now, fall back to the most recent
+  // active session and assume it's the caller. Better wiring later.
+  const sessions = sessionService.getActiveSessions();
+  if (sessions.length === 0) return { type: 'mcp-agent', model: null };
+  const latest = sessions[sessions.length - 1];
+  return { type: latest.agentType ?? 'mcp-agent', model: latest.model ?? null };
+}
 
 export async function startMcpServer(): Promise<void> {
   if (mcpServer) return;
@@ -34,6 +89,48 @@ export async function startMcpServer(): Promise<void> {
       instructions: 'CodeTrellis provides codebase architecture analysis. Use these tools to understand how files connect, search for symbols, and report your plans.',
     }
   );
+
+  // Generic per-tool-call broadcast: every MCP tool invocation, from
+  // any agent (Claude Code, Codex, Cursor, aider, custom) flows into
+  // the same `agent-event` channel that the file-watcher and the
+  // Claude Code session watcher use. Without this, the Agent Timeline
+  // is silent for any agent that isn't Claude Code, even though the
+  // MCP work is happening.
+  const originalRegisterTool = (mcpServer.registerTool as any).bind(mcpServer);
+  (mcpServer as any).registerTool = (name: string, config: any, handler: any) => {
+    return originalRegisterTool(name, config, async (args: any, extra: any) => {
+      const start = Date.now();
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      const agentInfo = inferAgentFromSession(sessionId);
+      try {
+        const result = await handler(args, extra);
+        broadcastToolEvent({
+          tool: name,
+          args: summarizeArgs(args),
+          phase: 'complete',
+          durationMs: Date.now() - start,
+          sessionId,
+          agentType: agentInfo.type,
+          agentModel: agentInfo.model,
+        });
+        return result;
+      } catch (err) {
+        broadcastToolEvent({
+          tool: name,
+          args: summarizeArgs(args),
+          phase: 'error',
+          durationMs: Date.now() - start,
+          sessionId,
+          agentType: agentInfo.type,
+          agentModel: agentInfo.model,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    });
+  };
 
   // --- Tools ---
 
@@ -609,6 +706,61 @@ export async function startMcpServer(): Promise<void> {
 
   // --- Resources ---
 
+  // Agent skill / "how to use this product" guides. Agents can fetch
+  // these on connect so they don't need out-of-band briefing on what
+  // CodeTrellis is or how to operate it. Three flavors:
+  //   - codetrellis://skill              → project-state-tailored summary
+  //   - codetrellis://skill/quickstart   → first-time agent flow
+  //   - codetrellis://skill/power-user   → deep usage (phases, drift, multi-agent)
+
+  mcpServer.registerResource(
+    'codetrellis://skill',
+    'codetrellis://skill',
+    {
+      description: 'How to use CodeTrellis — tailored summary of plans, spec docs, systems, and active sessions in this project.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://skill',
+        mimeType: 'text/markdown',
+        text: buildSkillGuide('summary'),
+      }],
+    }),
+  );
+
+  mcpServer.registerResource(
+    'codetrellis://skill/quickstart',
+    'codetrellis://skill/quickstart',
+    {
+      description: 'CodeTrellis quickstart for AI coding agents — basic flow: read the active plan, claim a task, do the work, mark it done.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://skill/quickstart',
+        mimeType: 'text/markdown',
+        text: buildSkillGuide('quickstart'),
+      }],
+    }),
+  );
+
+  mcpServer.registerResource(
+    'codetrellis://skill/power-user',
+    'codetrellis://skill/power-user',
+    {
+      description: 'CodeTrellis power-user guide for AI coding agents — spec docs, drift verification, multi-agent coordination, granular task fields.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://skill/power-user',
+        mimeType: 'text/markdown',
+        text: buildSkillGuide('power-user'),
+      }],
+    }),
+  );
+
   mcpServer.registerResource(
     'project://graph',
     'project://graph',
@@ -698,8 +850,19 @@ export async function startMcpServer(): Promise<void> {
       const sessionId = transport.sessionId;
       connectedTransports.set(sessionId, transport);
 
+      // Auto-register a session on connect so EVERY connected agent
+      // shows up in the active-sessions list (and per-tool events get
+      // attribution) even if the agent never calls register_session
+      // explicitly. Agents that DO call register_session will upgrade
+      // this record with their real type/model.
+      const inferredAgentType = req.headers['user-agent']?.toString().split(' ')[0]?.toLowerCase().includes('claude')
+        ? 'claude-code'
+        : 'mcp-client';
+      sessionService.registerSession(sessionId, inferredAgentType);
+
       res.on('close', () => {
         connectedTransports.delete(sessionId);
+        sessionService.disconnectSession(sessionId);
         console.log(`[MCP] Client disconnected: ${sessionId}`);
         broadcast('agent-event', {
           id: `mcp-disconnect-${Date.now()}`,
@@ -708,16 +871,18 @@ export async function startMcpServer(): Promise<void> {
           type: 'session_end',
           payload: { sessionId },
         });
+        broadcast('mcp-session-changed', { reason: 'disconnect' });
       });
 
-      console.log(`[MCP] Client connected: ${sessionId}`);
+      console.log(`[MCP] Client connected: ${sessionId} (${inferredAgentType})`);
       broadcast('agent-event', {
         id: `mcp-connect-${Date.now()}`,
         timestamp: Date.now(),
         source: 'mcp',
         type: 'session_start',
-        payload: { sessionId, source: 'mcp' },
+        payload: { sessionId, source: 'mcp', agentType: inferredAgentType },
       });
+      broadcast('mcp-session-changed', { reason: 'connect' });
 
       await mcpServer!.connect(transport);
       return;
