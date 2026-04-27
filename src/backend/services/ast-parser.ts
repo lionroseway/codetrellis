@@ -9,7 +9,30 @@ import { getCallsiteExtractor } from './callsites';
 const TreeSitter = (TreeSitterModule as any).Parser || (TreeSitterModule as any).default?.Parser || TreeSitterModule;
 const Language = (TreeSitterModule as any).Language || TreeSitter.Language;
 
-const GRAMMAR_DIR = path.resolve(__dirname, '../../../resources/tree-sitter');
+/**
+ * Where the tree-sitter WASM grammars live at runtime. Two cases:
+ *
+ * 1. **Dev / web mode** — running from the repo via `tsx`. `__dirname`
+ *    is `<repo>/src/backend/services`; grammars are at the repo's
+ *    `resources/tree-sitter/`.
+ * 2. **Packaged Electron app** — Forge's `extraResource` copies the
+ *    `resources/tree-sitter/` dir verbatim into `process.resourcesPath`
+ *    (i.e. `<app>/Contents/Resources/tree-sitter/` on macOS,
+ *    `<app>/resources/tree-sitter/` on Windows + Linux).
+ *
+ * We probe both paths and use whichever exists. Keeps a single code
+ * path for dev + production, no bundler magic required.
+ */
+const GRAMMAR_DIR = (() => {
+  const dev = path.resolve(__dirname, '../../../resources/tree-sitter');
+  if (fs.existsSync(dev)) return dev;
+  const resourcesPath = (process as any).resourcesPath as string | undefined;
+  if (resourcesPath) {
+    const packaged = path.join(resourcesPath, 'tree-sitter');
+    if (fs.existsSync(packaged)) return packaged;
+  }
+  return dev; // last resort — caller will log a "grammar missing" warning
+})();
 
 let initialized = false;
 const parsersByGrammar = new Map<string, any>();
