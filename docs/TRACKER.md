@@ -34,8 +34,9 @@ shared via the bridge abstraction.
 | MCP Server | 100 | High | 24 tools across architecture queries / plans / tasks / spec docs / comments / sessions / drift / trellis snapshots |
 | Claude Code Watcher | 100 | High | Tails session JSONL, extracts tool calls + plan heuristics |
 | Generic MCP-agent activity | 0 | – | MCP tool calls don't surface in Timeline; only Claude Code does. Top of front-to-back gap list. |
-| Plan CRUD + Comments + Versions | 95 | Good | Missing: version viewer UI; task-level comments |
-| Spec Room (typed plan docs) | 100 | High | 12 doc types, MCP + REST + UI + version history + restore |
+| Plan CRUD + Comments + Versions | 95 | Good | Missing: version viewer UI; task-level comments. Phase 12 will add explicit Phases entity + Proposed Changes view + plan templates so plans can scale from light (one-line title) to deep (swf-style multi-phase migration). |
+| Spec Room (typed plan docs) | 100 | High | 12 doc types, MCP + REST + UI + version history + restore. Phase 12 §C adds doc orderHint + parentDocUid for swf-style `00-…/01-…` structure. |
+| Agent skill / instructions resource | 0 | – | Phase 12 §E. Agents currently have no way to fetch a "how to use CodeTrellis" guide — every integration depends on out-of-band briefing. Will add `codetrellis://skill` MCP resource (quickstart + power-user) tailored to project state. |
 | Three Trellis States | 85 | Medium | Snapshots + projection + baseline pin/auto/branch — modes don't yet read as visually unmistakable |
 | Architecture Diffing | 90 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope |
 | Inspector + Code Viewer | 100 | High | Cluster/file/symbol routing + Prism syntax highlighting + git gutter + drift coloring + selection-to-task |
@@ -412,6 +413,66 @@ After: **2552 edges — 1688 Python + 591 .tsx + 273 .ts, 314 into `packages/*`.
 
 ---
 
+### Phase 12 — Deepening Plans + Agent Skills ⚡ HIGH PRIORITY (in flight)
+**Goal:** plans can be light *or* deep on a per-plan basis. Light = title
++ a few tasks (already works). Deep = phased structure with executive
+overview, per-phase scope + acceptance criteria, structured spec docs,
+and a granular "proposed changes" feed of CRUD operations on files /
+symbols / connections — all so multiple AI agents can share rich context
+without having to re-derive it from chat history.
+
+**Inspiration:** swf's `docs/oms/002-oms-integration/` style:
+`00-EXECUTIVE-OVERVIEW.md` + `01-PHASE-1-FOUNDATION.md` …
+`06-PHASE-6-…md` + cross-cutting `DATA-MODEL.md`, `FRONTEND-AUDIT.md`,
+`TRACKER.md`, plus a `testing/` subfolder. Each phase doc has its own
+ToC: backend models → routes → auth → frontend types → API client →
+testing → acceptance criteria. We want the same expressiveness, but
+backed by the DB so agents can query slices via MCP rather than
+parsing markdown.
+
+**The use case driving this:** "the majority of AI tools are being used
+for mass refactoring to modernise systems" — multiple agents working
+in parallel on a big migration need a shared deep plan they can refer
+to and update.
+
+#### Sub-phases
+
+| | Item | Size | Status |
+|---|---|---|---|
+| **A** | Explicit `Phase` entity (table + service + REST + MCP + UI). Each phase has number, title, scope, prerequisites, gitCheckpoint, acceptanceCriteria. Tasks gain optional `phaseUid`. Plans can have N phases or zero. | medium | ❌ |
+| **B** | "Proposed Changes" first-class view. Aggregates `affectedFiles` / `symbolSpecs` / `newConnections` / `removedConnections` from every task into one CRUD feed. Each change row has operation (add / modify / remove / move), target (file / symbol / connection), expected vs actual state, drift status. New tab in the plan panel + MCP `list_proposed_changes(plan_uid)` + `get_change_status(plan_uid, change_id)`. | medium | ❌ |
+| **C** | Spec docs gain `orderHint` (e.g. "00", "01") + `parentDocUid` (nesting). Lets the spec room render the swf-style `00-OVERVIEW / 01-PHASE-1 / …` order naturally, with sub-folders for grouping (e.g. `testing/`). UI: tree view in the spec room. | small | ❌ |
+| **D** | Generic MCP agent timeline — every MCP tool call from any agent (Claude Code, Codex, Cursor, aider, custom) flows into the Agent Timeline as an `agent-event`. Closes step 5 of front-to-back loop for any agent. Started; backend wrapper in place; UI rendering + commit pending. | small | 🟡 In flight |
+| **E** | **Agent skill resource via MCP.** New MCP resource `codetrellis://skill` (and `codetrellis://skill/quickstart`, `codetrellis://skill/power-user`) that returns a markdown guide tailored to the project state — what plans exist, what spec docs are attached, how to author / verify / claim tasks, when to use phases vs flat tasks. Like the MCP setup config but for "how to actually use the product." Also: tool `set_user_skill_level(level)` so the agent can ask the user which mode to operate in. | small | ❌ |
+| **F** | Multiple-docs-per-type support. swf has multiple "phase" overview docs; we currently treat doc_type as a single-instance taxonomy. Already supported by the data model (each doc has a uid) — UI just needs to stop assuming "one executive_summary, ever" and group by type with ordering. | small | ❌ |
+| **G** | Plan templates seeded from common shapes — "swf-style mass refactor" template seeds: 1 executive_overview doc, N phase docs (numbered), 1 data_model doc, 1 frontend_audit doc, 1 testing strategy doc, plus task scaffolds per phase. One-click from a template. | medium | ❌ |
+
+#### Suggested order
+1. **D** (small, immediate value — closes front-to-back step 5 for any agent)
+2. **C** (small — enables the swf-style document ordering)
+3. **A** (medium — unlocks structured phased plans)
+4. **F** (small — let multiple docs of same type coexist)
+5. **G** (medium — make the swf-style structure one-click)
+6. **B** (medium — granular CRUD-level proposed changes)
+7. **E** (small — agent skill resource; can land any time but reads better once A+C are in)
+
+#### Acceptance for the deepening push as a whole
+
+A user can:
+- Open a project, type a one-line plan title → light plan (current behavior, untouched)
+- OR pick "Mass refactor" from plan templates → seeded with executive overview + 6 phase docs + tasks + audit + testing strategy in seconds (matches the swf shape exactly)
+- Author or edit any of those docs in the spec room with markdown ordering / nesting that mirrors swf's `00-…`, `01-…` convention
+- Have multiple agents (Claude Code + Codex side-by-side) connect via MCP and:
+  - See each other's tool calls in a live Agent Timeline
+  - Pull the agent skill from `codetrellis://skill` so they know how to operate the product without out-of-band briefing
+  - Fetch only the spec slice they need (`get_plan_doc(plan_uid, doc_type='security')`)
+  - Claim tasks scoped to a specific phase (`get_next_task(plan_uid, phase_uid)`)
+  - Drop into "Proposed Changes" to see the granular CRUD operations they're about to make
+- Watch tasks auto-advance as files change on disk (Phase 11 / front-to-back step 9)
+- Hit a "Verify completion" panel that reads `get_drift_report` and shows planned vs landed at a glance
+
+---
+
 ## 4. Trellis State Definitions (canonical mental model)
 
 These are the precise meanings of the four graph modes. UI labels and
@@ -622,14 +683,19 @@ Closing these is the priority block before adding more surfaces.
 
 **Concrete next pushes (in order):**
 
-1. **Generic MCP-agent Timeline** — surface every MCP tool call in the Agent Timeline tab, attributed by `register_session` agent_type. Closes step 5 for any agent.
-2. **Plan-task progress auto-detection** — when a task's `affectedFiles` start changing, advance to `in_progress`; when all are clean against plan expectations, suggest `done`. Closes step 9.
-3. **System-aware clustering** — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster, and `apps/admin` doesn't merge with `apps/web`. See Phase 11 §3 / §4.
-4. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB; frontend fetches JSON. Per-system load is genuinely independent. The ~"load JSON from DB on demand" architecture.
-5. **Phase 3 — systems table + MCP tools** (`list_systems`, `get_system_files`, `get_system_dependencies`). Without this, agents can't query system-scoped state.
-6. **Phase 4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`**. The user finally sees Systems as a first-class entity, not just a graph filter.
-7. **"Plan completion" verification panel** — reads `get_drift_report` for the active plan and shows: planned files done / pending / unexpected; planned edges done / missing; spec doc consultation count. Closes step 11.
-8. **Phase 11 §5 — cross-system non-import links** (HTTP routes, SQL refs). Closes step 12.
+1. **Phase 12 §D — Generic MCP-agent Timeline** *(in flight)* — surface every MCP tool call from any agent in the Agent Timeline. Closes step 5 for any agent.
+2. **Phase 12 §C — Spec doc orderHint + parentDocUid** — supports the swf-style `00-OVERVIEW / 01-PHASE-1 / 02-…` layout in the spec room.
+3. **Phase 12 §A — Explicit Phases entity** — first-class phased plans: each phase has scope, prereqs, acceptance, git checkpoint. Tasks belong to a phase optionally. Matches the swf phase-doc structure but DB-backed.
+4. **Phase 12 §E — Agent skill resource** (`codetrellis://skill` MCP resource) — agents fetch a markdown guide on how to use CodeTrellis effectively (quickstart vs power-user) tailored to the project state.
+5. **Phase 12 §F + §G — multiple docs per type + plan templates** — let multiple docs of the same type coexist; ship a "Mass refactor (swf-style)" template that seeds executive overview + N phase docs + audit + testing strategy in one click.
+6. **Phase 12 §B — Proposed Changes view** — granular CRUD feed (add / modify / remove file or symbol or connection) aggregated from task fields, with drift status per change. New tab + MCP tools.
+7. **Plan-task progress auto-detection** — task auto-advances to `in_progress` when affected files change. Closes step 9 of front-to-back loop.
+8. **System-aware clustering** — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster.
+9. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB.
+10. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.).
+11. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`**.
+12. **"Plan completion" verification panel** — reads `get_drift_report` and shows planned vs landed at a glance. Closes step 11.
+13. **Phase 11 §5 — cross-system non-import links** (HTTP routes, SQL refs). Closes step 12.
 
 ### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
 Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
