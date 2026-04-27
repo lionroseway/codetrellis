@@ -9,7 +9,8 @@ docs ([CORE-VISION.md](CORE-VISION.md), [THREE-TRELLIS.md](THREE-TRELLIS.md),
 [CLUSTER-FIRST-VISION.md](CLUSTER-FIRST-VISION.md),
 [GRAPH-UX-REFINEMENT.md](GRAPH-UX-REFINEMENT.md),
 [DATA-MODEL.md](DATA-MODEL.md), [MCP-INTEGRATION.md](MCP-INTEGRATION.md),
-[UI-DESIGN.md](UI-DESIGN.md), [ARCHITECTURE.md](ARCHITECTURE.md))
+[UI-DESIGN.md](UI-DESIGN.md), [ARCHITECTURE.md](ARCHITECTURE.md),
+[PLAN-EXPORT.md](PLAN-EXPORT.md))
 remain canonical for *what* and *why*; this doc is for *where things
 stand*.
 
@@ -55,10 +56,36 @@ shared via the bridge abstraction.
 | Multi-tab projects | 100 | Good | Open multiple projects/worktrees as TopBar tabs |
 | Visual Plan Builder | 35 | Medium | "Add to plan" from the inspector exists; clicking nodes-on-graph to author isn't wired |
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
+| Plan export / source-controllable plans | 0 | – | **Designed, not built.** See [PLAN-EXPORT.md](PLAN-EXPORT.md) for the full spec — directory of YAML + markdown under `<project>/.codetrellis/plans/`, file-as-source-of-truth with DB cache, auto-sync via file watcher, identity via `git config`. Three-phase delivery: (1) manual export/import, (2) auto-sync, (3) templates as publishable repos. The headline feature for the multi-device + multi-agent story. |
+| Electron desktop build | 30 | Medium | `npm run package` runs to completion but the resulting `.app` is non-functional — renderer not bundled, tree-sitter WASM missing, icon needs `.icns` / `.ico`, no `maker-squirrel` for Windows. Five small fixes needed before a real DMG / EXE ships. See §7 for the punch list. |
+| Settings surface | 0 | – | No in-app settings today. [PLAN-EXPORT.md §13](PLAN-EXPORT.md) details the proposed shape: Identity (display name + email from `git config`), MCP server (port + autodetect + agent-config regenerate), Plans (default visibility), Data (dir + export/import/reset), Telemetry (off). Persisted to `~/.codetrellis/settings.json`. |
+| Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
+| E2E test harness | 30 | Medium | Playwright wired today against the real running app — flaky (folder-picker, stale plans across runs). Real story needs: a sample mixed-language repo committed under `tests/fixtures/`, a scripted agent harness that connects via MCP and follows a canned plan, a deterministic clock for timing-sensitive assertions, and a reset-to-clean-state hook. Needs further planning before expansion. |
 
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Phase 13 design + Electron build audit
+
+Not code — design + tracker hygiene to set the next phase up cleanly.
+
+- **[PLAN-EXPORT.md](PLAN-EXPORT.md)** — full design for plans as
+  source-controllable artefacts. Directory of YAML + markdown under
+  `<project>/.codetrellis/plans/`, file-as-source-of-truth with DB
+  cache, auto-sync via file watcher, `git config`-derived identity,
+  configurable MCP port via settings panel, three-phase delivery
+  (manual → auto-sync → publishable templates). The headline
+  feature for the multi-device + multi-agent story.
+- **Electron build verified non-functional** — `npm run package`
+  runs to completion but the resulting `.app` is missing the
+  renderer, tree-sitter WASM, and a proper icon. Five small fixes
+  documented in §7 #8.
+- **Tracker reshape** — new Phase 13 section, new domain rows for
+  Plan Export, Electron desktop build, Settings surface, Learn
+  Trellis, and E2E test harness. Next-pushes queue reordered to
+  put Phase 13 §D/§E (settings + identity) at the top since they
+  unblock everything else.
 
 ### Apr 27, 2026 — Polish pass for "ready to use"
 
@@ -618,8 +645,47 @@ D → C → A → D2 → E → F → G → B. All landed Apr 27, 2026.
   - Use the "Proposed Changes" tab (or `list_proposed_changes` MCP) to see what the plan promises vs what's landed.
 
 ⚠️ Still open (rolled into next pushes — see §7):
-- Tasks auto-advance as files change on disk (front-to-back step 9).
-- "Verify completion" panel that reads `get_drift_report` and shows planned vs landed at a glance (front-to-back step 11).
+- Tasks auto-advance as files change on disk (front-to-back step 9). ✅ shipped Apr 27 (Push 1).
+- "Verify completion" panel that reads `get_drift_report` and shows planned vs landed at a glance (front-to-back step 11). ✅ shipped Apr 27 (Push 1).
+
+---
+
+### Phase 13 — Plan Export + Multi-Device + Settings (designed, not built)
+**Goal:** Plans, phases, tasks, spec docs, and templates round-trip
+between the DB and a directory of YAML + markdown checked into the
+project repo at `<project>/.codetrellis/plans/`. The file is canonical;
+the DB is a fast-rebuild index. Multi-device / multi-agent
+collaboration becomes "just `git pull`."
+
+**Design doc:** [PLAN-EXPORT.md](PLAN-EXPORT.md) covers format, sync
+model, conflict resolution, identity, settings surface (incl.
+configurable MCP port), and three-phase delivery. Read that before
+writing code.
+
+**Why now:** This is the headline feature for "multi-device" and
+"team collaboration on a plan." Without it, every device is an
+island. The DB-only path that ships today is fine for a single-user
+single-machine workflow but breaks the moment two people want to
+share a plan or someone moves between laptop and desktop.
+
+**Sub-phases**
+
+| | Item | Size | Status |
+|---|---|---|---|
+| **A** | Manual export → file, manual import. New `plan-file-service.ts`, REST + MCP wrappers (`export_plan_to_files`, `import_plan_from_files`), "Export to .codetrellis/" button + "Import plan from file..." menu item. Documents the format. Delivers the multi-device story without auto-sync. | medium | ❌ |
+| **B** | Auto-sync (file is canonical). File watcher on `.codetrellis/plans/`, write-through on every plan/phase/task/doc mutation, banner UI for external-update reload, conflict-marker detection, per-plan "Linked ⇄ Local" toggle. | medium | ❌ |
+| **C** | Templates as publishable repos. "Publish as template" extracts a plan dir + scrubs project paths to placeholders. A user can `git clone` a template repo into `.codetrellis/templates/`. | small | ❌ |
+| **D** | **Settings surface.** New gear-icon panel + `~/.codetrellis/settings.json` persistence. Identity (display name + email defaulting from `git config`), MCP server (configurable port + autodetect on conflict + "regenerate agent config" buttons), Plans (default visibility for new plans), Data (dir override + export/import/reset DB), Telemetry (off; explicit). | small | ❌ |
+| **E** | **Identity in attributions.** `Plan.author` / `Task.assignee` / `Comment.author` migrate from `'human'` / `'agent'` (role) to `email@domain` (stable id). Backwards compatible — old rows still valid. Defaults pulled from settings panel which itself defaults from `git config`. | small | ❌ |
+
+**Suggested order:** D + E first (small, unlocks everyone-else's
+attribution + settings), then A (manual export — biggest UX win),
+then B (auto-sync), then C (template publishing).
+
+**Acceptance for the deepening as a whole** (per [PLAN-EXPORT.md §16](PLAN-EXPORT.md)):
+A user can author a plan on laptop A, `git push`, `git pull` on
+desktop B, and see the plan instantly. Both devices' agents read the
+same plan from disk. Templates publish as git repos.
 
 ---
 
@@ -836,20 +902,35 @@ Closing these is the priority block before adding more surfaces.
 > **Phase 12 ✅ DONE** (Apr 27, 2026) — A, B, C, D, D2, E, F, G all shipped.
 > See §3 Phase 12 for the per-sub-phase detail.
 
-The active queue is now driven by the front-to-back loop gaps (§6) +
-the Multi-System Ingestion follow-ups (§3 Phase 11):
+The active queue is now driven by:
+- **Phase 13** — Plan Export + Multi-Device + Settings (designed in [PLAN-EXPORT.md](PLAN-EXPORT.md), not yet built; the headline feature for actual team use)
+- **Electron build fixes** — needed before any DMG/EXE distribution
+- **Phase 11** Multi-System follow-ups
+- Graph quality + UX polish
 
-1. ~~**Plan-task progress auto-detection**~~ ✅ shipped — `plan-progress-service` hooks the file watcher; `pending`/`assigned` tasks auto-advance to `in_progress`; `task-completion-suggested` event fires once every ProposedChange is `satisfied`.
-2. ~~**"Plan completion" verification panel**~~ ✅ shipped — `VerificationPanel` on PlanDetail reads `/api/plans/:uid/changes?summary=1` and renders a colour-coded readiness card.
-3. ~~**Cross-system MVP**~~ ✅ shipped — TS/JS `fetch(...)` + `axios.*` matched against Python FastAPI / Flask routes via `callsites/<lang>.ts` + `cross-system-service`. Dashed protocol-tinted edges (purple HTTP) render alongside imports. MCP `list_cross_system_edges`. SQL / subprocess / env / OpenAPI matchers still pending.
-4. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
-5. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
-6. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.) — exposes the discovered system list as a queryable surface.
-7. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`** — Systems section above the file tree, system view kind in Inspector, drift attribution by system.
-8. **Phase 11 §5 — cross-system non-import links (full)** — extends the §3 MVP with SQL ref tracker, subprocess/env, OpenAPI contracts.
-9. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`; just needs node visual wiring).
-10. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses.
-11. ~~**Pre-existing TS errors**~~ ✅ shipped — `npm run typecheck` returns zero. (sql.js shim, PlanStatus rename, useRef init, electronAPI assertions, http-bridge handler typing, database row annotations.)
+##### Recently shipped (Apr 27, 2026)
+
+1. ~~**Plan-task progress auto-detection**~~ ✅ — `plan-progress-service` hooks the file watcher; `pending`/`assigned` tasks auto-advance to `in_progress`; `task-completion-suggested` event fires once every ProposedChange is `satisfied`.
+2. ~~**"Plan completion" verification panel**~~ ✅ — `VerificationPanel` on PlanDetail reads `/api/plans/:uid/changes?summary=1` and renders a colour-coded readiness card.
+3. ~~**Cross-system MVP**~~ ✅ — TS/JS `fetch(...)` + `axios.*` matched against Python FastAPI / Flask routes via `callsites/<lang>.ts` + `cross-system-service`. Dashed protocol-tinted edges (purple HTTP) render alongside imports. MCP `list_cross_system_edges`. SQL / subprocess / env / OpenAPI matchers still pending.
+4. ~~**Pre-existing TS errors**~~ ✅ — `npm run typecheck` returns zero.
+
+##### Next up (in order)
+
+5. **Phase 13 §D + §E — Settings surface + Identity in attributions.** New gear-icon settings panel persisting to `~/.codetrellis/settings.json`: Identity (display name + email defaulting from `git config`), MCP server (configurable port + autodetect on conflict + regenerate-agent-config buttons), Plans (default visibility), Data dir override + DB import/export, Telemetry off. `Plan.author` / `Task.assignee` / `Comment.author` switch from role-based (`'human'`/`'agent'`) to email-based ids. Small but unlocks everything in Phase 13.
+6. **Phase 13 §A — Manual plan export / import.** New `plan-file-service.ts` + REST + MCP (`export_plan_to_files`, `import_plan_from_files`) + UI buttons. The biggest single UX win for multi-device — `git push` / `git pull` plans alongside the project.
+7. **Phase 13 §B — Auto-sync.** File watcher on `.codetrellis/plans/`, write-through on every mutation, banner UI for external-update reload, conflict-marker detection.
+8. **Electron build fixes (real DMG + EXE).** Five small fixes: (a) renderer asset bundling — Forge says "built" but renderer never lands in the `.app`; (b) `extraResource` for tree-sitter WASM grammars + read via `process.resourcesPath` in production; (c) generate `icon.icns` + `icon.ico` from `icon.png`; (d) add `@electron-forge/maker-squirrel` for Windows; (e) signing + notarisation hooks. Prep for shipping the desktop app to actual users.
+9. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
+10. **Phase 13 §C — Templates as publishable repos.** "Publish as template" extracts a plan dir + scrubs project paths to placeholders. Users `git clone` template repos into `.codetrellis/templates/`.
+11. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
+12. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.) — exposes the discovered system list as a queryable surface.
+13. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`** — Systems section above the file tree, system view kind in Inspector, drift attribution by system.
+14. **Phase 11 §5 — cross-system non-import links (full)** — extends the HTTP MVP with SQL ref tracker, subprocess/env, OpenAPI contracts.
+15. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`; just needs node visual wiring).
+16. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses.
+17. **Learn Trellis (in-app onboarding takeover).** Full-screen UI walkthrough that teaches a new user the loop end-to-end: open project → see graph → make a plan → connect an agent → watch tasks land → verify completion. Tooltip-driven, skippable, designed so a developer is productive in < 10 min without docs. Needs design pass before code (sketch what each step covers; map to existing surfaces; decide on dismissibility + "show this again" behaviour).
+18. **E2E test harness overhaul.** Today's Playwright suite is flaky (folder-picker, plan persistence across runs). Real story needs: a sample mixed-language repo committed under `tests/fixtures/`, a scripted agent harness that registers a session via MCP and follows a canned plan deterministically, a clock-mock for timing-sensitive assertions, a reset-to-clean-state hook, and a CI mode that runs against this fixture instead of the developer's home directory. Needs further planning before expansion — likely its own design doc (`docs/E2E-HARNESS.md`).
 
 ### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
 Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
