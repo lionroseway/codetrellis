@@ -110,7 +110,15 @@ export const useGraphStore = create<GraphState>((set) => ({
       return { nodes, edges };
     }),
   setLayoutMode: (mode) => set({ layoutMode: mode }),
-  setTrellisMode: (mode) => set({ trellisMode: mode }),
+  setTrellisMode: (mode) => set((s) => {
+    // Diff mode is meaningless without the planned overlay — auto-
+    // engage projection so the user doesn't have to know about a
+    // separate toggle. Other modes leave projection alone.
+    if (mode === 'diff' && !s.projectionEnabled && s.projectionData) {
+      return { trellisMode: mode, projectionEnabled: true };
+    }
+    return { trellisMode: mode };
+  }),
   setScopePath: (scopePath) => set({ scopePath }),
   setBaselineMode: (mode) => set({ baselineMode: mode }),
   setBaselineReference: (data) => set({

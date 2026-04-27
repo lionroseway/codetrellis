@@ -11,7 +11,7 @@ import type { AgentEvent } from '../../shared/types';
  */
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     function connect() {

@@ -26,13 +26,18 @@ export interface AgentPlanStep {
   files: string[];
 }
 
-export type PlanStatus = 'proposed' | 'in_progress' | 'completed' | 'abandoned';
+/**
+ * Status of an *inferred* AgentPlan (the lightweight plan derived
+ * from a Claude Code session's chat heuristics — not the canonical
+ * persisted Plan from `./plan.ts`, which has its own richer status).
+ */
+export type AgentPlanStatus = 'proposed' | 'in_progress' | 'completed' | 'abandoned';
 
 export interface AgentPlan {
   id: string;
   title: string;
   steps: AgentPlanStep[];
-  status: PlanStatus;
+  status: AgentPlanStatus;
   affectedFiles: string[];
   estimatedImpact: ArchitectureDiff | null;
 }

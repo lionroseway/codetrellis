@@ -23,7 +23,7 @@ export function getAPI(): BridgeAPI {
     _api = httpBridge;
   }
 
-  return _api;
+  return _api!;
 }
 
 export type { BridgeAPI } from './types';

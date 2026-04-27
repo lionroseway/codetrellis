@@ -77,7 +77,9 @@ export const httpBridge: BridgeAPI = {
 
   onScanProgress: (callback) => {
     ensureWebSocket();
-    const handler = { type: 'scan-progress', callback };
+    // The handlers array has the unknown-payload shape; the bridge
+    // narrows on dispatch (`payload as { phase, progress }`).
+    const handler: WSHandler = { type: 'scan-progress', callback: callback as WSHandler['callback'] };
     handlers.push(handler);
     return () => {
       const idx = handlers.indexOf(handler);
@@ -87,7 +89,7 @@ export const httpBridge: BridgeAPI = {
 
   onAgentEvent: (callback) => {
     ensureWebSocket();
-    const handler = { type: 'agent-event', callback };
+    const handler: WSHandler = { type: 'agent-event', callback: callback as WSHandler['callback'] };
     handlers.push(handler);
     return () => {
       const idx = handlers.indexOf(handler);

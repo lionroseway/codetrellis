@@ -375,7 +375,7 @@ export function searchSymbols(query: string): Array<{
 
   if (!results[0]) return [];
 
-  return results[0].values.map((row) => ({
+  return results[0].values.map((row: any[]) => ({
     name: row[0] as string,
     kind: row[1] as string,
     filePath: row[2] as string,
@@ -407,7 +407,7 @@ export function getFileSymbols(filePath: string): Array<{
 
   if (!results[0]) return [];
 
-  return results[0].values.map((row) => ({
+  return results[0].values.map((row: any[]) => ({
     name: row[0] as string,
     kind: row[1] as string,
     startLine: row[2] as number,
@@ -566,7 +566,7 @@ export function getDependencyEdges(): Array<{
 
   if (!results[0]) return [];
 
-  return results[0].values.map((row) => ({
+  return results[0].values.map((row: any[]) => ({
     source: row[0] as string,
     target: row[1] as string,
     sourceRelative: row[2] as string,
@@ -598,7 +598,7 @@ export function getAllGraphEdges(): GraphEdge[] {
   }
 
   if (!xs[0]) return imports;
-  const crossSystem: GraphEdge[] = xs[0].values.map((row) => ({
+  const crossSystem: GraphEdge[] = xs[0].values.map((row: any[]) => ({
     source: row[0] as string,
     target: row[1] as string,
     sourceRelative: row[2] as string,
@@ -639,12 +639,12 @@ export function getFileDependencies(filePath: string): {
   `, [filePath]);
 
   return {
-    imports: (importsResult[0]?.values || []).map((row) => ({
+    imports: (importsResult[0]?.values || []).map((row: any[]) => ({
       path: row[0] as string,
       relativePath: row[1] as string,
       specifiers: JSON.parse((row[2] as string) || '[]'),
     })),
-    importedBy: (importedByResult[0]?.values || []).map((row) => ({
+    importedBy: (importedByResult[0]?.values || []).map((row: any[]) => ({
       path: row[0] as string,
       relativePath: row[1] as string,
       specifiers: JSON.parse((row[2] as string) || '[]'),

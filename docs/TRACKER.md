@@ -60,6 +60,36 @@ shared via the bridge abstraction.
 
 ## 2. Recently Shipped
 
+### Apr 27, 2026 — Polish pass for "ready to use"
+
+Push 3 of "ready-to-use" — friction items that snag real use:
+
+- **Diff mode auto-engages projection** — switching to `diff`
+  trellis mode now auto-flips `projectionEnabled` if a projection
+  is loaded. No more "why is the diff blank?" surprise.
+- **All pre-existing TS errors fixed**. `npm run typecheck` is now
+  clean (was 18 errors). Specifically:
+  - `PlanStatus` re-export ambiguity resolved by renaming
+    `agent.ts`'s legacy type → `AgentPlanStatus` (the AgentPlan
+    chat-derived shape's status, distinct from the persisted
+    `Plan.status`).
+  - `useRef<ReturnType<typeof setTimeout>>()` initial-value
+    warnings cleaned up.
+  - `electronAPI` `possibly 'undefined'` warnings — env.d.ts now
+    explicitly notes the bridge is gated by `isElectron()`, with
+    `!` assertions on the call sites.
+  - `bridge/index.ts` BridgeAPI null narrowing.
+  - `http-bridge.ts` WSHandler callback typing.
+  - `database.ts` row implicit-any annotations on every
+    `.values.map((row) => …)`.
+  - New `src/backend/types/sql-js.d.ts` shim for the missing
+    `@types/sql.js` (declares the exact subset we use).
+- **AGENTS.md / CLAUDE.md reconciled** — both files now describe
+  the agent-agnostic MCP model (any tool-call broadcasts
+  attribution; Claude Code adds the JSONL watcher) and reflect
+  the actual `src/backend/` + `src/frontend/` structure, sql.js
+  storage, plugin slots, and synchronous AST.
+
 ### Apr 27, 2026 — Cross-system MVP (TS ↔ Python HTTP)
 
 Push 2 of "ready-to-use". Mixed repos no longer look like islands.
@@ -819,7 +849,7 @@ the Multi-System Ingestion follow-ups (§3 Phase 11):
 8. **Phase 11 §5 — cross-system non-import links (full)** — extends the §3 MVP with SQL ref tracker, subprocess/env, OpenAPI contracts.
 9. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`; just needs node visual wiring).
 10. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses.
-11. **Pre-existing TS errors** — clean up `useRef()` initial-value, `PlanStatus` re-export ambiguity, missing `@types/sql.js`. Cosmetic but they block "no errors" CI gating.
+11. ~~**Pre-existing TS errors**~~ ✅ shipped — `npm run typecheck` returns zero. (sql.js shim, PlanStatus rename, useRef init, electronAPI assertions, http-bridge handler typing, database row annotations.)
 
 ### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
 Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
@@ -839,8 +869,8 @@ Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
 
 ### Quick wins (≤ a few hours each)
 1. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`)
-2. **Diff mode auto-engages projection** — drop the Projection toggle requirement when Diff is active and a plan exists
-3. **AGENTS.md vs CLAUDE.md drift** — they disagree on which agents are monitored
+2. ~~**Diff mode auto-engages projection**~~ ✅ shipped — `setTrellisMode('diff')` auto-flips `projectionEnabled` when a projection is loaded.
+3. ~~**AGENTS.md vs CLAUDE.md drift**~~ ✅ shipped — both files reconciled with the multi-agent MCP reality + actual repo structure.
 4. **Verify auto-track HEAD fix end-to-end** with a real `git commit --amend`
 5. **More plan templates** — alongside the shipped `mass-refactor`: ship "new feature", "bug fix", "library migration", "perf pass" templates. One new entry in `plan-templates.ts` per template; no schema work.
 
@@ -863,8 +893,8 @@ Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
 
 ### Cleanup
 19. [docs/CODEX-VISUAL-OVERHAUL.md](CODEX-VISUAL-OVERHAUL.md) — one-off prompt, archive or delete
-20. E2E tests for Spec Room, Inspector, and the new Phase 12 surfaces (Phases UI, Proposed Changes tab, Template picker)
-21. Pre-existing TS errors: `useRef()` initial value, `PlanStatus` ambiguous re-export between `agent.ts` and `plan.ts`, missing `sql.js` types
+20. E2E tests for Spec Room, Inspector, and the new Phase 12 surfaces (Phases UI, Proposed Changes tab, Template picker, VerificationPanel, cross-system edges)
+21. ~~Pre-existing TS errors~~ ✅ all clean (Apr 27, 2026). `npm run typecheck` returns zero errors.
 
 ---
 
