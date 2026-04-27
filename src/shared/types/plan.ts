@@ -119,6 +119,17 @@ export interface PlanDocument {
   version: number;
   author: string;
   authorType: 'human' | string;
+  /**
+   * Sortable string used to render docs in a stable order — matches the
+   * swf "00-EXECUTIVE / 01-PHASE-1 / 02-PHASE-2 / …" filename convention.
+   * Lexicographic compare; nulls sort last.
+   */
+  orderHint: string | null;
+  /**
+   * Optional parent doc — lets docs nest into folder-like groupings
+   * (e.g. a "testing" parent with per-phase test children).
+   */
+  parentDocUid: string | null;
   createdAt: number;
   updatedAt: number;
 }

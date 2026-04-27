@@ -4,6 +4,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { getSpecDocTypeMeta, SPEC_DOC_TYPES } from '../../lib/spec-doc-types';
 import { SpecDocViewer } from './SpecDocViewer';
 import { SpecDocCreateModal } from './SpecDocCreateModal';
+import type { PlanDocument } from '@shared/types';
 
 /**
  * Spec Room — the structured context surface for a plan. Lists all docs
@@ -82,32 +83,19 @@ export function SpecRoom({ planUid }: { planUid: string }) {
           )}
 
           <div className="space-y-1">
-            {filtered.map((doc) => {
-              const meta = getSpecDocTypeMeta(doc.docType);
-              return (
-                <button
+            {query.trim() ? (
+              // Flat list while searching — nesting hides matches.
+              filtered.map((doc) => (
+                <DocRow
                   key={doc.uid}
+                  doc={doc}
+                  depth={0}
                   onClick={() => setSelectedDoc(doc.uid)}
-                  className="w-full text-left p-2 rounded-lg border border-white/[0.05] bg-white/[0.015] hover:bg-white/[0.04] hover:border-accent/25 transition-all"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border ${meta.chipClass} shrink-0`}>
-                      <meta.icon size={8} />
-                      {meta.label}
-                    </span>
-                    <span className="text-[11px] font-medium text-foreground truncate flex-1">
-                      {doc.title}
-                    </span>
-                    <span className="text-[9px] text-foreground-subtle shrink-0">
-                      v{doc.version}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-foreground-muted mt-1 line-clamp-2 leading-relaxed">
-                    {extractPreview(doc.body)}
-                  </p>
-                </button>
-              );
-            })}
+                />
+              ))
+            ) : (
+              <DocTree docs={filtered} onSelect={setSelectedDoc} />
+            )}
             {filtered.length === 0 && query && (
               <div className="text-[10.5px] text-foreground-subtle text-center py-4">
                 No docs match "{query}"
@@ -168,4 +156,99 @@ function extractPreview(body: string): string {
     .replace(/\n{2,}/g, ' · ')
     .trim()
     .slice(0, 200);
+}
+
+/**
+ * Renders the spec docs as a tree using `parentDocUid`. The list arrives
+ * already sorted by the backend (top-level first, then by orderHint, then
+ * by type), so we walk it once and build parent → children buckets in
+ * source order. Recursion handles arbitrary nesting depth.
+ */
+function DocTree({ docs, onSelect }: { docs: PlanDocument[]; onSelect: (uid: string) => void }) {
+  // Index children by parent uid in arrival order — preserves the
+  // backend's lex sort so we don't re-derive it client-side.
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string | null, PlanDocument[]>();
+    for (const doc of docs) {
+      const key = doc.parentDocUid ?? null;
+      const bucket = map.get(key) ?? [];
+      bucket.push(doc);
+      map.set(key, bucket);
+    }
+    return map;
+  }, [docs]);
+
+  // Defensive: if a doc references a parent that isn't in this list
+  // (e.g. parent was filtered out), promote it to the top level so it
+  // doesn't disappear.
+  const presentUids = useMemo(() => new Set(docs.map((d) => d.uid)), [docs]);
+  const orphans = useMemo(
+    () => docs.filter((d) => d.parentDocUid && !presentUids.has(d.parentDocUid)),
+    [docs, presentUids]
+  );
+
+  const renderNode = (doc: PlanDocument, depth: number): React.ReactNode => {
+    const children = childrenByParent.get(doc.uid) ?? [];
+    return (
+      <div key={doc.uid}>
+        <DocRow doc={doc} depth={depth} onClick={() => onSelect(doc.uid)} />
+        {children.length > 0 && (
+          <div className="space-y-1 mt-1">
+            {children.map((child) => renderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const topLevel = childrenByParent.get(null) ?? [];
+
+  return (
+    <>
+      {topLevel.map((doc) => renderNode(doc, 0))}
+      {orphans.map((doc) => renderNode(doc, 0))}
+    </>
+  );
+}
+
+function DocRow({
+  doc,
+  depth,
+  onClick,
+}: {
+  doc: PlanDocument;
+  depth: number;
+  onClick: () => void;
+}) {
+  const meta = getSpecDocTypeMeta(doc.docType);
+  return (
+    <button
+      onClick={onClick}
+      style={{ marginLeft: depth > 0 ? `${depth * 12}px` : undefined }}
+      className={`w-full text-left p-2 rounded-lg border bg-white/[0.015] hover:bg-white/[0.04] hover:border-accent/25 transition-all ${
+        depth > 0 ? 'border-white/[0.04] border-l-accent/30' : 'border-white/[0.05]'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        {doc.orderHint && (
+          <span className="text-[9px] font-mono text-foreground-subtle bg-white/[0.04] px-1 rounded shrink-0">
+            {doc.orderHint}
+          </span>
+        )}
+        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border ${meta.chipClass} shrink-0`}>
+          <meta.icon size={8} />
+          {meta.label}
+        </span>
+        <span className="text-[11px] font-medium text-foreground truncate flex-1">
+          {doc.title}
+        </span>
+        <span className="text-[9px] text-foreground-subtle shrink-0">
+          v{doc.version}
+        </span>
+      </div>
+      <p className="text-[10px] text-foreground-muted mt-1 line-clamp-2 leading-relaxed">
+        {extractPreview(doc.body)}
+      </p>
+    </button>
+  );
 }

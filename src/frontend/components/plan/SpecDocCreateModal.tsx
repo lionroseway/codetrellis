@@ -4,6 +4,19 @@ import { X, Sparkles } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { SPEC_DOC_TYPES, getSpecDocTypeMeta } from '../../lib/spec-doc-types';
 
+function suggestNextOrderHint(existingHints: Array<string | null>): string {
+  // Pick the next two-digit prefix after the highest existing one. Falls
+  // back to "00" when the plan has no ordered docs yet, so the first
+  // ordered doc lines up with the swf "00-EXECUTIVE" convention.
+  const numeric = existingHints
+    .filter((h): h is string => !!h)
+    .map((h) => parseInt(h, 10))
+    .filter((n) => Number.isFinite(n));
+  if (numeric.length === 0) return '00';
+  const max = Math.max(...numeric);
+  return String(max + 1).padStart(2, '0');
+}
+
 const STARTER_BODIES: Record<string, string> = {
   executive_summary: '# Goal\n\n## Why this matters\n\n## Out of scope\n',
   architecture: '# Components\n\n# Data flow\n\n# Boundaries\n',
@@ -30,15 +43,19 @@ export function SpecDocCreateModal({
 }) {
   const createPlanDoc = usePlanStore((s) => s.createPlanDoc);
   const setSelectedDoc = usePlanStore((s) => s.setSelectedDoc);
+  const existingDocs = usePlanStore((s) => s.planDocs);
 
   const initialType = defaultType ?? 'executive_summary';
   const initialMeta = getSpecDocTypeMeta(initialType);
   const [docType, setDocType] = useState(initialType);
   const [title, setTitle] = useState(initialMeta.label);
   const [body, setBody] = useState(STARTER_BODIES[initialType] ?? '');
+  const [orderHint, setOrderHint] = useState(suggestNextOrderHint(existingDocs.map((d) => d.orderHint)));
+  const [parentDocUid, setParentDocUid] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   const meta = getSpecDocTypeMeta(docType);
+  const parentCandidates = existingDocs.filter((d) => !d.parentDocUid);
 
   const handleTypeChange = (next: string) => {
     setDocType(next);
@@ -55,7 +72,13 @@ export function SpecDocCreateModal({
   const onCreate = async () => {
     if (!title.trim()) return;
     setSaving(true);
-    const doc = await createPlanDoc(planUid, { docType, title: title.trim(), body });
+    const doc = await createPlanDoc(planUid, {
+      docType,
+      title: title.trim(),
+      body,
+      orderHint: orderHint.trim() || null,
+      parentDocUid: parentDocUid || null,
+    });
     setSaving(false);
     if (doc) {
       setSelectedDoc(doc.uid);
@@ -112,6 +135,42 @@ export function SpecDocCreateModal({
               onChange={(e) => setTitle(e.target.value)}
               className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-2 text-[12.5px] text-foreground focus:outline-none focus:border-accent/40"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">
+                Order
+                <span className="ml-1 normal-case tracking-normal text-foreground-subtle/70">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={orderHint}
+                onChange={(e) => setOrderHint(e.target.value)}
+                placeholder='e.g. "00", "01", "01.5"'
+                className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] font-mono text-foreground focus:outline-none focus:border-accent/40"
+              />
+              <p className="text-[9.5px] text-foreground-subtle mt-1">Lex sort. Use "00" for the overview.</p>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">
+                Nest under
+                <span className="ml-1 normal-case tracking-normal text-foreground-subtle/70">(optional)</span>
+              </label>
+              <select
+                value={parentDocUid}
+                onChange={(e) => setParentDocUid(e.target.value)}
+                className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+              >
+                <option value="">(top level)</option>
+                {parentCandidates.map((d) => (
+                  <option key={d.uid} value={d.uid}>
+                    {d.orderHint ? `${d.orderHint} · ` : ''}{d.title}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[9.5px] text-foreground-subtle mt-1">Group sub-docs under a parent.</p>
+            </div>
           </div>
 
           <div>

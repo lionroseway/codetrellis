@@ -167,12 +167,15 @@ export async function initDatabase(): Promise<void> {
       version INTEGER NOT NULL DEFAULT 1,
       author TEXT NOT NULL,
       author_type TEXT NOT NULL DEFAULT 'human',
+      order_hint TEXT,
+      parent_doc_uid TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_plan_docs_plan ON plan_documents(plan_uid);
     CREATE INDEX IF NOT EXISTS idx_plan_docs_type ON plan_documents(doc_type);
+    CREATE INDEX IF NOT EXISTS idx_plan_docs_parent ON plan_documents(parent_doc_uid);
 
     CREATE TABLE IF NOT EXISTS plan_document_versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -383,6 +386,13 @@ export function resolveImports(
   try {
     d.run(`ALTER TABLE imports ADD COLUMN resolved_path TEXT`);
   } catch { /* column already exists */ }
+
+  // Phase 12 §C: spec doc ordering + nesting. order_hint is a sortable
+  // string like "00", "01", "01.5" (matches the swf-style "00-…/01-…"
+  // doc-name convention). parent_doc_uid lets docs nest into folder-
+  // like groupings (e.g. a "testing" parent with phase-test children).
+  try { d.run(`ALTER TABLE plan_documents ADD COLUMN order_hint TEXT`); } catch { /* exists */ }
+  try { d.run(`ALTER TABLE plan_documents ADD COLUMN parent_doc_uid TEXT`); } catch { /* exists */ }
 
   // Get all imports
   const importsResult = d.exec(`SELECT i.id, i.source_path, f.path FROM imports i JOIN files f ON i.file_id = f.id`);

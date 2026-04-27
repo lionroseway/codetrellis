@@ -20,8 +20,8 @@ interface PlanState {
   fetchSessions: () => Promise<void>;
 
   fetchPlanDocs: (planUid: string) => Promise<void>;
-  createPlanDoc: (planUid: string, input: { docType: string; title: string; body: string }) => Promise<PlanDocument | null>;
-  updatePlanDoc: (docUid: string, updates: { title?: string; body?: string; docType?: string; changeSummary?: string }) => Promise<PlanDocument | null>;
+  createPlanDoc: (planUid: string, input: { docType: string; title: string; body: string; orderHint?: string | null; parentDocUid?: string | null }) => Promise<PlanDocument | null>;
+  updatePlanDoc: (docUid: string, updates: { title?: string; body?: string; docType?: string; changeSummary?: string; orderHint?: string | null; parentDocUid?: string | null }) => Promise<PlanDocument | null>;
   deletePlanDoc: (docUid: string) => Promise<void>;
   setSelectedDoc: (uid: string | null) => void;
 

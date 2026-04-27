@@ -79,8 +79,8 @@ const COMMON_FOOTER = `## Most-used MCP tools (cheat sheet)
 - \`list_plan_docs(plan_uid)\` — cheap index of titles + types + lengths (no bodies)
 - \`get_plan_doc(doc_uid? | plan_uid + doc_type?)\` — fetch one doc body
 - \`search_plan_docs(plan_uid, query)\` — substring search with excerpts
-- \`add_plan_doc(plan_uid, doc_type, title, body)\` — create new doc
-- \`update_plan_doc(doc_uid, body?, title?, change_summary?)\` — auto-versioned
+- \`add_plan_doc(plan_uid, doc_type, title, body, order_hint?, parent_doc_uid?)\` — create new doc; \`order_hint\` "00", "01", "01.5" controls sort, \`parent_doc_uid\` nests
+- \`update_plan_doc(doc_uid, body?, title?, change_summary?, order_hint?, parent_doc_uid?)\` — auto-versioned
 
 Doc types: \`executive_summary\`, \`architecture\`, \`patterns\`,
 \`examples\`, \`research\`, \`testing\`, \`security\`, \`ux_ui\`,

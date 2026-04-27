@@ -10,6 +10,8 @@ export interface CreatePlanDocInput {
   body: string;
   author: string;
   authorType?: string;
+  orderHint?: string | null;
+  parentDocUid?: string | null;
 }
 
 export interface UpdatePlanDocInput {
@@ -18,6 +20,8 @@ export interface UpdatePlanDocInput {
   docType?: string;
   changeSummary?: string;
   author?: string;
+  orderHint?: string | null;
+  parentDocUid?: string | null;
 }
 
 export function createPlanDocument(input: CreatePlanDocInput): PlanDocument {
@@ -25,11 +29,13 @@ export function createPlanDocument(input: CreatePlanDocInput): PlanDocument {
   const uid = randomUUID();
   const now = Date.now();
   const authorType = input.authorType ?? 'human';
+  const orderHint = input.orderHint ?? null;
+  const parentDocUid = input.parentDocUid ?? null;
 
   db.run(
-    `INSERT INTO plan_documents (uid, plan_uid, doc_type, title, body, version, author, author_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
-    [uid, input.planUid, input.docType, input.title, input.body, input.author, authorType, now, now]
+    `INSERT INTO plan_documents (uid, plan_uid, doc_type, title, body, version, author, author_type, order_hint, parent_doc_uid, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+    [uid, input.planUid, input.docType, input.title, input.body, input.author, authorType, orderHint, parentDocUid, now, now]
   );
 
   db.run(
@@ -49,6 +55,8 @@ export function createPlanDocument(input: CreatePlanDocInput): PlanDocument {
     version: 1,
     author: input.author,
     authorType,
+    orderHint,
+    parentDocUid,
     createdAt: now,
     updatedAt: now,
   };
@@ -56,7 +64,7 @@ export function createPlanDocument(input: CreatePlanDocInput): PlanDocument {
 
 export function getPlanDocument(docUid: string): PlanDocument | null {
   const result = getDb().exec(
-    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, created_at, updated_at
+    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, order_hint, parent_doc_uid, created_at, updated_at
      FROM plan_documents WHERE uid = ?`,
     [docUid]
   );
@@ -70,7 +78,7 @@ export function getPlanDocument(docUid: string): PlanDocument | null {
  */
 export function getPlanDocumentByType(planUid: string, docType: string): PlanDocument | null {
   const result = getDb().exec(
-    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, created_at, updated_at
+    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, order_hint, parent_doc_uid, created_at, updated_at
      FROM plan_documents WHERE plan_uid = ? AND doc_type = ?
      ORDER BY updated_at DESC LIMIT 1`,
     [planUid, docType]
@@ -80,10 +88,17 @@ export function getPlanDocumentByType(planUid: string, docType: string): PlanDoc
 }
 
 export function listPlanDocuments(planUid: string): PlanDocument[] {
+  // Sort: top-level docs (no parent) first, then ordered by orderHint
+  // (lex; nulls last via the COALESCE trick — '~' sorts after digits/letters
+  // in ASCII), then by doc_type, then by updated_at desc as a stable tail.
   const result = getDb().exec(
-    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, created_at, updated_at
+    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, order_hint, parent_doc_uid, created_at, updated_at
      FROM plan_documents WHERE plan_uid = ?
-     ORDER BY doc_type, updated_at DESC`,
+     ORDER BY
+       CASE WHEN parent_doc_uid IS NULL THEN 0 ELSE 1 END,
+       COALESCE(order_hint, '~'),
+       doc_type,
+       updated_at DESC`,
     [planUid]
   );
   if (!result[0]) return [];
@@ -100,12 +115,18 @@ export function listPlanDocumentSummaries(planUid: string): Array<{
   title: string;
   version: number;
   bodyLength: number;
+  orderHint: string | null;
+  parentDocUid: string | null;
   updatedAt: number;
 }> {
   const result = getDb().exec(
-    `SELECT uid, doc_type, title, version, length(body), updated_at
+    `SELECT uid, doc_type, title, version, length(body), order_hint, parent_doc_uid, updated_at
      FROM plan_documents WHERE plan_uid = ?
-     ORDER BY doc_type, updated_at DESC`,
+     ORDER BY
+       CASE WHEN parent_doc_uid IS NULL THEN 0 ELSE 1 END,
+       COALESCE(order_hint, '~'),
+       doc_type,
+       updated_at DESC`,
     [planUid]
   );
   if (!result[0]) return [];
@@ -115,7 +136,9 @@ export function listPlanDocumentSummaries(planUid: string): Array<{
     title: r[2] as string,
     version: r[3] as number,
     bodyLength: (r[4] as number) || 0,
-    updatedAt: r[5] as number,
+    orderHint: (r[5] as string | null) ?? null,
+    parentDocUid: (r[6] as string | null) ?? null,
+    updatedAt: r[7] as number,
   }));
 }
 
@@ -131,6 +154,8 @@ export function updatePlanDocument(docUid: string, updates: UpdatePlanDocInput):
 
   if (updates.title !== undefined) { sets.push('title = ?'); params.push(updates.title); }
   if (updates.docType !== undefined) { sets.push('doc_type = ?'); params.push(updates.docType); }
+  if (updates.orderHint !== undefined) { sets.push('order_hint = ?'); params.push(updates.orderHint); }
+  if (updates.parentDocUid !== undefined) { sets.push('parent_doc_uid = ?'); params.push(updates.parentDocUid); }
   if (bodyChanged) {
     sets.push('body = ?');
     params.push(updates.body);
@@ -171,7 +196,7 @@ export function searchPlanDocuments(planUid: string, query: string): Array<{
 }> {
   if (!query.trim()) return [];
   const result = getDb().exec(
-    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, created_at, updated_at
+    `SELECT uid, plan_uid, doc_type, title, body, version, author, author_type, order_hint, parent_doc_uid, created_at, updated_at
      FROM plan_documents
      WHERE plan_uid = ? AND (title LIKE ? OR body LIKE ?)
      ORDER BY updated_at DESC LIMIT 25`,
@@ -213,8 +238,10 @@ function rowToDoc(r: any[]): PlanDocument {
     version: r[5] as number,
     author: r[6] as string,
     authorType: r[7] as string,
-    createdAt: r[8] as number,
-    updatedAt: r[9] as number,
+    orderHint: (r[8] as string | null) ?? null,
+    parentDocUid: (r[9] as string | null) ?? null,
+    createdAt: r[10] as number,
+    updatedAt: r[11] as number,
   };
 }
 

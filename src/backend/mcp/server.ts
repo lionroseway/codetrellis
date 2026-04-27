@@ -498,15 +498,17 @@ export async function startMcpServer(): Promise<void> {
   mcpServer.registerTool(
     'add_plan_doc',
     {
-      description: 'Attach a spec document to a plan — patterns to follow, security considerations, test strategy, examples, research notes, etc. Doc body is markdown. Use this instead of stuffing everything into the plan description.',
+      description: 'Attach a spec document to a plan — patterns to follow, security considerations, test strategy, examples, research notes, etc. Doc body is markdown. Use this instead of stuffing everything into the plan description. Use order_hint ("00", "01", "01.5") to control sort order in the spec room (matches the swf "00-EXECUTIVE / 01-PHASE-1 / …" file convention). Use parent_doc_uid to nest the doc under another doc (e.g. per-phase test docs under one "testing" parent).',
       inputSchema: {
         plan_uid: z.string(),
         doc_type: z.string().describe(docTypeDescription),
         title: z.string().describe('Short human-readable title for the doc'),
         body: z.string().describe('Markdown body — the actual spec content'),
+        order_hint: z.string().optional().describe('Sortable string like "00", "01", "01.5". Lex compare; nulls sort last.'),
+        parent_doc_uid: z.string().optional().describe('UID of a parent doc this nests under.'),
       },
     },
-    async ({ plan_uid, doc_type, title, body }) => {
+    async ({ plan_uid, doc_type, title, body, order_hint, parent_doc_uid }) => {
       const doc = planDocsService.createPlanDocument({
         planUid: plan_uid,
         docType: doc_type,
@@ -514,6 +516,8 @@ export async function startMcpServer(): Promise<void> {
         body,
         author: 'agent',
         authorType: 'mcp',
+        orderHint: order_hint ?? null,
+        parentDocUid: parent_doc_uid ?? null,
       });
       broadcast('plan-doc-created', { doc });
       saveNow(() => exportDatabase());
@@ -524,18 +528,22 @@ export async function startMcpServer(): Promise<void> {
   mcpServer.registerTool(
     'update_plan_doc',
     {
-      description: 'Update the body, title, or type of an existing spec doc. Body changes increment the version and snapshot the previous body for traceability.',
+      description: 'Update the body, title, type, ordering, or nesting of an existing spec doc. Body changes increment the version and snapshot the previous body for traceability.',
       inputSchema: {
         doc_uid: z.string(),
         title: z.string().optional(),
         body: z.string().optional(),
         doc_type: z.string().optional().describe(docTypeDescription),
+        order_hint: z.string().optional().describe('New sort hint (e.g. "01.5"). Pass empty string to clear.'),
+        parent_doc_uid: z.string().optional().describe('New parent doc uid. Pass empty string to clear.'),
         change_summary: z.string().optional().describe('Why this update was made — shows up in the version history'),
       },
     },
-    async ({ doc_uid, title, body, doc_type, change_summary }) => {
+    async ({ doc_uid, title, body, doc_type, order_hint, parent_doc_uid, change_summary }) => {
       const doc = planDocsService.updatePlanDocument(doc_uid, {
         title, body, docType: doc_type, changeSummary: change_summary, author: 'agent',
+        orderHint: order_hint === '' ? null : order_hint,
+        parentDocUid: parent_doc_uid === '' ? null : parent_doc_uid,
       });
       if (!doc) {
         return { content: [{ type: 'text' as const, text: `Doc ${doc_uid} not found` }] };

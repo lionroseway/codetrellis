@@ -1012,7 +1012,7 @@ app.get('/api/plans/:uid/docs', (req, res) => {
 
 app.post('/api/plans/:uid/docs', (req, res) => {
   const { createPlanDocument } = require('./services/plan-documents-service');
-  const { docType, title, body, author, authorType } = req.body || {};
+  const { docType, title, body, author, authorType, orderHint, parentDocUid } = req.body || {};
   if (!docType || !title) {
     res.status(400).json({ error: 'docType and title are required' });
     return;
@@ -1024,6 +1024,8 @@ app.post('/api/plans/:uid/docs', (req, res) => {
     body: body ?? '',
     author: author ?? 'human',
     authorType: authorType ?? 'human',
+    orderHint: orderHint ?? null,
+    parentDocUid: parentDocUid ?? null,
   });
   broadcast('plan-doc-created', { doc });
   saveNow(() => exportDatabase());
@@ -1052,8 +1054,10 @@ app.get('/api/plan-docs/:docUid', (req, res) => {
 
 app.put('/api/plan-docs/:docUid', (req, res) => {
   const { updatePlanDocument } = require('./services/plan-documents-service');
-  const { title, body, docType, changeSummary, author } = req.body || {};
-  const doc = updatePlanDocument(req.params.docUid, { title, body, docType, changeSummary, author });
+  const { title, body, docType, changeSummary, author, orderHint, parentDocUid } = req.body || {};
+  const doc = updatePlanDocument(req.params.docUid, {
+    title, body, docType, changeSummary, author, orderHint, parentDocUid,
+  });
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
   broadcast('plan-doc-updated', { doc });
   saveNow(() => exportDatabase());
