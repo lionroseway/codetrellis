@@ -63,6 +63,7 @@ const COMMON_FOOTER = `## Most-used MCP tools (cheat sheet)
 - \`get_dependencies(file_path)\` — imports + importedBy for a file
 - \`check_architecture(query?)\` — full dependency graph (filterable)
 - \`check_conformity(proposed_imports[])\` — would these imports cause cycles?
+- \`list_cross_system_edges()\` — runtime couplings between files: HTTP fetches in TS/JS matched against FastAPI/Flask routes in Python (more protocols coming)
 
 **Plans (the durable spec)**
 - \`list_plans(project_path?, status?)\` — what plans exist

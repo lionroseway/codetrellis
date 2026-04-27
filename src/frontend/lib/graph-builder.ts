@@ -12,6 +12,15 @@ export interface DependencyEdge {
   sourceRelative: string;
   targetRelative: string;
   specifiers: string[];
+  /**
+   * "import" (language-level) or "cross_system" (HTTP / SQL / …).
+   * Defaults to "import" when omitted so existing callers stay valid.
+   */
+  kind?: 'import' | 'cross_system';
+  /** For cross_system edges only — "http" / "sql" / "subprocess". */
+  protocol?: string;
+  /** Human-readable label, e.g. "GET /api/users". */
+  label?: string;
 }
 
 export interface FileSymbol {
@@ -272,6 +281,13 @@ export function buildDependencyGraph(
   trellisMode: TrellisMode = 'live',
   scopePath?: string | null,
 ): GraphData {
+  // Split cross-system edges out before the existing import logic
+  // runs. They get appended as their own dashed-pass after layout so
+  // they don't get aggregated into cluster→cluster bundles or
+  // mistaken for language-level imports.
+  const crossSystemDepEdges = depEdges.filter((e) => e.kind === 'cross_system');
+  depEdges = depEdges.filter((e) => e.kind !== 'cross_system');
+
   // Pre-filter edges by scope (relative-path prefix). Cuts the graph
   // to a single subtree before any clustering / layout — drops the
   // visible node + edge counts proportionally and stops the canvas
@@ -284,7 +300,7 @@ export function buildDependencyGraph(
       || e.targetRelative === exact || e.targetRelative.startsWith(prefix),
     );
   }
-  if (depEdges.length === 0) return { nodes: [], edges: [] };
+  if (depEdges.length === 0 && crossSystemDepEdges.length === 0) return { nodes: [], edges: [] };
 
   const changeMap = buildChangeMap(diffData);
   const edgeChangeMap = buildEdgeChangeMap(diffData, projectionData);
@@ -373,6 +389,14 @@ export function buildDependencyGraph(
         },
       });
     }
+  }
+
+  // Cross-system pass — append dashed protocol-tinted edges between
+  // the nearest cluster (or file, in deeper views) of each call/route
+  // pair. Resolved at the resulting-node granularity so the edge
+  // always connects to a visible target.
+  if (crossSystemDepEdges.length > 0) {
+    appendCrossSystemEdges(result, crossSystemDepEdges);
   }
 
   // Apply layout
@@ -922,6 +946,86 @@ function buildGitStateMap(diffData?: DiffData | null): Map<string, string[]> {
   for (const file of diffData.git.untracked) add(file, 'untracked');
 
   return map;
+}
+
+/**
+ * Append cross-system edges (HTTP / SQL / …) onto the laid-out graph.
+ * For each cross-system DependencyEdge, find the visible source +
+ * target node — at file depth that's the file node directly; at
+ * cluster depth we resolve the file's owning cluster node by walking
+ * the result.nodes for one whose `fullPath`/data contains the file
+ * path. If neither end has a visible node, we drop the edge silently
+ * (the file was scope-filtered or aggregated away).
+ */
+function appendCrossSystemEdges(result: { nodes: Node[]; edges: Edge[] }, xs: DependencyEdge[]): void {
+  // Index visible nodes by every file path they represent. Cluster
+  // nodes carry their member files in `data.files`; file/symbol nodes
+  // carry the path on `data.fullPath` (or in node.id).
+  const fileToNodeId = new Map<string, string>();
+  for (const node of result.nodes) {
+    const data: any = node.data ?? {};
+    if (typeof data.fullPath === 'string') fileToNodeId.set(data.fullPath, node.id);
+    if (typeof data.relativePath === 'string') fileToNodeId.set(data.relativePath, node.id);
+    if (Array.isArray(data.files)) {
+      for (const f of data.files) {
+        if (typeof f === 'string') fileToNodeId.set(f, node.id);
+        if (typeof f?.path === 'string') fileToNodeId.set(f.path, node.id);
+        if (typeof f?.relativePath === 'string') fileToNodeId.set(f.relativePath, node.id);
+      }
+    }
+    // Many node ids ARE the file path — add as a fallback.
+    fileToNodeId.set(node.id, node.id);
+  }
+
+  const seen = new Set<string>();
+  for (const e of xs) {
+    const sourceNodeId =
+      fileToNodeId.get(e.source) ??
+      fileToNodeId.get(e.sourceRelative) ??
+      null;
+    const targetNodeId =
+      fileToNodeId.get(e.target) ??
+      fileToNodeId.get(e.targetRelative) ??
+      null;
+    if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) continue;
+
+    const key = `${e.protocol}|${sourceNodeId}->${targetNodeId}|${e.label || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const tint = protocolTint(e.protocol || 'http');
+    result.edges.push({
+      id: `xs:${e.protocol}:${sourceNodeId}->${targetNodeId}:${e.label || ''}`,
+      source: sourceNodeId,
+      target: targetNodeId,
+      type: 'importEdge',
+      animated: false,
+      style: {
+        stroke: tint,
+        strokeWidth: 1.5,
+        strokeDasharray: '4 3',
+      },
+      label: e.label,
+      labelStyle: { fontSize: 9, fill: '#a8a8b0' },
+      labelBgStyle: { fill: 'rgba(11, 16, 32, 0.85)' },
+      data: {
+        importState: 'cross_system',
+        kind: 'cross_system',
+        protocol: e.protocol,
+        symbolCount: 1,
+      },
+    });
+  }
+}
+
+function protocolTint(protocol: string): string {
+  switch (protocol) {
+    case 'http': return 'rgba(167, 139, 250, 0.65)';     // purple
+    case 'sql': return 'rgba(251, 191, 36, 0.65)';        // amber
+    case 'subprocess': return 'rgba(34, 211, 238, 0.65)'; // cyan
+    case 'env': return 'rgba(148, 163, 184, 0.55)';       // slate
+    default: return 'rgba(148, 163, 184, 0.5)';
+  }
 }
 
 function collectLiveChangedFiles(diffData?: DiffData | null): Set<string> {

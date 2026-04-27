@@ -4,6 +4,7 @@ import * as TreeSitterModule from 'web-tree-sitter';
 import type { ParsedFile, SupportedLanguage } from '../../shared/types';
 import { createHash } from 'node:crypto';
 import { PARSER_PLUGINS, getPluginForFile, type ParserPlugin } from './parsers';
+import { getCallsiteExtractor } from './callsites';
 
 const TreeSitter = (TreeSitterModule as any).Parser || (TreeSitterModule as any).default?.Parser || TreeSitterModule;
 const Language = (TreeSitterModule as any).Language || TreeSitter.Language;
@@ -74,6 +75,17 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
   const imports = plugin.extractImports(root);
   const exports = plugin.extractExports?.(root) ?? [];
 
+  // Extract non-import callsites (HTTP routes / fetches / SQL / etc.)
+  // for the cross-system matcher. Best-effort — a missing extractor or
+  // a regex error must not break the parse.
+  let callsites = [] as ReturnType<NonNullable<ReturnType<typeof getCallsiteExtractor>>['extract']>;
+  try {
+    const extractor = getCallsiteExtractor(plugin.language as SupportedLanguage);
+    if (extractor) callsites = extractor.extract(content, filePath);
+  } catch (err) {
+    console.warn(`[AST] Callsite extraction failed for ${filePath}:`, err);
+  }
+
   return {
     path: filePath,
     contentHash,
@@ -81,6 +93,7 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
     symbols,
     imports,
     exports,
+    callsites,
   };
 }
 

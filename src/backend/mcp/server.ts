@@ -201,6 +201,23 @@ export async function startMcpServer(): Promise<void> {
     }
   );
 
+  mcpServer.registerTool(
+    'list_cross_system_edges',
+    {
+      description: 'Cross-system edges — non-import couplings between files inferred from runtime patterns. Today: HTTP fetches in TS/JS matched against FastAPI/Flask routes in Python (more protocols coming: SQL refs, subprocess, env-configured URLs, OpenAPI contracts). Use this to see how the frontend talks to the backend even when no import edges exist.',
+      inputSchema: {},
+    },
+    async () => {
+      const { listCrossSystemEdges, getCrossSystemStats } = require('../services/cross-system-service');
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ stats: getCrossSystemStats(), edges: listCrossSystemEdges() }, null, 2),
+        }],
+      };
+    }
+  );
+
   // --- Plan Management Tools ---
 
   const symbolSpecSchema = z.object({

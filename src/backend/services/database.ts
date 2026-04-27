@@ -57,6 +57,38 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind);
     CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
     CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
+
+    -- Cross-system callsites — non-import couplings (HTTP fetches /
+    -- routes, SQL queries, subprocess calls). Populated per-file by
+    -- the language-specific extractors in callsites/<lang>.ts.
+    CREATE TABLE IF NOT EXISTS callsites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      protocol TEXT NOT NULL,
+      method TEXT,
+      url_pattern TEXT,
+      sql_text TEXT,
+      line INTEGER,
+      context TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_callsites_file ON callsites(file_id);
+    CREATE INDEX IF NOT EXISTS idx_callsites_kind ON callsites(kind);
+    CREATE INDEX IF NOT EXISTS idx_callsites_url ON callsites(url_pattern);
+
+    -- Cross-system edges produced by the matchers. Refreshed at the
+    -- end of every project scan from the callsites + files tables.
+    CREATE TABLE IF NOT EXISTS cross_system_edges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+      target_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+      protocol TEXT NOT NULL,
+      label TEXT,
+      confidence REAL DEFAULT 1.0
+    );
+    CREATE INDEX IF NOT EXISTS idx_xs_edges_source ON cross_system_edges(source_file_id);
+    CREATE INDEX IF NOT EXISTS idx_xs_edges_target ON cross_system_edges(target_file_id);
+    CREATE INDEX IF NOT EXISTS idx_xs_edges_protocol ON cross_system_edges(protocol);
   `);
 
   // Plan tables (persistent — survive restarts)
@@ -244,6 +276,10 @@ export function exportDatabase(): Uint8Array {
  */
 export function clearAstData(): void {
   const d = getDb();
+  // Order matters: cross_system_edges + callsites reference files via
+  // FK; clear them first so the cascading deletes don't surprise us.
+  try { d.run(`DELETE FROM cross_system_edges`); } catch { /* table may not exist on first run */ }
+  try { d.run(`DELETE FROM callsites`); } catch { /* same */ }
   d.run(`DELETE FROM imports`);
   d.run(`DELETE FROM symbols`);
   d.run(`DELETE FROM files`);
@@ -276,6 +312,26 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
     d.run(
       `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace) VALUES (?, ?, ?, ?, ?)`,
       [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0]
+    );
+  }
+
+  // Store callsites (cross-system MVP). Replace any existing rows for
+  // this file so re-parsing on save doesn't accumulate stale rows.
+  d.run(`DELETE FROM callsites WHERE file_id = ?`, [fileId]);
+  for (const cs of parsed.callsites ?? []) {
+    d.run(
+      `INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        fileId,
+        cs.kind,
+        cs.protocol,
+        cs.method ?? null,
+        cs.urlPattern ?? null,
+        cs.sqlText ?? null,
+        cs.line ?? null,
+        cs.context ?? null,
+      ]
     );
   }
 }
@@ -471,6 +527,20 @@ export function resolveImports(
 /**
  * Get file-to-file dependency edges (who imports whom).
  */
+export interface GraphEdge {
+  source: string;
+  target: string;
+  sourceRelative: string;
+  targetRelative: string;
+  specifiers: string[];
+  /** "import" (default — language-level dep) or "cross_system" (HTTP / SQL / …). */
+  kind?: 'import' | 'cross_system';
+  /** For cross_system edges only — "http" / "sql" / "subprocess" / "env". */
+  protocol?: string;
+  /** Human-readable label for cross_system edges, e.g. "GET /api/users". */
+  label?: string;
+}
+
 export function getDependencyEdges(): Array<{
   source: string;
   target: string;
@@ -503,6 +573,43 @@ export function getDependencyEdges(): Array<{
     targetRelative: row[3] as string,
     specifiers: JSON.parse((row[4] as string) || '[]'),
   }));
+}
+
+/**
+ * Like getDependencyEdges() but also includes cross-system edges
+ * (HTTP / SQL / subprocess / …) tagged with `kind: 'cross_system'`
+ * and a `protocol` discriminator. The frontend renders cross-system
+ * edges with a distinct (dashed, protocol-tinted) style.
+ */
+export function getAllGraphEdges(): GraphEdge[] {
+  const imports: GraphEdge[] = getDependencyEdges().map((e) => ({ ...e, kind: 'import' }));
+
+  const d = getDb();
+  let xs;
+  try {
+    xs = d.exec(`
+      SELECT sf.path, tf.path, sf.relative_path, tf.relative_path, e.protocol, e.label
+      FROM cross_system_edges e
+      JOIN files sf ON e.source_file_id = sf.id
+      JOIN files tf ON e.target_file_id = tf.id
+    `);
+  } catch {
+    return imports;
+  }
+
+  if (!xs[0]) return imports;
+  const crossSystem: GraphEdge[] = xs[0].values.map((row) => ({
+    source: row[0] as string,
+    target: row[1] as string,
+    sourceRelative: row[2] as string,
+    targetRelative: row[3] as string,
+    specifiers: [],
+    kind: 'cross_system',
+    protocol: row[4] as string,
+    label: row[5] as string,
+  }));
+
+  return [...imports, ...crossSystem];
 }
 
 /**

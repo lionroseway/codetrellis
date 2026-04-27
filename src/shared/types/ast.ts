@@ -40,6 +40,28 @@ export interface ExportDeclaration {
   isDefault: boolean;
 }
 
+/**
+ * A non-import callsite — HTTP fetch, route handler, SQL query,
+ * subprocess invocation. Used by the cross-system matcher to surface
+ * runtime coupling between systems that don't share imports.
+ */
+export type CallsiteKind = 'http_call' | 'http_route' | 'sql_query' | 'subprocess' | 'env_lookup';
+export type CallsiteProtocol = 'http' | 'sql' | 'subprocess' | 'env';
+
+export interface Callsite {
+  kind: CallsiteKind;
+  protocol: CallsiteProtocol;
+  /** Line in the source file (1-indexed). */
+  line: number;
+  // HTTP specifics
+  method?: string;        // 'GET' / 'POST' / 'PUT' / 'DELETE' / 'PATCH'
+  urlPattern?: string;    // '/api/users', '/api/users/:id'
+  // SQL specifics (later phases)
+  sqlText?: string;
+  // Free-form context (function name, decorator name, etc.)
+  context?: string;
+}
+
 export interface ParsedFile {
   path: string;
   contentHash: string;
@@ -47,4 +69,5 @@ export interface ParsedFile {
   symbols: ParsedSymbol[];
   imports: ImportDeclaration[];
   exports: ExportDeclaration[];
+  callsites: Callsite[];
 }

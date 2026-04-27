@@ -236,7 +236,7 @@ export function MainCanvas() {
     setLoadingGraph(true);
     hasFetchedRef.current = root;
 
-    fetch('/api/dependencies')
+    fetch('/api/dependencies?include=cross_system')
       .then((r) => r.json())
       .then((edges) => {
         setDepEdges(edges);
@@ -375,7 +375,7 @@ export function MainCanvas() {
           nextDiffHasChanges ||
           nextGitHasChanges
         ) {
-          fetch('/api/dependencies')
+          fetch('/api/dependencies?include=cross_system')
             .then((r) => r.json())
             .then((edges) => {
               if (Array.isArray(edges) && edges.length > 0) {
@@ -403,7 +403,7 @@ export function MainCanvas() {
                   git: previous?.git || null,
                 }));
 
-                fetch('/api/dependencies')
+                fetch('/api/dependencies?include=cross_system')
                   .then((r) => r.json())
                   .then((edges) => {
                     if (Array.isArray(edges)) {

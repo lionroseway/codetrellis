@@ -30,7 +30,8 @@ shared via the bridge abstraction.
 | Data Model & Types | 100 | High | Plan, Task, Comment, PlanDocument, ProjectionData, Trellis snapshots all typed |
 | Database Persistence | 100 | Good | sql.js with file export — survives restarts |
 | AST Parsing (7 langs) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go and SQL pending. |
-| Multi-System Ingestion | 70 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve, services/realtime + backend/fastapi visible. Remaining: systems DB + UI, cross-system links, server-side per-scope views. |
+| Multi-System Ingestion | 75 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve. Cross-system MVP shipped (HTTP TS↔Python). Remaining: systems DB + UI, SQL / subprocess / env matchers, server-side per-scope views. |
+| Cross-system edges | 30 | Medium | MVP shipped: TS/JS `fetch(...)` + `axios.*` ↔ Python FastAPI/Flask route matcher. New `callsites/<lang>.ts` plugin slot + `cross-system-service` matcher + dashed protocol-tinted graph edges. REST + MCP (`list_cross_system_edges`). Pending: SQL ref tracker, subprocess, env-configured URLs, OpenAPI contracts. |
 | MCP Server | 100 | High | 30+ tools across architecture queries / plans / phases / tasks / spec docs / proposed-changes / templates / comments / sessions / drift / trellis snapshots. Skill resources (`codetrellis://skill[/quickstart|/power-user]`). |
 | Claude Code Watcher | 100 | High | Tails session JSONL, extracts tool calls + plan heuristics |
 | Generic MCP-agent activity | 100 | High | Phase 12 §D — `registerTool` wrapper broadcasts `tool_call` / `tool_error` events with agent attribution. Codex / Cursor / aider / any MCP client now surfaces in the Agent Timeline alongside Claude Code. |
@@ -58,6 +59,41 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Cross-system MVP (TS ↔ Python HTTP)
+
+Push 2 of "ready-to-use". Mixed repos no longer look like islands.
+
+- **New plugin slot**: `callsites/<lang>.ts` mirrors the existing
+  `parsers/` / `resolvers/` shape. Adding a new language's
+  callsite extraction = drop a file, list it in the index.
+- **TS / JS extractors**: regex-match `fetch('/api/...')`,
+  `axios.get/post/put/...`. Method inferred from `{ method: 'POST' }`
+  options or the axios verb. Template-literal placeholders
+  `${id}` normalise to `:id`.
+- **Python extractor**: regex-match FastAPI/APIRouter `@router.get(...)`,
+  Flask `@app.route(..., methods=[...])` (fans out one row per
+  method), and outbound `requests.get/post/...`. FastAPI `{user_id}`
+  normalises to `:id` so routes match the TS template-literal style.
+- **Schema**: `callsites` (per-file row per extracted callsite) +
+  `cross_system_edges` (matched pairs). Both wiped + re-derived on
+  every scan; `clearAstData` knows about them.
+- **Matcher**: `cross-system-service.recomputeCrossSystemEdges()`
+  groups routes by `${METHOD} ${path}`, scans calls, emits one
+  edge per pair. Self-loops + ambiguous matches dropped.
+- **Graph render**: cross-system edges split out of the main
+  import pipeline at the top of `buildDependencyGraph`, then
+  appended after layout as dashed protocol-tinted edges
+  (purple HTTP) with the route as the label.
+- **Wire-up**: scan orchestrator calls
+  `recomputeCrossSystemEdges()` after `resolveImports()`.
+- **REST**: `/api/dependencies?include=cross_system` merges them
+  into the existing edge list with a `kind` discriminator;
+  `/api/cross-system` returns just the cross-system edges +
+  stats.
+- **MCP**: `list_cross_system_edges` exposes the full feed (with
+  per-protocol stats) so agents can ask "how does the frontend
+  talk to the backend?" in one call.
 
 ### Apr 27, 2026 — Agent loop closure (front-to-back step 9 + 11)
 
@@ -762,7 +798,7 @@ Closing these is the priority block before adding more surfaces.
 | 9. **Track agent progress** (which tasks are in-flight / done) | ✅ | `plan-progress-service` auto-advances `pending` / `assigned` tasks to `in_progress` when one of their `affectedFiles` changes on disk. Toast surfaces the auto-promotion. We don't auto-mark `done` (false positives); instead we broadcast `task-completion-suggested` once every ProposedChange for the task is `satisfied`. |
 | 10. **Adjust the plan mid-flight** (revise tasks / spec docs) | ✅ | Works. No formal approval/rejection workflow yet. |
 | 11. **Verify completion** ("are we actually done?") | ✅ | `VerificationPanel` on PlanDetail reads `plan-changes-service` summary and shows planned vs landed at a glance: green "Ready to ship" / amber "Drifted" / accent "Mid-flight" with a satisfied/total bar and per-status legend. Re-runs on click. |
-| 12. **Cross-system flows visible on the graph** (frontend → backend route → SQL table) | ❌ | Phase 11 §5 — HTTP / SQL / env / subprocess link extraction. Until this lands, "PHP + Python + SQL together" feels like three islands instead of one architecture. |
+| 12. **Cross-system flows visible on the graph** (frontend → backend route → SQL table) | ⚠️ | MVP shipped: TS/JS `fetch(...)` + `axios.*` matched against Python FastAPI / Flask routes via the new `callsites/<lang>.ts` plugin slot + `matchers/http`. Dashed protocol-tinted edges render between matched files. Still missing: SQL ref tracker, subprocess, env-configured URLs, OpenAPI contract awareness. |
 | 13. **Plan completion artifact** (commit / PR with the diff against baseline) | ❌ | Not started. Eventually: one-click "open PR with these changes" once a plan is verified. |
 
 **Concrete next pushes (in order):**
@@ -775,7 +811,7 @@ the Multi-System Ingestion follow-ups (§3 Phase 11):
 
 1. ~~**Plan-task progress auto-detection**~~ ✅ shipped — `plan-progress-service` hooks the file watcher; `pending`/`assigned` tasks auto-advance to `in_progress`; `task-completion-suggested` event fires once every ProposedChange is `satisfied`.
 2. ~~**"Plan completion" verification panel**~~ ✅ shipped — `VerificationPanel` on PlanDetail reads `/api/plans/:uid/changes?summary=1` and renders a colour-coded readiness card.
-3. **Cross-system MVP** *(closes front-to-back step 12)* — TS `fetch(...)` ↔ Python FastAPI/Flask route matcher. New plugin slot `callsites/<lang>.ts`, a `matchers/http.ts`, and a `cross_system_edges` table. Renders dashed cross-protocol edges so PHP+Python+SQL stops looking like 3 islands. (See "Cross-system story" notes for the full design.)
+3. ~~**Cross-system MVP**~~ ✅ shipped — TS/JS `fetch(...)` + `axios.*` matched against Python FastAPI / Flask routes via `callsites/<lang>.ts` + `cross-system-service`. Dashed protocol-tinted edges (purple HTTP) render alongside imports. MCP `list_cross_system_edges`. SQL / subprocess / env / OpenAPI matchers still pending.
 4. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
 5. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
 6. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.) — exposes the discovered system list as a queryable surface.

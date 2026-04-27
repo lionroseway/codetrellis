@@ -395,6 +395,15 @@ app.post('/api/project/scan', async (req, res) => {
   // Java to anchor absolute imports at the importer's project root.
   resolveImports(projectPath, aliasMap, systems);
 
+  // Cross-system pass — match HTTP callsites (and later SQL / etc.)
+  // across languages so PHP+Python+SQL stops looking like 3 islands.
+  try {
+    const { recomputeCrossSystemEdges } = require('./services/cross-system-service');
+    recomputeCrossSystemEdges();
+  } catch (err) {
+    console.warn('[API] Cross-system pass failed:', err);
+  }
+
   const stats = getDbStats();
   console.log(`[API] Parsed ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports, ${stats.resolvedImports} resolved`);
 
@@ -688,8 +697,21 @@ function computeFileDrift(
 }
 
 // File-to-file dependency edges
-app.get('/api/dependencies', (_req, res) => {
+app.get('/api/dependencies', (req, res) => {
+  // Optional `?include=cross_system` returns the merged list with
+  // `kind` discriminator. Default keeps the legacy import-only shape
+  // so existing callers don't change.
+  if (req.query.include === 'cross_system') {
+    const { getAllGraphEdges } = require('./services/database');
+    res.json(getAllGraphEdges());
+    return;
+  }
   res.json(getDependencyEdges());
+});
+
+app.get('/api/cross-system', (_req, res) => {
+  const { listCrossSystemEdges, getCrossSystemStats } = require('./services/cross-system-service');
+  res.json({ edges: listCrossSystemEdges(), stats: getCrossSystemStats() });
 });
 
 // Dependencies for a specific file
