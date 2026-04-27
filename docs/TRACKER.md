@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-26
+Last updated: 2026-04-27
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -29,16 +29,17 @@ shared via the bridge abstraction.
 |---|---|---|---|
 | Data Model & Types | 100 | High | Plan, Task, Comment, PlanDocument, ProjectionData, Trellis snapshots all typed |
 | Database Persistence | 100 | Good | sql.js with file export — survives restarts |
-| AST Parsing (7 langs) | 100 | Good | TS/TSX/JS/JSX, Python, Rust, PHP, Java |
+| AST Parsing (7 langs) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go and SQL pending. |
+| Multi-System Ingestion | 70 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve, services/realtime + backend/fastapi visible. Remaining: systems DB + UI, cross-system links, server-side per-scope views. |
 | MCP Server | 100 | High | 24 tools across architecture queries / plans / tasks / spec docs / comments / sessions / drift / trellis snapshots |
 | Claude Code Watcher | 100 | High | Tails session JSONL, extracts tool calls + plan heuristics |
-| Generic MCP-agent activity | 0 | – | MCP tool calls don't surface in Timeline; only Claude Code does |
+| Generic MCP-agent activity | 0 | – | MCP tool calls don't surface in Timeline; only Claude Code does. Top of front-to-back gap list. |
 | Plan CRUD + Comments + Versions | 95 | Good | Missing: version viewer UI; task-level comments |
 | Spec Room (typed plan docs) | 100 | High | 12 doc types, MCP + REST + UI + version history + restore |
 | Three Trellis States | 85 | Medium | Snapshots + projection + baseline pin/auto/branch — modes don't yet read as visually unmistakable |
 | Architecture Diffing | 90 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope |
 | Inspector + Code Viewer | 100 | High | Cluster/file/symbol routing + Prism syntax highlighting + git gutter + drift coloring + selection-to-task |
-| Graph Visualization | 65 | Medium | Glassmorphic nodes, curved animated edges, cluster discovery, selection emphasis. **Missing: node-level drift ring, semantic zoom, mode visual distinctness.** |
+| Graph Visualization | 75 | Medium | Glassmorphic nodes, curved edges, cluster discovery, selection emphasis, per-system scope filter, files-view no longer hides files silently, regular edges no longer animated (perf fix). **Missing: node-level drift ring, semantic zoom, mode visual distinctness, system-aware clustering, server-side per-scope views.** |
 | Real-time Activity Visualization | 60 | Medium | recently-changed pulse + edge drift; node drift not yet wired |
 | Toast Notifications | 100 | Good | Wired to plans, tasks, deviations, conflicts, sessions, plan-doc events |
 | Deviation Detection | 75 | Medium | Service + MCP tools + file-watcher hook; needs more detection types and graph surfacing |
@@ -50,7 +51,26 @@ shared via the bridge abstraction.
 
 ---
 
-## 2. Recently Shipped (Apr 23–26, 2026)
+## 2. Recently Shipped
+
+### Apr 27, 2026 — Multi-System Ingestion + perf
+
+- **Multi-system ingestion (Phase 1 + 2)**: opening a real mixed-language repo (swf) now produces **2552 edges** including 1688 Python, 314 into workspace packages — was 597 edges TS-only before this sprint.
+- **System discovery**: 13 systems detected from any manifest (`package.json`, `pyproject.toml`, `setup.py`, `requirements.txt`, `Cargo.toml`, `go.mod`, `composer.json`, `pom.xml`, `build.gradle`, `Gemfile`, standalone `tsconfig.json`).
+- **Workspace alias resolution**: `@swf/ui` etc. now resolve dynamically from every `package.json` in the repo + `tsconfig.json` `paths`.
+- **Modular parser/resolver plugin architecture**: each language is one file in `parsers/` + `resolvers/`. Adding a language = drop two files. No core changes.
+- **Per-language extraction**: Python (`import_statement` + `import_from_statement` + relative + aliased + project-anchored absolute), Rust (`use_declaration` + crate / self / super / sibling-crate), PHP (`namespace_use_declaration` + PSR-4 from `composer.json`), Java (`import_declaration` + standard source roots).
+- **Proper `.gitignore` semantics**: `ignore` npm package — globs, negation (`!path`), nested .gitignore inheritance. Plus optional `.codetrellis-ignore` per-directory override.
+- **Heavy non-source dirs ignored** (venv / env / build / vendor / target / __pycache__ / coverage / test-results / playwright-report / cypress) — stops drowning the scanner.
+- **Per-project AST scoping**: `clearAstData()` on every scan. Switching projects no longer leaves stale rows or unioned search results.
+- **EMFILE survival in file watcher**: function-based ignore predicate; backend stays alive even when chokidar can't watch every file in a giant repo.
+- **`/api/diff` regression fix**: was re-parsing all 2k+ files every 10s AND wiping every workspace-aliased + Python edge each cycle. Now reads from DB. 30s → 193ms.
+- **Graph scope filter**: top-right of canvas — pick any discovered system to filter the graph to that subtree. Stops RAM blow-up on big repos.
+- **Files-depth view stops hiding files**: when scoped, shows every file (no threshold, no cap). Unscoped: threshold 3→2, cap 40→200.
+- **Edge animation perf**: regular edges no longer animated (~5000 SVG animations per frame killed pan/zoom). Motion only on `active` and `planned_add` edges where it conveys meaning.
+- **System discovery REST**: `GET /api/systems?project=...` returns all detected systems for a project.
+
+### Apr 23–26, 2026 — Architectural authoring tool
 
 This sprint focused on making CodeTrellis usable as an *architectural
 authoring* tool, not just a viewer: agents and humans co-author plans
@@ -332,40 +352,63 @@ Symbol`, where systems are detected from any manifest (npm / Python /
 Rust / PHP / Java / Go / Ruby / standalone TS), not just npm
 workspaces. Resolve workspace aliases dynamically. Extract imports for
 every supported language.
-**Status: PLANNING + Phase 1 in flight.**
+**Status: Phase 1 + 2 + plugin refactor DONE. Phase 3+ open.**
 **Spec: [SYSTEM-MODEL.md](SYSTEM-MODEL.md)**
 
-#### Why this is high priority
+#### Why this matters
 
-CodeTrellis was npm-shaped. Real repos aren't. Today's failures we've
-seen against real codebases:
+CodeTrellis was npm-shaped. Real repos aren't. Without these phases:
 
-- npm packages outside the `workspaces` glob (e.g. orphan `services/realtime/`) are invisible
-- Python / Rust / PHP / Java backends have files in the tree but **zero edges** because per-language import extraction isn't wired
-- Workspace package imports (`@scope/name`) don't resolve because the resolver only knows a hardcoded `@shared` alias → an entire app like `apps/admin` shows up disconnected from `packages/*`
-- Heavy non-source dirs (`venv/`, `build/`, `vendor/`, `test-results/`) get scanned and parsed, drowning the real code
+- npm packages outside the `workspaces` glob (e.g. orphan `services/realtime/`) were invisible
+- Python / Rust / PHP / Java backends had files in the tree but **zero edges** because per-language import extraction wasn't wired
+- Workspace package imports (`@scope/name`) didn't resolve because the resolver only knew a hardcoded `@shared` alias → entire apps like `apps/admin` showed up disconnected from `packages/*`
+- Heavy non-source dirs (`venv/`, `build/`, `vendor/`, `test-results/`) drowned the real code AND blew up chokidar with EMFILE
+
+#### Verified against /path/to/sample-monorepo
+
+Before this phase: **597 edges, 0 Python, 0 workspace-aliased.**
+After: **2552 edges — 1688 Python + 591 .tsx + 273 .ts, 314 into `packages/*`.**
 
 | Sub-phase | Status | Notes |
 |---|---|---|
-| **1.A** Better ignore list (venv, build, vendor, test-results, playwright-report, .vercel, .netlify, .expo, .gradle, .DS_Store, ...) | ⏳ | In flight |
-| **1.B** Generic system discovery — find every manifest, not just npm `workspaces` | ⏳ | In flight — covers `package.json`, `pyproject.toml`, `setup.py`, `requirements.txt`, `Cargo.toml`, `go.mod`, `composer.json`, `pom.xml`, `build.gradle`, `Gemfile`, `tsconfig.json` standalone |
-| **1.C** Dynamic package alias map from every `package.json` | ⏳ | `@swf/ui` → `packages/ui/src/index.ts`, etc. |
-| **1.D** Read `tsconfig.json` `compilerOptions.paths` at every level | ⏳ | TS path aliases respected per-app |
-| **2.A** Python `import_statement` + `import_from_statement` extraction | ❌ | Phase 2 |
-| **2.B** Python resolver (relative + project-anchored absolute) | ❌ | Phase 2 |
-| **2.C** Rust `use_declaration` + crate-relative resolver | ❌ | Phase 2 |
-| **2.D** PHP `namespace_use_declaration` + PSR-4 from `composer.json` | ❌ | Phase 2 |
-| **2.E** Java `import_declaration` + package-dir resolver | ❌ | Phase 2 |
-| **2.F** Go `import` + `go.mod`-relative resolver | ❌ | Phase 2 |
-| **3** Systems table + `system_id` on files + MCP `list_systems` etc. + REST `/api/systems` | ❌ | Phase 3 |
-| **4** System-aware sidebar + cluster-within-system view + system-scoped Inspector + plan tasks gain `affectedSystems[]` | ❌ | Phase 4 |
-| **5** Cross-system non-import links — HTTP routes, SQL refs, env vars, subprocess, OpenAPI contracts | ❌ | Phase 5 (later) |
-| **6** Ingest selected `node_modules` packages + `.gitmodules` awareness | ❌ | Phase 6 (later) |
+| **1.A** Better ignore list | ✅ | venv / env / build / vendor / target / __pycache__ / coverage / test-results / playwright-report / cypress; safety floor under proper gitignore semantics |
+| **1.B** Generic system discovery | ✅ | `system-discovery.ts`. Walks tree, emits a `DiscoveredSystem` for every manifest. Detects: `package.json` (with/without workspaces), `pyproject.toml`, `setup.py`, `requirements.txt`, `Cargo.toml` (incl. `[workspace]`), `go.mod`, `composer.json`, `pom.xml`, `build.gradle(.kts)`, `Gemfile`, standalone `tsconfig.json`. Project root always informal-system if no manifest. |
+| **1.C** Dynamic package alias map | ✅ | `@swf/ui` → `packages/ui/src/index.ts`, etc. — built from every discovered package.json's name + entry hints + tsconfig.paths. Sorted longest-first for greedy prefix matching. |
+| **1.D** `tsconfig.json` `compilerOptions.paths` | ✅ | Respected per-system; comment-tolerant + trailing-comma-tolerant JSON parser. |
+| **1.E** Proper `.gitignore` semantics | ✅ | `ignore` npm package — globs, negation (`!path`), nested .gitignore inheritance. Optional `.codetrellis-ignore` per directory for project-specific overrides. |
+| **1.6** Modular plugin architecture | ✅ | `parsers/{base,index,typescript,python,rust,php,java}.ts` and `resolvers/` mirroring it. Adding a language = drop a new file in each dir, register in index. No core changes. |
+| **2.A** Python parser plugin | ✅ | `function_definition` / `async_function_definition` / `class_definition` / `decorated_definition` (decorators captured as modifiers) / module-level UPPER_CASE constants. Imports: `import_statement`, `import_from_statement`, aliased + relative (`from . import x`, `from ..pkg import y`). |
+| **2.B** Python resolver | ✅ | Relative (`.x`, `..x`) walks up from importer; absolute anchors at importer's nearest-ancestor system root with `src/` and `app/` fallbacks. Filters stdlib + common third-party (fastapi, pydantic, sqlalchemy, etc.) so we don't fail to "resolve" `os` / `json` / etc. |
+| **2.C** Rust parser + resolver | ✅ | function_item / struct_item / enum_item / trait_item / impl_item / mod_item / type_item; use_declaration. Resolver: crate:: from src/, self/super:: relative, sibling-crate within Cargo workspace. |
+| **2.D** PHP parser + resolver | ✅ | function_definition / class_declaration / interface_declaration / trait_declaration / enum_declaration; namespace_use_declaration with namespace_definition recursion. Resolver: PSR-4 lookup from nearest composer.json `autoload.psr-4` (cached). |
+| **2.E** Java parser + resolver | ✅ | class / interface / enum / record / method declarations; import_declaration with wildcard support. Resolver: src/main/java + src/test/java + src/ + root layouts; skips java./javax./sun./com.sun.*. |
+| **2.F** Go parser + resolver | ❌ | Pending. Need a tree-sitter-go grammar in resources/ + plugin file. |
+| **2.G** SQL ref-tracker | ❌ | Pending. String-literal SQL parsing → table refs; migration parser builds the table index. Becomes a cross-system edge once Phase 5 lands. |
+| **3** Systems table + DB persistence + MCP `list_systems` etc. | ⚠️ Partial | `GET /api/systems?project=` exists. Missing: `systems` SQLite table, `system_id` column on `files`, MCP tools (`list_systems`, `get_system_files`, `get_system_dependencies`). |
+| **4** System-aware UI | ⚠️ Partial | Done: graph scope filter (top-right of canvas) — pick any system → graph filters to that subtree. Missing: sidebar "Systems" section, system-as-cluster-boundary in graph builder (currently cluster discovery merges across systems), system view kind in Inspector, plan tasks `affectedSystems[]`. |
+| **5** Cross-system non-import links | ❌ | HTTP routes (FastAPI decorators ↔ frontend `fetch()`), SQL table refs, env vars, subprocess, OpenAPI contracts. The reason "PHP + Python + SQL together" actually works as a single architecture. |
+| **6** External / submodule shared libs | ❌ | Mark a `node_modules` package as "interesting" → ingest its source as a virtual system. `.gitmodules` awareness. |
 
-**Acceptance after sub-phase 1:** opening a real multi-system repo
-discovers every manifest as a known system; orphan-but-named npm
-packages resolve their workspace aliases; admin-style apps light up
-their connections to shared packages.
+#### Performance + correctness fixes that landed alongside
+
+| Fix | Status | Notes |
+|---|---|---|
+| EMFILE survival in file watcher | ✅ | Function-based ignore predicate (globs weren't reliable for nested layouts). `followSymlinks: false`. Watcher 'error' handler logs + continues instead of tearing down the backend. |
+| Per-project AST scoping | ✅ | `clearAstData()` at start of every `/api/project/scan`. Switching projects no longer leaves stale rows / unioned search results. |
+| `/api/diff` regression fix | ✅ | Endpoint was re-running scanDirectory + parseFiles + storeParsedFile + resolveImports on EVERY 10s poll, AND calling resolveImports with no alias map (which wiped every workspace-aliased + Python edge each cycle). Now reads current state from the DB. Response time: ~30s → 193ms. |
+| Graph scope filter | ✅ | Picker top-right of canvas + `scopePath` in graph-store. Filters depEdges before clustering / layout. |
+| Files-depth view stops hiding files | ✅ | When scoped to one system, shows every file (no threshold, no cap). Unscoped: threshold lowered 3 → 2, cap raised 40 → 200. |
+| Edge animation perf fix | ✅ | `<animateMotion>` on every regular edge was 5000+ SVG animations per frame, killing pan/zoom. Now only `active` and `planned_add` edges animate. |
+
+#### What's left in this phase (in the order I'd do them)
+
+1. **System-aware clustering** — use discovered systems as primary cluster boundaries, so Python's 1688 internal edges don't all collapse into one mega-cluster and `apps/admin`'s clusters stay separate from `apps/web`'s. Sub-cluster within a system by directory.
+2. **Server-side rendered graph views** (your "load JSON from DB on demand" suggestion) — backend computes and caches `{ nodes, edges }` per scope, frontend just fetches. Switching systems becomes truly per-scope load. Caches invalidated on scan.
+3. **Phase 3** — `systems` SQLite table + `system_id` on files + MCP `list_systems` / `get_system_files` / `get_system_dependencies`. Without this, agents can't query system-scoped state.
+4. **Phase 4** — system-aware sidebar (Systems section above the file tree), system view kind in Inspector, `affectedSystems[]` on plan tasks, drift attribution by system.
+5. **Phase 2.F + 2.G** — Go plugin + SQL ref tracker, completing language coverage.
+6. **Phase 5** — cross-system non-import links (HTTP / SQL / env / subprocess / OpenAPI contracts). The headline product story for "PHP + Python + SQL all in one project."
+7. **Phase 6** — selected `node_modules` ingestion + `.gitmodules`.
 
 ---
 
@@ -554,17 +597,47 @@ darker); smooth transitions when expanding/collapsing.
 
 ## 7. Open Items (priority order)
 
-### ⚡ Top priority — Multi-System Ingestion (Phase 11)
-Without this, CodeTrellis can't actually visualise mixed-language /
-mixed-system real repos. See §3 Phase 11 + [SYSTEM-MODEL.md](SYSTEM-MODEL.md).
+### ⚡ Top priority — Front-to-back workflow
 
-1. **Phase 1.A** — Better ignore list (venv / build / vendor / test-results / etc.)
-2. **Phase 1.B** — Generic system discovery (find every manifest, not just npm `workspaces`)
-3. **Phase 1.C** — Dynamic package alias map (`@swf/ui` resolves to its source)
-4. **Phase 1.D** — `tsconfig.json` `paths` respected per-system
-5. **Phase 2** — Per-language import extractors + resolvers (Python, Rust, PHP, Java, Go)
-6. **Phase 3** — Systems table + MCP tools + REST `/api/systems`
-7. **Phase 4** — System-aware sidebar + cluster-within-system view + plan tasks `affectedSystems[]`
+The end-to-end product loop is **open project → see architecture →
+plan changes → agent executes → see drift → adjust → verify**. Most
+steps work; a few seams are still broken or only partially wired.
+Closing these is the priority block before adding more surfaces.
+
+| Step | State | What's missing |
+|---|---|---|
+| 1. Open project (any language mix) | ✅ | — |
+| 2. See architecture (graph, multi-language, multi-system) | ✅ | — for visible scope. `system-aware clustering` would split mega-clusters; `server-side per-system view loading` would make scope-switching truly per-scope. |
+| 3. Drill into a file (Inspector + code preview + drift coloring) | ✅ | — |
+| 4. Author a plan (title + tasks + spec docs) | ✅ | Plan templates would speed it up. Plan version viewer UI missing. |
+| 5. Connect a coding agent | ✅ | Only Claude Code surfaces in the Agent Timeline. Codex / Cursor / aider sessions are *invisible* even though MCP tool calls flow. |
+| 6. Agent reads the plan via MCP | ✅ | — |
+| 7. Agent writes code | ✅ | — file watcher detects changes (any language). |
+| 8. See file/edge/code-line drift against the plan | ✅ | — |
+| 9. **Track agent progress** (which tasks are in-flight / done) | ⚠️ | Task status is updated *only* when the agent calls `update_task`. Should auto-advance to `in_progress` when affected files change on disk; auto-advance to `done` when all expected changes land + tests pass. |
+| 10. **Adjust the plan mid-flight** (revise tasks / spec docs) | ✅ | Works. No formal approval/rejection workflow yet. |
+| 11. **Verify completion** ("are we actually done?") | ⚠️ | Drift is shown but no "all expected planned changes have landed" verification. `get_drift_report` returns the data — needs a UI summary panel. |
+| 12. **Cross-system flows visible on the graph** (frontend → backend route → SQL table) | ❌ | Phase 11 §5 — HTTP / SQL / env / subprocess link extraction. Until this lands, "PHP + Python + SQL together" feels like three islands instead of one architecture. |
+| 13. **Plan completion artifact** (commit / PR with the diff against baseline) | ❌ | Not started. Eventually: one-click "open PR with these changes" once a plan is verified. |
+
+**Concrete next pushes (in order):**
+
+1. **Generic MCP-agent Timeline** — surface every MCP tool call in the Agent Timeline tab, attributed by `register_session` agent_type. Closes step 5 for any agent.
+2. **Plan-task progress auto-detection** — when a task's `affectedFiles` start changing, advance to `in_progress`; when all are clean against plan expectations, suggest `done`. Closes step 9.
+3. **System-aware clustering** — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster, and `apps/admin` doesn't merge with `apps/web`. See Phase 11 §3 / §4.
+4. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB; frontend fetches JSON. Per-system load is genuinely independent. The ~"load JSON from DB on demand" architecture.
+5. **Phase 3 — systems table + MCP tools** (`list_systems`, `get_system_files`, `get_system_dependencies`). Without this, agents can't query system-scoped state.
+6. **Phase 4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`**. The user finally sees Systems as a first-class entity, not just a graph filter.
+7. **"Plan completion" verification panel** — reads `get_drift_report` for the active plan and shows: planned files done / pending / unexpected; planned edges done / missing; spec doc consultation count. Closes step 11.
+8. **Phase 11 §5 — cross-system non-import links** (HTTP routes, SQL refs). Closes step 12.
+
+### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
+Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
+(Python/Rust/PHP/Java parsers + resolvers), graph scope filter, AST
+per-project scoping, /api/diff fix, EMFILE survival, animation perf.
+
+Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
+4 (system-aware UI), 5 (cross-system links), 6 (external libs).
 
 ### Graph-quality blockers (Immediate Focus from previous tracker)
 1. ❌ Make the four trellis modes visually unmistakable
@@ -768,6 +841,13 @@ docs/                                  — TRACKER.md (this) + vision/design doc
 ## 12. Recent Sessions Commit Log (newest first)
 
 ```
+41eeefa Stop animating regular edges — fixes pan/zoom slowness
+27de688 Files-depth view no longer hides files silently
+6e55646 Graph scope filter — limit canvas to one system / directory
+2ebcc1e Stop /api/diff from re-parsing the entire project on every poll
+00672ac Phase 1.6 + 2: language-plugin parsers/resolvers; Python edges; EMFILE survival; per-project AST scoping
+ed3f346 Multi-system ingestion (Phase 1): discover every system, resolve workspace aliases, proper gitignore
+5059f9f Consolidate trackers into a single TRACKER.md
 7824b86 Edge drift visualization + watch all parseable extensions
 734c957 Drift badge: pick which plan to compare against
 27bf2ec Code viewer: syntax highlighting, git gutter, drift coloring, add-to-task
