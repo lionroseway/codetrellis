@@ -3,6 +3,15 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { PlanPhase, PhaseStatus } from '../../shared/types';
 
+/** Phase 13 §B auto-sync hook — see plan-service for the rationale. */
+function notifyMutation(planUid: string): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { scheduleWriteThrough } = require('./plan-file-service');
+    scheduleWriteThrough(planUid);
+  } catch { /* fine */ }
+}
+
 /**
  * Plan phases — first-class checkpoints within a plan, modelled on the
  * swf `01-PHASE-1-FOUNDATION.md / 02-PHASE-2-…` shape.
@@ -70,6 +79,7 @@ export function createPhase(input: CreatePhaseInput): PlanPhase {
   );
 
   markDirty();
+  notifyMutation(input.planUid);
   return {
     uid,
     planUid: input.planUid,
@@ -125,15 +135,19 @@ export function updatePhase(uid: string, updates: UpdatePhaseInput): PlanPhase |
   getDb().run(`UPDATE plan_phases SET ${sets.join(', ')} WHERE uid = ?`, params);
 
   markDirty();
+  if (existing) notifyMutation(existing.planUid);
   return getPhase(uid);
 }
 
 export function deletePhase(uid: string): void {
   const db = getDb();
+  // Capture parent plan before delete so we can notify auto-sync.
+  const before = getPhase(uid);
   // Detach any tasks pointing at this phase so they don't dangle.
   db.run(`UPDATE tasks SET phase_uid = NULL WHERE phase_uid = ?`, [uid]);
   db.run(`DELETE FROM plan_phases WHERE uid = ?`, [uid]);
   markDirty();
+  if (before) notifyMutation(before.planUid);
 }
 
 function rowToPhase(r: any[]): PlanPhase {

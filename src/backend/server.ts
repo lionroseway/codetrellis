@@ -422,6 +422,16 @@ app.post('/api/project/scan', async (req, res) => {
   // Start watching for Claude Code sessions
   startClaudeCodeWatcher(projectPath);
 
+  // Phase 13 §B: watch <project>/.codetrellis/plans/ so external
+  // edits (post `git pull`, hand-edits, another tool) flow into the
+  // DB without requiring an explicit Import click.
+  try {
+    const { startPlanFileWatcher } = require('./services/plan-file-service');
+    startPlanFileWatcher(projectPath);
+  } catch (err) {
+    console.warn('[API] Plan file watcher failed to start:', err);
+  }
+
   // Convert Map to plain object for JSON serialization
   const depGraph: Record<string, string[]> = {};
   monorepoConfig.dependencyGraph.forEach((v, k) => { depGraph[k] = v; });
@@ -1210,6 +1220,33 @@ app.get('/api/plans/discover', (req, res) => {
     return;
   }
   res.json(discoverPlanDirs(projectRoot));
+});
+
+app.get('/api/plans/:uid/file-status', (req, res) => {
+  const { getLinkedPlanDir } = require('./services/plan-file-service');
+  const projectRoot = req.query.path as string | undefined;
+  if (!projectRoot) {
+    res.status(400).json({ error: 'path query param required' });
+    return;
+  }
+  const planDir = getLinkedPlanDir(req.params.uid, projectRoot);
+  res.json({ linked: planDir !== null, planDir });
+});
+
+app.post('/api/plans/:uid/unlink', (req, res) => {
+  const { unlinkPlan } = require('./services/plan-file-service');
+  const projectRoot = (req.query.path as string) || (req.body && req.body.projectRoot);
+  if (!projectRoot) {
+    res.status(400).json({ error: 'projectRoot required (?path=… or body.projectRoot)' });
+    return;
+  }
+  try {
+    const result = unlinkPlan(req.params.uid, projectRoot);
+    broadcast('plan-unlinked', { planUid: req.params.uid });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // --- Plan Templates API (Phase 12 §G) ---

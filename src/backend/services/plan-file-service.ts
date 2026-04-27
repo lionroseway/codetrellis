@@ -26,6 +26,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import chokidar, { type FSWatcher } from 'chokidar';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import * as planService from './plan-service';
 import * as planPhasesService from './plan-phases-service';
@@ -39,6 +40,29 @@ import type {
   PhaseStatus,
   TaskStatus,
 } from '../../shared/types';
+
+/**
+ * Tracks file paths we just wrote ourselves, so the file watcher can
+ * skip re-importing them as if they were external edits. Stamped with
+ * a timestamp; entries older than 1 second are dropped (covers any
+ * filesystem rename / fsync delay).
+ */
+const recentSelfWrites = new Map<string, number>();
+const SELF_WRITE_TTL_MS = 1000;
+
+function stampSelfWrite(filePath: string): void {
+  recentSelfWrites.set(filePath, Date.now());
+}
+
+function wasJustWrittenByUs(filePath: string): boolean {
+  const t = recentSelfWrites.get(filePath);
+  if (!t) return false;
+  if (Date.now() - t > SELF_WRITE_TTL_MS) {
+    recentSelfWrites.delete(filePath);
+    return false;
+  }
+  return true;
+}
 
 // --- Public surface ---
 
@@ -118,6 +142,17 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
  * Upsert: matches by UID. Returns the resulting in-DB rows.
  */
 export function importPlan(planDirOrPlanYaml: string): ImportPlanResult {
+  // Suppress auto-sync write-through during the import — every
+  // upsert below would otherwise schedule a redundant export.
+  importDepth++;
+  try {
+    return importPlanInternal(planDirOrPlanYaml);
+  } finally {
+    importDepth--;
+  }
+}
+
+function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   // Accept either the directory or the plan.yaml path explicitly.
   let planDir = planDirOrPlanYaml;
   if (planDir.endsWith('plan.yaml')) {
@@ -227,6 +262,200 @@ export function discoverPlanDirs(projectRoot: string): string[] {
         return false;
       }
     });
+}
+
+/**
+ * Find the on-disk plan directory for a plan, if it exists. The plan
+ * is "linked to file" iff its directory + plan.yaml exist in the
+ * given project. Returns null otherwise.
+ *
+ * Used by the write-through layer to decide whether to auto-export on
+ * a DB mutation, and by the UI to render the "Linked" badge.
+ */
+export function getLinkedPlanDir(planUid: string, projectRoot: string): string | null {
+  const plan = planService.getPlan(planUid);
+  if (!plan) return null;
+  const slug = makePlanSlug(plan);
+  const dir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  if (fs.existsSync(path.join(dir, 'plan.yaml'))) return dir;
+  return null;
+}
+
+/**
+ * Drop the on-disk directory for a plan. The DB rows survive — this
+ * is the "Shared → Local" toggle. No-op if the dir doesn't exist.
+ */
+export function unlinkPlan(planUid: string, projectRoot: string): { removed: boolean; planDir: string | null } {
+  const dir = getLinkedPlanDir(planUid, projectRoot);
+  if (!dir) return { removed: false, planDir: null };
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { removed: true, planDir: dir };
+}
+
+// --- Auto-sync (Phase 13 §B) ---
+
+/**
+ * Per-plan debounced write-through. Every plan/phase/task/doc
+ * mutation calls this; if the plan has a directory on disk, we
+ * re-export 200ms later (coalescing rapid edits into a single write).
+ *
+ * Pure best-effort: errors are logged, not thrown. A failed
+ * write-through doesn't roll back the DB mutation — the file is the
+ * source of truth eventually, but the in-memory state stays correct
+ * until the user resolves whatever caused the write to fail.
+ */
+const writeThroughTimers = new Map<string, NodeJS.Timeout>();
+const WRITE_THROUGH_DEBOUNCE_MS = 200;
+
+/**
+ * Set inside `importPlan` so any DB mutations the import triggers
+ * (upserts via plan/phase/task/doc services) don't re-trigger a
+ * write-through. The self-write stamp on `writeFileAtomic` already
+ * blocks the file→DB→file ping-pong, but suppressing at this layer
+ * too means we skip the debounced timer + DB lookup entirely.
+ */
+let importDepth = 0;
+
+export function scheduleWriteThrough(planUid: string, projectRoot?: string): void {
+  if (importDepth > 0) return;
+  // Caller may not know the project path (e.g. a deep service that
+  // only has the planUid). Look it up from the plan row.
+  const plan = planService.getPlan(planUid);
+  if (!plan) return;
+  const root = projectRoot ?? plan.projectPath;
+  if (!root) return;
+  if (!getLinkedPlanDir(planUid, root)) return; // not linked → no-op
+
+  const existing = writeThroughTimers.get(planUid);
+  if (existing) clearTimeout(existing);
+  writeThroughTimers.set(planUid, setTimeout(() => {
+    writeThroughTimers.delete(planUid);
+    try {
+      const result = exportPlan(planUid, root);
+      // Best-effort broadcast (server module may not be imported yet
+      // in tests).
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { broadcast } = require('../server');
+        broadcast('plan-exported', { planUid, planDir: result.planDir, source: 'auto-sync', files: result.files.length });
+      } catch { /* ignore */ }
+    } catch (err) {
+      console.warn(`[Auto-sync] Failed to export plan ${planUid}:`, err);
+    }
+  }, WRITE_THROUGH_DEBOUNCE_MS));
+}
+
+/**
+ * Watch `<projectRoot>/.codetrellis/plans/` for external edits.
+ * On a change to a `plan.yaml` / `phases/*.yaml` / `tasks/*.yaml` /
+ * `docs/*.md` file, re-import the parent plan directory. Skips files
+ * we just wrote ourselves (see `recentSelfWrites`) so the
+ * write-through-then-watcher doesn't ping-pong.
+ */
+const watchersByProject = new Map<string, FSWatcher>();
+
+export function startPlanFileWatcher(projectRoot: string): void {
+  if (watchersByProject.has(projectRoot)) return; // already watching
+
+  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  // Watch even if the dir doesn't exist yet — chokidar handles
+  // late-creation gracefully and will emit `addDir` when it appears.
+  const watcher = chokidar.watch(plansRoot, {
+    ignoreInitial: true,
+    persistent: true,
+    awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
+    depth: 4, // plans/<slug>/{phases|tasks|docs}/file.yaml
+  });
+
+  watcher.on('all', (event, filePath) => {
+    if (event !== 'add' && event !== 'change' && event !== 'unlink') return;
+    if (!filePath) return;
+
+    // Skip self-writes (we just stamped them in writeFileAtomic).
+    if (wasJustWrittenByUs(filePath)) return;
+
+    // Resolve the plan directory containing this file.
+    const planDir = findContainingPlanDir(filePath, plansRoot);
+    if (!planDir) return;
+
+    // Detect YAML conflict markers — we don't try to resolve them
+    // in-app, but we surface a clear banner pointing at the file so
+    // the user knows where to look.
+    if (filePath.endsWith('.yaml') || filePath.endsWith('.md')) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        if (hasGitConflictMarkers(content)) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { broadcast } = require('../server');
+            broadcast('plan-file-conflict', { filePath, planDir });
+          } catch { /* ignore */ }
+          return; // don't try to import a half-merged file
+        }
+      } catch {
+        // file disappeared / unreadable — fall through to attempt
+        // the import which will then no-op.
+      }
+    }
+
+    // Re-import. Idempotent — upsert by UID. We import the whole plan
+    // directory rather than just the changed file because tasks /
+    // phases reference each other (phaseUid) and a single file can't
+    // be safely upserted in isolation if its parent is missing.
+    try {
+      const result = importPlan(planDir);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { broadcast } = require('../server');
+        broadcast('plan-imported', {
+          planUid: result.plan.uid,
+          source: 'file-watcher',
+          planDir,
+          warnings: result.warnings,
+        });
+      } catch { /* ignore */ }
+    } catch (err) {
+      console.warn(`[Auto-sync] Failed to re-import ${planDir}:`, err);
+    }
+  });
+
+  watcher.on('error', (err) => {
+    console.warn('[Auto-sync] Plan file watcher error:', err);
+  });
+
+  watchersByProject.set(projectRoot, watcher);
+  console.log(`[Auto-sync] Watching ${plansRoot}`);
+}
+
+export function stopPlanFileWatcher(projectRoot: string): void {
+  const w = watchersByProject.get(projectRoot);
+  if (w) {
+    w.close().catch(() => {});
+    watchersByProject.delete(projectRoot);
+  }
+}
+
+function findContainingPlanDir(filePath: string, plansRoot: string): string | null {
+  // filePath looks like:
+  //   <plansRoot>/<slug>/plan.yaml
+  //   <plansRoot>/<slug>/phases/01-foundation.yaml
+  //   <plansRoot>/<slug>/tasks/001-add-types.yaml
+  //   <plansRoot>/<slug>/docs/00-overview.md
+  // We want <plansRoot>/<slug>.
+  if (!filePath.startsWith(plansRoot)) return null;
+  const rel = path.relative(plansRoot, filePath);
+  const firstSegment = rel.split(path.sep)[0];
+  if (!firstSegment) return null;
+  const planDir = path.join(plansRoot, firstSegment);
+  if (!fs.existsSync(path.join(planDir, 'plan.yaml'))) return null;
+  return planDir;
+}
+
+function hasGitConflictMarkers(content: string): boolean {
+  // Match the canonical 7-character markers at line start. False
+  // positives on prose mentioning "<<<<<<<" are accepted — the
+  // banner is a hint, not a hard error.
+  return /^<{7} |^={7}$|^>{7} /m.test(content);
 }
 
 // --- Serialization ---
@@ -484,6 +713,7 @@ function writeFileAtomic(filePath: string, content: string): void {
   const tmp = `${filePath}.tmp`;
   fs.writeFileSync(tmp, content, 'utf-8');
   fs.renameSync(tmp, filePath);
+  stampSelfWrite(filePath);
 }
 
 function ensureCodetrellisGitignore(codetrellisDir: string): void {

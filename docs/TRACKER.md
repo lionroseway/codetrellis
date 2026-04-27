@@ -56,7 +56,7 @@ shared via the bridge abstraction.
 | Multi-tab projects | 100 | Good | Open multiple projects/worktrees as TopBar tabs |
 | Visual Plan Builder | 35 | Medium | "Add to plan" from the inspector exists; clicking nodes-on-graph to author isn't wired |
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
-| Plan export / source-controllable plans | 35 | Medium | Phase 13 §A shipped (manual export/import). Plans round-trip to `<project>/.codetrellis/plans/<slug>/` as YAML + markdown; PlanList shows discovered-but-unimported plans for one-click pulls. Still pending: §B auto-sync (file watcher write-through), §C templates as publishable repos. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
+| Plan export / source-controllable plans | 70 | High | Phase 13 §A + §B shipped. Plans round-trip to `<project>/.codetrellis/plans/<slug>/` as YAML + markdown (§A); linked plans auto-sync DB ↔ disk via debounced write-through + chokidar file watcher with self-write detection (§B). External edits picked up after `git pull` without an Import click. Per-plan Linked/Unlink toggle on the plan header. YAML conflict markers surfaced. Pending: §C templates as publishable repos. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
 | Electron desktop build | 30 | Medium | `npm run package` runs to completion but the resulting `.app` is non-functional — renderer not bundled, tree-sitter WASM missing, icon needs `.icns` / `.ico`, no `maker-squirrel` for Windows. Five small fixes needed before a real DMG / EXE ships. See §7 for the punch list. |
 | Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
@@ -65,6 +65,42 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Auto-sync (Phase 13 §B)
+
+The file is the source of truth now. Every plan / phase / task / doc
+mutation auto-exports to `.codetrellis/plans/<slug>/` (debounced 200ms);
+external edits to those files (after `git pull`, hand-edit, another
+tool) re-import idempotently into the DB.
+
+- **Write-through**: `plan-file-service.scheduleWriteThrough(planUid)`
+  is called from `notifyMutation` helpers added to plan-service,
+  plan-phases-service, plan-documents-service. Lazy-required to dodge
+  the import cycle. No-op if the plan isn't linked (no
+  `.codetrellis/plans/<slug>/plan.yaml` on disk) — opt-in per plan.
+- **File watcher**: `startPlanFileWatcher(projectRoot)` runs chokidar
+  against `<projectRoot>/.codetrellis/plans/` (depth 4 covers slug /
+  phases|tasks|docs / file). On change/add/unlink: locate the
+  containing plan dir, re-import.
+- **Self-write stamping**: every `writeFileAtomic` call stamps
+  `recentSelfWrites`; the watcher skips files we just wrote (1s TTL).
+  Plus an `importDepth` guard suppresses write-through during a
+  re-import — belt-and-braces against the file→DB→file ping-pong.
+- **YAML conflict markers**: detected (`<<<<<<<` / `=======` /
+  `>>>>>>>`) and broadcast as `plan-file-conflict`. Frontend toasts
+  with the file path; we don't try to in-app resolve — the user fixes
+  in their editor and the watcher picks up the clean file.
+- **REST**: `GET /api/plans/:uid/file-status` (is it linked?) +
+  `POST /api/plans/:uid/unlink` (delete the dir; DB rows survive).
+- **MCP**: `unlink_plan_from_files(plan_uid, project_root)`.
+- **UI**: PlanDetail header shows a green **Linked** pill when the
+  plan is on disk; hover flips it to **Unlink** with confirm. The
+  not-linked state shows **Link to disk** (renamed from "Export").
+  WS handler distinguishes `source: 'file-watcher'` imports from
+  manual ones — toast text matches.
+
+Tracker §1 Plan export 35 → 70. §3 Phase 13 §B row ✅. §7
+next-pushes shifts to §C (templates as publishable repos).
 
 ### Apr 27, 2026 — Manual plan export / import (Phase 13 §A)
 
@@ -761,7 +797,7 @@ share a plan or someone moves between laptop and desktop.
 | | Item | Size | Status |
 |---|---|---|---|
 | **A** | Manual export / import shipped. `plan-file-service.ts` round-trips plan + phases + tasks + spec docs to `<project>/.codetrellis/plans/<slug>/` (YAML + markdown with front-matter, per [PLAN-EXPORT.md §3](PLAN-EXPORT.md)). REST: `POST /api/plans/:uid/export`, `POST /api/plans/import`, `GET /api/plans/discover`. MCP: `export_plan_to_files`, `import_plan_from_files`, `discover_plan_files`. UI: "Export" button on PlanDetail header; PlanList shows a "Found N plans on disk" panel for plans committed via git but not yet in the local DB, with one-click Import. Idempotent — re-export overwrites; re-import upserts by UID. WS broadcasts `plan-imported` so other windows refresh. | medium | ✅ |
-| **B** | Auto-sync (file is canonical). File watcher on `.codetrellis/plans/`, write-through on every plan/phase/task/doc mutation, banner UI for external-update reload, conflict-marker detection, per-plan "Linked ⇄ Local" toggle. | medium | ❌ |
+| **B** | Auto-sync shipped. `plan-file-service` exposes `scheduleWriteThrough(planUid)` (debounced 200ms per plan) — hooked into every mutation site in plan / plan-phases / plan-documents services via lazy-required notifyMutation helpers. Linked plans (those with `<projectRoot>/.codetrellis/plans/<slug>/plan.yaml` on disk) auto-export on every change. File watcher (`startPlanFileWatcher`) monitors `.codetrellis/plans/` with self-write stamping (1s TTL) so the write-through-then-watcher loop is broken; external edits re-import the plan idempotently. Import-depth guard suppresses write-through during a re-import. YAML conflict markers detected and surfaced as a `plan-file-conflict` toast. UI: per-plan "Linked / Unlink" toggle on the plan header; toast on file-watcher-driven imports. REST `GET /api/plans/:uid/file-status` + `POST /api/plans/:uid/unlink`; MCP `unlink_plan_from_files`. | medium | ✅ |
 | **C** | Templates as publishable repos. "Publish as template" extracts a plan dir + scrubs project paths to placeholders. A user can `git clone` a template repo into `.codetrellis/templates/`. | small | ❌ |
 | **D** | **Settings surface.** Gear icon in TopBar opens a modal with 5 sections — Identity (name + email defaulting from `git config user.name`/`user.email`), MCP Server (configurable port + autodetect-on-collision + copy-config snippet), Plans (default visibility), Data (dir override + `CODETRELLIS_DATA_DIR` env var honoured for tests), Telemetry (off; explicit). Persisted at `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. WS broadcasts `settings-changed` + `mcp-port-changed`. | small | ✅ |
 | **E** | **Identity in attributions.** REST authoring sites (`POST /api/plans`, plan-doc create, comment create) now resolve `author` via `getAuthorKey('human')` — returns the user's settings email if configured, falls back to the legacy `'human'` role string. Old rows stay valid; new rows pick up the email once set. | small | ✅ |
@@ -1007,7 +1043,7 @@ The active queue is now driven by:
 
 5. ~~**Phase 13 §D + §E — Settings surface + Identity in attributions**~~ ✅ shipped — gear icon in TopBar opens a 5-section modal; identity defaults from `git config`; MCP port configurable + autodetects on collision; `CODETRELLIS_DATA_DIR` env var supported for the E2E harness; REST authoring sites use the configured identity email (falls back to `'human'`).
 6. ~~**Phase 13 §A — Manual plan export / import**~~ ✅ shipped — `plan-file-service.ts` round-trips plan + phases + tasks + spec docs to disk; REST + MCP + UI. Multi-device works via `git push` / `git pull`.
-7. **Phase 13 §B — Auto-sync.** File watcher on `.codetrellis/plans/`, write-through on every plan/phase/task/doc mutation, banner UI for external-update reload, conflict-marker detection. The next push.
+7. ~~**Phase 13 §B — Auto-sync**~~ ✅ shipped — debounced write-through on every plan/phase/task/doc mutation, chokidar file watcher with self-write stamping, import-depth guard, YAML conflict-marker detection, per-plan Linked/Unlink toggle.
 8. **Electron build fixes (real DMG + EXE).** Five small fixes: (a) renderer asset bundling — Forge says "built" but renderer never lands in the `.app`; (b) `extraResource` for tree-sitter WASM grammars + read via `process.resourcesPath` in production; (c) generate `icon.icns` + `icon.ico` from `icon.png`; (d) add `@electron-forge/maker-squirrel` for Windows; (e) signing + notarisation hooks. Prep for shipping the desktop app to actual users.
 9. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
 10. **Phase 13 §C — Templates as publishable repos.** "Publish as template" extracts a plan dir + scrubs project paths to placeholders. Users `git clone` template repos into `.codetrellis/templates/`.

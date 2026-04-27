@@ -3,6 +3,20 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { Plan, Task, PlanVersion, CreatePlanInput, PlanStatus } from '../../shared/types';
 
+/**
+ * Phase 13 §B auto-sync hook. Lazy-required to dodge the import
+ * cycle (plan-file-service → plan-service → here). Best-effort: if
+ * the auto-sync layer isn't wired up (early init / tests), this is a
+ * no-op.
+ */
+function notifyMutation(planUid: string): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { scheduleWriteThrough } = require('./plan-file-service');
+    scheduleWriteThrough(planUid);
+  } catch { /* auto-sync not available — fine, manual export still works */ }
+}
+
 export function createPlan(
   input: CreatePlanInput,
   author: string,
@@ -59,6 +73,7 @@ export function createPlan(
   );
 
   markDirty();
+  notifyMutation(plan.uid);
   return plan;
 }
 
@@ -133,11 +148,13 @@ export function updatePlan(planUid: string, changes: Partial<Pick<Plan, 'title' 
     );
   }
   markDirty();
+  notifyMutation(planUid);
 }
 
 export function deletePlan(planUid: string): void {
   getDb().run(`UPDATE plans SET status = 'archived', updated_at = ? WHERE uid = ?`, [Date.now(), planUid]);
   markDirty();
+  notifyMutation(planUid);
 }
 
 export function getTasksByPlan(planUid: string): Task[] {
@@ -192,6 +209,11 @@ export function updateTask(
   params.push(taskUid);
   getDb().run(`UPDATE tasks SET ${sets.join(', ')} WHERE uid = ?`, params);
   markDirty();
+  // Look up the parent plan so the auto-sync layer can pick the right
+  // directory. Cheap (one-row by-uid query).
+  const parent = getDb().exec(`SELECT plan_uid FROM tasks WHERE uid = ?`, [taskUid]);
+  const planUid = parent[0]?.values[0]?.[0] as string | undefined;
+  if (planUid) notifyMutation(planUid);
 }
 
 /**
@@ -296,6 +318,7 @@ export function appendTaskToPlan(planUid: string, input: {
   );
 
   markDirty();
+  notifyMutation(planUid);
   return getTaskByUid(taskUid);
 }
 

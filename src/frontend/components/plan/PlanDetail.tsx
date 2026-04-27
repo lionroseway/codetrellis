@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward, User, Download } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward, User, Download, Link2, Link2Off } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
@@ -17,6 +17,21 @@ export function PlanDetail() {
   const projectRoot = useProjectStore((s) => s.root);
   const addToast = useToastStore((s) => s.addToast);
   const [exporting, setExporting] = useState(false);
+  const [linked, setLinked] = useState<boolean | null>(null);
+
+  // Phase 13 §B: a plan is "linked" when its directory exists on disk;
+  // every mutation auto-syncs through `plan-file-service.scheduleWriteThrough`.
+  // Refresh on plan switch + when a `plan-exported` / `plan-unlinked` WS
+  // event names this plan.
+  useEffect(() => {
+    if (!plan || !projectRoot) { setLinked(null); return; }
+    let cancelled = false;
+    fetch(`/api/plans/${plan.uid}/file-status?path=${encodeURIComponent(projectRoot)}`)
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setLinked(!!data.linked); })
+      .catch(() => { if (!cancelled) setLinked(null); });
+    return () => { cancelled = true; };
+  }, [plan?.uid, projectRoot]);
 
   if (!plan) return null;
 
@@ -32,16 +47,33 @@ export function PlanDetail() {
       const res = await fetch(`/api/plans/${plan.uid}/export?path=${encodeURIComponent(projectRoot)}`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Export failed');
+      setLinked(true);
       addToast({
         type: 'success',
-        title: 'Plan exported',
-        message: `Wrote ${data.files.length} files to ${data.planDir.replace(projectRoot, '')}`,
+        title: 'Plan linked to disk',
+        message: `Wrote ${data.files.length} files. Future edits auto-sync.`,
         duration: 6000,
       });
     } catch (err) {
       addToast({ type: 'error', title: 'Export failed', message: String(err) });
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleUnlink = async () => {
+    if (!projectRoot || !plan) return;
+    if (!confirm(`Stop syncing "${plan.title}" to .codetrellis/plans/?\n\nThe directory on disk will be deleted. Your DB rows stay intact. You can always re-export later.`)) return;
+    try {
+      const res = await fetch(`/api/plans/${plan.uid}/unlink?path=${encodeURIComponent(projectRoot)}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Unlink failed');
+      }
+      setLinked(false);
+      addToast({ type: 'info', title: 'Plan unlinked', message: 'Directory removed; DB intact.' });
+    } catch (err) {
+      addToast({ type: 'error', title: 'Unlink failed', message: String(err) });
     }
   };
 
@@ -70,15 +102,29 @@ export function PlanDetail() {
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-semibold text-foreground flex-1">{plan.title}</h3>
           <StatusBadge status={plan.status} />
-          <button
-            onClick={handleExport}
-            disabled={exporting || !projectRoot}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md border border-white/[0.06] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title={projectRoot ? `Export to ${projectRoot}/.codetrellis/plans/` : 'Open a project first'}
-          >
-            <Download size={10} />
-            {exporting ? 'Exporting…' : 'Export'}
-          </button>
+          {linked === true ? (
+            <button
+              onClick={handleUnlink}
+              disabled={!projectRoot}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md border border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300 hover:bg-emerald-500/[0.15] hover:border-emerald-500/50 transition-colors group"
+              title="Linked: every change auto-syncs to .codetrellis/plans/. Click to unlink."
+            >
+              <Link2 size={10} className="group-hover:hidden" />
+              <Link2Off size={10} className="hidden group-hover:inline" />
+              <span className="group-hover:hidden">Linked</span>
+              <span className="hidden group-hover:inline">Unlink</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleExport}
+              disabled={exporting || !projectRoot}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md border border-white/[0.06] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title={projectRoot ? `Link this plan to ${projectRoot}/.codetrellis/plans/ for git-based sync` : 'Open a project first'}
+            >
+              <Download size={10} />
+              {exporting ? 'Linking…' : 'Link to disk'}
+            </button>
+          )}
         </div>
         {plan.description && (
           <p className="text-[10px] text-foreground-muted mt-1 leading-relaxed">{plan.description}</p>

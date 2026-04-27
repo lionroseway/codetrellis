@@ -3,6 +3,15 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { PlanDocument, PlanDocumentVersion } from '../../shared/types';
 
+/** Phase 13 §B auto-sync hook — see plan-service for the rationale. */
+function notifyMutation(planUid: string): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { scheduleWriteThrough } = require('./plan-file-service');
+    scheduleWriteThrough(planUid);
+  } catch { /* fine */ }
+}
+
 export interface CreatePlanDocInput {
   planUid: string;
   docType: string;
@@ -45,6 +54,7 @@ export function createPlanDocument(input: CreatePlanDocInput): PlanDocument {
   );
 
   markDirty();
+  notifyMutation(input.planUid);
 
   return {
     uid,
@@ -175,14 +185,17 @@ export function updatePlanDocument(docUid: string, updates: UpdatePlanDocInput):
   }
 
   markDirty();
+  notifyMutation(existing.planUid);
   return getPlanDocument(docUid);
 }
 
 export function deletePlanDocument(docUid: string): void {
   const db = getDb();
+  const before = getPlanDocument(docUid);
   db.run(`DELETE FROM plan_document_versions WHERE doc_uid = ?`, [docUid]);
   db.run(`DELETE FROM plan_documents WHERE uid = ?`, [docUid]);
   markDirty();
+  if (before) notifyMutation(before.planUid);
 }
 
 /**

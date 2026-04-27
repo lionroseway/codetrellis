@@ -566,6 +566,27 @@ export async function startMcpServer(): Promise<void> {
     }
   );
 
+  mcpServer.registerTool(
+    'unlink_plan_from_files',
+    {
+      description: 'Remove a plan\'s on-disk directory under `.codetrellis/plans/<slug>/`. The DB rows survive — this is the "Shared → Local" toggle. Use this to stop write-through-syncing a plan to the project repo (e.g. for a private brainstorm you don\'t want committed).',
+      inputSchema: {
+        plan_uid: z.string(),
+        project_root: z.string(),
+      },
+    },
+    async ({ plan_uid, project_root }) => {
+      const { unlinkPlan } = require('../services/plan-file-service');
+      try {
+        const result = unlinkPlan(plan_uid, project_root);
+        broadcast('plan-unlinked', { planUid: plan_uid });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
+      }
+    }
+  );
+
   // --- Plan Templates (Phase 12 §G) ---
 
   mcpServer.registerTool(

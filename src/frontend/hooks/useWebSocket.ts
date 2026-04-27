@@ -134,11 +134,46 @@ export function useWebSocket() {
             const { useProjectStore } = require('../stores/project-store');
             const root = useProjectStore.getState().root;
             usePlanStore.getState().fetchPlans(root || undefined).catch(() => {});
-            useToastStore.getState().addToast({ type: 'info', title: 'Plan imported', message: payload?.source || 'from disk' });
+            // Phase 13 §B: file-watcher-driven auto-syncs are common
+            // (every git pull, every external edit). Distinguish them
+            // so the toast text matches what just happened.
+            if (payload?.source === 'file-watcher') {
+              const planUid = payload?.planUid;
+              const active = usePlanStore.getState().activePlanUid;
+              if (planUid && planUid === active) {
+                // Re-fetch the in-flight plan so the open view
+                // reflects the disk change.
+                usePlanStore.getState().fetchPlan(planUid).catch(() => {});
+              }
+              useToastStore.getState().addToast({
+                type: 'info',
+                title: 'Plan reloaded from disk',
+                message: payload?.warnings?.length
+                  ? `External change picked up (${payload.warnings.length} warnings).`
+                  : 'External change picked up.',
+                duration: 5000,
+              });
+            } else {
+              useToastStore.getState().addToast({ type: 'info', title: 'Plan imported', message: payload?.source || 'from disk' });
+            }
           }
           if (type === 'plan-exported') {
-            // Pure notification — file content matches DB; no
-            // store mutation needed.
+            // Auto-sync write-through. No state mutation needed —
+            // file matches DB. Skip toast for these (would spam on
+            // every edit); only the manual Export still toasts.
+          }
+          if (type === 'plan-unlinked') {
+            // Another window / agent unlinked the plan from disk.
+            useToastStore.getState().addToast({ type: 'info', title: 'Plan unlinked', message: 'No longer syncing to disk.' });
+          }
+          if (type === 'plan-file-conflict') {
+            // YAML merge conflict detected by the file watcher.
+            useToastStore.getState().addToast({
+              type: 'warning',
+              title: 'Plan file has merge conflicts',
+              message: `Resolve in your editor: ${payload?.filePath || 'unknown file'}`,
+              duration: 12000,
+            });
           }
           if (type === 'plan-phase-deleted') {
             // Phase deleted — refetch phases for whichever plan is
