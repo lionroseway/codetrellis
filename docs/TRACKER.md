@@ -57,7 +57,7 @@ shared via the bridge abstraction.
 | Visual Plan Builder | 35 | Medium | "Add to plan" from the inspector exists; clicking nodes-on-graph to author isn't wired |
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
 | Plan export / source-controllable plans | 100 | High | Phase 13 §A + §B + §C all shipped. Plans round-trip to disk as YAML + markdown (§A), linked plans auto-sync via write-through + chokidar (§B), and templates ship as portable directories (§C — built-ins + `<project>/.codetrellis/templates/` + `~/.codetrellis/templates/` with `{{key}}` placeholder substitution). Multi-device + multi-team workflows fully covered via git. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
-| Electron desktop build | 30 | Medium | `npm run package` runs to completion but the resulting `.app` is non-functional — renderer not bundled, tree-sitter WASM missing, icon needs `.icns` / `.ico`, no `maker-squirrel` for Windows. Five small fixes needed before a real DMG / EXE ships. See §7 for the punch list. |
+| Electron desktop build | 90 | High | `npm run package` and `npm run make` both produce launchable artefacts. macOS DMG verified at 98 MB (`CodeTrellis-0.1.0-arm64.dmg`). Windows installer config in place via `@electron-forge/maker-squirrel` — needs a Windows host (or GitHub Actions matrix) to actually build since Squirrel requires Mono cross-platform. Linux DEB/RPM makers wired. Code-signing scaffolding conditional on env vars (`CODESIGN_IDENTITY` for macOS, `certificateFile` for Windows) — unsigned builds work but the OS warns users until certs are added. Outstanding: GitHub Actions release workflow, real signing certs. |
 | Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
 | E2E test harness | 35 | Medium | **Designed in [E2E-HARNESS.md](E2E-HARNESS.md), not built.** Today's Playwright suite hits the real running app and is flaky (folder-picker, stale plans, port collisions, no clock control, no agent simulation). Design covers: in-tree fixture repo (`tests/fixtures/sample-app/` — TS + Python, 25 files, known cross-system pairs), a scripted MCP agent (deterministic, no real LLM), per-test tmp data dir (`CODETRELLIS_DATA_DIR` env var), dynamic port allocation, an in-process `services/clock.ts` for timestamp control, and a 4-phase delivery (scaffolding → loop tests → plan-export round-trip → optional visual diffs). |
@@ -65,6 +65,31 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Electron DMG / EXE shipped
+
+The audit's five-point punch list cleared. `npm run make`
+produces a launchable `CodeTrellis-0.1.0-arm64.dmg` (98 MB) on
+macOS plus a cross-platform zip. Windows installer config in place
+(needs a Windows host to actually build).
+
+The renderer-bundling miss was the headline bug: vite's `root:
+'src/frontend'` made it write the build to
+`src/frontend/.vite/renderer/main_window/` while Forge looked at
+`<repo>/.vite/renderer/main_window/`. Window opened on a blank
+screen because the `.app` shipped with `package.json` + `main.js`
++ `preload.js` and nothing else.
+
+Plus tree-sitter WASMs now ship via `extraResource` and
+`ast-parser.ts` probes `process.resourcesPath` in production;
+icons regenerate from `resources/icon.png` via `png2icons` in a
+Forge `generateAssets` hook; maker-squirrel + maker-deb +
+maker-rpm wired alongside maker-dmg; `osxSign` / `osxNotarize` /
+Squirrel `certificateFile` all conditional on env vars so
+unsigned builds still work for testing.
+
+Tracker §1 Electron desktop build 30 → 90. §7 #8 ✅. Outstanding:
+GitHub Actions release workflow, real signing certs.
 
 ### Apr 27, 2026 — Templates as publishable repos (Phase 13 §C)
 
@@ -1090,7 +1115,7 @@ The active queue is now driven by:
 5. ~~**Phase 13 §D + §E — Settings surface + Identity in attributions**~~ ✅ shipped — gear icon in TopBar opens a 5-section modal; identity defaults from `git config`; MCP port configurable + autodetects on collision; `CODETRELLIS_DATA_DIR` env var supported for the E2E harness; REST authoring sites use the configured identity email (falls back to `'human'`).
 6. ~~**Phase 13 §A — Manual plan export / import**~~ ✅ shipped — `plan-file-service.ts` round-trips plan + phases + tasks + spec docs to disk; REST + MCP + UI. Multi-device works via `git push` / `git pull`.
 7. ~~**Phase 13 §B — Auto-sync**~~ ✅ shipped — debounced write-through on every plan/phase/task/doc mutation, chokidar file watcher with self-write stamping, import-depth guard, YAML conflict-marker detection, per-plan Linked/Unlink toggle.
-8. **Electron build fixes (real DMG + EXE).** Five small fixes: (a) renderer asset bundling — Forge says "built" but renderer never lands in the `.app`; (b) `extraResource` for tree-sitter WASM grammars + read via `process.resourcesPath` in production; (c) generate `icon.icns` + `icon.ico` from `icon.png`; (d) add `@electron-forge/maker-squirrel` for Windows; (e) signing + notarisation hooks. Prep for shipping the desktop app to actual users.
+8. ~~**Electron build fixes (real DMG + EXE)**~~ ✅ shipped — vite renderer outDir absolute (was misplaced under src/frontend/.vite); tree-sitter WASMs via extraResource + dual-path probe in ast-parser; png2icons-driven icon.icns + icon.ico generation as a Forge generateAssets hook; maker-squirrel + maker-deb + maker-rpm added; conditional osxSign / osxNotarize wiring. **macOS DMG verified at 98 MB.** Windows EXE needs a Windows host or CI matrix.
 9. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
 10. ~~**Phase 13 §C — Templates as publishable repos**~~ ✅ shipped — disk templates from `<project>/.codetrellis/templates/` + `~/.codetrellis/templates/` merged with built-ins; "Publish as template" UI; `{{key}}` placeholder substitution.
 11. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
