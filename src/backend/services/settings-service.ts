@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/types';
-import { getDataDir } from './persistence';
+import { getSettingsDir } from './persistence';
 
 /**
  * Settings service — Phase 13 §D.
@@ -22,7 +22,11 @@ import { getDataDir } from './persistence';
 let cached: AppSettings | null = null;
 
 function getSettingsPath(): string {
-  return path.join(getDataDir(), 'settings.json');
+  // Important: use `getSettingsDir()` not `getDataDir()`. The latter
+  // calls back into this module to read `dataDirOverride` — which
+  // creates an infinite recursion. settings.json always lives at
+  // env-or-default; the data-dir override only affects the DB.
+  return path.join(getSettingsDir(), 'settings.json');
 }
 
 /**
@@ -126,8 +130,9 @@ export function resetSettingsCache(): void {
 function saveSettings(settings: AppSettings): void {
   const filePath = getSettingsPath();
   try {
-    if (!fs.existsSync(getDataDir())) {
-      fs.mkdirSync(getDataDir(), { recursive: true });
+    const dir = getSettingsDir();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
     const tmpPath = `${filePath}.tmp`;
     fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2));

@@ -3,27 +3,33 @@ import path from 'node:path';
 import os from 'node:os';
 
 /**
- * Resolve the data directory at every call so it picks up:
- *   1. `CODETRELLIS_DATA_DIR` env var (used by the E2E harness — see
- *      docs/E2E-HARNESS.md §7), highest priority.
- *   2. Settings override (`settings.dataDirOverride`) — set via the
- *      Settings panel for users who want their plans/DB on a network
- *      drive or shared volume.
- *   3. Default `~/.codetrellis/`.
+ * Two-tier resolution to avoid an import cycle:
  *
- * settings-service is loaded lazily to dodge an import cycle
- * (settings-service depends on persistence's `getDataDir()`).
+ *   - **Settings dir** = env > default. Always resolvable without
+ *     reading any file. Settings.json itself lives here.
+ *   - **Data dir** = env > settings.dataDirOverride > default. Reads
+ *     settings.json, so it depends on the settings dir being known
+ *     first. Used for `data.db` and trellis snapshots.
+ *
+ * The cycle this prevents: previously `getDataDir()` consulted
+ * settings-service, which called `getSettingsPath()` which called
+ * `getDataDir()`. With settings.json living at a path that doesn't
+ * itself depend on settings, the recursion is broken.
  */
 const DEFAULT_DATA_DIR = path.join(os.homedir(), '.codetrellis');
 
-function getDbPath(): string {
-  return path.join(resolveDataDir(), 'data.db');
+/**
+ * The directory `settings.json` lives in. Stable, never depends on
+ * settings — only env override + default. Used by settings-service's
+ * own path resolver.
+ */
+export function getSettingsDir(): string {
+  const fromEnv = process.env.CODETRELLIS_DATA_DIR;
+  if (fromEnv && fromEnv.trim()) return fromEnv;
+  return DEFAULT_DATA_DIR;
 }
 
-function getDbTmpPath(): string {
-  return path.join(resolveDataDir(), 'data.db.tmp');
-}
-
+/** Fully-resolved data dir (DB, snapshots) — may differ from settings dir. */
 function resolveDataDir(): string {
   const fromEnv = process.env.CODETRELLIS_DATA_DIR;
   if (fromEnv && fromEnv.trim()) return fromEnv;
@@ -32,12 +38,21 @@ function resolveDataDir(): string {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getSettings } = require('./settings-service');
     const override = getSettings().data.dataDirOverride;
-    if (override) return override;
+    if (override && typeof override === 'string' && override.trim()) return override;
   } catch {
-    // settings-service may itself depend on getDataDir(); if that
-    // happens during init, just fall through to the default.
+    // settings-service may not be ready yet (during early init or
+    // tests). Fall through to the default — the DB starts in the
+    // canonical place.
   }
   return DEFAULT_DATA_DIR;
+}
+
+function getDbPath(): string {
+  return path.join(resolveDataDir(), 'data.db');
+}
+
+function getDbTmpPath(): string {
+  return path.join(resolveDataDir(), 'data.db.tmp');
 }
 
 let dirty = false;

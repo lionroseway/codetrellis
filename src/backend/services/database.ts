@@ -224,7 +224,11 @@ export async function initDatabase(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_plan_docs_plan ON plan_documents(plan_uid);
     CREATE INDEX IF NOT EXISTS idx_plan_docs_type ON plan_documents(doc_type);
-    CREATE INDEX IF NOT EXISTS idx_plan_docs_parent ON plan_documents(parent_doc_uid);
+    -- idx_plan_docs_parent is created in the migration block below
+    -- (after the ALTER TABLE that adds parent_doc_uid). Defining it
+    -- here would fail on databases that pre-date Phase 12 §C — the
+    -- table exists, the column doesn't, CREATE INDEX errors. Fresh
+    -- installs still get the index via the migration block too.
 
     CREATE TABLE IF NOT EXISTS plan_document_versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -466,6 +470,10 @@ export function resolveImports(
   // like groupings (e.g. a "testing" parent with phase-test children).
   try { d.run(`ALTER TABLE plan_documents ADD COLUMN order_hint TEXT`); } catch { /* exists */ }
   try { d.run(`ALTER TABLE plan_documents ADD COLUMN parent_doc_uid TEXT`); } catch { /* exists */ }
+  // Index created here (not in the schema CREATE block) so existing
+  // databases that have plan_documents without parent_doc_uid migrate
+  // cleanly: the ALTER TABLE adds the column, then the index lands.
+  try { d.run(`CREATE INDEX IF NOT EXISTS idx_plan_docs_parent ON plan_documents(parent_doc_uid)`); } catch { /* should not happen post-ALTER */ }
 
   // Phase 12 §A: explicit Phase entity + tasks.phase_uid. A phase is a
   // first-class checkpoint within a plan with its own scope, prereqs,
