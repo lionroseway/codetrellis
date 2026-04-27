@@ -58,13 +58,57 @@ shared via the bridge abstraction.
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
 | Plan export / source-controllable plans | 0 | – | **Designed, not built.** See [PLAN-EXPORT.md](PLAN-EXPORT.md) for the full spec — directory of YAML + markdown under `<project>/.codetrellis/plans/`, file-as-source-of-truth with DB cache, auto-sync via file watcher, identity via `git config`. Three-phase delivery: (1) manual export/import, (2) auto-sync, (3) templates as publishable repos. The headline feature for the multi-device + multi-agent story. |
 | Electron desktop build | 30 | Medium | `npm run package` runs to completion but the resulting `.app` is non-functional — renderer not bundled, tree-sitter WASM missing, icon needs `.icns` / `.ico`, no `maker-squirrel` for Windows. Five small fixes needed before a real DMG / EXE ships. See §7 for the punch list. |
-| Settings surface | 0 | – | No in-app settings today. [PLAN-EXPORT.md §13](PLAN-EXPORT.md) details the proposed shape: Identity (display name + email from `git config`), MCP server (port + autodetect + agent-config regenerate), Plans (default visibility), Data (dir + export/import/reset), Telemetry (off). Persisted to `~/.codetrellis/settings.json`. |
+| Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
 | E2E test harness | 35 | Medium | **Designed in [E2E-HARNESS.md](E2E-HARNESS.md), not built.** Today's Playwright suite hits the real running app and is flaky (folder-picker, stale plans, port collisions, no clock control, no agent simulation). Design covers: in-tree fixture repo (`tests/fixtures/sample-app/` — TS + Python, 25 files, known cross-system pairs), a scripted MCP agent (deterministic, no real LLM), per-test tmp data dir (`CODETRELLIS_DATA_DIR` env var), dynamic port allocation, an in-process `services/clock.ts` for timestamp control, and a 4-phase delivery (scaffolding → loop tests → plan-export round-trip → optional visual diffs). |
 
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Settings surface + identity (Phase 13 §D + §E)
+
+First code from Phase 13. Unblocks everything else.
+
+- **`settings-service.ts`** owns `<dataDir>/settings.json`. Lazy
+  cached, additive schema (older files missing new fields stay
+  valid via `mergeWithDefaults`). `getAuthorKey()` returns the
+  configured identity email or falls back to the legacy
+  `'human'`/`'agent'` role string — backwards compatible with
+  every existing row.
+- **`readGitIdentity(projectPath?)`** shells out to `git config
+  --get user.name` / `user.email` so the Identity section
+  pre-fills from the user's existing git config — zero-config for
+  the 95% case.
+- **MCP port**: was hardcoded `19432`. Now reads from
+  `settings.mcp.port` (env var `CODETRELLIS_MCP_PORT` overrides
+  for tests), and on `EADDRINUSE` walks forward up to 10 ports if
+  `mcp.autodetectOnCollision` is on. The actually-bound port is
+  reported via `getMcpStatus()` and broadcast as
+  `mcp-port-changed` so the "Copy MCP config" snippets stay
+  accurate.
+- **Persistence env var**: `~/.codetrellis/` becomes
+  `resolveDataDir()` with priority env > settings override >
+  default. Required by [E2E-HARNESS.md §7](E2E-HARNESS.md) for
+  per-test data isolation.
+- **REST**: `GET/PUT /api/settings`, `GET /api/identity/git-defaults`.
+  Save broadcasts `settings-changed` (other open windows refresh
+  on next open) and `mcp-port-config-changed` if the port
+  preference moved.
+- **REST authoring sites** now resolve `author` via
+  `getAuthorKey('human')` — `POST /api/plans`, plan-doc create,
+  comment create. New plans/tasks/comments carry the user's email
+  once the Identity section is filled.
+- **UI**: new gear icon in the TopBar → `SettingsModal` with
+  5 sections (Identity, MCP Server, Plans, Data, Telemetry).
+  Identity has a "Pull from `git config`" button. MCP shows the
+  bound port if it differs from configured + a Copy button for
+  the agent config JSON. Plans has a Shared/Local toggle for
+  the default visibility (used once §A lands). Data has the dir
+  override. Telemetry says "Off." with a paragraph on why.
+- **Skill cheat sheet** updated: agents are told the MCP port may
+  not be the default and how to fetch the bound port from
+  `/api/mcp/status`.
 
 ### Apr 27, 2026 — Phase 13 + E2E design + Electron build audit
 
@@ -682,8 +726,8 @@ share a plan or someone moves between laptop and desktop.
 | **A** | Manual export → file, manual import. New `plan-file-service.ts`, REST + MCP wrappers (`export_plan_to_files`, `import_plan_from_files`), "Export to .codetrellis/" button + "Import plan from file..." menu item. Documents the format. Delivers the multi-device story without auto-sync. | medium | ❌ |
 | **B** | Auto-sync (file is canonical). File watcher on `.codetrellis/plans/`, write-through on every plan/phase/task/doc mutation, banner UI for external-update reload, conflict-marker detection, per-plan "Linked ⇄ Local" toggle. | medium | ❌ |
 | **C** | Templates as publishable repos. "Publish as template" extracts a plan dir + scrubs project paths to placeholders. A user can `git clone` a template repo into `.codetrellis/templates/`. | small | ❌ |
-| **D** | **Settings surface.** New gear-icon panel + `~/.codetrellis/settings.json` persistence. Identity (display name + email defaulting from `git config`), MCP server (configurable port + autodetect on conflict + "regenerate agent config" buttons), Plans (default visibility for new plans), Data (dir override + export/import/reset DB), Telemetry (off; explicit). | small | ❌ |
-| **E** | **Identity in attributions.** `Plan.author` / `Task.assignee` / `Comment.author` migrate from `'human'` / `'agent'` (role) to `email@domain` (stable id). Backwards compatible — old rows still valid. Defaults pulled from settings panel which itself defaults from `git config`. | small | ❌ |
+| **D** | **Settings surface.** Gear icon in TopBar opens a modal with 5 sections — Identity (name + email defaulting from `git config user.name`/`user.email`), MCP Server (configurable port + autodetect-on-collision + copy-config snippet), Plans (default visibility), Data (dir override + `CODETRELLIS_DATA_DIR` env var honoured for tests), Telemetry (off; explicit). Persisted at `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. WS broadcasts `settings-changed` + `mcp-port-changed`. | small | ✅ |
+| **E** | **Identity in attributions.** REST authoring sites (`POST /api/plans`, plan-doc create, comment create) now resolve `author` via `getAuthorKey('human')` — returns the user's settings email if configured, falls back to the legacy `'human'` role string. Old rows stay valid; new rows pick up the email once set. | small | ✅ |
 
 **Suggested order:** D + E first (small, unlocks everyone-else's
 attribution + settings), then A (manual export — biggest UX win),
@@ -924,8 +968,8 @@ The active queue is now driven by:
 
 ##### Next up (in order)
 
-5. **Phase 13 §D + §E — Settings surface + Identity in attributions.** New gear-icon settings panel persisting to `~/.codetrellis/settings.json`: Identity (display name + email defaulting from `git config`), MCP server (configurable port + autodetect on conflict + regenerate-agent-config buttons), Plans (default visibility), Data dir override + DB import/export, Telemetry off. `Plan.author` / `Task.assignee` / `Comment.author` switch from role-based (`'human'`/`'agent'`) to email-based ids. Small but unlocks everything in Phase 13.
-6. **Phase 13 §A — Manual plan export / import.** New `plan-file-service.ts` + REST + MCP (`export_plan_to_files`, `import_plan_from_files`) + UI buttons. The biggest single UX win for multi-device — `git push` / `git pull` plans alongside the project.
+5. ~~**Phase 13 §D + §E — Settings surface + Identity in attributions**~~ ✅ shipped — gear icon in TopBar opens a 5-section modal; identity defaults from `git config`; MCP port configurable + autodetects on collision; `CODETRELLIS_DATA_DIR` env var supported for the E2E harness; REST authoring sites use the configured identity email (falls back to `'human'`).
+6. **Phase 13 §A — Manual plan export / import.** New `plan-file-service.ts` + REST + MCP (`export_plan_to_files`, `import_plan_from_files`) + UI buttons. The biggest single UX win for multi-device — `git push` / `git pull` plans alongside the project. See [PLAN-EXPORT.md](PLAN-EXPORT.md) for the format.
 7. **Phase 13 §B — Auto-sync.** File watcher on `.codetrellis/plans/`, write-through on every mutation, banner UI for external-update reload, conflict-marker detection.
 8. **Electron build fixes (real DMG + EXE).** Five small fixes: (a) renderer asset bundling — Forge says "built" but renderer never lands in the `.app`; (b) `extraResource` for tree-sitter WASM grammars + read via `process.resourcesPath` in production; (c) generate `icon.icns` + `icon.ico` from `icon.png`; (d) add `@electron-forge/maker-squirrel` for Windows; (e) signing + notarisation hooks. Prep for shipping the desktop app to actual users.
 9. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.

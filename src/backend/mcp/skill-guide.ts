@@ -112,6 +112,15 @@ Doc types: \`executive_summary\`, \`architecture\`, \`patterns\`,
 - \`set_active_plan(plan_uid)\` — say which plan you're working on
 - \`add_comment(target_uid, body, comment_type?)\` — leave a note on a plan or task
 
+## Where to find the MCP server
+
+The user may have moved it off the default port. Read the bound port
+from \`GET http://127.0.0.1:3001/api/mcp/status\` (returns
+\`{ running, port, connectedAgents }\`) or fetch the current config
+snippet from \`GET /api/mcp/config\`. Hardcoding port \`19432\` will
+break for users running CodeTrellis alongside another tool that grabs
+that port (autodetect walks forward to 19433+).
+
 ## MCP resources you can fetch
 
 - \`codetrellis://plans\` — all plans

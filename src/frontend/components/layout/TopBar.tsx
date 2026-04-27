@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { getAPI } from '../../bridge';
 import type { ViewDepth } from '../../../shared/types';
 import { ConnectedAgents } from './ConnectedAgents';
+import { SettingsModal } from '../settings/SettingsModal';
 
 async function captureBaselineFromBranch(projectPath: string, branch: string): Promise<boolean> {
   try {
@@ -306,6 +307,7 @@ export function TopBar() {
   const root = useProjectStore((s) => s.root);
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const setViewDepth = useGraphStore((s) => s.setViewDepth);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <div className="glass-panel flex items-center h-11 px-3 border-b gap-2 shrink-0 overflow-visible relative z-40">
@@ -360,6 +362,16 @@ export function TopBar() {
       </button>
 
       <ConnectedAgents />
+
+      <button
+        onClick={() => setSettingsOpen(true)}
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
+        title="Settings"
+      >
+        <SettingsIcon size={13} />
+      </button>
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

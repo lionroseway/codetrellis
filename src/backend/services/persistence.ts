@@ -2,17 +2,52 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const DATA_DIR = path.join(os.homedir(), '.codetrellis');
-const DB_PATH = path.join(DATA_DIR, 'data.db');
-const DB_TMP_PATH = path.join(DATA_DIR, 'data.db.tmp');
+/**
+ * Resolve the data directory at every call so it picks up:
+ *   1. `CODETRELLIS_DATA_DIR` env var (used by the E2E harness — see
+ *      docs/E2E-HARNESS.md §7), highest priority.
+ *   2. Settings override (`settings.dataDirOverride`) — set via the
+ *      Settings panel for users who want their plans/DB on a network
+ *      drive or shared volume.
+ *   3. Default `~/.codetrellis/`.
+ *
+ * settings-service is loaded lazily to dodge an import cycle
+ * (settings-service depends on persistence's `getDataDir()`).
+ */
+const DEFAULT_DATA_DIR = path.join(os.homedir(), '.codetrellis');
+
+function getDbPath(): string {
+  return path.join(resolveDataDir(), 'data.db');
+}
+
+function getDbTmpPath(): string {
+  return path.join(resolveDataDir(), 'data.db.tmp');
+}
+
+function resolveDataDir(): string {
+  const fromEnv = process.env.CODETRELLIS_DATA_DIR;
+  if (fromEnv && fromEnv.trim()) return fromEnv;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getSettings } = require('./settings-service');
+    const override = getSettings().data.dataDirOverride;
+    if (override) return override;
+  } catch {
+    // settings-service may itself depend on getDataDir(); if that
+    // happens during init, just fall through to the default.
+  }
+  return DEFAULT_DATA_DIR;
+}
 
 let dirty = false;
 let autoSaveInterval: ReturnType<typeof setInterval> | null = null;
 
 export function ensureDataDir(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    console.log(`[Persistence] Created data directory: ${DATA_DIR}`);
+  const dir = resolveDataDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`[Persistence] Created data directory: ${dir}`);
   }
 }
 
@@ -21,14 +56,14 @@ export function ensureDataDir(): void {
  */
 export function loadFromDisk(): Uint8Array | null {
   ensureDataDir();
-  if (!fs.existsSync(DB_PATH)) {
+  if (!fs.existsSync(getDbPath())) {
     console.log('[Persistence] No saved database found, starting fresh');
     return null;
   }
 
   try {
-    const buffer = fs.readFileSync(DB_PATH);
-    console.log(`[Persistence] Loaded database from ${DB_PATH} (${(buffer.length / 1024).toFixed(1)} KB)`);
+    const buffer = fs.readFileSync(getDbPath());
+    console.log(`[Persistence] Loaded database from ${getDbPath()} (${(buffer.length / 1024).toFixed(1)} KB)`);
     return new Uint8Array(buffer);
   } catch (err) {
     console.error('[Persistence] Failed to load database:', err);
@@ -42,8 +77,8 @@ export function loadFromDisk(): Uint8Array | null {
 export function saveToDisk(data: Uint8Array): void {
   ensureDataDir();
   try {
-    fs.writeFileSync(DB_TMP_PATH, data);
-    fs.renameSync(DB_TMP_PATH, DB_PATH);
+    fs.writeFileSync(getDbTmpPath(), data);
+    fs.renameSync(getDbTmpPath(), getDbPath());
     dirty = false;
   } catch (err) {
     console.error('[Persistence] Failed to save database:', err);
@@ -91,5 +126,5 @@ export function stopAutoSave(): void {
 }
 
 export function getDataDir(): string {
-  return DATA_DIR;
+  return resolveDataDir();
 }

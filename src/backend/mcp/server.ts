@@ -18,10 +18,19 @@ import { saveNow } from '../services/persistence';
 import { exportDatabase } from '../services/database';
 import { buildSkillGuide } from './skill-guide';
 
-const MCP_PORT = 19432;
+/**
+ * Default + max-attempt range. The user-configured port comes from
+ * settings (`mcp.port`); if `mcp.autodetectOnCollision` is true and
+ * that port is in use, we walk forward up to MAX_PORT_ATTEMPTS slots.
+ * The actually-bound port is reported via getMcpStatus() and broadcast
+ * over WS so the frontend's "Copy MCP config" buttons stay accurate.
+ */
+const DEFAULT_MCP_PORT = 19432;
+const MAX_PORT_ATTEMPTS = 10;
 
 let mcpServer: McpServer | null = null;
 let httpServer: http.Server | null = null;
+let boundPort: number = DEFAULT_MCP_PORT;
 let connectedTransports = new Map<string, SSEServerTransport>();
 // Maps MCP transport sessionId → registered agent sessionId
 let transportToAgent = new Map<string, string>();
@@ -1150,7 +1159,7 @@ export async function startMcpServer(): Promise<void> {
     }
 
     if (req.url?.startsWith('/messages') && req.method === 'POST') {
-      const sessionId = new URL(req.url, `http://localhost:${MCP_PORT}`).searchParams.get('sessionId');
+      const sessionId = new URL(req.url, `http://localhost:${boundPort}`).searchParams.get('sessionId');
       if (!sessionId || !connectedTransports.has(sessionId)) {
         res.writeHead(404);
         res.end('Session not found');
@@ -1178,11 +1187,46 @@ export async function startMcpServer(): Promise<void> {
 
   httpServer = app;
 
-  return new Promise<void>((resolve) => {
-    app.listen(MCP_PORT, '127.0.0.1', () => {
-      console.log(`[MCP] Server running on http://127.0.0.1:${MCP_PORT}`);
-      resolve();
-    });
+  // Resolve the configured port from settings; allow env override for
+  // the E2E harness; fall back to the historical default. Then walk
+  // forward up to MAX_PORT_ATTEMPTS slots on EADDRINUSE if autodetect
+  // is enabled.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getSettings } = require('../services/settings-service');
+  const settings = getSettings();
+  const envPort = process.env.CODETRELLIS_MCP_PORT;
+  const requestedPort = envPort ? Number(envPort) : (settings.mcp.port ?? DEFAULT_MCP_PORT);
+  const autodetect = settings.mcp.autodetectOnCollision !== false && !envPort;
+
+  return new Promise<void>((resolve, reject) => {
+    const tryPort = (candidate: number, attemptsLeft: number) => {
+      const onError = (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE' && autodetect && attemptsLeft > 0) {
+          console.warn(`[MCP] Port ${candidate} in use; trying ${candidate + 1}…`);
+          app.removeListener('error', onError);
+          tryPort(candidate + 1, attemptsLeft - 1);
+        } else {
+          app.removeListener('error', onError);
+          reject(err);
+        }
+      };
+      app.once('error', onError);
+      app.listen(candidate, '127.0.0.1', () => {
+        boundPort = candidate;
+        app.removeListener('error', onError);
+        console.log(`[MCP] Server running on http://127.0.0.1:${boundPort}${candidate !== requestedPort ? ` (requested ${requestedPort}, autodetected)` : ''}`);
+        // Tell the frontend the bound port might differ from the
+        // configured one — the "Copy MCP config" buttons need to
+        // reflect reality.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { broadcast: bc } = require('../server');
+          bc('mcp-port-changed', { port: boundPort, requested: requestedPort });
+        } catch { /* server module may not yet be registered for broadcast in tests */ }
+        resolve();
+      });
+    };
+    tryPort(requestedPort, autodetect ? MAX_PORT_ATTEMPTS : 0);
   });
 }
 
@@ -1193,7 +1237,7 @@ export function getMcpStatus(): {
 } {
   return {
     running: httpServer !== null,
-    port: MCP_PORT,
+    port: boundPort,
     connectedAgents: connectedTransports.size,
   };
 }
@@ -1205,7 +1249,7 @@ export function getMcpConfig(): Record<string, unknown> {
   return {
     codetrellis: {
       type: 'sse',
-      url: `http://127.0.0.1:${MCP_PORT}/sse`,
+      url: `http://127.0.0.1:${boundPort}/sse`,
     },
   };
 }

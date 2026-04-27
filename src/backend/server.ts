@@ -873,7 +873,11 @@ app.get('/api/plans', (req, res) => {
 app.post('/api/plans', (req, res) => {
   const { title, description, tasks, projectPath } = req.body;
   if (!title || !projectPath) { res.status(400).json({ error: 'title and projectPath required' }); return; }
-  const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, 'user', 'human', projectPath);
+  // Phase 13 §E: prefer the configured identity (email) over the
+  // legacy "user" role. `getAuthorKey` falls back to "human" if the
+  // user hasn't set an identity yet, so old behaviour stays valid.
+  const { getAuthorKey } = require('./services/settings-service');
+  const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, getAuthorKey('human'), 'human', projectPath);
   broadcast('plan-created', { plan });
   saveNow(() => exportDatabase());
   res.json(plan);
@@ -1044,7 +1048,7 @@ app.post('/api/plans/:uid/docs', (req, res) => {
     docType,
     title,
     body: body ?? '',
-    author: author ?? 'human',
+    author: author ?? require('./services/settings-service').getAuthorKey('human'),
     authorType: authorType ?? 'human',
     orderHint: orderHint ?? null,
     parentDocUid: parentDocUid ?? null,
@@ -1232,7 +1236,8 @@ app.get('/api/comments', (req, res) => {
 app.post('/api/comments', (req, res) => {
   const { targetType, targetUid, body, commentType, parentUid } = req.body;
   if (!targetUid || !body) { res.status(400).json({ error: 'targetUid and body required' }); return; }
-  const comment = commentService.addComment(targetType || 'plan', targetUid, 'user', 'human', body, commentType, parentUid);
+  const { getAuthorKey } = require('./services/settings-service');
+  const comment = commentService.addComment(targetType || 'plan', targetUid, getAuthorKey('human'), 'human', body, commentType, parentUid);
   broadcast('comment-added', { comment });
   saveNow(() => exportDatabase());
   res.json(comment);
@@ -1262,6 +1267,40 @@ app.get('/api/mcp/status', (_req, res) => {
 // MCP config for agents to copy
 app.get('/api/mcp/config', (_req, res) => {
   res.json(getMcpConfig());
+});
+
+// --- Settings API (Phase 13 §D) ---
+
+app.get('/api/settings', (_req, res) => {
+  const { getSettings } = require('./services/settings-service');
+  res.json(getSettings());
+});
+
+app.put('/api/settings', (req, res) => {
+  const { updateSettings, getSettings } = require('./services/settings-service');
+  const before = getSettings();
+  const next = updateSettings(req.body || {});
+  // Tell the frontend (and any open Settings panels in other windows)
+  // that settings changed.
+  broadcast('settings-changed', { settings: next });
+  // If the MCP port preference changed, the frontend should know that
+  // a server restart may be needed for it to take effect.
+  if (before.mcp.port !== next.mcp.port) {
+    broadcast('mcp-port-config-changed', { configuredPort: next.mcp.port });
+  }
+  res.json(next);
+});
+
+/**
+ * Read git config defaults for the active project (or a path passed
+ * in via ?project=) so the Settings panel can pre-populate the
+ * Identity section. Returns `{ name, email }` with empty strings on
+ * miss — never errors.
+ */
+app.get('/api/identity/git-defaults', (req, res) => {
+  const { readGitIdentity } = require('./services/settings-service');
+  const projectPath = (req.query.project as string | undefined) || undefined;
+  res.json(readGitIdentity(projectPath));
 });
 
 // --- Server lifecycle ---

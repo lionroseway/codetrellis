@@ -150,6 +150,23 @@ export function useWebSocket() {
             // so the ConnectedAgents widget reflects reality.
             usePlanStore.getState().fetchSessions().catch(() => {});
           }
+          if (type === 'mcp-port-changed') {
+            // Bound port may differ from the configured port (autodetect
+            // on collision). The settings panel + Connect Agent guide
+            // refresh on next open via /api/mcp/status.
+            useToastStore.getState().addToast({
+              type: 'info',
+              title: 'MCP port autodetected',
+              message: `Bound to ${payload.port}${payload.requested && payload.requested !== payload.port ? ` (requested ${payload.requested})` : ''}`,
+              duration: 6000,
+            });
+          }
+          if (type === 'settings-changed') {
+            // Another window saved settings. Settings panel re-reads
+            // on open; if it's currently open, the user may want to
+            // reload — but we don't have a clean push channel into
+            // SettingsModal yet. Future: dispatch a window event.
+          }
 
           // Execution tracking — mark files as actively being worked on
           if (type === 'task-updated' && payload.status === 'in_progress') {
