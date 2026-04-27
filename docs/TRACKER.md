@@ -10,7 +10,7 @@ docs ([CORE-VISION.md](CORE-VISION.md), [THREE-TRELLIS.md](THREE-TRELLIS.md),
 [GRAPH-UX-REFINEMENT.md](GRAPH-UX-REFINEMENT.md),
 [DATA-MODEL.md](DATA-MODEL.md), [MCP-INTEGRATION.md](MCP-INTEGRATION.md),
 [UI-DESIGN.md](UI-DESIGN.md), [ARCHITECTURE.md](ARCHITECTURE.md),
-[PLAN-EXPORT.md](PLAN-EXPORT.md))
+[PLAN-EXPORT.md](PLAN-EXPORT.md), [E2E-HARNESS.md](E2E-HARNESS.md))
 remain canonical for *what* and *why*; this doc is for *where things
 stand*.
 
@@ -60,13 +60,13 @@ shared via the bridge abstraction.
 | Electron desktop build | 30 | Medium | `npm run package` runs to completion but the resulting `.app` is non-functional — renderer not bundled, tree-sitter WASM missing, icon needs `.icns` / `.ico`, no `maker-squirrel` for Windows. Five small fixes needed before a real DMG / EXE ships. See §7 for the punch list. |
 | Settings surface | 0 | – | No in-app settings today. [PLAN-EXPORT.md §13](PLAN-EXPORT.md) details the proposed shape: Identity (display name + email from `git config`), MCP server (port + autodetect + agent-config regenerate), Plans (default visibility), Data (dir + export/import/reset), Telemetry (off). Persisted to `~/.codetrellis/settings.json`. |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
-| E2E test harness | 30 | Medium | Playwright wired today against the real running app — flaky (folder-picker, stale plans across runs). Real story needs: a sample mixed-language repo committed under `tests/fixtures/`, a scripted agent harness that connects via MCP and follows a canned plan, a deterministic clock for timing-sensitive assertions, and a reset-to-clean-state hook. Needs further planning before expansion. |
+| E2E test harness | 35 | Medium | **Designed in [E2E-HARNESS.md](E2E-HARNESS.md), not built.** Today's Playwright suite hits the real running app and is flaky (folder-picker, stale plans, port collisions, no clock control, no agent simulation). Design covers: in-tree fixture repo (`tests/fixtures/sample-app/` — TS + Python, 25 files, known cross-system pairs), a scripted MCP agent (deterministic, no real LLM), per-test tmp data dir (`CODETRELLIS_DATA_DIR` env var), dynamic port allocation, an in-process `services/clock.ts` for timestamp control, and a 4-phase delivery (scaffolding → loop tests → plan-export round-trip → optional visual diffs). |
 
 ---
 
 ## 2. Recently Shipped
 
-### Apr 27, 2026 — Phase 13 design + Electron build audit
+### Apr 27, 2026 — Phase 13 + E2E design + Electron build audit
 
 Not code — design + tracker hygiene to set the next phase up cleanly.
 
@@ -77,6 +77,13 @@ Not code — design + tracker hygiene to set the next phase up cleanly.
   configurable MCP port via settings panel, three-phase delivery
   (manual → auto-sync → publishable templates). The headline
   feature for the multi-device + multi-agent story.
+- **[E2E-HARNESS.md](E2E-HARNESS.md)** — full design for the E2E
+  test harness that catches loop regressions on PR. In-tree
+  fixture repo (`tests/fixtures/sample-app/` — TS + Python, ~25
+  files, known cross-system pairs), scripted MCP agent (no real
+  LLM), per-test tmp data dir, dynamic port allocation,
+  controllable clock, four-phase delivery (scaffolding → loop
+  tests → plan-export round-trip → optional visual diffs).
 - **Electron build verified non-functional** — `npm run package`
   runs to completion but the resulting `.app` is missing the
   renderer, tree-sitter WASM, and a proper icon. Five small fixes
@@ -930,7 +937,7 @@ The active queue is now driven by:
 15. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`; just needs node visual wiring).
 16. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses.
 17. **Learn Trellis (in-app onboarding takeover).** Full-screen UI walkthrough that teaches a new user the loop end-to-end: open project → see graph → make a plan → connect an agent → watch tasks land → verify completion. Tooltip-driven, skippable, designed so a developer is productive in < 10 min without docs. Needs design pass before code (sketch what each step covers; map to existing surfaces; decide on dismissibility + "show this again" behaviour).
-18. **E2E test harness overhaul.** Today's Playwright suite is flaky (folder-picker, plan persistence across runs). Real story needs: a sample mixed-language repo committed under `tests/fixtures/`, a scripted agent harness that registers a session via MCP and follows a canned plan deterministically, a clock-mock for timing-sensitive assertions, a reset-to-clean-state hook, and a CI mode that runs against this fixture instead of the developer's home directory. Needs further planning before expansion — likely its own design doc (`docs/E2E-HARNESS.md`).
+18. **E2E test harness overhaul.** Designed in [E2E-HARNESS.md](E2E-HARNESS.md). Four phases: (1) fixture repo at `tests/fixtures/sample-app/` (TS + Python, ~25 files, known cross-system pairs) + harness scaffolding (per-test tmp data dir, dynamic ports, `services/clock.ts`, scripted MCP agent) + smoke test; (2) loop tests covering scan→plan-from-template→agent→auto-progress→verification; (3) plan-export round-trip tests (depends on Phase 13 §A); (4) optional visual diffs. Catches the loop regressions we keep shipping.
 
 ### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
 Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
