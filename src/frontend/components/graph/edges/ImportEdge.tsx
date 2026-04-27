@@ -113,7 +113,12 @@ function ImportEdgeComponent(props: EdgeProps) {
           }}
         />
 
-        {(edgeData.importState === 'active' || edgeData.importState === 'regular' || edgeData.importState === 'planned_add') && (
+        {/* Animated flow dots — only for states where motion conveys
+            meaning (the agent is working, a planned change is about to
+            happen, or a change just landed). Animating EVERY regular
+            edge with 2k+ edges in big repos pegs the GPU and makes
+            pan/zoom feel sluggish. */}
+        {(edgeData.importState === 'active' || edgeData.importState === 'planned_add') && (
           <>
             <circle r="3.2" fill={visual.flow}>
               <animateMotion dur={edgeData.importState === 'active' ? '1.6s' : '2.4s'} repeatCount="indefinite" rotate="auto">

@@ -363,6 +363,8 @@ export function buildDependencyGraph(
         source: result.nodes.find((n) => n.id === edge.from || n.id === `ghost:${edge.from}`)?.id || edge.from,
         target: result.nodes.find((n) => n.id === edge.to || n.id === `ghost:${edge.to}`)?.id || edge.to,
         type: 'importEdge',
+        // Keep the dashed flow on planned-add ghost edges — motion
+        // signals "about to happen" and is meaningful.
         animated: true,
         style: { stroke: 'rgba(34, 197, 94, 0.5)', strokeWidth: 2, strokeDasharray: '8 4' },
         data: {
@@ -468,7 +470,7 @@ function buildClusterView(
       source,
       target,
       type: 'importEdge',
-      animated: true,
+      animated: false,
       style: {
         stroke: 'rgba(59, 130, 246, 0.4)',
         strokeWidth: Math.min(1 + count * 0.5, 4),
@@ -583,7 +585,7 @@ function buildHubView(
       source: edge.sourceRelative,
       target: edge.targetRelative,
       type: 'importEdge',
-      animated: true,
+      animated: false,
       style: { stroke: 'rgba(59, 130, 246, 0.3)', strokeWidth: 1.5 },
       label: edge.specifiers.length > 0 ? edge.specifiers.slice(0, 2).join(', ') : undefined,
       labelStyle: { fontSize: 8, fill: '#6b6b78' },
@@ -691,7 +693,7 @@ function buildFocusView(
       source: focusPath,
       target: imp,
       type: 'importEdge',
-      animated: true,
+      animated: false,
       style: { stroke: 'rgba(59, 130, 246, 0.5)', strokeWidth: 2 },
       label: specifiers.length > 0 ? specifiers.slice(0, 3).join(', ') : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
@@ -732,7 +734,7 @@ function buildFocusView(
       source: imp,
       target: focusPath,
       type: 'importEdge',
-      animated: true,
+      animated: false,
       style: { stroke: 'rgba(245, 158, 11, 0.5)', strokeWidth: 2 },
       label: specifiers.length > 0 ? specifiers.slice(0, 3).join(', ') : undefined,
       labelStyle: { fontSize: 9, fill: '#8b8b98' },
