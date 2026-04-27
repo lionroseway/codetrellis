@@ -89,8 +89,21 @@ export function useWebSocket() {
               useToastStore.getState().addToast({ type: 'success', title: 'Task completed', message: `Task marked as done` });
             }
             if (payload.status === 'in_progress') {
-              useToastStore.getState().addToast({ type: 'info', title: 'Task started', message: 'Agent is working on a task' });
+              const isAuto = payload.source === 'auto-progress';
+              useToastStore.getState().addToast({
+                type: 'info',
+                title: isAuto ? 'Task auto-started' : 'Task started',
+                message: isAuto ? 'A file in this task changed — moved to in_progress' : 'Agent is working on a task',
+              });
             }
+          }
+          if (type === 'task-completion-suggested') {
+            useToastStore.getState().addToast({
+              type: 'success',
+              title: 'Task may be done',
+              message: `All ${payload.changeCount} proposed changes are satisfied — review and mark done if you agree.`,
+              duration: 8000,
+            });
           }
           if (type === 'task-claimed') {
             usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, 'assigned');

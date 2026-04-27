@@ -38,6 +38,7 @@ shared via the bridge abstraction.
 | Spec Room (typed plan docs) | 100 | High | 12 doc types, MCP + REST + UI + version history + restore + Phase 12 §C orderHint + parentDocUid (swf-style `00-…/01-…` nesting; tree-rendered in the spec room) + §F multi-doc per type with auto-numbered defaults. |
 | Plan Phases (first-class checkpoints) | 100 | High | Phase 12 §A. `plan_phases` table + service + REST + 4 MCP tools (`add/list/update/delete_plan_phase`); `update_task` / `get_next_task` accept `phase_uid`. UI: `PlanPhases` groups tasks by phase with expandable scope/prereqs/acceptance markdown + "Unphased" bucket. |
 | Proposed Changes view | 100 | High | Phase 12 §B. `plan-changes-service` projects every task field into ProposedChange rows with computed drift status. REST + MCP (`list_proposed_changes` / `get_changes_summary` / `get_change_status`) + new "Proposed" tab in PlanPanel with status filter chips. |
+| Agent loop closure | 100 | High | `plan-progress-service` auto-advances `pending`/`assigned` tasks to `in_progress` when an `affectedFiles` entry changes on disk; broadcasts `task-completion-suggested` when every ProposedChange for an in-flight task is `satisfied`. `VerificationPanel` on PlanDetail shows planned-vs-landed at a glance with a colour-coded "Ready to ship / Mid-flight / Drifted" readout. Closes front-to-back loop steps 9 + 11. |
 | Plan Templates | 100 | High | Phase 12 §G. `plan-templates.ts` (pure data); `applyTemplate` seeds plan + phases + spec docs in one sweep. First template: **mass-refactor** (6 phases + 10 docs incl. swf-style numbering + cross-cutting patterns/testing/security). REST + MCP (`list_plan_templates` / `create_plan_from_template`) + PlanCreateModal "From template" tab. |
 | Agent skill / instructions resource | 100 | High | Phase 12 §E. Three MCP resources: `codetrellis://skill` (project-tailored summary listing current plans + connected agents), `…/quickstart` (first-time flow), `…/power-user` (deep usage incl. phase + template guidance). Markdown so any MCP-capable agent can ingest. |
 | Multi-agent visibility (TopBar) | 100 | High | Phase 12 §D2. `ConnectedAgents` widget replaces the single-agent pill; popover shows every active MCP session (type, model, active plan, last seen) and refreshes live on session events. `register_session` / `set_active_plan` keyed off the caller's transport sessionId so multiple simultaneous agents stay attributed. |
@@ -57,6 +58,29 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Agent loop closure (front-to-back step 9 + 11)
+
+Push 1 of the "ready-to-use" sprint. The agent loop now closes
+without the human having to read every diff:
+
+- **`plan-progress-service`** — file watcher hook auto-advances
+  `pending`/`assigned` tasks to `in_progress` when one of their
+  `affectedFiles` changes on disk. Toast notes the auto-promotion
+  ("Task auto-started · A file in this task changed"). Avoids the
+  "agent forgot to call update_task" silent-progress problem.
+- **`task-completion-suggested` event** — once every
+  ProposedChange for an in-flight task reads as `satisfied`, the
+  service broadcasts a one-shot suggestion (deduped per task). The
+  toast tells the human "all N proposed changes satisfied — review
+  and mark done if you agree." We deliberately don't auto-mark
+  `done`; false positives would erode trust.
+- **`VerificationPanel`** — new card on PlanDetail. Reads
+  `/api/plans/:uid/changes?summary=1` and renders a stacked bar
+  with a colour-coded headline: green "Ready to ship", accent
+  "Mid-flight", amber "Drifted" (if any change is `missing` or
+  `unexpected`). Re-runs on click. Hidden for plans with no
+  proposed changes so light plans don't get a confusing "0%" card.
 
 ### Apr 27, 2026 — Phase 12 complete (Deepening Plans + Agent Skills)
 
@@ -735,9 +759,9 @@ Closing these is the priority block before adding more surfaces.
 | 6. Agent reads the plan via MCP | ✅ | — |
 | 7. Agent writes code | ✅ | — file watcher detects changes (any language). |
 | 8. See file/edge/code-line drift against the plan | ✅ | — |
-| 9. **Track agent progress** (which tasks are in-flight / done) | ⚠️ | Task status is updated *only* when the agent calls `update_task`. Should auto-advance to `in_progress` when affected files change on disk; auto-advance to `done` when all expected changes land + tests pass. |
+| 9. **Track agent progress** (which tasks are in-flight / done) | ✅ | `plan-progress-service` auto-advances `pending` / `assigned` tasks to `in_progress` when one of their `affectedFiles` changes on disk. Toast surfaces the auto-promotion. We don't auto-mark `done` (false positives); instead we broadcast `task-completion-suggested` once every ProposedChange for the task is `satisfied`. |
 | 10. **Adjust the plan mid-flight** (revise tasks / spec docs) | ✅ | Works. No formal approval/rejection workflow yet. |
-| 11. **Verify completion** ("are we actually done?") | ⚠️ | Drift is shown but no "all expected planned changes have landed" verification. `get_drift_report` returns the data — needs a UI summary panel. |
+| 11. **Verify completion** ("are we actually done?") | ✅ | `VerificationPanel` on PlanDetail reads `plan-changes-service` summary and shows planned vs landed at a glance: green "Ready to ship" / amber "Drifted" / accent "Mid-flight" with a satisfied/total bar and per-status legend. Re-runs on click. |
 | 12. **Cross-system flows visible on the graph** (frontend → backend route → SQL table) | ❌ | Phase 11 §5 — HTTP / SQL / env / subprocess link extraction. Until this lands, "PHP + Python + SQL together" feels like three islands instead of one architecture. |
 | 13. **Plan completion artifact** (commit / PR with the diff against baseline) | ❌ | Not started. Eventually: one-click "open PR with these changes" once a plan is verified. |
 
@@ -749,16 +773,17 @@ Closing these is the priority block before adding more surfaces.
 The active queue is now driven by the front-to-back loop gaps (§6) +
 the Multi-System Ingestion follow-ups (§3 Phase 11):
 
-1. **Plan-task progress auto-detection** *(closes front-to-back step 9)* — task auto-advances to `in_progress` when one of its `affectedFiles` changes on disk; auto-suggests `done` once every ProposedChange for that task is `satisfied`. Hooks into the existing `file_changed` event + `plan-changes-service`.
-2. **"Plan completion" verification panel** *(closes step 11)* — reads `get_drift_report` + `get_changes_summary` and shows planned vs landed at a glance. Likely a new tab (or a summary card on the Plans tab) so the human can check "are we done?" without opening every task.
-3. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
-4. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
-5. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.) — exposes the discovered system list as a queryable surface.
-6. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`** — Systems section above the file tree, system view kind in Inspector, drift attribution by system.
-7. **Phase 11 §5 — cross-system non-import links** *(closes step 12)* — HTTP routes, SQL refs, env, subprocess, OpenAPI contracts. The headline product story for "PHP + Python + SQL all in one project."
-8. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`; just needs node visual wiring).
-9. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses.
-10. **Pre-existing TS errors** — clean up `useRef()` initial-value, `PlanStatus` re-export ambiguity, missing `@types/sql.js`. Cosmetic but they block "no errors" CI gating.
+1. ~~**Plan-task progress auto-detection**~~ ✅ shipped — `plan-progress-service` hooks the file watcher; `pending`/`assigned` tasks auto-advance to `in_progress`; `task-completion-suggested` event fires once every ProposedChange is `satisfied`.
+2. ~~**"Plan completion" verification panel**~~ ✅ shipped — `VerificationPanel` on PlanDetail reads `/api/plans/:uid/changes?summary=1` and renders a colour-coded readiness card.
+3. **Cross-system MVP** *(closes front-to-back step 12)* — TS `fetch(...)` ↔ Python FastAPI/Flask route matcher. New plugin slot `callsites/<lang>.ts`, a `matchers/http.ts`, and a `cross_system_edges` table. Renders dashed cross-protocol edges so PHP+Python+SQL stops looking like 3 islands. (See "Cross-system story" notes for the full design.)
+4. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
+5. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
+6. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.) — exposes the discovered system list as a queryable surface.
+7. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`** — Systems section above the file tree, system view kind in Inspector, drift attribution by system.
+8. **Phase 11 §5 — cross-system non-import links (full)** — extends the §3 MVP with SQL ref tracker, subprocess/env, OpenAPI contracts.
+9. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`; just needs node visual wiring).
+10. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses.
+11. **Pre-existing TS errors** — clean up `useRef()` initial-value, `PlanStatus` re-export ambiguity, missing `@types/sql.js`. Cosmetic but they block "no errors" CI gating.
 
 ### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
 Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E

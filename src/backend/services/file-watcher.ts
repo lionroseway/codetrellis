@@ -91,8 +91,14 @@ export async function startWatching(projectRoot: string): Promise<void> {
       symbols: parsed.symbols.map((s) => ({ name: s.name, kind: s.kind })),
     });
 
-    // Check for plan deviations
+    // Check for plan deviations + auto-advance task progress
     try { checkFileDeviation(relativePath); } catch { /* ignore */ }
+    try {
+      // Lazy-require to avoid an import cycle (plan-progress-service →
+      // plan-service → database → broadcast → server → file-watcher).
+      const { recordFileChange } = require('./plan-progress-service');
+      recordFileChange(relativePath);
+    } catch { /* ignore */ }
   });
 
   watcher.on('add', (filePath) => {
@@ -111,7 +117,12 @@ export async function startWatching(projectRoot: string): Promise<void> {
     });
 
     // Newly added files create new edges — flag for plan deviation too.
-    try { checkFileDeviation(path.relative(projectRoot, filePath)); } catch { /* ignore */ }
+    const relPath = path.relative(projectRoot, filePath);
+    try { checkFileDeviation(relPath); } catch { /* ignore */ }
+    try {
+      const { recordFileChange } = require('./plan-progress-service');
+      recordFileChange(relPath);
+    } catch { /* ignore */ }
   });
 
   watcher.on('unlink', (filePath) => {

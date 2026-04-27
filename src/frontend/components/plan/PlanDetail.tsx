@@ -3,6 +3,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { StatusBadge } from './StatusBadge';
 import { SpecRoom } from './SpecRoom';
 import { PlanPhases } from './PlanPhases';
+import { VerificationPanel } from './VerificationPanel';
 
 export function PlanDetail() {
   const plan = usePlanStore((s) => s.activePlan);
@@ -56,6 +57,11 @@ export function PlanDetail() {
         </div>
         <span className="text-[10px] text-foreground-subtle">{progress}%</span>
       </div>
+
+      {/* "Are we done?" verification — Phase 12 §B + auto-progress; closes
+          step 11 of the front-to-back loop. Hidden when the plan has no
+          proposed changes (no affected files / symbols / connections). */}
+      <VerificationPanel planUid={plan.uid} />
 
       {/* Spec Room — structured context docs (patterns, security, tests, etc.) */}
       <SpecRoom planUid={plan.uid} />
