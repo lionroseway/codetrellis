@@ -31,13 +31,16 @@ shared via the bridge abstraction.
 | Database Persistence | 100 | Good | sql.js with file export — survives restarts |
 | AST Parsing (7 langs) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go and SQL pending. |
 | Multi-System Ingestion | 70 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve, services/realtime + backend/fastapi visible. Remaining: systems DB + UI, cross-system links, server-side per-scope views. |
-| MCP Server | 100 | High | 24 tools across architecture queries / plans / tasks / spec docs / comments / sessions / drift / trellis snapshots |
+| MCP Server | 100 | High | 30+ tools across architecture queries / plans / phases / tasks / spec docs / proposed-changes / templates / comments / sessions / drift / trellis snapshots. Skill resources (`codetrellis://skill[/quickstart|/power-user]`). |
 | Claude Code Watcher | 100 | High | Tails session JSONL, extracts tool calls + plan heuristics |
-| Generic MCP-agent activity | 0 | – | MCP tool calls don't surface in Timeline; only Claude Code does. Top of front-to-back gap list. |
-| Plan CRUD + Comments + Versions | 100 | High | Phase 12 §A (Phases) + §B (Proposed Changes) + §C (doc orderHint/parent) + §F (multi-doc per type) + §G (Mass-refactor template) all shipped. Plans now scale from light one-liners to deep swf-style multi-phase migrations with their own granular CRUD feed. Outstanding: version viewer UI, task-level comments. |
-| Spec Room (typed plan docs) | 100 | High | 12 doc types, MCP + REST + UI + version history + restore + Phase 12 §C orderHint + parentDocUid (swf-style `00-…/01-…` nesting; tree-rendered in the spec room). |
-| Agent skill / instructions resource | 100 | High | Phase 12 §E shipped. Three MCP resources: `codetrellis://skill` (project-tailored summary), `…/quickstart` (first-time flow), `…/power-user` (deep usage). Markdown-only so any MCP-capable agent can ingest. |
-| Multi-agent visibility (TopBar) | 100 | High | Phase 12 §D2 shipped. `ConnectedAgents` widget replaces the single-agent pill; popover shows every active MCP session (type, model, active plan, last seen) and refreshes live on session events. `register_session` / `set_active_plan` keyed off the caller's transport sessionId. |
+| Generic MCP-agent activity | 100 | High | Phase 12 §D — `registerTool` wrapper broadcasts `tool_call` / `tool_error` events with agent attribution. Codex / Cursor / aider / any MCP client now surfaces in the Agent Timeline alongside Claude Code. |
+| Plan CRUD + Comments + Versions | 100 | High | Phase 12 done end-to-end: §A Phases, §B Proposed Changes, §C doc ordering, §D + §D2 multi-agent timeline + visibility, §E skill, §F multi-doc-per-type, §G Mass-refactor template. Plans scale from light one-liners to deep swf-style multi-phase migrations with their own granular CRUD feed. Outstanding: version viewer UI, task-level comments. |
+| Spec Room (typed plan docs) | 100 | High | 12 doc types, MCP + REST + UI + version history + restore + Phase 12 §C orderHint + parentDocUid (swf-style `00-…/01-…` nesting; tree-rendered in the spec room) + §F multi-doc per type with auto-numbered defaults. |
+| Plan Phases (first-class checkpoints) | 100 | High | Phase 12 §A. `plan_phases` table + service + REST + 4 MCP tools (`add/list/update/delete_plan_phase`); `update_task` / `get_next_task` accept `phase_uid`. UI: `PlanPhases` groups tasks by phase with expandable scope/prereqs/acceptance markdown + "Unphased" bucket. |
+| Proposed Changes view | 100 | High | Phase 12 §B. `plan-changes-service` projects every task field into ProposedChange rows with computed drift status. REST + MCP (`list_proposed_changes` / `get_changes_summary` / `get_change_status`) + new "Proposed" tab in PlanPanel with status filter chips. |
+| Plan Templates | 100 | High | Phase 12 §G. `plan-templates.ts` (pure data); `applyTemplate` seeds plan + phases + spec docs in one sweep. First template: **mass-refactor** (6 phases + 10 docs incl. swf-style numbering + cross-cutting patterns/testing/security). REST + MCP (`list_plan_templates` / `create_plan_from_template`) + PlanCreateModal "From template" tab. |
+| Agent skill / instructions resource | 100 | High | Phase 12 §E. Three MCP resources: `codetrellis://skill` (project-tailored summary listing current plans + connected agents), `…/quickstart` (first-time flow), `…/power-user` (deep usage incl. phase + template guidance). Markdown so any MCP-capable agent can ingest. |
+| Multi-agent visibility (TopBar) | 100 | High | Phase 12 §D2. `ConnectedAgents` widget replaces the single-agent pill; popover shows every active MCP session (type, model, active plan, last seen) and refreshes live on session events. `register_session` / `set_active_plan` keyed off the caller's transport sessionId so multiple simultaneous agents stay attributed. |
 | Three Trellis States | 85 | Medium | Snapshots + projection + baseline pin/auto/branch — modes don't yet read as visually unmistakable |
 | Architecture Diffing | 90 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope |
 | Inspector + Code Viewer | 100 | High | Cluster/file/symbol routing + Prism syntax highlighting + git gutter + drift coloring + selection-to-task |
@@ -49,11 +52,69 @@ shared via the bridge abstraction.
 | Onboarding | 100 | High | Welcome + recent projects + Getting Started checklist |
 | Multi-tab projects | 100 | Good | Open multiple projects/worktrees as TopBar tabs |
 | Visual Plan Builder | 35 | Medium | "Add to plan" from the inspector exists; clicking nodes-on-graph to author isn't wired |
-| Multi-Agent Dashboard | 0 | – | Not started |
+| Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
 
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Phase 12 complete (Deepening Plans + Agent Skills)
+
+All seven sub-phases shipped end-to-end across schema, service, REST,
+MCP, and UI. Plans now scale from a one-line title to a full swf-style
+multi-phase migration without changing how light plans work.
+
+- **§A — Plan Phases (first-class checkpoints)**: `plan_phases` table
+  with phase_number / scope / prerequisites / git_checkpoint /
+  acceptance_criteria / status; `tasks.phase_uid` nullable column.
+  MCP: `add_plan_phase`, `list_plan_phases`, `update_plan_phase`,
+  `delete_plan_phase`; `update_task` and `get_next_task` extended with
+  `phase_uid` (empty string clears / scopes to unphased). UI:
+  `PlanPhases` renders phases above tasks, expandable rows show
+  markdown scope/prereqs/acceptance + bound tasks; "Unphased" bucket
+  lets the user reassign loose tasks via dropdown.
+- **§B — Proposed Changes view**: `plan-changes-service` projects every
+  task field (`affectedFiles`, `symbolSpecs`, `newConnections`,
+  `removedConnections`) into a CRUD-style row with operation /
+  kind / target / freshly computed drift status (planned /
+  in_progress / satisfied / missing / unexpected). REST + MCP
+  (`list_proposed_changes` / `get_changes_summary` /
+  `get_change_status`) + new "Proposed" tab in PlanPanel.
+- **§C — Spec doc ordering + nesting**: `plan_documents.order_hint` +
+  `parent_doc_uid` columns; SpecRoom now renders as a tree with
+  order-prefixed labels; SpecDocCreateModal auto-suggests the next
+  prefix and offers a parent dropdown. Supports the swf
+  "00-EXECUTIVE / 01-PHASE-1 / …" pattern natively.
+- **§D — Generic MCP-agent timeline**: `registerTool` wrapper
+  broadcasts `tool_call` / `tool_error` events with agent attribution
+  inferred from the SSE session. PlanPanel Timeline tab renders them
+  with per-event icons + duration. Codex / Cursor / aider / any MCP
+  client now visible alongside Claude Code.
+- **§D2 — Multi-agent visibility (TopBar)**: `ConnectedAgents` widget
+  replaces the single-agent pill — shows count + popover listing
+  every active MCP session (type, model, active plan, last seen);
+  WS auto-refreshes on session events. `register_session` /
+  `set_active_plan` keyed off the caller's transport sessionId so
+  N simultaneous agents stay attributed.
+- **§E — Agent skill resource via MCP**: `codetrellis://skill`
+  (project-tailored summary), `…/quickstart` (first-time flow),
+  `…/power-user` (deep usage incl. phase + template guidance).
+  Markdown so any MCP-capable agent can ingest.
+- **§F — Multi-doc per type**: `SpecDocCreateModal` auto-numbers the
+  default title ("Patterns 2", "Patterns 3") so a second doc of the
+  same type doesn't clash. The data model already allowed it; this
+  unblocks the UX. SpecRoom tree handles ordering via §C.
+- **§G — Plan templates**: `plan-templates.ts` declares templates as
+  pure data; `applyTemplate` seeds plan + phases + spec docs in one
+  sweep. First template: **mass-refactor** (6 phases + 10 docs incl.
+  executive overview, per-phase docs, cross-cutting patterns /
+  testing / security). REST + MCP (`list_plan_templates` /
+  `create_plan_from_template`); PlanCreateModal has a "From template"
+  tab with phase + doc count preview.
+- **Markdown rendering**: replaced hand-rolled markdown with
+  `react-markdown` + `remark-gfm` so spec docs and skill guides
+  render with full GFM (tables, task lists, autolinks,
+  strikethrough).
 
 ### Apr 27, 2026 — Multi-System Ingestion + perf
 
@@ -414,7 +475,7 @@ After: **2552 edges — 1688 Python + 591 .tsx + 273 .ts, 314 into `packages/*`.
 
 ---
 
-### Phase 12 — Deepening Plans + Agent Skills ⚡ HIGH PRIORITY (in flight)
+### Phase 12 — Deepening Plans + Agent Skills ✅ DONE (Apr 27, 2026)
 **Goal:** plans can be light *or* deep on a per-plan basis. Light = title
 + a few tasks (already works). Deep = phased structure with executive
 overview, per-phase scope + acceptance criteria, structured spec docs,
@@ -449,29 +510,26 @@ to and update.
 | **F** | Multiple-docs-per-type support. swf has multiple "phase" overview docs; the data model already allowed it (each doc has its own uid) — `SpecDocCreateModal` now auto-numbers default titles ("Patterns 2", "Patterns 3", …) so a second doc of the same type doesn't clash, and the SpecRoom tree (Phase 12 §C) renders multiples cleanly via `orderHint`. | small | ✅ |
 | **G** | Plan templates from common shapes. Templates declared in `plan-templates.ts` as pure data (no schema dep). Ships **"Mass refactor (swf-style)"**: 1 executive overview + 6 numbered phase docs + 1 architecture overview + cross-cutting patterns / testing / security docs + 6 phases with scope/prereqs/acceptance/git-checkpoint placeholders, all wired up via `parentDocUid` + `orderHint`. REST `/api/plan-templates` and `/api/plans/from-template`; MCP `list_plan_templates` + `create_plan_from_template`. PlanCreateModal has a "From template" tab that previews phase + doc count and confirms with a "Seed plan (6+10)" button. | medium | ✅ |
 
-#### Suggested order
-1. **D** (small, immediate value — closes front-to-back step 5 for any agent)
-2. **C** (small — enables the swf-style document ordering)
-3. **A** (medium — unlocks structured phased plans)
-4. **F** (small — let multiple docs of same type coexist)
-5. **G** (medium — make the swf-style structure one-click)
-6. **B** (medium — granular CRUD-level proposed changes)
-7. **E** (small — agent skill resource; can land any time but reads better once A+C are in)
+#### Shipped order (for posterity)
+D → C → A → D2 → E → F → G → B. All landed Apr 27, 2026.
 
 #### Acceptance for the deepening push as a whole
 
-A user can:
-- Open a project, type a one-line plan title → light plan (current behavior, untouched)
-- OR pick "Mass refactor" from plan templates → seeded with executive overview + 6 phase docs + tasks + audit + testing strategy in seconds (matches the swf shape exactly)
-- Author or edit any of those docs in the spec room with markdown ordering / nesting that mirrors swf's `00-…`, `01-…` convention
+✅ Achieved:
+- Open a project, type a one-line plan title → light plan (current behavior, untouched).
+- OR pick "Mass refactor" from plan templates → seeded with executive overview + 6 phase docs + 1 architecture overview + cross-cutting patterns / testing / security docs in one click.
+- Author or edit any of those docs in the spec room with markdown ordering / nesting that mirrors swf's `00-…`, `01-…` convention.
 - Have multiple agents (Claude Code + Codex side-by-side) connect via MCP and:
   - See each other's tool calls in a live Agent Timeline
-  - Pull the agent skill from `codetrellis://skill` so they know how to operate the product without out-of-band briefing
+  - See each other in the TopBar `ConnectedAgents` widget (type, model, active plan, last seen)
+  - Pull the agent skill from `codetrellis://skill` so they operate the product without out-of-band briefing
   - Fetch only the spec slice they need (`get_plan_doc(plan_uid, doc_type='security')`)
   - Claim tasks scoped to a specific phase (`get_next_task(plan_uid, phase_uid)`)
-  - Drop into "Proposed Changes" to see the granular CRUD operations they're about to make
-- Watch tasks auto-advance as files change on disk (Phase 11 / front-to-back step 9)
-- Hit a "Verify completion" panel that reads `get_drift_report` and shows planned vs landed at a glance
+  - Use the "Proposed Changes" tab (or `list_proposed_changes` MCP) to see what the plan promises vs what's landed.
+
+⚠️ Still open (rolled into next pushes — see §7):
+- Tasks auto-advance as files change on disk (front-to-back step 9).
+- "Verify completion" panel that reads `get_drift_report` and shows planned vs landed at a glance (front-to-back step 11).
 
 ---
 
@@ -672,8 +730,8 @@ Closing these is the priority block before adding more surfaces.
 | 1. Open project (any language mix) | ✅ | — |
 | 2. See architecture (graph, multi-language, multi-system) | ✅ | — for visible scope. `system-aware clustering` would split mega-clusters; `server-side per-system view loading` would make scope-switching truly per-scope. |
 | 3. Drill into a file (Inspector + code preview + drift coloring) | ✅ | — |
-| 4. Author a plan (title + tasks + spec docs) | ✅ | Plan templates would speed it up. Plan version viewer UI missing. |
-| 5. Connect a coding agent | ✅ | Only Claude Code surfaces in the Agent Timeline. Codex / Cursor / aider sessions are *invisible* even though MCP tool calls flow. |
+| 4. Author a plan (title + tasks + spec docs) | ✅ | Plan templates ship a one-click swf-style "Mass refactor" seed (Phase 12 §G). Plan version viewer UI still missing. |
+| 5. Connect a coding agent | ✅ | Generic MCP-agent timeline (Phase 12 §D) — every MCP client (Codex / Cursor / aider / custom) shows in the Timeline. Multi-agent visibility (§D2) — `ConnectedAgents` TopBar widget shows every active session. |
 | 6. Agent reads the plan via MCP | ✅ | — |
 | 7. Agent writes code | ✅ | — file watcher detects changes (any language). |
 | 8. See file/edge/code-line drift against the plan | ✅ | — |
@@ -685,21 +743,22 @@ Closing these is the priority block before adding more surfaces.
 
 **Concrete next pushes (in order):**
 
-1. ~~**Phase 12 §D — Generic MCP-agent Timeline**~~ ✅ shipped — every MCP tool call broadcasts `tool_call` / `tool_error` with agent attribution; PlanPanel renders.
-2. ~~**Phase 12 §D2 — Multi-agent visibility (TopBar)**~~ ✅ shipped — `ConnectedAgents` widget shows count + per-session detail (type, model, active plan, last seen).
-3. ~~**Phase 12 §E — Agent skill resource**~~ ✅ shipped — `codetrellis://skill` (summary + quickstart + power-user) MCP resources.
-4. ~~**Phase 12 §C — Spec doc orderHint + parentDocUid**~~ ✅ shipped — schema migration + service + REST + MCP + SpecRoom tree render + create-modal pickers; supports the swf-style `00-OVERVIEW / 01-PHASE-1 / 02-…` layout.
-5. ~~**Phase 12 §A — Explicit Phases entity**~~ ✅ shipped — first-class `plan_phases` table, MCP `add/list/update/delete_plan_phase` + `update_task`/`get_next_task` accept `phase_uid`, `PlanPhases` UI groups tasks by phase with expandable scope/prereqs/acceptance markdown.
-6. ~~**Phase 12 §F — Multiple docs per type**~~ ✅ shipped — `SpecDocCreateModal` auto-numbers default titles ("Patterns 2", …); SpecRoom tree (§C) handles ordering. Data model already allowed it.
-7. ~~**Phase 12 §G — Plan templates**~~ ✅ shipped — `plan-templates.ts` data; `applyTemplate` service; REST + MCP (`list_plan_templates` / `create_plan_from_template`); PlanCreateModal "From template" tab. First template: **mass-refactor** (6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security).
-8. ~~**Phase 12 §B — Proposed Changes view**~~ ✅ shipped — `plan-changes-service` projects task fields into ProposedChange rows with drift status; REST + MCP (`list_proposed_changes` / `get_changes_summary` / `get_change_status`); PlanPanel "Proposed" tab.
-9. **Plan-task progress auto-detection** — task auto-advances to `in_progress` when affected files change. Closes step 9 of front-to-back loop.
-10. **System-aware clustering** — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster.
-11. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB.
-12. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.).
-13. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`**.
-14. **"Plan completion" verification panel** — reads `get_drift_report` and shows planned vs landed at a glance. Closes step 11.
-15. **Phase 11 §5 — cross-system non-import links** (HTTP routes, SQL refs). Closes step 12.
+> **Phase 12 ✅ DONE** (Apr 27, 2026) — A, B, C, D, D2, E, F, G all shipped.
+> See §3 Phase 12 for the per-sub-phase detail.
+
+The active queue is now driven by the front-to-back loop gaps (§6) +
+the Multi-System Ingestion follow-ups (§3 Phase 11):
+
+1. **Plan-task progress auto-detection** *(closes front-to-back step 9)* — task auto-advances to `in_progress` when one of its `affectedFiles` changes on disk; auto-suggests `done` once every ProposedChange for that task is `satisfied`. Hooks into the existing `file_changed` event + `plan-changes-service`.
+2. **"Plan completion" verification panel** *(closes step 11)* — reads `get_drift_report` + `get_changes_summary` and shows planned vs landed at a glance. Likely a new tab (or a summary card on the Plans tab) so the human can check "are we done?" without opening every task.
+3. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
+4. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
+5. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.) — exposes the discovered system list as a queryable surface.
+6. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`** — Systems section above the file tree, system view kind in Inspector, drift attribution by system.
+7. **Phase 11 §5 — cross-system non-import links** *(closes step 12)* — HTTP routes, SQL refs, env, subprocess, OpenAPI contracts. The headline product story for "PHP + Python + SQL all in one project."
+8. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`; just needs node visual wiring).
+9. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses.
+10. **Pre-existing TS errors** — clean up `useRef()` initial-value, `PlanStatus` re-export ambiguity, missing `@types/sql.js`. Cosmetic but they block "no errors" CI gating.
 
 ### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
 Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
@@ -718,32 +777,32 @@ Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
 6. ❌ Reduce congestion and make changed-but-unconnected files easier to place
 
 ### Quick wins (≤ a few hours each)
-1. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed)
-2. **Generic MCP-agent timeline** — surface MCP tool calls in the Timeline tab so Codex / Cursor / aider show alongside Claude Code
-3. **Diff mode auto-engages projection** — drop the Projection toggle requirement when Diff is active and a plan exists
-4. **AGENTS.md vs CLAUDE.md drift** — they disagree on which agents are monitored
-5. **Verify auto-track HEAD fix end-to-end** with a real `git commit --amend`
+1. **Drift state on graph nodes** — emerald / amber / rose ring on each node in Diff mode (data already computed via `plan-changes-service`)
+2. **Diff mode auto-engages projection** — drop the Projection toggle requirement when Diff is active and a plan exists
+3. **AGENTS.md vs CLAUDE.md drift** — they disagree on which agents are monitored
+4. **Verify auto-track HEAD fix end-to-end** with a real `git commit --amend`
+5. **More plan templates** — alongside the shipped `mass-refactor`: ship "new feature", "bug fix", "library migration", "perf pass" templates. One new entry in `plan-templates.ts` per template; no schema work.
 
 ### Medium-term
 6. **Task ↔ graph linkage** — click a task in PlanPanel → graph highlights its affected files + planned edges; hover an affected file → corresponding node pulses
 7. **Persisted clusters + cluster MCP** — let humans rename clusters and let agents propose changes (`create_cluster`, `rename_cluster`, `assign_files_to_cluster`, `annotate_cluster`, `suggest_cluster_changes`)
-8. **Plan templates** — refactor / new feature / bug fix / migration starter shapes (with seeded spec doc skeletons + task scaffolds)
-9. **Plan-task progress auto-detection** — advance a task to `in_progress` when its `affectedFiles` change on disk
-10. **Spec-aware drift** — extend `get_drift_report` to flag "agent worked on file X without consulting `security` or `testing` doc"
-11. **Task-level comments** + **Plan version viewer UI**
-12. **Visual Plan Builder** — click nodes on the graph to add to a plan, draw connections between files, right-click context menu
+8. **Plan-task progress auto-detection** — advance a task to `in_progress` when its `affectedFiles` change on disk; auto-suggest `done` once every ProposedChange for the task is `satisfied`
+9. **Spec-aware drift** — extend `get_drift_report` to flag "agent worked on file X without consulting `security` or `testing` doc"
+10. **Task-level comments** + **Plan version viewer UI**
+11. **Visual Plan Builder** — click nodes on the graph to add to a plan, draw connections between files, right-click context menu
 
 ### Larger pushes
-13. **Make four trellis modes visually unmistakable** (Immediate Focus #1 spelled out): mode-tinted canvas / chrome / palette swap; "this is BASELINE" pulled out clearly; Diff feels different from Live at a glance
-14. **Floating window primitive** — for plan + spec doc editors that don't block the graph (drag, resize, minimise to a corner chip)
-15. **Filter bar** for the graph
-16. **Semantic zoom** — cluster ↔ file ↔ symbol via zoom level
-17. **Performance pass** — large repos (500+ files) currently block the main thread on parse / layout; needs worker pool for both
-18. **Multi-Agent Dashboard** — cards per active agent, color-coded, conflict warnings
+12. **Make four trellis modes visually unmistakable** (Immediate Focus #1 spelled out): mode-tinted canvas / chrome / palette swap; "this is BASELINE" pulled out clearly; Diff feels different from Live at a glance
+13. **Floating window primitive** — for plan + spec doc editors that don't block the graph (drag, resize, minimise to a corner chip)
+14. **Filter bar** for the graph
+15. **Semantic zoom** — cluster ↔ file ↔ symbol via zoom level
+16. **Performance pass** — large repos (500+ files) currently block the main thread on parse / layout; needs worker pool for both
+17. **Multi-Agent Dashboard** — cards per active agent, color-coded, conflict warnings (the TopBar `ConnectedAgents` widget is the v1; this is the dedicated multi-agent surface)
+18. **Plan-template authoring UI** — humans can save the current plan shape as a new reusable template
 
 ### Cleanup
 19. [docs/CODEX-VISUAL-OVERHAUL.md](CODEX-VISUAL-OVERHAUL.md) — one-off prompt, archive or delete
-20. E2E tests for Spec Room and Inspector
+20. E2E tests for Spec Room, Inspector, and the new Phase 12 surfaces (Phases UI, Proposed Changes tab, Template picker)
 21. Pre-existing TS errors: `useRef()` initial value, `PlanStatus` ambiguous re-export between `agent.ts` and `plan.ts`, missing `sql.js` types
 
 ---
@@ -760,18 +819,27 @@ Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
 `new_connections`, `removed_connections`, `dependencies`, `file_spec`,
 `symbol_specs`), `get_plan`, `update_plan`, `list_plans`
 
+**Plan templates** *(Phase 12 §G)*
+`list_plan_templates`, `create_plan_from_template` *(seeds plan + phases + spec docs in one sweep; first template: `mass-refactor`)*
+
+**Plan phases** *(Phase 12 §A)*
+`add_plan_phase`, `list_plan_phases`, `update_plan_phase`, `delete_plan_phase`
+
 **Task management**
-`claim_task`, `update_task`, `get_next_task`
+`claim_task`, `update_task` *(now accepts `phase_uid`)*, `get_next_task` *(now accepts `phase_uid`; empty string = unphased only)*
+
+**Proposed changes** *(Phase 12 §B)*
+`list_proposed_changes`, `get_changes_summary`, `get_change_status`
 
 **Spec docs**
-`add_plan_doc`, `update_plan_doc`, `get_plan_doc`,
-`list_plan_docs` (cheap summary index), `search_plan_docs` (with excerpts)
+`add_plan_doc` *(accepts `order_hint` + `parent_doc_uid`)*, `update_plan_doc` *(same)*, `get_plan_doc`,
+`list_plan_docs` (cheap summary index — includes order/parent), `search_plan_docs` (with excerpts)
 
 **Comments**
 `add_comment`, `get_comments`
 
 **Sessions**
-`register_session`, `set_active_plan`
+`register_session` *(now keys off the caller's transport sessionId so multiple agents stay attributed)*, `set_active_plan` *(same)*
 
 **Deviations / drift**
 `get_deviations`, `detect_deviations`, `reconcile`, `get_drift_report`
@@ -788,6 +856,9 @@ Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
 - `project://stats` — file / symbol / import counts
 - `codetrellis://plans` — list of all plans
 - `codetrellis://sessions` — active agent sessions
+- `codetrellis://skill` — project-tailored summary (current plans + connected agents + cheat sheet)
+- `codetrellis://skill/quickstart` — first-time agent flow
+- `codetrellis://skill/power-user` — deep usage (phased plans, granular task fields, drift verification, multi-agent coordination, spec docs as shared context, snapshots)
 
 ### REST endpoints worth knowing
 
@@ -798,7 +869,10 @@ Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
 - `GET /api/recent-projects` · `DELETE /api/recent-projects` · `POST /api/recent-projects/pin`
 - `GET /api/onboarding-state?project=`
 - `GET/POST /api/plans` · `GET/PUT/DELETE /api/plans/:uid` · `GET /api/plans/:uid/tasks` · `PUT /api/plans/:uid/tasks/:taskUid` · `POST /api/plans/:uid/tasks/:taskUid/{claim,code-reference}` · `GET /api/plans/:uid/projection` · `GET /api/plans/:uid/deviations` · `POST /api/plans/:uid/reconcile` · `GET /api/plans/:uid/versions`
-- `GET/POST /api/plans/:uid/docs` · `GET /api/plans/:uid/docs/by-type/:docType` · `GET /api/plans/:uid/docs/search?q=` · `GET/PUT/DELETE /api/plan-docs/:docUid` · `GET /api/plan-docs/:docUid/versions`
+- `GET/POST /api/plans/:uid/docs` *(POST accepts `orderHint` + `parentDocUid`)* · `GET /api/plans/:uid/docs/by-type/:docType` · `GET /api/plans/:uid/docs/search?q=` · `GET/PUT/DELETE /api/plan-docs/:docUid` · `GET /api/plan-docs/:docUid/versions`
+- `GET/POST /api/plans/:uid/phases` · `PUT/DELETE /api/plan-phases/:phaseUid` *(Phase 12 §A)*
+- `GET /api/plans/:uid/changes` *(or `?summary=1` for counts)* · `GET /api/plans/:uid/changes/:changeId` *(Phase 12 §B)*
+- `GET /api/plan-templates` · `POST /api/plans/from-template` *(Phase 12 §G)*
 - `POST /api/trellis/capture` · `GET /api/trellis/snapshots` · `GET /api/trellis/:id` · `GET /api/trellis/:id/diff`
 - `GET/POST /api/comments`
 - `GET /api/baseline` · `POST /api/baseline/capture`
@@ -848,8 +922,12 @@ src/
       diff-engine.ts                   — In-memory baseline + diff computation
       trellis-service.ts               — Trellis snapshots (current / planned / checkpoint)
       projection-service.ts            — Compute planned graph state from a plan's tasks
-      plan-service.ts                  — Plans + tasks CRUD; appendTaskCodeReference, appendTaskToPlan, getTaskByUid
-      plan-documents-service.ts        — Spec docs CRUD + version history + search
+      plan-service.ts                  — Plans + tasks CRUD; appendTaskCodeReference, appendTaskToPlan, getTaskByUid; updateTask + getNextTask accept phase_uid (Phase 12 §A)
+      plan-documents-service.ts        — Spec docs CRUD + version history + search; orderHint + parentDocUid (Phase 12 §C)
+      plan-phases-service.ts           — Phase 12 §A: plan phases CRUD; createPhase auto-numbers; deletePhase detaches bound tasks
+      plan-changes-service.ts          — Phase 12 §B: projects task fields into ProposedChange rows with computed drift status
+      plan-templates.ts                — Phase 12 §G: pure-data template definitions (mass-refactor + future)
+      plan-templates-service.ts        — Phase 12 §G: applyTemplate seeds plan + phases + spec docs in one sweep
       comment-service.ts               — Threaded comments on plans/tasks
       session-service.ts               — Agent session registry
       deviation-service.ts             — checkFileDeviation hook for plan drift
@@ -858,7 +936,8 @@ src/
     agent/
       claude-code-watcher.ts           — Tails ~/.claude/sessions/<id>.jsonl
     mcp/
-      server.ts                        — MCP SSE server (port 19432); all tools + resources
+      server.ts                        — MCP SSE server (port 19432); all tools + resources; registerTool wrapper broadcasts tool_call/tool_error per Phase 12 §D
+      skill-guide.ts                   — Phase 12 §E: markdown for codetrellis://skill[/quickstart|/power-user] resources
   frontend/
     App.tsx                            — Root layout; Allotment refs for programmatic panel resize
     bridge/                            — HTTP / Electron API abstraction
@@ -873,11 +952,12 @@ src/
       Toast.tsx
       ErrorBoundary.tsx
       layout/
-        TopBar.tsx                     — Tabs, branch popover (with branch-pin baseline), depth selector, Connect Agent
+        TopBar.tsx                     — Tabs, branch popover (with branch-pin baseline), depth selector, Connect Agent, ConnectedAgents widget
+        ConnectedAgents.tsx            — Phase 12 §D2: count + popover listing every active MCP session (type / model / active plan / last seen)
         Sidebar.tsx                    — File tree with per-file git status markers
         MainCanvas.tsx                 — ReactFlow canvas, mode selector, baseline controls, refresh chrome
         InspectorPanel.tsx             — Kind-aware (cluster / file / symbol) routing, expand toggle
-        PlanPanel.tsx                  — Tabs (Plans / Timeline / Changes / Comments), expand toggle
+        PlanPanel.tsx                  — Tabs (Plans / Timeline / Changes / Proposed / Comments), expand toggle
         StatusBar.tsx
       graph/
         nodes/                         — PackageNode, DirectoryNode, FileNode, SymbolNode (glassmorphic)
@@ -885,11 +965,13 @@ src/
           ImportEdge.tsx               — Custom edges with state-aware visuals + animated flow dots
       plan/
         PlanList.tsx
-        PlanDetail.tsx                 — Plan header, progress, SpecRoom, tasks
-        PlanCreateModal.tsx            — Portaled modal; basic create wizard
-        SpecRoom.tsx                   — Inside PlanDetail; type chips, search, doc cards
+        PlanDetail.tsx                 — Plan header, progress, SpecRoom, PlanPhases, fallback flat task list
+        PlanPhases.tsx                 — Phase 12 §A: groups tasks by phase; expandable scope/prereqs/acceptance; "Unphased" bucket; create/edit modal
+        ProposedChanges.tsx            — Phase 12 §B: ProposedChange feed grouped by task with status filter chips + kind selector
+        PlanCreateModal.tsx            — Portaled modal; "Blank" + "From template" tabs (Phase 12 §G)
+        SpecRoom.tsx                   — Inside PlanDetail; type chips, search, tree-rendered doc list (Phase 12 §C)
         SpecDocViewer.tsx              — Portaled modal; markdown + edit + version history + restore
-        SpecDocCreateModal.tsx         — Portaled modal; type picker grid + starter skeletons
+        SpecDocCreateModal.tsx         — Portaled modal; type picker grid + starter skeletons; orderHint + parent dropdown; auto-numbered titles for repeat types (Phase 12 §C, §F)
         StatusBadge.tsx
         CommentThread.tsx
       inspector/
@@ -898,7 +980,7 @@ src/
     lib/
       graph-builder.ts                 — Cluster discovery + view builders + edge change map (live × planned)
       graph-visuals.ts                 — Node sizing + visual data types
-      markdown.tsx                     — Minimal markdown renderer for spec docs
+      markdown.tsx                     — react-markdown + remark-gfm wrapper (tables, task lists, autolinks); used by spec docs + skill guides + phase markdown
       spec-doc-types.tsx               — Doc taxonomy with icons + chip colors
     stores/                            — Zustand: graph, agent, project, plan, ui, toast
   electron/                            — Electron main + preload (untested)
@@ -911,6 +993,14 @@ docs/                                  — TRACKER.md (this) + vision/design doc
 ## 12. Recent Sessions Commit Log (newest first)
 
 ```
+7d9f6cd Proposed Changes view — granular CRUD feed per plan (Phase 12 §B ✅)
+2e6237e Plan templates + multi-doc-per-type ("Mass refactor" template) (Phase 12 §F + §G ✅)
+865e057 Plan Phases — first-class checkpoints (swf-style "01 Foundation/…") (Phase 12 §A ✅)
+ccf4d2e Spec docs: orderHint + parentDocUid (swf-style ordering + nesting) (Phase 12 §C ✅)
+51e1b72 Add ConnectedAgents widget — multi-agent MCP visibility (Phase 12 §D2 ✅)
+5bb2f88 Add MCP agent skill guide + generic per-tool timeline (Phase 12 §D + §E ✅)
+dcf3b98 TRACKER: add Phase 12 — Deepening Plans + Agent Skills
+669156e Update TRACKER through 2026-04-27 with multi-system progress + front-to-back gaps
 41eeefa Stop animating regular edges — fixes pan/zoom slowness
 27de688 Files-depth view no longer hides files silently
 6e55646 Graph scope filter — limit canvas to one system / directory
