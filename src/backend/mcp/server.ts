@@ -587,31 +587,70 @@ export async function startMcpServer(): Promise<void> {
     }
   );
 
+  mcpServer.registerTool(
+    'publish_plan_as_template',
+    {
+      description: 'Snapshot a plan as a reusable template under `<project_root>/.codetrellis/templates/<template_id>/`. Strips project-specific bits (statuses, assignees, git checkpoints) and produces a `template.yaml` + `docs/<order>-<slug>.md` shape that other projects can `git clone` into their own `.codetrellis/templates/`. Phase 13 §C.',
+      inputSchema: {
+        plan_uid: z.string(),
+        project_root: z.string(),
+        template_id: z.string().describe('Lowercase slug, alphanumeric + hyphens (e.g. "company-mass-refactor").'),
+        label: z.string().optional().describe('Human-readable name shown in the picker. Defaults to the plan title.'),
+        short_description: z.string().optional(),
+        long_description: z.string().optional(),
+        default_title: z.string().optional().describe('Default plan title when the template is applied. May contain `{{name}}` etc. for placeholder substitution.'),
+        default_plan_description: z.string().optional(),
+      },
+    },
+    async ({ plan_uid, project_root, template_id, label, short_description, long_description, default_title, default_plan_description }) => {
+      const { publishPlanAsTemplate } = require('../services/plan-template-publish-service');
+      try {
+        const result = publishPlanAsTemplate({
+          planUid: plan_uid,
+          projectRoot: project_root,
+          templateId: template_id,
+          label,
+          shortDescription: short_description,
+          longDescription: long_description,
+          defaultTitle: default_title,
+          defaultPlanDescription: default_plan_description,
+        });
+        broadcast('plan-template-published', { templateId: template_id, templateDir: result.templateDir });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
+      }
+    }
+  );
+
   // --- Plan Templates (Phase 12 §G) ---
 
   mcpServer.registerTool(
     'list_plan_templates',
     {
-      description: 'List the available plan templates. Each template seeds a plan + phases + spec docs in one go — built for mass-refactor / multi-phase work where the swf-style "00-EXECUTIVE / 01-PHASE-1 / …" shape applies.',
-      inputSchema: {},
+      description: 'List the available plan templates. Includes built-ins, user-global templates from `~/.codetrellis/templates/`, and project-local templates from `<project_root>/.codetrellis/templates/` when project_root is provided. Each template seeds a plan + phases + spec docs in one go.',
+      inputSchema: {
+        project_root: z.string().optional().describe('Project root for picking up team-published templates from `.codetrellis/templates/`. Optional — without it, only built-ins + user-global templates are returned.'),
+      },
     },
-    async () => {
-      return { content: [{ type: 'text' as const, text: JSON.stringify(listTemplates(), null, 2) }] };
+    async ({ project_root }) => {
+      return { content: [{ type: 'text' as const, text: JSON.stringify(listTemplates(project_root), null, 2) }] };
     }
   );
 
   mcpServer.registerTool(
     'create_plan_from_template',
     {
-      description: 'Create a new plan from a template — seeds the plan, phases (with scope / prereqs / acceptance), and spec docs (with orderHint / parent refs) in one transactional sweep. Use list_plan_templates first to pick a template_id. Most common: "mass-refactor" (swf-style 6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security).',
+      description: 'Create a new plan from a template — seeds the plan, phases (with scope / prereqs / acceptance), and spec docs (with orderHint / parent refs) in one transactional sweep. Use list_plan_templates first to pick a template_id. Most common: "mass-refactor" (swf-style 6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security). For Phase 13 §C disk templates that declare `placeholders`, pass `placeholder_values` to fill them in.',
       inputSchema: {
         template_id: z.string().describe('e.g. "mass-refactor"'),
         project_path: z.string(),
         title: z.string().optional().describe('Override the template default title'),
         description: z.string().optional().describe('Override the template default description'),
+        placeholder_values: z.record(z.string(), z.string()).optional().describe('Values for `{{key}}` placeholders declared by the template (Phase 13 §C). Missing keys fall back to the placeholder default.'),
       },
     },
-    async ({ template_id, project_path, title, description }, extra: any) => {
+    async ({ template_id, project_path, title, description, placeholder_values }, extra: any) => {
       // Attribute the seeded plan to the actual caller when we know
       // who they are. This shows up in the human's plan list as
       // "authored by claude-code" instead of "agent".
@@ -630,6 +669,7 @@ export async function startMcpServer(): Promise<void> {
           description,
           author,
           authorType: 'mcp',
+          placeholderValues: placeholder_values,
         });
         broadcast('plan-created', { plan: result.plan });
         for (const phase of result.phases) broadcast('plan-phase-created', { phase });

@@ -15,7 +15,7 @@ import { createPhase } from './plan-phases-service';
 import { createPlanDocument } from './plan-documents-service';
 import { updateTask } from './plan-service';
 import { getTasksByPlan } from './plan-service';
-import { getTemplate } from './plan-templates';
+import { getTemplate, substitutePlaceholders } from './plan-templates';
 
 export interface ApplyTemplateInput {
   templateId: string;
@@ -26,6 +26,14 @@ export interface ApplyTemplateInput {
   description?: string;
   author?: string;
   authorType?: string;
+  /**
+   * Phase 13 §C: values for the template's declared `placeholders`.
+   * Substituted into every string field via `{{key}}` interpolation
+   * before the plan + phases + docs are seeded. Missing keys fall
+   * back to the placeholder's `default`, then to the literal
+   * `{{key}}` if no default is set.
+   */
+  placeholderValues?: Record<string, string>;
 }
 
 export interface ApplyTemplateResult {
@@ -36,10 +44,25 @@ export interface ApplyTemplateResult {
 }
 
 export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
-  const template = getTemplate(input.templateId);
-  if (!template) {
+  // Look up the template, including disk-installed ones at the
+  // project's `.codetrellis/templates/` and `~/.codetrellis/templates/`.
+  const rawTemplate = getTemplate(input.templateId, input.projectPath);
+  if (!rawTemplate) {
     throw new Error(`Unknown plan template: ${input.templateId}`);
   }
+
+  // Build the placeholder map: caller-provided values + per-placeholder
+  // defaults. Empty string is a valid value (means "explicitly blank");
+  // only undefined falls through to the default.
+  const values: Record<string, string> = {};
+  for (const p of rawTemplate.placeholders ?? []) {
+    if (input.placeholderValues && input.placeholderValues[p.key] !== undefined) {
+      values[p.key] = input.placeholderValues[p.key];
+    } else if (p.default !== undefined) {
+      values[p.key] = p.default;
+    }
+  }
+  const template = substitutePlaceholders(rawTemplate, values);
 
   const author = input.author ?? 'human';
   const authorType = input.authorType ?? 'human';

@@ -56,7 +56,7 @@ shared via the bridge abstraction.
 | Multi-tab projects | 100 | Good | Open multiple projects/worktrees as TopBar tabs |
 | Visual Plan Builder | 35 | Medium | "Add to plan" from the inspector exists; clicking nodes-on-graph to author isn't wired |
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
-| Plan export / source-controllable plans | 70 | High | Phase 13 §A + §B shipped. Plans round-trip to `<project>/.codetrellis/plans/<slug>/` as YAML + markdown (§A); linked plans auto-sync DB ↔ disk via debounced write-through + chokidar file watcher with self-write detection (§B). External edits picked up after `git pull` without an Import click. Per-plan Linked/Unlink toggle on the plan header. YAML conflict markers surfaced. Pending: §C templates as publishable repos. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
+| Plan export / source-controllable plans | 100 | High | Phase 13 §A + §B + §C all shipped. Plans round-trip to disk as YAML + markdown (§A), linked plans auto-sync via write-through + chokidar (§B), and templates ship as portable directories (§C — built-ins + `<project>/.codetrellis/templates/` + `~/.codetrellis/templates/` with `{{key}}` placeholder substitution). Multi-device + multi-team workflows fully covered via git. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
 | Electron desktop build | 30 | Medium | `npm run package` runs to completion but the resulting `.app` is non-functional — renderer not bundled, tree-sitter WASM missing, icon needs `.icns` / `.ico`, no `maker-squirrel` for Windows. Five small fixes needed before a real DMG / EXE ships. See §7 for the punch list. |
 | Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
@@ -65,6 +65,52 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Templates as publishable repos (Phase 13 §C)
+
+Phase 13 closes out. Plan templates are now portable directories
+that travel through git like any other repo artifact.
+
+- **Disk template loading** — `plan-templates.ts` walks built-ins
+  + `~/.codetrellis/templates/<id>/` (user-global) +
+  `<projectRoot>/.codetrellis/templates/<id>/` (project-local;
+  highest priority — project wins ID collisions). Each template
+  is a directory with `template.yaml` + `docs/<order>-<slug>.md`.
+- **Publish service** — `plan-template-publish-service.ts`
+  snapshots a plan to disk in the same format. Strips
+  project-specific bits: task statuses → `pending`, assignees
+  cleared, phase status reset, git checkpoints null. Doc bodies
+  go to separate `.md` files referenced via `bodyPath`.
+- **Placeholders** — templates can declare `placeholders:` in
+  `template.yaml` (each with `key`, optional `label`, `default`).
+  At apply time, `{{key}}` tokens in every string field — phase
+  titles, scope, doc bodies, file paths in tasks — get
+  substituted from the user's input (or the placeholder default).
+  Templates without placeholders work unchanged.
+- **Source merging** — `listTemplates(projectRoot)` returns built-
+  ins + user-global + project-local with a `source` discriminator.
+  UI shows a Project / User badge so the user can tell where each
+  template came from.
+- **REST**: `POST /api/plans/:uid/publish-as-template`,
+  `GET /api/plan-templates?project=<root>`,
+  `POST /api/plans/from-template` accepts `placeholderValues`.
+- **MCP**: new `publish_plan_as_template`. `list_plan_templates`
+  takes `project_root`. `create_plan_from_template` takes
+  `placeholder_values`.
+- **UI**: "Publish as template" button on the plan header opens
+  a small modal asking only for the slug + label + short
+  description. PlanCreateModal "From template" tab now shows
+  source badges and renders a placeholder-collection form when
+  the chosen template declares any.
+
+The flow: a team writes one canonical "Company Mass Refactor"
+template, publishes it, commits to git. Other projects
+`git clone https://github.com/team/codetrellis-templates
+.codetrellis/templates/team`. The CodeTrellis instance picks it
+up automatically on next project open. No registry, no cloud.
+
+Tracker §1 Plan-export domain row 70 → 100. §3 Phase 13 marked
+DONE. §7 next-pushes shifts to Electron build fixes (DMG / EXE).
 
 ### Apr 27, 2026 — Auto-sync (Phase 13 §B)
 
@@ -774,7 +820,7 @@ D → C → A → D2 → E → F → G → B. All landed Apr 27, 2026.
 
 ---
 
-### Phase 13 — Plan Export + Multi-Device + Settings (designed, not built)
+### Phase 13 — Plan Export + Multi-Device + Settings ✅ DONE (Apr 27, 2026)
 **Goal:** Plans, phases, tasks, spec docs, and templates round-trip
 between the DB and a directory of YAML + markdown checked into the
 project repo at `<project>/.codetrellis/plans/`. The file is canonical;
@@ -798,7 +844,7 @@ share a plan or someone moves between laptop and desktop.
 |---|---|---|---|
 | **A** | Manual export / import shipped. `plan-file-service.ts` round-trips plan + phases + tasks + spec docs to `<project>/.codetrellis/plans/<slug>/` (YAML + markdown with front-matter, per [PLAN-EXPORT.md §3](PLAN-EXPORT.md)). REST: `POST /api/plans/:uid/export`, `POST /api/plans/import`, `GET /api/plans/discover`. MCP: `export_plan_to_files`, `import_plan_from_files`, `discover_plan_files`. UI: "Export" button on PlanDetail header; PlanList shows a "Found N plans on disk" panel for plans committed via git but not yet in the local DB, with one-click Import. Idempotent — re-export overwrites; re-import upserts by UID. WS broadcasts `plan-imported` so other windows refresh. | medium | ✅ |
 | **B** | Auto-sync shipped. `plan-file-service` exposes `scheduleWriteThrough(planUid)` (debounced 200ms per plan) — hooked into every mutation site in plan / plan-phases / plan-documents services via lazy-required notifyMutation helpers. Linked plans (those with `<projectRoot>/.codetrellis/plans/<slug>/plan.yaml` on disk) auto-export on every change. File watcher (`startPlanFileWatcher`) monitors `.codetrellis/plans/` with self-write stamping (1s TTL) so the write-through-then-watcher loop is broken; external edits re-import the plan idempotently. Import-depth guard suppresses write-through during a re-import. YAML conflict markers detected and surfaced as a `plan-file-conflict` toast. UI: per-plan "Linked / Unlink" toggle on the plan header; toast on file-watcher-driven imports. REST `GET /api/plans/:uid/file-status` + `POST /api/plans/:uid/unlink`; MCP `unlink_plan_from_files`. | medium | ✅ |
-| **C** | Templates as publishable repos. "Publish as template" extracts a plan dir + scrubs project paths to placeholders. A user can `git clone` a template repo into `.codetrellis/templates/`. | small | ❌ |
+| **C** | Templates as publishable repos shipped. `plan-templates.ts` now loads templates from built-ins + `~/.codetrellis/templates/<id>/` + `<project>/.codetrellis/templates/<id>/` (project wins ID collisions); a `template.yaml` + `docs/<order>-<slug>.md` shape mirrors the plan-export format. New `plan-template-publish-service.ts` snapshots a plan as a template, scrubbing statuses / assignees / git checkpoints. Placeholder system: `{{key}}` tokens substituted in every string field at apply time, with optional defaults declared in `placeholders:`. REST `POST /api/plans/:uid/publish-as-template`; MCP `publish_plan_as_template`; `list_plan_templates` and `create_plan_from_template` accept `project_root` / `placeholder_values`. UI: "Publish as template" button on PlanDetail header; PlanCreateModal "From template" tab shows source badge (Project / User) and a placeholder-collection form. | small | ✅ |
 | **D** | **Settings surface.** Gear icon in TopBar opens a modal with 5 sections — Identity (name + email defaulting from `git config user.name`/`user.email`), MCP Server (configurable port + autodetect-on-collision + copy-config snippet), Plans (default visibility), Data (dir override + `CODETRELLIS_DATA_DIR` env var honoured for tests), Telemetry (off; explicit). Persisted at `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. WS broadcasts `settings-changed` + `mcp-port-changed`. | small | ✅ |
 | **E** | **Identity in attributions.** REST authoring sites (`POST /api/plans`, plan-doc create, comment create) now resolve `author` via `getAuthorKey('human')` — returns the user's settings email if configured, falls back to the legacy `'human'` role string. Old rows stay valid; new rows pick up the email once set. | small | ✅ |
 
@@ -1046,7 +1092,7 @@ The active queue is now driven by:
 7. ~~**Phase 13 §B — Auto-sync**~~ ✅ shipped — debounced write-through on every plan/phase/task/doc mutation, chokidar file watcher with self-write stamping, import-depth guard, YAML conflict-marker detection, per-plan Linked/Unlink toggle.
 8. **Electron build fixes (real DMG + EXE).** Five small fixes: (a) renderer asset bundling — Forge says "built" but renderer never lands in the `.app`; (b) `extraResource` for tree-sitter WASM grammars + read via `process.resourcesPath` in production; (c) generate `icon.icns` + `icon.ico` from `icon.png`; (d) add `@electron-forge/maker-squirrel` for Windows; (e) signing + notarisation hooks. Prep for shipping the desktop app to actual users.
 9. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
-10. **Phase 13 §C — Templates as publishable repos.** "Publish as template" extracts a plan dir + scrubs project paths to placeholders. Users `git clone` template repos into `.codetrellis/templates/`.
+10. ~~**Phase 13 §C — Templates as publishable repos**~~ ✅ shipped — disk templates from `<project>/.codetrellis/templates/` + `~/.codetrellis/templates/` merged with built-ins; "Publish as template" UI; `{{key}}` placeholder substitution.
 11. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB so scope-switching is instant on big repos.
 12. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.) — exposes the discovered system list as a queryable surface.
 13. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`** — Systems section above the file tree, system view kind in Inspector, drift attribution by system.

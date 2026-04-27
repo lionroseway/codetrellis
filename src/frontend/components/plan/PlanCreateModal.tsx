@@ -9,6 +9,12 @@ interface TaskInput {
   affectedFiles: string;
 }
 
+interface TemplatePlaceholder {
+  key: string;
+  label?: string;
+  default?: string;
+}
+
 interface TemplateSummary {
   id: string;
   label: string;
@@ -17,6 +23,8 @@ interface TemplateSummary {
   defaultTitle: string;
   phaseCount: number;
   docCount: number;
+  source?: 'builtin' | 'project' | 'user';
+  placeholders?: TemplatePlaceholder[];
 }
 
 type Mode = 'blank' | 'template';
@@ -29,19 +37,25 @@ export function PlanCreateModal({ onClose }: { onClose: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
   const root = useProjectStore((s) => s.root);
   const fetchPlans = usePlanStore((s) => s.fetchPlans);
   const setActivePlan = usePlanStore((s) => s.setActivePlan);
 
-  // Pull the template list once when the modal opens.
+  // Pull the template list once when the modal opens. Pass the
+  // active project so disk templates from `<root>/.codetrellis/templates/`
+  // appear alongside built-ins (Phase 13 §C).
   useEffect(() => {
-    fetch('/api/plan-templates')
+    const url = root
+      ? `/api/plan-templates?project=${encodeURIComponent(root)}`
+      : '/api/plan-templates';
+    fetch(url)
       .then((r) => r.json())
       .then((list: TemplateSummary[]) => {
         if (Array.isArray(list)) setTemplates(list);
       })
       .catch(() => { /* not fatal — blank mode still works */ });
-  }, []);
+  }, [root]);
 
   const addTask = () => setTasks([...tasks, { description: '', affectedFiles: '' }]);
   const removeTask = (i: number) => setTasks(tasks.filter((_, j) => j !== i));
@@ -71,6 +85,7 @@ export function PlanCreateModal({ onClose }: { onClose: () => void }) {
           projectPath: root,
           title: title.trim() || undefined,
           description: description.trim() || undefined,
+          placeholderValues: Object.keys(placeholderValues).length ? placeholderValues : undefined,
         }),
       });
       setSubmitting(false);
@@ -176,6 +191,15 @@ export function PlanCreateModal({ onClose }: { onClose: () => void }) {
                       <div className="flex items-center gap-2">
                         <Layers size={11} className={selected ? 'text-accent' : 'text-foreground-subtle'} />
                         <span className="text-[12px] font-semibold text-foreground flex-1">{t.label}</span>
+                        {t.source && t.source !== 'builtin' && (
+                          <span className={`text-[9px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded ${
+                            t.source === 'project'
+                              ? 'text-emerald-300 bg-emerald-500/[0.1] border border-emerald-500/20'
+                              : 'text-cyan-300 bg-cyan-500/[0.1] border border-cyan-500/20'
+                          }`}>
+                            {t.source === 'project' ? 'Project' : 'User'}
+                          </span>
+                        )}
                         <span className="text-[9px] text-foreground-subtle font-mono">
                           {t.phaseCount} phases · {t.docCount} docs
                         </span>
@@ -215,6 +239,32 @@ export function PlanCreateModal({ onClose }: { onClose: () => void }) {
                       className="w-full mt-1 px-3 py-2 text-[12px] bg-surface border border-border rounded-lg text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-accent/30 resize-none"
                     />
                   </div>
+
+                  {selectedTemplate.placeholders && selectedTemplate.placeholders.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-white/[0.04]">
+                      <label className="text-[10px] text-foreground-subtle uppercase tracking-wider font-medium">
+                        Template values
+                      </label>
+                      <p className="text-[10px] text-foreground-subtle leading-relaxed">
+                        These fill in <code className="font-mono bg-white/[0.05] px-1 rounded">{'{{'}…{'}}'}</code> placeholders the template author left for you.
+                      </p>
+                      {selectedTemplate.placeholders.map((p) => (
+                        <div key={p.key}>
+                          <label className="text-[10px] text-foreground-subtle font-mono">
+                            {`{{${p.key}}}`} — {p.label || p.key}
+                          </label>
+                          <input
+                            type="text"
+                            value={placeholderValues[p.key] ?? p.default ?? ''}
+                            onChange={(e) => setPlaceholderValues({ ...placeholderValues, [p.key]: e.target.value })}
+                            placeholder={p.default || p.key}
+                            className="w-full mt-1 px-3 py-1.5 text-[11.5px] bg-surface border border-border rounded-md text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-accent/30"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <p className="text-[10px] text-foreground-subtle leading-relaxed">
                     {selectedTemplate.longDescription}
                   </p>

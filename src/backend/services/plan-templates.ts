@@ -11,6 +11,10 @@
  * cross-cutting patterns / testing / security docs.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { parse as parseYaml } from 'yaml';
 import type { PhaseStatus, PlanDocType } from '../../shared/types';
 
 export interface PlanTemplatePhase {
@@ -42,6 +46,19 @@ export interface PlanTemplateDoc {
   key?: string;
 }
 
+/**
+ * A `{{key}}` placeholder a template declares. Substituted in every
+ * string field (titles, descriptions, scope, doc bodies) at apply
+ * time. `default` is used when the user doesn't fill it in.
+ */
+export interface PlanTemplatePlaceholder {
+  key: string;
+  label?: string;
+  default?: string;
+}
+
+export type PlanTemplateSource = 'builtin' | 'project' | 'user';
+
 export interface PlanTemplate {
   id: string;
   label: string;
@@ -56,6 +73,10 @@ export interface PlanTemplate {
   defaultPlanDescription: string;
   phases: PlanTemplatePhase[];
   docs: PlanTemplateDoc[];
+  /** §C: where this template came from. */
+  source?: PlanTemplateSource;
+  /** §C: optional user-fillable placeholders. */
+  placeholders?: PlanTemplatePlaceholder[];
 }
 
 const MASS_REFACTOR_OVERVIEW = `# Mass refactor — executive overview
@@ -264,18 +285,183 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
   },
 ];
 
-export function listTemplates(): Array<Pick<PlanTemplate, 'id' | 'label' | 'shortDescription' | 'longDescription' | 'defaultTitle'> & { phaseCount: number; docCount: number }> {
-  return PLAN_TEMPLATES.map((t) => ({
+/**
+ * Templates discovered on disk (project-local + user-global) merged
+ * with built-ins. Same `source` field tells the UI which bucket they
+ * came from. Project-local wins when an id collides — lets a team
+ * override a built-in or a global template per-project.
+ */
+export function listTemplates(projectRoot?: string): Array<Pick<PlanTemplate, 'id' | 'label' | 'shortDescription' | 'longDescription' | 'defaultTitle' | 'source' | 'placeholders'> & { phaseCount: number; docCount: number }> {
+  const all = collectTemplates(projectRoot);
+  return all.map((t) => ({
     id: t.id,
     label: t.label,
     shortDescription: t.shortDescription,
     longDescription: t.longDescription,
     defaultTitle: t.defaultTitle,
+    source: t.source ?? 'builtin',
+    placeholders: t.placeholders,
     phaseCount: t.phases.length,
     docCount: t.docs.length,
   }));
 }
 
-export function getTemplate(id: string): PlanTemplate | null {
-  return PLAN_TEMPLATES.find((t) => t.id === id) ?? null;
+export function getTemplate(id: string, projectRoot?: string): PlanTemplate | null {
+  return collectTemplates(projectRoot).find((t) => t.id === id) ?? null;
+}
+
+// --- Disk template loading (Phase 13 §C) ---
+
+/**
+ * Walk built-ins + project + user template dirs, returning a
+ * deduplicated list. Project templates win ID collisions, then
+ * user-global, then built-in.
+ */
+function collectTemplates(projectRoot?: string): PlanTemplate[] {
+  const byId = new Map<string, PlanTemplate>();
+
+  // Built-ins first; lower priority — overridable.
+  for (const t of PLAN_TEMPLATES) {
+    byId.set(t.id, { ...t, source: 'builtin' });
+  }
+
+  // User-global next: ~/.codetrellis/templates/<id>/
+  for (const t of loadTemplatesFromDir(path.join(os.homedir(), '.codetrellis', 'templates'), 'user')) {
+    byId.set(t.id, t);
+  }
+
+  // Project-local last (highest priority): <projectRoot>/.codetrellis/templates/<id>/
+  if (projectRoot) {
+    for (const t of loadTemplatesFromDir(path.join(projectRoot, '.codetrellis', 'templates'), 'project')) {
+      byId.set(t.id, t);
+    }
+  }
+
+  return [...byId.values()];
+}
+
+function loadTemplatesFromDir(dir: string, source: PlanTemplateSource): PlanTemplate[] {
+  if (!fs.existsSync(dir)) return [];
+  const out: PlanTemplate[] = [];
+  for (const entry of safeReaddir(dir)) {
+    const tplDir = path.join(dir, entry);
+    let stat;
+    try { stat = fs.statSync(tplDir); } catch { continue; }
+    if (!stat.isDirectory()) continue;
+    const yamlPath = path.join(tplDir, 'template.yaml');
+    if (!fs.existsSync(yamlPath)) continue;
+    try {
+      const tpl = readTemplate(tplDir, source);
+      if (tpl) out.push(tpl);
+    } catch (err) {
+      console.warn(`[Templates] Failed to load ${tplDir}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return out;
+}
+
+/**
+ * Read one `<dir>/template.yaml` (+ referenced markdown files) into
+ * a PlanTemplate. The format is intentionally close to PLAN-EXPORT's
+ * plan format — anything we'd export from a real plan can also be a
+ * template, just with placeholders sprinkled through string fields.
+ */
+function readTemplate(tplDir: string, source: PlanTemplateSource): PlanTemplate | null {
+  const yamlPath = path.join(tplDir, 'template.yaml');
+  const raw = parseYaml(fs.readFileSync(yamlPath, 'utf-8'));
+  if (!raw || typeof raw !== 'object') return null;
+  if (!raw.id || !raw.label) return null;
+
+  const docs: PlanTemplateDoc[] = [];
+  for (const d of (raw.docs as any[]) ?? []) {
+    if (!d) continue;
+    let body = typeof d.body === 'string' ? d.body : '';
+    if (!body && typeof d.bodyPath === 'string') {
+      const bodyFile = path.join(tplDir, d.bodyPath);
+      if (fs.existsSync(bodyFile)) {
+        body = fs.readFileSync(bodyFile, 'utf-8');
+      }
+    }
+    docs.push({
+      docType: String(d.docType ?? 'custom'),
+      title: String(d.title ?? ''),
+      body,
+      orderHint: typeof d.orderHint === 'string' ? d.orderHint : undefined,
+      parentKey: typeof d.parentKey === 'string' ? d.parentKey : undefined,
+      key: typeof d.key === 'string' ? d.key : undefined,
+    });
+  }
+
+  const phases: PlanTemplatePhase[] = ((raw.phases as any[]) ?? []).map((p) => ({
+    phaseNumber: Number(p.phaseNumber ?? 1),
+    title: String(p.title ?? ''),
+    scope: typeof p.scope === 'string' ? p.scope : undefined,
+    prerequisites: typeof p.prerequisites === 'string' ? p.prerequisites : undefined,
+    acceptanceCriteria: typeof p.acceptanceCriteria === 'string' ? p.acceptanceCriteria : undefined,
+    status: p.status,
+    tasks: Array.isArray(p.tasks) ? p.tasks : undefined,
+  }));
+
+  const placeholders: PlanTemplatePlaceholder[] = ((raw.placeholders as any[]) ?? [])
+    .filter((p) => p && typeof p.key === 'string')
+    .map((p) => ({
+      key: String(p.key),
+      label: typeof p.label === 'string' ? p.label : undefined,
+      default: typeof p.default === 'string' ? p.default : undefined,
+    }));
+
+  return {
+    id: String(raw.id),
+    label: String(raw.label),
+    shortDescription: String(raw.shortDescription ?? ''),
+    longDescription: String(raw.longDescription ?? ''),
+    defaultTitle: String(raw.defaultTitle ?? raw.label),
+    defaultPlanDescription: String(raw.defaultPlanDescription ?? ''),
+    phases,
+    docs,
+    placeholders: placeholders.length ? placeholders : undefined,
+    source,
+  };
+}
+
+function safeReaddir(dir: string): string[] {
+  try { return fs.readdirSync(dir); } catch { return []; }
+}
+
+/**
+ * Substitute `{{key}}` placeholders in every string field of a
+ * template. Used by `applyTemplate` once the user has filled in
+ * values. Pure — returns a new template, doesn't mutate.
+ */
+export function substitutePlaceholders(
+  template: PlanTemplate,
+  values: Record<string, string>,
+): PlanTemplate {
+  const sub = (s: string | undefined): string | undefined => {
+    if (typeof s !== 'string') return s;
+    return s.replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? `{{${k}}}`);
+  };
+  return {
+    ...template,
+    label: sub(template.label) ?? template.label,
+    defaultTitle: sub(template.defaultTitle) ?? template.defaultTitle,
+    defaultPlanDescription: sub(template.defaultPlanDescription) ?? template.defaultPlanDescription,
+    phases: template.phases.map((p) => ({
+      ...p,
+      title: sub(p.title) ?? p.title,
+      scope: sub(p.scope),
+      prerequisites: sub(p.prerequisites),
+      acceptanceCriteria: sub(p.acceptanceCriteria),
+      tasks: p.tasks?.map((t) => ({
+        ...t,
+        description: sub(t.description) ?? t.description,
+        affectedFiles: t.affectedFiles?.map((f) => sub(f) ?? f),
+      })),
+    })),
+    docs: template.docs.map((d) => ({
+      ...d,
+      title: sub(d.title) ?? d.title,
+      body: sub(d.body) ?? d.body,
+    })),
+  };
 }

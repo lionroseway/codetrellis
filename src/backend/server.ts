@@ -1251,20 +1251,53 @@ app.post('/api/plans/:uid/unlink', (req, res) => {
 
 // --- Plan Templates API (Phase 12 §G) ---
 
-app.get('/api/plan-templates', (_req, res) => {
+app.get('/api/plan-templates', (req, res) => {
+  // Phase 13 §C: include disk templates from <project>/.codetrellis/
+  // templates/ + ~/.codetrellis/templates/ when a project path is
+  // passed. No project = built-ins + user-global only.
   const { listTemplates } = require('./services/plan-templates');
-  res.json(listTemplates());
+  const projectRoot = req.query.project as string | undefined;
+  res.json(listTemplates(projectRoot));
+});
+
+app.post('/api/plans/:uid/publish-as-template', (req, res) => {
+  const { publishPlanAsTemplate } = require('./services/plan-template-publish-service');
+  const { projectRoot, templateId, label, shortDescription, longDescription, defaultTitle, defaultPlanDescription, placeholders } = req.body || {};
+  if (!projectRoot || !templateId) {
+    res.status(400).json({ error: 'projectRoot + templateId required' });
+    return;
+  }
+  try {
+    const result = publishPlanAsTemplate({
+      planUid: req.params.uid,
+      projectRoot,
+      templateId,
+      label,
+      shortDescription,
+      longDescription,
+      defaultTitle,
+      defaultPlanDescription,
+      placeholders,
+    });
+    broadcast('plan-template-published', { templateId, templateDir: result.templateDir });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 app.post('/api/plans/from-template', (req, res) => {
   const { applyTemplate } = require('./services/plan-templates-service');
-  const { templateId, projectPath, title, description, author, authorType } = req.body || {};
+  const { templateId, projectPath, title, description, author, authorType, placeholderValues } = req.body || {};
   if (!templateId || !projectPath) {
     res.status(400).json({ error: 'templateId and projectPath are required' });
     return;
   }
   try {
-    const result = applyTemplate({ templateId, projectPath, title, description, author, authorType });
+    const result = applyTemplate({
+      templateId, projectPath, title, description, author, authorType,
+      placeholderValues,
+    });
     broadcast('plan-created', { plan: result.plan });
     for (const phase of result.phases) broadcast('plan-phase-created', { phase });
     for (const doc of result.docs) broadcast('plan-doc-created', { doc });

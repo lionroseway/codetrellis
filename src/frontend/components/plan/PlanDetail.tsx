@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward, User, Download, Link2, Link2Off } from 'lucide-react';
+import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward, User, Download, Link2, Link2Off, Layers } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
@@ -7,6 +7,7 @@ import { StatusBadge } from './StatusBadge';
 import { SpecRoom } from './SpecRoom';
 import { PlanPhases } from './PlanPhases';
 import { VerificationPanel } from './VerificationPanel';
+import { PublishTemplateModal } from './PublishTemplateModal';
 
 export function PlanDetail() {
   const plan = usePlanStore((s) => s.activePlan);
@@ -18,6 +19,7 @@ export function PlanDetail() {
   const addToast = useToastStore((s) => s.addToast);
   const [exporting, setExporting] = useState(false);
   const [linked, setLinked] = useState<boolean | null>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   // Phase 13 §B: a plan is "linked" when its directory exists on disk;
   // every mutation auto-syncs through `plan-file-service.scheduleWriteThrough`.
@@ -125,7 +127,26 @@ export function PlanDetail() {
               {exporting ? 'Linking…' : 'Link to disk'}
             </button>
           )}
+          <button
+            onClick={() => setPublishOpen(true)}
+            disabled={!projectRoot}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md border border-white/[0.06] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={projectRoot ? 'Snapshot this plan as a reusable template' : 'Open a project first'}
+          >
+            <Layers size={10} />
+            Publish as template
+          </button>
         </div>
+
+        {publishOpen && projectRoot && (
+          <PublishTemplateModal
+            planUid={plan.uid}
+            planTitle={plan.title}
+            projectRoot={projectRoot}
+            onClose={() => setPublishOpen(false)}
+            onPublished={() => { /* WS event handles list refresh */ }}
+          />
+        )}
         {plan.description && (
           <p className="text-[10px] text-foreground-muted mt-1 leading-relaxed">{plan.description}</p>
         )}

@@ -83,8 +83,9 @@ const COMMON_FOOTER = `## Most-used MCP tools (cheat sheet)
 - \`delete_plan_phase(phase_uid)\` — tasks survive (phase_uid cleared)
 
 **Plan templates (one-shot deep plan seeding)**
-- \`list_plan_templates()\` — what's available
-- \`create_plan_from_template(template_id, project_path, title?, description?)\` — most common: \`"mass-refactor"\` (6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security)
+- \`list_plan_templates(project_root?)\` — built-ins + disk templates from \`<project_root>/.codetrellis/templates/\` and \`~/.codetrellis/templates/\`
+- \`create_plan_from_template(template_id, project_path, title?, description?, placeholder_values?)\` — most common: \`"mass-refactor"\` (6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security). Disk templates may declare \`{{key}}\` placeholders — pass \`placeholder_values: { key: 'value' }\` to fill them.
+- \`publish_plan_as_template(plan_uid, project_root, template_id, ...)\` — snapshot a plan to \`<project_root>/.codetrellis/templates/<template_id>/\` so a team can \`git push\` it as a reusable template
 
 **Plan file sync (multi-device via git)**
 - \`export_plan_to_files(plan_uid, project_root)\` — writes plan + phases + tasks + spec docs to \`<project>/.codetrellis/plans/<slug>/\`. Idempotent. Commit + push to share with the team.
