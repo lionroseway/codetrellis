@@ -595,7 +595,7 @@ CodeTrellis was npm-shaped. Real repos aren't. Without these phases:
 - Workspace package imports (`@scope/name`) didn't resolve because the resolver only knew a hardcoded `@shared` alias → entire apps like `apps/admin` showed up disconnected from `packages/*`
 - Heavy non-source dirs (`venv/`, `build/`, `vendor/`, `test-results/`) drowned the real code AND blew up chokidar with EMFILE
 
-#### Verified against /path/to/sample-monorepo
+#### Verified against a real mixed-language monorepo (swf)
 
 Before this phase: **597 edges, 0 Python, 0 workspace-aliased.**
 After: **2552 edges — 1688 Python + 591 .tsx + 273 .ts, 314 into `packages/*`.**

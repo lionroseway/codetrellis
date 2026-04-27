@@ -451,18 +451,18 @@ done?" can't be answered.
 
 Add a **user identity setting** at first-run or in settings:
 
-- **Display name** (e.g. *Your Name*) — shown in the plan author
-  field, in attributions on the timeline, in conflict banners.
-- **Email** (e.g. `you@example.com`) — used as the stable id for
-  attributions. We don't validate or send anywhere; it's the same
-  contract as `git config user.email`.
+- **Display name** — shown in the plan author field, in attributions
+  on the timeline, in conflict banners.
+- **Email** — used as the stable id for attributions. We don't
+  validate or send anywhere; it's the same contract as
+  `git config user.email`.
 - **Default to `git config --get user.name` + `user.email`** read
   from the active project — feels native to anyone with git
   configured.
 
-The `Plan.author` / `Task.assignee` fields then become
-`"you@example.com"` instead of `"human"`. Backwards compatible —
-existing rows stay valid; new rows pick up the identity.
+The `Plan.author` / `Task.assignee` fields then become an email
+address instead of `"human"`. Backwards compatible — existing rows
+stay valid; new rows pick up the identity.
 
 ### Settings surface
 

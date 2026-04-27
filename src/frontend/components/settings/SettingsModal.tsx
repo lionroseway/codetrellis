@@ -195,7 +195,7 @@ function IdentitySection({
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           onBlur={save}
-          placeholder="e.g. Your Name"
+          placeholder="Your name"
           className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12.5px] text-foreground focus:outline-none focus:border-accent/40"
         />
       </Field>
@@ -206,7 +206,7 @@ function IdentitySection({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           onBlur={save}
-          placeholder="e.g. you@example.com"
+          placeholder="you@example.com"
           className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12.5px] font-mono text-foreground focus:outline-none focus:border-accent/40"
         />
       </Field>

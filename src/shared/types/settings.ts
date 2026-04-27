@@ -12,10 +12,10 @@
  */
 
 export interface IdentitySettings {
-  /** Display name shown in attributions (e.g. "Your Name"). */
+  /** Display name shown in attributions. */
   displayName: string;
   /**
-   * Stable id used as the canonical author key (e.g. "you@example.com").
+   * Stable id used as the canonical author key (an email address).
    * Defaults to `git config --get user.email` of the active project on
    * first run. Empty string means "not configured" — services fall back
    * to the role-based legacy values ("human" / "agent").

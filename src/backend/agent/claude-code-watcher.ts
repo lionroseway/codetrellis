@@ -36,7 +36,7 @@ function findActiveSession(projectRoot: string): { sessionId: string; jsonlPath:
         continue; // Process is dead
       }
 
-      // Find the JSONL file — Claude encodes paths as -Users-username-... (leading dash kept)
+      // Find the JSONL file — Claude encodes paths by replacing every "/" with "-" (leading dash kept)
       const encodedPath = projectRoot.replace(/\//g, '-');
       const projectDir = path.join(PROJECTS_DIR, encodedPath);
 
