@@ -493,6 +493,79 @@ export async function startMcpServer(): Promise<void> {
     }
   );
 
+  // --- Plan File Sync (Phase 13 §A) ---
+
+  mcpServer.registerTool(
+    'export_plan_to_files',
+    {
+      description: 'Round-trip a plan to disk: writes plan + phases + tasks + spec docs as YAML / markdown under `<projectRoot>/.codetrellis/plans/<slug>/`. Idempotent — re-exporting overwrites the same files. Use this so plans can be committed to git and shared across devices / agents (see codetrellis://skill/power-user for the multi-device flow).',
+      inputSchema: {
+        plan_uid: z.string(),
+        project_root: z.string().describe('Absolute path to the project repo root. The .codetrellis/ directory will be created inside it.'),
+      },
+    },
+    async ({ plan_uid, project_root }) => {
+      const { exportPlan } = require('../services/plan-file-service');
+      try {
+        const result = exportPlan(plan_uid, project_root);
+        broadcast('plan-exported', { planUid: plan_uid, planDir: result.planDir, files: result.files.length });
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ planDir: result.planDir, fileCount: result.files.length }, null, 2),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
+      }
+    }
+  );
+
+  mcpServer.registerTool(
+    'import_plan_from_files',
+    {
+      description: 'Read a plan directory (`.codetrellis/plans/<slug>/`) from disk and upsert it into the DB. UID is the canonical id — re-importing the same directory is idempotent. Returns the plan + phase + task + doc counts. Use after `git pull` to sync external changes.',
+      inputSchema: {
+        plan_dir: z.string().describe('Absolute path to the plan directory (or directly to plan.yaml).'),
+      },
+    },
+    async ({ plan_dir }) => {
+      const { importPlan } = require('../services/plan-file-service');
+      try {
+        const result = importPlan(plan_dir);
+        broadcast('plan-imported', { planUid: result.plan.uid, source: plan_dir });
+        saveNow(() => exportDatabase());
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              plan: { uid: result.plan.uid, title: result.plan.title },
+              phaseCount: result.phases.length,
+              taskCount: result.tasks.length,
+              docCount: result.docs.length,
+              warnings: result.warnings,
+            }, null, 2),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
+      }
+    }
+  );
+
+  mcpServer.registerTool(
+    'discover_plan_files',
+    {
+      description: 'List every plan directory under `<project_root>/.codetrellis/plans/`. Used to find plans that came in via `git pull` or that another tool authored. Returns absolute paths.',
+      inputSchema: { project_root: z.string() },
+    },
+    async ({ project_root }) => {
+      const { discoverPlanDirs } = require('../services/plan-file-service');
+      const dirs = discoverPlanDirs(project_root);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(dirs, null, 2) }] };
+    }
+  );
+
   // --- Plan Templates (Phase 12 §G) ---
 
   mcpServer.registerTool(
@@ -1200,31 +1273,36 @@ export async function startMcpServer(): Promise<void> {
 
   return new Promise<void>((resolve, reject) => {
     const tryPort = (candidate: number, attemptsLeft: number) => {
-      const onError = (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE' && autodetect && attemptsLeft > 0) {
-          console.warn(`[MCP] Port ${candidate} in use; trying ${candidate + 1}…`);
-          app.removeListener('error', onError);
-          tryPort(candidate + 1, attemptsLeft - 1);
-        } else {
-          app.removeListener('error', onError);
-          reject(err);
-        }
-      };
-      app.once('error', onError);
-      app.listen(candidate, '127.0.0.1', () => {
-        boundPort = candidate;
+      // Use the `listening` event explicitly (instead of the listen()
+      // callback) so we can pair it with a single `error` handler and
+      // remove BOTH on whichever fires first. Otherwise the callback
+      // registered on a failing `listen(port-in-use)` call is still
+      // attached when a later `listen(other-port)` succeeds, and node
+      // fires *both* listen callbacks — leading to a duplicate
+      // "Server running on…" log line on the wrong port.
+      const onListening = () => {
         app.removeListener('error', onError);
+        boundPort = candidate;
         console.log(`[MCP] Server running on http://127.0.0.1:${boundPort}${candidate !== requestedPort ? ` (requested ${requestedPort}, autodetected)` : ''}`);
-        // Tell the frontend the bound port might differ from the
-        // configured one — the "Copy MCP config" buttons need to
-        // reflect reality.
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { broadcast: bc } = require('../server');
           bc('mcp-port-changed', { port: boundPort, requested: requestedPort });
         } catch { /* server module may not yet be registered for broadcast in tests */ }
         resolve();
-      });
+      };
+      const onError = (err: NodeJS.ErrnoException) => {
+        app.removeListener('listening', onListening);
+        if (err.code === 'EADDRINUSE' && autodetect && attemptsLeft > 0) {
+          console.warn(`[MCP] Port ${candidate} in use; trying ${candidate + 1}…`);
+          tryPort(candidate + 1, attemptsLeft - 1);
+        } else {
+          reject(err);
+        }
+      };
+      app.once('listening', onListening);
+      app.once('error', onError);
+      app.listen(candidate, '127.0.0.1');
     };
     tryPort(requestedPort, autodetect ? MAX_PORT_ATTEMPTS : 0);
   });

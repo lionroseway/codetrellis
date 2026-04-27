@@ -86,6 +86,11 @@ const COMMON_FOOTER = `## Most-used MCP tools (cheat sheet)
 - \`list_plan_templates()\` — what's available
 - \`create_plan_from_template(template_id, project_path, title?, description?)\` — most common: \`"mass-refactor"\` (6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security)
 
+**Plan file sync (multi-device via git)**
+- \`export_plan_to_files(plan_uid, project_root)\` — writes plan + phases + tasks + spec docs to \`<project>/.codetrellis/plans/<slug>/\`. Idempotent. Commit + push to share with the team.
+- \`import_plan_from_files(plan_dir)\` — upserts a plan from disk into the DB. Use after \`git pull\` to sync external changes.
+- \`discover_plan_files(project_root)\` — list every plan directory checked into the project's \`.codetrellis/plans/\`.
+
 **Spec docs (rich shared context)**
 - \`list_plan_docs(plan_uid)\` — cheap index of titles + types + lengths (no bodies)
 - \`get_plan_doc(doc_uid? | plan_uid + doc_type?)\` — fetch one doc body

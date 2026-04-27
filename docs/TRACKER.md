@@ -56,7 +56,7 @@ shared via the bridge abstraction.
 | Multi-tab projects | 100 | Good | Open multiple projects/worktrees as TopBar tabs |
 | Visual Plan Builder | 35 | Medium | "Add to plan" from the inspector exists; clicking nodes-on-graph to author isn't wired |
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
-| Plan export / source-controllable plans | 0 | – | **Designed, not built.** See [PLAN-EXPORT.md](PLAN-EXPORT.md) for the full spec — directory of YAML + markdown under `<project>/.codetrellis/plans/`, file-as-source-of-truth with DB cache, auto-sync via file watcher, identity via `git config`. Three-phase delivery: (1) manual export/import, (2) auto-sync, (3) templates as publishable repos. The headline feature for the multi-device + multi-agent story. |
+| Plan export / source-controllable plans | 35 | Medium | Phase 13 §A shipped (manual export/import). Plans round-trip to `<project>/.codetrellis/plans/<slug>/` as YAML + markdown; PlanList shows discovered-but-unimported plans for one-click pulls. Still pending: §B auto-sync (file watcher write-through), §C templates as publishable repos. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
 | Electron desktop build | 30 | Medium | `npm run package` runs to completion but the resulting `.app` is non-functional — renderer not bundled, tree-sitter WASM missing, icon needs `.icns` / `.ico`, no `maker-squirrel` for Windows. Five small fixes needed before a real DMG / EXE ships. See §7 for the punch list. |
 | Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
@@ -65,6 +65,43 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 27, 2026 — Manual plan export / import (Phase 13 §A)
+
+The headline multi-device feature is real now. `git push` your
+plans alongside the code; teammates / your other machines
+`git pull` and one-click import.
+
+- **`plan-file-service.ts`** round-trips plan + phases + tasks +
+  spec docs between SQL and disk per the layout in
+  [PLAN-EXPORT.md §3](PLAN-EXPORT.md): `plan.yaml`, `phases/NN-slug.yaml`,
+  `tasks/NNN-slug.yaml`, `docs/order-slug.md` (with YAML front-
+  matter for metadata, markdown body untouched). Slug = title-slug
+  + 8-char UID prefix to avoid clashes.
+- **Idempotent**: re-export overwrites the same files; re-import
+  upserts by UID (existing rows get updated, new ones created).
+  UID is canonical — renaming a file doesn't fork its history.
+- **Auto-creates** `<project>/.codetrellis/.gitignore` with
+  `cache/` so runtime state never gets committed.
+- **REST**: `POST /api/plans/:uid/export?path=…`,
+  `POST /api/plans/import?path=…`,
+  `GET /api/plans/discover?project=…`.
+- **MCP**: `export_plan_to_files`, `import_plan_from_files`,
+  `discover_plan_files`. Surfaced in the skill cheat sheet.
+- **UI**: Export button on the plan header. PlanList grows a
+  "Found N plans on disk" callout when the project has committed
+  plans not yet in the DB, with one-click Import per plan.
+- **WS**: `plan-imported` / `plan-exported` broadcasts so other
+  windows refresh.
+- **MCP autodetect logging fix**: when port 19432 was busy, the
+  console double-printed "Server running on…" because the failing
+  `app.listen()` callback was still attached when the retry
+  succeeded. Now uses paired `once('listening')` + `once('error')`
+  with mutual cleanup. One log line per successful bind.
+
+Tracker §1 Plan-export domain row 0 → 35 (§A done; §B + §C
+pending). §3 Phase 13 §A row updated to ✅. §7 next-pushes shifts
+to §B (auto-sync).
 
 ### Apr 27, 2026 — Settings surface + identity (Phase 13 §D + §E)
 
@@ -723,7 +760,7 @@ share a plan or someone moves between laptop and desktop.
 
 | | Item | Size | Status |
 |---|---|---|---|
-| **A** | Manual export → file, manual import. New `plan-file-service.ts`, REST + MCP wrappers (`export_plan_to_files`, `import_plan_from_files`), "Export to .codetrellis/" button + "Import plan from file..." menu item. Documents the format. Delivers the multi-device story without auto-sync. | medium | ❌ |
+| **A** | Manual export / import shipped. `plan-file-service.ts` round-trips plan + phases + tasks + spec docs to `<project>/.codetrellis/plans/<slug>/` (YAML + markdown with front-matter, per [PLAN-EXPORT.md §3](PLAN-EXPORT.md)). REST: `POST /api/plans/:uid/export`, `POST /api/plans/import`, `GET /api/plans/discover`. MCP: `export_plan_to_files`, `import_plan_from_files`, `discover_plan_files`. UI: "Export" button on PlanDetail header; PlanList shows a "Found N plans on disk" panel for plans committed via git but not yet in the local DB, with one-click Import. Idempotent — re-export overwrites; re-import upserts by UID. WS broadcasts `plan-imported` so other windows refresh. | medium | ✅ |
 | **B** | Auto-sync (file is canonical). File watcher on `.codetrellis/plans/`, write-through on every plan/phase/task/doc mutation, banner UI for external-update reload, conflict-marker detection, per-plan "Linked ⇄ Local" toggle. | medium | ❌ |
 | **C** | Templates as publishable repos. "Publish as template" extracts a plan dir + scrubs project paths to placeholders. A user can `git clone` a template repo into `.codetrellis/templates/`. | small | ❌ |
 | **D** | **Settings surface.** Gear icon in TopBar opens a modal with 5 sections — Identity (name + email defaulting from `git config user.name`/`user.email`), MCP Server (configurable port + autodetect-on-collision + copy-config snippet), Plans (default visibility), Data (dir override + `CODETRELLIS_DATA_DIR` env var honoured for tests), Telemetry (off; explicit). Persisted at `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. WS broadcasts `settings-changed` + `mcp-port-changed`. | small | ✅ |
@@ -969,8 +1006,8 @@ The active queue is now driven by:
 ##### Next up (in order)
 
 5. ~~**Phase 13 §D + §E — Settings surface + Identity in attributions**~~ ✅ shipped — gear icon in TopBar opens a 5-section modal; identity defaults from `git config`; MCP port configurable + autodetects on collision; `CODETRELLIS_DATA_DIR` env var supported for the E2E harness; REST authoring sites use the configured identity email (falls back to `'human'`).
-6. **Phase 13 §A — Manual plan export / import.** New `plan-file-service.ts` + REST + MCP (`export_plan_to_files`, `import_plan_from_files`) + UI buttons. The biggest single UX win for multi-device — `git push` / `git pull` plans alongside the project. See [PLAN-EXPORT.md](PLAN-EXPORT.md) for the format.
-7. **Phase 13 §B — Auto-sync.** File watcher on `.codetrellis/plans/`, write-through on every mutation, banner UI for external-update reload, conflict-marker detection.
+6. ~~**Phase 13 §A — Manual plan export / import**~~ ✅ shipped — `plan-file-service.ts` round-trips plan + phases + tasks + spec docs to disk; REST + MCP + UI. Multi-device works via `git push` / `git pull`.
+7. **Phase 13 §B — Auto-sync.** File watcher on `.codetrellis/plans/`, write-through on every plan/phase/task/doc mutation, banner UI for external-update reload, conflict-marker detection. The next push.
 8. **Electron build fixes (real DMG + EXE).** Five small fixes: (a) renderer asset bundling — Forge says "built" but renderer never lands in the `.app`; (b) `extraResource` for tree-sitter WASM grammars + read via `process.resourcesPath` in production; (c) generate `icon.icns` + `icon.ico` from `icon.png`; (d) add `@electron-forge/maker-squirrel` for Windows; (e) signing + notarisation hooks. Prep for shipping the desktop app to actual users.
 9. **System-aware clustering** *(graph quality)* — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster. Lets users actually navigate big repos.
 10. **Phase 13 §C — Templates as publishable repos.** "Publish as template" extracts a plan dir + scrubs project paths to placeholders. Users `git clone` template repos into `.codetrellis/templates/`.

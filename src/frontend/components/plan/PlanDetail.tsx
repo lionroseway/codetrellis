@@ -1,5 +1,8 @@
-import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward, User } from 'lucide-react';
+import { useState } from 'react';
+import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward, User, Download } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
+import { useProjectStore } from '../../stores/project-store';
+import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
 import { SpecRoom } from './SpecRoom';
 import { PlanPhases } from './PlanPhases';
@@ -11,10 +14,36 @@ export function PlanDetail() {
   const setActivePlan = usePlanStore((s) => s.setActivePlan);
   const selectedTaskUid = usePlanStore((s) => s.selectedTaskUid);
   const setSelectedTask = usePlanStore((s) => s.setSelectedTask);
+  const projectRoot = useProjectStore((s) => s.root);
+  const addToast = useToastStore((s) => s.addToast);
+  const [exporting, setExporting] = useState(false);
 
   if (!plan) return null;
 
   const progress = plan.taskCount ? Math.round(((plan.completedTaskCount || 0) / (plan.taskCount || 1)) * 100) : 0;
+
+  const handleExport = async () => {
+    if (!projectRoot) {
+      addToast({ type: 'warning', title: 'Open a project first', message: 'Plans export to <project>/.codetrellis/plans/' });
+      return;
+    }
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/plans/${plan.uid}/export?path=${encodeURIComponent(projectRoot)}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Export failed');
+      addToast({
+        type: 'success',
+        title: 'Plan exported',
+        message: `Wrote ${data.files.length} files to ${data.planDir.replace(projectRoot, '')}`,
+        duration: 6000,
+      });
+    } catch (err) {
+      addToast({ type: 'error', title: 'Export failed', message: String(err) });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const taskIcon = (status: string) => {
     switch (status) {
@@ -41,6 +70,15 @@ export function PlanDetail() {
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-semibold text-foreground flex-1">{plan.title}</h3>
           <StatusBadge status={plan.status} />
+          <button
+            onClick={handleExport}
+            disabled={exporting || !projectRoot}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md border border-white/[0.06] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={projectRoot ? `Export to ${projectRoot}/.codetrellis/plans/` : 'Open a project first'}
+          >
+            <Download size={10} />
+            {exporting ? 'Exporting…' : 'Export'}
+          </button>
         </div>
         {plan.description && (
           <p className="text-[10px] text-foreground-muted mt-1 leading-relaxed">{plan.description}</p>

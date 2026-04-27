@@ -127,6 +127,19 @@ export function useWebSocket() {
             const planUid = payload?.phase?.planUid as string | undefined;
             if (planUid) usePlanStore.getState().onPlanPhaseChanged(planUid);
           }
+          if (type === 'plan-imported') {
+            // An external import (MCP, another window, future
+            // auto-sync) loaded a plan. Refresh the list so the
+            // user sees it.
+            const { useProjectStore } = require('../stores/project-store');
+            const root = useProjectStore.getState().root;
+            usePlanStore.getState().fetchPlans(root || undefined).catch(() => {});
+            useToastStore.getState().addToast({ type: 'info', title: 'Plan imported', message: payload?.source || 'from disk' });
+          }
+          if (type === 'plan-exported') {
+            // Pure notification — file content matches DB; no
+            // store mutation needed.
+          }
           if (type === 'plan-phase-deleted') {
             // Phase deleted — refetch phases for whichever plan is
             // active. We don't have planUid in the payload, but

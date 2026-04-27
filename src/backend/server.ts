@@ -1167,6 +1167,51 @@ app.get('/api/plans/:uid/changes/:changeId', (req, res) => {
   res.json(change);
 });
 
+// --- Plan File Sync API (Phase 13 §A) ---
+
+app.post('/api/plans/:uid/export', (req, res) => {
+  const { exportPlan } = require('./services/plan-file-service');
+  const projectRoot = (req.query.path as string) || (req.body && req.body.projectRoot);
+  if (!projectRoot) {
+    res.status(400).json({ error: 'projectRoot path required (?path=… or body.projectRoot)' });
+    return;
+  }
+  try {
+    const result = exportPlan(req.params.uid, projectRoot);
+    broadcast('plan-exported', { planUid: req.params.uid, planDir: result.planDir, files: result.files.length });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/plans/import', (req, res) => {
+  const { importPlan } = require('./services/plan-file-service');
+  const planDir = (req.query.path as string) || (req.body && req.body.planDir);
+  if (!planDir) {
+    res.status(400).json({ error: 'planDir path required (?path=… or body.planDir)' });
+    return;
+  }
+  try {
+    const result = importPlan(planDir);
+    broadcast('plan-imported', { planUid: result.plan.uid, source: planDir });
+    saveNow(() => exportDatabase());
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/plans/discover', (req, res) => {
+  const { discoverPlanDirs } = require('./services/plan-file-service');
+  const projectRoot = req.query.project as string | undefined;
+  if (!projectRoot) {
+    res.status(400).json({ error: 'project query param required' });
+    return;
+  }
+  res.json(discoverPlanDirs(projectRoot));
+});
+
 // --- Plan Templates API (Phase 12 §G) ---
 
 app.get('/api/plan-templates', (_req, res) => {
