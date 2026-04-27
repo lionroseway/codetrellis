@@ -8,6 +8,7 @@ import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
 import * as planDocsService from '../services/plan-documents-service';
+import * as planPhasesService from '../services/plan-phases-service';
 import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
@@ -327,31 +328,139 @@ export async function startMcpServer(): Promise<void> {
   mcpServer.registerTool(
     'update_task',
     {
-      description: 'Update task status. Use this to report progress: pending → in_progress → done.',
+      description: 'Update task status, or assign / reassign it to a phase. Use this to report progress: pending → in_progress → done. Pass phase_uid to bind the task to a phase, or empty string to clear.',
       inputSchema: {
         plan_uid: z.string(),
         task_uid: z.string(),
-        status: z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']),
+        status: z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']).optional(),
+        phase_uid: z.string().optional().describe('Bind this task to a phase. Empty string clears the binding.'),
       },
     },
-    async ({ plan_uid, task_uid, status }) => {
-      planService.updateTask(task_uid, { status });
-      broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid, status });
+    async ({ plan_uid, task_uid, status, phase_uid }) => {
+      const updates: Parameters<typeof planService.updateTask>[1] = {};
+      if (status !== undefined) updates.status = status;
+      if (phase_uid !== undefined) updates.phaseUid = phase_uid === '' ? null : phase_uid;
+      planService.updateTask(task_uid, updates);
+      if (status !== undefined) {
+        broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid, status });
+      } else {
+        broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid });
+      }
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Task ${task_uid} → ${status}` }] };
+      const summary = [status && `status → ${status}`, phase_uid !== undefined && `phase → ${phase_uid || 'none'}`]
+        .filter(Boolean).join(', ');
+      return { content: [{ type: 'text' as const, text: `Task ${task_uid} ${summary || 'unchanged'}` }] };
     }
   );
 
   mcpServer.registerTool(
     'get_next_task',
     {
-      description: 'Get the next available unclaimed task from a plan, respecting dependency order.',
+      description: 'Get the next available unclaimed task from a plan, respecting dependency order. Pass phase_uid to scope to a single phase (use empty string to scope to "no phase" tasks only).',
+      inputSchema: {
+        plan_uid: z.string(),
+        phase_uid: z.string().optional().describe('Restrict to a phase. Empty string = unphased tasks only. Omit = any phase.'),
+      },
+    },
+    async ({ plan_uid, phase_uid }) => {
+      const phaseFilter = phase_uid === undefined ? undefined : (phase_uid === '' ? null : phase_uid);
+      const task = planService.getNextTask(plan_uid, phaseFilter);
+      if (!task) return { content: [{ type: 'text' as const, text: 'No tasks available — all claimed, completed, or blocked by dependencies.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }] };
+    }
+  );
+
+  // --- Plan Phase Tools ---
+
+  const phaseStatusEnum = z.enum(['pending', 'in_progress', 'done', 'blocked']);
+
+  mcpServer.registerTool(
+    'add_plan_phase',
+    {
+      description: 'Add a phase to a plan. A phase is a first-class checkpoint with its own scope, prerequisites, git checkpoint, and acceptance criteria — modelled on the swf "01-PHASE-1-FOUNDATION" pattern. phase_number auto-picks the next slot if omitted. Tasks bind to a phase via update_task(..., phase_uid).',
+      inputSchema: {
+        plan_uid: z.string(),
+        title: z.string(),
+        phase_number: z.number().int().optional(),
+        scope: z.string().optional().describe('Markdown describing what this phase covers'),
+        prerequisites: z.string().optional().describe('Markdown — what must be done before this phase starts'),
+        git_checkpoint: z.string().optional().describe('Commit hash, tag, or label captured at phase start'),
+        acceptance_criteria: z.string().optional().describe('Markdown — ideally a checklist of "- [ ] …" items'),
+        status: phaseStatusEnum.optional(),
+      },
+    },
+    async ({ plan_uid, title, phase_number, scope, prerequisites, git_checkpoint, acceptance_criteria, status }) => {
+      const phase = planPhasesService.createPhase({
+        planUid: plan_uid,
+        phaseNumber: phase_number,
+        title,
+        scope,
+        prerequisites,
+        gitCheckpoint: git_checkpoint ?? null,
+        acceptanceCriteria: acceptance_criteria,
+        status,
+      });
+      broadcast('plan-phase-created', { phase });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(phase, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'list_plan_phases',
+    {
+      description: 'List all phases for a plan, ordered by phase_number. Returns the full phase rows (small payload, no need for a summary variant).',
       inputSchema: { plan_uid: z.string() },
     },
     async ({ plan_uid }) => {
-      const task = planService.getNextTask(plan_uid);
-      if (!task) return { content: [{ type: 'text' as const, text: 'No tasks available — all claimed, completed, or blocked by dependencies.' }] };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }] };
+      const phases = planPhasesService.listPhases(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(phases, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'update_plan_phase',
+    {
+      description: 'Update any field on a phase — title, scope, prerequisites, git checkpoint, acceptance criteria, status, or phase_number. Pass empty string for git_checkpoint to clear.',
+      inputSchema: {
+        phase_uid: z.string(),
+        title: z.string().optional(),
+        phase_number: z.number().int().optional(),
+        scope: z.string().optional(),
+        prerequisites: z.string().optional(),
+        git_checkpoint: z.string().optional(),
+        acceptance_criteria: z.string().optional(),
+        status: phaseStatusEnum.optional(),
+      },
+    },
+    async ({ phase_uid, title, phase_number, scope, prerequisites, git_checkpoint, acceptance_criteria, status }) => {
+      const phase = planPhasesService.updatePhase(phase_uid, {
+        title,
+        phaseNumber: phase_number,
+        scope,
+        prerequisites,
+        gitCheckpoint: git_checkpoint === '' ? null : git_checkpoint,
+        acceptanceCriteria: acceptance_criteria,
+        status,
+      });
+      if (!phase) return { content: [{ type: 'text' as const, text: `Phase ${phase_uid} not found` }] };
+      broadcast('plan-phase-updated', { phase });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(phase, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'delete_plan_phase',
+    {
+      description: 'Delete a phase. Tasks that reference it have their phase_uid cleared (they survive, just become unphased).',
+      inputSchema: { phase_uid: z.string() },
+    },
+    async ({ phase_uid }) => {
+      planPhasesService.deletePhase(phase_uid);
+      broadcast('plan-phase-deleted', { phaseUid: phase_uid });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Phase ${phase_uid} deleted` }] };
     }
   );
 

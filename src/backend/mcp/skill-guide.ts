@@ -71,9 +71,15 @@ const COMMON_FOOTER = `## Most-used MCP tools (cheat sheet)
 - \`update_plan(plan_uid, {title?, description?, status?})\`
 
 **Tasks**
-- \`get_next_task(plan_uid)\` — pick next available task respecting dependencies
+- \`get_next_task(plan_uid, phase_uid?)\` — pick next available task; pass \`phase_uid\` to scope to one phase, empty string for unphased
 - \`claim_task(plan_uid, task_uid, agent_type?, model?)\` — mark assigned to you
-- \`update_task(plan_uid, task_uid, status)\` — pending / assigned / in_progress / done / blocked / skipped
+- \`update_task(plan_uid, task_uid, status?, phase_uid?)\` — pending / assigned / in_progress / done / blocked / skipped; \`phase_uid\` binds to phase (empty = clear)
+
+**Phases (first-class checkpoints — optional)**
+- \`add_plan_phase(plan_uid, title, phase_number?, scope?, prerequisites?, git_checkpoint?, acceptance_criteria?, status?)\` — swf-style "01 Foundation / 02 Migration / …"
+- \`list_plan_phases(plan_uid)\` — phases ordered by phase_number
+- \`update_plan_phase(phase_uid, ...)\` — any field; status: pending / in_progress / done / blocked
+- \`delete_plan_phase(phase_uid)\` — tasks survive (phase_uid cleared)
 
 **Spec docs (rich shared context)**
 - \`list_plan_docs(plan_uid)\` — cheap index of titles + types + lengths (no bodies)

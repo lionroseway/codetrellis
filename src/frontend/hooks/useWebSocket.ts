@@ -110,6 +110,18 @@ export function useWebSocket() {
           if (type === 'plan-doc-deleted') {
             usePlanStore.getState().onPlanDocDeleted(payload.docUid);
           }
+          if (type === 'plan-phase-created' || type === 'plan-phase-updated') {
+            const planUid = payload?.phase?.planUid as string | undefined;
+            if (planUid) usePlanStore.getState().onPlanPhaseChanged(planUid);
+          }
+          if (type === 'plan-phase-deleted') {
+            // Phase deleted — refetch phases for whichever plan is
+            // active. We don't have planUid in the payload, but
+            // onPlanPhaseChanged short-circuits if there's no active
+            // plan, so this is safe.
+            const active = usePlanStore.getState().activePlanUid;
+            if (active) usePlanStore.getState().onPlanPhaseChanged(active);
+          }
           if (type === 'deviation-detected') {
             useToastStore.getState().addToast({ type: 'warning', title: 'Deviation detected', message: payload.deviation?.description, duration: 8000 });
           }

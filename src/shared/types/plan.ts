@@ -1,5 +1,6 @@
 export type PlanStatus = 'draft' | 'review' | 'approved' | 'in_progress' | 'completed' | 'archived';
 export type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'done' | 'blocked' | 'skipped';
+export type PhaseStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
 export type CommentType = 'comment' | 'suggestion' | 'approval' | 'concern' | 'status_update';
 export type DeviationSeverity = 'info' | 'warning' | 'error';
 export type DeviationResolution = 'pending' | 'accepted' | 'reverted' | 'ignored';
@@ -43,6 +44,29 @@ export interface Task {
   dependencies: string[];
   fileSpec?: string;             // Markdown description of what the file should do
   symbolSpecs?: SymbolSpec[];    // Detailed symbol-level changes
+  phaseUid: string | null;       // Optional phase grouping (Phase 12 §A)
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * A first-class phase within a plan — matches the swf
+ * `01-PHASE-1-FOUNDATION.md / 02-PHASE-2-…` pattern but is DB-backed
+ * so agents can claim tasks by phase, the UI can group by phase, and
+ * each phase can carry its own scope, prereqs, git checkpoint, and
+ * acceptance criteria. Plans without phases keep working unchanged
+ * (every task simply has `phaseUid: null`).
+ */
+export interface PlanPhase {
+  uid: string;
+  planUid: string;
+  phaseNumber: number;
+  title: string;
+  scope: string;                 // markdown
+  prerequisites: string;         // markdown
+  gitCheckpoint: string | null;  // commit hash, tag, or label
+  acceptanceCriteria: string;    // markdown — ideally a checklist
+  status: PhaseStatus;
   createdAt: number;
   updatedAt: number;
 }

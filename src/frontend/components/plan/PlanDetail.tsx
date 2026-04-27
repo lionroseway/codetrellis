@@ -2,9 +2,11 @@ import { FileCode, ChevronLeft, CheckCircle2, Circle, Loader2, Ban, SkipForward,
 import { usePlanStore } from '../../stores/plan-store';
 import { StatusBadge } from './StatusBadge';
 import { SpecRoom } from './SpecRoom';
+import { PlanPhases } from './PlanPhases';
 
 export function PlanDetail() {
   const plan = usePlanStore((s) => s.activePlan);
+  const phases = usePlanStore((s) => s.planPhases);
   const setActivePlan = usePlanStore((s) => s.setActivePlan);
   const selectedTaskUid = usePlanStore((s) => s.selectedTaskUid);
   const setSelectedTask = usePlanStore((s) => s.setSelectedTask);
@@ -58,41 +60,50 @@ export function PlanDetail() {
       {/* Spec Room — structured context docs (patterns, security, tests, etc.) */}
       <SpecRoom planUid={plan.uid} />
 
-      {/* Tasks */}
-      <div>
-        <span className="text-[9px] text-foreground-subtle uppercase tracking-wider font-medium">
-          Tasks ({plan.tasks.length})
-        </span>
-        <div className="mt-1 space-y-0.5">
-          {plan.tasks.map((task) => (
-            <button
-              key={task.uid}
-              onClick={() => setSelectedTask(task.uid === selectedTaskUid ? null : task.uid)}
-              className={`w-full text-left flex items-start gap-2 px-2 py-1.5 rounded-md transition-all ${
-                selectedTaskUid === task.uid
-                  ? 'bg-accent/10 border border-accent/20'
-                  : 'hover:bg-surface-hover border border-transparent'
-              }`}
-            >
-              <span className="mt-0.5 shrink-0">{taskIcon(task.status)}</span>
-              <div className="flex-1 min-w-0">
-                <span className="text-[11px] text-foreground block truncate">{task.description}</span>
-                {task.affectedFiles.length > 0 && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <FileCode size={9} className="text-foreground-subtle" />
-                    <span className="text-[9px] text-foreground-subtle truncate">
-                      {task.affectedFiles.length} file{task.affectedFiles.length > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                )}
-                {task.assignee && (
-                  <span className="text-[9px] text-accent mt-0.5 block">{task.assigneeType}: {task.assignee}</span>
-                )}
-              </div>
-            </button>
-          ))}
+      {/* Phases — first-class checkpoints (swf-style); falls back to a
+          subtle "no phases" hint that lets the user add one without
+          changing the look of light plans. */}
+      <PlanPhases planUid={plan.uid} tasks={plan.tasks} />
+
+      {/* Flat task list — only when the plan has zero phases. With
+          phases, all tasks render inside PlanPhases (phased + unphased
+          buckets) and the duplicate flat list would be noise. */}
+      {phases.length === 0 && (
+        <div>
+          <span className="text-[9px] text-foreground-subtle uppercase tracking-wider font-medium">
+            Tasks ({plan.tasks.length})
+          </span>
+          <div className="mt-1 space-y-0.5">
+            {plan.tasks.map((task) => (
+              <button
+                key={task.uid}
+                onClick={() => setSelectedTask(task.uid === selectedTaskUid ? null : task.uid)}
+                className={`w-full text-left flex items-start gap-2 px-2 py-1.5 rounded-md transition-all ${
+                  selectedTaskUid === task.uid
+                    ? 'bg-accent/10 border border-accent/20'
+                    : 'hover:bg-surface-hover border border-transparent'
+                }`}
+              >
+                <span className="mt-0.5 shrink-0">{taskIcon(task.status)}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[11px] text-foreground block truncate">{task.description}</span>
+                  {task.affectedFiles.length > 0 && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <FileCode size={9} className="text-foreground-subtle" />
+                      <span className="text-[9px] text-foreground-subtle truncate">
+                        {task.affectedFiles.length} file{task.affectedFiles.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                  {task.assignee && (
+                    <span className="text-[9px] text-accent mt-0.5 block">{task.assigneeType}: {task.assignee}</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Meta */}
       <div className="text-[9px] text-foreground-subtle space-y-0.5 pt-1 border-t border-white/[0.04]">

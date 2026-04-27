@@ -902,12 +902,12 @@ app.put('/api/plans/:uid/tasks/:taskUid', (req, res) => {
   const {
     status, assignee, assigneeType, assigneeModel, description,
     affectedFiles, affectedSymbols, newConnections, removedConnections,
-    dependencies, fileSpec, symbolSpecs,
+    dependencies, fileSpec, symbolSpecs, phaseUid,
   } = req.body;
   planService.updateTask(req.params.taskUid, {
     status, assignee, assigneeType, assigneeModel, description,
     affectedFiles, affectedSymbols, newConnections, removedConnections,
-    dependencies, fileSpec, symbolSpecs,
+    dependencies, fileSpec, symbolSpecs, phaseUid,
   });
   broadcast('task-updated', { planUid: req.params.uid, taskUid: req.params.taskUid, status });
   saveNow(() => exportDatabase());
@@ -1075,6 +1075,52 @@ app.delete('/api/plan-docs/:docUid', (req, res) => {
 app.get('/api/plan-docs/:docUid/versions', (req, res) => {
   const { getPlanDocumentVersions } = require('./services/plan-documents-service');
   res.json(getPlanDocumentVersions(req.params.docUid));
+});
+
+// --- Plan Phases API ---
+
+app.get('/api/plans/:uid/phases', (req, res) => {
+  const { listPhases } = require('./services/plan-phases-service');
+  res.json(listPhases(req.params.uid));
+});
+
+app.post('/api/plans/:uid/phases', (req, res) => {
+  const { createPhase } = require('./services/plan-phases-service');
+  const { title, scope, prerequisites, gitCheckpoint, acceptanceCriteria, status, phaseNumber } = req.body || {};
+  if (!title) {
+    res.status(400).json({ error: 'title is required' });
+    return;
+  }
+  const phase = createPhase({
+    planUid: req.params.uid,
+    title,
+    scope,
+    prerequisites,
+    gitCheckpoint,
+    acceptanceCriteria,
+    status,
+    phaseNumber,
+  });
+  broadcast('plan-phase-created', { phase });
+  saveNow(() => exportDatabase());
+  res.json(phase);
+});
+
+app.put('/api/plan-phases/:phaseUid', (req, res) => {
+  const { updatePhase } = require('./services/plan-phases-service');
+  const phase = updatePhase(req.params.phaseUid, req.body || {});
+  if (!phase) { res.status(404).json({ error: 'Phase not found' }); return; }
+  broadcast('plan-phase-updated', { phase });
+  saveNow(() => exportDatabase());
+  res.json(phase);
+});
+
+app.delete('/api/plan-phases/:phaseUid', (req, res) => {
+  const { deletePhase } = require('./services/plan-phases-service');
+  deletePhase(req.params.phaseUid);
+  broadcast('plan-phase-deleted', { phaseUid: req.params.phaseUid });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
 });
 
 // --- Trellis Snapshots API ---

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Plan, Task, Comment, AgentSessionInfo, Deviation, PlanDocument } from '@shared/types';
+import type { Plan, Task, Comment, AgentSessionInfo, Deviation, PlanDocument, PlanPhase, PhaseStatus } from '@shared/types';
 
 interface PlanState {
   plans: Plan[];
@@ -10,6 +10,7 @@ interface PlanState {
   sessions: AgentSessionInfo[];
   deviations: Deviation[];
   planDocs: PlanDocument[];
+  planPhases: PlanPhase[];
   selectedDocUid: string | null;
 
   fetchPlans: (projectPath?: string) => Promise<void>;
@@ -25,6 +26,20 @@ interface PlanState {
   deletePlanDoc: (docUid: string) => Promise<void>;
   setSelectedDoc: (uid: string | null) => void;
 
+  fetchPlanPhases: (planUid: string) => Promise<void>;
+  createPlanPhase: (planUid: string, input: {
+    title: string;
+    phaseNumber?: number;
+    scope?: string;
+    prerequisites?: string;
+    gitCheckpoint?: string | null;
+    acceptanceCriteria?: string;
+    status?: PhaseStatus;
+  }) => Promise<PlanPhase | null>;
+  updatePlanPhase: (phaseUid: string, updates: Partial<PlanPhase>) => Promise<PlanPhase | null>;
+  deletePlanPhase: (phaseUid: string) => Promise<void>;
+  assignTaskToPhase: (planUid: string, taskUid: string, phaseUid: string | null) => Promise<void>;
+
   // Called by WebSocket handler
   onPlanCreated: (plan: Plan) => void;
   onPlanUpdated: (planUid: string) => void;
@@ -33,6 +48,7 @@ interface PlanState {
   onPlanDocCreated: (doc: PlanDocument) => void;
   onPlanDocUpdated: (doc: PlanDocument) => void;
   onPlanDocDeleted: (docUid: string) => void;
+  onPlanPhaseChanged: (planUid: string) => void;
 }
 
 export const usePlanStore = create<PlanState>((set, get) => ({
@@ -44,6 +60,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   sessions: [],
   deviations: [],
   planDocs: [],
+  planPhases: [],
   selectedDocUid: null,
 
   fetchPlans: async (projectPath) => {
@@ -57,9 +74,10 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     const res = await fetch(`/api/plans/${uid}`);
     const plan = await res.json();
     set({ activePlan: plan, activePlanUid: uid });
-    // Also fetch comments + spec docs
+    // Also fetch comments + spec docs + phases
     get().fetchComments(uid);
     get().fetchPlanDocs(uid);
+    get().fetchPlanPhases(uid);
   },
 
   setActivePlan: async (uid) => {
@@ -182,6 +200,91 @@ export const usePlanStore = create<PlanState>((set, get) => ({
 
   setSelectedDoc: (uid) => set({ selectedDocUid: uid }),
 
+  fetchPlanPhases: async (planUid) => {
+    try {
+      const res = await fetch(`/api/plans/${planUid}/phases`);
+      const phases = await res.json();
+      set({ planPhases: Array.isArray(phases) ? phases : [] });
+    } catch {
+      set({ planPhases: [] });
+    }
+  },
+
+  createPlanPhase: async (planUid, input) => {
+    try {
+      const res = await fetch(`/api/plans/${planUid}/phases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) return null;
+      const phase: PlanPhase = await res.json();
+      set((s) => ({
+        planPhases: get().activePlanUid === planUid ? [...s.planPhases, phase] : s.planPhases,
+      }));
+      return phase;
+    } catch {
+      return null;
+    }
+  },
+
+  updatePlanPhase: async (phaseUid, updates) => {
+    try {
+      const res = await fetch(`/api/plan-phases/${phaseUid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) return null;
+      const phase: PlanPhase = await res.json();
+      set((s) => ({
+        planPhases: s.planPhases.map((p) => (p.uid === phaseUid ? phase : p)),
+      }));
+      return phase;
+    } catch {
+      return null;
+    }
+  },
+
+  deletePlanPhase: async (phaseUid) => {
+    try {
+      await fetch(`/api/plan-phases/${phaseUid}`, { method: 'DELETE' });
+      set((s) => {
+        // Detach tasks locally so the UI updates immediately; backend
+        // already cleared phase_uid via deletePhase.
+        const next = s.planPhases.filter((p) => p.uid !== phaseUid);
+        if (s.activePlan) {
+          const tasks = s.activePlan.tasks.map((t) =>
+            t.phaseUid === phaseUid ? { ...t, phaseUid: null } : t,
+          );
+          return { planPhases: next, activePlan: { ...s.activePlan, tasks } };
+        }
+        return { planPhases: next };
+      });
+    } catch {
+      // WS event will reconcile
+    }
+  },
+
+  assignTaskToPhase: async (planUid, taskUid, phaseUid) => {
+    try {
+      await fetch(`/api/plans/${planUid}/tasks/${taskUid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phaseUid }),
+      });
+      set((s) => {
+        if (!s.activePlan || s.activePlan.uid !== planUid) return s;
+        const tasks = s.activePlan.tasks.map((t) =>
+          t.uid === taskUid ? { ...t, phaseUid } : t,
+        );
+        return { activePlan: { ...s.activePlan, tasks } };
+      });
+    } catch {
+      // WS task-updated will reconcile
+    }
+  },
+
   onPlanCreated: (plan) => {
     set((s) => ({ plans: [plan, ...s.plans] }));
   },
@@ -238,5 +341,14 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       planDocs: s.planDocs.filter((d) => d.uid !== docUid),
       selectedDocUid: s.selectedDocUid === docUid ? null : s.selectedDocUid,
     }));
+  },
+
+  onPlanPhaseChanged: (planUid) => {
+    // Phase create / update / delete from any source — refetch the
+    // active plan's phases so the UI reflects all clients (including
+    // MCP-side authoring). Cheap, single endpoint.
+    if (get().activePlanUid === planUid) {
+      get().fetchPlanPhases(planUid);
+    }
   },
 }));

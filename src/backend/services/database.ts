@@ -104,6 +104,23 @@ export async function initDatabase(): Promise<void> {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS plan_phases (
+      uid TEXT PRIMARY KEY,
+      plan_uid TEXT NOT NULL REFERENCES plans(uid),
+      phase_number INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      scope TEXT NOT NULL DEFAULT '',
+      prerequisites TEXT NOT NULL DEFAULT '',
+      git_checkpoint TEXT,
+      acceptance_criteria TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_plan_phases_plan ON plan_phases(plan_uid);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_phases_unique ON plan_phases(plan_uid, phase_number);
+
     CREATE TABLE IF NOT EXISTS comments (
       uid TEXT PRIMARY KEY,
       target_type TEXT NOT NULL,
@@ -393,6 +410,32 @@ export function resolveImports(
   // like groupings (e.g. a "testing" parent with phase-test children).
   try { d.run(`ALTER TABLE plan_documents ADD COLUMN order_hint TEXT`); } catch { /* exists */ }
   try { d.run(`ALTER TABLE plan_documents ADD COLUMN parent_doc_uid TEXT`); } catch { /* exists */ }
+
+  // Phase 12 §A: explicit Phase entity + tasks.phase_uid. A phase is a
+  // first-class checkpoint within a plan with its own scope, prereqs,
+  // git checkpoint, and acceptance criteria — matches the swf
+  // 01-PHASE-1-FOUNDATION.md / 02-PHASE-2-… shape but is DB-backed
+  // so agents can query slices and the UI can group tasks by phase.
+  try {
+    d.run(`
+      CREATE TABLE IF NOT EXISTS plan_phases (
+        uid TEXT PRIMARY KEY,
+        plan_uid TEXT NOT NULL REFERENCES plans(uid),
+        phase_number INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        scope TEXT NOT NULL DEFAULT '',
+        prerequisites TEXT NOT NULL DEFAULT '',
+        git_checkpoint TEXT,
+        acceptance_criteria TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    d.run(`CREATE INDEX IF NOT EXISTS idx_plan_phases_plan ON plan_phases(plan_uid)`);
+    d.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_phases_unique ON plan_phases(plan_uid, phase_number)`);
+  } catch { /* table or index already exists */ }
+  try { d.run(`ALTER TABLE tasks ADD COLUMN phase_uid TEXT`); } catch { /* exists */ }
 
   // Get all imports
   const importsResult = d.exec(`SELECT i.id, i.source_path, f.path FROM imports i JOIN files f ON i.file_id = f.id`);

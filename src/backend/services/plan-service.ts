@@ -40,6 +40,7 @@ export function createPlan(
       newConnections: t.newConnections || [], removedConnections: t.removedConnections || [],
       dependencies: t.dependencies || [],
       fileSpec: t.fileSpec, symbolSpecs: t.symbolSpecs || [],
+      phaseUid: null,
       createdAt: now, updatedAt: now,
     });
   }
@@ -143,7 +144,7 @@ export function getTasksByPlan(planUid: string): Task[] {
   const result = getDb().exec(
     `SELECT uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model,
             affected_files, affected_symbols, new_connections, removed_connections, dependencies,
-            file_spec, symbol_specs, created_at, updated_at
+            file_spec, symbol_specs, phase_uid, created_at, updated_at
      FROM tasks WHERE plan_uid = ? ORDER BY sort_order`,
     [planUid]
   );
@@ -157,7 +158,8 @@ export function getTasksByPlan(planUid: string): Task[] {
     dependencies: JSON.parse(r[12] || '[]'),
     fileSpec: (r[13] as string | null) ?? undefined,
     symbolSpecs: JSON.parse(r[14] || '[]'),
-    createdAt: r[15], updatedAt: r[16],
+    phaseUid: (r[15] as string | null) ?? null,
+    createdAt: r[16], updatedAt: r[17],
   }));
 }
 
@@ -166,7 +168,7 @@ export function updateTask(
   updates: Partial<Pick<Task,
     'status' | 'assignee' | 'assigneeType' | 'assigneeModel' | 'description'
     | 'affectedFiles' | 'affectedSymbols' | 'newConnections' | 'removedConnections'
-    | 'dependencies' | 'fileSpec' | 'symbolSpecs'
+    | 'dependencies' | 'fileSpec' | 'symbolSpecs' | 'phaseUid'
   >>,
 ): void {
   const now = Date.now();
@@ -185,6 +187,7 @@ export function updateTask(
   if (updates.dependencies !== undefined) { sets.push('dependencies = ?'); params.push(JSON.stringify(updates.dependencies)); }
   if (updates.fileSpec !== undefined) { sets.push('file_spec = ?'); params.push(updates.fileSpec); }
   if (updates.symbolSpecs !== undefined) { sets.push('symbol_specs = ?'); params.push(JSON.stringify(updates.symbolSpecs)); }
+  if (updates.phaseUid !== undefined) { sets.push('phase_uid = ?'); params.push(updates.phaseUid); }
 
   params.push(taskUid);
   getDb().run(`UPDATE tasks SET ${sets.join(', ')} WHERE uid = ?`, params);
@@ -244,7 +247,7 @@ export function getTaskByUid(taskUid: string): Task | null {
   const result = getDb().exec(
     `SELECT uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model,
             affected_files, affected_symbols, new_connections, removed_connections, dependencies,
-            file_spec, symbol_specs, created_at, updated_at
+            file_spec, symbol_specs, phase_uid, created_at, updated_at
      FROM tasks WHERE uid = ?`,
     [taskUid],
   );
@@ -258,7 +261,8 @@ export function getTaskByUid(taskUid: string): Task | null {
     dependencies: JSON.parse(r[12] || '[]'),
     fileSpec: (r[13] as string | null) ?? undefined,
     symbolSpecs: JSON.parse(r[14] || '[]'),
-    createdAt: r[15], updatedAt: r[16],
+    phaseUid: (r[15] as string | null) ?? null,
+    createdAt: r[16], updatedAt: r[17],
   };
 }
 
@@ -323,12 +327,13 @@ export function claimTask(taskUid: string, agentId: string, agentType: string, m
   return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
 }
 
-export function getNextTask(planUid: string): Task | null {
+export function getNextTask(planUid: string, phaseUid?: string | null): Task | null {
   const tasks = getTasksByPlan(planUid);
   const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.uid));
 
   for (const task of tasks) {
     if (task.status !== 'pending') continue;
+    if (phaseUid !== undefined && task.phaseUid !== phaseUid) continue;
     if (task.dependencies.every((d) => done.has(d))) return task;
   }
   return null;
