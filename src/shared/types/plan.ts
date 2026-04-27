@@ -104,6 +104,38 @@ export interface AgentSessionInfo {
   status: 'active' | 'inactive';
 }
 
+/**
+ * A single granular change a plan promises to make. Aggregated from
+ * task fields (`affectedFiles`, `symbolSpecs`, `newConnections`,
+ * `removedConnections`) into one CRUD-style feed so the UI can show
+ * "what's left" / "what's done" / "what drifted" per change instead
+ * of per task. Computed on demand by the backend — never stored.
+ */
+export type ChangeOperation = 'add' | 'modify' | 'remove' | 'move';
+export type ChangeKind = 'file' | 'symbol' | 'connection';
+export type ChangeDriftStatus =
+  | 'planned'        // not yet detected in the live state
+  | 'in_progress'    // task is in_progress / assigned
+  | 'satisfied'      // change is reflected in the current state
+  | 'missing'        // task is done but the change isn't visible
+  | 'unexpected';    // change exists in the live state but no task claims it
+
+export interface ProposedChange {
+  /** Deterministic id: `${taskUid}:${kind}:${target}:${operation}`. */
+  id: string;
+  taskUid: string;
+  taskDescription: string;
+  taskStatus: TaskStatus;
+  phaseUid: string | null;
+  operation: ChangeOperation;
+  kind: ChangeKind;
+  /** Human-readable target identifier — file path, "Class#method", "from → to". */
+  target: string;
+  /** Optional structured detail (signature, moveTo, etc.). */
+  detail?: string;
+  driftStatus: ChangeDriftStatus;
+}
+
 export interface Deviation {
   id: number;
   planUid: string;

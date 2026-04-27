@@ -1123,6 +1123,24 @@ app.delete('/api/plan-phases/:phaseUid', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Proposed Changes API (Phase 12 §B) ---
+
+app.get('/api/plans/:uid/changes', (req, res) => {
+  const { listProposedChanges, summarizeChanges } = require('./services/plan-changes-service');
+  if (req.query.summary === '1') {
+    res.json(summarizeChanges(req.params.uid));
+  } else {
+    res.json(listProposedChanges(req.params.uid));
+  }
+});
+
+app.get('/api/plans/:uid/changes/:changeId', (req, res) => {
+  const { getChange } = require('./services/plan-changes-service');
+  const change = getChange(req.params.uid, req.params.changeId);
+  if (!change) { res.status(404).json({ error: 'Change not found' }); return; }
+  res.json(change);
+});
+
 // --- Plan Templates API (Phase 12 §G) ---
 
 app.get('/api/plan-templates', (_req, res) => {

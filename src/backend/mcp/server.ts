@@ -11,6 +11,7 @@ import * as planDocsService from '../services/plan-documents-service';
 import * as planPhasesService from '../services/plan-phases-service';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
+import * as planChangesService from '../services/plan-changes-service';
 import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
@@ -783,6 +784,48 @@ export async function startMcpServer(): Promise<void> {
     async ({ plan_uid, query }) => {
       const results = planDocsService.searchPlanDocuments(plan_uid, query);
       return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
+    }
+  );
+
+  // --- Proposed Changes Tools (Phase 12 §B) ---
+
+  mcpServer.registerTool(
+    'list_proposed_changes',
+    {
+      description: 'Granular CRUD feed projected from a plan\'s tasks: every affected file, symbol_spec, new_connection, and removed_connection becomes one ProposedChange row with operation (add/modify/remove/move), kind (file/symbol/connection), target, and a drift status (planned / in_progress / satisfied / missing / unexpected). Use this instead of walking task fields by hand to ask "what\'s left in this plan?".',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      const changes = planChangesService.listProposedChanges(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(changes, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'get_changes_summary',
+    {
+      description: 'Aggregate counts for a plan\'s proposed changes — total + breakdown by drift status, kind, and operation. Use this to get a one-line "12/18 satisfied" picture without pulling every change row.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      const summary = planChangesService.summarizeChanges(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(summary, null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'get_change_status',
+    {
+      description: 'Fetch a single ProposedChange (by id from list_proposed_changes) with its current drift status freshly computed against the live database.',
+      inputSchema: {
+        plan_uid: z.string(),
+        change_id: z.string(),
+      },
+    },
+    async ({ plan_uid, change_id }) => {
+      const change = planChangesService.getChange(plan_uid, change_id);
+      if (!change) return { content: [{ type: 'text' as const, text: `Change ${change_id} not found in plan ${plan_uid}` }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(change, null, 2) }] };
     }
   );
 

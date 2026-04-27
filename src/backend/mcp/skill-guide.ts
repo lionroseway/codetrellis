@@ -101,6 +101,11 @@ Doc types: \`executive_summary\`, \`architecture\`, \`patterns\`,
 - \`detect_deviations(plan_uid)\` — run deviation detection now
 - \`get_deviations(plan_uid)\` — list outstanding deviations
 
+**Proposed changes (per-plan CRUD feed)**
+- \`list_proposed_changes(plan_uid)\` — every affected file / symbol_spec / new_connection / removed_connection across all tasks, with operation, kind, target, and drift status (planned / in_progress / satisfied / missing / unexpected)
+- \`get_changes_summary(plan_uid)\` — one-call counts ("12/18 satisfied")
+- \`get_change_status(plan_uid, change_id)\` — fresh drift recompute for a single change
+
 **Sessions / multi-agent**
 - \`register_session(agent_type, model?)\` — identify yourself (so the human and other agents can see you)
 - \`set_active_plan(plan_uid)\` — say which plan you're working on

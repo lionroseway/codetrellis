@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileEdit, Search, Circle, XCircle, X, ClipboardList, Maximize2, Minimize2, Wrench, AlertCircle, Plug } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
@@ -7,8 +7,9 @@ import { PlanList } from '../plan/PlanList';
 import { PlanDetail } from '../plan/PlanDetail';
 import { CommentThread } from '../plan/CommentThread';
 import { PlanCreateModal } from '../plan/PlanCreateModal';
+import { ProposedChanges } from '../plan/ProposedChanges';
 
-type Tab = 'plans' | 'timeline' | 'changes' | 'comments';
+type Tab = 'plans' | 'timeline' | 'changes' | 'proposed' | 'comments';
 
 const EVENT_ICON_MAP: Record<string, typeof FileEdit> = {
   file_changed: FileEdit,
@@ -67,12 +68,21 @@ export function PlanPanel() {
     (e) => e.type === 'file_changed' && (e.payload.action === 'write' || e.payload.action === 'edit')
   );
 
+  // If the active plan goes away while the user is on the Proposed
+  // tab (which depends on it), bounce back to Plans.
+  useEffect(() => {
+    if (activeTab === 'proposed' && !activePlan) setActiveTab('plans');
+  }, [activeTab, activePlan]);
+
   if (!visible) return null;
 
-  const tabs: { key: Tab; label: string; count?: number }[] = [
+  const tabs: { key: Tab; label: string; count?: number; disabled?: boolean }[] = [
     { key: 'plans', label: 'Plans' },
     { key: 'timeline', label: 'Timeline', count: events.length || undefined },
     { key: 'changes', label: 'Changes', count: fileChanges.length || undefined },
+    // Proposed Changes (Phase 12 §B) requires an active plan — task
+    // fields are the source of truth.
+    { key: 'proposed', label: 'Proposed', disabled: !activePlan },
     { key: 'comments', label: 'Comments', count: comments.length || undefined },
   ];
 
@@ -82,12 +92,16 @@ export function PlanPanel() {
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => !tab.disabled && setActiveTab(tab.key)}
+            disabled={tab.disabled}
             className={`px-3 py-1.5 text-[11px] font-medium border-b-2 transition-all flex items-center gap-1.5 ${
-              activeTab === tab.key
-                ? 'border-accent text-accent'
-                : 'border-transparent text-foreground-subtle hover:text-foreground-muted'
+              tab.disabled
+                ? 'border-transparent text-foreground-subtle/40 cursor-not-allowed'
+                : activeTab === tab.key
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-foreground-subtle hover:text-foreground-muted'
             }`}
+            title={tab.disabled ? 'Open a plan to see its proposed changes' : undefined}
           >
             {tab.label}
             {tab.count != null && tab.count > 0 && (
@@ -171,6 +185,10 @@ export function PlanPanel() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'proposed' && activePlan && (
+          <ProposedChanges planUid={activePlan.uid} />
         )}
 
         {activeTab === 'comments' && <CommentThread />}
