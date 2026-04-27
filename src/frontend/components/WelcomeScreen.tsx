@@ -223,10 +223,25 @@ function RecentProjectRow({
   onPin: (e: React.MouseEvent) => void;
   onRemove: (e: React.MouseEvent) => void;
 }) {
+  // The row is a clickable surface, but it contains real buttons
+  // (pin / remove). HTML doesn't allow nested <button>s, so the outer
+  // container is a div with role="button" + keyboard handlers; the
+  // inner buttons stop propagation so clicking pin/remove doesn't
+  // also fire onOpen.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-accent/30 transition-all text-left"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-accent/30 transition-all text-left cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
     >
       <FolderOpen size={14} className="text-foreground-subtle shrink-0 group-hover:text-accent transition-colors" />
       <div className="flex-1 min-w-0">
@@ -247,21 +262,21 @@ function RecentProjectRow({
           {formatRelativeTime(project.lastOpenedAt)}
         </span>
         <button
-          onClick={onPin}
+          onClick={(e) => { stop(e); onPin(e); }}
           className={`p-1.5 rounded-md transition-all ${project.pinned ? 'text-accent' : 'text-foreground-subtle opacity-0 group-hover:opacity-100 hover:text-foreground'}`}
           title={project.pinned ? 'Unpin' : 'Pin to top'}
         >
           {project.pinned ? <Pin size={11} /> : <PinOff size={11} />}
         </button>
         <button
-          onClick={onRemove}
+          onClick={(e) => { stop(e); onRemove(e); }}
           className="p-1.5 rounded-md text-foreground-subtle opacity-0 group-hover:opacity-100 hover:text-red-300 transition-all"
           title="Remove from recents"
         >
           <X size={11} />
         </button>
       </div>
-    </button>
+    </div>
   );
 }
 
