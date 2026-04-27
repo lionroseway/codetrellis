@@ -29,6 +29,10 @@ export function useWebSocket() {
             }
           })
           .catch(() => {});
+        // Pull the current MCP session list so the ConnectedAgents
+        // widget shows agents that were already connected before the
+        // UI loaded.
+        usePlanStore.getState().fetchSessions().catch(() => {});
       };
 
       ws.onmessage = (event) => {
@@ -39,11 +43,15 @@ export function useWebSocket() {
             const agentEvent = payload as AgentEvent;
             useAgentStore.getState().pushEvent(agentEvent);
 
-            // Update agent status
+            // Update agent status + refresh the connected-agents list
+            // when sessions come and go (the per-row last-seen is also
+            // recomputed naturally via the timestamp).
             if (agentEvent.type === 'session_start') {
               useAgentStore.getState().setStatus('active');
+              usePlanStore.getState().fetchSessions().catch(() => {});
             } else if (agentEvent.type === 'session_end') {
               useAgentStore.getState().setStatus('idle');
+              usePlanStore.getState().fetchSessions().catch(() => {});
             }
 
             // Extract plan if detected
@@ -110,6 +118,12 @@ export function useWebSocket() {
           }
           if (type === 'session-registered') {
             useToastStore.getState().addToast({ type: 'success', title: 'Agent connected', message: `${payload.agentType || 'Agent'} via MCP` });
+            usePlanStore.getState().fetchSessions().catch(() => {});
+          }
+          if (type === 'mcp-session-changed') {
+            // Connect / disconnect / set_active_plan — pull fresh state
+            // so the ConnectedAgents widget reflects reality.
+            usePlanStore.getState().fetchSessions().catch(() => {});
           }
 
           // Execution tracking — mark files as actively being worked on

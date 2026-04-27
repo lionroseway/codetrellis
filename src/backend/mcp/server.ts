@@ -393,32 +393,48 @@ export async function startMcpServer(): Promise<void> {
   mcpServer.registerTool(
     'register_session',
     {
-      description: 'Register this agent connection with CodeTrellis. Identifies who you are and what model you use.',
+      description: 'Register this agent connection with CodeTrellis. Identifies who you are and what model you use. Upgrades the auto-registered session for this transport so the human can tell agents apart in the Connected Agents list.',
       inputSchema: {
         agent_type: z.string().describe('Agent type, e.g. claude-code, cursor, aider'),
         model: z.string().optional().describe('Model name, e.g. claude-opus-4, gpt-4o'),
       },
     },
-    async ({ agent_type, model }) => {
-      const sessionId = `mcp-${Date.now()}`;
+    async ({ agent_type, model }, extra: any) => {
+      // Prefer the caller's actual transport sessionId so multiple
+      // simultaneous agents stay attributed correctly. Fall back to a
+      // synthetic id only if the transport context is missing.
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? `mcp-${Date.now()}`;
       sessionService.registerSession(sessionId, agent_type, model);
       broadcast('session-registered', { sessionId, agentType: agent_type, model });
+      broadcast('mcp-session-changed', { reason: 'register', sessionId });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Session registered: ${sessionId}` }] };
+      return { content: [{ type: 'text' as const, text: `Session registered: ${sessionId} (${agent_type}${model ? ` / ${model}` : ''})` }] };
     }
   );
 
   mcpServer.registerTool(
     'set_active_plan',
     {
-      description: 'Associate this agent session with a plan, indicating you are working on it.',
+      description: 'Associate this agent session with a plan, indicating you are working on it. Other connected agents see your active plan in the Connected Agents widget.',
       inputSchema: { plan_uid: z.string() },
     },
-    async ({ plan_uid }) => {
-      // Find the most recent session for this transport
-      const sessions = sessionService.getActiveSessions();
-      if (sessions.length > 0) {
-        sessionService.setActivePlan(sessions[sessions.length - 1].sessionId, plan_uid);
+    async ({ plan_uid }, extra: any) => {
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      if (sessionId) {
+        sessionService.setActivePlan(sessionId, plan_uid);
+        broadcast('mcp-session-changed', { reason: 'set_active_plan', sessionId, planUid: plan_uid });
+      } else {
+        // Fall back to most-recent if the transport context isn't
+        // available (rare — only if the SDK ever calls without extra).
+        const sessions = sessionService.getActiveSessions();
+        if (sessions.length > 0) {
+          sessionService.setActivePlan(sessions[sessions.length - 1].sessionId, plan_uid);
+          broadcast('mcp-session-changed', { reason: 'set_active_plan', planUid: plan_uid });
+        }
       }
       return { content: [{ type: 'text' as const, text: `Active plan set to ${plan_uid}` }] };
     }

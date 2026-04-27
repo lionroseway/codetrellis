@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Cpu, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
-import { useAgentStore } from '../../stores/agent-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { getAPI } from '../../bridge';
 import type { ViewDepth } from '../../../shared/types';
+import { ConnectedAgents } from './ConnectedAgents';
 
 async function captureBaselineFromBranch(projectPath: string, branch: string): Promise<boolean> {
   try {
@@ -304,7 +304,6 @@ export function TopBar() {
   const tabs = useProjectStore((s) => s.tabs);
   const activeTabId = useProjectStore((s) => s.activeTabId);
   const root = useProjectStore((s) => s.root);
-  const agentStatus = useAgentStore((s) => s.status);
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const setViewDepth = useGraphStore((s) => s.setViewDepth);
 
@@ -360,11 +359,7 @@ export function TopBar() {
         Connect Agent
       </button>
 
-      <div className="flex items-center gap-2 text-[11px] text-foreground-muted px-3 py-1.5 rounded-lg bg-surface border border-border shrink-0">
-        <Cpu size={12} className={agentStatus === 'active' ? 'text-success drop-shadow-[0_0_4px_rgba(34,197,94,0.5)]' : 'text-foreground-subtle'} />
-        <span className={`w-1.5 h-1.5 rounded-full ${agentStatus === 'active' ? 'bg-success shadow-[0_0_6px_rgba(34,197,94,0.5)] animate-pulse' : 'bg-foreground-subtle'}`} />
-        <span>{agentStatus === 'active' ? 'Agent active' : 'No agent'}</span>
-      </div>
+      <ConnectedAgents />
     </div>
   );
 }
