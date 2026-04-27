@@ -446,8 +446,8 @@ to and update.
 | **D** | Generic MCP agent timeline — every MCP tool call from any agent (Claude Code, Codex, Cursor, aider, custom) flows into the Agent Timeline as an `agent-event`. `registerTool` is wrapped to broadcast `tool_call` / `tool_error` events with agent attribution; PlanPanel Timeline tab renders them with per-event icons + duration. Closes step 5 of front-to-back loop for any agent. | small | ✅ |
 | **D2** | **Multi-agent visibility (TopBar).** New `ConnectedAgents` widget in the TopBar replaces the single "Agent active" pill — shows count + popover listing every active MCP session (agent type, model, active plan, last seen). WS auto-refetches on `mcp-session-changed` / `session-registered` / `session_start` / `session_end`. `register_session` and `set_active_plan` now use the caller's transport sessionId so multiple simultaneous agents stay attributed correctly. | small | ✅ |
 | **E** | **Agent skill resource via MCP.** Three resources: `codetrellis://skill` (project-tailored summary listing current plans + connected agents), `codetrellis://skill/quickstart` (first-time agent flow), `codetrellis://skill/power-user` (deep usage — phased plans, granular task fields, drift verification, multi-agent coordination, spec docs as shared context, snapshots). Markdown so any MCP-capable agent can ingest. | small | ✅ |
-| **F** | Multiple-docs-per-type support. swf has multiple "phase" overview docs; we currently treat doc_type as a single-instance taxonomy. Already supported by the data model (each doc has a uid) — UI just needs to stop assuming "one executive_summary, ever" and group by type with ordering. | small | ❌ |
-| **G** | Plan templates seeded from common shapes — "swf-style mass refactor" template seeds: 1 executive_overview doc, N phase docs (numbered), 1 data_model doc, 1 frontend_audit doc, 1 testing strategy doc, plus task scaffolds per phase. One-click from a template. | medium | ❌ |
+| **F** | Multiple-docs-per-type support. swf has multiple "phase" overview docs; the data model already allowed it (each doc has its own uid) — `SpecDocCreateModal` now auto-numbers default titles ("Patterns 2", "Patterns 3", …) so a second doc of the same type doesn't clash, and the SpecRoom tree (Phase 12 §C) renders multiples cleanly via `orderHint`. | small | ✅ |
+| **G** | Plan templates from common shapes. Templates declared in `plan-templates.ts` as pure data (no schema dep). Ships **"Mass refactor (swf-style)"**: 1 executive overview + 6 numbered phase docs + 1 architecture overview + cross-cutting patterns / testing / security docs + 6 phases with scope/prereqs/acceptance/git-checkpoint placeholders, all wired up via `parentDocUid` + `orderHint`. REST `/api/plan-templates` and `/api/plans/from-template`; MCP `list_plan_templates` + `create_plan_from_template`. PlanCreateModal has a "From template" tab that previews phase + doc count and confirms with a "Seed plan (6+10)" button. | medium | ✅ |
 
 #### Suggested order
 1. **D** (small, immediate value — closes front-to-back step 5 for any agent)
@@ -690,15 +690,16 @@ Closing these is the priority block before adding more surfaces.
 3. ~~**Phase 12 §E — Agent skill resource**~~ ✅ shipped — `codetrellis://skill` (summary + quickstart + power-user) MCP resources.
 4. ~~**Phase 12 §C — Spec doc orderHint + parentDocUid**~~ ✅ shipped — schema migration + service + REST + MCP + SpecRoom tree render + create-modal pickers; supports the swf-style `00-OVERVIEW / 01-PHASE-1 / 02-…` layout.
 5. ~~**Phase 12 §A — Explicit Phases entity**~~ ✅ shipped — first-class `plan_phases` table, MCP `add/list/update/delete_plan_phase` + `update_task`/`get_next_task` accept `phase_uid`, `PlanPhases` UI groups tasks by phase with expandable scope/prereqs/acceptance markdown.
-6. **Phase 12 §F + §G — multiple docs per type + plan templates** — let multiple docs of the same type coexist; ship a "Mass refactor (swf-style)" template that seeds executive overview + N phase docs + audit + testing strategy in one click.
-7. **Phase 12 §B — Proposed Changes view** — granular CRUD feed (add / modify / remove file or symbol or connection) aggregated from task fields, with drift status per change. New tab + MCP tools.
-8. **Plan-task progress auto-detection** — task auto-advances to `in_progress` when affected files change. Closes step 9 of front-to-back loop.
-9. **System-aware clustering** — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster.
-10. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB.
-11. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.).
-12. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`**.
-12. **"Plan completion" verification panel** — reads `get_drift_report` and shows planned vs landed at a glance. Closes step 11.
-13. **Phase 11 §5 — cross-system non-import links** (HTTP routes, SQL refs). Closes step 12.
+6. ~~**Phase 12 §F — Multiple docs per type**~~ ✅ shipped — `SpecDocCreateModal` auto-numbers default titles ("Patterns 2", …); SpecRoom tree (§C) handles ordering. Data model already allowed it.
+7. ~~**Phase 12 §G — Plan templates**~~ ✅ shipped — `plan-templates.ts` data; `applyTemplate` service; REST + MCP (`list_plan_templates` / `create_plan_from_template`); PlanCreateModal "From template" tab. First template: **mass-refactor** (6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security).
+8. **Phase 12 §B — Proposed Changes view** — granular CRUD feed (add / modify / remove file or symbol or connection) aggregated from task fields, with drift status per change. New tab + MCP tools.
+9. **Plan-task progress auto-detection** — task auto-advances to `in_progress` when affected files change. Closes step 9 of front-to-back loop.
+10. **System-aware clustering** — use discovered systems as primary cluster boundaries so Python's 1688 internal edges aren't all one mega-cluster.
+11. **Server-side per-system rendered views** — backend computes `{ nodes, edges }` per scope and caches in DB.
+12. **Phase 11 §3 — systems table + MCP tools** (`list_systems`, etc.).
+13. **Phase 11 §4 — system-aware Sidebar + Inspector + plan tasks `affectedSystems[]`**.
+14. **"Plan completion" verification panel** — reads `get_drift_report` and shows planned vs landed at a glance. Closes step 11.
+15. **Phase 11 §5 — cross-system non-import links** (HTTP routes, SQL refs). Closes step 12.
 
 ### Multi-System Ingestion — remaining sub-phases (see §3 Phase 11)
 Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E

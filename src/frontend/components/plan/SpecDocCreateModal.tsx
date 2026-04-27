@@ -47,8 +47,16 @@ export function SpecDocCreateModal({
 
   const initialType = defaultType ?? 'executive_summary';
   const initialMeta = getSpecDocTypeMeta(initialType);
+  // Phase 12 §F — multiple docs of the same type are allowed. Auto-
+  // suffix the default title so a second "Patterns" doc starts as
+  // "Patterns 2" instead of clashing with the first.
+  const titleForType = (type: string) => {
+    const base = getSpecDocTypeMeta(type).label;
+    const sameType = existingDocs.filter((d) => d.docType === type).length;
+    return sameType > 0 ? `${base} ${sameType + 1}` : base;
+  };
   const [docType, setDocType] = useState(initialType);
-  const [title, setTitle] = useState(initialMeta.label);
+  const [title, setTitle] = useState(titleForType(initialType));
   const [body, setBody] = useState(STARTER_BODIES[initialType] ?? '');
   const [orderHint, setOrderHint] = useState(suggestNextOrderHint(existingDocs.map((d) => d.orderHint)));
   const [parentDocUid, setParentDocUid] = useState<string>('');
@@ -59,10 +67,10 @@ export function SpecDocCreateModal({
 
   const handleTypeChange = (next: string) => {
     setDocType(next);
-    const nextMeta = getSpecDocTypeMeta(next);
-    // If user hasn't customized title, follow the type label
-    if (title === getSpecDocTypeMeta(docType).label) {
-      setTitle(nextMeta.label);
+    // If user hasn't customized title, follow the type label (with the
+    // §F auto-numbered suffix when this would be the Nth of its type).
+    if (title === titleForType(docType)) {
+      setTitle(titleForType(next));
     }
     if (!body || body === STARTER_BODIES[docType]) {
       setBody(STARTER_BODIES[next] ?? '');

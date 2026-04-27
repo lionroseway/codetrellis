@@ -9,6 +9,8 @@ import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
 import * as planDocsService from '../services/plan-documents-service';
 import * as planPhasesService from '../services/plan-phases-service';
+import { applyTemplate } from '../services/plan-templates-service';
+import { listTemplates } from '../services/plan-templates';
 import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
@@ -461,6 +463,72 @@ export async function startMcpServer(): Promise<void> {
       broadcast('plan-phase-deleted', { phaseUid: phase_uid });
       saveNow(() => exportDatabase());
       return { content: [{ type: 'text' as const, text: `Phase ${phase_uid} deleted` }] };
+    }
+  );
+
+  // --- Plan Templates (Phase 12 §G) ---
+
+  mcpServer.registerTool(
+    'list_plan_templates',
+    {
+      description: 'List the available plan templates. Each template seeds a plan + phases + spec docs in one go — built for mass-refactor / multi-phase work where the swf-style "00-EXECUTIVE / 01-PHASE-1 / …" shape applies.',
+      inputSchema: {},
+    },
+    async () => {
+      return { content: [{ type: 'text' as const, text: JSON.stringify(listTemplates(), null, 2) }] };
+    }
+  );
+
+  mcpServer.registerTool(
+    'create_plan_from_template',
+    {
+      description: 'Create a new plan from a template — seeds the plan, phases (with scope / prereqs / acceptance), and spec docs (with orderHint / parent refs) in one transactional sweep. Use list_plan_templates first to pick a template_id. Most common: "mass-refactor" (swf-style 6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security).',
+      inputSchema: {
+        template_id: z.string().describe('e.g. "mass-refactor"'),
+        project_path: z.string(),
+        title: z.string().optional().describe('Override the template default title'),
+        description: z.string().optional().describe('Override the template default description'),
+      },
+    },
+    async ({ template_id, project_path, title, description }, extra: any) => {
+      // Attribute the seeded plan to the actual caller when we know
+      // who they are. This shows up in the human's plan list as
+      // "authored by claude-code" instead of "agent".
+      const sessions = sessionService.getActiveSessions();
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
+      const author = session?.agentType ?? 'agent';
+
+      try {
+        const result = applyTemplate({
+          templateId: template_id,
+          projectPath: project_path,
+          title,
+          description,
+          author,
+          authorType: 'mcp',
+        });
+        broadcast('plan-created', { plan: result.plan });
+        for (const phase of result.phases) broadcast('plan-phase-created', { phase });
+        for (const doc of result.docs) broadcast('plan-doc-created', { doc });
+        saveNow(() => exportDatabase());
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              plan: result.plan,
+              phaseCount: result.phases.length,
+              docCount: result.docs.length,
+              taskCount: result.tasks.length,
+              hint: 'Read get_plan_doc(plan_uid, doc_type=\"executive_summary\") first, then list_plan_phases(plan_uid).',
+            }, null, 2),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed to apply template: ${err instanceof Error ? err.message : String(err)}` }] };
+      }
     }
   );
 

@@ -1123,6 +1123,32 @@ app.delete('/api/plan-phases/:phaseUid', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Plan Templates API (Phase 12 §G) ---
+
+app.get('/api/plan-templates', (_req, res) => {
+  const { listTemplates } = require('./services/plan-templates');
+  res.json(listTemplates());
+});
+
+app.post('/api/plans/from-template', (req, res) => {
+  const { applyTemplate } = require('./services/plan-templates-service');
+  const { templateId, projectPath, title, description, author, authorType } = req.body || {};
+  if (!templateId || !projectPath) {
+    res.status(400).json({ error: 'templateId and projectPath are required' });
+    return;
+  }
+  try {
+    const result = applyTemplate({ templateId, projectPath, title, description, author, authorType });
+    broadcast('plan-created', { plan: result.plan });
+    for (const phase of result.phases) broadcast('plan-phase-created', { phase });
+    for (const doc of result.docs) broadcast('plan-doc-created', { doc });
+    saveNow(() => exportDatabase());
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // --- Trellis Snapshots API ---
 
 app.post('/api/trellis/capture', (req, res) => {

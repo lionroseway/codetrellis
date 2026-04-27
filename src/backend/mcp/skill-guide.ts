@@ -81,6 +81,10 @@ const COMMON_FOOTER = `## Most-used MCP tools (cheat sheet)
 - \`update_plan_phase(phase_uid, ...)\` — any field; status: pending / in_progress / done / blocked
 - \`delete_plan_phase(phase_uid)\` — tasks survive (phase_uid cleared)
 
+**Plan templates (one-shot deep plan seeding)**
+- \`list_plan_templates()\` — what's available
+- \`create_plan_from_template(template_id, project_path, title?, description?)\` — most common: \`"mass-refactor"\` (6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security)
+
 **Spec docs (rich shared context)**
 - \`list_plan_docs(plan_uid)\` — cheap index of titles + types + lengths (no bodies)
 - \`get_plan_doc(doc_uid? | plan_uid + doc_type?)\` — fetch one doc body
