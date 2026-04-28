@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-28
+Last updated: 2026-04-28 (post public-releases pipeline + website specs)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -58,7 +58,10 @@ shared via the bridge abstraction.
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
 | Plan export / source-controllable plans | 100 | High | Phase 13 §A + §B + §C all shipped. Plans round-trip to disk as YAML + markdown (§A), linked plans auto-sync via write-through + chokidar (§B), and templates ship as portable directories (§C — built-ins + `<project>/.codetrellis/templates/` + `~/.codetrellis/templates/` with `{{key}}` placeholder substitution). Multi-device + multi-team workflows fully covered via git. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
 | Electron desktop build | 100 | High | `npm run package:mac` / `:win` / `:linux` (electron-builder + electron-vite) produces working DMG (arm64 + x64, ~115 MB), NSIS installer EXE + Portable EXE (90 MB), DEB / RPM / AppImage. **Windows EXE builds cleanly from macOS** — no Wine. Backend embedded; loopback-only (127.0.0.1); CORS for `file://`; sql.js + web-tree-sitter shipped via `extraResources`; tree-sitter WASM grammars same. Build metadata generated at packaging time (`scripts/generate-build-info.js` via the `prepackage` npm hook) and exposed via `/api/build-info` + Settings → About. File logging at `<dataDir>/logs/<YYYY-MM-DD>.log` with daily rollover; Settings → Logs shows live tail + Reveal. **GitHub Actions release workflow** (`.github/workflows/release.yml`) builds DMG / EXE / DEB / RPM / AppImage on native runners on every `v*` tag push and attaches them to a Release. Code-signing scaffolding conditional on repo secrets. Outstanding: real signing certs, auto-updater. |
-| Auto-updater | 0 | – | **Not started.** Currently users have to download a fresh DMG to update. Plan: `update-electron-app` (or full `electron-updater`) wired against a GitHub Releases feed. App polls on launch + once a day; downloads a delta on quit; restart applies. Settings → About already shows build time + commit so users can manually compare against the latest release. |
+| Auto-updater | 5 | – | **Spec'd, not wired.** Currently users have to download a fresh installer to update. Plan: in-app polls a website-mediated OTA endpoint (see Website domain), surfaces a non-blocking banner when a newer build exists, opens the platform installer URL in the system browser on click. Auto-download + apply on quit comes after code-signing lands (too easy to corrupt installs without it). Settings → About already shows build time + commit + a "Check for updates" affordance can re-poll on demand. |
+| Website (codetrellis.dev) | 0 | – | **Specs done, not built.** Design + build specs drafted (lives in the AILAR-Website monorepo, not here, to avoid leaking internal infra into a soon-to-be-public source repo). Three jobs: marketing pages, the right installer for the visitor's platform, and the OTA update API the desktop app polls. **Headline contract:** the website is the single source of truth for "what's the latest version + where do I download it" — moves installer hosting (S3, R2, anywhere) become URL changes on the site, not desktop-app re-shipments. Endpoints: `/api/updates/check` (desktop-app polled), `/api/updates/latest` (downloads metadata), `/api/revalidate` (webhook from `release.sh` to flush cache on publish). Built on the AILAR Next.js workspace conventions (port 3003, PORT env-overridable for nginx). |
+| Code-signing | 0 | – | **Not done — biggest first-impression cliff.** Builds are unsigned; first launch warns on macOS (Gatekeeper) and Windows (SmartScreen). Bypassable but rough. macOS needs Apple Developer ID (~$99/y) + notarization; Windows needs an EV cert (~$200-400/y) for instant SmartScreen trust. CI workflow already wires the env-var-conditional signing path (`CSC_LINK`, `WIN_CSC_LINK`, `APPLE_ID`, `APPLE_TEAM_ID`); it's a no-op until secrets are added. Blocks proper auto-updater (electron-updater needs signed builds for trust verification). |
+| Public releases repo | 100 | High | `lionroseway/codetrellis-releases` — public repo seeded with README + Apache 2.0 LICENSE that hosts every installer release. Decoupled from the (currently private) source repo so download URLs can be shared without exposing source. `scripts/release.sh` (`npm run release`) builds DMG / NSIS / Portable / AppImage in one shot from macOS host and uploads to a tagged Release on this repo. v0.1.0 live with 6 platform installers. |
 | Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
 | E2E test harness | 35 | Medium | **Designed in [E2E-HARNESS.md](E2E-HARNESS.md), not built.** Today's Playwright suite hits the real running app and is flaky (folder-picker, stale plans, port collisions, no clock control, no agent simulation). Design covers: in-tree fixture repo (`tests/fixtures/sample-app/` — TS + Python, 25 files, known cross-system pairs), a scripted MCP agent (deterministic, no real LLM), per-test tmp data dir (`CODETRELLIS_DATA_DIR` env var), dynamic port allocation, an in-process `services/clock.ts` for timestamp control, and a 4-phase delivery (scaffolding → loop tests → plan-export round-trip → optional visual diffs). |
@@ -66,6 +69,64 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 28, 2026 — Public releases pipeline + Apache 2.0 + website specs
+
+After the electron-builder migration landed, focus shifted to making
+the product actually distributable while keeping the source private
+during the feedback phase.
+
+**Public releases repo + script.** Created `lionroseway/codetrellis-releases`
+(public) as the dedicated home for installer downloads. Source stays
+in the (currently private) `lionroseway/codetrellis` until the
+feedback round is done. `scripts/release.sh` (`npm run release` /
+`:dry-run`) builds DMG (arm64 + x64), NSIS Setup + Portable EXE, and
+Linux AppImage (arm64 + x64) from a single macOS host, then uploads
+all six to a tagged GitHub Release on the public repo. rpm + deb
+intentionally skipped — `rpmbuild` isn't on macOS at all and
+electron-builder's bundled `fpm` produces 96-byte truncated archives
+on Apple Silicon (open issue upstream). AppImage runs unchanged on
+Debian / Ubuntu / Fedora / RHEL / Arch so the userbase is covered.
+Switch to a Linux runner if/when deb/rpm need to come back.
+
+**v0.1.0 published.** 6 installers live at
+[codetrellis-releases/releases/tag/v0.1.0](https://github.com/lionroseway/codetrellis-releases/releases/tag/v0.1.0).
+Tag-trigger on the GitHub Actions release workflow temporarily
+disabled (`workflow_dispatch` only) while the source repo is private
+and Actions minutes count against quota.
+
+**Apache 2.0 license.** LICENSE swapped from MIT to Apache 2.0;
+`license` field added to `package.json` plus `homepage` + `repository`
+pointers to the public releases repo. Carried through to the public
+releases repo too.
+
+**README rewrite.** Both READMEs (private + public) rewritten in
+first-person voice with the actual product story: why the tool was
+built (architecture-and-conformity focus, drift catching, planning
+discipline borrowed from the maintainer's best AI sessions), how it's
+actually used in real workflows (re-running with different agents,
+splitting work across agents, recursive runs, high-level monitoring,
+context refresh + multi-device), and a prominent privacy / cost block
+("no data leaves your machine; AI compute lives in your agent; AI
+cost stays inside your existing AI usage; no TOS violation"). Public
+README leads with a 6-row download table.
+
+**codetrellis.dev specs drafted.** Design + build specs for the
+public marketing + OTA-update site. Specs live in the AILAR-Website
+monorepo (not in this repo — the build spec necessarily references
+internal infra paths and sister-app conventions). Headline build
+decision: a website-mediated OTA update API. Desktop app will poll
+`/api/updates/check?platform=…&current=…` — the website is the only
+place that knows where downloads live, so the installer hosting
+backend can move (GitHub Releases → S3 → CDN) by editing one resolver
+on the site, no desktop-app re-shipment. `/api/updates/latest` for
+public download metadata; `POST /api/revalidate` webhook from
+`release.sh` flushes the cache the moment a new release is published.
+
+Tracker §1 row adjustments: `Auto-updater` clarified (waits on
+signing for full electron-updater); new rows for `Website` and
+`Code-signing`; `Public releases repo` 100. §7 picks up new top-tier
+items for OTA wiring + website build.
 
 ### Apr 28, 2026 — Migrated to electron-builder + electron-vite (Windows EXE from macOS works)
 
@@ -1113,6 +1174,22 @@ darker); smooth transitions when expanding/collapsing.
 ---
 
 ## 7. Open Items (priority order)
+
+### ⚡⚡ Distribution + first-impression block (added Apr 28)
+
+The product is downloadable but the loop *around* the download —
+how users find it, how they get told there's a newer version, how
+much friction the first launch is — has gaps. These are the items
+that affect every visitor before they've even opened the app.
+
+| Item | State | Why it matters | Effort |
+|---|---|---|---|
+| **Build codetrellis.dev** (Next.js, sits in AILAR-Website monorepo) | ❌ specs done, not built | The front door. No website = no canonical place to pull installers from = no OTA endpoint. | M (~3-5 days) |
+| **Wire desktop OTA poll** | ❌ | Without it, every install is stuck on whatever version they downloaded. Specs nailed the `/api/updates/check` contract — desktop side: poll on launch + every 24h, surface a non-blocking banner that opens the URL in browser. | S (~1 day, post-website) |
+| **Code-signing — macOS Apple Developer ID + notarization** | ❌ | Biggest first-impression cliff. Right now every macOS install warns "can't be opened, Apple cannot check…". Bypassable but it costs trust on launch #1. ~$99/y. | S once cert in hand |
+| **Code-signing — Windows EV cert** | ❌ | SmartScreen "Windows protected your PC" warning until the cert builds reputation. ~$200-400/y. | S once cert in hand |
+| **Full electron-updater integration** | ❌ | After signing — auto-download + apply-on-quit instead of just opening the browser. Needs signed builds to verify the update came from us. | M post-signing |
+| **More plan templates** *(quick win)* | ❌ | Mass-refactor template ships; need "new feature", "bug fix", "library migration", "perf pass". One entry each in `plan-templates.ts`. Makes the "From template" picker feel alive on first open. | XS (an hour each) |
 
 ### ⚡ Top priority — Front-to-back workflow
 
