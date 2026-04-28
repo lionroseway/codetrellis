@@ -16,21 +16,22 @@
  * Tests:
  *  1. Baseline scan reports exactly 4 cross-system edges with the
  *     expected labels.
- *  2. Removing a Python route + re-scan drops the matching edge.
- *  3. Adding a new fetch + matching route + re-scan adds an edge.
+ *  2. Removing a Python route auto-refreshes (no manual rescan) and
+ *     drops the matching edge.
+ *  3. Adding a new fetch + matching route auto-refreshes and adds
+ *     an edge.
  *
- * **Known gap surfaced by these tests** — the cross-system matcher
- * only runs inside `/api/project/scan`. The file watcher's `change`
- * handler re-parses but doesn't call `recomputeCrossSystemEdges()`,
- * so cross-system edges go stale until the user rescans manually.
- * The tests work around this by triggering a fresh scan after
- * mutation; the gap itself is logged in TRACKER §7.
+ * History: tests 2 + 3 used to call `scanProject()` again after
+ * each mutation because the file-watcher didn't call
+ * `recomputeCrossSystemEdges()`. Fixed Apr 28 — the watcher now
+ * schedules a debounced recompute on every `change` / `add` /
+ * `unlink`, so cross-system edges stay current with the source.
  */
 
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { setupHarness } from '../harness';
+import { setupHarness, waitFor, sleep } from '../harness';
 
 test.describe('Cross-system HTTP matcher', () => {
   test.setTimeout(120_000);
@@ -63,7 +64,7 @@ test.describe('Cross-system HTTP matcher', () => {
     }
   });
 
-  test('removing a Python route + re-scan drops the matching edge', async () => {
+  test('removing a Python route auto-refreshes and drops the matching edge', async () => {
     const h = await setupHarness('xs-remove-route');
     try {
       await h.client.scanProject(h.fixture.projectPath);
@@ -85,10 +86,32 @@ test.describe('Cross-system HTTP matcher', () => {
       expect(edited).not.toContain('@router.post("/api/orders")');
       fs.writeFileSync(ordersPy, edited, 'utf-8');
 
-      // Re-scan to refresh the cross-system matcher (gap: it doesn't
-      // re-run on file-change today).
-      await h.client.scanProject(h.fixture.projectPath);
-      const after = await h.client.getCrossSystemEdges();
+      // Brief settle: chokidar's awaitWriteFinish (300 ms) + the
+      // file-watcher's own recompute debounce (500 ms) sometimes
+      // produce two recompute cycles when the OS fires duplicate
+      // change events. A 1s settle lets the second cycle finish
+      // before we start polling, so we don't catch a transient
+      // mid-recompute state and treat it as final.
+      await sleep(1000);
+
+      // No manual re-scan — the file-watcher's debounced recompute
+      // should fire automatically. Wait for the EXACT expected
+      // state (3 edges, POST /api/orders gone) so we're robust to
+      // transient mid-refresh values.
+      const after = await waitFor(
+        async () => {
+          const edges = await h.client.getCrossSystemEdges();
+          if (edges.length === 3 && !edges.find((e) => e.label === 'POST /api/orders')) {
+            return edges;
+          }
+          return null;
+        },
+        {
+          timeoutMs: 10_000,
+          intervalMs: 200,
+          description: 'cross-system edges to auto-refresh to exactly 3 (POST orders gone)',
+        },
+      );
 
       expect(after).toHaveLength(3);
       expect(after.find((e) => e.label === 'POST /api/orders')).toBeUndefined();
@@ -99,7 +122,7 @@ test.describe('Cross-system HTTP matcher', () => {
     }
   });
 
-  test('adding a new fetch + matching route + re-scan adds an edge', async () => {
+  test('adding a new fetch + matching route auto-refreshes and adds an edge', async () => {
     const h = await setupHarness('xs-add-edge');
     try {
       await h.client.scanProject(h.fixture.projectPath);
@@ -136,8 +159,27 @@ def get_products() -> list[Order]:
         'utf-8',
       );
 
-      await h.client.scanProject(h.fixture.projectPath);
-      const after = await h.client.getCrossSystemEdges();
+      // Brief settle for the same chokidar / debounce reason as the
+      // remove-route test above.
+      await sleep(1000);
+
+      // No manual re-scan — wait for the EXACT expected state. The
+      // recompute can pass through transient mid-refresh values
+      // before settling on the final 5-edge graph.
+      const after = await waitFor(
+        async () => {
+          const edges = await h.client.getCrossSystemEdges();
+          if (edges.length === 5 && edges.find((e) => e.label === 'GET /api/products')) {
+            return edges;
+          }
+          return null;
+        },
+        {
+          timeoutMs: 10_000,
+          intervalMs: 200,
+          description: 'cross-system edges to settle at 5 with the new GET /api/products',
+        },
+      );
 
       expect(after).toHaveLength(5);
       expect(after.find((e) => e.label === 'GET /api/products')).toBeDefined();

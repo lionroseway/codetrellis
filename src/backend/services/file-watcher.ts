@@ -7,6 +7,41 @@ import { checkFileDeviation } from './deviation-service';
 
 let watcher: FSWatcher | null = null;
 
+/**
+ * Cross-system recompute is intentionally **debounced**: agents
+ * often touch a burst of files in quick succession (rename refactor,
+ * add-then-edit, batched code mods). Recomputing once per file would
+ * thrash the matcher and re-broadcast `cross-system-changed` six
+ * times for one logical edit. Once-per-burst is what the user
+ * actually wants.
+ *
+ * 500 ms is generous on chokidar's already-debounced 300 ms
+ * `awaitWriteFinish` — gives the second / third file in the same
+ * burst a chance to roll into the same recompute.
+ */
+let crossSystemRecomputeTimer: NodeJS.Timeout | null = null;
+const CROSS_SYSTEM_DEBOUNCE_MS = 500;
+
+function scheduleCrossSystemRecompute(): void {
+  if (crossSystemRecomputeTimer) clearTimeout(crossSystemRecomputeTimer);
+  crossSystemRecomputeTimer = setTimeout(() => {
+    crossSystemRecomputeTimer = null;
+    try {
+      // Lazy-require to avoid an import cycle. cross-system-service
+      // → database → server → file-watcher → cross-system-service
+      // would otherwise be a load-time loop.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { recomputeCrossSystemEdges } = require('./cross-system-service');
+      recomputeCrossSystemEdges();
+      try {
+        broadcast('cross-system-changed', { reason: 'file-change' });
+      } catch { /* server module may not be loaded in tests */ }
+    } catch (err) {
+      console.warn('[Watcher] Cross-system recompute failed:', err);
+    }
+  }, CROSS_SYSTEM_DEBOUNCE_MS);
+}
+
 // Match the languages the AST parser actually supports — earlier this was
 // limited to the TS/JS family, which meant agent edits to .py / .rs / .php
 // / .java files never triggered a re-parse and the dependency graph went
@@ -99,6 +134,11 @@ export async function startWatching(projectRoot: string): Promise<void> {
       const { recordFileChange } = require('./plan-progress-service');
       recordFileChange(relativePath);
     } catch { /* ignore */ }
+
+    // Recompute cross-system edges so HTTP / SQL / etc. couplings
+    // stay current with the latest callsite + route declarations.
+    // Debounced; see `scheduleCrossSystemRecompute`.
+    scheduleCrossSystemRecompute();
   });
 
   watcher.on('add', (filePath) => {
@@ -123,11 +163,20 @@ export async function startWatching(projectRoot: string): Promise<void> {
       const { recordFileChange } = require('./plan-progress-service');
       recordFileChange(relPath);
     } catch { /* ignore */ }
+
+    // A new route / fetch / SQL ref might pair with something that
+    // already exists. Debounced recompute — see `change` handler.
+    scheduleCrossSystemRecompute();
   });
 
   watcher.on('unlink', (filePath) => {
     console.log(`[Watcher] File removed: ${path.relative(projectRoot, filePath)}`);
     broadcast('file-removed', { path: filePath });
+
+    // Removing a file can drop one side of a cross-system edge.
+    // Debounced — let any in-flight rename (`unlink` followed by
+    // `add` in the same tick) settle before recomputing.
+    scheduleCrossSystemRecompute();
   });
 
   console.log(`[Watcher] Watching ${projectRoot}`);
