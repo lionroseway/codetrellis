@@ -3,6 +3,12 @@
   "productName": "CodeTrellis",
   "version": "0.1.0",
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
+  "license": "Apache-2.0",
+  "homepage": "https://codetrellis.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lionroseway/codetrellis-releases"
+  },
   "main": "out/main/main.js",
   "scripts": {
     "predev": "bash scripts/free-dev-ports.sh",
@@ -20,6 +26,8 @@
     "package:win": "electron-vite build && electron-builder --win --x64",
     "package:linux": "electron-vite build && electron-builder --linux",
     "package:all": "electron-vite build && electron-builder --mac --arm64 --win --x64 --linux",
+    "release": "bash scripts/release.sh",
+    "release:dry-run": "bash scripts/release.sh --dry-run",
     "build:icons": "node scripts/build-icons.js",
     "build:info": "node scripts/generate-build-info.js",
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",

@@ -5,192 +5,236 @@
 </p>
 
 <p align="center">
-  <strong>Visualize your codebase architecture and monitor AI coding agents in real-time</strong>
+  <strong>Visualise your codebase architecture and monitor AI coding agents in real time.</strong>
 </p>
 
 <p align="center">
   <a href="https://codetrellis.dev">codetrellis.dev</a>
+  ·
+  <a href="https://github.com/lionroseway/codetrellis-releases/releases/latest">Download installers</a>
 </p>
 
 ---
 
-CodeTrellis is an open-source tool that sits alongside AI coding agents (starting with Claude Code) and provides real-time visibility into what the agent is doing to your codebase. It parses your project's AST, builds a dependency graph, and overlays agent activity so you can understand architectural impact before, during, and after the agent acts.
+CodeTrellis is a desktop app that sits alongside AI coding agents
+(Claude Code, Codex, Cursor, aider — anything that speaks MCP) and
+gives you real-time visibility into what they're doing to your
+codebase. It parses your project, builds a multi-language dependency
+graph, lets you author plans the agents pick up, and overlays every
+tool call so you can understand architectural impact **before, during,
+and after** the agent acts.
 
-## Features
+## Status
 
-### Dependency Graph Visualization
-- Interactive graph showing how files connect through imports
-- Three depth levels: **Packages** (grouped by directory), **Files** (individual files with import edges), **Symbols** (functions, classes, interfaces)
-- Auto-layout with dagre, pan/zoom, minimap
-- Click any node to inspect its symbols, imports, and dependents
-- Export graph as PNG
+> **The source repo is private right now.** We're collecting feedback
+> on the product before opening up the source. Installers are public
+> and free to download — please try the app and tell us what's
+> confusing, broken, or missing. The source will go public once the
+> rough edges are smoothed.
+>
+> Public installer downloads: **[lionroseway/codetrellis-releases](https://github.com/lionroseway/codetrellis-releases/releases/latest)**
 
-### AST Parsing
-- Powered by tree-sitter (WASM) — no native dependencies
-- **Supported languages:** TypeScript, TSX, JavaScript, Python, Rust, PHP, Java
-- Extracts functions, classes, methods, interfaces, types, enums
-- Resolves import paths to build file-to-file dependency edges
-- Monorepo support: npm workspaces, pnpm, Nx, Turborepo
+## Install
 
-### AI Agent Monitoring
-- **Zero-config Claude Code integration** — automatically detects active sessions by watching `~/.claude/` session files
-- Real-time event timeline: see every file read, write, edit, and bash command as it happens
-- Plan detection: heuristically extracts numbered/bulleted plans from agent output
-- Changes tab: tracks which files the agent has written or edited
-- Agent status indicator in the status bar
+Pre-built installers for macOS, Windows, and Linux are published on
+the [public releases repo](https://github.com/lionroseway/codetrellis-releases/releases/latest).
 
-### Architecture Diffing
-- Captures a baseline snapshot when you open a project
-- Polls for changes and highlights what's different:
-  - **Green glow** — new files
-  - **Orange glow** — modified files
-  - **Red glow** — deleted files
-  - **Purple glow** — files affected by changes (blast radius)
-- Detects added/removed import edges
+| Platform | File | Notes |
+|---|---|---|
+| macOS (Apple Silicon) | `CodeTrellis-<version>-arm64.dmg` | Drag to /Applications |
+| macOS (Intel) | `CodeTrellis-<version>-x64.dmg` | Drag to /Applications |
+| Windows installer | `CodeTrellis-Setup-<version>.exe` | NSIS — installs into Programs |
+| Windows portable | `CodeTrellis-Portable-<version>.exe` | Run anywhere |
+| Linux (.deb) | `CodeTrellis-<version>.deb` | Debian, Ubuntu, Mint |
+| Linux (AppImage) | `CodeTrellis-<version>.AppImage` | Fedora, RHEL, Arch |
 
-### MCP Server (Agent Integration)
+Builds aren't yet code-signed, so the OS will warn on first launch.
+On macOS: right-click → **Open** → **Open**. On Windows: **More info**
+→ **Run anyway**. The warning won't repeat.
 
-CodeTrellis hosts an MCP (Model Context Protocol) server on `localhost:19432`, making it compatible with **any MCP-enabled AI agent** — not just Claude Code.
+## What it does
 
-**Tools available to agents:**
-| Tool | Description |
-|------|-------------|
-| `search_symbols` | Search functions, classes, interfaces by name |
-| `get_dependencies` | Get imports and importedBy for a file |
-| `check_architecture` | Query the full dependency graph |
-| `report_plan` | Report intended plan (shown in CodeTrellis UI) |
-| `check_conformity` | Check if proposed imports create circular dependencies |
+### 🕸 Dependency graph
+- Multi-language graph (TS / TSX / JS / JSX / Python / Rust / PHP / Java)
+  via web-tree-sitter
+- Three depths — packages, files, symbols (functions / classes / methods)
+- Cross-system edges: HTTP/SQL/subprocess coupling between
+  micro-services or polyglot stacks (e.g. a TS frontend `fetch()` to a
+  Python FastAPI route renders as one dashed edge)
+- Architecture diffing: green/orange/red glow as files change,
+  blast-radius highlighting, per-line git annotations
+- Pan / zoom / minimap / PNG export
 
-**Resources:**
-| URI | Description |
-|-----|-------------|
-| `project://graph` | Full dependency graph as JSON |
-| `project://stats` | File/symbol/import counts |
+### 📋 Plans, phases, and spec rooms
+- **Plans** group work with phases, tasks, comments, and a spec room
+  (typed markdown docs: requirements, design, ADRs, runbooks, …)
+- **Phases** are first-class checkpoints — scope, prereqs, acceptance
+  criteria, all editable from the UI or from an MCP client
+- **Templates** ship as portable directories — built-ins (e.g. mass
+  refactor), `<project>/.codetrellis/templates/`, and
+  `~/.codetrellis/templates/` with `{{key}}` placeholder substitution
+- **Plan export** round-trips plans to disk as YAML + markdown so you
+  can commit them, share them, or sync them across devices
+- **Proposed Changes** view projects every task field as a diff row
+  with computed drift status; the agent loop auto-advances tasks to
+  `in_progress` when files change and signals `task-completion-suggested`
+  when every change is satisfied
 
-**Connect any agent** — add to your agent's MCP config:
-```json
-{
-  "codetrellis": {
-    "type": "sse",
-    "url": "http://127.0.0.1:19432/sse"
-  }
-}
-```
-Or click the "MCP :19432" button in the status bar to copy the config to your clipboard.
+### 🤖 Multi-agent monitoring
+- **MCP server** on `127.0.0.1:19432` — 30+ tools across architecture
+  queries, plans, phases, tasks, spec docs, proposed changes,
+  templates, comments, sessions, drift, and trellis snapshots
+- **Skill resources** (`codetrellis://skill[/quickstart|/power-user]`)
+  so any MCP-capable agent can self-onboard
+- **Live timeline** — every tool call from any agent (Claude Code,
+  Codex, Cursor, aider, custom) is broadcast as `tool_call` /
+  `tool_error` with attribution
+- **Connected Agents** widget in the TopBar shows every active session
+  with type / model / active plan / last seen
+- **Claude Code session-JSONL watcher** for richer chat-derived
+  signals (plan heuristics, file activity)
 
-## Quick Start
+### 🔍 Inspector + code viewer
+- Click any node — inspector shows symbols, imports, dependents, drift
+- Code viewer with Prism syntax highlighting, git gutter, drift colour-coding
+- "Add to plan" from any selection writes a task with the right scope
+
+## Quick start (development)
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/codetrellis.git
+git clone <private-repo-url>
 cd codetrellis
-
-# Install dependencies
 npm install
-
-# Start in web mode (backend + frontend)
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser.
+This starts the backend (Express on `127.0.0.1:3001` + MCP SSE on
+`127.0.0.1:19432`) and the frontend (Vite on `127.0.0.1:5173`). Open
+[http://localhost:5173](http://localhost:5173).
 
-Click **Open Project** (or `Cmd+O`) and enter the path to any codebase. CodeTrellis will scan it, parse the AST, resolve imports, and render the dependency graph.
+Click **Open Project** (or `Cmd+O`) and point it at any codebase.
+CodeTrellis scans, parses, resolves imports, and renders the graph.
 
-## Keyboard Shortcuts
+## Build the desktop app
 
-| Shortcut | Action |
-|----------|--------|
-| `Cmd+O` | Open project |
-| `Cmd+1` | Package view |
-| `Cmd+2` | File view |
-| `Cmd+3` | Symbol view |
-| `Cmd+B` | Toggle sidebar |
-| `Cmd+J` | Toggle agent panel |
-| `Escape` | Deselect node |
+```bash
+npm run package:mac           # macOS arm64 DMG
+npm run package:mac-x64       # macOS Intel DMG
+npm run package:mac-universal # both arches
+npm run package:win           # Windows NSIS installer + portable EXE
+npm run package:linux         # Linux deb + rpm + AppImage (rpm needs rpmbuild)
+```
+
+Outputs land in `out/make/`. The build is via **electron-builder +
+electron-vite** — Windows EXEs build cleanly from macOS, no Wine
+needed.
+
+## Cut a release
+
+```bash
+npm run release        # builds all platforms + uploads to the public releases repo
+npm run release:dry-run # build only, skip upload
+```
+
+The script (`scripts/release.sh`):
+1. Builds DMG (arm64 + x64), Windows NSIS + Portable, Linux deb + AppImage
+2. Uploads to **`lionroseway/codetrellis-releases`** as a tagged GitHub Release
+3. Skips rpm by default (no `rpmbuild` on macOS — AppImage covers
+   Fedora/RHEL/Arch users)
+
+The source repo (this one) stays private; only the public releases
+repo gets the binaries. Source-side tags and CI runs are decoupled.
 
 ## Architecture
 
 ```
 src/
-  backend/              # Express API + WebSocket server
+  backend/
     services/
-      ast-parser.ts     # tree-sitter WASM parsing
-      database.ts       # sql.js SQLite (in-memory)
-      project-scanner.ts # Directory scanner with .gitignore
+      ast-parser.ts          # tree-sitter WASM parsing (7 langs)
+      database.ts            # sql.js SQLite (in-memory + persisted)
+      project-scanner.ts     # .gitignore-aware walk
       monorepo-detector.ts
-      file-watcher.ts   # chokidar for live re-parsing
-      diff-engine.ts    # Architecture snapshot diffing
-    agent/
-      claude-code-watcher.ts  # Tails Claude Code JSONL sessions
-    server.ts           # Express routes + WebSocket
+      file-watcher.ts        # chokidar live re-parse
+      diff-engine.ts         # snapshot-based architecture diffing
+      cross-system-service.ts
+      callsites/<lang>.ts    # HTTP / SQL / subprocess / env extractors
+      parsers/<lang>.ts      # per-language symbol + import extraction
+      resolvers/<lang>.ts
+      plan-*-service.ts      # plan, phases, spec docs, changes, templates
+      plan-progress-service.ts # auto-advance + completion suggestions
+      mcp/server.ts          # 30+ tools, SSE on 127.0.0.1:19432
+      logger.ts              # daily file logs
+      claude-code-watcher.ts
+    server.ts                # Express on 127.0.0.1:3001 + WebSocket
 
-  frontend/             # React 19 + ReactFlow
-    components/
-      graph/nodes/      # Custom ReactFlow nodes (Package, File, Symbol)
-      layout/           # TopBar, Sidebar, MainCanvas, Inspector, AgentPanel, StatusBar
-      WelcomeScreen.tsx
-      ErrorBoundary.tsx
-    stores/             # Zustand (graph, agent, project, ui)
-    bridge/             # API abstraction (HTTP for web, IPC for Electron)
-    lib/graph-builder.ts # Converts dependency data to ReactFlow graph
+  frontend/
+    components/              # graph, layout, plan, inspector, settings
+    stores/                  # zustand (graph, agent, project, plan, ui, toast)
+    bridge/                  # HTTP for web mode, IPC for Electron
+    lib/graph-builder.ts
 
-  shared/types/         # TypeScript types shared between backend/frontend
-  electron/             # Electron wrapper (main + preload)
+  electron/                  # main + preload (electron-vite layout)
+  shared/                    # types + build-info
 ```
 
-### How It Works
+### How it works
 
-1. **Scan** — ProjectScanner walks your codebase respecting `.gitignore`, detects monorepo workspaces
-2. **Parse** — tree-sitter parses every source file, extracts symbols and imports
-3. **Resolve** — Import paths (`./foo`, `@shared/types`) are resolved to actual file paths
-4. **Store** — Everything persisted in SQLite (in-memory via sql.js)
-5. **Graph** — Dependency edges built from resolved imports, rendered with ReactFlow + dagre layout
-6. **Watch** — chokidar monitors file changes, re-parses and updates the graph
-7. **Monitor** — Claude Code watcher tails JSONL session files, broadcasts events via WebSocket
+1. **Scan** — walk the codebase honouring `.gitignore`, detect monorepo workspaces
+2. **Parse** — tree-sitter parses every source file, extracts symbols + imports
+3. **Resolve** — `./foo`, `@shared/types`, `from app.routes import x` all resolve to actual files
+4. **Cross-system** — HTTP / SQL / subprocess / env callsites pair across language boundaries
+5. **Store** — sql.js SQLite, persisted to disk on a debounced autosave
+6. **Graph** — dagre + d3-force layout, React Flow renders
+7. **Watch** — chokidar live-rescans, drift overlay updates
+8. **Plan** — author multi-phase plans with spec docs; agents pick them up via MCP
+9. **Monitor** — every MCP tool call broadcasts to the renderer with agent attribution
 
-## API Endpoints
+## Tech stack
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/project/scan` | POST | Scan a project, parse AST, resolve imports |
-| `/api/dependencies` | GET | All file-to-file import edges |
-| `/api/dependencies/file?path=...` | GET | Imports and importedBy for a file |
-| `/api/symbols/search?q=...` | GET | Search symbols by name |
-| `/api/symbols/file?path=...` | GET | Symbols in a specific file |
-| `/api/diff?project=...` | GET | Architecture diff (current vs baseline) |
-| `/api/agent/status` | GET | Claude Code watcher status |
-| `/api/fs/browse?path=...` | GET | Browse directories (for folder picker) |
-| `/api/stats` | GET | Database stats |
+- **Frontend** — React 19, ReactFlow 12, Tailwind CSS 4, Zustand 5,
+  Lucide, Allotment, Prism, react-markdown + remark-gfm
+- **Backend** — Express 5, ws (WebSocket), sql.js (SQLite WASM)
+- **AST** — web-tree-sitter (WASM) with grammars for TS / TSX / JS /
+  JSX / Python / Rust / PHP / Java
+- **Desktop** — Electron 33 packaged with electron-builder + electron-vite
+- **MCP** — `@modelcontextprotocol/sdk` over SSE
 
-WebSocket on `/ws` broadcasts real-time events: agent activity, file changes.
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Cmd+O` | Open project |
+| `Cmd+1` / `2` / `3` | Package / File / Symbol depth |
+| `Cmd+B` | Toggle sidebar |
+| `Cmd+J` | Toggle agent panel |
+| `Cmd+,` | Settings |
+| `Esc` | Deselect |
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start backend + frontend (web mode) |
-| `npm run dev:backend` | Backend only (Express on :3001) |
-| `npm run dev:frontend` | Frontend only (Vite on :5173) |
-| `npm run start:electron` | Electron mode (requires macOS fix) |
-| `npm run build` | Production build |
-| `npm run typecheck` | TypeScript type checking |
+| Command | What it does |
+|---|---|
+| `npm run dev` | Backend + frontend in web mode |
+| `npm run dev:backend` | Backend only |
+| `npm run dev:frontend` | Frontend only |
+| `npm run dev:electron` | Electron in dev mode |
+| `npm run build` | Web-mode production build (typecheck + Vite) |
+| `npm run package:mac` / `:win` / `:linux` | Build platform installer |
+| `npm run release` | Build all + publish to public releases repo |
+| `npm run typecheck` | tsc --noEmit |
+| `npm run lint` | ESLint |
+| `npm test` | Playwright E2E |
 
-## Tech Stack
+## Feedback
 
-- **Frontend:** React 19, ReactFlow, Tailwind CSS 4, Zustand, Lucide icons
-- **Backend:** Express, WebSocket (ws), sql.js (SQLite WASM)
-- **AST:** web-tree-sitter with grammars for TS, JS, Python, Rust, PHP, Java
-- **Desktop:** Electron (optional, blocked by macOS 26 bug)
+The source repo isn't open yet. Bug reports, "this confused me"
+moments, and feature requests all welcome on the
+[public releases repo](https://github.com/lionroseway/codetrellis-releases/issues)
+or by email.
 
-## Roadmap
-
-- [ ] Session history — replay past agent sessions
-- [ ] Search UI in frontend (backend search API exists)
-- [ ] Resizable panels
-- [ ] Go and C# grammar support
-- [ ] Performance optimization for 1000+ file repos
-- [ ] Electron desktop app (blocked by macOS 26 bug)
+We'll post here when the source goes public.
 
 ## License
 
-MIT
+Apache License 2.0 — see [LICENSE](LICENSE).
