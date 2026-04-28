@@ -21,9 +21,15 @@
 name: release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Tag-push trigger disabled while the repo is private — Actions
+  # minutes cost real money, and the maintainer is currently building
+  # locally + uploading via `gh release create`. Re-enable by
+  # un-commenting the `push.tags` block once the repo goes public
+  # (public repos get unlimited free Actions minutes).
+  #
+  # push:
+  #   tags:
+  #     - 'v*'
   workflow_dispatch:
 
 permissions:
