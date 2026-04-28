@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Visualise your codebase architecture and monitor AI coding agents in real time.</strong>
+  <strong>Plan, watch, and keep AI coding agents on track — and yourself too, even when no agent is involved.</strong>
 </p>
 
 <p align="center">
@@ -16,21 +16,39 @@
 
 ---
 
-CodeTrellis is a desktop app that sits alongside AI coding agents
-(Claude Code, Codex, Cursor, aider — anything that speaks MCP) and
-gives you real-time visibility into what they're doing to your
-codebase. It parses your project, builds a multi-language dependency
-graph, lets you author plans the agents pick up, and overlays every
-tool call so you can understand architectural impact **before, during,
-and after** the agent acts.
+This is the **internal source repo** for CodeTrellis. The public-facing
+README, downloads, and feedback issues live on the
+[**`codetrellis-releases`**](https://github.com/lionroseway/codetrellis-releases)
+repo — that's the one to point users at.
+
+## What it is
+
+CodeTrellis is a desktop app I built to help me plan work, run AI
+coding agents against those plans, and catch drift early. It works
+**with or without** an AI agent — I prefer to focus on architecture
+and conformity, and the planning workflow is just as useful when I'm
+the one writing the code.
+
+The core ethos is built on git: every diff, every drift signal, every
+"is this commit doing what the plan said it would" check goes through
+version control. Plans scale from a one-line "do this thing" to
+multi-phase migrations with spec docs, ADRs, UX journeys, success
+metrics — as simple or as detailed as you want.
+
+When an AI agent is in the loop, it connects via the local MCP server
+(`127.0.0.1:19432`) — Claude Code, Codex, Cursor, aider, anything
+MCP-capable. The agent reads plans, asks architecture questions, and
+reports its tool calls back into the timeline. **The AI compute lives
+in your agent**, not in CodeTrellis — no data leaves your machine, no
+extra account, no TOS violation.
 
 ## Status
 
-> **The source repo is private right now.** We're collecting feedback
-> on the product before opening up the source. Installers are public
-> and free to download — please try the app and tell us what's
-> confusing, broken, or missing. The source will go public once the
-> rough edges are smoothed.
+> **The source repo is private right now.** I'm collecting feedback on
+> the product before opening up the source. Installers are public and
+> free to download — try the app and tell me what's confusing,
+> broken, or missing. The source goes public once the rough edges are
+> smoothed.
 >
 > Public installer downloads: **[lionroseway/codetrellis-releases](https://github.com/lionroseway/codetrellis-releases/releases/latest)**
 
@@ -229,12 +247,13 @@ src/
 
 ## Feedback
 
-The source repo isn't open yet. Bug reports, "this confused me"
-moments, and feature requests all welcome on the
+The source isn't open yet — I'm collecting feedback first to
+sharpen the rough edges. Bug reports, "this confused me" moments,
+missing use cases, and feature requests all welcome on the
 [public releases repo](https://github.com/lionroseway/codetrellis-releases/issues)
 or by email.
 
-We'll post here when the source goes public.
+I'll announce there once the source goes public.
 
 ## License
 
