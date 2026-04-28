@@ -53,16 +53,36 @@ export {
   slugify,
 } from './paths';
 export { waitFor, sleep, type WaitForOptions } from './wait';
+export {
+  createMcpClient,
+  type ScriptedMcp,
+  type McpClientOptions,
+  type McpToolResult,
+} from './mcp-client';
+export {
+  createScriptedAgent,
+  type ScriptedAgent,
+  type ScriptedAgentOptions,
+} from './scripted-agent';
 
 import { prepareFixture, PreparedFixture } from './fixture';
 import { startBackend, RunningBackend } from './backend';
 import { createClient, RestClient } from './client';
+import { createScriptedAgent, ScriptedAgent } from './scripted-agent';
 
 export interface Harness {
   fixture: PreparedFixture;
   backend: RunningBackend;
   client: RestClient;
-  /** Stop the backend + delete the tmp dir. Idempotent. */
+  /**
+   * Spin up a connected scripted agent against the harness's MCP
+   * server. The agent registers a session immediately. Multiple
+   * agents may be spawned per harness instance — each gets its own
+   * MCP transport / sessionId, suitable for contention tests.
+   * Disconnects automatically on `teardown()`.
+   */
+  spawnAgent(opts?: { agentType?: string; model?: string }): Promise<ScriptedAgent>;
+  /** Stop the backend + delete the tmp dir + disconnect agents. Idempotent. */
   teardown(): Promise<void>;
 }
 
@@ -101,11 +121,30 @@ export async function setupHarness(
   }
 
   const client = createClient(backend.baseUrl);
+  const agents: ScriptedAgent[] = [];
+
+  const spawnAgent = async (
+    agentOpts: { agentType?: string; model?: string } = {},
+  ): Promise<ScriptedAgent> => {
+    const agent = createScriptedAgent({
+      mcpPort: backend!.mcpPort,
+      agentType: agentOpts.agentType ?? `harness-agent-${agents.length + 1}`,
+      model: agentOpts.model,
+      projectPath: fixture.projectPath,
+    });
+    await agent.connect();
+    agents.push(agent);
+    return agent;
+  };
 
   let torn = false;
   const teardown = async () => {
     if (torn) return;
     torn = true;
+    // Disconnect every spawned agent first so the backend doesn't
+    // see SSE drops mid-shutdown — order matters less for
+    // correctness than for clean stderr in CI.
+    await Promise.allSettled(agents.map((a) => a.disconnect()));
     try {
       await backend!.stop();
     } finally {
@@ -113,5 +152,5 @@ export async function setupHarness(
     }
   };
 
-  return { fixture, backend, client, teardown };
+  return { fixture, backend, client, spawnAgent, teardown };
 }
