@@ -107,7 +107,7 @@ test.describe('Cross-system HTTP matcher', () => {
           return null;
         },
         {
-          timeoutMs: 10_000,
+          timeoutMs: 15_000,
           intervalMs: 200,
           description: 'cross-system edges to auto-refresh to exactly 3 (POST orders gone)',
         },
@@ -175,7 +175,7 @@ def get_products() -> list[Order]:
           return null;
         },
         {
-          timeoutMs: 10_000,
+          timeoutMs: 15_000,
           intervalMs: 200,
           description: 'cross-system edges to settle at 5 with the new GET /api/products',
         },

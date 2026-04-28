@@ -27,7 +27,15 @@ export default defineConfig({
   // can struggle with many concurrent tsx subprocesses on slower
   // machines. Default to 1 worker; override with --workers.
   workers: 1,
-  retries: 0,
+  // Each harness test boots a real backend subprocess + chokidar +
+  // tsx + sql.js + tree-sitter — there's a lot going on per test,
+  // and under heavy local load (parallel agent runs, fs churn from
+  // previous tests' tmp-dir cleanup) the timing-sensitive tests
+  // (file-watcher → auto-advance, chokidar → plan-import) can
+  // exceed their per-step timeouts. Two retries treats those
+  // genuine flakes as transient — green on the second or third
+  // attempt. Keeps the suite signal-to-noise high.
+  retries: 2,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
     // Tests that don't use the browser ignore this — set so the

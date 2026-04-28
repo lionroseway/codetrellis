@@ -253,6 +253,332 @@ const ARCHITECTURE_DOC = `# Architecture overview
 (what's the contract between the touched components and everything else)
 `;
 
+// --- Lighter-weight templates ---
+//
+// `mass-refactor` (below) is the deep-mode template. The four below
+// are right-sized for everyday work — fewer phases, lighter docs,
+// no need for executive-summary scaffolding. They use placeholders
+// so the create-plan modal can ask for the salient input up front.
+
+const NEW_FEATURE_REQUIREMENTS = `# Requirements — {{feature}}
+
+## What this feature does
+
+(one-paragraph description in plain language)
+
+## User stories
+
+- As a [user type], I want to [goal] so that [benefit]
+- ...
+
+## Success criteria
+
+- [ ]
+- [ ]
+
+## Out of scope
+
+(what this feature explicitly does NOT do — anti-scope)
+
+## Open questions
+
+-
+`;
+
+const NEW_FEATURE_DESIGN = `# Design — {{feature}}
+
+## High-level approach
+
+(2-3 sentences on the chosen approach + why)
+
+## New files / modules
+
+| Path | Role |
+|---|---|
+| | |
+
+## Modified files
+
+| Path | Change |
+|---|---|
+| | |
+
+## Data model changes
+
+(new tables / columns / types — link to migration if applicable)
+
+## API surface
+
+| Method | Path | Purpose |
+|---|---|---|
+| | | |
+
+## UI surface
+
+(screens / components affected)
+`;
+
+const NEW_FEATURE_UX = `# UX journey — {{feature}}
+
+## Entry point
+
+(how the user discovers / triggers this feature)
+
+## Happy path
+
+1.
+2.
+3.
+
+## Empty / loading / error states
+
+| State | What user sees |
+|---|---|
+| First-time / empty | |
+| Loading | |
+| Error | |
+
+## Cross-references
+
+(other features / screens that link to this one or are linked from it)
+`;
+
+const NEW_FEATURE_TESTING = `# Testing — {{feature}}
+
+## Unit
+
+-
+
+## Integration
+
+-
+
+## Manual / e2e
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| | | |
+`;
+
+const BUG_FIX_REPORT = `# Bug — {{bug}}
+
+## Symptom
+
+(what the user sees that's wrong)
+
+## Reproduction
+
+1.
+2.
+3.
+
+**Expected**:
+**Actual**:
+
+## Affected area
+
+{{area}}
+
+## First reported
+
+(date / version / customer)
+
+## Severity
+
+- [ ] Blocker — production down or data loss
+- [ ] High — common path broken
+- [ ] Medium — workaround exists
+- [ ] Low — cosmetic
+`;
+
+const BUG_FIX_ROOT_CAUSE = `# Root cause hypothesis
+
+## Suspected files / functions
+
+- {{area}}
+
+## Why it happens
+
+(one-paragraph hypothesis — disprove if possible)
+
+## Why we didn't catch it
+
+(missing test? missing type guard? missing review checklist?)
+
+## Related code
+
+(grep / xref hits — places that look similar and might also be broken)
+`;
+
+const BUG_FIX_REGRESSION = `# Regression test
+
+## Test that would have caught this
+
+(unit / integration / e2e — and where in the suite it should live)
+
+## Test fixture
+
+\`\`\`
+(input)
+\`\`\`
+
+\`\`\`
+(expected output)
+\`\`\`
+
+## Other tests to add or strengthen
+
+(if the bug class suggests a missing pattern of coverage)
+`;
+
+const LIB_MIG_OVERVIEW = `# Library migration — {{from_library}} → {{to_library}}
+
+## Why migrate
+
+(perf / maintenance / sunset / API improvements / bundle size — be specific)
+
+## Risk profile
+
+| Dimension | Old | New | Risk |
+|---|---|---|---|
+| Maintenance status | | | |
+| Bundle size | | | |
+| Breaking changes | | | |
+| Type safety | | | |
+
+## Migration strategy
+
+- [ ] **Big bang** — replace everywhere at once. Choose only if blast radius is small.
+- [ ] **Adapter** — wrap old behind a thin adapter, swap implementations one callsite at a time. Default for non-trivial migrations.
+- [ ] **Strangler** — both old and new live side-by-side; flag-flip per code path. For very large or risky migrations.
+
+## Rollback plan
+
+(what triggers rollback, how to roll back, what's lost)
+`;
+
+const LIB_MIG_COMPAT = `# Compatibility matrix — {{from_library}} vs {{to_library}}
+
+| {{from_library}} API | {{to_library}} equivalent | Notes |
+|---|---|---|
+| | | |
+| | | |
+
+## Behaviours that change
+
+(silent semantic differences — places where calling code "looks the same" but does something subtly different)
+
+## Behaviours that disappear
+
+(deprecated APIs with no replacement — list each callsite that needs custom handling)
+`;
+
+const LIB_MIG_ROLLOUT = `# Rollout plan
+
+## Order of callsites
+
+(why this order — usually: smallest / lowest-risk first, hottest path last)
+
+| Order | Callsite | Owner | Notes |
+|---|---|---|---|
+| 1 | | | |
+| 2 | | | |
+
+## Verification per step
+
+(what test confirms the migrated callsite still works — and that the rest of the app didn't regress)
+
+## Coexistence
+
+(can old and new run in the same process? if not, what's the cut?)
+`;
+
+const PERF_BUDGET = `# Performance budget — {{target_metric}}
+
+## Goal
+
+Target **{{target_metric}} ≤ {{target_value}}** on the {{benchmark}} workload.
+
+## Why this metric
+
+(p95 latency? cold-start time? bundle size? memory under load? — pick the one that matters to users and explain)
+
+## Out of scope
+
+(metrics that this pass explicitly does NOT optimise; tradeoffs we'll accept)
+`;
+
+const PERF_BASELINE = `# Baseline measurements
+
+## Reproducer
+
+\`\`\`bash
+(exact command / steps to measure — must be repeatable on a clean machine)
+\`\`\`
+
+## Current numbers
+
+| Run | {{target_metric}} | Notes |
+|---|---|---|
+| 1 | | |
+| 2 | | |
+| 3 | | |
+| **Median** | | |
+
+## Hardware / env
+
+(machine, OS, node version, etc.)
+
+## Sub-metrics
+
+(CPU? memory? syscalls? — anything that helps narrow the hotspot before profiling)
+`;
+
+const PERF_HOTSPOTS = `# Hotspot inventory
+
+## Profiler output
+
+(paste flame graph / sampled stack — at minimum, top-10 by self-time)
+
+## Suspect functions / files
+
+| Function / file | Why suspected | Estimated win |
+|---|---|---|
+| | | |
+
+## Anti-suspects
+
+(places that look hot but are likely not — saves wasted optimisation effort)
+
+## Picked first
+
+(which hotspot we're tackling first + why — usually highest estimated win × lowest risk)
+`;
+
+const PERF_VERIFY = `# Verification
+
+## Re-measurement script
+
+(same command as baseline — copy-paste-able)
+
+## Acceptance
+
+| Run | {{target_metric}} | Δ vs baseline | Notes |
+|---|---|---|---|
+| 1 | | | |
+| 2 | | | |
+| 3 | | | |
+| **Median** | | | |
+
+## Regression guard
+
+(microbenchmark / CI assertion that fails if the metric backslides above the new ceiling — without this, the win decays in 2 sprints)
+
+## What we didn't do
+
+(optimisations considered but skipped — and why; future-you will want this list)
+`;
+
 export const PLAN_TEMPLATES: PlanTemplate[] = [
   {
     id: 'mass-refactor',
@@ -281,6 +607,171 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
       { key: 'patterns', orderHint: '90', docType: 'patterns', title: 'Patterns', body: PATTERNS_DOC },
       { key: 'testing', orderHint: '91', docType: 'testing', title: 'Testing strategy', body: TESTING_DOC },
       { key: 'security', orderHint: '92', docType: 'security', title: 'Security threat model', body: SECURITY_DOC },
+    ],
+  },
+  {
+    id: 'new-feature',
+    label: 'New feature',
+    shortDescription: 'Three-phase scaffold for adding a feature: design → implementation → testing.',
+    longDescription: 'Lighter than mass-refactor — for net-new features. Seeds a requirements doc, design doc, UX journey, and testing plan, plus three phases that map cleanly to "decide → build → ship". Use the `{{feature}}` placeholder to give the plan a name in one place.',
+    defaultTitle: 'Feature: {{feature}}',
+    defaultPlanDescription: 'Add a new feature. Read the requirements + design docs first, then pick up tasks from the Implementation phase.',
+    placeholders: [
+      { key: 'feature', label: 'Feature name', default: '<the feature>' },
+    ],
+    phases: [
+      {
+        phaseNumber: 1,
+        title: 'Design',
+        scope: 'Lock down requirements, design, and UX journey. No code yet.',
+        acceptanceCriteria: '- [ ] Requirements doc complete (success criteria + out-of-scope filled in)\n- [ ] Design doc lists every new / modified file\n- [ ] UX journey covers happy path + empty / loading / error states\n',
+      },
+      {
+        phaseNumber: 2,
+        title: 'Implementation',
+        scope: 'Build the feature against the design doc. Backend first if there\'s a data layer, then API, then UI.',
+        prerequisites: 'Phase 1 design signed off.',
+        acceptanceCriteria: '- [ ] Every file listed in the design doc exists\n- [ ] Lints + typechecks clean\n- [ ] Drift report against the plan: clean\n',
+      },
+      {
+        phaseNumber: 3,
+        title: 'Testing & polish',
+        scope: 'Tests for every path in the testing doc, accessibility pass, copy review, telemetry hooks if applicable.',
+        prerequisites: 'Phase 2 implementation complete and self-tested.',
+        acceptanceCriteria: '- [ ] Unit + integration tests for every callout in the testing doc\n- [ ] Manual happy path passes on a clean install\n- [ ] No new "(TODO)" or "(fix me)" comments left in the diff\n',
+      },
+    ],
+    docs: [
+      { key: 'requirements', orderHint: '00', docType: 'acceptance_criteria', title: 'Requirements', body: NEW_FEATURE_REQUIREMENTS },
+      { key: 'design', orderHint: '01', docType: 'architecture', title: 'Design', body: NEW_FEATURE_DESIGN },
+      { key: 'ux', orderHint: '02', docType: 'ux_ui', title: 'UX journey', body: NEW_FEATURE_UX },
+      { key: 'testing', orderHint: '03', docType: 'testing', title: 'Testing', body: NEW_FEATURE_TESTING },
+    ],
+  },
+  {
+    id: 'bug-fix',
+    label: 'Bug fix',
+    shortDescription: 'Lean two-phase template: investigate → fix-with-regression-test.',
+    longDescription: 'Built for "something is wrong, find it, fix it, prove it stays fixed". Three docs (bug report, root-cause hypothesis, regression test) and two phases. Use `{{bug}}` for the short description and `{{area}}` to point investigators at the suspected module.',
+    defaultTitle: 'Bug: {{bug}}',
+    defaultPlanDescription: 'Reproduce, root-cause, fix, and add a regression test. Don\'t mark done without the regression test.',
+    placeholders: [
+      { key: 'bug', label: 'Bug summary', default: '<one-line description>' },
+      { key: 'area', label: 'Suspected area', default: '<file or module to start in>' },
+    ],
+    phases: [
+      {
+        phaseNumber: 1,
+        title: 'Investigate',
+        scope: 'Reproduce reliably, identify the root cause, decide the fix shape.',
+        acceptanceCriteria: '- [ ] Reliable reproduction documented\n- [ ] Root cause confirmed (not just hypothesised)\n- [ ] Fix approach agreed (with one alternative considered + rejected)\n',
+      },
+      {
+        phaseNumber: 2,
+        title: 'Fix + regression',
+        scope: 'Apply the fix, write a regression test that fails on the bug and passes on the fix, ship.',
+        prerequisites: 'Phase 1 root cause confirmed.',
+        acceptanceCriteria: '- [ ] Fix applied, scoped to the root cause\n- [ ] Regression test fails on `git stash` of the fix and passes with it\n- [ ] No nearby suspects left untouched (check the "related code" section)\n',
+      },
+    ],
+    docs: [
+      { key: 'report', orderHint: '00', docType: 'executive_summary', title: 'Bug report', body: BUG_FIX_REPORT },
+      { key: 'rootcause', orderHint: '01', docType: 'research', title: 'Root cause', body: BUG_FIX_ROOT_CAUSE },
+      { key: 'regression', orderHint: '02', docType: 'testing', title: 'Regression test', body: BUG_FIX_REGRESSION },
+    ],
+  },
+  {
+    id: 'library-migration',
+    label: 'Library migration',
+    shortDescription: 'Four-phase scaffold for swapping a dependency: audit → adapter → per-callsite → decommission.',
+    longDescription: 'For replacing or upgrading a dependency that touches many callsites. Strategy is configurable (big-bang vs adapter vs strangler — picked in the overview doc). Use `{{from_library}}` and `{{to_library}}` placeholders. The compatibility matrix doc forces you to think through silent-semantic-change traps before code touches any callsite.',
+    defaultTitle: 'Migrate {{from_library}} → {{to_library}}',
+    defaultPlanDescription: 'Replace a dependency without breaking anything. The compatibility matrix is the most important doc — fill it in honestly before touching any callsite.',
+    placeholders: [
+      { key: 'from_library', label: 'From (current library)', default: '<old-lib>' },
+      { key: 'to_library', label: 'To (new library)', default: '<new-lib>' },
+    ],
+    phases: [
+      {
+        phaseNumber: 1,
+        title: 'Audit',
+        scope: 'Inventory every callsite of {{from_library}}, document API differences, pick a migration strategy.',
+        acceptanceCriteria: '- [ ] Compatibility matrix complete\n- [ ] Migration strategy chosen + documented\n- [ ] Rollback plan written\n',
+      },
+      {
+        phaseNumber: 2,
+        title: 'Adapter / scaffolding',
+        scope: 'If the strategy is "adapter," build the adapter layer + tests. If "strangler," set up the flag plumbing. If "big bang," skip — but reconsider the strategy.',
+        prerequisites: 'Phase 1 audit complete.',
+        acceptanceCriteria: '- [ ] Adapter / flag plumbing in place\n- [ ] One pilot callsite migrated through the adapter and proven equivalent\n',
+      },
+      {
+        phaseNumber: 3,
+        title: 'Per-callsite migration',
+        scope: 'Walk the rollout-plan order. One callsite per task; tests for each before moving on.',
+        prerequisites: 'Phase 2 pilot green.',
+        acceptanceCriteria: '- [ ] Every callsite migrated\n- [ ] Per-callsite verification passing\n- [ ] No regressions in the rest of the suite\n',
+      },
+      {
+        phaseNumber: 4,
+        title: 'Decommission',
+        scope: 'Remove the adapter, drop {{from_library}} from package.json, prove no leftover imports.',
+        prerequisites: 'Phase 3 complete + at least 24h of staging soak.',
+        acceptanceCriteria: '- [ ] `{{from_library}}` removed from dependencies\n- [ ] `grep` for `{{from_library}}` in src/ returns nothing meaningful\n- [ ] Bundle size measured before / after\n',
+      },
+    ],
+    docs: [
+      { key: 'overview', orderHint: '00', docType: 'executive_summary', title: 'Migration overview', body: LIB_MIG_OVERVIEW },
+      { key: 'compat', orderHint: '01', docType: 'architecture', title: 'Compatibility matrix', body: LIB_MIG_COMPAT },
+      { key: 'rollout', orderHint: '02', docType: 'rollout', title: 'Rollout plan', body: LIB_MIG_ROLLOUT },
+    ],
+  },
+  {
+    id: 'perf-pass',
+    label: 'Performance pass',
+    shortDescription: 'Measure → identify → fix → verify, with a regression guard at the end.',
+    longDescription: 'Forces you to measure first and verify last. Four phases that match the only good way to do perf work: baseline measurement, hotspot identification, fix, then re-measurement + a regression guard so the win doesn\'t silently decay. Use `{{target_metric}}` (e.g. "p95 cold-start time") and `{{target_value}}` (e.g. "<400 ms") to set the budget up front.',
+    defaultTitle: 'Perf pass: {{target_metric}}',
+    defaultPlanDescription: 'Don\'t optimise without measuring. The baseline is the contract; the regression guard is the win.',
+    placeholders: [
+      { key: 'target_metric', label: 'Target metric', default: 'p95 latency' },
+      { key: 'target_value', label: 'Target value', default: '<400 ms' },
+      { key: 'benchmark', label: 'Benchmark workload', default: 'production-replay' },
+    ],
+    phases: [
+      {
+        phaseNumber: 1,
+        title: 'Baseline',
+        scope: 'Lock the metric, lock the workload, capture current numbers reproducibly.',
+        acceptanceCriteria: '- [ ] Reproducer command documented\n- [ ] Median of ≥3 runs recorded\n- [ ] Sub-metrics captured (CPU / memory / syscalls etc.)\n',
+      },
+      {
+        phaseNumber: 2,
+        title: 'Identify hotspots',
+        scope: 'Profile, surface the suspects, pick the highest-leverage hotspot first.',
+        prerequisites: 'Phase 1 baseline locked.',
+        acceptanceCriteria: '- [ ] Profile output captured + reviewed\n- [ ] Top suspects ranked by estimated win\n- [ ] First hotspot picked with a written estimate\n',
+      },
+      {
+        phaseNumber: 3,
+        title: 'Fix',
+        scope: 'Apply the optimisation. One hotspot per task. Don\'t rewrite anything that wasn\'t in the suspect list.',
+        prerequisites: 'Phase 2 hotspot picked.',
+        acceptanceCriteria: '- [ ] Fix is scoped to the picked hotspot\n- [ ] Local micro-benchmark shows the expected win\n- [ ] No new abstraction layers added "while we\'re in here"\n',
+      },
+      {
+        phaseNumber: 4,
+        title: 'Verify + guard',
+        scope: 'Re-measure on the same reproducer, write a regression guard so future commits can\'t silently undo the win.',
+        prerequisites: 'Phase 3 fix landed.',
+        acceptanceCriteria: '- [ ] Re-measured median meets {{target_value}}\n- [ ] Regression guard wired (microbenchmark in CI / perf assertion)\n- [ ] "What we didn\'t do" list filled in for future-us\n',
+      },
+    ],
+    docs: [
+      { key: 'budget', orderHint: '00', docType: 'constraints', title: 'Performance budget', body: PERF_BUDGET },
+      { key: 'baseline', orderHint: '01', docType: 'research', title: 'Baseline measurements', body: PERF_BASELINE },
+      { key: 'hotspots', orderHint: '02', docType: 'research', title: 'Hotspot inventory', body: PERF_HOTSPOTS },
+      { key: 'verify', orderHint: '03', docType: 'testing', title: 'Verification', body: PERF_VERIFY },
     ],
   },
 ];

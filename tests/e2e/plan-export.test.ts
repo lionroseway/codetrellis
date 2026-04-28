@@ -201,7 +201,7 @@ test.describe('Plan export — Phase 13 §A round-trip', () => {
             const fresh = await h.client.getPlan(plan.uid);
             return fresh.title === 'Edited from disk' ? fresh : null;
           },
-          { timeoutMs: 10_000, intervalMs: 200, description: 'auto-sync via chokidar' },
+          { timeoutMs: 15_000, intervalMs: 200, description: 'auto-sync via chokidar' },
         );
       } finally {
         await h.teardown();

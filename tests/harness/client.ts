@@ -23,6 +23,10 @@ export interface RestClient {
   exportPlan(uid: string, projectRoot: string): Promise<ExportPlanResult>;
   /** Import a plan from a `<plan-dir>/` (or `<plan-dir>/plan.yaml`). */
   importPlan(planDir: string): Promise<{ plan: PlanDetail; [k: string]: unknown }>;
+  /** List available plan templates (built-in + project + user). */
+  listTemplates(projectRoot?: string): Promise<TemplateSummary[]>;
+  /** Create a plan from a template, optionally overriding placeholder values. */
+  createPlanFromTemplate(input: CreatePlanFromTemplateInput): Promise<PlanSummary>;
   /** Status of file-link for a plan in a given project. */
   getPlanFileStatus(uid: string, projectRoot: string): Promise<{ linked: boolean; planDir: string | null }>;
   /** Unlink a plan from disk (deletes the on-disk plan dir). */
@@ -121,6 +125,28 @@ export interface CreatePlanInput {
   }>;
 }
 
+export interface TemplateSummary {
+  id: string;
+  label: string;
+  shortDescription: string;
+  longDescription: string;
+  defaultTitle: string;
+  source?: 'builtin' | 'project' | 'user';
+  phaseCount: number;
+  docCount: number;
+  placeholders?: Array<{ key: string; label?: string; default?: string }>;
+  [k: string]: unknown;
+}
+
+export interface CreatePlanFromTemplateInput {
+  templateId: string;
+  projectPath: string;
+  /** Override the template's defaultTitle. */
+  title?: string;
+  /** Override individual placeholder values. */
+  placeholders?: Record<string, string>;
+}
+
 export interface ExportPlanResult {
   /** Absolute path to the plan dir (`<projectRoot>/.codetrellis/plans/<slug>`). */
   planDir: string;
@@ -198,6 +224,25 @@ export function createClient(baseUrl: string): RestClient {
     },
     async getBuildInfo() {
       return (await json('GET', '/api/build-info')) as BuildInfo;
+    },
+    async listTemplates(projectRoot) {
+      const qs = projectRoot ? `?project=${encodeURIComponent(projectRoot)}` : '';
+      return (await json('GET', `/api/plan-templates${qs}`)) as TemplateSummary[];
+    },
+    async createPlanFromTemplate(input) {
+      const body: Record<string, unknown> = {
+        templateId: input.templateId,
+        projectPath: input.projectPath,
+      };
+      if (input.title) body.title = input.title;
+      if (input.placeholders) body.placeholderValues = input.placeholders;
+      const result = (await json('POST', '/api/plans/from-template', body)) as {
+        plan: PlanSummary;
+        phases: unknown[];
+        docs: unknown[];
+        [k: string]: unknown;
+      };
+      return result.plan;
     },
     async exportPlan(uid, projectRoot) {
       return (await json(
