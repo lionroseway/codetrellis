@@ -51,6 +51,11 @@ import {
 } from './services/plan-documents-service';
 import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
 import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
+import {
+  getUpdateState,
+  checkForUpdate,
+  startUpdatePolling,
+} from './services/update-service';
 import { BUILD_INFO } from '../shared/build-info';
 
 const app = express();
@@ -1424,6 +1429,36 @@ app.get('/api/build-info', (_req, res) => {
   res.json(BUILD_INFO);
 });
 
+// --- OTA update polling (against codetrellis.dev with GitHub fallback) ---
+
+/**
+ * Read the cached update-check state. Cheap; doesn't hit the
+ * network. The frontend polls this on mount + after a manual
+ * "Check for updates" click.
+ */
+app.get('/api/updates/status', (_req, res) => {
+  res.json(getUpdateState());
+});
+
+/**
+ * Force a fresh update check. Returns the new state.
+ *
+ * Used by:
+ *   - Settings → About → "Check for updates" button
+ *   - End-to-end harness when we add an OTA test
+ */
+app.post('/api/updates/check', async (_req, res) => {
+  try {
+    const result = await checkForUpdate({ force: true });
+    res.json(result);
+    if (result.status === 'available') {
+      broadcast('update-available', { result: result.result });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // --- Settings API (Phase 13 §D) ---
 
 app.get('/api/settings', (_req, res) => {
@@ -1487,6 +1522,11 @@ export async function startServer(port?: number): Promise<http.Server> {
   } catch (err) {
     console.warn('[Backend] MCP server failed to start:', err);
   }
+
+  // Start the auto-update poller — best-effort initial check on
+  // boot, then once every 24h. Network failures don't abort boot;
+  // they're surfaced via `getUpdateState().lastError`.
+  startUpdatePolling();
 
   const envPort = process.env.CODETRELLIS_BACKEND_PORT;
   const requestedPort = envPort ? Number(envPort) : (port ?? DEFAULT_PORT);

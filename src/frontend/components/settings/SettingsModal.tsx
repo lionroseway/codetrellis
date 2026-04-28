@@ -13,6 +13,8 @@ import {
   Terminal,
   ExternalLink,
   Info,
+  Download,
+  AlertCircle,
 } from 'lucide-react';
 import type { AppSettings } from '@shared/types';
 
@@ -573,15 +575,181 @@ function AboutSection() {
         <KV label="Build #" value={String(info.buildNumber)} mono />
       </div>
 
-      <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-2 border-t border-white/[0.04]">
-        Updates land as new DMG / EXE downloads. To check for a newer build, compare the <span className="text-foreground-muted">Built</span> timestamp above with the latest release on{' '}
-        <span className="text-accent">codetrellis.dev</span>. Auto-update is on the roadmap (electron-updater + GitHub Releases).
-      </p>
+      <UpdateBlock />
 
       <p className="text-[10px] text-amber-200/80 leading-relaxed">
         <strong>Installing on macOS:</strong> open the <code className="font-mono bg-white/[0.05] px-1 rounded">.dmg</code> file, then drag the <code className="font-mono bg-white/[0.05] px-1 rounded">CodeTrellis.app</code> icon onto the <code className="font-mono bg-white/[0.05] px-1 rounded">Applications</code> shortcut in the same window. Don't run the .app from the DMG mount or your Downloads folder — it won't update cleanly.
       </p>
     </>
+  );
+}
+
+interface UpdateDownload {
+  url: string;
+  filename: string;
+  size?: number;
+  sha256?: string;
+}
+
+interface UpdateResultData {
+  available: boolean;
+  latest: string;
+  current: string;
+  publishedAt?: string;
+  download?: UpdateDownload;
+  releaseNotes?: { url?: string; markdown?: string };
+  source: 'website' | 'github' | 'cache';
+}
+
+interface UpdateStateData {
+  status: 'idle' | 'checking' | 'available' | 'up-to-date' | 'error';
+  lastCheckedAt: number | null;
+  result: UpdateResultData | null;
+  lastError: string | null;
+  platform: string;
+  currentVersion: string;
+}
+
+/**
+ * Updates block — polls `/api/updates/status` (cheap, cached) on
+ * mount, lets the user trigger a fresh check, and surfaces the
+ * latest version + a Download button when an update is available.
+ *
+ * v1 doesn't auto-download. Click → opens the platform installer
+ * URL in the system browser. Auto-apply waits for code-signing
+ * (otherwise we can't verify the download came from us).
+ */
+function UpdateBlock() {
+  const [state, setState] = useState<UpdateStateData | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const res = await fetch('/api/updates/status');
+      if (res.ok) setState(await res.json());
+    } catch {
+      // ignore — initial 404 means the backend is still booting
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch('/api/updates/check', { method: 'POST' });
+      if (res.ok) {
+        const fresh = (await res.json()) as UpdateStateData;
+        setState(fresh);
+      }
+    } catch {
+      // surface to the user via the lastError that gets returned
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  if (!state) {
+    return (
+      <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-2 border-t border-white/[0.04]">
+        Loading update status…
+      </p>
+    );
+  }
+
+  const { status, result, lastCheckedAt, lastError } = state;
+  const lastCheckedText = lastCheckedAt
+    ? formatRelativeTime(new Date(lastCheckedAt))
+    : 'never';
+
+  return (
+    <div className="pt-3 border-t border-white/[0.04] space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-foreground-subtle">
+          Updates
+        </span>
+        <button
+          onClick={checkNow}
+          disabled={checking || status === 'checking'}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title={`Last checked: ${lastCheckedText}`}
+        >
+          <RefreshCw size={10} className={checking || status === 'checking' ? 'animate-spin' : ''} />
+          Check now
+        </button>
+      </div>
+
+      {status === 'available' && result?.download ? (
+        <div className="rounded-lg border border-accent/30 bg-accent/[0.06] p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Download size={14} className="text-accent shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium text-foreground">
+                v{result.latest} is available
+              </div>
+              <div className="text-[10px] text-foreground-muted mt-0.5">
+                You're on v{result.current}
+                {result.publishedAt
+                  ? ` · released ${formatRelativeTime(new Date(result.publishedAt))}`
+                  : ''}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 pl-6">
+            <a
+              href={result.download.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1 px-3 py-1 text-[11px] rounded-md bg-accent/15 border border-accent/40 text-accent hover:bg-accent/25 transition-colors"
+            >
+              <Download size={11} />
+              Download {result.download.filename}
+            </a>
+            {result.releaseNotes?.url && (
+              <a
+                href={result.releaseNotes.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded-md text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
+              >
+                Release notes
+                <ExternalLink size={10} />
+              </a>
+            )}
+          </div>
+        </div>
+      ) : status === 'up-to-date' ? (
+        <div className="flex items-center gap-2 text-[11px] text-foreground-muted">
+          <CheckCircle2 size={12} className="text-green-400/70" />
+          <span>You're on the latest version (v{result?.current ?? state.currentVersion}).</span>
+        </div>
+      ) : status === 'error' ? (
+        <div className="flex items-start gap-2 text-[10.5px] text-amber-200/80">
+          <AlertCircle size={12} className="text-amber-400/70 shrink-0 mt-0.5" />
+          <div>
+            Couldn't check for updates: {lastError ?? 'unknown error'}.{' '}
+            <button onClick={checkNow} className="underline hover:text-foreground">
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : status === 'checking' ? (
+        <div className="flex items-center gap-2 text-[11px] text-foreground-muted">
+          <RefreshCw size={12} className="animate-spin" />
+          <span>Checking…</span>
+        </div>
+      ) : (
+        <div className="text-[11px] text-foreground-subtle">
+          Haven't checked yet. Hit "Check now" to look for a newer build.
+        </div>
+      )}
+
+      <p className="text-[10px] text-foreground-subtle leading-relaxed">
+        Auto-checked once a day. Updates open in your browser — install the new DMG / EXE / AppImage to upgrade. Auto-download lands once we have code-signing.
+      </p>
+    </div>
   );
 }
 

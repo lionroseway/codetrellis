@@ -309,6 +309,7 @@ export function TopBar() {
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const setViewDepth = useGraphStore((s) => s.setViewDepth);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const updateAvailable = useUpdateAvailable(settingsOpen);
 
   return (
     <div className="glass-panel flex items-center h-11 px-3 border-b gap-2 shrink-0 overflow-visible relative z-40">
@@ -375,13 +376,76 @@ export function TopBar() {
 
       <button
         onClick={() => setSettingsOpen(true)}
-        className="flex items-center justify-center w-8 h-8 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
-        title="Settings"
+        className="relative flex items-center justify-center w-8 h-8 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
+        title={updateAvailable ? 'Settings — update available' : 'Settings'}
       >
         <SettingsIcon size={13} />
+        {updateAvailable && (
+          <span
+            className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_4px_rgba(110,231,183,0.6)]"
+            aria-label="Update available"
+          />
+        )}
       </button>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
+}
+
+/**
+ * Polls `/api/updates/status` to know whether to show the
+ * update-available dot on the Settings button. Cheap — the backend
+ * caches; this is just reading that cache.
+ *
+ *   - Fetches once on mount (covers the auto-poll that ran on
+ *     backend boot).
+ *   - Re-fetches whenever Settings closes (covers the case where
+ *     the user clicks "Check now" inside Settings and a new state
+ *     comes back).
+ *   - Polls every 5 minutes as a soft refresh while the app is
+ *     running (the backend's actual remote check is daily; this
+ *     just picks up state changes between checks).
+ */
+function useUpdateAvailable(settingsOpen: boolean): boolean {
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/updates/status');
+        if (!res.ok) return;
+        const data = (await res.json()) as { status?: string };
+        if (!cancelled) setAvailable(data.status === 'available');
+      } catch {
+        // ignore — backend may still be booting
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Re-check whenever Settings closes — covers the "user just
+  // clicked Check now and a result came back" case.
+  useEffect(() => {
+    if (settingsOpen) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/updates/status');
+        if (!res.ok) return;
+        const data = (await res.json()) as { status?: string };
+        setAvailable(data.status === 'available');
+      } catch {
+        // ignore
+      }
+    }, 200);
+    return () => clearTimeout(t);
+  }, [settingsOpen]);
+
+  return available;
 }
