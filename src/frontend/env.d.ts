@@ -9,6 +9,10 @@ interface ElectronAPI {
   getMcpStatus: () => Promise<{ running: boolean; port: number; connectedAgents: number }>;
   onScanProgress: (callback: (progress: { phase: string; progress: number }) => void) => () => void;
   onAgentEvent: (callback: (event: unknown) => void) => () => void;
+  /** Reveal the current day's log file in Finder / Explorer. */
+  revealLogs: () => Promise<string>;
+  /** Returns the absolute path of the current day's log file. */
+  getLogPath: () => Promise<string>;
 }
 
 declare global {

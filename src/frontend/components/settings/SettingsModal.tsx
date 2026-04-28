@@ -426,12 +426,12 @@ function LogsSection() {
   }, [tick]);
 
   const reveal = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const electronAPI = (window as any).electronAPI;
-    if (electronAPI?.invoke) {
-      electronAPI.invoke('logs:reveal').catch(() => {});
+    const electronAPI = window.electronAPI;
+    if (electronAPI?.revealLogs) {
+      electronAPI.revealLogs().catch(() => {});
     } else {
-      // Web mode — best we can do is copy the path.
+      // Web mode — best we can do is copy the path so the user
+      // can open it themselves.
       navigator.clipboard?.writeText(logFile).catch(() => {});
     }
   };

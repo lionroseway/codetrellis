@@ -23,6 +23,11 @@ const api = {
     ipcRenderer.on('agent:event', handler);
     return () => ipcRenderer.removeListener('agent:event', handler);
   },
+
+  // Reveal the current day's log file in Finder / Explorer.
+  // Resolves to the file path that was revealed (string).
+  revealLogs: (): Promise<string> => ipcRenderer.invoke('logs:reveal'),
+  getLogPath: (): Promise<string> => ipcRenderer.invoke('logs:get-path'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);
