@@ -1,0 +1,126 @@
+# Multi-platform release workflow.
+#
+# Triggered by:
+#   - `git push` of a `v*` tag (e.g. `v0.1.1`) — produces a public GitHub Release
+#   - manual dispatch from the Actions tab — produces a draft Release
+#
+# Each runner builds for its native OS (no cross-compilation, no
+# Mono/Wine on macOS, no headaches):
+#   macos-13       → CodeTrellis-<version>-x64.dmg + .zip
+#   macos-14       → CodeTrellis-<version>-arm64.dmg + .zip
+#   ubuntu-latest  → .deb + .rpm
+#   windows-latest → CodeTrellis-Setup.exe (Squirrel) + nupkg + zip
+#
+# Code-signing scaffolding is wired via env: set the relevant repo
+# secrets and Forge's `osxSign` / `osxNotarize` / Squirrel
+# `certificateFile` will pick them up automatically. Without secrets,
+# the workflow still produces unsigned builds (warns at install on
+# Gatekeeper / SmartScreen).
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write     # needed by softprops/action-gh-release
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14         # arm64
+            label: macOS arm64
+            artifact_glob: |
+              out/make/**/*.dmg
+              out/make/**/*.zip
+          - os: macos-13         # x64
+            label: macOS x64
+            artifact_glob: |
+              out/make/**/*.dmg
+              out/make/**/*.zip
+          - os: ubuntu-latest
+            label: Linux
+            artifact_glob: |
+              out/make/**/*.deb
+              out/make/**/*.rpm
+          - os: windows-latest
+            label: Windows
+            artifact_glob: |
+              out/make/**/*.exe
+              out/make/**/*.nupkg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # build-info uses `git rev-list --count HEAD`
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # rpm tooling for the Linux runner — `dpkg-deb` is preinstalled
+      # on ubuntu-latest, but rpmbuild is not.
+      - name: Install rpm (Linux only)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y rpm
+
+      - name: Build
+        env:
+          # macOS code-signing + notarization (no-op without secrets)
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows code-signing (no-op without secrets)
+          WINDOWS_CERTIFICATE_FILE: ${{ secrets.WINDOWS_CERTIFICATE_FILE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: npm run make
+
+      - name: Upload build artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: codetrellis-${{ matrix.label }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Inspect collected artefacts
+        run: |
+          ls -la artifacts/
+          find artifacts -type f -printf '%p (%s bytes)\n'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.exe
+            artifacts/**/*.nupkg
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
