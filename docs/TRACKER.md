@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-28 (post public-releases pipeline + website specs)
+Last updated: 2026-04-28 (post E2E harness Phase 1)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -64,11 +64,74 @@ shared via the bridge abstraction.
 | Public releases repo | 100 | High | `lionroseway/codetrellis-releases` — public repo seeded with README + Apache 2.0 LICENSE that hosts every installer release. Decoupled from the (currently private) source repo so download URLs can be shared without exposing source. `scripts/release.sh` (`npm run release`) builds DMG / NSIS / Portable / AppImage in one shot from macOS host and uploads to a tagged Release on this repo. v0.1.0 live with 6 platform installers. |
 | Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
-| E2E test harness | 35 | Medium | **Designed in [E2E-HARNESS.md](E2E-HARNESS.md), not built.** Today's Playwright suite hits the real running app and is flaky (folder-picker, stale plans, port collisions, no clock control, no agent simulation). Design covers: in-tree fixture repo (`tests/fixtures/sample-app/` — TS + Python, 25 files, known cross-system pairs), a scripted MCP agent (deterministic, no real LLM), per-test tmp data dir (`CODETRELLIS_DATA_DIR` env var), dynamic port allocation, an in-process `services/clock.ts` for timestamp control, and a 4-phase delivery (scaffolding → loop tests → plan-export round-trip → optional visual diffs). |
+| E2E test harness | 50 | Medium | **Phase 1 shipped (Apr 28, 2026).** `tests/fixtures/sample-app/` (27-file TS workspace + Python FastAPI fixture) + `tests/harness/` (fixture lifecycle with `git init`, free-port allocator, child-process backend, typed REST client, one-call `setupHarness()`) + `tests/e2e/smoke.test.ts` (~4 s green). `npm run test:harness` boots a fresh backend in a tmp data dir, scans the fixture, asserts deterministic counts, tears everything down — no developer's `~/.codetrellis/` touched. Phase 2 (loop tests with scripted MCP agent), Phase 3 (plan-export round-trip), Phase 4 (visual snapshots) still pending. Originally designed: Today's Playwright suite hits the real running app and is flaky (folder-picker, stale plans, port collisions, no clock control, no agent simulation). Design covers: in-tree fixture repo (`tests/fixtures/sample-app/` — TS + Python, 25 files, known cross-system pairs), a scripted MCP agent (deterministic, no real LLM), per-test tmp data dir (`CODETRELLIS_DATA_DIR` env var), dynamic port allocation, an in-process `services/clock.ts` for timestamp control, and a 4-phase delivery (scaffolding → loop tests → plan-export round-trip → optional visual diffs). |
 
 ---
 
 ## 2. Recently Shipped
+
+### Apr 28, 2026 — E2E harness Phase 1 (fixture + scaffolding + smoke test)
+
+The first slice of the [E2E-HARNESS.md](E2E-HARNESS.md) design. Until
+this landed, every "shipped" feature was effectively shipped to a
+state that worked once on the maintainer's machine — there was no way
+to re-prove the loop on a clean checkout.
+
+**Fixture repo** (`tests/fixtures/sample-app/`, 27 files): TS workspace
+(`@sample/shared` + `@sample/web`) plus a Python FastAPI service.
+Cross-system HTTP coupling between `packages/web/src/api.ts`'s
+`fetch('/api/users')` calls and `services/api/app/routes/{users,orders}.py`'s
+`@router.{get,post}('/api/...')` decorators — known matchable pairs the
+matcher can find. Fixture template stays pristine in the repo; tests
+clone it into a tmp dir and `git init` for the diff engine.
+
+**Harness scaffolding** (`tests/harness/`):
+- `paths.ts` — REPO_ROOT, fixture template, tmp-dir helpers
+- `fixture.ts` — clones template → `tests/.tmp/<test-id>/sample-app/`,
+  runs `git init` + commit with pinned author/committer/timestamp
+  (stable initial-commit SHA across runs from a clean checkout),
+  returns a `cleanup()` that wipes the whole tmp dir
+- `ports.ts` — free-port allocator via `net.listen(0)` (no `get-port` dep)
+- `backend.ts` — spawns the backend as a child process with isolated
+  `CODETRELLIS_DATA_DIR`, `CODETRELLIS_BACKEND_PORT`,
+  `CODETRELLIS_MCP_PORT`, waits for `/api/build-info` to answer 200,
+  buffers stderr for diagnostics, kills cleanly on teardown
+- `client.ts` — typed REST helpers (scan, stats, plans, cross-system,
+  build-info, raw escape hatch)
+- `index.ts` — `setupHarness(name)` one-call: fixture + backend +
+  client + `teardown()`
+
+**Backend additions:**
+- `services/clock.ts` — abstraction over `Date.now()` /
+  `new Date().toISOString()` so tests can pin time. Default
+  byte-identical to the real clock; `_setClockForTesting()` swaps in
+  a controllable one. Codemod of existing `Date.now()` sites
+  intentionally deferred — partial migration is safe.
+
+**Smoke test** (`tests/e2e/smoke.test.ts`):
+- Boots the harness, asserts the fixture is materialised + git-init'd,
+  hits `/api/build-info`, scans the fixture (file/symbol/import
+  counts), checks ≥ 2 cross-system HTTP edges (TS↔Python pairings),
+  searches for the `User` symbol, asserts the tmp dir is deleted on
+  teardown.
+- Second test boots two harnesses in a row and verifies isolation:
+  different tmp dirs, different ports, plans don't leak.
+
+**Wiring:**
+- `playwright.harness.config.ts` — separate from the legacy
+  `playwright.config.ts` (which still hits the dev backend on
+  hardcoded ports). No `webServer` block — the harness manages its
+  own subprocesses. `testDir: tests/e2e/`, `testMatch: *.test.ts`.
+- `npm run test:harness` runs the suite. Total runtime: ~4 s.
+
+**Result:** `npm run test:harness` from a clean checkout boots a fresh
+backend in a tmp dir, scans a known fixture, asserts deterministic
+counts, and tears everything down — without touching
+`~/.codetrellis/`. Phase 2 (loop tests with a scripted MCP agent) and
+Phase 3 (plan-export round-trip) can now be built on this.
+
+Tracker §1 E2E test harness 35 → 50 (Phase 1 complete; Phase 2-4 still
+pending).
 
 ### Apr 28, 2026 — Public releases pipeline + Apache 2.0 + website specs
 

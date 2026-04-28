@@ -10,3 +10,8 @@ dist/
 .claude/
 test-results/
 playwright-report/
+
+# E2E harness — per-test working dirs (cloned fixture + tmp data dir).
+# The harness creates these in setup and deletes them in teardown;
+# any leftovers after a crash are safe to wipe by hand.
+tests/.tmp/

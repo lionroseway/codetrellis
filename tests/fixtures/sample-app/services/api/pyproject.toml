@@ -1,0 +1,16 @@
+[project]
+name = "sample-api"
+version = "0.0.1"
+description = "Sample FastAPI service for the CodeTrellis E2E fixture."
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "pydantic>=2.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+packages = ["app"]

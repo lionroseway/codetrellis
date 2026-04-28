@@ -1,0 +1,9 @@
+{
+  "name": "sample-app",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Fixture project for the CodeTrellis E2E test harness. Two systems: an npm workspace (TS) and a Python FastAPI service. Designed so cross-system matchers, alias resolution, system discovery, and the full plan loop all have predictable targets.",
+  "workspaces": [
+    "packages/*"
+  ]
+}
