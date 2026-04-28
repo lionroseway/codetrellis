@@ -10,6 +10,8 @@ import {
   Copy,
   CheckCircle2,
   RefreshCw,
+  Terminal,
+  ExternalLink,
 } from 'lucide-react';
 import type { AppSettings } from '@shared/types';
 
@@ -28,13 +30,14 @@ import type { AppSettings } from '@shared/types';
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'telemetry';
+type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'logs' | 'telemetry';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
   { key: 'mcp', label: 'MCP Server', Icon: Plug },
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
   { key: 'data', label: 'Data', Icon: HardDrive },
+  { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
 ];
 
@@ -133,6 +136,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             {section === 'plans' && (
               <PlansSection settings={settings} onChange={update} />
             )}
+            {section === 'logs' && <LogsSection />}
             {section === 'data' && (
               <DataSection settings={settings} onChange={update} />
             )}
@@ -393,6 +397,84 @@ function DataSection({
 }
 
 // --- Telemetry ---
+
+// --- Logs ---
+
+function LogsSection() {
+  const [content, setContent] = useState<string>('');
+  const [logFile, setLogFile] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch('/api/logs/tail?maxBytes=65536')
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setContent(data.content || '(log file empty)');
+        setLogFile(data.path || '');
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setContent('Failed to read logs.');
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [tick]);
+
+  const reveal = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI?.invoke) {
+      electronAPI.invoke('logs:reveal').catch(() => {});
+    } else {
+      // Web mode — best we can do is copy the path.
+      navigator.clipboard?.writeText(logFile).catch(() => {});
+    }
+  };
+
+  return (
+    <>
+      <p className="text-[11px] text-foreground-muted leading-relaxed">
+        Backend logs (everything `console.log` / `console.warn` / `console.error` emits) mirrored to a daily file at:
+      </p>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 bg-white/[0.05] border border-white/[0.06] rounded px-2 py-1.5 text-[10.5px] font-mono text-foreground-muted truncate">
+          {logFile || 'Loading…'}
+        </code>
+        <button
+          onClick={reveal}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
+          title="Reveal in Finder / Explorer"
+        >
+          <ExternalLink size={11} /> Reveal
+        </button>
+        <button
+          onClick={() => setTick((n) => n + 1)}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
+        >
+          <RefreshCw size={11} /> Refresh
+        </button>
+      </div>
+
+      <div>
+        <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1.5">
+          Recent log output (last 64 KB)
+        </label>
+        <pre className="max-h-[420px] overflow-auto bg-black/40 border border-white/[0.06] rounded-md px-3 py-2 text-[10.5px] font-mono text-foreground-muted whitespace-pre-wrap break-all">
+{loading ? 'Loading…' : content}
+        </pre>
+      </div>
+
+      <p className="text-[10px] text-foreground-subtle leading-relaxed">
+        If the app stops responding, send the contents of this file when reporting the issue. Each day's logs roll over automatically.
+      </p>
+    </>
+  );
+}
 
 function TelemetrySection() {
   return (

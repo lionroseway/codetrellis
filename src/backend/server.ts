@@ -25,9 +25,64 @@ import {
   setRecentProjectPinned,
 } from './services/recent-projects-service';
 import { discoverSystems, buildAliasMap } from './services/system-discovery';
+// Top-of-file imports for everything that used to be lazy-required.
+// Vite's Electron main bundle doesn't statically resolve runtime
+// `require('./services/...')` paths, so they fail at runtime
+// (MODULE_NOT_FOUND from inside `.vite/build/main.js`). Static
+// imports get bundled cleanly. The original lazy-require pattern
+// existed to dodge import cycles that no longer apply.
+import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
+import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir } from './services/plan-file-service';
+import { getAllGraphEdges, getDb } from './services/database';
+import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
+import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
+import { computeProjection } from './services/projection-service';
+import { getDeviations, resolveDeviation } from './services/deviation-service';
+import { applyTemplate } from './services/plan-templates-service';
+import { listTemplates } from './services/plan-templates';
+import { publishPlanAsTemplate } from './services/plan-template-publish-service';
+import {
+  createPhase, updatePhase, deletePhase, listPhases,
+} from './services/plan-phases-service';
+import {
+  createPlanDocument, updatePlanDocument, deletePlanDocument,
+  getPlanDocument, getPlanDocumentByType, getPlanDocumentVersions,
+  listPlanDocuments, listPlanDocumentSummaries, searchPlanDocuments,
+} from './services/plan-documents-service';
+import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
+import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
 
 const app = express();
 app.use(express.json());
+
+/**
+ * CORS for the packaged Electron renderer. The renderer loads from
+ * `file://`, which browsers report as `Origin: null` for CORS. We
+ * allow it through (alongside any `http://localhost:*` origin from
+ * the Vite dev server) so the renderer can hit the backend at
+ * 127.0.0.1:<port>. The server is bound to 127.0.0.1 only — no
+ * untrusted host on the network can reach it.
+ */
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  // file:// → "null", localhost dev → "http://localhost:5173" etc.
+  // Mirror whatever was sent so credentialed requests work; we
+  // already gate access at the bind level (loopback only).
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
 
 const server = http.createServer(app);
 
@@ -398,7 +453,6 @@ app.post('/api/project/scan', async (req, res) => {
   // Cross-system pass — match HTTP callsites (and later SQL / etc.)
   // across languages so PHP+Python+SQL stops looking like 3 islands.
   try {
-    const { recomputeCrossSystemEdges } = require('./services/cross-system-service');
     recomputeCrossSystemEdges();
   } catch (err) {
     console.warn('[API] Cross-system pass failed:', err);
@@ -426,7 +480,6 @@ app.post('/api/project/scan', async (req, res) => {
   // edits (post `git pull`, hand-edits, another tool) flow into the
   // DB without requiring an explicit Import click.
   try {
-    const { startPlanFileWatcher } = require('./services/plan-file-service');
     startPlanFileWatcher(projectPath);
   } catch (err) {
     console.warn('[API] Plan file watcher failed to start:', err);
@@ -712,7 +765,6 @@ app.get('/api/dependencies', (req, res) => {
   // `kind` discriminator. Default keeps the legacy import-only shape
   // so existing callers don't change.
   if (req.query.include === 'cross_system') {
-    const { getAllGraphEdges } = require('./services/database');
     res.json(getAllGraphEdges());
     return;
   }
@@ -720,7 +772,6 @@ app.get('/api/dependencies', (req, res) => {
 });
 
 app.get('/api/cross-system', (_req, res) => {
-  const { listCrossSystemEdges, getCrossSystemStats } = require('./services/cross-system-service');
   res.json({ edges: listCrossSystemEdges(), stats: getCrossSystemStats() });
 });
 
@@ -764,7 +815,6 @@ app.get('/api/diff', async (req, res) => {
 
 /** Read current files (path + hash + symbol count) from the DB. */
 function readFilesSnapshot(projectPath: string): Array<{ path: string; hash: string; symbolCount: number }> {
-  const { getDb } = require('./services/database');
   const d = getDb();
   const result = d.exec(`
     SELECT f.path, f.content_hash, COUNT(s.id) as symbol_count
@@ -886,7 +936,6 @@ app.post('/api/plans', (req, res) => {
   // Phase 13 §E: prefer the configured identity (email) over the
   // legacy "user" role. `getAuthorKey` falls back to "human" if the
   // user hasn't set an identity yet, so old behaviour stays valid.
-  const { getAuthorKey } = require('./services/settings-service');
   const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, getAuthorKey('human'), 'human', projectPath);
   broadcast('plan-created', { plan });
   saveNow(() => exportDatabase());
@@ -909,7 +958,6 @@ app.put('/api/plans/:uid', (req, res) => {
   // Auto-capture trellis snapshot when plan is approved
   if (status === 'approved' && plan?.projectPath) {
     try {
-      const { captureCurrentTrellis } = require('./services/trellis-service');
       const snapshot = captureCurrentTrellis(plan.projectPath, req.params.uid, `Baseline for "${plan.title}"`);
       broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name } });
     } catch (err) {
@@ -1014,19 +1062,16 @@ app.get('/api/plans/:uid/versions', (req, res) => {
 
 // Plan projection
 app.get('/api/plans/:uid/projection', (req, res) => {
-  const { computeProjection } = require('./services/projection-service');
   res.json(computeProjection(req.params.uid));
 });
 
 // Plan deviations
 app.get('/api/plans/:uid/deviations', (req, res) => {
-  const { getDeviations } = require('./services/deviation-service');
   res.json(getDeviations(req.params.uid));
 });
 
 // Reconcile deviations
 app.post('/api/plans/:uid/reconcile', (req, res) => {
-  const { resolveDeviation } = require('./services/deviation-service');
   const { deviations } = req.body; // [{id, action}]
   if (!Array.isArray(deviations)) { res.status(400).json({ error: 'deviations array required' }); return; }
   for (const d of deviations) {
@@ -1038,7 +1083,6 @@ app.post('/api/plans/:uid/reconcile', (req, res) => {
 // --- Plan Spec Documents API ---
 
 app.get('/api/plans/:uid/docs', (req, res) => {
-  const { listPlanDocuments, listPlanDocumentSummaries } = require('./services/plan-documents-service');
   if (req.query.summary === '1') {
     res.json(listPlanDocumentSummaries(req.params.uid));
   } else {
@@ -1047,7 +1091,6 @@ app.get('/api/plans/:uid/docs', (req, res) => {
 });
 
 app.post('/api/plans/:uid/docs', (req, res) => {
-  const { createPlanDocument } = require('./services/plan-documents-service');
   const { docType, title, body, author, authorType, orderHint, parentDocUid } = req.body || {};
   if (!docType || !title) {
     res.status(400).json({ error: 'docType and title are required' });
@@ -1058,7 +1101,7 @@ app.post('/api/plans/:uid/docs', (req, res) => {
     docType,
     title,
     body: body ?? '',
-    author: author ?? require('./services/settings-service').getAuthorKey('human'),
+    author: author ?? getAuthorKey('human'),
     authorType: authorType ?? 'human',
     orderHint: orderHint ?? null,
     parentDocUid: parentDocUid ?? null,
@@ -1069,27 +1112,23 @@ app.post('/api/plans/:uid/docs', (req, res) => {
 });
 
 app.get('/api/plans/:uid/docs/by-type/:docType', (req, res) => {
-  const { getPlanDocumentByType } = require('./services/plan-documents-service');
   const doc = getPlanDocumentByType(req.params.uid, req.params.docType);
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
   res.json(doc);
 });
 
 app.get('/api/plans/:uid/docs/search', (req, res) => {
-  const { searchPlanDocuments } = require('./services/plan-documents-service');
   const q = (req.query.q as string) || '';
   res.json(searchPlanDocuments(req.params.uid, q));
 });
 
 app.get('/api/plan-docs/:docUid', (req, res) => {
-  const { getPlanDocument } = require('./services/plan-documents-service');
   const doc = getPlanDocument(req.params.docUid);
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
   res.json(doc);
 });
 
 app.put('/api/plan-docs/:docUid', (req, res) => {
-  const { updatePlanDocument } = require('./services/plan-documents-service');
   const { title, body, docType, changeSummary, author, orderHint, parentDocUid } = req.body || {};
   const doc = updatePlanDocument(req.params.docUid, {
     title, body, docType, changeSummary, author, orderHint, parentDocUid,
@@ -1101,7 +1140,6 @@ app.put('/api/plan-docs/:docUid', (req, res) => {
 });
 
 app.delete('/api/plan-docs/:docUid', (req, res) => {
-  const { deletePlanDocument } = require('./services/plan-documents-service');
   deletePlanDocument(req.params.docUid);
   broadcast('plan-doc-deleted', { docUid: req.params.docUid });
   saveNow(() => exportDatabase());
@@ -1109,19 +1147,16 @@ app.delete('/api/plan-docs/:docUid', (req, res) => {
 });
 
 app.get('/api/plan-docs/:docUid/versions', (req, res) => {
-  const { getPlanDocumentVersions } = require('./services/plan-documents-service');
   res.json(getPlanDocumentVersions(req.params.docUid));
 });
 
 // --- Plan Phases API ---
 
 app.get('/api/plans/:uid/phases', (req, res) => {
-  const { listPhases } = require('./services/plan-phases-service');
   res.json(listPhases(req.params.uid));
 });
 
 app.post('/api/plans/:uid/phases', (req, res) => {
-  const { createPhase } = require('./services/plan-phases-service');
   const { title, scope, prerequisites, gitCheckpoint, acceptanceCriteria, status, phaseNumber } = req.body || {};
   if (!title) {
     res.status(400).json({ error: 'title is required' });
@@ -1143,7 +1178,6 @@ app.post('/api/plans/:uid/phases', (req, res) => {
 });
 
 app.put('/api/plan-phases/:phaseUid', (req, res) => {
-  const { updatePhase } = require('./services/plan-phases-service');
   const phase = updatePhase(req.params.phaseUid, req.body || {});
   if (!phase) { res.status(404).json({ error: 'Phase not found' }); return; }
   broadcast('plan-phase-updated', { phase });
@@ -1152,7 +1186,6 @@ app.put('/api/plan-phases/:phaseUid', (req, res) => {
 });
 
 app.delete('/api/plan-phases/:phaseUid', (req, res) => {
-  const { deletePhase } = require('./services/plan-phases-service');
   deletePhase(req.params.phaseUid);
   broadcast('plan-phase-deleted', { phaseUid: req.params.phaseUid });
   saveNow(() => exportDatabase());
@@ -1162,7 +1195,6 @@ app.delete('/api/plan-phases/:phaseUid', (req, res) => {
 // --- Proposed Changes API (Phase 12 §B) ---
 
 app.get('/api/plans/:uid/changes', (req, res) => {
-  const { listProposedChanges, summarizeChanges } = require('./services/plan-changes-service');
   if (req.query.summary === '1') {
     res.json(summarizeChanges(req.params.uid));
   } else {
@@ -1171,7 +1203,6 @@ app.get('/api/plans/:uid/changes', (req, res) => {
 });
 
 app.get('/api/plans/:uid/changes/:changeId', (req, res) => {
-  const { getChange } = require('./services/plan-changes-service');
   const change = getChange(req.params.uid, req.params.changeId);
   if (!change) { res.status(404).json({ error: 'Change not found' }); return; }
   res.json(change);
@@ -1180,7 +1211,6 @@ app.get('/api/plans/:uid/changes/:changeId', (req, res) => {
 // --- Plan File Sync API (Phase 13 §A) ---
 
 app.post('/api/plans/:uid/export', (req, res) => {
-  const { exportPlan } = require('./services/plan-file-service');
   const projectRoot = (req.query.path as string) || (req.body && req.body.projectRoot);
   if (!projectRoot) {
     res.status(400).json({ error: 'projectRoot path required (?path=… or body.projectRoot)' });
@@ -1196,7 +1226,6 @@ app.post('/api/plans/:uid/export', (req, res) => {
 });
 
 app.post('/api/plans/import', (req, res) => {
-  const { importPlan } = require('./services/plan-file-service');
   const planDir = (req.query.path as string) || (req.body && req.body.planDir);
   if (!planDir) {
     res.status(400).json({ error: 'planDir path required (?path=… or body.planDir)' });
@@ -1213,7 +1242,6 @@ app.post('/api/plans/import', (req, res) => {
 });
 
 app.get('/api/plans/discover', (req, res) => {
-  const { discoverPlanDirs } = require('./services/plan-file-service');
   const projectRoot = req.query.project as string | undefined;
   if (!projectRoot) {
     res.status(400).json({ error: 'project query param required' });
@@ -1223,7 +1251,6 @@ app.get('/api/plans/discover', (req, res) => {
 });
 
 app.get('/api/plans/:uid/file-status', (req, res) => {
-  const { getLinkedPlanDir } = require('./services/plan-file-service');
   const projectRoot = req.query.path as string | undefined;
   if (!projectRoot) {
     res.status(400).json({ error: 'path query param required' });
@@ -1234,7 +1261,6 @@ app.get('/api/plans/:uid/file-status', (req, res) => {
 });
 
 app.post('/api/plans/:uid/unlink', (req, res) => {
-  const { unlinkPlan } = require('./services/plan-file-service');
   const projectRoot = (req.query.path as string) || (req.body && req.body.projectRoot);
   if (!projectRoot) {
     res.status(400).json({ error: 'projectRoot required (?path=… or body.projectRoot)' });
@@ -1255,13 +1281,11 @@ app.get('/api/plan-templates', (req, res) => {
   // Phase 13 §C: include disk templates from <project>/.codetrellis/
   // templates/ + ~/.codetrellis/templates/ when a project path is
   // passed. No project = built-ins + user-global only.
-  const { listTemplates } = require('./services/plan-templates');
   const projectRoot = req.query.project as string | undefined;
   res.json(listTemplates(projectRoot));
 });
 
 app.post('/api/plans/:uid/publish-as-template', (req, res) => {
-  const { publishPlanAsTemplate } = require('./services/plan-template-publish-service');
   const { projectRoot, templateId, label, shortDescription, longDescription, defaultTitle, defaultPlanDescription, placeholders } = req.body || {};
   if (!projectRoot || !templateId) {
     res.status(400).json({ error: 'projectRoot + templateId required' });
@@ -1287,7 +1311,6 @@ app.post('/api/plans/:uid/publish-as-template', (req, res) => {
 });
 
 app.post('/api/plans/from-template', (req, res) => {
-  const { applyTemplate } = require('./services/plan-templates-service');
   const { templateId, projectPath, title, description, author, authorType, placeholderValues } = req.body || {};
   if (!templateId || !projectPath) {
     res.status(400).json({ error: 'templateId and projectPath are required' });
@@ -1313,7 +1336,6 @@ app.post('/api/plans/from-template', (req, res) => {
 app.post('/api/trellis/capture', (req, res) => {
   const { projectPath, planUid, name } = req.body;
   if (!projectPath) { res.status(400).json({ error: 'projectPath required' }); return; }
-  const { captureCurrentTrellis } = require('./services/trellis-service');
   const snapshot = captureCurrentTrellis(projectPath, planUid, name);
   broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name, snapshotType: snapshot.snapshotType } });
   saveNow(() => exportDatabase());
@@ -1321,20 +1343,17 @@ app.post('/api/trellis/capture', (req, res) => {
 });
 
 app.get('/api/trellis/snapshots', (req, res) => {
-  const { listSnapshots } = require('./services/trellis-service');
   const planUid = req.query.plan as string | undefined;
   res.json(listSnapshots(planUid));
 });
 
 app.get('/api/trellis/:id', (req, res) => {
-  const { getSnapshot } = require('./services/trellis-service');
   const snapshot = getSnapshot(parseInt(req.params.id));
   if (!snapshot) { res.status(404).json({ error: 'Snapshot not found' }); return; }
   res.json(snapshot);
 });
 
 app.get('/api/trellis/:id/diff', (req, res) => {
-  const { computeTrellisDiff } = require('./services/trellis-service');
   const diff = computeTrellisDiff(parseInt(req.params.id));
   if (!diff) { res.status(404).json({ error: 'Snapshot not found' }); return; }
   res.json(diff);
@@ -1351,7 +1370,6 @@ app.get('/api/comments', (req, res) => {
 app.post('/api/comments', (req, res) => {
   const { targetType, targetUid, body, commentType, parentUid } = req.body;
   if (!targetUid || !body) { res.status(400).json({ error: 'targetUid and body required' }); return; }
-  const { getAuthorKey } = require('./services/settings-service');
   const comment = commentService.addComment(targetType || 'plan', targetUid, getAuthorKey('human'), 'human', body, commentType, parentUid);
   broadcast('comment-added', { comment });
   saveNow(() => exportDatabase());
@@ -1384,15 +1402,29 @@ app.get('/api/mcp/config', (_req, res) => {
   res.json(getMcpConfig());
 });
 
+// --- Logs API (Phase 13 follow-up) ---
+
+app.get('/api/logs/tail', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const maxBytes = req.query.maxBytes ? Math.min(Number(req.query.maxBytes), 1024 * 1024) : 64 * 1024;
+  res.json({
+    path: getCurrentLogPath(),
+    content: tailLog(maxBytes),
+  });
+});
+
+app.get('/api/logs/path', (_req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  res.json({ logFile: getCurrentLogPath(), logDir: getLogDir() });
+});
+
 // --- Settings API (Phase 13 §D) ---
 
 app.get('/api/settings', (_req, res) => {
-  const { getSettings } = require('./services/settings-service');
   res.json(getSettings());
 });
 
 app.put('/api/settings', (req, res) => {
-  const { updateSettings, getSettings } = require('./services/settings-service');
   const before = getSettings();
   const next = updateSettings(req.body || {});
   // Tell the frontend (and any open Settings panels in other windows)
@@ -1413,7 +1445,6 @@ app.put('/api/settings', (req, res) => {
  * miss — never errors.
  */
 app.get('/api/identity/git-defaults', (req, res) => {
-  const { readGitIdentity } = require('./services/settings-service');
   const projectPath = (req.query.project as string | undefined) || undefined;
   res.json(readGitIdentity(projectPath));
 });
@@ -1421,8 +1452,23 @@ app.get('/api/identity/git-defaults', (req, res) => {
 // --- Server lifecycle ---
 
 const DEFAULT_PORT = 3001;
+const MAX_PORT_ATTEMPTS = 10;
 
-export async function startServer(port = DEFAULT_PORT): Promise<http.Server> {
+let boundBackendPort: number = DEFAULT_PORT;
+
+export function getBoundBackendPort(): number {
+  return boundBackendPort;
+}
+
+/**
+ * Boot the backend. Honours `CODETRELLIS_BACKEND_PORT` env var and
+ * autodetects a free port on `EADDRINUSE` (walks forward up to 10
+ * slots) — same behaviour as the MCP server. The actually-bound
+ * port is returned via `getBoundBackendPort()` so the Electron main
+ * process can pass it to the renderer (which otherwise can't reach
+ * the backend from a `file://` origin).
+ */
+export async function startServer(port?: number): Promise<http.Server> {
   await initDatabase();
   await initParser();
 
@@ -1436,20 +1482,46 @@ export async function startServer(port = DEFAULT_PORT): Promise<http.Server> {
     console.warn('[Backend] MCP server failed to start:', err);
   }
 
-  return new Promise((resolve) => {
-    server.listen(port, () => {
-      console.log(`[Backend] Server running on http://localhost:${port}`);
-      resolve(server);
-    });
+  const envPort = process.env.CODETRELLIS_BACKEND_PORT;
+  const requestedPort = envPort ? Number(envPort) : (port ?? DEFAULT_PORT);
+
+  return new Promise<http.Server>((resolve, reject) => {
+    const tryPort = (candidate: number, attemptsLeft: number) => {
+      const onListening = () => {
+        server.removeListener('error', onError);
+        boundBackendPort = candidate;
+        console.log(`[Backend] Server running on http://localhost:${boundBackendPort}${candidate !== requestedPort ? ` (requested ${requestedPort}, autodetected)` : ''}`);
+        resolve(server);
+      };
+      const onError = (err: NodeJS.ErrnoException) => {
+        server.removeListener('listening', onListening);
+        if (err.code === 'EADDRINUSE' && attemptsLeft > 0 && !envPort) {
+          console.warn(`[Backend] Port ${candidate} in use; trying ${candidate + 1}…`);
+          tryPort(candidate + 1, attemptsLeft - 1);
+        } else {
+          reject(err);
+        }
+      };
+      server.once('listening', onListening);
+      server.once('error', onError);
+      // Bind to loopback only — never accept connections from other
+      // machines on the network. The renderer (file:// in packaged
+      // mode) reaches us via http://localhost:<port> which resolves
+      // to 127.0.0.1; agents also connect via 127.0.0.1.
+      server.listen(candidate, '127.0.0.1');
+    };
+    tryPort(requestedPort, MAX_PORT_ATTEMPTS);
   });
 }
 
 export { app, server };
 
-// If run directly (web mode), start the server
-if (require.main === module) {
-  startServer().catch(console.error);
-}
+// Note: web-mode entry lives in `src/backend/index.ts` and imports
+// `startServer` explicitly. We intentionally don't auto-start on
+// require here — Vite bundles this file alongside `main.ts` for the
+// Electron build, and the `require.main === module` check evaluated
+// as true in the bundled context, causing a second startServer()
+// call → ERR_SERVER_ALREADY_LISTEN.
 
 type GitCommitSummary = {
   commitHash: string;

@@ -1,16 +1,59 @@
-import initSqlJs, { type Database } from 'sql.js';
+import type { Database } from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
 import { loadFromDisk } from './persistence';
 import { getResolverForLanguage } from './resolvers';
 
+/**
+ * Dynamically load sql.js. Two paths:
+ *   - **Dev / web mode**: `require('sql.js')` walks `node_modules`
+ *     normally. The string is computed (`'sql' + '.js'`) so Vite's
+ *     bundler doesn't statically resolve and try to bundle it — the
+ *     Emscripten UMD wrapper breaks when bundled (see
+ *     vite.main.config.ts).
+ *   - **Packaged Electron**: Forge's `extraResource` copies
+ *     `node_modules/sql.js/` to `<app>/Contents/Resources/sql.js/`;
+ *     we resolve that absolute path and require it directly.
+ */
+function loadSqlJs(): typeof import('sql.js').default {
+  const resourcesPath = (process as any).resourcesPath as string | undefined;
+  if (resourcesPath) {
+    const packagedPath = path.join(resourcesPath, 'sql.js', 'dist', 'sql-wasm.js');
+    if (fs.existsSync(packagedPath)) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require(packagedPath);
+    }
+  }
+  // Computed string keeps Vite from bundling it during the main
+  // build (it gets externalized regardless, but belt and braces).
+  const sqlJsName = 'sql' + '.js';
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require(sqlJsName);
+}
+
+const initSqlJs = loadSqlJs();
+
 let db: Database | null = null;
 
 export async function initDatabase(): Promise<void> {
   if (db) return;
 
-  const SQL = await initSqlJs();
+  // sql.js's `locateFile` callback tells the Emscripten loader where
+  // to find `sql-wasm.wasm`. In dev it lives next to sql-wasm.js
+  // inside node_modules; in production we point at the packaged
+  // resources path.
+  const resourcesPath = (process as any).resourcesPath as string | undefined;
+  const SQL = await initSqlJs({
+    locateFile: (file: string) => {
+      if (resourcesPath) {
+        const packaged = path.join(resourcesPath, 'sql.js', 'dist', file);
+        if (fs.existsSync(packaged)) return packaged;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require.resolve(`sql.js/dist/${file}`);
+    },
+  });
 
   // Try loading persisted database
   const savedData = loadFromDisk();

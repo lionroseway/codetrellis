@@ -140,7 +140,7 @@ export function WelcomeScreen() {
         {/* Logo */}
         <div className="relative mb-6">
           <div className="absolute inset-0 w-20 h-20 rounded-2xl bg-blue-500/10 blur-xl" />
-          <img src="/icon.png" alt="CodeTrellis" className="relative w-16 h-16 drop-shadow-[0_0_20px_rgba(59,130,246,0.3)]" />
+          <img src="./icon.png" alt="CodeTrellis" className="relative w-16 h-16 drop-shadow-[0_0_20px_rgba(59,130,246,0.3)]" />
         </div>
 
         <h1 className="text-2xl font-bold text-foreground tracking-tight mb-1">CodeTrellis</h1>

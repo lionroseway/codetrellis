@@ -311,7 +311,7 @@ export function TopBar() {
 
   return (
     <div className="glass-panel flex items-center h-11 px-3 border-b gap-2 shrink-0 overflow-visible relative z-40">
-      <img src="/icon.png" alt="" className="w-5 h-5 shrink-0" />
+      <img src="./icon.png" alt="" className="w-5 h-5 shrink-0" />
 
       <div className="flex items-center gap-1 min-w-0 overflow-x-auto flex-1">
         {tabs.map((tab) => (

@@ -17,6 +17,17 @@ import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../ser
 import { saveNow } from '../services/persistence';
 import { exportDatabase } from '../services/database';
 import { buildSkillGuide } from './skill-guide';
+// Top-of-file imports for everything we used to lazy-require. Vite's
+// Electron-main bundler doesn't preserve `require('../services/foo')`
+// relative paths correctly (the bundled main.js lives at
+// `.vite/build/main.js` but Vite emits the literal relative path),
+// so the runtime `require` fails with MODULE_NOT_FOUND. Static
+// imports get bundled cleanly. The original lazy-require pattern
+// existed to dodge a circular dependency that no longer applies.
+import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-system-service';
+import * as planFileService from '../services/plan-file-service';
+import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
+import { getSettings } from '../services/settings-service';
 
 /**
  * Default + max-attempt range. The user-configured port comes from
@@ -217,7 +228,6 @@ export async function startMcpServer(): Promise<void> {
       inputSchema: {},
     },
     async () => {
-      const { listCrossSystemEdges, getCrossSystemStats } = require('../services/cross-system-service');
       return {
         content: [{
           type: 'text' as const,
@@ -505,7 +515,7 @@ export async function startMcpServer(): Promise<void> {
       },
     },
     async ({ plan_uid, project_root }) => {
-      const { exportPlan } = require('../services/plan-file-service');
+      const { exportPlan } = planFileService;
       try {
         const result = exportPlan(plan_uid, project_root);
         broadcast('plan-exported', { planUid: plan_uid, planDir: result.planDir, files: result.files.length });
@@ -530,7 +540,7 @@ export async function startMcpServer(): Promise<void> {
       },
     },
     async ({ plan_dir }) => {
-      const { importPlan } = require('../services/plan-file-service');
+      const { importPlan } = planFileService;
       try {
         const result = importPlan(plan_dir);
         broadcast('plan-imported', { planUid: result.plan.uid, source: plan_dir });
@@ -560,7 +570,7 @@ export async function startMcpServer(): Promise<void> {
       inputSchema: { project_root: z.string() },
     },
     async ({ project_root }) => {
-      const { discoverPlanDirs } = require('../services/plan-file-service');
+      const { discoverPlanDirs } = planFileService;
       const dirs = discoverPlanDirs(project_root);
       return { content: [{ type: 'text' as const, text: JSON.stringify(dirs, null, 2) }] };
     }
@@ -576,7 +586,7 @@ export async function startMcpServer(): Promise<void> {
       },
     },
     async ({ plan_uid, project_root }) => {
-      const { unlinkPlan } = require('../services/plan-file-service');
+      const { unlinkPlan } = planFileService;
       try {
         const result = unlinkPlan(plan_uid, project_root);
         broadcast('plan-unlinked', { planUid: plan_uid });
@@ -603,7 +613,7 @@ export async function startMcpServer(): Promise<void> {
       },
     },
     async ({ plan_uid, project_root, template_id, label, short_description, long_description, default_title, default_plan_description }) => {
-      const { publishPlanAsTemplate } = require('../services/plan-template-publish-service');
+      // publishPlanAsTemplate already imported at top of file
       try {
         const result = publishPlanAsTemplate({
           planUid: plan_uid,
@@ -1326,7 +1336,7 @@ export async function startMcpServer(): Promise<void> {
   // forward up to MAX_PORT_ATTEMPTS slots on EADDRINUSE if autodetect
   // is enabled.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getSettings } = require('../services/settings-service');
+  // getSettings imported at top of file
   const settings = getSettings();
   const envPort = process.env.CODETRELLIS_MCP_PORT;
   const requestedPort = envPort ? Number(envPort) : (settings.mcp.port ?? DEFAULT_MCP_PORT);

@@ -25,6 +25,14 @@ const config: ForgeConfig = {
       // Land at `<app>/Contents/Resources/tree-sitter/` on macOS,
       // `<app>/resources/tree-sitter/` on Windows + Linux.
       path.resolve(__dirname, 'resources', 'tree-sitter'),
+      // Sql.js shipped as a whole runtime resource because bundling
+      // its Emscripten UMD wrapper breaks. Lands at
+      // `<resources>/sql.js/dist/sql-wasm.js` + `sql-wasm.wasm`.
+      // Loaded via dynamic require in services/database.ts.
+      path.resolve(__dirname, 'node_modules', 'sql.js'),
+      // web-tree-sitter — same story. Lands at
+      // `<resources>/web-tree-sitter/{tree-sitter.js,tree-sitter.wasm}`.
+      path.resolve(__dirname, 'node_modules', 'web-tree-sitter'),
     ],
   },
   hooks: {

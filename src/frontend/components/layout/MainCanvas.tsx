@@ -640,7 +640,7 @@ export function MainCanvas() {
           {/* Animated logo */}
           <div className="relative">
             <div className="absolute inset-0 w-14 h-14 rounded-2xl bg-accent/20 blur-xl animate-pulse" />
-            <img src="/icon.png" alt="" className="relative w-12 h-12 animate-pulse" />
+            <img src="./icon.png" alt="" className="relative w-12 h-12 animate-pulse" />
           </div>
 
           <div className="flex flex-col items-center gap-2">

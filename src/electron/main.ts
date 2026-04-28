@@ -1,6 +1,14 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
-import { startServer } from '../backend/server';
+import { startServer, getBoundBackendPort } from '../backend/server';
+import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
+
+// Mirror console.* to <dataDir>/logs/<YYYY-MM-DD>.log so the
+// packaged app produces a discoverable trail when no terminal is
+// attached. Must run BEFORE any code that does console.* so we
+// don't lose the early boot logs.
+installFileLogger();
+console.log(`[Electron] App boot — pid ${process.pid}, log file: ${getCurrentLogPath()}`);
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -8,16 +16,34 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 process.on('uncaughtException', (err) => {
   console.error('[Electron] Uncaught exception:', err);
 });
+process.on('unhandledRejection', (reason) => {
+  console.error('[Electron] Unhandled promise rejection:', reason);
+});
 
 let mainWindow: BrowserWindow | null = null;
+let backendStartError: Error | null = null;
 
-async function bootstrap(): Promise<void> {
-  // Start backend server (same one used in web mode)
-  await startServer(3001);
-  console.log('[Electron] Backend server started');
+/**
+ * Boot the embedded backend. Resolves to the actually-bound port (3001
+ * by default; autodetected forward on EADDRINUSE — see
+ * `startServer` in src/backend/server.ts). Failures are caught and
+ * stashed in `backendStartError` so the window opens regardless and
+ * the user sees something rather than just a Dock icon.
+ */
+async function bootstrap(): Promise<number | null> {
+  try {
+    await startServer();
+    const port = getBoundBackendPort();
+    console.log(`[Electron] Backend ready on port ${port}`);
+    return port;
+  } catch (err) {
+    backendStartError = err instanceof Error ? err : new Error(String(err));
+    console.error('[Electron] Backend failed to start:', backendStartError);
+    return null;
+  }
 }
 
-function createWindow(): void {
+function createWindow(backendPort: number | null): void {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -35,11 +61,19 @@ function createWindow(): void {
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    // Dev mode: Vite dev server is the origin; relative `/api` proxies
+    // to the backend. No port query needed.
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
-    );
+    // Packaged: the renderer runs from `file://` so relative `/api`
+    // fetches don't work. Pass the bound backend port + status as a
+    // query string; the frontend's bridge layer reads them and routes
+    // calls to `http://localhost:<port>/api`.
+    const renderHtml = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+    const query: Record<string, string> = {};
+    if (backendPort) query.port = String(backendPort);
+    if (backendStartError) query.backendError = backendStartError.message.slice(0, 200);
+    mainWindow.loadFile(renderHtml, { query });
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -52,12 +86,23 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  await bootstrap();
-  createWindow();
+  // Start the backend, but don't gate window creation on it. If the
+  // backend fails (port conflict, broken DB), we still want the
+  // window to open and surface a useful error instead of leaving the
+  // user looking at a Dock icon with nothing else.
+  const backendPort = await bootstrap();
+  createWindow(backendPort);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(backendPort);
   });
+}).catch((err) => {
+  // Final safety net — if even the activation handler throws, keep
+  // the app from silently hanging in Dock.
+  console.error('[Electron] Fatal startup error:', err);
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow(null);
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -78,7 +123,8 @@ ipcMain.handle('dialog:open-project', async () => {
 
 ipcMain.handle('project:scan', async (_event, projectPath: string) => {
   // Delegate to backend via HTTP (same as web mode)
-  const res = await fetch(`http://localhost:3001/api/project/scan`, {
+  const port = getBoundBackendPort();
+  const res = await fetch(`http://localhost:${port}/api/project/scan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectPath }),
@@ -87,11 +133,22 @@ ipcMain.handle('project:scan', async (_event, projectPath: string) => {
 });
 
 ipcMain.handle('db:search-symbols', async (_event, query: string) => {
-  const res = await fetch(`http://localhost:3001/api/symbols/search?q=${encodeURIComponent(query)}`);
+  const port = getBoundBackendPort();
+  const res = await fetch(`http://localhost:${port}/api/symbols/search?q=${encodeURIComponent(query)}`);
   return res.json();
 });
 
 ipcMain.handle('mcp:status', async () => {
-  const res = await fetch('http://localhost:3001/api/mcp/status');
+  const port = getBoundBackendPort();
+  const res = await fetch(`http://localhost:${port}/api/mcp/status`);
   return res.json();
 });
+
+ipcMain.handle('logs:reveal', async () => {
+  // Reveal the current day's log in Finder / Explorer / file manager.
+  const p = getCurrentLogPath();
+  shell.showItemInFolder(p);
+  return p;
+});
+
+ipcMain.handle('logs:get-path', async () => getCurrentLogPath());

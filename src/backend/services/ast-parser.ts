@@ -1,13 +1,39 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import * as TreeSitterModule from 'web-tree-sitter';
 import type { ParsedFile, SupportedLanguage } from '../../shared/types';
 import { createHash } from 'node:crypto';
 import { PARSER_PLUGINS, getPluginForFile, type ParserPlugin } from './parsers';
 import { getCallsiteExtractor } from './callsites';
 
-const TreeSitter = (TreeSitterModule as any).Parser || (TreeSitterModule as any).default?.Parser || TreeSitterModule;
-const Language = (TreeSitterModule as any).Language || TreeSitter.Language;
+/**
+ * Dynamically load `web-tree-sitter` — same pattern as sql.js in
+ * services/database.ts. The library does Emscripten-style global-
+ * environment shenanigans that don't survive Vite's bundling, so we
+ * mark it external (vite.main.config.ts) and require it at runtime
+ * from `node_modules` (dev) or `process.resourcesPath` (packaged).
+ */
+function loadWebTreeSitter(): any {
+  const resourcesPath = (process as any).resourcesPath as string | undefined;
+  if (resourcesPath) {
+    // web-tree-sitter v0.26+ ships a CJS entry named
+    // `web-tree-sitter.cjs` alongside its ESM `.js` variant. The
+    // packaged app has the whole package at
+    // `<resources>/web-tree-sitter/`.
+    const packaged = path.join(resourcesPath, 'web-tree-sitter', 'web-tree-sitter.cjs');
+    if (fs.existsSync(packaged)) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require(packaged);
+    }
+  }
+  // Computed string keeps Vite from statically resolving + bundling.
+  const wtsName = 'web-tree' + '-sitter';
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require(wtsName);
+}
+
+const TreeSitterModule: any = loadWebTreeSitter();
+const TreeSitter = TreeSitterModule.Parser || TreeSitterModule.default?.Parser || TreeSitterModule;
+const Language = TreeSitterModule.Language || TreeSitter.Language;
 
 /**
  * Where the tree-sitter WASM grammars live at runtime. Two cases:
