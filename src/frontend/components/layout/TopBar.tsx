@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
+import { useUiStore } from '../../stores/ui-store';
 import { getAPI } from '../../bridge';
 import type { ViewDepth } from '../../../shared/types';
 import { ConnectedAgents } from './ConnectedAgents';
@@ -362,6 +363,15 @@ export function TopBar() {
       </button>
 
       <ConnectedAgents />
+
+      <button
+        onClick={() => useUiStore.getState().setLearnTrellisOpen(true)}
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
+        title="Learn CodeTrellis"
+        aria-label="Open onboarding tour"
+      >
+        <GraduationCap size={14} />
+      </button>
 
       <button
         onClick={() => setSettingsOpen(true)}

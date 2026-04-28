@@ -12,6 +12,7 @@ import { StatusBar } from './components/layout/StatusBar';
 import { FolderPickerModal } from './components/FolderPickerModal';
 import { McpGuideModal } from './components/McpGuideModal';
 import { GettingStarted } from './components/GettingStarted';
+import { LearnTrellis, LEARN_TRELLIS_SEEN_KEY } from './components/LearnTrellis';
 import { ToastContainer } from './components/Toast';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -44,6 +45,28 @@ export function App() {
     };
     window.addEventListener('__test_open_project__', handler);
     return () => window.removeEventListener('__test_open_project__', handler);
+  }, []);
+
+  // First-run auto-open of the Learn Trellis takeover. Triggers
+  // exactly once per machine: when the user has no projects open
+  // and the localStorage seen-flag isn't set. We wait a beat so
+  // the splash render doesn't flash the takeover before the layout
+  // settles.
+  useEffect(() => {
+    const seen = localStorage.getItem(LEARN_TRELLIS_SEEN_KEY) === '1';
+    if (seen) return;
+    const tabs = useProjectStore.getState().tabs;
+    if (tabs.length > 0) {
+      // User already had a project open from a previous session —
+      // don't ambush them with onboarding. Mark seen so it doesn't
+      // surface unprompted later either.
+      localStorage.setItem(LEARN_TRELLIS_SEEN_KEY, '1');
+      return;
+    }
+    const t = setTimeout(() => {
+      useUiStore.getState().setLearnTrellisOpen(true);
+    }, 250);
+    return () => clearTimeout(t);
   }, []);
 
   // Skip the very first effect run — Allotment is still wiring up its
@@ -123,6 +146,7 @@ export function App() {
       <FolderPickerModal />
       <McpGuideModal />
       <GettingStarted />
+      <LearnTrellis />
       <ToastContainer />
     </div>
   );

@@ -35,6 +35,15 @@ interface UiState {
    */
   driftComparePlanUid: string | null;
 
+  /**
+   * Whether the Learn Trellis onboarding takeover is currently open.
+   * Auto-opens once on first launch (when the user has no projects
+   * and the localStorage seen-flag isn't set); also openable from
+   * the TopBar's "Learn" button. See `LearnTrellis.tsx`.
+   */
+  learnTrellisOpen: boolean;
+  setLearnTrellisOpen: (open: boolean) => void;
+
   toggleSidebar: () => void;
   toggleInspector: () => void;
   toggleAgentPanel: () => void;
@@ -63,6 +72,8 @@ export const useUiStore = create<UiState>((set) => ({
   planPanelExpanded: false,
   inspectorExpanded: false,
   driftComparePlanUid: null,
+  learnTrellisOpen: false,
+  setLearnTrellisOpen: (open) => set({ learnTrellisOpen: open }),
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleInspector: () => set((s) => ({ inspectorVisible: !s.inspectorVisible })),
