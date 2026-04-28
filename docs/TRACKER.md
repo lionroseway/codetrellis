@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-27
+Last updated: 2026-04-28
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -57,7 +57,7 @@ shared via the bridge abstraction.
 | Visual Plan Builder | 35 | Medium | "Add to plan" from the inspector exists; clicking nodes-on-graph to author isn't wired |
 | Multi-Agent Dashboard | 25 | Medium | TopBar `ConnectedAgents` (Phase 12 §D2) is the v1 — count + popover per session. Dedicated dashboard with per-agent cards, drift attribution, and conflict resolution UI not yet started. |
 | Plan export / source-controllable plans | 100 | High | Phase 13 §A + §B + §C all shipped. Plans round-trip to disk as YAML + markdown (§A), linked plans auto-sync via write-through + chokidar (§B), and templates ship as portable directories (§C — built-ins + `<project>/.codetrellis/templates/` + `~/.codetrellis/templates/` with `{{key}}` placeholder substitution). Multi-device + multi-team workflows fully covered via git. Spec: [PLAN-EXPORT.md](PLAN-EXPORT.md). |
-| Electron desktop build | 100 | High | `npm run make` produces a working DMG (~103 MB) with the standard `CodeTrellis.app` ↔ `Applications` drag layout. Backend embedded; loopback-only (127.0.0.1); CORS for `file://`; sql.js + web-tree-sitter shipped via `extraResource`; tree-sitter WASM grammars same. Build metadata generated at packaging time (`scripts/generate-build-info.js`) and exposed via `/api/build-info` + Settings → About. File logging at `<dataDir>/logs/<YYYY-MM-DD>.log` with daily rollover; Settings → Logs shows live tail + Reveal. **GitHub Actions release workflow** (`.github/workflows/release.yml`) builds DMG (arm64 + x64) / EXE / DEB / RPM on native runners on every `v*` tag push and attaches them to a Release. Code-signing scaffolding conditional on repo secrets. Outstanding: real signing certs, auto-updater. |
+| Electron desktop build | 100 | High | `npm run package:mac` / `:win` / `:linux` (electron-builder + electron-vite) produces working DMG (arm64 + x64, ~115 MB), NSIS installer EXE + Portable EXE (90 MB), DEB / RPM / AppImage. **Windows EXE builds cleanly from macOS** — no Wine. Backend embedded; loopback-only (127.0.0.1); CORS for `file://`; sql.js + web-tree-sitter shipped via `extraResources`; tree-sitter WASM grammars same. Build metadata generated at packaging time (`scripts/generate-build-info.js` via the `prepackage` npm hook) and exposed via `/api/build-info` + Settings → About. File logging at `<dataDir>/logs/<YYYY-MM-DD>.log` with daily rollover; Settings → Logs shows live tail + Reveal. **GitHub Actions release workflow** (`.github/workflows/release.yml`) builds DMG / EXE / DEB / RPM / AppImage on native runners on every `v*` tag push and attaches them to a Release. Code-signing scaffolding conditional on repo secrets. Outstanding: real signing certs, auto-updater. |
 | Auto-updater | 0 | – | **Not started.** Currently users have to download a fresh DMG to update. Plan: `update-electron-app` (or full `electron-updater`) wired against a GitHub Releases feed. App polls on launch + once a day; downloads a delta on quit; restart applies. Settings → About already shows build time + commit so users can manually compare against the latest release. |
 | Settings surface | 100 | High | Phase 13 §D shipped. Gear icon in TopBar → modal with 5 sections (Identity / MCP Server / Plans / Data / Telemetry). Persisted to `<dataDir>/settings.json`. REST `GET/PUT /api/settings`, `GET /api/identity/git-defaults`. MCP port now reads from settings + autodetects on collision (walks forward up to 10 ports). `CODETRELLIS_DATA_DIR` env var honoured (used by E2E harness per [E2E-HARNESS.md §7](E2E-HARNESS.md)). |
 | Learn Trellis (in-app onboarding) | 0 | – | Full-screen UI-takeover that walks users through CodeTrellis end-to-end: open a project → see graph → make a plan → wire an agent → watch it land → verify completion. Tooltip-driven wizard with skippable steps; designed so a developer becomes productive in under 10 minutes without reading docs. Needs design pass before code. |
@@ -66,6 +66,50 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 28, 2026 — Migrated to electron-builder + electron-vite (Windows EXE from macOS works)
+
+Replaced the electron-forge + plugin-vite + maker-squirrel stack
+with **electron-builder + electron-vite**, mirroring the swf
+project's setup. Headline win: `npm run package:win` now produces
+`CodeTrellis-Setup-0.1.0.exe` (NSIS, 94 MB) **from macOS** —
+no Wine, no Mono, no opaque Squirrel exit codes. NSIS is a native
+binary builder-binaries ships, so cross-compilation Just Works.
+
+Surface area:
+- `electron.vite.config.ts` consolidates the three per-target Vite
+  configs (`vite.main.config.ts`, `vite.preload.config.ts`,
+  `vite.renderer.config.ts` — all deleted) into one. Output lands
+  at `out/{main,preload,renderer}` instead of the old
+  `.vite/build/` + `.vite/renderer/` split.
+- `forge.config.ts` deleted. Its packaging config translated into
+  the `build` block in `package.json` (electron-builder's
+  convention): `appId`, `productName`, `directories.output`,
+  `extraResources` for tree-sitter / sql.js / web-tree-sitter,
+  `mac.target` (dmg + zip, arm64 + x64), `win.target` (nsis +
+  portable, x64), `linux.target` (deb + rpm + AppImage), DMG
+  layout with the Applications shortcut preserved.
+- Build-info + icon scripts now run via the `prepackage` npm-script
+  hook (was a Forge `generateAssets` hook).
+- `src/electron/main.ts` reads `ELECTRON_RENDERER_URL` (electron-
+  vite's dev convention) instead of `MAIN_WINDOW_VITE_DEV_SERVER_URL`;
+  renderer + preload paths updated for the new layout.
+- `.github/workflows/release.yml` switched to `package:mac-universal`
+  / `package:linux` / `package:win` and the new `out/make/*.{dmg,
+  exe,deb,rpm,AppImage}` artefact globs. Standard
+  electron-builder env names (`CSC_LINK`, `WIN_CSC_LINK`,
+  `APPLE_ID` …) for code-signing — no-op without secrets.
+
+Verified locally on macos-15 / arm64:
+- `npm run package:mac` → `CodeTrellis-0.1.0-arm64.dmg` (111 MB) +
+  `CodeTrellis-0.1.0-x64.dmg` (115 MB) + zips.
+- `npm run package:win` → `CodeTrellis-Setup-0.1.0.exe` (90 MB) +
+  `CodeTrellis-Portable-0.1.0.exe` (89 MB).
+- `app.asar` + `Resources/{tree-sitter,sql.js,web-tree-sitter}` all
+  present in the unpacked bundle.
+
+Tracker §1 Electron desktop build kept at 100. New baseline: cross-
+platform installers from a single host.
 
 ### Apr 27, 2026 — Electron DMG / EXE shipped
 

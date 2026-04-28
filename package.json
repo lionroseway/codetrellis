@@ -3,7 +3,7 @@
   "productName": "CodeTrellis",
   "version": "0.1.0",
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
-  "main": ".vite/build/main.js",
+  "main": "out/main/main.js",
   "scripts": {
     "predev": "bash scripts/free-dev-ports.sh",
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
@@ -11,14 +11,15 @@
     "dev:frontend": "vite --config vite.web.config.ts",
     "predev:backend": "bash scripts/free-dev-ports.sh 19432 3001",
     "dev:backend": "tsx watch src/backend/index.ts",
-    "start:electron": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "make:mac": "electron-forge make --platform=darwin --arch=arm64",
-    "make:mac-x64": "electron-forge make --platform=darwin --arch=x64",
-    "make:win": "electron-forge make --platform=win32 --arch=x64",
-    "make:linux": "electron-forge make --platform=linux --arch=x64",
-    "make:all": "electron-forge make --platform=darwin --arch=arm64 && electron-forge make --platform=win32 --arch=x64 && electron-forge make --platform=linux --arch=x64",
+    "dev:electron": "electron-vite dev",
+    "prepackage": "node scripts/build-icons.js && node scripts/generate-build-info.js",
+    "package": "electron-vite build && electron-builder",
+    "package:mac": "electron-vite build && electron-builder --mac --arm64",
+    "package:mac-x64": "electron-vite build && electron-builder --mac --x64",
+    "package:mac-universal": "electron-vite build && electron-builder --mac",
+    "package:win": "electron-vite build && electron-builder --win --x64",
+    "package:linux": "electron-vite build && electron-builder --linux",
+    "package:all": "electron-vite build && electron-builder --mac --arm64 --win --x64 --linux",
     "build:icons": "node scripts/build-icons.js",
     "build:info": "node scripts/generate-build-info.js",
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",
@@ -29,13 +30,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.6.0",
-    "@electron-forge/maker-deb": "^7.11.1",
-    "@electron-forge/maker-dmg": "^7.6.0",
-    "@electron-forge/maker-rpm": "^7.11.1",
-    "@electron-forge/maker-squirrel": "^7.11.1",
-    "@electron-forge/maker-zip": "^7.6.0",
-    "@electron-forge/plugin-vite": "^7.6.0",
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/express": "^5.0.0",
@@ -45,6 +41,8 @@
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^9.0.0",
     "electron": "^33.4.11",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
     "png2icons": "^2.0.1",
     "tailwindcss": "^4.0.0",
     "tree-sitter-java": "^0.23.5",
@@ -89,5 +87,98 @@
     "yaml": "^2.8.3",
     "zod": "^4.3.6",
     "zustand": "^5.0.0"
+  },
+  "build": {
+    "appId": "dev.codetrellis.app",
+    "productName": "CodeTrellis",
+    "copyright": "Copyright © 2026 CodeTrellis Contributors",
+    "directories": {
+      "output": "out/make",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/main/**/*",
+      "out/preload/**/*",
+      "out/renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/tree-sitter",
+        "to": "tree-sitter",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "node_modules/sql.js",
+        "to": "sql.js",
+        "filter": ["package.json", "dist/sql-wasm.js", "dist/sql-wasm.wasm"]
+      },
+      {
+        "from": "node_modules/web-tree-sitter",
+        "to": "web-tree-sitter",
+        "filter": ["package.json", "web-tree-sitter.cjs", "web-tree-sitter.wasm"]
+      }
+    ],
+    "asar": true,
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64", "x64"]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "resources/icon.icns",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "sign": false,
+      "title": "${productName} ${version}",
+      "icon": "resources/icon.icns",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        { "x": 130, "y": 180, "type": "file" },
+        { "x": 410, "y": 180, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "resources/icon.ico",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CodeTrellis"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "linux": {
+      "target": ["deb", "rpm", "AppImage"],
+      "icon": "resources/icon.png",
+      "category": "Development",
+      "maintainer": "CodeTrellis Contributors",
+      "vendor": "CodeTrellis",
+      "synopsis": "Monitor AI coding agents and visualize codebase architecture",
+      "description": "CodeTrellis monitors AI coding agents (starting with Claude Code) and visualizes their impact on codebase architecture in real-time."
+    }
   }
 }

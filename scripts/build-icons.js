@@ -2,9 +2,9 @@
 /**
  * Generate macOS `.icns` and Windows `.ico` from `resources/icon.png`.
  *
- * Run via `npm run build:icons` (added to package.json) or as a
- * `prepackage` hook in forge.config.ts so DMG / EXE builds always
- * have fresh icons. Idempotent — overwrites existing outputs.
+ * Run via `npm run build:icons` (added to package.json) or as the
+ * `prepackage` npm-script hook so DMG / EXE builds always have
+ * fresh icons. Idempotent — overwrites existing outputs.
  */
 const fs = require('node:fs');
 const path = require('node:path');

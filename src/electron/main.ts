@@ -10,8 +10,10 @@ import { installFileLogger, getCurrentLogPath } from '../backend/services/logger
 installFileLogger();
 console.log(`[Electron] App boot — pid ${process.pid}, log file: ${getCurrentLogPath()}`);
 
-declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
-declare const MAIN_WINDOW_VITE_NAME: string;
+// electron-vite injects this env var when running `electron-vite dev`.
+// In production builds it's undefined; we load index.html from the
+// packaged `out/renderer/` directory instead.
+declare const __dirname: string; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 process.on('uncaughtException', (err) => {
   console.error('[Electron] Uncaught exception:', err);
@@ -52,7 +54,9 @@ function createWindow(backendPort: number | null): void {
     show: false,
     backgroundColor: '#0a0a0b',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      // electron-vite emits preload to `out/preload/preload.js`; main.js
+      // lives at `out/main/main.js`, so we reach across with `..`.
+      preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -60,16 +64,20 @@ function createWindow(backendPort: number | null): void {
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    // Dev mode: Vite dev server is the origin; relative `/api` proxies
-    // to the backend. No port query needed.
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  // electron-vite sets `ELECTRON_RENDERER_URL` to the dev server URL
+  // when running `electron-vite dev`. In production builds, it's
+  // unset and we load the bundled html from disk.
+  const devUrl = process.env.ELECTRON_RENDERER_URL;
+  if (devUrl) {
+    mainWindow.loadURL(devUrl);
   } else {
     // Packaged: the renderer runs from `file://` so relative `/api`
     // fetches don't work. Pass the bound backend port + status as a
     // query string; the frontend's bridge layer reads them and routes
-    // calls to `http://localhost:<port>/api`.
-    const renderHtml = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+    // calls to `http://localhost:<port>/api`. The renderer html ends
+    // up at `out/renderer/index.html`, which inside the asar is at
+    // the same relative location to main.js (`../renderer/index.html`).
+    const renderHtml = path.join(__dirname, '../renderer/index.html');
     const query: Record<string, string> = {};
     if (backendPort) query.port = String(backendPort);
     if (backendStartError) query.backendError = backendStartError.message.slice(0, 200);

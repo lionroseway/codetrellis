@@ -4,18 +4,19 @@
 #   - `git push` of a `v*` tag (e.g. `v0.1.1`) — produces a public GitHub Release
 #   - manual dispatch from the Actions tab — produces a draft Release
 #
-# Each runner builds for its native OS (no cross-compilation, no
-# Mono/Wine on macOS, no headaches):
-#   macos-13       → CodeTrellis-<version>-x64.dmg + .zip
-#   macos-14       → CodeTrellis-<version>-arm64.dmg + .zip
-#   ubuntu-latest  → .deb + .rpm
-#   windows-latest → CodeTrellis-Setup.exe (Squirrel) + nupkg + zip
+# Builds via electron-builder + electron-vite (replaced electron-forge,
+# which needed Wine on macOS for the Windows installer). Each runner
+# now builds for its native OS — keeps signing, notarization, and
+# rpmbuild paths simple:
+#
+#   macos-14       → CodeTrellis-<version>-arm64.dmg + x64.dmg + zips
+#   ubuntu-latest  → .deb, .rpm, .AppImage
+#   windows-latest → CodeTrellis-Setup-<version>.exe (NSIS) + Portable.exe
 #
 # Code-signing scaffolding is wired via env: set the relevant repo
-# secrets and Forge's `osxSign` / `osxNotarize` / Squirrel
-# `certificateFile` will pick them up automatically. Without secrets,
-# the workflow still produces unsigned builds (warns at install on
-# Gatekeeper / SmartScreen).
+# secrets and electron-builder will pick them up automatically.
+# Without secrets, the workflow still produces unsigned builds (warns
+# at install on Gatekeeper / SmartScreen).
 
 name: release
 
@@ -36,26 +37,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14         # arm64
-            label: macOS arm64
+          - os: macos-14         # arm64 host, builds arm64 + x64 DMGs
+            label: macOS
+            package_script: package:mac-universal
             artifact_glob: |
-              out/make/**/*.dmg
-              out/make/**/*.zip
-          - os: macos-13         # x64
-            label: macOS x64
-            artifact_glob: |
-              out/make/**/*.dmg
-              out/make/**/*.zip
+              out/make/*.dmg
+              out/make/*.zip
           - os: ubuntu-latest
             label: Linux
+            package_script: package:linux
             artifact_glob: |
-              out/make/**/*.deb
-              out/make/**/*.rpm
+              out/make/*.deb
+              out/make/*.rpm
+              out/make/*.AppImage
           - os: windows-latest
             label: Windows
+            package_script: package:win
             artifact_glob: |
-              out/make/**/*.exe
-              out/make/**/*.nupkg
+              out/make/*.exe
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,15 +76,17 @@ jobs:
 
       - name: Build
         env:
-          # macOS code-signing + notarization (no-op without secrets)
-          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          # macOS code-signing + notarization (no-op without secrets).
+          # electron-builder reads these standard env names directly.
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Windows code-signing (no-op without secrets)
-          WINDOWS_CERTIFICATE_FILE: ${{ secrets.WINDOWS_CERTIFICATE_FILE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: npm run make
+          # Windows code-signing (no-op without secrets).
+          WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: npm run ${{ matrix.package_script }}
 
       - name: Upload build artefacts
         uses: actions/upload-artifact@v4
@@ -121,6 +122,6 @@ jobs:
             artifacts/**/*.dmg
             artifacts/**/*.zip
             artifacts/**/*.exe
-            artifacts/**/*.nupkg
             artifacts/**/*.deb
             artifacts/**/*.rpm
+            artifacts/**/*.AppImage

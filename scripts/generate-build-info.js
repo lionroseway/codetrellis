@@ -7,11 +7,12 @@
  *
  * Idempotent: re-runs always overwrite. Designed to run in two
  * places:
- *   - **`npm run package` / `make`**: via Forge's `generateAssets`
- *     hook. Picks the build time = now, commit = current HEAD.
+ *   - **`npm run package`**: via the `prepackage` npm script. Picks
+ *     the build time = now, commit = current HEAD, so every
+ *     DMG / EXE / DEB carries fresh metadata.
  *   - **Dev / typecheck**: the file is committed with sensible
- *     defaults (version from package.json, "(dev build)" markers)
- *     so it's never missing.
+ *     defaults (version from package.json) so it's never missing on
+ *     a fresh clone.
  *
  * Build number policy: count of commits reachable from HEAD. Stable,
  * monotonic, no external counter required. Falls back to 0 if we
@@ -55,7 +56,7 @@ const ts = `/**
  *   - the dev backend (run via tsx) can import it without an extra
  *     build step
  *
- * Forge's \`generateAssets\` hook re-runs this at packaging time so
+ * The \`prepackage\` npm script re-runs this at packaging time so
  * the DMG / EXE always carries fresh metadata.
  */
 export interface BuildInfo {
