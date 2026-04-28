@@ -19,6 +19,14 @@ export interface RestClient {
   createPlan(input: CreatePlanInput): Promise<PlanSummary>;
   getPlan(uid: string): Promise<PlanDetail>;
   getBuildInfo(): Promise<BuildInfo>;
+  /** Export the plan to disk under `<projectRoot>/.codetrellis/plans/<slug>/`. */
+  exportPlan(uid: string, projectRoot: string): Promise<ExportPlanResult>;
+  /** Import a plan from a `<plan-dir>/` (or `<plan-dir>/plan.yaml`). */
+  importPlan(planDir: string): Promise<{ plan: PlanDetail; [k: string]: unknown }>;
+  /** Status of file-link for a plan in a given project. */
+  getPlanFileStatus(uid: string, projectRoot: string): Promise<{ linked: boolean; planDir: string | null }>;
+  /** Unlink a plan from disk (deletes the on-disk plan dir). */
+  unlinkPlan(uid: string, projectRoot: string): Promise<{ removed: boolean; planDir: string | null }>;
   /** Raw escape hatch for endpoints we haven't typed yet. */
   raw(method: string, path: string, body?: unknown): Promise<Response>;
 }
@@ -113,6 +121,13 @@ export interface CreatePlanInput {
   }>;
 }
 
+export interface ExportPlanResult {
+  /** Absolute path to the plan dir (`<projectRoot>/.codetrellis/plans/<slug>`). */
+  planDir: string;
+  /** Absolute paths of every file written. */
+  files: string[];
+}
+
 export interface BuildInfo {
   version: string;
   buildTime: string;
@@ -183,6 +198,30 @@ export function createClient(baseUrl: string): RestClient {
     },
     async getBuildInfo() {
       return (await json('GET', '/api/build-info')) as BuildInfo;
+    },
+    async exportPlan(uid, projectRoot) {
+      return (await json(
+        'POST',
+        `/api/plans/${uid}/export?path=${encodeURIComponent(projectRoot)}`,
+      )) as ExportPlanResult;
+    },
+    async importPlan(planDir) {
+      return (await json('POST', '/api/plans/import', { planDir })) as {
+        plan: PlanDetail;
+        [k: string]: unknown;
+      };
+    },
+    async getPlanFileStatus(uid, projectRoot) {
+      return (await json(
+        'GET',
+        `/api/plans/${uid}/file-status?path=${encodeURIComponent(projectRoot)}`,
+      )) as { linked: boolean; planDir: string | null };
+    },
+    async unlinkPlan(uid, projectRoot) {
+      return (await json(
+        'POST',
+        `/api/plans/${uid}/unlink?path=${encodeURIComponent(projectRoot)}`,
+      )) as { removed: boolean; planDir: string | null };
     },
   };
 }
