@@ -1332,6 +1332,12 @@ darker); smooth transitions when expanding/collapsing.
 
 ## 7. Open Items (priority order)
 
+### 🐛 Bugs surfaced by user reports
+
+| Bug | Found by | Fix | Status |
+|---|---|---|---|
+| **Linux AppImage crashes on Ubuntu 24.04+ launch** with `FATAL:setuid_sandbox_host.cc(...) The SUID sandbox helper binary was found, but is not configured correctly`. Ubuntu 24.04 tightened AppArmor's unprivileged user-namespace policy, which breaks Chromium's setuid sandbox in AppImages. The chrome-sandbox binary inside the mounted AppImage can't be `chmod`'d (read-only mount). Same issue every Electron AppImage hits on modern Ubuntu. | User report on v0.1.0 | `src/electron/main.ts` now `app.commandLine.appendSwitch('no-sandbox')` when running on Linux AND `process.env.APPIMAGE` is set. Scoped to AppImage runs only — `.deb` installs (when we ship them) keep the sandbox. v0.1.1 auto-fixes; v0.1.0 users follow the `--no-sandbox` workaround documented in the public README + v0.1.0 release notes. | ✅ shipped (will land in v0.1.1) |
+
 ### 🐛 Bugs surfaced by the harness (added Apr 28)
 
 The act of writing the harness already paid off — these gaps were

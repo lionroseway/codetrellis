@@ -10,6 +10,32 @@ import { installFileLogger, getCurrentLogPath } from '../backend/services/logger
 installFileLogger();
 console.log(`[Electron] App boot — pid ${process.pid}, log file: ${getCurrentLogPath()}`);
 
+// Linux AppImage sandboxing fix.
+//
+// Modern Ubuntu (24.04+) tightened AppArmor's unprivileged
+// user-namespace policy, which breaks Chromium's setuid sandbox
+// when launched from an AppImage. The user sees:
+//
+//     FATAL:setuid_sandbox_host.cc(...) The SUID sandbox helper
+//     binary was found, but is not configured correctly.
+//
+// The chrome-sandbox binary inside the mounted AppImage can't be
+// chmod'd because the mount is read-only. The pragmatic fix all
+// other Electron AppImages (Cursor, Obsidian, etc.) ship is to
+// disable the sandbox when running from an AppImage on Linux.
+// The renderer loads our own bundled HTML over a loopback HTTP
+// origin — the standard sandbox threat model (untrusted web
+// content) doesn't really apply to a local dev tool. .deb installs
+// (when we ship them) get a properly-permissioned chrome-sandbox
+// and DON'T need this switch.
+//
+// We scope the switch to AppImage runs specifically (env var set
+// by the AppImage runtime) so other Linux installs stay sandboxed.
+if (process.platform === 'linux' && process.env.APPIMAGE) {
+  app.commandLine.appendSwitch('no-sandbox');
+  console.log('[Electron] AppImage detected on Linux — running with --no-sandbox');
+}
+
 // electron-vite injects this env var when running `electron-vite dev`.
 // In production builds it's undefined; we load index.html from the
 // packaged `out/renderer/` directory instead.
