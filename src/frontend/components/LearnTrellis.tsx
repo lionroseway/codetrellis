@@ -30,6 +30,7 @@ import {
   Plug,
   Sparkles,
   Layers,
+  Wrench,
   CheckCircle2,
   Copy,
 } from 'lucide-react';
@@ -134,11 +135,26 @@ const STEPS: Step[] = [
       ),
     },
     bullets: [
+      'First time connecting? Open the prompt with: "Read `codetrellis://skill/quickstart` and confirm available tools." Saves a lot of trial.',
       'Different agents can own different phases (Claude does the refactor, Codex does the tests)',
       "Tasks auto-claim — two agents won't pick up the same one",
       'Every tool call shows up in the timeline attributed to the right agent',
     ],
     hint: 'Click the MCP pill in the TopBar to copy this snippet straight to clipboard.',
+  },
+  {
+    Icon: Wrench,
+    eyebrow: 'The agent toolbox',
+    heading: 'What the agent can actually do — and how to write good prompts.',
+    body:
+      'The MCP server exposes 30+ tools the agent can call. Knowing what\'s available means you can ask for it directly ("get the drift report") instead of guessing. There are also skill resources that let an agent self-onboard — point a fresh agent at one and it learns the patterns automatically.',
+    bullets: [
+      'Browse the codebase: `search_symbols`, `get_dependencies`, `check_architecture`, `list_cross_system_edges`',
+      'Plans + tasks: `list_plans`, `get_plan`, `claim_task`, `update_task`, `get_next_task`',
+      'Drift + verification: `get_drift_report`, `list_proposed_changes`',
+      'Skill resources for the agent to read: `codetrellis://skill` (overview), `…/quickstart` (first time), `…/power-user` (deep usage)',
+    ],
+    hint: 'Try this prompt: "Read `codetrellis://skill/quickstart`, then summarise the active plan and propose what to work on next."',
   },
   {
     Icon: Sparkles,
