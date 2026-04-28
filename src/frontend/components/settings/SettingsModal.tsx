@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Terminal,
   ExternalLink,
+  Info,
 } from 'lucide-react';
 import type { AppSettings } from '@shared/types';
 
@@ -30,7 +31,7 @@ import type { AppSettings } from '@shared/types';
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'logs' | 'telemetry';
+type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'logs' | 'telemetry' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
@@ -39,6 +40,7 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'data', label: 'Data', Icon: HardDrive },
   { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
+  { key: 'about', label: 'About', Icon: Info },
 ];
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
@@ -141,6 +143,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <DataSection settings={settings} onChange={update} />
             )}
             {section === 'telemetry' && <TelemetrySection />}
+            {section === 'about' && <AboutSection />}
           </div>
 
           {saving && (
@@ -494,6 +497,110 @@ function TelemetrySection() {
 }
 
 // --- shared bits ---
+
+// --- About ---
+
+interface BuildInfo {
+  version: string;
+  buildTime: string;
+  buildNumber: number;
+  commit: string;
+  commitShort: string;
+  branch: string;
+  dirty: boolean;
+}
+
+function AboutSection() {
+  const [info, setInfo] = useState<BuildInfo | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/build-info')
+      .then((r) => r.json())
+      .then((data: BuildInfo) => setInfo(data))
+      .catch(() => setInfo(null));
+  }, []);
+
+  const copyAll = () => {
+    if (!info) return;
+    const txt = [
+      `CodeTrellis v${info.version} (build #${info.buildNumber})`,
+      `Built: ${info.buildTime}`,
+      `Commit: ${info.commitShort}${info.dirty ? ' (dirty)' : ''} (${info.branch})`,
+    ].join('\n');
+    navigator.clipboard.writeText(txt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  if (!info) {
+    return <p className="text-[11px] text-foreground-subtle">Loading build info…</p>;
+  }
+
+  const buildDate = new Date(info.buildTime);
+  const buildAge = formatRelativeTime(buildDate);
+
+  return (
+    <>
+      <div className="flex items-start gap-3">
+        <img src="./icon.png" alt="" className="w-12 h-12 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)] shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-[14px] font-semibold text-foreground">CodeTrellis</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[11px] text-foreground-muted font-mono">v{info.version}</span>
+            <span className="text-[10px] text-foreground-subtle">·</span>
+            <span className="text-[10px] text-foreground-subtle">build #{info.buildNumber}</span>
+            {info.dirty && (
+              <span className="text-[9px] text-amber-300 bg-amber-500/[0.1] border border-amber-500/20 px-1.5 py-0.5 rounded">
+                dirty
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={copyAll}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] shrink-0"
+          title="Copy build info to clipboard (paste when reporting issues)"
+        >
+          {copied ? <CheckCircle2 size={11} className="text-green-400" /> : <Copy size={11} />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+
+      <div className="space-y-1 text-[11px] text-foreground-muted">
+        <KV label="Built" value={`${buildDate.toLocaleString()} (${buildAge})`} />
+        <KV label="Commit" value={info.commitShort + (info.branch && info.branch !== 'HEAD' ? ` · ${info.branch}` : '')} mono />
+        <KV label="Build #" value={String(info.buildNumber)} mono />
+      </div>
+
+      <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-2 border-t border-white/[0.04]">
+        Updates land as new DMG / EXE downloads. To check for a newer build, compare the <span className="text-foreground-muted">Built</span> timestamp above with the latest release on{' '}
+        <span className="text-accent">codetrellis.dev</span>. Auto-update is on the roadmap (electron-updater + GitHub Releases).
+      </p>
+
+      <p className="text-[10px] text-amber-200/80 leading-relaxed">
+        <strong>Installing on macOS:</strong> open the <code className="font-mono bg-white/[0.05] px-1 rounded">.dmg</code> file, then drag the <code className="font-mono bg-white/[0.05] px-1 rounded">CodeTrellis.app</code> icon onto the <code className="font-mono bg-white/[0.05] px-1 rounded">Applications</code> shortcut in the same window. Don't run the .app from the DMG mount or your Downloads folder — it won't update cleanly.
+      </p>
+    </>
+  );
+}
+
+function KV({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex gap-2">
+      <span className="text-foreground-subtle w-16 shrink-0">{label}</span>
+      <span className={mono ? 'font-mono text-foreground' : 'text-foreground'}>{value}</span>
+    </div>
+  );
+}
+
+function formatRelativeTime(d: Date): string {
+  const ageMs = Date.now() - d.getTime();
+  if (ageMs < 60_000) return 'just now';
+  if (ageMs < 3600_000) return `${Math.floor(ageMs / 60_000)}m ago`;
+  if (ageMs < 86400_000) return `${Math.floor(ageMs / 3600_000)}h ago`;
+  return `${Math.floor(ageMs / 86400_000)}d ago`;
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

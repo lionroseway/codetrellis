@@ -15,6 +15,7 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "build:icons": "node scripts/build-icons.js",
+    "build:info": "node scripts/generate-build-info.js",
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",
     "test": "playwright test",
     "test:ui": "playwright test --ui",

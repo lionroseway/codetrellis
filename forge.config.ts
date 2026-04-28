@@ -36,18 +36,40 @@ const config: ForgeConfig = {
     ],
   },
   hooks: {
-    // Regenerate platform icons before packaging so a fresh clone
-    // doesn't ship a stale icon.icns / icon.ico.
+    // Run before packaging:
+    //   - regenerate platform icons (icon.icns / icon.ico) from
+    //     resources/icon.png so a fresh clone doesn't ship stale ones
+    //   - regenerate src/shared/build-info.ts with the current
+    //     version + ISO timestamp + git commit so every DMG / EXE
+    //     carries accurate metadata
     generateAssets: async () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('./scripts/build-icons.js');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('./scripts/generate-build-info.js');
     },
   },
   makers: [
-    // macOS DMG
+    // macOS DMG — ships with an Applications shortcut so the
+    // install workflow is "open .dmg → drag .app onto Applications".
+    // Without `additionalDMGOptions.contents` the maker emits a bare
+    // DMG with just the .app, which makes users double-click to run
+    // it directly from the mount and skip the install step.
     {
       name: '@electron-forge/maker-dmg',
       config: {
+        name: 'CodeTrellis',
+        icon: path.resolve(__dirname, 'resources', 'icon.icns'),
+        format: 'ULFO', // smallest compressed format on modern macOS
+        additionalDMGOptions: {
+          window: {
+            size: { width: 540, height: 380 },
+          },
+        },
+        contents: ((opts: any) => [
+          { x: 130, y: 180, type: 'file' as const, path: opts.appPath },
+          { x: 410, y: 180, type: 'link' as const, path: '/Applications' },
+        ]) as any,
         // Apple Developer code-signing happens via `osxSign` in
         // packagerConfig when CODESIGN_IDENTITY env var is set;
         // notarization via `osxNotarize`. Both no-op without env.

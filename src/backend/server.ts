@@ -51,6 +51,7 @@ import {
 } from './services/plan-documents-service';
 import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
 import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
+import { BUILD_INFO } from '../shared/build-info';
 
 const app = express();
 app.use(express.json());
@@ -1414,8 +1415,13 @@ app.get('/api/logs/tail', (req, res) => {
 });
 
 app.get('/api/logs/path', (_req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   res.json({ logFile: getCurrentLogPath(), logDir: getLogDir() });
+});
+
+// --- Build info (so Settings → About can show what's actually running) ---
+
+app.get('/api/build-info', (_req, res) => {
+  res.json(BUILD_INFO);
 });
 
 // --- Settings API (Phase 13 §D) ---
