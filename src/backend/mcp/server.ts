@@ -39,7 +39,13 @@ import { getSettings } from '../services/settings-service';
 const DEFAULT_MCP_PORT = 19432;
 const MAX_PORT_ATTEMPTS = 10;
 
-let mcpServer: McpServer | null = null;
+// Per-session McpServer instances, keyed by transport sessionId.
+// Each agent connection gets its own McpServer object — sharing a
+// singleton would re-bind the underlying Protocol's single
+// `_transport` slot when a second agent connects, severing the first
+// agent's stream. Same-process, same-port, just per-conversation
+// bookkeeping (no new ports / no new processes).
+let connectedServers = new Map<string, McpServer>();
 let httpServer: http.Server | null = null;
 let boundPort: number = DEFAULT_MCP_PORT;
 let connectedTransports = new Map<string, SSEServerTransport>();
@@ -100,10 +106,21 @@ function inferAgentFromSession(sessionId: string | null): { type: string | null;
   return { type: latest.agentType ?? 'mcp-agent', model: latest.model ?? null };
 }
 
-export async function startMcpServer(): Promise<void> {
-  if (mcpServer) return;
-
-  mcpServer = new McpServer(
+/**
+ * Build a fresh `McpServer` instance with all tools + resources
+ * registered. Called **once per agent connection** — the SDK's
+ * `Server.connect(transport)` is single-transport, so multi-agent
+ * support requires one server instance per session. All instances
+ * share the same module-level state (database, plan service,
+ * sessionService, etc.); only the MCP transport binding is
+ * per-session.
+ *
+ * Same process, same port — no ports / processes / network surface
+ * are added by spawning multiple instances. This is purely an
+ * in-memory bookkeeping refactor.
+ */
+function setupMcpServerInstance(): McpServer {
+  const mcpServer = new McpServer(
     { name: 'codetrellis', version: '0.1.0' },
     {
       capabilities: {
@@ -1245,6 +1262,18 @@ export async function startMcpServer(): Promise<void> {
     }
   );
 
+  return mcpServer;
+}
+
+/**
+ * Boot the MCP HTTP/SSE server. Called once at backend startup.
+ * Per-connection server *instances* are built lazily inside the
+ * `/sse` handler via `setupMcpServerInstance()` — the HTTP server is
+ * a singleton, the McpServer objects are per-agent.
+ */
+export async function startMcpServer(): Promise<void> {
+  if (httpServer) return; // already started
+
   // --- HTTP Server with SSE ---
 
   const app = http.createServer(async (req, res) => {
@@ -1264,6 +1293,17 @@ export async function startMcpServer(): Promise<void> {
       const sessionId = transport.sessionId;
       connectedTransports.set(sessionId, transport);
 
+      // Build a fresh MCP server *instance* for this agent
+      // connection. The SDK's `Server.connect(transport)` is
+      // single-transport — sharing one server across multiple SSE
+      // connections re-binds its internal `_transport` slot and
+      // severs whichever transport was bound first. Each agent
+      // gets its own server object; all instances share the same
+      // module-level state (database, plan service, etc.) so the
+      // app's data is still single-source-of-truth.
+      const mcpServer = setupMcpServerInstance();
+      connectedServers.set(sessionId, mcpServer);
+
       // Auto-register a session on connect so EVERY connected agent
       // shows up in the active-sessions list (and per-tool events get
       // attribution) even if the agent never calls register_session
@@ -1276,6 +1316,13 @@ export async function startMcpServer(): Promise<void> {
 
       res.on('close', () => {
         connectedTransports.delete(sessionId);
+        const sessionServer = connectedServers.get(sessionId);
+        if (sessionServer) {
+          // Best-effort close — ignore errors so a cleanup failure
+          // for one agent doesn't take down the whole process.
+          sessionServer.close().catch(() => { /* ignore */ });
+          connectedServers.delete(sessionId);
+        }
         sessionService.disconnectSession(sessionId);
         console.log(`[MCP] Client disconnected: ${sessionId}`);
         broadcast('agent-event', {
@@ -1298,7 +1345,7 @@ export async function startMcpServer(): Promise<void> {
       });
       broadcast('mcp-session-changed', { reason: 'connect' });
 
-      await mcpServer!.connect(transport);
+      await mcpServer.connect(transport);
       return;
     }
 
@@ -1408,9 +1455,13 @@ export async function stopMcpServer(): Promise<void> {
     httpServer.close();
     httpServer = null;
   }
-  if (mcpServer) {
-    await mcpServer.close();
-    mcpServer = null;
-  }
+  // Close every per-session server instance. We don't `await` on
+  // each one in a loop — close() can take a moment and we'd rather
+  // surface "server stopped" promptly than block on every agent's
+  // teardown.
+  await Promise.allSettled(
+    Array.from(connectedServers.values()).map((s) => s.close()),
+  );
+  connectedServers.clear();
   connectedTransports.clear();
 }
