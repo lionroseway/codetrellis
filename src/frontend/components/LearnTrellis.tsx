@@ -60,7 +60,12 @@ const STEPS: Step[] = [
     eyebrow: 'Welcome',
     heading: 'A few ways people use CodeTrellis. Pick what fits.',
     body:
-      "There's no one right way. Some people just want to watch the codebase change as they work. Others build out detailed plans and hand them off to AI. Most do both, depending on the day. We'll walk through seven common workflows — skip any that aren't relevant.",
+      "There's no one right way. Some people just want to watch the codebase change as they work. Others build out detailed plans and hand them off to AI. Most do both, depending on the day. We'll walk through eight common workflows — skip any that aren't relevant.",
+    bullets: [
+      "Everything's local — your code never leaves your machine, and the AI cost stays on your existing AI usage",
+      'Works with or without an AI agent — Claude Code, Codex, Cursor, aider, anything that speaks MCP',
+      'Dots above are clickable — jump to whichever step matters most',
+    ],
     hint: 'About 4 minutes total. Skip whenever — come back via the Learn button in the TopBar.',
   },
   {
@@ -68,13 +73,27 @@ const STEPS: Step[] = [
     eyebrow: 'Watching live',
     heading: "Just want to see what's changing? You don't need a plan.",
     body:
-      "Open a project, leave it open, and code as normal. The graph updates live as files change — yours, an AI's, anyone's. This is the lightest way to use CodeTrellis.",
+      "Click the + in the top-left of the TopBar to open any project on disk. Leave it open and code as normal — yours, an AI's, anyone's edits update the graph live as files change. This is the lightest way to use CodeTrellis.",
     bullets: [
       'New / modified / deleted files glow as they change',
       'Cross-system edges (e.g. a TS fetch ↔ a Python route) update automatically',
       'Click any node to drill in — file, symbol, or whole package',
     ],
-    hint: 'Live mode is the default. The other three modes earn their keep when you have a plan to compare against.',
+    hint: "Live mode is the default. The next step shows the other three lenses.",
+  },
+  {
+    Icon: Layers,
+    eyebrow: 'The four modes',
+    heading: 'Live / Baseline / Planned / Diff — when each one earns its keep.',
+    body:
+      'Four buttons in the TopBar swap your view of the same graph. Same nodes, different lens. You\'ll spend most of your agent-watching time in Diff.',
+    bullets: [
+      "Live — disk right now. Default. Just shows what's there.",
+      'Baseline — a pinned snapshot (e.g. `git main`). What "before" looked like.',
+      "Planned — what the active plan says SHOULD be there once it's done.",
+      'Diff — Live vs Baseline (or vs Planned). Where the green/orange/red glow shows up.',
+    ],
+    hint: 'Open Diff mode when an agent is mid-flight to see drift in real time.',
   },
   {
     Icon: ClipboardList,
@@ -120,7 +139,7 @@ const STEPS: Step[] = [
     eyebrow: 'Pointing agents',
     heading: 'Tell agents which phase or task to take.',
     body:
-      'Connect the agent (snippet below). In your prompt, name the area: "work the next task on the auth-refactor plan, phase 2" or "focus only on the API phase." The agent calls `get_next_task` and goes.',
+      'Connect the agent over MCP — Model Context Protocol, the open standard agents use to call tools (same way Claude Code, Cursor, and Codex talk to anything else). Then in your prompt, name the area: "work the next task on the auth-refactor plan, phase 2" or "focus only on the API phase." The agent calls `get_next_task` and goes.',
     snippet: {
       language: 'json',
       content: JSON.stringify(
@@ -168,20 +187,6 @@ const STEPS: Step[] = [
       'Multi-device: just `git pull` and the agent on the new machine re-reads from disk',
     ],
     hint: 'If the agent loses track mid-task, ask it to call `get_drift_report` for an instant catch-up.',
-  },
-  {
-    Icon: Layers,
-    eyebrow: 'The four modes',
-    heading: 'Live / Baseline / Planned / Diff — when each one earns its keep.',
-    body:
-      'Four buttons in the TopBar swap your view of the same graph. Same nodes, different lens.',
-    bullets: [
-      'Live — disk right now. Default. Just shows what\'s there.',
-      'Baseline — a pinned snapshot (e.g. `git main`). What "before" looked like.',
-      'Planned — what the active plan says SHOULD be there once it\'s done.',
-      'Diff — Live vs Baseline (or vs Planned). Where the green/orange/red glow shows up.',
-    ],
-    hint: "Diff mode is where you spend most of your agent-watching time.",
   },
 ];
 
@@ -258,7 +263,7 @@ export function LearnTrellis() {
 
         {/* Step indicator */}
         <div className="flex justify-center pt-7 pb-4 gap-1.5">
-          {STEPS.map((_, i) => (
+          {STEPS.map((s, i) => (
             <button
               key={i}
               onClick={() => setStepIndex(i)}
@@ -269,7 +274,8 @@ export function LearnTrellis() {
                   ? 'w-2 bg-accent/50'
                   : 'w-2 bg-white/10'
               }`}
-              aria-label={`Go to step ${i + 1}`}
+              title={`${i + 1}. ${s.eyebrow}`}
+              aria-label={`Step ${i + 1}: ${s.eyebrow}`}
             />
           ))}
         </div>
