@@ -45,8 +45,8 @@ the [public releases repo](https://github.com/lionroseway/codetrellis-releases/r
 | macOS (Intel) | `CodeTrellis-<version>-x64.dmg` | Drag to /Applications |
 | Windows installer | `CodeTrellis-Setup-<version>.exe` | NSIS — installs into Programs |
 | Windows portable | `CodeTrellis-Portable-<version>.exe` | Run anywhere |
-| Linux (.deb) | `CodeTrellis-<version>.deb` | Debian, Ubuntu, Mint |
-| Linux (AppImage) | `CodeTrellis-<version>.AppImage` | Fedora, RHEL, Arch |
+| Linux AppImage (x64) | `CodeTrellis-<version>.AppImage` | All distros — `chmod +x` then run |
+| Linux AppImage (arm64) | `CodeTrellis-<version>-arm64.AppImage` | ARM Linux — same install |
 
 Builds aren't yet code-signed, so the OS will warn on first launch.
 On macOS: right-click → **Open** → **Open**. On Windows: **More info**
@@ -122,7 +122,7 @@ npm run package:mac           # macOS arm64 DMG
 npm run package:mac-x64       # macOS Intel DMG
 npm run package:mac-universal # both arches
 npm run package:win           # Windows NSIS installer + portable EXE
-npm run package:linux         # Linux deb + rpm + AppImage (rpm needs rpmbuild)
+npm run package:linux         # Linux AppImage (deb/rpm need a Linux runner — see scripts/release.sh)
 ```
 
 Outputs land in `out/make/`. The build is via **electron-builder +
@@ -137,10 +137,11 @@ npm run release:dry-run # build only, skip upload
 ```
 
 The script (`scripts/release.sh`):
-1. Builds DMG (arm64 + x64), Windows NSIS + Portable, Linux deb + AppImage
+1. Builds DMG (arm64 + x64), Windows NSIS + Portable, Linux AppImage (arm64 + x64)
 2. Uploads to **`lionroseway/codetrellis-releases`** as a tagged GitHub Release
-3. Skips rpm by default (no `rpmbuild` on macOS — AppImage covers
-   Fedora/RHEL/Arch users)
+3. Skips deb + rpm — `fpm` is broken on Apple Silicon and `rpmbuild`
+   isn't on macOS at all. AppImage runs on Debian / Ubuntu / Fedora /
+   RHEL / Arch unchanged. Switch to a Linux runner if you need deb/rpm.
 
 The source repo (this one) stays private; only the public releases
 repo gets the binaries. Source-side tags and CI runs are decoupled.

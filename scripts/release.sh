@@ -7,9 +7,15 @@
 # a GitHub Release on the **public** `codetrellis-releases` repo.
 # Source stays in the private `codetrellis` repo.
 #
-# rpm is intentionally skipped — `rpmbuild` isn't on macOS and
-# AppImage already covers Fedora / RHEL / Arch users. Add it back via
-# CI on a Linux runner if/when needed.
+# Linux:
+#   - AppImage works for both arm64 + x64 from macOS hosts.
+#   - rpm is skipped — `rpmbuild` isn't on macOS.
+#   - **deb is skipped** on macOS too: electron-builder's bundled
+#     `fpm` binary produces a 96-byte truncated archive on Apple
+#     Silicon (open issue upstream). Debian/Ubuntu users can run the
+#     AppImage in the meantime; we'll re-enable deb once we have a
+#     Linux CI runner.
+#   - tl;dr: Linux output = arm64 + x64 AppImage only.
 #
 # Usage:
 #   ./scripts/release.sh                # uses version from package.json
@@ -85,10 +91,12 @@ if [[ "$SKIP_BUILD" -eq 0 ]]; then
   log "  → Windows NSIS + Portable"
   npm run package:win
 
-  log "  → Linux deb + AppImage (skipping rpm — needs rpmbuild)"
-  # Override the package.json `linux.target` config from the CLI so we
-  # don't try to build rpm. electron-builder takes targets after `--linux`.
-  npx electron-builder --linux deb AppImage
+  log "  → Linux AppImage (arm64 + x64) — skipping deb/rpm (broken fpm on macOS)"
+  # AppImage builds reliably on macOS for both arches; deb's fpm tool
+  # ships broken for Apple Silicon, rpm needs `rpmbuild`. AppImage is
+  # universal enough to ship single-binary; users who specifically
+  # want deb can install AppImage in the interim.
+  npx electron-builder --linux AppImage --arm64 --x64
 else
   log "Skipping build (--skip-build); using existing $OUT_DIR"
 fi
@@ -103,8 +111,8 @@ expected_files=(
   "${OUT_DIR}/CodeTrellis-${VERSION}-x64.dmg"
   "${OUT_DIR}/CodeTrellis-Setup-${VERSION}.exe"
   "${OUT_DIR}/CodeTrellis-Portable-${VERSION}.exe"
-  "${OUT_DIR}/CodeTrellis-${VERSION}.deb"
-  "${OUT_DIR}/CodeTrellis-${VERSION}.AppImage"
+  "${OUT_DIR}/CodeTrellis-${VERSION}-arm64.AppImage"
+  "${OUT_DIR}/CodeTrellis-${VERSION}.AppImage"   # x64 AppImage has no arch suffix
 )
 
 # Some platforms emit slightly different names — fall back to globs.
@@ -117,13 +125,15 @@ for f in "${expected_files[@]}"; do
   fi
 done
 
-# Linux deb and AppImage filenames sometimes have arch suffixes; pick
-# them up via glob too.
+# Defensive glob fallback: pick up any AppImages we missed (e.g. if
+# electron-builder changes its naming convention again).
 shopt -s nullglob
-for f in "${OUT_DIR}"/CodeTrellis_${VERSION}_amd64.deb "${OUT_DIR}"/*.AppImage; do
-  if [[ -f "$f" && ! " ${upload_files[*]} " =~ " ${f} " ]]; then
-    upload_files+=("$f")
-  fi
+for f in "${OUT_DIR}"/*.AppImage; do
+  already=0
+  for existing in "${upload_files[@]}"; do
+    [[ "$f" == "$existing" ]] && { already=1; break; }
+  done
+  [[ "$already" -eq 0 ]] && upload_files+=("$f")
 done
 shopt -u nullglob
 
@@ -165,8 +175,8 @@ CodeTrellis ${VERSION} — installer downloads.
 - **macOS (Intel)** — \`CodeTrellis-${VERSION}-x64.dmg\`
 - **Windows installer (NSIS)** — \`CodeTrellis-Setup-${VERSION}.exe\`
 - **Windows portable** — \`CodeTrellis-Portable-${VERSION}.exe\`
-- **Linux (.deb)** — for Debian / Ubuntu / Mint
-- **Linux (AppImage)** — for Fedora / RHEL / Arch (\`chmod +x\` then run)
+- **Linux AppImage (x64)** — \`CodeTrellis-${VERSION}.AppImage\`
+- **Linux AppImage (arm64)** — \`CodeTrellis-${VERSION}-arm64.AppImage\`
 
 ## First-launch notes
 
@@ -175,8 +185,7 @@ time. This is expected — bypass it once and the warning won't repeat.
 
 - **macOS**: right-click → Open → Open. Or System Settings → Privacy & Security → "Open Anyway".
 - **Windows**: SmartScreen → "More info" → "Run anyway".
-- **Linux .deb**: \`sudo dpkg -i CodeTrellis-${VERSION}.deb\`
-- **Linux AppImage**: \`chmod +x\` then \`./CodeTrellis-${VERSION}.AppImage\`
+- **Linux AppImage**: \`chmod +x\` then \`./CodeTrellis-${VERSION}.AppImage\` (or the \`-arm64\` variant for ARM Linux).
 
 ---
 Built from \`${SOURCE_REPO_SLUG}\` @ \`${COMMIT_SHORT}\`.
