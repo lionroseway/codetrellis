@@ -14,4 +14,8 @@ playwright-report/
 # E2E harness — per-test working dirs (cloned fixture + tmp data dir).
 # The harness creates these in setup and deletes them in teardown;
 # any leftovers after a crash are safe to wipe by hand.
-tests/.tmp/
+#
+# Underscore prefix (not dot prefix): the file watcher's ignore
+# function skips any path segment starting with `.`, which would
+# silently neutralise the fixture inside.
+tests/_tmp/

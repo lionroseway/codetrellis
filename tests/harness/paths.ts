@@ -26,8 +26,16 @@ export const REPO_ROOT = path.resolve(__dirname, '..', '..');
 /** Pristine fixture template — never written to. */
 export const FIXTURE_TEMPLATE = path.resolve(REPO_ROOT, 'tests', 'fixtures', 'sample-app');
 
-/** Parent of all per-test working dirs. Gitignored. */
-export const TMP_ROOT = path.resolve(REPO_ROOT, 'tests', '.tmp');
+/**
+ * Parent of all per-test working dirs. Gitignored.
+ *
+ * Naming note: this used to be `tests/.tmp/`, but the file watcher's
+ * ignore function skips any segment starting with `.` — so the
+ * fixture paths under there were being silently ignored, which
+ * meant `recordFileChange` never fired in tests. `_tmp/` is the
+ * cleanest fix that also plays nicely with `.gitignore`.
+ */
+export const TMP_ROOT = path.resolve(REPO_ROOT, 'tests', '_tmp');
 
 /**
  * Compose a path inside a test's tmp dir. `testId` should be a

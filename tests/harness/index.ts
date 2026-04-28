@@ -52,6 +52,7 @@ export {
   tmpDirFor,
   slugify,
 } from './paths';
+export { waitFor, sleep, type WaitForOptions } from './wait';
 
 import { prepareFixture, PreparedFixture } from './fixture';
 import { startBackend, RunningBackend } from './backend';
