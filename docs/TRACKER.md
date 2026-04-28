@@ -1238,6 +1238,16 @@ darker); smooth transitions when expanding/collapsing.
 
 ## 7. Open Items (priority order)
 
+### 🐛 Bugs surfaced by the harness (added Apr 28)
+
+The act of writing the harness already paid off — these gaps were
+silently in the codebase and nobody noticed.
+
+| Bug | Found by | Fix effort | Status |
+|---|---|---|---|
+| **Cross-system matcher doesn't re-run on file change.** Edges stale until manual re-scan. `recomputeCrossSystemEdges()` runs in `/api/project/scan` only; the file-watcher's `change`/`add` handlers re-parse but don't recompute. The "I edited a route file, where's my updated edge?" gap. | `tests/e2e/cross-system.test.ts` (mutation tests had to re-scan to pass) | XS — call `recomputeCrossSystemEdges()` from the file-watcher's `change`/`add` handlers, debounced. Tracker §1 Cross-system bumped from 30 → ~35 once shipped. | ❌ open |
+| **`tests/.tmp/` was silently ignored by chokidar.** Any harness test that mutated files inside the tmp dir would hang because the watcher's ignore regex skips dot-prefixed segments. Caught by the loop test's first failed run. Renamed to `tests/_tmp/`. | `tests/e2e/loop.test.ts` first run | n/a — fixed | ✅ shipped |
+
 ### ⚡⚡ Distribution + first-impression block (added Apr 28)
 
 The product is downloadable but the loop *around* the download —

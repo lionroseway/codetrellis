@@ -46,15 +46,31 @@ export interface ScanResult {
   [k: string]: unknown;
 }
 
+export interface CrossSystemEdge {
+  /** Absolute path to the calling file. */
+  source: string;
+  /** Absolute path to the called file (e.g. the matching FastAPI route file). */
+  target: string;
+  /** Repo-relative caller path. */
+  sourceRelative: string;
+  /** Repo-relative callee path. */
+  targetRelative: string;
+  /** `http`, `sql`, etc. */
+  protocol: string;
+  /** Human label, e.g. `GET /api/users`. */
+  label: string;
+  /** 0-1 — matcher's confidence in the pairing. */
+  confidence: number;
+  [k: string]: unknown;
+}
+
 export interface CrossSystemResponse {
-  edges: Array<{
-    fromPath: string;
-    toPath: string;
-    protocol: string;
-    [k: string]: unknown;
-  }>;
+  edges: CrossSystemEdge[];
   stats?: {
     edgeCount?: number;
+    callsiteCount?: number;
+    routeCount?: number;
+    byProtocol?: Record<string, number>;
     [k: string]: unknown;
   };
 }
