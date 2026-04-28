@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-28 (post E2E harness Phase 1)
+Last updated: 2026-04-28 (post big stability push — harness 1+2+3, multi-agent fix, cross-system auto-refresh, plan auto-sync fix, 4 new templates, Learn Trellis v1.3)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -69,6 +69,100 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 28, 2026 (evening) — Stability push: 3 wire-level bugs fixed + 4 templates + Learn Trellis v1.3
+
+This sprint took the product from "shipped at 100%, mostly works" to
+"shipped at 100%, proven works." The harness paid for itself:
+every "100%" feature it touched turned out to have a real bug, all
+three found and fixed in the same session.
+
+**Bugs found by the harness, all closed:**
+
+1. **Multi-agent broken at the wire** (commit `4bfe80e`) — the
+   backend's `mcpServer` was a singleton and the SDK's
+   `Server.connect(transport)` is single-transport, so the second
+   SSE client to connect re-bound the singleton and severed the
+   first. The Connected Agents widget rendered both sessions
+   (because `sessionService` tracked them separately), but only
+   one agent could actually exchange messages. Fixed by factoring
+   tool registration into `setupMcpServerInstance(): McpServer`
+   and building a fresh server per `/sse` connection — same
+   process, same port (`19432`), purely in-memory bookkeeping.
+   Verified by `tests/e2e/multi-agent.test.ts` un-`fixme`'d.
+
+2. **Cross-system stale on file change** (commit `a1bc2a6`) — the
+   matcher only ran inside `/api/project/scan`. Edits to TS / Py
+   route files left edges stale until manual rescan. Fixed: the
+   file-watcher's `change` / `add` / `unlink` handlers now schedule
+   a 500 ms-debounced `recomputeCrossSystemEdges()` and broadcast
+   `cross-system-changed`. Verified by
+   `tests/e2e/cross-system.test.ts` — mutation tests no longer
+   call `scanProject()`; the auto-refresh lands within ~1 s.
+
+3. **Plan auto-sync flake ~30%** (commit `dd151ea`) — chokidar v4
+   + `awaitWriteFinish` + `ignoreInitial: true` against a
+   directory created shortly after `watch()` had timing edges
+   that bucketed first writes as "initial" and dropped them.
+   Fixed by `mkdirSync(plansRoot, { recursive: true })` before
+   `chokidar.watch()` so the watcher always binds to a real,
+   empty dir. Chokidar variant of the auto-sync test un-`fixme`'d.
+
+**Plan templates expanded 1 → 5** (commit `d2b5918`):
+- Existing `mass-refactor` (deep-mode 6-phase migration)
+- New `new-feature` (3 phases, `{{feature}}` placeholder)
+- New `bug-fix` (2 phases, `{{bug}}` + `{{area}}` — encodes "no
+  done without a regression test" in acceptance criteria)
+- New `library-migration` (4 phases with strategy picker —
+  big-bang vs adapter vs strangler — `{{from_library}}` /
+  `{{to_library}}`)
+- New `perf-pass` (4 phases, `{{target_metric}}` /
+  `{{target_value}}` — forces measure-first / verify-with-guard
+  into the structure)
+
+Each template is right-sized for everyday work; doc types mapped
+to the canonical `PlanDocType` union. Verified by
+`tests/e2e/plan-templates.test.ts`.
+
+**Learn Trellis v1.0 → v1.3** (commits `eacd2ae` → `52a9382` →
+`a8ea7ce` → `ed8f96f`): nine-step full-screen onboarding takeover
+auto-shown on first launch + re-launchable from a TopBar
+GraduationCap button. Three iterations:
+- v1: information-only modal, six abstract-feature steps
+- v1.1: reframed around real workflows mapped 1:1 to the user's
+  use cases (just watching → planning → agents)
+- v1.2: surfaced the agent toolbox + skill resources at
+  `codetrellis://skill[/quickstart|/power-user]` so users can
+  write better prompts
+- v1.3: flow polish — modes step moved from end → after
+  watching-live (viewing cluster makes more sense), welcome
+  gained privacy + works-without-AI primer bullets, MCP defined
+  inline on first introduction, dot indicator gained hover
+  tooltips for scan-ability, "Refreshing context" became the
+  natural send-off step
+
+Final 9-step order: viewing cluster (Welcome → Watching live →
+The four modes) → planning cluster (Building → Adjusting →
+Sharing) → agents cluster (Pointing → Toolbox → Refreshing
+context).
+
+**Harness expanded** (commits `c43563b` → `df00343` → `4e3214e` →
+`80e4c71` → `c4516ab`): Phase 1 (fixture + scaffolding + smoke
+test) + Phase 2a-d (loop, agent-driven loop, cross-system,
+multi-agent) + Phase 3 (plan-export round-trip). 18 tests, ~22 s,
+5/5 stable runs. `playwright.harness.config.ts` runs `retries: 2`
+to absorb the under-load timing flakes that come from booting a
+real backend per test.
+
+Tracker §1 row movements after this push:
+- Multi-agent visibility (TopBar): unchanged 100% but now
+  genuinely works at the wire (was "renders sessions but only
+  one talks")
+- Cross-system edges: 30 → 35 (auto-refresh on file change)
+- Plan Templates: still 100% but content expanded 1 → 5
+- Learn Trellis: 0 → 75 (v1.3 information-only; v2 spotlighting
+  reserved)
+- E2E test harness: 35 → 60 (Phases 1+2+3 shipped)
 
 ### Apr 28, 2026 — E2E harness Phase 1 (fixture + scaffolding + smoke test)
 
