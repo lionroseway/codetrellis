@@ -118,7 +118,9 @@ test.describe('Agent-driven loop (via MCP)', () => {
           const t = fresh.tasks.find((t) => t.uid === taskUid);
           return t && t.status === 'in_progress' ? t : null;
         },
-        { timeoutMs: 10_000, description: `task ${taskUid} to advance via file watcher` },
+        // Same 20 s buffer rationale as `loop.test.ts` — generous on
+        // green, only matters when the system is under load.
+        { timeoutMs: 20_000, description: `task ${taskUid} to advance via file watcher` },
       );
       expect(advancedTask.status).toBe('in_progress');
     } finally {

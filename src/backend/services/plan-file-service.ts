@@ -358,8 +358,28 @@ export function startPlanFileWatcher(projectRoot: string): void {
   if (watchersByProject.has(projectRoot)) return; // already watching
 
   const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
-  // Watch even if the dir doesn't exist yet — chokidar handles
-  // late-creation gracefully and will emit `addDir` when it appears.
+
+  // Pre-create the plans dir before binding chokidar to it. Without
+  // this, chokidar v4 + `ignoreInitial: true` + a target that comes
+  // into existence shortly after `watch()` sometimes buckets the
+  // first writes inside it as "initial" and silently drops them —
+  // which broke the auto-sync UX (~30 % flake) for the very first
+  // export of any plan in a project.
+  //
+  // Pre-creating costs us nothing: the dir is empty, takes one
+  // syscall, and matches what `exportPlan` would do anyway on the
+  // first write-through. After this, chokidar always binds to a
+  // real, empty directory and `ignoreInitial: true` does the right
+  // thing — only later additions fire events.
+  try {
+    fs.mkdirSync(plansRoot, { recursive: true });
+  } catch (err) {
+    // Permissions / read-only FS / etc. — log and continue. The
+    // watcher will still attempt to bind; users on RO filesystems
+    // just won't get auto-sync.
+    console.warn('[Auto-sync] Could not pre-create plans dir:', err);
+  }
+
   const watcher = chokidar.watch(plansRoot, {
     ignoreInitial: true,
     persistent: true,

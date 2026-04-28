@@ -159,25 +159,24 @@ test.describe('Plan export — Phase 13 §A round-trip', () => {
     }
   });
 
-  // Chokidar-driven auto-sync (Phase 13 §B). Currently flaky:
-  // chokidar v4's `awaitWriteFinish` + `ignoreInitial: true` against
-  // a watched dir whose first write happens shortly after watch
-  // creation has timing edges that make this test non-deterministic
-  // (~30 % failure rate on macOS under load). The deterministic
-  // import test above covers the format correctness; this one
-  // covers the "agent edits a YAML directly and the UI updates
-  // without a re-scan" UX claim, which we still want to prove.
+  // Chokidar-driven auto-sync (Phase 13 §B). The "agent edits a
+  // YAML directly and the UI updates without a re-scan" UX claim.
   //
-  // Fix path is upstream: revisit the plan-file-watcher's chokidar
-  // options (drop `awaitWriteFinish`, add explicit `add` polling, or
-  // pre-mkdir the plans/ dir on backend start so chokidar sees it
-  // immediately). Tracked in TRACKER §7.
-  test.fixme(
+  // Was flaky (~30 %) until Apr 28: chokidar v4's `awaitWriteFinish`
+  // + `ignoreInitial: true` against a watched dir whose first write
+  // happens shortly after `watch()` has timing edges that bucket
+  // the first writes as "initial" and drop them. Fixed by
+  // pre-creating `<project>/.codetrellis/plans/` inside
+  // `startPlanFileWatcher()` so chokidar always binds to a real,
+  // empty directory.
+  test(
     'chokidar auto-detects on-disk plan edits (Phase 13 §B)',
     async () => {
       const h = await setupHarness('plan-export-autosync-chokidar');
       try {
-        fs.mkdirSync(path.join(h.fixture.projectPath, '.codetrellis', 'plans'), { recursive: true });
+        // No need to pre-mkdir from the test side anymore — the
+        // backend does it as part of `startPlanFileWatcher` (called
+        // from `scanProject`).
         await h.client.scanProject(h.fixture.projectPath);
 
         const plan = await h.client.createPlan({
@@ -187,6 +186,9 @@ test.describe('Plan export — Phase 13 §A round-trip', () => {
         });
         const exported = await h.client.exportPlan(plan.uid, h.fixture.projectPath);
         const planYamlPath = path.join(exported.planDir, 'plan.yaml');
+
+        // Wait beyond the SELF_WRITE_TTL_MS (1s) so our edit isn't
+        // mistaken for a self-write the export just stamped.
         await sleep(1500);
 
         const parsed = yaml.parse(fs.readFileSync(planYamlPath, 'utf-8'));

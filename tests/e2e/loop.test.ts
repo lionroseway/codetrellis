@@ -69,7 +69,11 @@ test.describe('Loop — file edit auto-advances task', () => {
           return t && t.status === 'in_progress' ? t : null;
         },
         {
-          timeoutMs: 10_000,
+          // 20 s buffer: chokidar's awaitWriteFinish (300 ms) + file
+          // watcher's plan-progress hook + REST roundtrip is normally
+          // <1 s, but slow CI / under-load runs occasionally take
+          // longer. Generous on green, no real cost.
+          timeoutMs: 20_000,
           intervalMs: 200,
           description: `task ${taskUid} to advance to in_progress`,
         },
