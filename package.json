@@ -1,7 +1,7 @@
 {
   "name": "codetrellis",
   "productName": "CodeTrellis",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
   "license": "Apache-2.0",
   "homepage": "https://codetrellis.dev",

@@ -60,7 +60,20 @@ let backendStartError: Error | null = null;
  */
 async function bootstrap(): Promise<number | null> {
   try {
-    await startServer();
+    // **Port 0 = OS picks a free port.** The desktop app has no
+    // reason to bind a predictable port — only the renderer talks
+    // to the backend, on loopback, and the renderer reads the
+    // bound port via `?port=<n>` in its URL. Hard-coding 3001
+    // (the dev-mode default) caused collisions with users' own
+    // dev servers and made the autodetect path the difference
+    // between the app launching and silently aborting. With
+    // port 0, EADDRINUSE on the backend port is impossible.
+    //
+    // The MCP server keeps its predictable default (`19432`)
+    // because external agents need a stable URL to put in their
+    // MCP config. It still autodetects-and-walks-forward on
+    // collision; users see the bound port in Settings → MCP.
+    await startServer(0);
     const port = getBoundBackendPort();
     console.log(`[Electron] Backend ready on port ${port}`);
     return port;

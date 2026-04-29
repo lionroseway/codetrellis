@@ -1543,8 +1543,23 @@ export async function startServer(port?: number): Promise<http.Server> {
     const tryPort = (candidate: number, attemptsLeft: number) => {
       const onListening = () => {
         server.removeListener('error', onError);
-        boundBackendPort = candidate;
-        console.log(`[Backend] Server running on http://localhost:${boundBackendPort}${candidate !== requestedPort ? ` (requested ${requestedPort}, autodetected)` : ''}`);
+        // Read the actually-bound port from the kernel. Matters for
+        // `port=0` (OS-assigned) where `candidate` is just `0` and
+        // the real port comes back from `server.address()`. Also
+        // serves as a sanity check for the autodetect path.
+        const addr = server.address();
+        if (addr && typeof addr === 'object' && typeof addr.port === 'number') {
+          boundBackendPort = addr.port;
+        } else {
+          boundBackendPort = candidate;
+        }
+        const note =
+          candidate === 0
+            ? ' (OS-assigned)'
+            : candidate !== requestedPort
+              ? ` (requested ${requestedPort}, autodetected)`
+              : '';
+        console.log(`[Backend] Server running on http://localhost:${boundBackendPort}${note}`);
         resolve(server);
       };
       const onError = (err: NodeJS.ErrnoException) => {
@@ -1562,7 +1577,19 @@ export async function startServer(port?: number): Promise<http.Server> {
       // machines on the network. The renderer (file:// in packaged
       // mode) reaches us via http://localhost:<port> which resolves
       // to 127.0.0.1; agents also connect via 127.0.0.1.
-      server.listen(candidate, '127.0.0.1');
+      //
+      // Wrap in try/catch: some Node versions (observed on 25.x)
+      // throw synchronously from inside `listen()` for EADDRINUSE
+      // rather than emitting an `error` event, which leaks past
+      // our once-listener as an uncaughtException. Funnel the
+      // sync throw through the same retry path.
+      try {
+        server.listen(candidate, '127.0.0.1');
+      } catch (err) {
+        server.removeListener('listening', onListening);
+        server.removeListener('error', onError);
+        onError(err as NodeJS.ErrnoException);
+      }
     };
     tryPort(requestedPort, MAX_PORT_ATTEMPTS);
   });
