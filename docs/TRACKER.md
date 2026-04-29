@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-29 (v0.1.2 published; full IPC bridge, no backend TCP port; OTA loop unchanged, now insulated from any local-port concerns)
+Last updated: 2026-04-29 (v0.1.3 published; Open Project regression from the v0.1.2 IPC refactor fixed by collapsing the bridge layer to a unified httpBridge)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -69,6 +69,27 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 29, 2026 (late evening) — v0.1.3: fix Open Project regression from v0.1.2
+
+User upgraded to v0.1.2 (full IPC), app booted clean (`[Electron] Backend initialised in-process`), but **Open Project did nothing**. No graph populated.
+
+Root cause: the v0.1.2 IPC refactor swapped the renderer's network path from "fetch over a TCP backend port" to "fetch monkey-patched to route through IPC." But `src/frontend/bridge/electron-bridge.ts` was still reaching for `window.electronAPI.scanProject(path)` etc. — methods I'd removed from preload because the IPC shim now intercepts the underlying `fetch('/api/...')` calls transparently. So `electronBridge.scanProject(...)` returned `undefined`, the renderer thought scan returned no data, the UI silently sat there.
+
+The architectural answer is cleaner than the old separate-bridges design:
+
+- The IPC shim makes `fetch('/api/...')` Just Work in Electron via IPC.
+- The IPC shim makes `new WebSocket(...)` Just Work via broadcast forwarding.
+- So `httpBridge` (which just calls fetch / WebSocket directly) is now correct in BOTH modes.
+- The dual-bridge `isElectron()` switch is gone.
+
+Changes:
+- `bridge/index.ts` always returns `httpBridge`.
+- `httpBridge.openProjectDialog` checks for `window.electronAPI?.openProjectDialog` first (uses the OS-native dialog when available), falls through to the FolderPickerModal custom-event flow in web mode.
+- `bridge/electron-bridge.ts` deleted.
+- `env.d.ts` slimmed `ElectronAPI` to the surfaces still on preload (`openProjectDialog`, `revealLogs`, `getLogPath`).
+
+Verified: typecheck clean, harness 18/18, packaged DMG boots clean and Open Project flow is alive again. Released as v0.1.3; OTA picked it up immediately (`{"available":true,"latest":"0.1.3","current":"0.1.2",...}` for v0.1.2 clients).
 
 ### Apr 29, 2026 (evening) — v0.1.2: full IPC bridge, no backend TCP port
 
