@@ -33,7 +33,7 @@ import type { AppSettings } from '@shared/types';
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'logs' | 'telemetry' | 'about';
+type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
@@ -42,6 +42,7 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'data', label: 'Data', Icon: HardDrive },
   { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
+  { key: 'updates', label: 'Updates', Icon: Download },
   { key: 'about', label: 'About', Icon: Info },
 ];
 
@@ -145,7 +146,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <DataSection settings={settings} onChange={update} />
             )}
             {section === 'telemetry' && <TelemetrySection />}
-            {section === 'about' && <AboutSection />}
+            {section === 'updates' && <UpdatesSection />}
+            {section === 'about' && <AboutSection onJumpToSection={setSection} />}
           </div>
 
           {saving && (
@@ -512,7 +514,7 @@ interface BuildInfo {
   dirty: boolean;
 }
 
-function AboutSection() {
+function AboutSection({ onJumpToSection }: { onJumpToSection: (section: Section) => void }) {
   const [info, setInfo] = useState<BuildInfo | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -575,7 +577,15 @@ function AboutSection() {
         <KV label="Build #" value={String(info.buildNumber)} mono />
       </div>
 
-      <UpdateBlock />
+      <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-2 border-t border-white/[0.04]">
+        Looking for a newer build?{' '}
+        <button
+          onClick={() => onJumpToSection('updates')}
+          className="text-accent hover:text-accent-hover underline underline-offset-2"
+        >
+          Open Updates →
+        </button>
+      </p>
 
       <p className="text-[10px] text-amber-200/80 leading-relaxed">
         <strong>Installing on macOS:</strong> open the <code className="font-mono bg-white/[0.05] px-1 rounded">.dmg</code> file, then drag the <code className="font-mono bg-white/[0.05] px-1 rounded">CodeTrellis.app</code> icon onto the <code className="font-mono bg-white/[0.05] px-1 rounded">Applications</code> shortcut in the same window. Don't run the .app from the DMG mount or your Downloads folder — it won't update cleanly.
@@ -611,29 +621,25 @@ interface UpdateStateData {
 }
 
 /**
- * Updates block — polls `/api/updates/status` (cheap, cached) on
- * mount, lets the user trigger a fresh check, and surfaces the
- * latest version + a Download button when an update is available.
+ * Updates section — its own panel in the Settings sidebar.
  *
- * v1 doesn't auto-download. Click → opens the platform installer
- * URL in the system browser. Auto-apply waits for code-signing
- * (otherwise we can't verify the download came from us).
+ * Polls `/api/updates/status` (cheap, cached on the backend) on
+ * mount, surfaces the result, and exposes a prominent
+ * **Check for Updates** button. v1 doesn't auto-download — click
+ * Download → opens the platform installer URL in the system
+ * browser. Auto-apply on quit waits for code-signing.
  */
-function UpdateBlock() {
+function UpdatesSection() {
   const [state, setState] = useState<UpdateStateData | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const refresh = async () => {
-    try {
-      const res = await fetch('/api/updates/status');
-      if (res.ok) setState(await res.json());
-    } catch {
-      // ignore — initial 404 means the backend is still booting
-    }
-  };
-
   useEffect(() => {
-    refresh();
+    fetch('/api/updates/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setState(data))
+      .catch(() => {
+        // ignore — backend may still be booting; user can hit Check
+      });
   }, []);
 
   const checkNow = async () => {
@@ -645,51 +651,64 @@ function UpdateBlock() {
         setState(fresh);
       }
     } catch {
-      // surface to the user via the lastError that gets returned
+      // surfaces via the lastError that comes back in state
     } finally {
       setChecking(false);
     }
   };
 
-  if (!state) {
-    return (
-      <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-2 border-t border-white/[0.04]">
-        Loading update status…
-      </p>
-    );
-  }
-
-  const { status, result, lastCheckedAt, lastError } = state;
-  const lastCheckedText = lastCheckedAt
-    ? formatRelativeTime(new Date(lastCheckedAt))
-    : 'never';
+  const status = state?.status ?? 'idle';
+  const result = state?.result ?? null;
+  const lastError = state?.lastError ?? null;
+  const lastCheckedAt = state?.lastCheckedAt ?? null;
+  const currentVersion = state?.currentVersion ?? '—';
+  const platform = state?.platform ?? '—';
+  const isChecking = checking || status === 'checking';
 
   return (
-    <div className="pt-3 border-t border-white/[0.04] space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-foreground-subtle">
-          Updates
-        </span>
-        <button
-          onClick={checkNow}
-          disabled={checking || status === 'checking'}
-          className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title={`Last checked: ${lastCheckedText}`}
-        >
-          <RefreshCw size={10} className={checking || status === 'checking' ? 'animate-spin' : ''} />
-          Check now
-        </button>
+    <>
+      {/* Hero card — current version + the big Check button */}
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-foreground-subtle">
+              You're running
+            </div>
+            <div className="text-[18px] font-semibold text-foreground tracking-tight mt-0.5">
+              CodeTrellis v{currentVersion}
+            </div>
+            <div className="text-[11px] text-foreground-subtle font-mono mt-0.5">
+              {platform}
+            </div>
+          </div>
+          <button
+            onClick={checkNow}
+            disabled={isChecking}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-medium rounded-lg bg-accent/15 border border-accent/40 text-accent hover:bg-accent/25 hover:border-accent/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={13} className={isChecking ? 'animate-spin' : ''} />
+            {isChecking ? 'Checking…' : 'Check for Updates'}
+          </button>
+        </div>
+        <div className="text-[10.5px] text-foreground-subtle mt-3">
+          {lastCheckedAt
+            ? `Last checked ${formatRelativeTime(new Date(lastCheckedAt))}`
+            : "Haven't checked yet — auto-checks once a day in the background."}
+        </div>
       </div>
 
+      {/* Status panel — flips based on the latest check result */}
       {status === 'available' && result?.download ? (
-        <div className="rounded-lg border border-accent/30 bg-accent/[0.06] p-3 space-y-2">
-          <div className="flex items-start gap-2">
-            <Download size={14} className="text-accent shrink-0 mt-0.5" />
+        <div className="rounded-xl border border-accent/30 bg-accent/[0.06] p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent/15 border border-accent/30 shrink-0">
+              <Download size={16} className="text-accent" />
+            </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-medium text-foreground">
+              <div className="text-[14px] font-medium text-foreground">
                 v{result.latest} is available
               </div>
-              <div className="text-[10px] text-foreground-muted mt-0.5">
+              <div className="text-[11px] text-foreground-muted mt-0.5">
                 You're on v{result.current}
                 {result.publishedAt
                   ? ` · released ${formatRelativeTime(new Date(result.publishedAt))}`
@@ -697,14 +716,14 @@ function UpdateBlock() {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 pl-6">
+          <div className="flex items-center gap-2 flex-wrap">
             <a
               href={result.download.url}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1 px-3 py-1 text-[11px] rounded-md bg-accent/15 border border-accent/40 text-accent hover:bg-accent/25 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium rounded-lg bg-accent/20 border border-accent/50 text-accent hover:bg-accent/30 transition-colors"
             >
-              <Download size={11} />
+              <Download size={12} />
               Download {result.download.filename}
             </a>
             {result.releaseNotes?.url && (
@@ -712,45 +731,73 @@ function UpdateBlock() {
                 href={result.releaseNotes.url}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded-md text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
               >
                 Release notes
-                <ExternalLink size={10} />
+                <ExternalLink size={11} />
               </a>
             )}
           </div>
+          {result.download.size !== undefined && (
+            <div className="text-[10px] text-foreground-subtle font-mono pl-12">
+              {formatBytes(result.download.size)}
+              {result.download.sha256 ? ` · sha256 ${result.download.sha256.slice(0, 12)}…` : ''}
+            </div>
+          )}
         </div>
       ) : status === 'up-to-date' ? (
-        <div className="flex items-center gap-2 text-[11px] text-foreground-muted">
-          <CheckCircle2 size={12} className="text-green-400/70" />
-          <span>You're on the latest version (v{result?.current ?? state.currentVersion}).</span>
-        </div>
-      ) : status === 'error' ? (
-        <div className="flex items-start gap-2 text-[10.5px] text-amber-200/80">
-          <AlertCircle size={12} className="text-amber-400/70 shrink-0 mt-0.5" />
-          <div>
-            Couldn't check for updates: {lastError ?? 'unknown error'}.{' '}
-            <button onClick={checkNow} className="underline hover:text-foreground">
-              Retry
-            </button>
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex items-center gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-400/[0.08] border border-green-400/20 shrink-0">
+            <CheckCircle2 size={16} className="text-green-400/80" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] text-foreground">
+              You're on the latest version.
+            </div>
+            <div className="text-[11px] text-foreground-subtle mt-0.5">
+              v{result?.current ?? currentVersion}
+              {result?.publishedAt
+                ? ` · released ${formatRelativeTime(new Date(result.publishedAt))}`
+                : ''}
+            </div>
           </div>
         </div>
-      ) : status === 'checking' ? (
-        <div className="flex items-center gap-2 text-[11px] text-foreground-muted">
-          <RefreshCw size={12} className="animate-spin" />
-          <span>Checking…</span>
+      ) : status === 'error' ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 flex items-start gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/[0.1] border border-amber-500/30 shrink-0">
+            <AlertCircle size={16} className="text-amber-300" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] text-foreground">
+              Couldn't reach the update server.
+            </div>
+            <div className="text-[11px] text-foreground-muted mt-0.5">
+              {lastError ?? 'Unknown error'} —{' '}
+              <button onClick={checkNow} className="underline hover:text-foreground">
+                retry
+              </button>
+              .
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="text-[11px] text-foreground-subtle">
-          Haven't checked yet. Hit "Check now" to look for a newer build.
-        </div>
-      )}
+      ) : null}
 
-      <p className="text-[10px] text-foreground-subtle leading-relaxed">
-        Auto-checked once a day. Updates open in your browser — install the new DMG / EXE / AppImage to upgrade. Auto-download lands once we have code-signing.
+      {/* Footer note */}
+      <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-1">
+        CodeTrellis checks <span className="text-foreground-muted">codetrellis.dev</span> for new
+        builds, and falls back to the GitHub Releases feed if the website's API is unreachable.
+        Updates open in your browser — install the new DMG / EXE / AppImage to upgrade.
+        Auto-download will land once builds are code-signed.
       </p>
-    </div>
+    </>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 function KV({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
