@@ -1525,8 +1525,16 @@ export async function startServer(port?: number): Promise<http.Server> {
 
   // Start the auto-update poller — best-effort initial check on
   // boot, then once every 24h. Network failures don't abort boot;
-  // they're surfaced via `getUpdateState().lastError`.
-  startUpdatePolling();
+  // they're surfaced via `getUpdateState().lastError`. Wrapped in
+  // try/catch as belt-and-braces: even if the service module load
+  // fails (e.g. a bundler edge in packaged Electron), the rest of
+  // the backend boot keeps going. Updates can be checked manually
+  // later via Settings → Updates → Check for Updates.
+  try {
+    startUpdatePolling();
+  } catch (err) {
+    console.warn('[Backend] Update polling failed to start:', err);
+  }
 
   const envPort = process.env.CODETRELLIS_BACKEND_PORT;
   const requestedPort = envPort ? Number(envPort) : (port ?? DEFAULT_PORT);
