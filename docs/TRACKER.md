@@ -1178,6 +1178,141 @@ same plan from disk. Templates publish as git repos.
 
 ---
 
+### Phase 14 — Plan Workspace (human-first) ⚡ ACTIVE
+
+**Goal**: treat plans as the human's primary work surface. Tasks
+become *nested context*, not just todo items. The spec room is
+always visible. Real-time agent ↔ human collaboration via comments
+and progress reports. Rich inputs (URLs, images, design notes,
+prompts). Mass-edit with CRUD intent. Subtasks. Folder-rooted scope.
+
+Driven by user feedback (Apr 29): the existing plan UI is clunky for
+humans, you can't drill in cleanly, tasks are too thin to read as
+context, agents have nowhere to leave blockers, and there's no way
+to bulk-assign file CRUD intent.
+
+#### Mental shift
+
+Today: a Task is `{ title, status, affectedFiles[] }`.
+
+After: a Task is **two things in one** —
+- **A todo** (status, claim, completion).
+- **A context blob** the agent reads to do the work — body /
+  prompt / fileSpecs with CRUD intent / attachments / references /
+  subtasks / comments.
+
+Same structure recurses at plan / phase / task / subtask. Every
+level shows context on the left, todo state on the right, comments
+below, attachments rail on the side.
+
+#### 14.A — Data model + MCP foundation
+
+New + extended fields:
+
+| Item | Shape | Purpose |
+|---|---|---|
+| `task.parentTaskUid` | nullable string | Subtasks (one level for v1; tree later) |
+| `task.body` | markdown | Design notes, context |
+| `task.prompt` | markdown optional | Literal prompt to paste at an agent |
+| `task.scopePath` | string optional | Task rooted at `src/auth/` — relative paths in fileSpecs resolve here |
+| `task.fileSpecs[]` | `{ path, action: 'create'\|'modify'\|'delete'\|'move', moveTo?, isDir? }` | Real CRUD intent on file ops; mirrors existing `symbolSpecs` shape. `affectedFiles[]` becomes a derived view. |
+| `task.attachments[]` | `{ kind: 'url'\|'image'\|'file_ref'\|'code_block'\|'transcript', value, label?, contentType? }` | URL refs, image refs, snippets, transcripts |
+| `plan_doc.attachments[]` | same shape | Same on spec docs |
+| `task_comments` (extended) | `+ kind: 'note'\|'blocker'\|'progress'\|'question'`, `+ source: 'agent'\|'human'` | First-class agent ↔ human channel |
+| `PlanDocType` | `+ 'requirements' \| 'design' \| 'ux_journey' \| 'bug_report' \| 'transcript' \| 'note'` | Loosens the closed union so templates (and humans) aren't shoehorned into `acceptance_criteria` etc. |
+
+New MCP tools:
+
+| Tool | Purpose |
+|---|---|
+| `add_task_comment(plan_uid, task_uid, kind, body)` | Agent leaves a note. Broadcasts WS event. |
+| `list_task_comments(task_uid)` | Agent reads existing comments before continuing. |
+| `update_task_progress(task_uid, percent, message)` | Reports % done + free-form status. Broadcasts. |
+| `add_subtask(parent_task_uid, description, body?, file_specs?)` | Agent breaks a task down. |
+| `add_task_attachment(task_uid, kind, value, label?)` | Agent or human pins a URL / file ref. |
+| `set_task_blocked(task_uid, reason)` | Explicit blocker status; visual + WS event. |
+| `read_task_full(task_uid)` | One round-trip to get body + prompt + fileSpecs + attachments + comments + subtasks + parent context + plan docs. |
+
+Extended MCP tools:
+
+- `update_task` — accept `body`, `prompt`, `scope_path`, `file_specs[]`, `parent_task_uid`
+- `create_plan` — accept richer task shape on initial creation
+- `claim_task` — return full task context (claim+read in one call)
+- `get_drift_report` — surface comment activity since last check
+
+Skill resources updated to teach the new vocabulary:
+- "When you pick up a task, **first** call `read_task_full` and `list_task_comments`."
+- "When you hit a blocker, call `add_task_comment(kind='blocker')`. Don't just stop."
+- "Mid-task progress → `update_task_progress(task_uid, percent, message)`."
+
+Acceptance:
+- [ ] Plan-export YAML round-trips the new fields cleanly (harness regression-tests)
+- [ ] Existing v0.1.1 templates keep loading (back-compat shims)
+- [ ] All new MCP tools registered + the harness covers each one
+
+#### 14.B — Plan detail rebuild (three-region layout)
+
+Today: side panel with a flat task list.
+
+After: full-canvas plan view with three columns —
+
+```
+┌─────────────────┬──────────────────────────────┬──────────────────┐
+│ Spec Room       │  Phases & Tasks              │  Activity        │
+│ (left rail)     │  (centre, drillable)         │  (right rail)    │
+└─────────────────┴──────────────────────────────┴──────────────────┘
+```
+
+- Click a task → expand inline (don't navigate away).
+- Spec room always visible — never hidden behind a tab.
+- Activity rail is the realtime channel.
+
+Acceptance:
+- [ ] Three-region layout, resizable
+- [ ] Tasks expand inline, subtasks indented
+- [ ] Spec docs link to / from tasks (cross-reference)
+
+#### 14.C — Task-as-context view + rich inputs
+
+Per-task surface:
+
+- Body / design notes (markdown editor)
+- Prompt (separate field, copy-as-prompt button)
+- Files (CRUD-tagged list with `+ Add File`, bulk-select, browse-tree picker)
+- References (URL / image / file rail)
+- Subtasks (nested, drag-to-reorder)
+- Comments thread (kind-tagged: note / blocker / progress / question)
+- Status / claim / progress %
+
+Plus polish:
+- Mass file selection in Inspector → bulk-add to task with one CRUD intent
+- File-creation picker — browse project tree, type new filename
+- Image attachment — paste-from-clipboard / drag-drop → `<project>/.codetrellis/attachments/<task-uid>/`
+- "Copy task context" button → dumps body + prompt + fileSpecs as a markdown block ready to paste at any agent
+
+Acceptance:
+- [ ] All field types editable in-place
+- [ ] Bulk file select + CRUD assign works
+- [ ] Image paste flow round-trips through git correctly
+
+#### 14.D — Real-time emphasis + polish
+
+Frontend reactions to existing WS events:
+
+| Event | UI reaction |
+|---|---|
+| `task-updated` / `task-claimed` / `task-completion-suggested` | Affected row flashes accent for 1.5s; activity rail item appears with relative time + agent attribution |
+| `task-comment-added` | Comments section animates new comment in; unread badge on the task row |
+| `task-progress` (new) | Inline progress bar fills smoothly |
+| `task-attachment-added` (new) | References section gets the new item |
+| `task-blocked` (new) | Task row turns amber; rail event with reason highlighted |
+
+Acceptance:
+- [ ] No agent action goes visually unannounced for > 250 ms
+- [ ] Multi-tab demo: edit a task in tab A, see it update in tab B
+
+---
+
 ## 4. Trellis State Definitions (canonical mental model)
 
 These are the precise meanings of the four graph modes. UI labels and
