@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-28 (post big stability push — harness 1+2+3, multi-agent fix, cross-system auto-refresh, plan auto-sync fix, 4 new templates, Learn Trellis v1.3)
+Last updated: 2026-04-29 (v0.1.1 published; OTA loop verified end-to-end against live codetrellis.dev API)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -69,6 +69,37 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Apr 29, 2026 — v0.1.1 published (full release loop verified end-to-end)
+
+`v0.1.1` published to [`lionroseway/codetrellis-releases`](https://github.com/lionroseway/codetrellis-releases/releases/tag/v0.1.1) — six platform installers (DMG arm64+x64, NSIS Setup + Portable EXE, AppImage arm64+x64). Source repo tagged `v0.1.1` and pushed.
+
+`codetrellis.dev/api/updates/check` confirmed already reflecting the new release within minutes of publish:
+
+```json
+{"available":true,"latest":"0.1.1","current":"0.1.0",
+ "download":{"url":".../CodeTrellis-0.1.1-arm64.dmg",
+ "size":118108976,"sha256":"bd9c0b83..."}, ...}
+```
+
+**Full OTA loop verified end-to-end:** v0.1.0 desktop installs in the wild will see the update banner on their next poll (auto-checks once a day, or right away on "Check for Updates"). Click Download → opens the platform installer URL in the system browser. No user has to do anything to reach v0.1.1.
+
+What's in v0.1.1 (highlights — all from the Apr 28 evening session
+captured below):
+- Multi-agent at the wire-level (per-session `McpServer` instances)
+- Cross-system edge auto-refresh on file change
+- Plan auto-sync flake fix
+- 4 new plan templates (5 total)
+- Learn Trellis full-screen onboarding (9 steps, real workflows)
+- Auto-update polling with website + GitHub fallback
+- Linux AppImage Ubuntu 24.04+ sandbox auto-fix
+- Updates panel as its own Settings section
+
+Bonus fix found mid-publish: `scripts/release.sh` glob fallback
+picked up a stale `CodeTrellis-0.1.0.AppImage` from a prior
+`package:linux` run still living in `out/make/`. Patched the glob
+to filter by `${VERSION}`. Stray uploaded asset deleted from
+the v0.1.1 release before any user could see it.
 
 ### Apr 28, 2026 (evening) — Stability push: 3 wire-level bugs fixed + 4 templates + Learn Trellis v1.3
 

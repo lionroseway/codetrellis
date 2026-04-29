@@ -125,10 +125,13 @@ for f in "${expected_files[@]}"; do
   fi
 done
 
-# Defensive glob fallback: pick up any AppImages we missed (e.g. if
-# electron-builder changes its naming convention again).
+# Defensive glob fallback: pick up any AppImages with the current
+# version that we missed (e.g. if electron-builder changes its
+# naming convention again). Filter by `${VERSION}` so stale
+# AppImages from prior `package:linux` runs in the same out/make/
+# can't sneak into the upload.
 shopt -s nullglob
-for f in "${OUT_DIR}"/*.AppImage; do
+for f in "${OUT_DIR}"/*"${VERSION}"*.AppImage; do
   already=0
   for existing in "${upload_files[@]}"; do
     [[ "$f" == "$existing" ]] && { already=1; break; }
