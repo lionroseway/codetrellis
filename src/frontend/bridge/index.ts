@@ -1,29 +1,23 @@
 import type { BridgeAPI } from './types';
 import { httpBridge } from './http-bridge';
-import { electronBridge } from './electron-bridge';
-
-function isElectron(): boolean {
-  // Preload exposes `window.electronAPI` via contextBridge. Its
-  // presence is the runtime signal that we're in an Electron
-  // renderer (vs a regular browser tab in dev mode).
-  return typeof window !== 'undefined' && 'electronAPI' in window;
-}
-
-let _api: BridgeAPI | null = null;
 
 /**
- * Returns the bridge API — Electron IPC if running in Electron,
- * HTTP/WebSocket if running in a browser. Both bridges are
- * statically imported (and so always bundled) — the previous
- * `require('./electron-bridge')` at runtime worked in dev but
- * broke in the packaged renderer (Vite's renderer bundle has no
- * `require`, so the call threw and `getAPI()` returned never;
- * "Open Project" fell through silently).
+ * Returns the bridge API.
+ *
+ * **One bridge for both modes** as of v0.1.2. The Electron renderer
+ * has a `fetch` / `WebSocket` monkey-patch installed by
+ * `lib/electron-ipc-shim.ts` that transparently routes `/api/...`
+ * fetches and `new WebSocket(...)` constructions through IPC to the
+ * in-process Express app. So this bridge can do `fetch('/api/...')`
+ * everywhere — in dev / web mode it hits the dev backend over HTTP,
+ * in Electron it goes through IPC.
+ *
+ * The only Electron-specific UX is the native open-folder dialog,
+ * which `httpBridge.openProjectDialog` handles internally by checking
+ * for `window.electronAPI?.openProjectDialog`.
  */
 export function getAPI(): BridgeAPI {
-  if (_api) return _api;
-  _api = isElectron() ? electronBridge : httpBridge;
-  return _api;
+  return httpBridge;
 }
 
 export type { BridgeAPI } from './types';

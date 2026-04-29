@@ -42,9 +42,13 @@ function ensureWebSocket(): void {
  */
 export const httpBridge: BridgeAPI = {
   openProjectDialog: async () => {
-    // In web mode, this is handled by the FolderPickerModal component
-    // which dispatches a custom event. We return a promise that resolves
-    // when the user picks a folder.
+    // In Electron, use the native open-folder dialog via preload IPC
+    // (better UX, OS-native picker). In web mode, fall through to
+    // the in-app FolderPickerModal that dispatches a custom event.
+    const electronAPI = (window as unknown as { electronAPI?: { openProjectDialog?: () => Promise<string | null> } }).electronAPI;
+    if (electronAPI?.openProjectDialog) {
+      return electronAPI.openProjectDialog();
+    }
     return new Promise<string | null>((resolve) => {
       const handler = (e: Event) => {
         const detail = (e as CustomEvent).detail;

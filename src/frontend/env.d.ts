@@ -1,25 +1,28 @@
 /// <reference types="vite/client" />
 
-import type { ScanResult } from './bridge/types';
-
+/**
+ * As of v0.1.2 the bulk of "Electron-vs-web" routing is handled by
+ * the IPC shim (`lib/electron-ipc-shim.ts`) — fetch and WebSocket
+ * are monkey-patched in Electron and routed through IPC, and the
+ * bridge layer just calls `fetch('/api/...')` regardless of mode.
+ * Only a couple of Electron-only surfaces remain on
+ * `window.electronAPI` (native dialogs, log file reveal).
+ */
 interface ElectronAPI {
+  /** Native open-folder dialog. */
   openProjectDialog: () => Promise<string | null>;
-  scanProject: (projectPath: string) => Promise<ScanResult>;
-  searchSymbols: (query: string) => Promise<unknown[]>;
-  getMcpStatus: () => Promise<{ running: boolean; port: number; connectedAgents: number }>;
-  onScanProgress: (callback: (progress: { phase: string; progress: number }) => void) => () => void;
-  onAgentEvent: (callback: (event: unknown) => void) => () => void;
   /** Reveal the current day's log file in Finder / Explorer. */
   revealLogs: () => Promise<string>;
-  /** Returns the absolute path of the current day's log file. */
+  /** Absolute path of the current day's log file. */
   getLogPath: () => Promise<string>;
 }
 
 declare global {
   interface Window {
     /**
-     * Present only when running inside the Electron preload context.
-     * Use `isElectron()` from `bridge/index.ts` to gate access.
+     * Present only inside the Electron preload context. Most callers
+     * shouldn't need to touch this directly — `getAPI()` from
+     * `bridge/index.ts` and the IPC shim handle the common cases.
      */
     electronAPI?: ElectronAPI;
   }
