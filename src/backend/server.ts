@@ -101,11 +101,37 @@ wss.on('connection', (ws) => {
   ws.on('close', () => clients.delete(ws));
 });
 
+/**
+ * Extra broadcast targets — anything that wants to receive `broadcast()`
+ * events alongside the WS clients. Electron's main process registers
+ * the renderer's `webContents.send` here so backend events reach the
+ * renderer without a WebSocket connection.
+ */
+export type BroadcastTarget = (message: { type: string; payload: unknown }) => void;
+const extraBroadcastTargets = new Set<BroadcastTarget>();
+
+export function addBroadcastTarget(target: BroadcastTarget): () => void {
+  extraBroadcastTargets.add(target);
+  return () => extraBroadcastTargets.delete(target);
+}
+
 export function broadcast(type: string, payload: unknown): void {
   const message = JSON.stringify({ type, payload });
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
+    }
+  }
+  // Also fan out to any non-WS targets (Electron renderer via IPC, etc.).
+  if (extraBroadcastTargets.size > 0) {
+    const decoded = { type, payload };
+    for (const target of extraBroadcastTargets) {
+      try {
+        target(decoded);
+      } catch {
+        // A bad target shouldn't take down the broadcast loop; the
+        // worst case is that one renderer misses an event.
+      }
     }
   }
 }
@@ -1502,21 +1528,25 @@ export function getBoundBackendPort(): number {
 }
 
 /**
- * Boot the backend. Honours `CODETRELLIS_BACKEND_PORT` env var and
- * autodetects a free port on `EADDRINUSE` (walks forward up to 10
- * slots) — same behaviour as the MCP server. The actually-bound
- * port is returned via `getBoundBackendPort()` so the Electron main
- * process can pass it to the renderer (which otherwise can't reach
- * the backend from a `file://` origin).
+ * Initialise the backend's in-process state — database, AST parser,
+ * autosave, MCP server, update polling. **Does not** open a TCP
+ * port; that's `startServer()`'s job. Electron's main process calls
+ * this directly so the desktop build never binds a backend port:
+ * the renderer reaches the Express app via IPC instead. Web mode
+ * (`npm run dev:backend`) goes through `startServer()` → calls this
+ * + listens on TCP.
  */
-export async function startServer(port?: number): Promise<http.Server> {
+export async function initializeBackend(): Promise<void> {
   await initDatabase();
   await initParser();
 
   // Start persistent auto-save for plan data
   startAutoSave(() => exportDatabase(), 30000);
 
-  // Start MCP server for agent integration
+  // Start MCP server for agent integration. The MCP server keeps
+  // its own TCP port (default 19432) because external agents need
+  // a stable URL to put in their MCP config — that's the only
+  // backend-process port intentionally exposed.
   try {
     await startMcpServer();
   } catch (err) {
@@ -1535,6 +1565,19 @@ export async function startServer(port?: number): Promise<http.Server> {
   } catch (err) {
     console.warn('[Backend] Update polling failed to start:', err);
   }
+}
+
+/**
+ * Boot the backend AND open a TCP port. Used by web mode
+ * (`npm run dev:backend`) where the browser fetches `/api/...` over
+ * HTTP. Honours `CODETRELLIS_BACKEND_PORT` env var and walks
+ * forward on `EADDRINUSE` (up to 10 slots). The actually-bound
+ * port is returned via `getBoundBackendPort()`.
+ *
+ * Electron does NOT call this — see `initializeBackend()` instead.
+ */
+export async function startServer(port?: number): Promise<http.Server> {
+  await initializeBackend();
 
   const envPort = process.env.CODETRELLIS_BACKEND_PORT;
   const requestedPort = envPort ? Number(envPort) : (port ?? DEFAULT_PORT);

@@ -1,6 +1,11 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, type WebContents } from 'electron';
 import path from 'node:path';
-import { startServer, getBoundBackendPort } from '../backend/server';
+import {
+  initializeBackend,
+  app as expressApp,
+  addBroadcastTarget,
+} from '../backend/server';
+import { dispatch, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
 
 // Mirror console.* to <dataDir>/logs/<YYYY-MM-DD>.log so the
@@ -14,23 +19,13 @@ console.log(`[Electron] App boot — pid ${process.pid}, log file: ${getCurrentL
 //
 // Modern Ubuntu (24.04+) tightened AppArmor's unprivileged
 // user-namespace policy, which breaks Chromium's setuid sandbox
-// when launched from an AppImage. The user sees:
+// when launched from an AppImage. The chrome-sandbox binary inside
+// the mounted AppImage can't be chmod'd because the mount is
+// read-only. The pragmatic fix every Electron AppImage on modern
+// Linux ships is to disable the sandbox when running from one.
 //
-//     FATAL:setuid_sandbox_host.cc(...) The SUID sandbox helper
-//     binary was found, but is not configured correctly.
-//
-// The chrome-sandbox binary inside the mounted AppImage can't be
-// chmod'd because the mount is read-only. The pragmatic fix all
-// other Electron AppImages (Cursor, Obsidian, etc.) ship is to
-// disable the sandbox when running from an AppImage on Linux.
-// The renderer loads our own bundled HTML over a loopback HTTP
-// origin — the standard sandbox threat model (untrusted web
-// content) doesn't really apply to a local dev tool. .deb installs
-// (when we ship them) get a properly-permissioned chrome-sandbox
-// and DON'T need this switch.
-//
-// We scope the switch to AppImage runs specifically (env var set
-// by the AppImage runtime) so other Linux installs stay sandboxed.
+// Scoped narrowly via the `APPIMAGE` env var that the AppImage
+// runtime sets, so other Linux installs (e.g. .deb) stay sandboxed.
 if (process.platform === 'linux' && process.env.APPIMAGE) {
   app.commandLine.appendSwitch('no-sandbox');
   console.log('[Electron] AppImage detected on Linux — running with --no-sandbox');
@@ -50,41 +45,45 @@ process.on('unhandledRejection', (reason) => {
 
 let mainWindow: BrowserWindow | null = null;
 let backendStartError: Error | null = null;
+let unregisterBroadcastTarget: (() => void) | null = null;
 
 /**
- * Boot the embedded backend. Resolves to the actually-bound port (3001
- * by default; autodetected forward on EADDRINUSE — see
- * `startServer` in src/backend/server.ts). Failures are caught and
- * stashed in `backendStartError` so the window opens regardless and
- * the user sees something rather than just a Dock icon.
+ * Boot the embedded backend in-process — no TCP listen on the
+ * backend port. Only the MCP server (port 19432) ends up exposed,
+ * because external agents need a stable URL for it. The renderer
+ * reaches the Express app via the IPC handler registered below.
+ *
+ * On failure we capture the error so `createWindow()` can still
+ * open the window and surface something useful instead of leaving
+ * the user staring at a Dock icon.
  */
-async function bootstrap(): Promise<number | null> {
+async function bootstrap(): Promise<boolean> {
   try {
-    // **Port 0 = OS picks a free port.** The desktop app has no
-    // reason to bind a predictable port — only the renderer talks
-    // to the backend, on loopback, and the renderer reads the
-    // bound port via `?port=<n>` in its URL. Hard-coding 3001
-    // (the dev-mode default) caused collisions with users' own
-    // dev servers and made the autodetect path the difference
-    // between the app launching and silently aborting. With
-    // port 0, EADDRINUSE on the backend port is impossible.
-    //
-    // The MCP server keeps its predictable default (`19432`)
-    // because external agents need a stable URL to put in their
-    // MCP config. It still autodetects-and-walks-forward on
-    // collision; users see the bound port in Settings → MCP.
-    await startServer(0);
-    const port = getBoundBackendPort();
-    console.log(`[Electron] Backend ready on port ${port}`);
-    return port;
+    await initializeBackend();
+    console.log('[Electron] Backend initialised in-process (no TCP backend port)');
+    return true;
   } catch (err) {
     backendStartError = err instanceof Error ? err : new Error(String(err));
-    console.error('[Electron] Backend failed to start:', backendStartError);
-    return null;
+    console.error('[Electron] Backend failed to initialise:', backendStartError);
+    return false;
   }
 }
 
-function createWindow(backendPort: number | null): void {
+/**
+ * Wire the renderer's webContents up as a broadcast target so
+ * backend `broadcast()` calls also push to the renderer over IPC.
+ * Replaces the WebSocket the renderer used to open against the
+ * backend's TCP port.
+ */
+function attachBroadcastForwarding(targetContents: WebContents): void {
+  if (unregisterBroadcastTarget) unregisterBroadcastTarget();
+  unregisterBroadcastTarget = addBroadcastTarget(({ type, payload }) => {
+    if (targetContents.isDestroyed()) return;
+    targetContents.send('codetrellis:ws-event', { type, payload });
+  });
+}
+
+function createWindow(backendOk: boolean): void {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -103,25 +102,33 @@ function createWindow(backendPort: number | null): void {
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
-  // electron-vite sets `ELECTRON_RENDERER_URL` to the dev server URL
-  // when running `electron-vite dev`. In production builds, it's
-  // unset and we load the bundled html from disk.
+  // Forward backend broadcasts to the renderer via IPC. Also
+  // re-attach if the renderer reloads (e.g. dev HMR).
+  attachBroadcastForwarding(mainWindow.webContents);
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow) attachBroadcastForwarding(mainWindow.webContents);
+  });
+
+  // Tell the renderer it's running under Electron + whether the
+  // backend booted cleanly. The frontend's IPC shim activates on
+  // `ipc=1` and routes /api/* fetches + WebSocket through window.codetrellisIpc.
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (devUrl) {
-    mainWindow.loadURL(devUrl);
+    const url = new URL(devUrl);
+    url.searchParams.set('ipc', '1');
+    if (backendStartError) {
+      url.searchParams.set('backendError', backendStartError.message.slice(0, 200));
+    }
+    mainWindow.loadURL(url.toString());
   } else {
-    // Packaged: the renderer runs from `file://` so relative `/api`
-    // fetches don't work. Pass the bound backend port + status as a
-    // query string; the frontend's bridge layer reads them and routes
-    // calls to `http://localhost:<port>/api`. The renderer html ends
-    // up at `out/renderer/index.html`, which inside the asar is at
-    // the same relative location to main.js (`../renderer/index.html`).
     const renderHtml = path.join(__dirname, '../renderer/index.html');
-    const query: Record<string, string> = {};
-    if (backendPort) query.port = String(backendPort);
+    const query: Record<string, string> = { ipc: '1' };
     if (backendStartError) query.backendError = backendStartError.message.slice(0, 200);
     mainWindow.loadFile(renderHtml, { query });
   }
+  // Note: `backendOk` is currently used only for logging; future
+  // work could surface a banner in the renderer based on it.
+  void backendOk;
 
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools({ mode: 'right' });
@@ -133,22 +140,19 @@ function createWindow(backendPort: number | null): void {
 }
 
 app.whenReady().then(async () => {
-  // Start the backend, but don't gate window creation on it. If the
-  // backend fails (port conflict, broken DB), we still want the
-  // window to open and surface a useful error instead of leaving the
-  // user looking at a Dock icon with nothing else.
-  const backendPort = await bootstrap();
-  createWindow(backendPort);
+  // Boot the backend in-process. Don't gate the window on it — if
+  // initialisation fails we still want to open the window with an
+  // error banner rather than a dangling Dock icon.
+  const backendOk = await bootstrap();
+  createWindow(backendOk);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(backendPort);
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(backendOk);
   });
 }).catch((err) => {
-  // Final safety net — if even the activation handler throws, keep
-  // the app from silently hanging in Dock.
   console.error('[Electron] Fatal startup error:', err);
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow(null);
+    createWindow(false);
   }
 });
 
@@ -156,7 +160,28 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// IPC handlers (Electron-only features)
+// =============================================================
+// IPC handlers
+// =============================================================
+
+/**
+ * Catch-all `/api/*` dispatcher. The renderer's IPC shim wraps
+ * `fetch('/api/...')` calls and forwards them here. The backend's
+ * Express app handles them in-process — no TCP, no port exposure.
+ */
+ipcMain.handle('codetrellis:api', async (_event, req: IpcRequest) => {
+  if (!req || typeof req.method !== 'string' || typeof req.url !== 'string') {
+    return {
+      status: 400,
+      headers: { 'content-type': 'text/plain' },
+      body: 'invalid IPC request shape',
+    };
+  }
+  return dispatch(expressApp, req);
+});
+
+// Native dialogs / shell integration — Electron-only features that
+// can't be served by the Express app.
 ipcMain.handle('dialog:open-project', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -168,31 +193,7 @@ ipcMain.handle('dialog:open-project', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('project:scan', async (_event, projectPath: string) => {
-  // Delegate to backend via HTTP (same as web mode)
-  const port = getBoundBackendPort();
-  const res = await fetch(`http://localhost:${port}/api/project/scan`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectPath }),
-  });
-  return res.json();
-});
-
-ipcMain.handle('db:search-symbols', async (_event, query: string) => {
-  const port = getBoundBackendPort();
-  const res = await fetch(`http://localhost:${port}/api/symbols/search?q=${encodeURIComponent(query)}`);
-  return res.json();
-});
-
-ipcMain.handle('mcp:status', async () => {
-  const port = getBoundBackendPort();
-  const res = await fetch(`http://localhost:${port}/api/mcp/status`);
-  return res.json();
-});
-
 ipcMain.handle('logs:reveal', async () => {
-  // Reveal the current day's log in Finder / Explorer / file manager.
   const p = getCurrentLogPath();
   shell.showItemInFolder(p);
   return p;
