@@ -68,7 +68,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
       <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-white/[0.06]">
         <FileText size={13} className="text-foreground-subtle shrink-0" />
         <span className="text-[12px] font-semibold text-foreground uppercase tracking-wider">
-          Items
+          Pages
         </span>
         <span className="text-[11.5px] text-foreground-subtle">
           ({Object.keys(itemsByUid).length})

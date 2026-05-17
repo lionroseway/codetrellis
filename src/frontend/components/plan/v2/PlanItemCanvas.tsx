@@ -365,6 +365,9 @@ function PlanHomePage() {
             </div>
           </div>
 
+          {/* Progress summary — shows task breakdown when there are actions */}
+          <PlanProgressSummary items={Object.values(itemsByUid)} />
+
           {/* Body — click-to-edit. Read mode shows the chip-aware
               renderer; edit mode opens a textarea with the slash
               menu. Same pattern as the item body editor. */}
@@ -695,6 +698,76 @@ function BodyEditor({ item }: { item: PlanItem }) {
   );
 }
 
+
+/**
+ * Compact progress summary on the plan home page. Shows a horizontal
+ * bar + status breakdown when the plan has tasks. Hidden when there
+ * are no actions (progressive disclosure).
+ */
+function PlanProgressSummary({ items }: { items: PlanItem[] }) {
+  const actions = items.filter((i) => i.kind === 'action');
+  if (actions.length === 0) return null;
+
+  const counts: Record<string, number> = {};
+  for (const a of actions) {
+    const s = a.status ?? 'pending';
+    counts[s] = (counts[s] ?? 0) + 1;
+  }
+  const done = counts['done'] ?? 0;
+  const inProgress = counts['in_progress'] ?? 0;
+  const blocked = counts['blocked'] ?? 0;
+  const pending = (counts['pending'] ?? 0) + (counts['assigned'] ?? 0) + (counts['skipped'] ?? 0);
+  const pct = Math.round((done / actions.length) * 100);
+
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.015] px-5 py-4">
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-[12px] uppercase tracking-[0.1em] text-foreground-subtle font-semibold">
+          Progress
+        </span>
+        <span className="text-[13px] text-foreground font-medium">{pct}%</span>
+        <span className="text-[12px] text-foreground-subtle">
+          {done}/{actions.length} tasks done
+        </span>
+      </div>
+      {/* Progress bar */}
+      <div className="h-2 rounded-full bg-white/[0.05] overflow-hidden flex">
+        {done > 0 && (
+          <div className="h-full bg-green-500/70 transition-all" style={{ width: `${(done / actions.length) * 100}%` }} />
+        )}
+        {inProgress > 0 && (
+          <div className="h-full bg-accent/60 transition-all" style={{ width: `${(inProgress / actions.length) * 100}%` }} />
+        )}
+        {blocked > 0 && (
+          <div className="h-full bg-red-500/60 transition-all" style={{ width: `${(blocked / actions.length) * 100}%` }} />
+        )}
+      </div>
+      {/* Legend */}
+      <div className="flex items-center gap-4 mt-2.5 text-[12px] text-foreground-subtle">
+        {done > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-green-500/70" /> {done} done
+          </span>
+        )}
+        {inProgress > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-accent/60" /> {inProgress} in progress
+          </span>
+        )}
+        {blocked > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500/60" /> {blocked} blocked
+          </span>
+        )}
+        {pending > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-white/[0.15]" /> {pending} pending
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ChildrenList({ ctx }: { ctx?: { children: PlanItem[] } }) {
   const selectItem = usePlanItemsStore((s) => s.selectItem);
