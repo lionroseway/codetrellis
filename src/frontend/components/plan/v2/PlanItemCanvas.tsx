@@ -17,6 +17,7 @@ import { PlanGitContextChip } from './PlanGitContextChip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { ContextRail } from './ContextRail';
 import { TargetsStrip } from './TargetsStrip';
+import { ItemRoutingPanel } from './ItemRoutingPanel';
 import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
 import type {
   PlanItem, TaskStatus, Comment,
@@ -125,6 +126,7 @@ export function PlanItemCanvas() {
           <ItemHeaderProperties item={item} />
           <BodyEditor key={item.uid} item={item} />
           <TargetsStrip item={item} />
+          <ItemRoutingPanel item={item} />
           <ItemLevelNudge item={item} attachments={ctx?.attachments ?? []} />
           <ContextRail item={item} attachments={ctx?.attachments ?? []} />
           <ChildrenList ctx={ctx} />
@@ -221,6 +223,22 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
               {item.fileSpecs.length} file{item.fileSpecs.length === 1 ? '' : 's'}
             </span>
           )}
+
+          {/* Phase 17.K — Approval gate toggle */}
+          <button
+            onClick={() => updateItem(item.uid, { requiresApproval: !item.requiresApproval })}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[12px] transition-colors ${
+              item.requiresApproval
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                : 'border-white/[0.08] bg-white/[0.02] text-foreground-subtle hover:text-foreground-muted'
+            }`}
+            title={item.requiresApproval
+              ? 'Approval gate ON — agent must wait for human approval after completing this item'
+              : 'No approval gate — click to require human approval before next task starts'}
+          >
+            {item.requiresApproval ? '🔒' : '🔓'}
+            Gate
+          </button>
         </>
       )}
 

@@ -312,6 +312,34 @@ export interface ExecutionConfig {
   temperature?: number | null;
 }
 
+// =============================================================================
+// Phase 17.F — Constraints & Guardrails
+// =============================================================================
+
+/**
+ * 17.F — Guardrail constraints that limit what an agent may do when
+ * working on an item (or any descendant, via cascade). Enforced at
+ * claim-time and optionally at runtime by the MCP server.
+ */
+export interface ItemConstraints {
+  /** Glob patterns the agent must NOT modify (e.g. "src/auth/**"). */
+  excludePaths?: string[];
+  /** Glob patterns the agent must NOT modify — symbols. */
+  excludeSymbols?: string[];
+  /** If true, agent may NOT change function/method signatures in this scope. */
+  lockInterfaces?: boolean;
+  /** If true, agent must include tests for any new/changed code. */
+  requireTests?: boolean;
+  /** If true, agent must run the project's lint/format before completing. */
+  requireLint?: boolean;
+  /** Max files the agent may touch in a single claim (prevents runaway changes). */
+  maxFilesTouched?: number | null;
+  /** Max lines changed across all files. */
+  maxLinesChanged?: number | null;
+  /** Free-form instructions the agent must follow (shown in handoff prompt). */
+  customRules?: string[];
+}
+
 /**
  * A single granular change a plan promises to make. Aggregated from
  * task fields (`affectedFiles`, `symbolSpecs`, `newConnections`,
@@ -572,6 +600,12 @@ export interface PlanItem {
   /** 17.Q — Per-item execution settings. Null = inherit from parent. */
   executionConfig?: ExecutionConfig | null;
   executionConfigMode?: 'inherit' | 'replace';
+  /** 17.F — Constraints & guardrails. Cascades down the tree. */
+  constraints?: ItemConstraints | null;
+  constraintsMode?: CascadeMode;
+  /** 17.K — Approval gate. When true, agent must wait for human approval
+   *  after completing this item before moving to the next sibling. */
+  requiresApproval?: boolean;
 
   // Common metadata
   author: string;
@@ -672,6 +706,11 @@ export interface CreatePlanItemInput {
   claimPolicyMode?: 'inherit' | 'replace';
   executionConfig?: ExecutionConfig | null;
   executionConfigMode?: 'inherit' | 'replace';
+  // Phase 17.F — constraints
+  constraints?: ItemConstraints | null;
+  constraintsMode?: CascadeMode;
+  // Phase 17.K — approval gate
+  requiresApproval?: boolean;
   // Caller identity
   author: string;
   authorType: string;
@@ -711,6 +750,11 @@ export interface UpdatePlanItemInput {
   claimPolicyMode?: 'inherit' | 'replace';
   executionConfig?: ExecutionConfig | null;
   executionConfigMode?: 'inherit' | 'replace';
+  // Phase 17.F — constraints
+  constraints?: ItemConstraints | null;
+  constraintsMode?: CascadeMode;
+  // Phase 17.K — approval gate
+  requiresApproval?: boolean;
   parentUid?: string | null;   // re-parent — emits plan_events
   sortOrder?: number;          // reorder — emits plan_events
   /** Optional human-readable why-summary. Lands in plan_item_versions.changeSummary. */

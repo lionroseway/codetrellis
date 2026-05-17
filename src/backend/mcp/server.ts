@@ -1798,6 +1798,78 @@ function setupMcpServerInstance(): McpServer {
     },
   );
 
+  // --- get_next_item (17.K) ---------------------------------------------
+  mcpServer.registerTool(
+    'get_next_item',
+    {
+      description:
+        'Get the next claimable Action from a plan (V2). Respects dependency order and approval gates. ' +
+        'When an approval gate blocks the next item, returns a `gated` payload telling you to wait.',
+      inputSchema: {
+        plan_uid: z.string(),
+        parent_uid: z.string().optional().describe('Scope to children of a specific item. Omit for all.'),
+      },
+    },
+    async (args) => {
+      const parentFilter = args.parent_uid === undefined
+        ? undefined
+        : (args.parent_uid === '' ? null : args.parent_uid);
+      const result = planItemService.getNextItem(args.plan_uid, parentFilter);
+      if (result.gated) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              available: false,
+              reason: result.gated.reason,
+              gated_item_uid: result.gated.itemUid,
+              gated_item_title: result.gated.itemTitle,
+            }, null, 2),
+          }],
+        };
+      }
+      if (!result.item) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'No items available — all claimed, completed, or blocked by dependencies.',
+          }],
+        };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result.item, null, 2) }] };
+    },
+  );
+
+  // --- approve_gate (17.K) ----------------------------------------------
+  mcpServer.registerTool(
+    'approve_gate',
+    {
+      description:
+        'Human-only: approve an approval gate on a completed item, allowing the next sibling to be claimed. ' +
+        'This clears the gate by marking the item as approved (sets requiresApproval to false after review).',
+      inputSchema: {
+        uid: z.string().describe('The uid of the completed item whose gate should be cleared.'),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.getItem(args.uid);
+      if (!item) return { content: [{ type: 'text' as const, text: 'Item not found.' }] };
+      if (!item.requiresApproval) {
+        return { content: [{ type: 'text' as const, text: 'This item does not have an approval gate.' }] };
+      }
+      planItemService.updateItem(args.uid, {
+        requiresApproval: false,
+        author: id.author,
+        authorType: id.authorType,
+        changeSummary: 'Approval gate cleared',
+      });
+      broadcast('plan-item-updated', { planUid: item.planUid, itemUid: args.uid, changes: { requiresApproval: false } });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Approval gate on "${item.title}" cleared. Next item can now be claimed.` }] };
+    },
+  );
+
   // --- list_items -------------------------------------------------------
   mcpServer.registerTool(
     'list_items',

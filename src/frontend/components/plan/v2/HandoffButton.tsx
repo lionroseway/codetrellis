@@ -63,6 +63,20 @@ function planToPrompt(plan: Plan, items: PlanItem[]): string {
           lines.push(`- ${ss.action} \`${ss.name}\`${ss.filePath ? ` in \`${ss.filePath}\`` : ''}${ss.description ? ` — ${ss.description}` : ''}`);
         }
       }
+      // Include constraints/guardrails
+      if (action.constraints) {
+        const c = action.constraints;
+        lines.push('', '**Guardrails:**');
+        if (c.excludePaths?.length) lines.push(`- Do NOT modify: ${c.excludePaths.map(p => `\`${p}\``).join(', ')}`);
+        if (c.lockInterfaces) lines.push('- Do NOT change function/method signatures');
+        if (c.requireTests) lines.push('- Must include tests for all changes');
+        if (c.requireLint) lines.push('- Must pass lint/format before completing');
+        if (c.maxFilesTouched) lines.push(`- Max ${c.maxFilesTouched} files may be touched`);
+        if (c.maxLinesChanged) lines.push(`- Max ${c.maxLinesChanged} lines changed`);
+        if (c.customRules?.length) {
+          for (const rule of c.customRules) lines.push(`- ${rule}`);
+        }
+      }
       lines.push('');
     }
   }

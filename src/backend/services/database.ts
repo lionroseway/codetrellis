@@ -410,6 +410,11 @@ export async function initDatabase(): Promise<void> {
       claim_policy_mode  TEXT DEFAULT 'inherit',
       execution_config   TEXT DEFAULT NULL,
       execution_config_mode TEXT DEFAULT 'inherit',
+      -- Phase 17.F: constraints & guardrails
+      constraints        TEXT DEFAULT NULL,
+      constraints_mode   TEXT DEFAULT 'inherit',
+      -- Phase 17.K: approval gate
+      requires_approval  INTEGER NOT NULL DEFAULT 0,
       author           TEXT NOT NULL,
       author_type      TEXT NOT NULL DEFAULT 'human',
       created_at       INTEGER NOT NULL,
@@ -461,6 +466,12 @@ export async function initDatabase(): Promise<void> {
   try { db.run(`ALTER TABLE plan_items ADD COLUMN claim_policy_mode TEXT DEFAULT 'inherit'`); } catch { /* exists */ }
   try { db.run(`ALTER TABLE plan_items ADD COLUMN execution_config TEXT DEFAULT NULL`); } catch { /* exists */ }
   try { db.run(`ALTER TABLE plan_items ADD COLUMN execution_config_mode TEXT DEFAULT 'inherit'`); } catch { /* exists */ }
+
+  // Phase 17.F — constraints & guardrails columns
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN constraints TEXT DEFAULT NULL`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN constraints_mode TEXT DEFAULT 'inherit'`); } catch { /* exists */ }
+  // Phase 17.K — approval gate
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN requires_approval INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
 
   // Phase 17.N — agent capabilities for skill matching
   try { db.run(`ALTER TABLE agent_sessions ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }

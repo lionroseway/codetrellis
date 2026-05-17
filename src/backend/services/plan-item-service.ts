@@ -48,6 +48,7 @@ import type {
   ClaimPolicy,
   ExecutionConfig,
   CascadeMode,
+  ItemConstraints,
 } from '../../shared/types';
 
 // =============================================================================
@@ -64,6 +65,7 @@ const ITEM_COLUMNS = `uid, plan_uid, parent_uid, sort_order, kind,
   progress_percent, blocked_reason,
   scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
   skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
+  constraints, constraints_mode, requires_approval,
   author, author_type, created_at, updated_at, migrated_from`;
 
 function rowToItem(r: any[]): PlanItem {
@@ -95,11 +97,16 @@ function rowToItem(r: any[]): PlanItem {
     claimPolicyMode: (r[23] as 'inherit' | 'replace' | null) ?? 'inherit',
     executionConfig: parseJsonOrNull<ExecutionConfig>(r[24] as string | null),
     executionConfigMode: (r[25] as 'inherit' | 'replace' | null) ?? 'inherit',
-    author: r[26] as string,
-    authorType: r[27] as string,
-    createdAt: r[28] as number,
-    updatedAt: r[29] as number,
-    migratedFrom: (r[30] as string | null) ?? null,
+    // Phase 17.F
+    constraints: parseJsonOrNull<ItemConstraints>(r[26] as string | null),
+    constraintsMode: (r[27] as CascadeMode | null) ?? 'inherit',
+    // Phase 17.K
+    requiresApproval: !!(r[28] as number),
+    author: r[29] as string,
+    authorType: r[30] as string,
+    createdAt: r[31] as number,
+    updatedAt: r[32] as number,
+    migratedFrom: (r[33] as string | null) ?? null,
   };
 }
 
@@ -152,6 +159,11 @@ function metaSnapshotOf(item: PlanItem): Record<string, unknown> {
     claimPolicyMode: item.claimPolicyMode,
     executionConfig: item.executionConfig,
     executionConfigMode: item.executionConfigMode,
+    // Phase 17.F
+    constraints: item.constraints,
+    constraintsMode: item.constraintsMode,
+    // Phase 17.K
+    requiresApproval: item.requiresApproval,
   };
 }
 
@@ -289,6 +301,7 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
         progress_percent, blocked_reason,
         scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
         skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
+        constraints, constraints_mode, requires_approval,
         author, author_type, created_at, updated_at, migrated_from)
      VALUES (?, ?, ?, ?, ?,
              ?, ?, ?,
@@ -296,6 +309,7 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
              ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
+             ?, ?, ?,
              ?, ?, ?, ?, ?)`,
     [
       uid, input.planUid, input.parentUid ?? null, sortOrder, input.kind,
@@ -321,6 +335,11 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
       input.claimPolicyMode ?? 'inherit',
       input.executionConfig ? JSON.stringify(input.executionConfig) : null,
       input.executionConfigMode ?? 'inherit',
+      // Phase 17.F
+      input.constraints ? JSON.stringify(input.constraints) : null,
+      input.constraintsMode ?? 'inherit',
+      // Phase 17.K
+      input.requiresApproval ? 1 : 0,
       input.author, input.authorType, createdAt, updatedAt,
       input.migratedFrom ?? null,
     ],
@@ -485,6 +504,20 @@ export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem 
   }
   if (updates.executionConfigMode !== undefined && updates.executionConfigMode !== before.executionConfigMode) {
     sets.push('execution_config_mode = ?'); params.push(updates.executionConfigMode);
+    contentChanged = true;
+  }
+  // Phase 17.F — constraints & guardrails
+  if (updates.constraints !== undefined) {
+    sets.push('constraints = ?'); params.push(updates.constraints ? JSON.stringify(updates.constraints) : null);
+    contentChanged = true;
+  }
+  if (updates.constraintsMode !== undefined && updates.constraintsMode !== before.constraintsMode) {
+    sets.push('constraints_mode = ?'); params.push(updates.constraintsMode);
+    contentChanged = true;
+  }
+  // Phase 17.K — approval gate
+  if (updates.requiresApproval !== undefined && updates.requiresApproval !== before.requiresApproval) {
+    sets.push('requires_approval = ?'); params.push(updates.requiresApproval ? 1 : 0);
     contentChanged = true;
   }
 
@@ -872,6 +905,50 @@ export function resolveSkills(item: PlanItem): Skill[] {
 }
 
 /**
+ * Phase 17.F — Resolve effective constraints by walking up the tree.
+ * Constraints merge additively: child exclusions ADD to parent exclusions,
+ * boolean flags are OR'd (any ancestor requiring tests = tests required).
+ * Child can override with constraintsMode='replace' (wipe inherited) or
+ * constraintsMode='none' (disable all constraints for subtree).
+ */
+export function resolveConstraints(item: PlanItem): ItemConstraints {
+  const chain: PlanItem[] = [];
+  let cur: PlanItem | null = item;
+  while (cur) {
+    chain.unshift(cur);
+    cur = cur.parentUid ? getItem(cur.parentUid) : null;
+  }
+
+  let resolved: ItemConstraints = {};
+  for (const ancestor of chain) {
+    const c = ancestor.constraints;
+    const mode = ancestor.constraintsMode ?? 'inherit';
+
+    if (mode === 'none') {
+      resolved = {};
+      continue;
+    }
+    if (mode === 'replace' && c) {
+      resolved = { ...c };
+      continue;
+    }
+    // inherit — merge additively
+    if (!c) continue;
+    resolved = {
+      excludePaths: [...(resolved.excludePaths ?? []), ...(c.excludePaths ?? [])],
+      excludeSymbols: [...(resolved.excludeSymbols ?? []), ...(c.excludeSymbols ?? [])],
+      lockInterfaces: resolved.lockInterfaces || c.lockInterfaces || false,
+      requireTests: resolved.requireTests || c.requireTests || false,
+      requireLint: resolved.requireLint || c.requireLint || false,
+      maxFilesTouched: c.maxFilesTouched ?? resolved.maxFilesTouched ?? null,
+      maxLinesChanged: c.maxLinesChanged ?? resolved.maxLinesChanged ?? null,
+      customRules: [...(resolved.customRules ?? []), ...(c.customRules ?? [])],
+    };
+  }
+  return resolved;
+}
+
+/**
  * Atomic claim — only succeeds if the Action is unclaimed (no
  * assignee) AND status is `pending`. Returns conflicts list when
  * other in-progress Actions in the same plan touch overlapping
@@ -978,6 +1055,94 @@ export function claimItem(
   });
 
   return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
+}
+
+// =============================================================================
+// Phase 17.K — Get next available item (V2 surface), respects approval gates
+// =============================================================================
+
+export interface NextItemResult {
+  item: PlanItem | null;
+  /** When an item exists but is gated by approval, this carries context. */
+  gated?: {
+    itemUid: string;
+    itemTitle: string;
+    reason: string;
+  };
+}
+
+/**
+ * Return the next claimable Action from a plan. Checks:
+ *   - Status must be 'pending'
+ *   - No unmet dependencies (all dep uids must be 'done' or 'skipped')
+ *   - If `requiresApproval` on a prior sibling that just completed,
+ *     gate the next sibling until a human approves
+ *
+ * Returns the first eligible item sorted by tree position (parent
+ * chain + sortOrder). Returns `gated` info when the next item
+ * exists but can't be started due to an approval gate.
+ */
+export function getNextItem(planUid: string, parentUid?: string | null): NextItemResult {
+  const all = listAllItems(planUid);
+  const itemMap = Object.fromEntries(all.map((i) => [i.uid, i]));
+
+  // Filter to pending Actions
+  let candidates = all.filter((i) =>
+    i.kind === 'action' &&
+    i.status === 'pending' &&
+    !i.assignee,
+  );
+
+  // Scope to a parent if provided
+  if (parentUid !== undefined) {
+    candidates = candidates.filter((i) => i.parentUid === parentUid);
+  }
+
+  // Filter out those with unmet dependencies
+  candidates = candidates.filter((i) => {
+    const deps = i.dependencies ?? [];
+    if (deps.length === 0) return true;
+    return deps.every((d) => {
+      const dep = itemMap[d];
+      return dep && (dep.status === 'done' || dep.status === 'skipped');
+    });
+  });
+
+  // Sort by sortOrder (within same parent) — stable ordering
+  candidates.sort((a, b) => a.sortOrder - b.sortOrder);
+
+  if (candidates.length === 0) {
+    return { item: null };
+  }
+
+  // Check approval gates: if the candidate has a prior sibling with
+  // requiresApproval that completed recently, gate the next item.
+  const next = candidates[0];
+  const siblings = all
+    .filter((i) => i.parentUid === next.parentUid && i.kind === 'action')
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const myIdx = siblings.findIndex((s) => s.uid === next.uid);
+  if (myIdx > 0) {
+    // Check the immediately preceding sibling
+    const prev = siblings[myIdx - 1];
+    if (prev.requiresApproval && prev.status === 'done') {
+      // The previous sibling requires approval before moving on.
+      // Gate the next item. Human must explicitly "approve" the
+      // previous item, which the frontend handles by clearing the
+      // gate (or the agent can call approve_gate).
+      return {
+        item: null,
+        gated: {
+          itemUid: next.uid,
+          itemTitle: next.title,
+          reason: `Waiting for human approval of "${prev.title}" before proceeding.`,
+        },
+      };
+    }
+  }
+
+  return { item: next };
 }
 
 // =============================================================================

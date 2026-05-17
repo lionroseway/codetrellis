@@ -403,7 +403,8 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       const safeChanges: Partial<PlanItem> = {};
       const keys = ['title', 'body', 'template', 'status', 'assignee', 'progressPercent', 'blockedReason',
         'scopePath', 'fileSpecs', 'symbolSpecs', 'newConnections', 'removedConnections', 'parentUid', 'sortOrder',
-        'skills', 'skillsMode', 'claimPolicy', 'claimPolicyMode', 'executionConfig', 'executionConfigMode'] as const;
+        'skills', 'skillsMode', 'claimPolicy', 'claimPolicyMode', 'executionConfig', 'executionConfigMode',
+        'constraints', 'constraintsMode', 'requiresApproval'] as const;
       for (const k of keys) {
         if (k in changes) (safeChanges as Record<string, unknown>)[k] = changes[k];
       }
