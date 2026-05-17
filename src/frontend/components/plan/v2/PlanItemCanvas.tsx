@@ -18,6 +18,7 @@ import { PlanDiffPanel } from './PlanDiffPanel';
 import { ContextRail } from './ContextRail';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
+import { DriftIndicator } from './DriftIndicator';
 import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
 import type {
   PlanItem, TaskStatus, Comment,
@@ -129,6 +130,7 @@ export function PlanItemCanvas() {
           <ItemRoutingPanel item={item} />
           <ItemLevelNudge item={item} attachments={ctx?.attachments ?? []} />
           <ContextRail item={item} attachments={ctx?.attachments ?? []} />
+          {item.kind === 'action' && <DriftIndicator planUid={item.planUid} />}
           <ChildrenList ctx={ctx} />
           <CommentsBlock
             itemUid={item.uid}

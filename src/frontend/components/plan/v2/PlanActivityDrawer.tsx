@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import {
   Activity, MessageSquare, AlertTriangle, HelpCircle, CheckCircle2, Loader2, Ban,
-  Pencil, Plus, Move, Trash2, RotateCcw, Hash, ListPlus,
+  Pencil, Plus, Move, Trash2, RotateCcw, Hash, ListPlus, Zap,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { ExecutionDashboard } from './ExecutionDashboard';
 import type { PlanEvent, PlanEventType } from '@shared/types';
 
 const EVENT_META: Record<PlanEventType, { Icon: typeof Activity; tint: string; label: string }> = {
@@ -30,6 +32,7 @@ export function PlanActivityDrawer() {
   const selectItem = usePlanItemsStore((s) => s.selectItem);
   const open = usePlanItemsStore((s) => s.activityDrawerOpen);
   const toggle = usePlanItemsStore((s) => s.toggleActivityDrawer);
+  const [tab, setTab] = useState<'activity' | 'live'>('activity');
 
   if (!open) {
     // Collapsed — show a slim icon-only rail
@@ -48,12 +51,31 @@ export function PlanActivityDrawer() {
 
   return (
     <div className="h-full flex flex-col border-l border-white/[0.06] bg-[#080915] min-w-0">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.06]">
-        <Activity size={12} className="text-foreground-subtle shrink-0" />
-        <span className="text-[12px] font-semibold text-foreground uppercase tracking-wider">
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-white/[0.06]">
+        {/* Tab buttons */}
+        <button
+          onClick={() => setTab('activity')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+            tab === 'activity'
+              ? 'bg-white/[0.05] text-foreground font-medium'
+              : 'text-foreground-subtle hover:text-foreground-muted'
+          }`}
+        >
+          <Activity size={11} />
           Activity
-        </span>
-        <span className="text-[11px] text-foreground-subtle">({events.length})</span>
+          {events.length > 0 && <span className="text-[10px] opacity-60">({events.length})</span>}
+        </button>
+        <button
+          onClick={() => setTab('live')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+            tab === 'live'
+              ? 'bg-white/[0.05] text-foreground font-medium'
+              : 'text-foreground-subtle hover:text-foreground-muted'
+          }`}
+        >
+          <Zap size={11} />
+          Live
+        </button>
         <div className="flex-1" />
         <button
           onClick={toggle}
@@ -64,22 +86,28 @@ export function PlanActivityDrawer() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {events.length === 0 ? (
-          <p className="text-[12px] text-foreground-subtle italic px-2 py-4 text-center">
-            Quiet. Item events will land here in real time.
-          </p>
-        ) : (
-          events.map((e) => (
-            <EventRow
-              key={e.id}
-              event={e}
-              affectedTitle={e.itemUid ? itemsByUid[e.itemUid]?.title : undefined}
-              onClick={() => e.itemUid && selectItem(e.itemUid)}
-            />
-          ))
-        )}
-      </div>
+      {tab === 'activity' ? (
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {events.length === 0 ? (
+            <p className="text-[12px] text-foreground-subtle italic px-2 py-4 text-center">
+              Quiet. Item events will land here in real time.
+            </p>
+          ) : (
+            events.map((e) => (
+              <EventRow
+                key={e.id}
+                event={e}
+                affectedTitle={e.itemUid ? itemsByUid[e.itemUid]?.title : undefined}
+                onClick={() => e.itemUid && selectItem(e.itemUid)}
+              />
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <ExecutionDashboard />
+        </div>
+      )}
     </div>
   );
 }
