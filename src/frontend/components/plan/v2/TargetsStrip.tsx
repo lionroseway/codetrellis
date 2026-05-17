@@ -184,20 +184,10 @@ export function TargetsStrip({
     }
   };
 
+  // Progressive disclosure: hide entirely when there are no targets.
+  // The user can add targets via @ mentions in the body or the ContextRail.
   if (targets.length === 0) {
-    return (
-      <div className="flex items-center gap-2 px-1 py-2">
-        <span className="text-[12.5px] text-foreground-subtle italic">No code targets yet</span>
-        {onAddClick && (
-          <button
-            onClick={onAddClick}
-            className="flex items-center gap-1 px-2 py-0.5 text-[12px] rounded-md border border-dashed border-white/[0.12] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
-          >
-            <Plus size={11} /> Add target
-          </button>
-        )}
-      </div>
-    );
+    return null;
   }
 
   return (

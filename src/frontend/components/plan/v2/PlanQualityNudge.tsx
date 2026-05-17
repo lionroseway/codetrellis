@@ -97,22 +97,24 @@ export function ItemLevelNudge({
   const hasReferences = attachments.length > 0;
   const hasAnyContext = hasCodeAnchor || hasReferences;
 
-  // Vague signal — short body + no context. For Actions we extra-flag
-  // "no graph anchor" because that means drift detection can't see it.
-  const isVague = bodyLen < SHORT_BODY_THRESHOLD && !hasAnyContext;
-  const isUntrackable = isAction && !hasCodeAnchor && bodyLen >= SHORT_BODY_THRESHOLD;
+  // Progressive disclosure: don't fire on empty/near-empty items.
+  // Only nudge once the user has actually written something (>50 chars)
+  // but hasn't added any targets or context.
+  const hasSubstantialBody = bodyLen > 50;
+  const isVague = hasSubstantialBody && !hasAnyContext;
+  const isUntrackable = isAction && !hasCodeAnchor && hasSubstantialBody;
 
   if (dismissed || (!isVague && !isUntrackable)) return null;
 
   const headline = isVague
-    ? `This ${isAction ? 'Action' : 'Object'} is thin.`
-    : 'This Action has no graph anchor.';
+    ? `This ${isAction ? 'task' : 'page'} needs more context.`
+    : 'This task has no graph anchor.';
 
   const detail = isVague
     ? (isAction
         ? 'An agent will struggle to land it. Add a file, folder, or symbol target — or paste a URL / transcript / image as context.'
         : 'Hard for the room to use. Drop a file, image, URL, or write a few sentences explaining the purpose.')
-    : 'Body is solid, but no file / folder / symbol / edge target means drift detection has nothing to compare against. Add at least one Target so progress is visible.';
+    : 'Body is solid, but no file / folder / symbol / edge target means drift detection has nothing to compare against. Add at least one target so progress is visible.';
 
   return (
     <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3.5 flex items-start gap-3">
@@ -121,7 +123,7 @@ export function ItemLevelNudge({
         <div className="font-medium text-amber-200 text-[15px]">{headline}</div>
         <p className="text-amber-100/80">{detail}</p>
         <p className="text-[12.5px] text-amber-100/60">
-          Tip: ask your AI agent — paste this {isAction ? 'Action' : 'Object'} and let it suggest the anchors.
+          Tip: ask your AI agent — paste this {isAction ? 'task' : 'page'} and let it suggest the anchors.
         </p>
       </div>
       <button

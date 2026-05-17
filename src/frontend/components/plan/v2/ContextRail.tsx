@@ -210,6 +210,25 @@ export function ContextRail({
     setAddOpen(false);
   };
 
+  // Progressive disclosure: when empty and no pending form, collapse
+  // to a single "+ Add context" button instead of rendering a full section.
+  const isEmpty = totalRows === 0 && pending === null && pickerMode === null;
+
+  if (isEmpty && !addOpen) {
+    return (
+      <section>
+        <div className="relative" ref={addMenuRef}>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] rounded-md border border-dashed border-white/[0.1] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
+          >
+            <Plus size={12} /> Add context
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -249,21 +268,6 @@ export function ContextRail({
           )}
         </div>
       </div>
-
-      {/* Empty state */}
-      {totalRows === 0 && pending === null && pickerMode === null && (
-        <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015] px-5 py-7 text-center text-[13.5px] text-foreground-muted">
-          <Upload size={18} className="mx-auto mb-2 opacity-60" />
-          <div className="leading-relaxed">
-            No context yet. Click <span className="text-foreground">Add ▾</span>, or drag files / folders here, or paste an image (⌘V).
-          </div>
-          {isAction && (
-            <div className="mt-1.5 text-[12px] text-foreground-subtle leading-relaxed">
-              Targets (📄 file, 📁 folder, 🔧 symbol, 🔗 edge) make this Action visible to drift detection.
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Rows */}
       <div className="space-y-2">

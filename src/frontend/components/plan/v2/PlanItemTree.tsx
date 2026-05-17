@@ -81,20 +81,20 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
         {rootUids.length === 0 ? (
           <div className="px-3 py-7 text-center">
             <p className="text-[12.5px] text-foreground-subtle italic leading-relaxed">
-              Empty plan. Add an Object (context) or Action (work item) below.
+              Empty plan. Add a page or task below.
             </p>
             <div className="flex justify-center gap-2 mt-3.5">
               <button
                 onClick={() => createItem({ planUid, kind: 'object', title: 'New page' })}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md border border-white/[0.06] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
               >
-                <FileText size={12} /> Object
+                <FileText size={12} /> Page
               </button>
               <button
-                onClick={() => createItem({ planUid, kind: 'action', title: 'New action' })}
+                onClick={() => createItem({ planUid, kind: 'action', title: 'New task' })}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md border border-accent/30 text-accent hover:bg-accent/10"
               >
-                <Zap size={12} /> Action
+                <Zap size={12} /> Task
               </button>
             </div>
           </div>
@@ -235,17 +235,17 @@ function NewButton({
             }}
             className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded hover:bg-white/[0.04]"
           >
-            <FileText size={13} className="text-foreground-subtle" /> Object (context)
+            <FileText size={13} className="text-foreground-subtle" /> Page
           </button>
           <button
             onClick={async () => {
               setOpen(false);
-              const item = await createItem({ planUid, kind: 'action' as PlanItemKind, parentUid, title: 'New action' });
+              const item = await createItem({ planUid, kind: 'action' as PlanItemKind, parentUid, title: 'New task' });
               if (item) usePlanItemsStore.getState().selectItem(item.uid);
             }}
             className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded hover:bg-white/[0.04]"
           >
-            <Zap size={13} className="text-accent" /> Action (work item)
+            <Zap size={13} className="text-accent" /> Task
           </button>
         </div>
       )}

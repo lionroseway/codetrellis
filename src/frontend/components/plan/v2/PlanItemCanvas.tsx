@@ -177,7 +177,7 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
   return (
     <div className="flex items-center gap-2 flex-wrap text-[13px] text-foreground-subtle">
       <span className="text-[11.5px] uppercase tracking-wider font-medium px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02]">
-        {isAction ? 'Action' : 'Object'}
+        {isAction ? 'Task' : 'Page'}
       </span>
 
       {isAction && (
@@ -427,16 +427,16 @@ function PlanHomePage() {
                   }}
                   className="flex items-center gap-2 px-4 py-2 text-[13px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
                 >
-                  <FileText size={13} /> Sub-page (Object)
+                  <FileText size={13} /> New page
                 </button>
                 <button
                   onClick={async () => {
-                    const item = await createItem({ planUid: plan.uid, kind: 'action', title: 'New action' });
+                    const item = await createItem({ planUid: plan.uid, kind: 'action', title: 'New task' });
                     if (item) selectItem(item.uid);
                   }}
                   className="flex items-center gap-2 px-4 py-2 text-[13px] rounded-md bg-accent text-white hover:bg-accent-hover shadow-[0_0_10px_rgba(59,130,246,0.2)]"
                 >
-                  <Zap size={13} /> Action (work item)
+                  <Zap size={13} /> New task
                 </button>
               </div>
             </div>
@@ -461,7 +461,8 @@ function PlanBodyArea({
   onChange: (next: string) => void;
   placeholder?: string;
 }) {
-  const [editing, setEditing] = useState(false);
+  // Start in edit mode when the body is empty — just start typing.
+  const [editing, setEditing] = useState(!value.trim());
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLTextAreaElement>(null);
   const slash = useSlashMenu({ textareaRef: ref, onChange: setDraft, parentItemUid: null });
@@ -574,7 +575,8 @@ function BodyEditor({ item }: { item: PlanItem }) {
   const updateItem = usePlanItemsStore((s) => s.updateItem);
   const [title, setTitle] = useState(item.title);
   const [body, setBody] = useState(item.body ?? '');
-  const [editingBody, setEditingBody] = useState(false);
+  // Start in edit mode when the body is empty — no click-to-enter needed.
+  const [editingBody, setEditingBody] = useState(!(item.body ?? '').trim());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset local state when the selected item flips.
@@ -742,6 +744,7 @@ function CommentsBlock({
   const [draft, setDraft] = useState('');
   const [kind, setKind] = useState<'note' | 'blocker' | 'progress' | 'question'>('note');
   const [submitting, setSubmitting] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const submit = async () => {
     if (!draft.trim()) return;
@@ -766,6 +769,21 @@ function CommentsBlock({
   const kinds: Array<'note' | 'blocker' | 'progress' | 'question'> = isAction
     ? ['note', 'progress', 'blocker', 'question']
     : ['note', 'question'];
+
+  // Progressive disclosure: if no comments and composer not open, show
+  // a single "Add comment" link instead of the full section.
+  if (sorted.length === 0 && !composerOpen) {
+    return (
+      <section>
+        <button
+          onClick={() => setComposerOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] rounded-md border border-dashed border-white/[0.1] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
+        >
+          <MessageSquare size={12} /> Add comment
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section>

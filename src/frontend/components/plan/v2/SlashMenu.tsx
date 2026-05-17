@@ -82,8 +82,8 @@ export function useSlashMenu(opts: {
     return [
       {
         id: 'sub-object',
-        label: 'Sub-page (Object)',
-        description: 'Context page — markdown body, attachments, can hold actions',
+        label: 'New page',
+        description: 'Context page — markdown body, attachments, nested pages',
         Icon: FileText,
         match: ['page', 'sub', 'object', 'doc', 'note'],
         apply: async ({ planUid, parentItemUid }) => {
@@ -95,17 +95,13 @@ export function useSlashMenu(opts: {
             title: 'Untitled',
           });
           if (!item) return '';
-          // Phase 15 §15.D bug-fix: no auto-navigation. Inserting the
-          // chip is enough — user clicks the chip when they're ready
-          // to enter the new page. Auto-nav was confusing because
-          // the canvas re-flowed away from the editor mid-typing.
-          addToast({ type: 'success', title: 'Sub-page added', message: item.title || 'Untitled', duration: 2500 });
+          addToast({ type: 'success', title: 'Page added', message: item.title || 'Untitled', duration: 2500 });
           return `[[item:${item.uid}|${item.title || 'Untitled'}]]`;
         },
       },
       {
         id: 'sub-action',
-        label: 'Action (work item)',
+        label: 'New task',
         description: 'Graph-anchored work — status, files, edits, agent claim',
         Icon: Zap,
         match: ['action', 'task', 'work', 'todo'],
@@ -115,11 +111,11 @@ export function useSlashMenu(opts: {
             planUid,
             kind: 'action',
             parentUid: parentItemUid,
-            title: 'Untitled action',
+            title: 'Untitled task',
           });
           if (!item) return '';
-          addToast({ type: 'success', title: 'Action added', message: item.title || 'Untitled action', duration: 2500 });
-          return `[[action:${item.uid}|${item.title || 'Untitled action'}]]`;
+          addToast({ type: 'success', title: 'Task added', message: item.title || 'Untitled task', duration: 2500 });
+          return `[[action:${item.uid}|${item.title || 'Untitled task'}]]`;
         },
       },
       {
