@@ -14,12 +14,12 @@ import { Send, Copy, ChevronDown, Radio } from 'lucide-react';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
-import type { PlanItem, Plan, AgentSessionInfo } from '@shared/types';
+import type { PlanItem, Plan, AgentSessionInfo, ExternalRef } from '@shared/types';
 
 /**
  * Generate a markdown prompt from a plan suitable for an agent.
  */
-function planToPrompt(plan: Plan, items: PlanItem[]): string {
+function planToPrompt(plan: Plan, items: PlanItem[], refs?: ExternalRef[]): string {
   const lines: string[] = [];
   lines.push(`# ${plan.title}`);
   if (plan.description) lines.push('', plan.description);
@@ -79,6 +79,16 @@ function planToPrompt(plan: Plan, items: PlanItem[]): string {
       }
       lines.push('');
     }
+  }
+
+  // Phase 17.R — external references
+  if (refs && refs.length > 0) {
+    lines.push('## External References');
+    lines.push('');
+    for (const ref of refs) {
+      lines.push(`- [${ref.title}](${ref.url})${ref.kind !== 'url' ? ` (${ref.kind.replace(/_/g, ' ')})` : ''}`);
+    }
+    lines.push('');
   }
 
   return lines.join('\n');
@@ -144,10 +154,15 @@ export function HandoffButton() {
   const pendingActions = items.filter((i) => i.kind === 'action' && i.status === 'pending');
   const selectedItem = selectedItemUid ? itemsByUid[selectedItemUid] : null;
 
-  // Copy plan as prompt
-  const handleCopyPlan = useCallback(() => {
+  // Copy plan as prompt (fetches external refs)
+  const handleCopyPlan = useCallback(async () => {
     if (!plan) return;
-    const prompt = planToPrompt(plan, items);
+    let refs: ExternalRef[] = [];
+    try {
+      const r = await fetch(`/api/plans/${plan.uid}/refs`);
+      if (r.ok) refs = await r.json();
+    } catch { /* continue without refs */ }
+    const prompt = planToPrompt(plan, items, refs);
     navigator.clipboard.writeText(prompt);
     addToast({ type: 'success', title: 'Copied', message: 'Plan prompt copied to clipboard.' });
     setOpen(false);

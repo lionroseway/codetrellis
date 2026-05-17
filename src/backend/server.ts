@@ -8,7 +8,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { scanDirectory, countFiles, collectFilePaths } from './services/project-scanner';
 import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile } from './services/ast-parser';
-import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, resolveImports, getDependencyEdges, getFileDependencies, clearAstData } from './services/database';
+import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
@@ -54,6 +54,7 @@ import {
   listPlanDocuments, listPlanDocumentSummaries, searchPlanDocuments,
 } from './services/plan-documents-service';
 import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
+import * as externalRefsService from './services/external-refs-service';
 import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
 import {
   getUpdateState,
@@ -1935,6 +1936,52 @@ app.delete('/api/comments/:uid', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- External References API (Phase 17.R) ---
+
+app.get('/api/items/:itemUid/refs', (req, res) => {
+  res.json(externalRefsService.getExternalRefs(req.params.itemUid));
+});
+
+app.get('/api/plans/:uid/refs', (req, res) => {
+  res.json(externalRefsService.getExternalRefsByPlan(req.params.uid));
+});
+
+app.post('/api/items/:itemUid/refs', (req, res) => {
+  const { url, title, kind, metadata } = req.body;
+  if (!url) { res.status(400).json({ error: 'url required' }); return; }
+  try {
+    const ref = externalRefsService.createExternalRef({
+      itemUid: req.params.itemUid,
+      url,
+      title,
+      kind,
+      metadata,
+      author: getAuthorKey('human'),
+      authorType: 'human',
+    });
+    broadcast('external-ref-added', { ref });
+    saveNow(() => exportDatabase());
+    res.json(ref);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.put('/api/refs/:uid', (req, res) => {
+  const { title, metadata } = req.body;
+  externalRefsService.updateExternalRef(req.params.uid, { title, metadata });
+  broadcast('external-ref-updated', { uid: req.params.uid });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+app.delete('/api/refs/:uid', (req, res) => {
+  externalRefsService.deleteExternalRef(req.params.uid);
+  broadcast('external-ref-deleted', { uid: req.params.uid });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
 // --- Sessions API ---
 
 app.get('/api/sessions', (_req, res) => {
@@ -1955,6 +2002,15 @@ app.post('/api/sessions/:sessionId/assign-plan', (req, res) => {
 // Database stats
 app.get('/api/stats', (_req, res) => {
   res.json(getDbStats());
+});
+
+// Architecture summary (Phase 17.A — Codebase Orientation)
+app.get('/api/architecture-summary', (_req, res) => {
+  try {
+    res.json(getArchitectureSummary());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 // Agent watcher status

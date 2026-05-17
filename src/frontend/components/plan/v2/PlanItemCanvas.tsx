@@ -19,6 +19,9 @@ import { ContextRail } from './ContextRail';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
 import { DriftIndicator } from './DriftIndicator';
+import { ExternalRefsPanel } from './ExternalRefsPanel';
+import { PlanTemplateChooser } from './PlanTemplateChooser';
+import { CodebaseOrientation } from './CodebaseOrientation';
 import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
 import type {
   PlanItem, TaskStatus, Comment,
@@ -130,6 +133,7 @@ export function PlanItemCanvas() {
           <ItemRoutingPanel item={item} />
           <ItemLevelNudge item={item} attachments={ctx?.attachments ?? []} />
           <ContextRail item={item} attachments={ctx?.attachments ?? []} />
+          <ExternalRefsPanel itemUid={item.uid} />
           {item.kind === 'action' && <DriftIndicator planUid={item.planUid} />}
           <ChildrenList ctx={ctx} />
           <CommentsBlock
@@ -397,6 +401,11 @@ function PlanHomePage() {
             placeholder="Write what this plan is about. Paste a transcript, drop a Figma link, sketch a strategy. Press '/' for sub-pages, todos, code blocks…"
           />
 
+          {/* Phase 17.A — Codebase orientation — architecture summary.
+              Expanded when plan is empty (user needs context), collapsed
+              when plan has content (available on demand). */}
+          <CodebaseOrientation defaultExpanded={isEmpty} />
+
           {/* Plan-level nudge — surfaces when the plan looks vague.
               Friendly coach, dismissible, never blocks anything. */}
           <PlanLevelNudge plan={plan} topLevelCount={topLevel.length} />
@@ -435,34 +444,39 @@ function PlanHomePage() {
             </section>
           )}
 
-          {/* Quick add — visible when the plan has nothing yet, hidden
-              after content lands so it doesn't compete with the body. */}
+          {/* Quick add + templates — visible when the plan has nothing yet */}
           {isEmpty && (
-            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015] p-7 text-center space-y-4">
-              <p className="text-[14px] text-foreground-muted leading-relaxed">
-                Empty plan. Start with a thought (just type above) or seed structure with sub-pages.
-              </p>
-              <div className="flex justify-center gap-2.5">
-                <button
-                  onClick={async () => {
-                    const item = await createItem({ planUid: plan.uid, kind: 'object', title: 'New page' });
-                    if (item) selectItem(item.uid);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 text-[13px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
-                >
-                  <FileText size={13} /> New page
-                </button>
-                <button
-                  onClick={async () => {
-                    const item = await createItem({ planUid: plan.uid, kind: 'action', title: 'New task' });
-                    if (item) selectItem(item.uid);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 text-[13px] rounded-md bg-accent text-white hover:bg-accent-hover shadow-[0_0_10px_rgba(59,130,246,0.2)]"
-                >
-                  <Zap size={13} /> New task
-                </button>
+            <>
+              {/* Phase 17.E — Smart templates */}
+              <PlanTemplateChooser />
+
+              {/* Or start blank */}
+              <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015] p-7 text-center space-y-4">
+                <p className="text-[14px] text-foreground-muted leading-relaxed">
+                  Or start blank — just type above, or seed structure manually.
+                </p>
+                <div className="flex justify-center gap-2.5">
+                  <button
+                    onClick={async () => {
+                      const item = await createItem({ planUid: plan.uid, kind: 'object', title: 'New page' });
+                      if (item) selectItem(item.uid);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-[13px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
+                  >
+                    <FileText size={13} /> New page
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const item = await createItem({ planUid: plan.uid, kind: 'action', title: 'New task' });
+                      if (item) selectItem(item.uid);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-[13px] rounded-md bg-accent text-white hover:bg-accent-hover shadow-[0_0_10px_rgba(59,130,246,0.2)]"
+                  >
+                    <Zap size={13} /> New task
+                  </button>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

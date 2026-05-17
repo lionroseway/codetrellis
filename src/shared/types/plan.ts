@@ -672,6 +672,48 @@ export interface PlanEvent {
   createdAt: number;
 }
 
+// =============================================================================
+// Phase 17.R — External References
+// =============================================================================
+
+/**
+ * Kind taxonomy for external references. Each kind gets a distinct icon
+ * and (optionally) a rich-metadata fetch when the user pastes a URL.
+ */
+export type ExternalRefKind =
+  | 'github_issue'
+  | 'github_pr'
+  | 'github_commit'
+  | 'jira'
+  | 'linear'
+  | 'figma'
+  | 'notion'
+  | 'slack'
+  | 'url';      // generic fallback
+
+/**
+ * 17.R — An external reference linked to a plan item. Lets users
+ * associate GitHub issues, PRs, Figma frames, Jira tickets, Linear
+ * issues, or arbitrary URLs with their plan items. The agent handoff
+ * prompt includes these so agents have context.
+ */
+export interface ExternalRef {
+  uid: string;
+  /** The plan item this ref is linked to. */
+  itemUid: string;
+  /** Determines the icon and how the link is rendered. */
+  kind: ExternalRefKind;
+  /** Canonical URL of the external resource. */
+  url: string;
+  /** Human-readable title (auto-extracted or user-provided). */
+  title: string;
+  /** Extra metadata (issue number, state, labels, etc.). JSON-safe. */
+  metadata?: Record<string, unknown> | null;
+  author: string;
+  authorType: string;
+  createdAt: number;
+}
+
 /**
  * Input to `add_item` — fields beyond the common ones are optional
  * and gated on `kind` (Action-only fields are ignored on Objects).

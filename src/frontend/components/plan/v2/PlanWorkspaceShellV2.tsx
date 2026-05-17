@@ -11,6 +11,7 @@ import { PlanActivityDrawer } from './PlanActivityDrawer';
 import { PlanItemHistoryDrawer } from './PlanItemHistoryDrawer';
 import { HandoffButton } from './HandoffButton';
 import { DriftBadge } from './DriftIndicator';
+import { PlanReadinessRing } from './PlanReadinessRing';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -112,6 +113,8 @@ export function PlanWorkspaceShellV2() {
           </div>
           <span>{progress}%</span>
         </div>
+        {/* Phase 17.G — Plan readiness score */}
+        <PlanReadinessRing />
         {/* Phase 17.L — Drift detection badge */}
         <DriftBadge planUid={plan.uid} />
         {/* Phase 17.H — Hand off to agent */}

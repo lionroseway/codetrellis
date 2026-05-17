@@ -36,6 +36,7 @@ import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-sys
 import * as planFileService from '../services/plan-file-service';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
 import { getSettings } from '../services/settings-service';
+import * as externalRefsService from '../services/external-refs-service';
 
 /**
  * Default + max-attempt range. The user-configured port comes from
@@ -2107,6 +2108,77 @@ function setupMcpServerInstance(): McpServer {
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
       }
+    },
+  );
+
+  // --- External References (17.R) ----------------------------------------
+
+  mcpServer.registerTool(
+    'list_external_refs',
+    {
+      description:
+        'List external references (GitHub issues, PRs, Jira tickets, Figma frames, etc.) linked to a plan item.',
+      inputSchema: {
+        item_uid: z.string().describe('The plan item uid to list refs for.'),
+      },
+    },
+    async (args) => {
+      const refs = externalRefsService.getExternalRefs(args.item_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(refs, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'add_external_ref',
+    {
+      description:
+        'Link an external resource (GitHub issue, PR, Jira ticket, Figma frame, any URL) to a plan item. ' +
+        'The kind is auto-detected from the URL pattern.',
+      inputSchema: {
+        item_uid: z.string().describe('The plan item uid to link the ref to.'),
+        url: z.string().describe('The URL of the external resource.'),
+        title: z.string().optional().describe('Display title. Auto-extracted from URL if omitted.'),
+        kind: z.enum([
+          'github_issue', 'github_pr', 'github_commit',
+          'jira', 'linear', 'figma', 'notion', 'slack', 'url',
+        ] as const).optional().describe('Reference kind. Auto-detected if omitted.'),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.getItem(args.item_uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.item_uid} not found` }] };
+      try {
+        const ref = externalRefsService.createExternalRef({
+          itemUid: args.item_uid,
+          url: args.url,
+          title: args.title,
+          kind: args.kind,
+          author: id.author,
+          authorType: id.authorType,
+        });
+        broadcast('external-ref-added', { ref });
+        saveNow(() => exportDatabase());
+        return { content: [{ type: 'text' as const, text: JSON.stringify(ref, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
+      }
+    },
+  );
+
+  mcpServer.registerTool(
+    'remove_external_ref',
+    {
+      description: 'Remove an external reference from a plan item.',
+      inputSchema: {
+        uid: z.string().describe('The external ref uid to remove.'),
+      },
+    },
+    async (args) => {
+      externalRefsService.deleteExternalRef(args.uid);
+      broadcast('external-ref-deleted', { uid: args.uid });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Removed external ref ${args.uid}` }] };
     },
   );
 

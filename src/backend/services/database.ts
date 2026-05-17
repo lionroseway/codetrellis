@@ -476,6 +476,23 @@ export async function initDatabase(): Promise<void> {
   // Phase 17.N — agent capabilities for skill matching
   try { db.run(`ALTER TABLE agent_sessions ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
 
+  // Phase 17.R — external references table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS external_refs (
+      uid TEXT PRIMARY KEY,
+      item_uid TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'url',
+      url TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      metadata TEXT DEFAULT NULL,
+      author TEXT NOT NULL DEFAULT 'human',
+      author_type TEXT NOT NULL DEFAULT 'human',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_external_refs_item ON external_refs(item_uid);
+    CREATE INDEX IF NOT EXISTS idx_external_refs_kind ON external_refs(kind);
+  `);
+
   console.log('[DB] SQLite initialized');
 }
 
@@ -884,6 +901,90 @@ export function getFileDependencies(filePath: string): {
 /**
  * Get stats about the database.
  */
+/**
+ * Phase 17.A — Architecture summary data. Returns a breakdown of the
+ * codebase by top-level directory, language distribution, symbol counts
+ * by kind, and most-imported files. Used by the orientation panel.
+ */
+export function getArchitectureSummary(): {
+  fileCount: number;
+  symbolCount: number;
+  importCount: number;
+  topDirectories: Array<{ dir: string; fileCount: number }>;
+  languageBreakdown: Array<{ language: string; count: number }>;
+  symbolsByKind: Array<{ kind: string; count: number }>;
+  mostImported: Array<{ path: string; importerCount: number }>;
+} {
+  const d = getDb();
+  const fileCount = (d.exec(`SELECT COUNT(*) FROM files`)[0]?.values[0]?.[0] as number) || 0;
+  const symbolCount = (d.exec(`SELECT COUNT(*) FROM symbols`)[0]?.values[0]?.[0] as number) || 0;
+  const importCount = (d.exec(`SELECT COUNT(*) FROM imports`)[0]?.values[0]?.[0] as number) || 0;
+
+  // Top-level directories
+  const topDirs: Array<{ dir: string; fileCount: number }> = [];
+  try {
+    const r = d.exec(`
+      SELECT
+        CASE
+          WHEN INSTR(relative_path, '/') > 0
+          THEN SUBSTR(relative_path, 1, INSTR(relative_path, '/') - 1)
+          ELSE '(root)'
+        END AS dir,
+        COUNT(*) AS cnt
+      FROM files
+      GROUP BY dir
+      ORDER BY cnt DESC
+      LIMIT 15
+    `);
+    for (const row of r[0]?.values ?? []) {
+      topDirs.push({ dir: row[0] as string, fileCount: row[1] as number });
+    }
+  } catch { /* old schema */ }
+
+  // Language breakdown
+  const langs: Array<{ language: string; count: number }> = [];
+  try {
+    const r = d.exec(`SELECT language, COUNT(*) AS cnt FROM files GROUP BY language ORDER BY cnt DESC`);
+    for (const row of r[0]?.values ?? []) {
+      langs.push({ language: row[0] as string, count: row[1] as number });
+    }
+  } catch { /* */ }
+
+  // Symbols by kind
+  const kindBreakdown: Array<{ kind: string; count: number }> = [];
+  try {
+    const r = d.exec(`SELECT kind, COUNT(*) AS cnt FROM symbols GROUP BY kind ORDER BY cnt DESC`);
+    for (const row of r[0]?.values ?? []) {
+      kindBreakdown.push({ kind: row[0] as string, count: row[1] as number });
+    }
+  } catch { /* */ }
+
+  // Most imported files (highest fan-in)
+  const mostImported: Array<{ path: string; importerCount: number }> = [];
+  try {
+    const r = d.exec(`
+      SELECT i.source_path, COUNT(DISTINCT i.file_id) AS cnt
+      FROM imports i
+      GROUP BY i.source_path
+      ORDER BY cnt DESC
+      LIMIT 10
+    `);
+    for (const row of r[0]?.values ?? []) {
+      mostImported.push({ path: row[0] as string, importerCount: row[1] as number });
+    }
+  } catch { /* */ }
+
+  return {
+    fileCount,
+    symbolCount,
+    importCount,
+    topDirectories: topDirs,
+    languageBreakdown: langs,
+    symbolsByKind: kindBreakdown,
+    mostImported,
+  };
+}
+
 export function getDbStats(): { fileCount: number; symbolCount: number; importCount: number; resolvedImports: number } {
   const d = getDb();
   const files = d.exec(`SELECT COUNT(*) FROM files`);
