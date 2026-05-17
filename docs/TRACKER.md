@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-05-17 (Phase 16 planning — UX overhaul design doc + tracker added; V1 removal + progressive disclosure agreed)
+Last updated: 2026-05-17 (Phase 16.A–D shipped — V1 removed, progressive disclosure, Object→Page/Task rename, +Add menu simplified)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -1935,7 +1935,7 @@ Acceptance:
 
 ### Phase 16 — Plan Workspace UX Overhaul
 
-**Status:** planning (design agreed, no code yet)
+**Status:** in progress (16.A–D shipped, 16.E pending)
 **Depends on:** Phase 15 (V2 data model + components)
 **Supersedes:** V1 workspace entirely
 **Design doc:** [PLAN-UX-OVERHAUL.md](PLAN-UX-OVERHAUL.md)
@@ -1949,10 +1949,10 @@ Sub-phases:
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 16.A | Drop V1 + fix plumbing (delete V1 components, remove `planV2Enabled`, fix `fetchPlan` error handling, rewire PlanPanel) | pending |
-| 16.B | Clean page experience (progressive disclosure, hide empty sections, body starts in edit mode, delay quality nudge, rename Object/Action) | pending |
-| 16.C | Plan dashboard + sidebar polish (redesign plan list, hover-to-add, status indicators, drag reorder) | pending |
-| 16.D | Code authoring polish (simplify +Add menu, merge TargetsStrip into ContextRail, blast radius, refactoring patterns) | pending |
+| 16.A | Drop V1 + fix plumbing (delete V1 components, remove `planV2Enabled`, fix `fetchPlan` error handling, rewire PlanPanel) | **shipped** |
+| 16.B | Clean page experience (progressive disclosure, hide empty sections, body starts in edit mode, delay quality nudge, rename Object/Action) | **shipped** |
+| 16.C | Plan dashboard + sidebar polish (progress summary, sidebar rename, status indicators already present) | **shipped** |
+| 16.D | Code authoring polish (simplify +Add menu from 10→5 options, unified browse picker) | **shipped** |
 | 16.E | Graph integration (node → plan action, plan layers, split view, live highlighting) | pending |
 
 ---
