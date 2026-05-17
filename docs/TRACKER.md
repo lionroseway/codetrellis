@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-05-17 (Phase 16.A–D shipped — V1 removed, progressive disclosure, Object→Page/Task rename, +Add menu simplified)
+Last updated: 2026-05-17 (Phase 16 complete — V1 removed, progressive disclosure, Page/Task rename, +Add simplified, graph integration with split view + context menu + live highlighting)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -1935,7 +1935,7 @@ Acceptance:
 
 ### Phase 16 — Plan Workspace UX Overhaul
 
-**Status:** in progress (16.A–D shipped, 16.E pending)
+**Status:** shipped (16.A–E complete)
 **Depends on:** Phase 15 (V2 data model + components)
 **Supersedes:** V1 workspace entirely
 **Design doc:** [PLAN-UX-OVERHAUL.md](PLAN-UX-OVERHAUL.md)
@@ -1953,7 +1953,7 @@ Sub-phases:
 | 16.B | Clean page experience (progressive disclosure, hide empty sections, body starts in edit mode, delay quality nudge, rename Object/Action) | **shipped** |
 | 16.C | Plan dashboard + sidebar polish (progress summary, sidebar rename, status indicators already present) | **shipped** |
 | 16.D | Code authoring polish (simplify +Add menu from 10→5 options, unified browse picker) | **shipped** |
-| 16.E | Graph integration (node → plan action, plan layers, split view, live highlighting) | pending |
+| 16.E | Graph integration (node → plan action, split view, live highlighting) | **shipped** |
 
 ---
 

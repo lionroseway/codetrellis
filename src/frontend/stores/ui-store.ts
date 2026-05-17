@@ -60,6 +60,11 @@ interface UiState {
   learnTrellisOpen: boolean;
   setLearnTrellisOpen: (open: boolean) => void;
 
+  /** Phase 16.E — when true, workspace + graph render side-by-side (horizontal split). */
+  splitView: boolean;
+  toggleSplitView: () => void;
+  setSplitView: (v: boolean) => void;
+
   toggleSidebar: () => void;
   toggleInspector: () => void;
   toggleAgentPanel: () => void;
@@ -90,6 +95,9 @@ export const useUiStore = create<UiState>((set) => ({
   driftComparePlanUid: null,
   learnTrellisOpen: false,
   setLearnTrellisOpen: (open) => set({ learnTrellisOpen: open }),
+  splitView: false,
+  toggleSplitView: () => set((s) => ({ splitView: !s.splitView })),
+  setSplitView: (v) => set({ splitView: v }),
 
   workspaceMode: 'graph',
   setWorkspaceMode: (mode) => set({ workspaceMode: mode }),

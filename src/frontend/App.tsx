@@ -37,6 +37,7 @@ export function App() {
   const inspectorExpanded = useUiStore((s) => s.inspectorExpanded);
   const workspaceMode = useUiStore((s) => s.workspaceMode);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  const splitView = useUiStore((s) => s.splitView);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
 
   // Phase 14 §B — auto-flip into plan workspace ONLY on a new plan
@@ -172,10 +173,22 @@ export function App() {
           </Allotment.Pane>
         </Allotment>
 
-        {/* Plan Workspace takeover — full-viewport overlay when a plan is open. */}
-        {workspaceMode === 'plan' && activePlanUid && (
+        {/* Plan Workspace — full takeover (default) or split view with graph. */}
+        {workspaceMode === 'plan' && activePlanUid && !splitView && (
           <div className="absolute inset-0 z-30">
             <PlanWorkspaceShellV2 />
+          </div>
+        )}
+        {workspaceMode === 'plan' && activePlanUid && splitView && (
+          <div className="absolute inset-0 z-30">
+            <Allotment>
+              <Allotment.Pane preferredSize="55%" minSize={360}>
+                <PlanWorkspaceShellV2 />
+              </Allotment.Pane>
+              <Allotment.Pane minSize={320}>
+                <MainCanvas />
+              </Allotment.Pane>
+            </Allotment>
           </div>
         )}
 

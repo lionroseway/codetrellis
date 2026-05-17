@@ -29,6 +29,7 @@ function FileNodeComponent({ data }: NodeProps) {
   const exportsList = d.exports?.slice(0, isFocused ? 8 : 4) || [];
   const showRichMeta = isFocused || isHub || isGhost;
   const isRelatedToSelection = Boolean(d.relatedToSelection);
+  const isPlanHighlighted = Boolean(d.planHighlighted);
   const gitStates = Array.isArray(d.gitStates) ? d.gitStates : [];
   const mode = typeof d.mode === 'string' ? d.mode : undefined;
   const wrapperClass = isFocused
@@ -60,6 +61,7 @@ function FileNodeComponent({ data }: NodeProps) {
         mode === 'current' ? 'border-blue-200/22 bg-[linear-gradient(180deg,rgba(59,130,246,0.14),rgba(7,11,22,0.54))] grayscale-[0.18]' : '',
         mode === 'planned' ? 'border-emerald-200/20 bg-[linear-gradient(180deg,rgba(34,197,94,0.12),rgba(7,14,12,0.5))]' : '',
         mode === 'diff' ? 'border-fuchsia-200/18 bg-[linear-gradient(180deg,rgba(168,85,247,0.12),rgba(16,8,24,0.5))]' : '',
+        isPlanHighlighted && !d.changeStatus ? 'ring-1 ring-accent/40 shadow-[0_0_16px_rgba(59,130,246,0.3)]' : '',
       ].join(' ')}
       style={{
         boxShadow: `0 24px 60px rgba(3,7,18,0.48), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 ${isRelatedToSelection ? 52 : 36}px ${change?.glow || language.glow}`,
@@ -76,6 +78,12 @@ function FileNodeComponent({ data }: NodeProps) {
             isFocused ? 'animate-graph-glow-pulse' : 'animate-node-pulse',
           ].join(' ')}
           style={{ boxShadow: `0 0 0 1px rgba(255,255,255,0.05) inset, 0 0 28px ${change?.glow || language.glow}` }}
+        />
+      )}
+      {isPlanHighlighted && !d.changeStatus && (
+        <div
+          className="pointer-events-none absolute inset-[-2px] rounded-[24px] border border-accent/25 animate-pulse"
+          style={{ boxShadow: '0 0 12px rgba(59,130,246,0.25)' }}
         />
       )}
 

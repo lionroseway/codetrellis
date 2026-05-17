@@ -14,14 +14,16 @@ import {
   type Edge,
   type NodeMouseHandler,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
+import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { useUiStore } from '../../stores/ui-store';
+import { useToastStore } from '../../stores/toast-store';
 import { buildDependencyGraph, buildFromSnapshot, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
 import { PackageNode } from '../graph/nodes/PackageNode';
 import { DirectoryNode } from '../graph/nodes/DirectoryNode';
@@ -79,6 +81,11 @@ export function MainCanvas() {
   const toggleProjection = useGraphStore((s) => s.toggleProjection);
   const setProjectionData = useGraphStore((s) => s.setProjectionData);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
+
+  // Phase 16.E — right-click context menu for graph nodes
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; nodePath: string; nodeLabel: string;
+  } | null>(null);
 
   // Dependency edges from backend
   const [depEdges, setDepEdges] = useState<DependencyEdge[]>([]);
@@ -563,27 +570,50 @@ export function MainCanvas() {
 
   const activeDiff = trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff;
 
+  // Phase 16.E — collect all file paths referenced by the active plan's items
+  const planItemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  const planHighlightPaths = useMemo(() => {
+    const paths = new Set<string>();
+    for (const item of Object.values(planItemsByUid)) {
+      if (item.fileSpecs) {
+        for (const fs of item.fileSpecs) {
+          if (fs.path) paths.add(fs.path);
+        }
+      }
+    }
+    return paths;
+  }, [planItemsByUid]);
+
   const displayGraphData = useMemo(() => {
-    if (!selectedNodeId) return graphData;
+    const hasPlanHighlights = planHighlightPaths.size > 0;
+
+    if (!selectedNodeId && !hasPlanHighlights) return graphData;
 
     return {
-      nodes: graphData.nodes.map((node) => ({
-        ...node,
-        data: {
-          ...(node.data || {}),
-          relatedToSelection: node.id === selectedNodeId || graphData.edges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id)),
-        },
-      })),
+      nodes: graphData.nodes.map((node) => {
+        const data = (node.data || {}) as Record<string, unknown>;
+        const nodePath = typeof data.fullPath === 'string' ? data.fullPath : node.id;
+        return {
+          ...node,
+          data: {
+            ...data,
+            relatedToSelection: selectedNodeId
+              ? node.id === selectedNodeId || graphData.edges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id))
+              : false,
+            planHighlighted: hasPlanHighlights && planHighlightPaths.has(nodePath),
+          },
+        };
+      }),
       edges: graphData.edges.map((edge) => ({
         ...edge,
         data: {
           ...(edge.data || {}),
-          emphasized: edge.source === selectedNodeId || edge.target === selectedNodeId,
-          muted: edge.source !== selectedNodeId && edge.target !== selectedNodeId,
+          emphasized: selectedNodeId ? (edge.source === selectedNodeId || edge.target === selectedNodeId) : false,
+          muted: selectedNodeId ? (edge.source !== selectedNodeId && edge.target !== selectedNodeId) : false,
         },
       })),
     };
-  }, [graphData, selectedNodeId]);
+  }, [graphData, selectedNodeId, planHighlightPaths]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData.edges);
@@ -627,6 +657,24 @@ export function MainCanvas() {
       });
     },
     [setSelectedNode],
+  );
+
+  const onNodeContextMenu: NodeMouseHandler = useCallback(
+    (event, node) => {
+      event.preventDefault();
+      const data = (node.data || {}) as Record<string, unknown>;
+      const nodePath = typeof data.filePath === 'string'
+        ? data.filePath
+        : typeof node.id === 'string' ? node.id : '';
+      const nodeLabel = typeof data.label === 'string' ? data.label : nodePath.split('/').pop() || 'node';
+      setContextMenu({
+        x: (event as unknown as MouseEvent).clientX,
+        y: (event as unknown as MouseEvent).clientY,
+        nodePath,
+        nodeLabel,
+      });
+    },
+    [],
   );
 
   if (!root) {
@@ -676,6 +724,8 @@ export function MainCanvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneClick={() => setContextMenu(null)}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable
@@ -896,6 +946,124 @@ export function MainCanvas() {
           />
         </Panel>
       </ReactFlow>
+
+      {/* Phase 16.E — Node context menu */}
+      {contextMenu && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          nodePath={contextMenu.nodePath}
+          nodeLabel={contextMenu.nodeLabel}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── Phase 16.E — Right-click context menu for graph nodes ───────────── */
+function NodeContextMenu({
+  x, y, nodePath, nodeLabel, onClose,
+}: {
+  x: number; y: number; nodePath: string; nodeLabel: string; onClose: () => void;
+}) {
+  const activePlanUid = usePlanStore((s) => s.activePlanUid);
+  const setActivePlan = usePlanStore((s) => s.setActivePlan);
+  const root = useProjectStore((s) => s.root);
+  const selectedItemUid = usePlanItemsStore((s) => s.selectedItemUid);
+  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  const createItem = usePlanItemsStore((s) => s.createItem);
+  const updateItem = usePlanItemsStore((s) => s.updateItem);
+  const addToast = useToastStore((s) => s.addToast);
+  const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+
+  const addFileSpecToItem = async (itemUid: string) => {
+    const item = itemsByUid[itemUid];
+    if (!item) return;
+    const existing = item.fileSpecs || [];
+    // Don't duplicate
+    if (existing.some((fs) => fs.path === nodePath)) {
+      addToast({ type: 'info', title: 'Already targeted', message: nodeLabel, duration: 2000 });
+      return;
+    }
+    await updateItem(itemUid, {
+      fileSpecs: [...existing, { path: nodePath, action: 'modify' as const }],
+      changeSummary: `Added file target: ${nodeLabel}`,
+    });
+    addToast({ type: 'success', title: 'Target added', message: nodeLabel, duration: 2500 });
+  };
+
+  const handleAddToCurrentTask = async () => {
+    onClose();
+    if (!activePlanUid || !selectedItemUid) {
+      addToast({ type: 'warning', title: 'No task selected', message: 'Select or create a task first.', duration: 3000 });
+      return;
+    }
+    await addFileSpecToItem(selectedItemUid);
+  };
+
+  const handleNewTask = async () => {
+    onClose();
+    let planUid = activePlanUid;
+    // If no plan, create one
+    if (!planUid) {
+      if (!root) {
+        addToast({ type: 'error', title: 'No project open', message: 'Open a project first.', duration: 3000 });
+        return;
+      }
+      try {
+        const res = await fetch('/api/plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'Untitled plan', description: '', projectPath: root, tasks: [] }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const plan = await res.json();
+        planUid = plan.uid;
+        await setActivePlan(plan.uid);
+      } catch (err) {
+        addToast({ type: 'error', title: 'Could not create plan', message: String(err), duration: 3000 });
+        return;
+      }
+    }
+    // Create a new task targeting this file
+    const item = await createItem({
+      planUid: planUid!,
+      kind: 'action',
+      title: `Change ${nodeLabel}`,
+      fileSpecs: [{ path: nodePath, action: 'modify' as const }],
+    });
+    if (item) {
+      usePlanItemsStore.getState().selectItem(item.uid);
+      setWorkspaceMode('plan');
+      addToast({ type: 'success', title: 'Task created', message: `Change ${nodeLabel}`, duration: 2500 });
+    }
+  };
+
+  return (
+    <div
+      className="fixed z-50 rounded-lg border border-white/[0.1] bg-[#0c0e1a]/95 backdrop-blur-md shadow-xl p-1.5 min-w-[200px] text-[12.5px]"
+      style={{ left: x, top: y }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-2.5 py-1.5 text-[11px] text-foreground-subtle uppercase tracking-wider font-medium truncate max-w-[200px]">
+        {nodeLabel}
+      </div>
+      {activePlanUid && selectedItemUid && (
+        <button
+          onClick={handleAddToCurrentTask}
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-accent/10 text-foreground-muted hover:text-foreground transition-colors"
+        >
+          <Plus size={13} className="text-accent" /> Add to current task
+        </button>
+      )}
+      <button
+        onClick={handleNewTask}
+        className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-accent/10 text-foreground-muted hover:text-foreground transition-colors"
+      >
+        <Zap size={13} className="text-accent" />
+        {activePlanUid ? 'New task for this' : 'Plan a change'}
+      </button>
     </div>
   );
 }

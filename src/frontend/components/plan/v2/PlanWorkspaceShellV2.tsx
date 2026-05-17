@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Allotment } from 'allotment';
-import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks } from 'lucide-react';
+import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen } from 'lucide-react';
 import { useUiStore } from '../../../stores/ui-store';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
@@ -29,6 +29,8 @@ import { PlanItemHistoryDrawer } from './PlanItemHistoryDrawer';
 export function PlanWorkspaceShellV2() {
   const plan = usePlanStore((s) => s.activePlan);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  const splitView = useUiStore((s) => s.splitView);
+  const toggleSplitView = useUiStore((s) => s.toggleSplitView);
   const activityDrawerOpen = usePlanItemsStore((s) => s.activityDrawerOpen);
 
   // Hydrate the V2 store whenever the active plan changes.
@@ -108,6 +110,18 @@ export function PlanWorkspaceShellV2() {
           </div>
           <span>{progress}%</span>
         </div>
+        <button
+          onClick={toggleSplitView}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            splitView
+              ? 'border-accent/30 bg-accent/10 text-accent'
+              : 'border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+          }`}
+          title="Toggle split view (workspace + graph side by side)"
+        >
+          <PanelRightOpen size={12} />
+          Graph
+        </button>
         <button
           onClick={() => usePlanItemsStore.getState().toggleActivityDrawer()}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
