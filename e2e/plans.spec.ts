@@ -108,6 +108,35 @@ test.describe('Plan system', () => {
     expect(task.description).toBe('Second task');
   });
 
+  test('plan git context round-trips', async ({ request }) => {
+    // Phase 15 §15.D — set baseRef / targetBranch / worktree /
+    // autoCreateBranch via PUT, read back via GET, ensure each
+    // field survives.
+    await request.put(`${API}/plans/${planUid}`, {
+      data: {
+        baseRef: 'main',
+        targetBranch: 'feat/e2e-test',
+        targetWorktree: '/tmp/codetrellis-e2e-worktree',
+        autoCreateBranch: true,
+      },
+    });
+    const res = await request.get(`${API}/plans/${planUid}`);
+    const plan = await res.json();
+    expect(plan.baseRef).toBe('main');
+    expect(plan.targetBranch).toBe('feat/e2e-test');
+    expect(plan.targetWorktree).toBe('/tmp/codetrellis-e2e-worktree');
+    expect(plan.autoCreateBranch).toBe(true);
+
+    // Clearing one field with null leaves the others intact.
+    await request.put(`${API}/plans/${planUid}`, {
+      data: { targetWorktree: null },
+    });
+    const res2 = await request.get(`${API}/plans/${planUid}`);
+    const plan2 = await res2.json();
+    expect(plan2.targetWorktree).toBeNull();
+    expect(plan2.baseRef).toBe('main');
+  });
+
   test('archive plan', async ({ request }) => {
     await request.delete(`${API}/plans/${planUid}`);
     const res = await request.get(`${API}/plans/${planUid}`);
