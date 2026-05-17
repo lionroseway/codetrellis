@@ -9,6 +9,7 @@ import { PlanItemTree } from './PlanItemTree';
 import { PlanItemCanvas } from './PlanItemCanvas';
 import { PlanActivityDrawer } from './PlanActivityDrawer';
 import { PlanItemHistoryDrawer } from './PlanItemHistoryDrawer';
+import { HandoffButton } from './HandoffButton';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -110,6 +111,8 @@ export function PlanWorkspaceShellV2() {
           </div>
           <span>{progress}%</span>
         </div>
+        {/* Phase 17.H — Hand off to agent */}
+        <HandoffButton />
         <button
           onClick={toggleSplitView}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${

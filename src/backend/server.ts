@@ -1941,6 +1941,17 @@ app.get('/api/sessions', (_req, res) => {
   res.json(sessionService.getActiveSessions());
 });
 
+// Phase 17.H — Assign a plan to a specific agent session
+app.post('/api/sessions/:sessionId/assign-plan', (req, res) => {
+  const { sessionId } = req.params;
+  const { planUid } = req.body;
+  if (!planUid) { res.status(400).json({ error: 'planUid required' }); return; }
+  sessionService.setActivePlan(sessionId, planUid);
+  broadcast('plan-assigned', { sessionId, planUid });
+  broadcast('mcp-session-changed', { reason: 'assign_plan', sessionId, planUid });
+  res.json({ ok: true });
+});
+
 // Database stats
 app.get('/api/stats', (_req, res) => {
   res.json(getDbStats());

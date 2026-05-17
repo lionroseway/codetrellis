@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { FileText, Folder, Hash, ArrowRight, X, Plus } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { FileSymbolExpander } from './FileSymbolExpander';
 import type { PlanItem, FileSpec, SymbolSpec, PlanItemEdge } from '@shared/types';
 
 /**
@@ -190,23 +191,41 @@ export function TargetsStrip({
     return null;
   }
 
+  // Phase 17.D — File targets that can be expanded to show symbols
+  const fileTargetsWithIndex = (item.fileSpecs ?? []).map((fs, idx) => ({
+    fs,
+    idx,
+    pill: targets.find((t) => t.detail === fs.path && t.kind === 'file'),
+  }));
+
   return (
-    <div className="flex items-center gap-1.5 flex-wrap px-1 py-2">
-      <span className="text-[11px] uppercase tracking-wider text-foreground-subtle font-medium mr-1">
-        Targets
-      </span>
-      {targets.map((t) => (
-        <TargetPillChip key={t.id} target={t} onRemove={t.source === 'api' ? () => removeTarget(t) : undefined} />
+    <div className="px-1 py-2">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] uppercase tracking-wider text-foreground-subtle font-medium mr-1">
+          Targets
+        </span>
+        {targets.map((t) => (
+          <TargetPillChip key={t.id} target={t} onRemove={t.source === 'api' ? () => removeTarget(t) : undefined} />
+        ))}
+        {onAddClick && (
+          <button
+            onClick={onAddClick}
+            className="flex items-center gap-1 px-2 py-1 text-[11.5px] rounded-md border border-dashed border-white/[0.1] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
+            title="Add a file, symbol, or edge target"
+          >
+            <Plus size={11} />
+          </button>
+        )}
+      </div>
+      {/* Phase 17.D — Symbol expanders for file targets */}
+      {item.kind === 'action' && fileTargetsWithIndex.map(({ fs, idx }) => (
+        <FileSymbolExpander
+          key={`sym-${fs.path}`}
+          item={item}
+          fileSpec={fs}
+          fileSpecIndex={idx}
+        />
       ))}
-      {onAddClick && (
-        <button
-          onClick={onAddClick}
-          className="flex items-center gap-1 px-2 py-1 text-[11.5px] rounded-md border border-dashed border-white/[0.1] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
-          title="Add a file, symbol, or edge target"
-        >
-          <Plus size={11} />
-        </button>
-      )}
     </div>
   );
 }
