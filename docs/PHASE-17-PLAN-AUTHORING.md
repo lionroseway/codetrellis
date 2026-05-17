@@ -385,6 +385,248 @@ interface AgentCapability {
 }
 ```
 
+### 17.Q — Execution Configuration (Model Settings per Item)
+
+**Problem:** "Use Claude Code" isn't enough. The user wants to say:
+"Use claude-opus-4 at high reasoning effort, with this system prompt,
+restricted to these tools, with a 20k token budget." Different tasks
+in the same plan might need radically different execution profiles.
+
+**Concept:** Each item can carry an `executionConfig` that specifies
+exactly how the assigned agent should behave.
+
+```typescript
+interface ExecutionConfig {
+  /** Model override — which model to use for this task. */
+  model?: string;                // 'claude-opus-4' | 'claude-sonnet-4' | etc.
+
+  /** Reasoning effort (for models that support it). */
+  reasoningEffort?: 'low' | 'medium' | 'high';
+
+  /** System prompt prepended to the task context. */
+  systemPrompt?: string;         // e.g., "You are a security auditor..."
+
+  /** Tool/MCP restrictions — allowlist of tools the agent may use. */
+  allowedTools?: string[];       // ['Read', 'Edit', 'Bash'] — empty = all
+
+  /** Tool denylist — tools the agent must NOT use. */
+  deniedTools?: string[];        // ['Write', 'Bash'] — overrides allowed
+
+  /** Token budget — max tokens the agent should spend on this task. */
+  maxTokens?: number;
+
+  /** Max iterations / tool calls before the agent should stop. */
+  maxIterations?: number;
+
+  /** Output expectations — what the agent should produce on completion. */
+  outputFormat?: 'pr-description' | 'commit-message' | 'summary' | 'none';
+
+  /** Temperature (for creative vs mechanical tasks). */
+  temperature?: number;          // 0.0-1.0
+
+  /** Custom key-value pairs passed to the agent as context. */
+  customParams?: Record<string, string | number | boolean>;
+}
+```
+
+**Examples:**
+
+| Task type | Config |
+|-----------|--------|
+| Mechanical refactor (rename across 20 files) | model: sonnet, reasoning: low, allowedTools: [Read, Edit], maxIterations: 100 |
+| Architecture design | model: opus, reasoning: high, systemPrompt: "Think carefully about maintainability and extensibility", outputFormat: summary |
+| Security audit | model: opus, reasoning: high, systemPrompt: "You are a security auditor. Flag vulnerabilities.", deniedTools: [Edit, Write, Bash] |
+| Test generation | model: sonnet, allowedTools: [Read, Edit, Bash], systemPrompt: "Write comprehensive tests following existing patterns in __tests__/" |
+| Quick fix | model: haiku, reasoning: low, maxTokens: 4000 |
+
+**Cascade behavior:** `executionConfig` cascades like skills:
+- Parent sets `model: opus` → all children use opus unless overridden
+- Child sets `model: sonnet` → only that child uses sonnet
+- `systemPrompt` APPENDS by default (parent prompt + child prompt),
+  or replaces if mode is `replace`
+
+**UI:**
+
+In the item properties panel, an "Execution settings" expandable
+section (collapsed by default). Shows:
+- Model selector (dropdown of known models)
+- Reasoning slider (low/medium/high)
+- System prompt (textarea, collapsed to first line)
+- Tool restrictions (chip selector from known tools)
+- Budget fields (tokens, iterations)
+
+Inherited values show with "(from parent)" label. Override link to
+customize.
+
+**Delivery to agent:**
+
+When agent calls `claim_item()` or `get_next_task()`, the response
+includes `resolvedConfig: ExecutionConfig` — the fully cascaded
+settings. The agent is expected to honor them (this is a contract,
+not enforcement — CodeTrellis can't force an external agent to obey,
+but it documents the intent and drift detection can flag violations).
+
+For Claude Code specifically: the `systemPrompt` maps to
+CLAUDE.md-style instructions that get prepended to the session.
+
+### 17.R — External References (Issues, PRs, Commits, Docs)
+
+**Problem:** Plans don't exist in a vacuum. They originate from GitHub
+issues, relate to open PRs, reference past commits, and connect to
+external docs. Currently the only way to bring this context in is
+to copy-paste text into the body.
+
+**Concept:** First-class `ExternalRef` objects that link plan items to
+external sources with bidirectional awareness.
+
+```typescript
+interface ExternalRef {
+  uid: string;
+  itemUid: string;              // which plan item this is attached to
+  planUid: string;
+
+  /** What kind of external thing this is. */
+  kind: 'github-issue'
+      | 'github-pr'
+      | 'github-commit'
+      | 'github-discussion'
+      | 'linear-issue'
+      | 'jira-ticket'
+      | 'url'                   // generic web link
+      | 'doc'                   // Google Doc, Notion page, etc.
+      ;
+
+  /** The canonical URL. */
+  url: string;
+
+  /** Extracted metadata (fetched on add, refreshable). */
+  title: string;
+  body?: string;                // first ~500 chars of body/description
+  status?: string;              // 'open' | 'closed' | 'merged' | etc.
+  author?: string;
+  labels?: string[];
+  linkedFiles?: string[];       // file paths mentioned in the issue/PR
+
+  /** Relationship to this plan item. */
+  relation: 'source'            // "this issue is WHY we're doing this"
+          | 'context'           // "this PR is relevant background"
+          | 'blocks'            // "this issue blocks our work"
+          | 'implements'        // "this plan item implements this issue"
+          | 'supersedes'        // "this plan replaces/supersedes that PR"
+          ;
+
+  /** Lifecycle hooks — what happens when the plan item completes. */
+  onComplete?: 'close-issue'    // auto-close the linked issue
+             | 'comment'        // post a comment: "Completed via CodeTrellis plan X"
+             | 'create-pr'      // auto-create a PR from the plan's branch
+             | 'none'
+             ;
+
+  createdAt: number;
+  updatedAt: number;
+}
+```
+
+**Inbound flows (bringing external context IN):**
+
+| Source | How it gets in | What happens |
+|--------|---------------|--------------|
+| Paste a GitHub issue URL | User pastes in body or "Add reference" button | Fetches title, body, labels. Extracts mentioned file paths → suggests as targets. Sets `relation: 'source'` |
+| Paste a PR URL | Same | Fetches title, body, changed files. Shows diff stats. "Use PR files as targets?" prompt. Sets `relation: 'context'` |
+| Paste a commit SHA/URL | Same | Fetches commit message + changed files. "Follow this pattern?" prompt. |
+| Link from GitHub Actions | Webhook or MCP tool | Agent creates ref automatically when it opens a PR |
+| Claude Code session | JSONL watcher detects GitHub URLs in conversation | Surfaces as "mentioned in agent session" with import prompt |
+| Bulk import | "Import from GitHub" button → shows recent issues with labels/milestones | Pick multiple → creates one task per issue, auto-linked |
+
+**Outbound flows (acting on external sources AFTER execution):**
+
+| Action | When | What happens |
+|--------|------|--------------|
+| Close linked issue | Plan completes + all tasks done | POST to GitHub API: close issue + comment with plan summary |
+| Create PR | Plan completes + has targetBranch | `gh pr create` with body auto-generated from plan targets + descriptions |
+| Comment on issue | Task completes | Post: "Task 'Refactor login' completed. Files changed: ..." |
+| Update PR description | Task completes + PR exists | Append task completion status to PR body |
+
+**UI:**
+
+In the item canvas, external refs appear as a compact strip below the
+body (similar to TargetsStrip):
+
+```
+📎 References
+  🔗 Fix auth token refresh (#142) · open · source
+  🔗 PR #156: Previous attempt · closed · context
+  ⬡ abc1234: "Add token rotation" · commit · context
+```
+
+Each ref is clickable (opens in browser), has a relationship badge,
+and an "×" to remove. The "Add reference" button supports paste or
+search (searches connected GitHub/Linear via their APIs).
+
+**Cascade behavior:** External refs do NOT cascade. Each item has its
+own refs. But: a parent Page might reference a GitHub epic, while
+child Tasks reference individual issues under that epic. The
+completion hook respects the tree: completing all children auto-closes
+the parent's linked epic (if configured).
+
+**Integration with claim/handoff:**
+
+When an agent claims a task with external refs, the response includes:
+- The ref metadata (title, body, linked files)
+- For `source` refs: the full issue body as context
+- For `context` refs: a summary of the PR/commit changes
+
+This means the agent gets the "why" (from the issue) alongside the
+"what" (from the fileSpecs) without the human needing to copy-paste.
+
+**Required backend:**
+
+| Component | Exists? | Work needed |
+|-----------|---------|-------------|
+| GitHub API access | No | OAuth flow or token config in settings |
+| Linear API | No | OAuth flow |
+| `external_refs` table | No | New table (schema above) |
+| Fetch metadata on paste | No | URL parser + GitHub/Linear REST calls |
+| Lifecycle hooks (close/comment) | No | GitHub API calls on plan completion |
+| Webhook receiver | No | For inbound updates (issue closed externally → update ref status) |
+
+### Schema additions for 17.Q + 17.R
+
+```sql
+-- Execution config on plan_items (JSON blob, nullable = inherit)
+ALTER TABLE plan_items ADD COLUMN execution_config      TEXT DEFAULT NULL;
+ALTER TABLE plan_items ADD COLUMN execution_config_mode TEXT DEFAULT 'inherit';
+
+-- External references table
+CREATE TABLE IF NOT EXISTS external_refs (
+  uid          TEXT PRIMARY KEY,
+  item_uid     TEXT NOT NULL REFERENCES plan_items(uid) ON DELETE CASCADE,
+  plan_uid     TEXT NOT NULL REFERENCES plans(uid),
+  kind         TEXT NOT NULL,
+  url          TEXT NOT NULL,
+  title        TEXT NOT NULL DEFAULT '',
+  body         TEXT DEFAULT NULL,
+  status       TEXT DEFAULT NULL,
+  author       TEXT DEFAULT NULL,
+  labels       TEXT NOT NULL DEFAULT '[]',
+  linked_files TEXT NOT NULL DEFAULT '[]',
+  relation     TEXT NOT NULL DEFAULT 'context',
+  on_complete  TEXT DEFAULT 'none',
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_external_refs_item ON external_refs(item_uid);
+CREATE INDEX IF NOT EXISTS idx_external_refs_plan ON external_refs(plan_uid);
+CREATE INDEX IF NOT EXISTS idx_external_refs_url  ON external_refs(url);
+```
+
+```typescript
+// Added to PlanItem
+executionConfig?: ExecutionConfig | null;
+executionConfigMode?: 'inherit' | 'replace';
+externalRefs?: ExternalRef[];   // populated on fetch, not stored inline
+```
+
 ---
 
 ## Part 3: Handoff (Plan → Agent)
@@ -525,6 +767,8 @@ still flag drift.
 | **P2** | 17.E Smart templates | 2d | Medium | Efficiency — speeds up repeat patterns |
 | **P2** | 17.G Plan readiness score | 1d | Medium | Confidence — tells user when plan is "done" |
 | **P2** | 17.I Import from external | 2d | Medium | Convenience — plans often start elsewhere |
+| **P2** | 17.Q Execution configuration | 1.5d | Med-High | Precision — right model/settings per task, prevents waste |
+| **P2** | 17.R External references | 2d | Medium | Context — agents get the "why" from issues/PRs automatically |
 | **P3** | 17.B "What does this do?" | 1.5d | Medium | Requires connected agent for explanation |
 | **P3** | 17.M Completion summary | 1.5d | Low-Med | Nice polish after execution |
 
