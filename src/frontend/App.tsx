@@ -4,11 +4,14 @@ import 'allotment/dist/style.css';
 import { TopBar } from './components/layout/TopBar';
 import { useProjectStore } from './stores/project-store';
 import { useUiStore } from './stores/ui-store';
+import { usePlanStore } from './stores/plan-store';
 import { Sidebar } from './components/layout/Sidebar';
 import { MainCanvas } from './components/layout/MainCanvas';
 import { InspectorPanel } from './components/layout/InspectorPanel';
 import { PlanPanel } from './components/layout/PlanPanel';
 import { StatusBar } from './components/layout/StatusBar';
+import { MinimizedPlanChip } from './components/plan/MinimizedPlanChip';
+import { PlanWorkspaceShellV2 } from './components/plan/v2/PlanWorkspaceShellV2';
 import { FolderPickerModal } from './components/FolderPickerModal';
 import { McpGuideModal } from './components/McpGuideModal';
 import { GettingStarted } from './components/GettingStarted';
@@ -32,6 +35,27 @@ export function App() {
 
   const planPanelExpanded = useUiStore((s) => s.planPanelExpanded);
   const inspectorExpanded = useUiStore((s) => s.inspectorExpanded);
+  const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  const activePlanUid = usePlanStore((s) => s.activePlanUid);
+
+  // Phase 14 §B — auto-flip into plan workspace ONLY on a new plan
+  // selection, and back to graph when the plan is cleared. Tracking
+  // the previous uid via a ref means the user's manual "minimize to
+  // graph" (workspaceMode = 'graph' with the same plan still active)
+  // sticks instead of being ping-ponged by this effect.
+  const prevPlanUidRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevPlanUidRef.current;
+    if (activePlanUid && activePlanUid !== prev) {
+      // New plan opened — fly into takeover.
+      setWorkspaceMode('plan');
+    } else if (!activePlanUid && prev) {
+      // Plan cleared — return to graph.
+      setWorkspaceMode('graph');
+    }
+    prevPlanUidRef.current = activePlanUid;
+  }, [activePlanUid, setWorkspaceMode]);
 
   // Test hook: allow e2e tests to open a project programmatically
   useEffect(() => {
@@ -124,24 +148,44 @@ export function App() {
   return (
     <div className="flex flex-col h-screen text-foreground bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]">
       <TopBar />
-      <Allotment className="flex-1 min-h-0" ref={horizontalRef}>
-        <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
-          <Sidebar />
-        </Allotment.Pane>
-        <Allotment.Pane>
-          <Allotment vertical ref={verticalRef}>
-            <Allotment.Pane>
-              <MainCanvas />
-            </Allotment.Pane>
-            <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100}>
-              <PlanPanel />
-            </Allotment.Pane>
-          </Allotment>
-        </Allotment.Pane>
-        <Allotment.Pane preferredSize={INSPECTOR_DEFAULT} minSize={220}>
-          <InspectorPanel />
-        </Allotment.Pane>
-      </Allotment>
+      {/* Graph layout is always rendered behind. The plan workspace
+          overlays the entire body area when active, so this stays
+          mounted (no scan / canvas re-init when minimizing) but is
+          hidden under the takeover. */}
+      <div className="relative flex-1 min-h-0">
+        <Allotment className="absolute inset-0" ref={horizontalRef}>
+          <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
+            <Sidebar />
+          </Allotment.Pane>
+          <Allotment.Pane>
+            <Allotment vertical ref={verticalRef}>
+              <Allotment.Pane>
+                <MainCanvas />
+              </Allotment.Pane>
+              <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100}>
+                <PlanPanel />
+              </Allotment.Pane>
+            </Allotment>
+          </Allotment.Pane>
+          <Allotment.Pane preferredSize={INSPECTOR_DEFAULT} minSize={220}>
+            <InspectorPanel />
+          </Allotment.Pane>
+        </Allotment>
+
+        {/* Plan Workspace takeover — full-viewport overlay when a plan is open. */}
+        {workspaceMode === 'plan' && activePlanUid && (
+          <div className="absolute inset-0 z-30">
+            <PlanWorkspaceShellV2 />
+          </div>
+        )}
+
+        {/* Floating "Plan: …" chip shown in graph mode when a plan is
+            still active (e.g. user hit Minimize). Click to fly the
+            workspace back open. */}
+        {workspaceMode === 'graph' && activePlanUid && (
+          <MinimizedPlanChip onRestore={() => setWorkspaceMode('plan')} />
+        )}
+      </div>
       <StatusBar />
       <FolderPickerModal />
       <McpGuideModal />

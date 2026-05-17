@@ -31,6 +31,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import * as planService from './plan-service';
 import * as planPhasesService from './plan-phases-service';
 import * as planDocsService from './plan-documents-service';
+import * as taskAttachmentsService from './task-attachments-service';
+import * as commentService from './comment-service';
 import { getDb } from './database';
 import type {
   Plan,
@@ -39,6 +41,13 @@ import type {
   PlanDocument,
   PhaseStatus,
   TaskStatus,
+  TaskAttachment,
+  Comment,
+  AttachmentKind,
+  CommentKind,
+  CommentSource,
+  CommentType,
+  FileSpec,
 } from '../../shared/types';
 
 /**
@@ -114,11 +123,15 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
     files.push(fpath);
   }
 
-  // tasks/
+  // tasks/ — include Phase 14 §A attachments + comments inline so a
+  // single task.yaml round-trips the full task-as-context blob. Bigger
+  // files but git-diff stays scoped.
   for (const task of tasks) {
     const fname = `${pad3(task.sortOrder)}-${slugify(task.description) || 'task'}.yaml`;
     const fpath = path.join(planDir, 'tasks', fname);
-    writeFileAtomic(fpath, stringifyYaml(serializeTask(task)));
+    const attachments = taskAttachmentsService.listTaskAttachments(task.uid);
+    const comments = commentService.listCommentsFlat(task.uid);
+    writeFileAtomic(fpath, stringifyYaml(serializeTask(task, attachments, comments)));
     files.push(fpath);
   }
 
@@ -509,11 +522,12 @@ function serializePhase(phase: PlanPhase) {
   };
 }
 
-function serializeTask(task: Task) {
+function serializeTask(task: Task, attachments: TaskAttachment[], comments: Comment[]) {
   return {
     uid: task.uid,
     sortOrder: task.sortOrder,
     phaseUid: task.phaseUid,
+    parentTaskUid: task.parentTaskUid ?? null,
     description: task.description,
     status: task.status,
     assignee: task.assignee,
@@ -526,6 +540,35 @@ function serializeTask(task: Task) {
     dependencies: task.dependencies,
     fileSpec: task.fileSpec ?? null,
     symbolSpecs: task.symbolSpecs ?? [],
+    // Phase 14 §A
+    body: task.body ?? null,
+    prompt: task.prompt ?? null,
+    scopePath: task.scopePath ?? null,
+    fileSpecs: task.fileSpecs ?? [],
+    progressPercent: task.progressPercent ?? null,
+    blockedReason: task.blockedReason ?? null,
+    attachments: attachments.map((a) => ({
+      uid: a.uid,
+      kind: a.kind,
+      value: a.value,
+      label: a.label ?? null,
+      contentType: a.contentType ?? null,
+      author: a.author,
+      authorType: a.authorType,
+      createdAt: new Date(a.createdAt).toISOString(),
+    })),
+    comments: comments.map((c) => ({
+      uid: c.uid,
+      parentUid: c.parentUid,
+      author: c.author,
+      authorType: c.authorType,
+      body: c.body,
+      commentType: c.commentType,
+      kind: c.kind ?? null,
+      source: c.source ?? null,
+      metadata: c.metadata ?? null,
+      createdAt: new Date(c.createdAt).toISOString(),
+    })),
     createdAt: new Date(task.createdAt).toISOString(),
     updatedAt: new Date(task.updatedAt).toISOString(),
   };
@@ -623,6 +666,7 @@ function upsertPhase(planUid: string, raw: any): void {
 
 function upsertTask(planUid: string, raw: any): void {
   const existing = planService.getTaskByUid(String(raw.uid));
+  const fileSpecs: FileSpec[] | undefined = Array.isArray(raw.fileSpecs) ? raw.fileSpecs : undefined;
   if (existing) {
     planService.updateTask(String(raw.uid), {
       description: typeof raw.description === 'string' ? raw.description : undefined,
@@ -638,35 +682,124 @@ function upsertTask(planUid: string, raw: any): void {
       dependencies: Array.isArray(raw.dependencies) ? raw.dependencies : undefined,
       fileSpec: typeof raw.fileSpec === 'string' ? raw.fileSpec : undefined,
       symbolSpecs: Array.isArray(raw.symbolSpecs) ? raw.symbolSpecs : undefined,
+      // Phase 14 §A
+      parentTaskUid: raw.parentTaskUid ?? null,
+      body: typeof raw.body === 'string' ? raw.body : raw.body === null ? null as unknown as string : undefined,
+      prompt: typeof raw.prompt === 'string' ? raw.prompt : raw.prompt === null ? null as unknown as string : undefined,
+      scopePath: raw.scopePath ?? null,
+      fileSpecs,
+      progressPercent: typeof raw.progressPercent === 'number' ? raw.progressPercent : raw.progressPercent === null ? null : undefined,
+      blockedReason: typeof raw.blockedReason === 'string' ? raw.blockedReason : raw.blockedReason === null ? null : undefined,
     });
-    return;
+  } else {
+    // Insert with the file's UID preserved.
+    const db = getDb();
+    const now = Date.now();
+    db.run(
+      `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, phase_uid, parent_task_uid, body, prompt, scope_path, file_specs, progress_percent, blocked_reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        String(raw.uid),
+        planUid,
+        Number(raw.sortOrder ?? 0),
+        String(raw.description ?? ''),
+        isTaskStatus(raw.status) ? raw.status : 'pending',
+        raw.assignee ?? null,
+        raw.assigneeType ?? null,
+        raw.assigneeModel ?? null,
+        JSON.stringify(raw.affectedFiles ?? []),
+        JSON.stringify(raw.affectedSymbols ?? []),
+        JSON.stringify(raw.newConnections ?? []),
+        JSON.stringify(raw.removedConnections ?? []),
+        JSON.stringify(raw.dependencies ?? []),
+        raw.fileSpec ?? null,
+        JSON.stringify(raw.symbolSpecs ?? []),
+        raw.phaseUid ?? null,
+        raw.parentTaskUid ?? null,
+        raw.body ?? null,
+        raw.prompt ?? null,
+        raw.scopePath ?? null,
+        JSON.stringify(fileSpecs ?? []),
+        typeof raw.progressPercent === 'number' ? raw.progressPercent : null,
+        raw.blockedReason ?? null,
+        toEpoch(raw.createdAt) ?? now,
+        toEpoch(raw.updatedAt) ?? now,
+      ],
+    );
   }
-  // Insert with the file's UID preserved.
+
+  // Phase 14 §A — round-trip attachments + comments alongside the task.
+  if (Array.isArray(raw.attachments)) {
+    for (const a of raw.attachments) {
+      if (!a?.uid || !a?.kind || a?.value == null) continue;
+      taskAttachmentsService.upsertAttachment({
+        uid: String(a.uid),
+        targetType: 'task',
+        targetUid: String(raw.uid),
+        kind: String(a.kind) as AttachmentKind,
+        value: String(a.value),
+        label: a.label ?? null,
+        contentType: a.contentType ?? null,
+        author: String(a.author ?? 'human'),
+        authorType: String(a.authorType ?? 'human'),
+        createdAt: toEpoch(a.createdAt) ?? Date.now(),
+      });
+    }
+  }
+  if (Array.isArray(raw.comments)) {
+    for (const c of raw.comments) {
+      if (!c?.uid || !c?.body) continue;
+      upsertComment({
+        uid: String(c.uid),
+        targetType: 'task',
+        targetUid: String(raw.uid),
+        parentUid: c.parentUid ?? null,
+        author: String(c.author ?? 'human'),
+        authorType: String(c.authorType ?? 'human'),
+        body: String(c.body),
+        commentType: (c.commentType as CommentType | undefined) ?? 'comment',
+        kind: (c.kind as CommentKind | null) ?? null,
+        source: (c.source as CommentSource | null) ?? null,
+        metadata: c.metadata ?? null,
+        createdAt: toEpoch(c.createdAt) ?? Date.now(),
+      });
+    }
+  }
+}
+
+/**
+ * Upsert a comment row by uid. Used by the importer to round-trip
+ * task chatter without mutating the public comment-service API.
+ */
+function upsertComment(input: {
+  uid: string;
+  targetType: 'plan' | 'task';
+  targetUid: string;
+  parentUid: string | null;
+  author: string;
+  authorType: string;
+  body: string;
+  commentType: CommentType;
+  kind: CommentKind | null;
+  source: CommentSource | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: number;
+}): void {
   const db = getDb();
-  const now = Date.now();
-  db.run(
-    `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, phase_uid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      String(raw.uid),
-      planUid,
-      Number(raw.sortOrder ?? 0),
-      String(raw.description ?? ''),
-      isTaskStatus(raw.status) ? raw.status : 'pending',
-      raw.assignee ?? null,
-      raw.assigneeType ?? null,
-      raw.assigneeModel ?? null,
-      JSON.stringify(raw.affectedFiles ?? []),
-      JSON.stringify(raw.affectedSymbols ?? []),
-      JSON.stringify(raw.newConnections ?? []),
-      JSON.stringify(raw.removedConnections ?? []),
-      JSON.stringify(raw.dependencies ?? []),
-      raw.fileSpec ?? null,
-      JSON.stringify(raw.symbolSpecs ?? []),
-      raw.phaseUid ?? null,
-      toEpoch(raw.createdAt) ?? now,
-      toEpoch(raw.updatedAt) ?? now,
-    ],
-  );
+  const exists = db.exec(`SELECT uid FROM comments WHERE uid = ?`, [input.uid]);
+  const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
+  if (exists[0]?.values[0]) {
+    db.run(
+      `UPDATE comments SET target_type = ?, target_uid = ?, parent_uid = ?, author = ?, author_type = ?, body = ?, comment_type = ?, kind = ?, source = ?, metadata = ?, created_at = ? WHERE uid = ?`,
+      [input.targetType, input.targetUid, input.parentUid, input.author, input.authorType,
+       input.body, input.commentType, input.kind, input.source, metadataJson, input.createdAt, input.uid],
+    );
+  } else {
+    db.run(
+      `INSERT INTO comments (uid, target_type, target_uid, parent_uid, author, author_type, body, comment_type, kind, source, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [input.uid, input.targetType, input.targetUid, input.parentUid, input.author, input.authorType,
+       input.body, input.commentType, input.kind, input.source, metadataJson, input.createdAt],
+    );
+  }
 }
 
 function upsertDoc(planUid: string, meta: any, body: string): void {

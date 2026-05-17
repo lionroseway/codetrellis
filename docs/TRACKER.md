@@ -1,6 +1,6 @@
 # Implementation Tracker
 
-Last updated: 2026-04-29 (v0.1.3 published; Open Project regression from the v0.1.2 IPC refactor fixed by collapsing the bridge layer to a unified httpBridge)
+Last updated: 2026-05-17 (Phase 16 planning — UX overhaul design doc + tracker added; V1 removal + progressive disclosure agreed)
 Supersedes: `CODE-GRAPH-CHECKLIST.md`, `IMPLEMENTATION-PHASES.md`, `GAP-ANALYSIS.md` (consolidated here)
 
 This is the running source of truth for what CodeTrellis ships, what's
@@ -10,7 +10,10 @@ docs ([CORE-VISION.md](CORE-VISION.md), [THREE-TRELLIS.md](THREE-TRELLIS.md),
 [GRAPH-UX-REFINEMENT.md](GRAPH-UX-REFINEMENT.md),
 [DATA-MODEL.md](DATA-MODEL.md), [MCP-INTEGRATION.md](MCP-INTEGRATION.md),
 [UI-DESIGN.md](UI-DESIGN.md), [ARCHITECTURE.md](ARCHITECTURE.md),
-[PLAN-EXPORT.md](PLAN-EXPORT.md), [E2E-HARNESS.md](E2E-HARNESS.md))
+[PLAN-EXPORT.md](PLAN-EXPORT.md), [E2E-HARNESS.md](E2E-HARNESS.md),
+[PLAN-UX-OVERHAUL.md](PLAN-UX-OVERHAUL.md),
+[PLAN-WORKSPACE-DESIGN.md](PLAN-WORKSPACE-DESIGN.md),
+[UX-FLOW-AUDIT.md](UX-FLOW-AUDIT.md))
 remain canonical for *what* and *why*; this doc is for *where things
 stand*.
 
@@ -37,6 +40,7 @@ shared via the bridge abstraction.
 | Claude Code Watcher | 100 | High | Tails session JSONL, extracts tool calls + plan heuristics |
 | Generic MCP-agent activity | 100 | High | Phase 12 §D — `registerTool` wrapper broadcasts `tool_call` / `tool_error` events with agent attribution. Codex / Cursor / aider / any MCP client now surfaces in the Agent Timeline alongside Claude Code. |
 | Plan CRUD + Comments + Versions | 100 | High | Phase 12 done end-to-end: §A Phases, §B Proposed Changes, §C doc ordering, §D + §D2 multi-agent timeline + visibility, §E skill, §F multi-doc-per-type, §G Mass-refactor template. Plans scale from light one-liners to deep swf-style multi-phase migrations with their own granular CRUD feed. Outstanding: version viewer UI, task-level comments. |
+| Plan Workspace V2 (Phase 15) | 72 | High | **Object/Action unified model.** 15.A–15.D.2 shipped: `plan_items` table, migrator, 15 MCP tools, V2 frontend shell (sidebar tree, canvas, activity drawer, history drawer, slash menu, unified @ mention picker with code file/symbol search, ContextRail, AnchorPicker, quality nudge, git context, diff panel, TargetsStrip). Notion-grade sizing. **15.D.2 shipped** — unified @ picker searches plan items + attachments + code files (local tree) + symbols (API); picks insert `[[file:...]]` / `[[symbol:...]]` chips + auto-write to item's `fileSpecs`/`symbolSpecs`; TargetsStrip below body shows all targets from both @ chips and API-added specs, with verb badges and x-to-remove; BodyRenderer parses 5 chip types (item/action/file/symbol/attach); WS store propagates symbolSpecs + connections for real-time AI agent updates. Outstanding: 15.E disk layout migration, 15.F beta flip + V1 cleanup, code browser panel (designed, deferred). **Next: Phase 16 — UX overhaul (drop V1, progressive disclosure, graph integration). Design: [PLAN-UX-OVERHAUL.md](PLAN-UX-OVERHAUL.md).** |
 | Spec Room (typed plan docs) | 100 | High | 12 doc types, MCP + REST + UI + version history + restore + Phase 12 §C orderHint + parentDocUid (swf-style `00-…/01-…` nesting; tree-rendered in the spec room) + §F multi-doc per type with auto-numbered defaults. |
 | Plan Phases (first-class checkpoints) | 100 | High | Phase 12 §A. `plan_phases` table + service + REST + 4 MCP tools (`add/list/update/delete_plan_phase`); `update_task` / `get_next_task` accept `phase_uid`. UI: `PlanPhases` groups tasks by phase with expandable scope/prereqs/acceptance markdown + "Unphased" bucket. |
 | Proposed Changes view | 100 | High | Phase 12 §B. `plan-changes-service` projects every task field into ProposedChange rows with computed drift status. REST + MCP (`list_proposed_changes` / `get_changes_summary` / `get_change_status`) + new "Proposed" tab in PlanPanel with status filter chips. |
@@ -69,6 +73,67 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### May 4, 2026 — Phase 15.D.2: inline code context (body-first @ authoring)
+
+UX refinement session → design → implementation. Started from a user
+audit ("Action page is trash — can't actually plan code changes"),
+iterated through multiple rounds to nail the authoring model, then
+built it.
+
+**Shipped (15.D.2 — inline code context):**
+
+- **Unified `@` mention picker** (`MentionPicker.tsx`, ~310 lines) —
+  typing `@` in any body editor triggers a unified fuzzy picker with
+  four source types: plan items (instant, local), attachments
+  (instant, local), code files (matched against `useProjectStore.fileTree`
+  instantly for ≥2 chars), code symbols (debounced API call to
+  `/api/symbols/search`). Picking inserts inline chips:
+  `[[item:uid|title]]`, `[[attach:uid|label]]`, `[[file:path|name]]`,
+  `[[symbol:name@path|name]]`. Category dividers separate plan items
+  from code results. File results show emerald icons; symbols show
+  cyan + line number.
+- **Auto-target creation** — when an `@` file/symbol chip is inserted,
+  the picker also writes to the item's `fileSpecs`/`symbolSpecs` via
+  `onFileTarget`/`onSymbolTarget` callbacks. This means typing `@` IS
+  the way to build structured targets — no separate form needed.
+- **TargetsStrip** (`TargetsStrip.tsx`, ~220 lines) — thin reactive
+  horizontal strip placed between body editor and ContextRail. Shows
+  all code targets from TWO sources: body chips (parsed at render) +
+  API-added `fileSpecs`/`symbolSpecs`/`newConnections`/
+  `removedConnections`. De-duplicated by path. Each pill shows icon +
+  verb badge (for Actions) + label + x-to-remove (API-only targets).
+  Body-derived targets show a subtle `@` indicator. Empty state shows
+  "No code targets yet" with optional "+Add target" button.
+- **Extended BodyRenderer** (`BodyRenderer.tsx`, ~180 lines) — now
+  parses 5 chip types: `item`, `action`, `file`, `symbol`, `attach`.
+  File chips render as emerald-tinted font-mono pills. Symbol chips
+  render as cyan-tinted font-mono pills. Attach chips render as
+  neutral pills. Item/action chips retain the existing live-title
+  resolution + dead-link detection.
+- **Real-time AI agent target updates** — `onItemUpdated` WS handler
+  in `plan-items-store.ts` now propagates `symbolSpecs`,
+  `newConnections`, `removedConnections` (previously only `fileSpecs`
+  was in the safe-keys list). When an agent calls `update_item` with
+  new targets, the TargetsStrip and ContextRail update live.
+
+**Jank fixes (same session):**
+
+- **MentionPicker size pass** — text sizes bumped from 11px/9px to
+  13.5px/11px; lineHeight corrected from 18→22; picker width
+  320→400px; `FileText as Transcript` aliasing removed.
+- **PlanWorkspaceShellV2** — removed duplicate "← Graph" + "Minimize"
+  buttons (were both calling `setWorkspaceMode('graph')`); merged into
+  single button. V2 chip 9px→11px. Activity toggle 10px→12px. Task
+  count label: "tasks"→"actions".
+- **PlanActivityDrawer** — event row text 9.5px→11.5px, summary
+  10.5px→12.5px, title 11px→12px.
+- **MentionPicker wired into body editors** — both `PlanBodyArea`
+  (plan home) and `BodyEditor` (item canvas) now spread both slash
+  menu AND mention picker hooks. Previously only `/` worked; now `@`
+  also triggers the picker.
+
+Design doc: `PLAN-WORKSPACE-DESIGN.md` v0.6 (updated earlier in session).
 
 ### Apr 29, 2026 (late evening) — v0.1.3: fix Open Project regression from v0.1.2
 
@@ -1237,7 +1302,17 @@ same plan from disk. Templates publish as git repos.
 
 ---
 
-### Phase 14 — Plan Workspace (human-first) ⚡ ACTIVE
+### Phase 14 — Plan Workspace (human-first) ✅ 14.A + 14.B shipped, **superseded by Phase 15**
+
+> **Note (Apr 29):** User feedback after 14.B: the three-region MVP felt "a
+> bit of a mess" — Objects (spec docs) and Actions (tasks) parallel rather
+> than mixed, no real drill-down, no visual proof of plan-shifts over time,
+> capture friction. Decision was to redesign journeys-first into a unified
+> Object/Action tree with a Notion-like sidebar + page canvas. See
+> [`PLAN-WORKSPACE-DESIGN.md`](PLAN-WORKSPACE-DESIGN.md) for the v0.5
+> implementation contract. Phase 14.C originally queued ("rich inputs +
+> mass file select + image paste") gets folded into Phase 15.D's canvas
+> rebuild — same affordances, native to the new model.
 
 **Goal**: treat plans as the human's primary work surface. Tasks
 become *nested context*, not just todo items. The spec room is
@@ -1264,7 +1339,54 @@ Same structure recurses at plan / phase / task / subtask. Every
 level shows context on the left, todo state on the right, comments
 below, attachments rail on the side.
 
-#### 14.A — Data model + MCP foundation
+#### 14.A — Data model + MCP foundation ✅ **shipped Apr 29**
+
+Landed:
+
+- **Schema migration** (idempotent ALTER TABLE inside try/catch) added
+  `tasks.{parent_task_uid, body, prompt, scope_path, file_specs,
+  progress_percent, blocked_reason}`, new `attachments` table covering
+  both task and plan-doc targets, and `comments.{kind, source,
+  metadata}`. Old DBs migrate on next boot; fresh installs land in the
+  same shape via the same code path.
+- **`plan-service`** now reads/writes the new columns, exposes
+  `getSubtasks(parentTaskUid)`, and `affectedFiles` is a derived view
+  of `fileSpecs[]` (legacy callers still work).
+- **`comment-service`** accepts the new `AddCommentOptions` (`kind`,
+  `source`, `metadata`) without breaking the legacy 7-arg signature;
+  `listCommentsFlat` + `listCommentsForPlanSince` feed the activity
+  rail and `get_drift_report`.
+- **`task-attachments-service`** (new) handles URL / image / file_ref
+  / code_block / transcript pins; image-with-bytes writes under
+  `<project>/.codetrellis/attachments/<task-uid>/<uuid>.<ext>` and
+  stores the project-relative path.
+- **MCP tools** (all registered + harness-tested): `read_task_full`,
+  `list_task_comments`, `add_task_comment`, `update_task_progress`,
+  `add_subtask`, `add_task_attachment`, `set_task_blocked`.
+  `update_task` now accepts `body`, `prompt`, `scope_path`,
+  `file_specs`, `parent_task_uid`. `create_plan` accepts the rich task
+  shape on initial creation. `claim_task` returns the full task context
+  blob (task + parent + subtasks + phase + attachments + comments) in
+  one round-trip — `message: "Task <uid> claimed."` preserved for
+  legacy regex assertions. `get_drift_report` surfaces comment activity
+  since the baseline snapshot (or a caller-supplied `since_ms`).
+- **WS broadcasts**: `task-comment-added`, `task-progress`,
+  `task-blocked`, `task-attachment-added`, `task-created` (subtask).
+- **Plan-export YAML** round-trips body / prompt / scopePath /
+  fileSpecs / progressPercent / blockedReason / attachments / comments
+  (verified by harness: export → unlink → import → field-for-field
+  equality).
+- **Skill guide** updated — new vocabulary in summary / quickstart /
+  power-user; "what NOT to do" now calls out silently-stopping on a
+  blocker as the worst possible UX.
+
+Acceptance:
+- [x] Plan-export YAML round-trips the new fields cleanly (harness regression-tests)
+- [x] Existing v0.1.1 templates keep loading (back-compat shims; old DBs migrate via ALTER TABLE)
+- [x] All new MCP tools registered + the harness covers each one (`tests/e2e/task-context.test.ts`, 6 tests, 24/24 full harness suite green)
+
+Next up: **14.B — three-region plan workspace UI** (frontend rebuild
+on top of this data model + tool surface).
 
 New + extended fields:
 
@@ -1309,27 +1431,88 @@ Acceptance:
 - [ ] Existing v0.1.1 templates keep loading (back-compat shims)
 - [ ] All new MCP tools registered + the harness covers each one
 
-#### 14.B — Plan detail rebuild (three-region layout)
+#### 14.B — Plan detail rebuild (three-region layout) ✅ **shipped Apr 29**
 
-Today: side panel with a flat task list.
+Landed:
 
-After: full-canvas plan view with three columns —
-
-```
-┌─────────────────┬──────────────────────────────┬──────────────────┐
-│ Spec Room       │  Phases & Tasks              │  Activity        │
-│ (left rail)     │  (centre, drillable)         │  (right rail)    │
-└─────────────────┴──────────────────────────────┴──────────────────┘
-```
-
-- Click a task → expand inline (don't navigate away).
-- Spec room always visible — never hidden behind a tab.
-- Activity rail is the realtime channel.
+- **`useUiStore.workspaceMode: 'graph' | 'plan'`** — top-level layout
+  switch. Auto-flips to `'plan'` when an active plan is selected, back
+  to `'graph'` when cleared. The "Graph" button in the workspace header
+  switches manually.
+- **`PlanWorkspace.tsx`** — full-canvas three-region shell built on
+  `Allotment`. Header carries plan title, status, progress bar, link/
+  export, publish-as-template, and a back-to-graph chevron. All three
+  rails resize independently.
+- **`SpecRail.tsx`** (left) — `SpecRoom` reborn as the always-visible
+  left rail. Search + type chips + nested tree, click a row to inline-
+  preview the doc body without losing the task in the centre. A
+  `Maximize2` icon on the inline preview pops the full `SpecDocViewer`
+  modal for editing / version history. Each row carries a `N↗` badge
+  showing how many tasks reference the doc.
+- **`TaskCenter.tsx`** (centre) — phases as collapsible buckets with
+  scope / acceptance / prereqs inline; flat list fallback for plans
+  without phases. Top-level tasks only — subtasks render inside their
+  parent's expanded TaskCard.
+- **`TaskCard.tsx`** (centre, the heavy lift) — task-as-context
+  drillable card. Header: status icon + description + meta + inline
+  progress bar. Tabs on expand:
+  - **Overview** — body / prompt / scope_path / fileSpecs (with full
+    CRUD-intent editor: per-fileSpec action / path / moveTo /
+    description, add/remove). Includes a `Copy task context` button
+    that dumps body + prompt + fileSpecs as a markdown block ready to
+    paste at any agent (one of the user's seven explicit use cases).
+    "Linked specs" pill row at the bottom — clickable badges that open
+    the spec doc viewer.
+  - **Comments** — kind chip selector (note / progress / blocker /
+    question), live thread rendered with kind-tinted icons, source
+    (agent / human) attribution, and `metadata.progressPercent`
+    surfaced inline.
+  - **Attachments** — URL / file_ref / code_block / transcript editor
+    (image-with-bytes pinned for 14.C since it needs a project-served
+    image route).
+  - **Subtasks** — recurses into nested `TaskCard`s, indented per
+    depth. `Add subtask` adds via the new REST endpoint.
+- **`ActivityRail.tsx`** (right) — plan-scoped real-time feed merging
+  `usePlanStore.activityEvents` (WS-driven for `task-claimed`,
+  `task-updated`, `task-comment-added`, `task-progress`, `task-blocked`,
+  `task-attachment-added`, `task-created`) with relevant MCP tool calls
+  whose args reference this plan uid.
+- **Cross-reference** (`workspace/cross-references.ts`) — shared
+  matcher (uid markers + case-insensitive title scan over body /
+  prompt / fileSpec descriptions) used by both directions.
+  `SpecDocViewer` now also renders a "Referenced by N" pill row so
+  jumping from a doc to its tasks is one click.
+- **REST mirrors of the new MCP tools** (`server.ts`):
+  `GET /api/tasks/:uid/full`, attachments `GET / POST / DELETE`,
+  comments `GET / POST`, `progress`, `blocked`, `subtasks`. The
+  workspace stays online without going through the SSE wire.
+- **Store extensions** (`plan-store.ts`): `taskContexts`
+  (uid → `{ comments, attachments, subtasks }`), `activityEvents`
+  feed, and lazy `fetchTaskContext` on first card expand. Optimistic
+  updates on every action — WS broadcasts reconcile.
+- **WS handler** (`useWebSocket.ts`) — fold the new task events into
+  `taskContexts` cache + activity feed; toast for blockers / questions
+  / notes; ignore self-driven progress + comment events that already
+  showed optimistically.
 
 Acceptance:
-- [ ] Three-region layout, resizable
-- [ ] Tasks expand inline, subtasks indented
-- [ ] Spec docs link to / from tasks (cross-reference)
+- [x] Three-region layout, resizable (Allotment, three Allotment.Panes)
+- [x] Tasks expand inline, subtasks indented (`TaskCard` recurses with
+      `depth + 1` and indents via `marginLeft: depth * 12px`)
+- [x] Spec docs link to / from tasks (cross-reference both ways:
+      SpecRail rows show task count, TaskCard overview shows linked
+      doc pills, `SpecDocViewer` lists referencing tasks)
+
+Tests: `tests/e2e/task-context.test.ts` adds a 7th case
+(`REST task-context endpoints round-trip the same way the MCP tools
+do`) — full harness still 25/25 green; frontend `npm run build`
+clean. Visual / interaction polish covered by future iteration.
+
+Next up: **14.C — task-as-context view + rich inputs** (mass-select
+files in the inspector → bulk-add to task with one CRUD intent;
+project-tree file picker for `+ Add File`; image paste/drag-drop
+attachment flow with on-disk write under
+`<project>/.codetrellis/attachments/<task-uid>/`).
 
 #### 14.C — Task-as-context view + rich inputs
 
@@ -1369,6 +1552,408 @@ Frontend reactions to existing WS events:
 Acceptance:
 - [ ] No agent action goes visually unannounced for > 250 ms
 - [ ] Multi-tab demo: edit a task in tab A, see it update in tab B
+
+### Phase 15 — Plan Workspace v2 (Object/Action model) ⚡ ACTIVE
+
+**Source-of-truth:** [`PLAN-WORKSPACE-DESIGN.md`](PLAN-WORKSPACE-DESIGN.md)
+v0.6. Six user flows, body-first @-tag authoring model, inline code
+browser, three altitudes of change tracking, ten UI surfaces
+(S1–S10), six-stage rollout (15.A–15.F).
+
+**Goal.** Replace the three-concept (plan/phase/task + spec docs)
+model with a unified two-primitive (**Object + Action**) tree where
+both kinds nest freely, mix at any level, and depth is the user's
+call. Capture-fast plans (J1), Notion-like build-out (J2),
+drill-down with breadcrumbs (J3), seamless cross-agent handoff (J4),
+parallel multi-agent presence (J5), drift verification (J6). Ship
+plan-shift visualization (timeline scrubber + per-item history +
+activity rail) as a first-class concept — not a bolt-on.
+
+**Design principle (v0.6).** The body IS the prompt. Users write
+naturally. `@` tags bring the codebase inline — each `@` chip
+auto-creates a structured target (`FileSpec` / `SymbolSpec`) that
+traces to the graph. AI agents can add targets via API — they appear
+in real-time in the targets strip below the body. Progressive
+disclosure: a body-only Action is valid; a fully @-tagged Action
+gives tight scope and drift-checking. Objects and Actions both get
+the code browser — Objects for reference context, Actions for CRUD
+verbs. Non-code Actions ("research X", "explore Y") are first-class;
+the code browser stays hidden when not needed.
+
+#### 15.A — Foundations
+
+New tables, new types, new services. Not yet wired to any UI or MCP
+tool; just compiles, typechecks, harness still green.
+
+- `plan_items` (unified — `kind: 'object' | 'action'`,
+  `parent_uid` lets the trees mix)
+- `plan_item_versions` (M1: per-item version log)
+- `plan_events` (NEW: append-only structural mutation log —
+  the "show how plans shift" data layer)
+- Shared types: `PlanItem`, `FileSpec` with `edits[]` (M2 line/symbol
+  precision), `FileEdit`, `PlanEvent`
+- Services: `plan-item-service.ts` (CRUD + version writer),
+  `plan-event-service.ts` (append-only event log)
+- Old tables kept readable; nothing rewires yet
+
+Acceptance:
+- [ ] Schema migrates idempotently on existing DBs
+- [ ] `npm run typecheck` clean
+- [ ] Existing harness (25/25) still green
+
+#### 15.B — Migrator ✅ shipped Apr 29
+
+Walks legacy DB tables (`plan_documents`, `plan_phases`, `tasks`) into
+the unified `plan_items` model. Idempotent via `migrated_from` UNIQUE
+index. Dry-run by default. Backfills synthetic `item_created` events
+with each row's *original* timestamp so the plan timeline scrubber
+renders sensibly post-migration without a "history starts from
+migration day" caveat.
+
+- `src/backend/services/plan-migrate-service.ts` (~340 lines):
+  `migratePlan(planUid, opts)` + `migrateAllPlans(opts)`. Returns
+  `MigrationCounts` with per-table counts + skipped count.
+- Two-pass parent resolution: insert all rows with provisional
+  `parent_uid`, then second-pass UPDATE for nested docs
+  (`parent_doc_uid`) and subtasks (`parent_task_uid`). Pass-2 fixups
+  use direct UPDATE so they don't pollute the activity rail with
+  phantom "reparented" events.
+- `attachments` + `comments` retargeted in-place: legacy
+  `target_type='task'` / `'plan_doc'` flips to `'item'`. Plan-level
+  comments stay `target_type='plan'`. uids preserved end-to-end so
+  no orphan rows.
+- Phase body composes scope + prerequisites + acceptance criteria +
+  git checkpoint into structured markdown sections.
+- **`scripts/smoke-plan-migrate.ts`** (`npm run smoke:plan-migrate`)
+  proves the round-trip end-to-end with 50+ assertions:
+  realistic 3-doc / 2-phase / 3-task / nested-subtask plan with
+  attachments + comments → dry-run reports counts but writes
+  nothing → live run inserts rows + retargets attachments/comments
+  + backfills events with original timestamps → re-run reports 0
+  new + 8 skipped → tree integrity (every parentUid resolves +
+  every row has migrated_from).
+
+Schema fix shipped as a side-effect: `tasks.phase_uid` ALTER moved
+from lazy-in-resolveImports into `initDatabase` so a fresh-boot DB
+without a project scan still has the column. Old ALTER kept for
+back-compat.
+
+Acceptance:
+- [x] An existing-shape plan (docs + phases + tasks) migrates to a
+      coherent `plan_items` tree, uids preserved
+- [x] Comments + attachments stay attached (target_type retargeted
+      to 'item', uids preserved so no orphans)
+- [x] Dry-run reports counts; `--write` (i.e. `{ dryRun: false }`)
+      actually writes
+- [x] Re-running on migrated DB no-ops (8 inserted + 8 skipped on
+      re-run, no duplicate events)
+- [x] `npm run smoke:plan-items` + `npm run smoke:plan-migrate` +
+      full harness 25/25 green; `npm run typecheck` + build clean
+
+#### 15.C — Unified service + MCP ✅ shipped Apr 29
+
+15 new canonical MCP tools wired against `plan-item-service` +
+`plan-event-service`, with full REST mirrors so the V2 frontend
+(15.D) can hydrate without going through SSE. Old tools
+(`add_plan_doc`, `add_subtask`, `claim_task`, `read_task_full`, …)
+keep writing to legacy tables in parallel — both surfaces run
+side-by-side throughout the cutover. Aliases / deprecation are 15.F.
+
+**MCP tools added (15)**:
+- Tree CRUD: `add_item`, `get_item`, `read_item_full`, `update_item`,
+  `move_item`, `delete_item`, `claim_item`, `list_items`,
+  `get_plan_timeline`, `restore_item_version`
+- Item-context (renamed from task-context): `add_item_comment`,
+  `list_item_comments`, `update_item_progress`, `set_item_blocked`,
+  `add_item_attachment`
+
+**REST endpoints added** (matching surface):
+- `GET /api/plans/:planUid/items` (tree query, parent_uid + kind filters)
+- `GET /api/plans/:planUid/timeline` (events feed)
+- `POST /api/plans/:planUid/items` (create)
+- `GET /api/items/:uid` / `GET /api/items/:uid/full`
+- `PUT /api/items/:uid` (update)
+- `POST /api/items/:uid/move` / `DELETE /api/items/:uid`
+- `POST /api/items/:uid/claim` / `POST /api/items/:uid/restore-version/:version`
+- `GET /api/items/:uid/versions` / `GET /api/items/:uid/events`
+- `GET / POST /api/items/:uid/comments`
+- `POST /api/items/:uid/progress` / `POST /api/items/:uid/blocked`
+- `GET / POST /api/items/:uid/attachments`
+
+**WS broadcasts added**: `plan-item-created`, `plan-item-updated`,
+`plan-item-moved`, `plan-item-deleted`, `plan-item-claimed`,
+`plan-item-comment-added`, `plan-item-progress`, `plan-item-blocked`,
+`plan-item-attachment-added`, `plan-item-version-saved`.
+
+**Service-layer changes**:
+- `commentService` extended with `'item'` and `'plan_doc'` in the
+  `targetType` union; new `listItemComments(itemUid)` reads
+  `target_type IN ('item', 'task')` so post-migration items keep
+  rendering chatter.
+- `taskAttachmentsService` extended likewise; new
+  `listItemAttachments(itemUid)` reads `target_type IN ('item',
+  'task', 'plan_doc')` so unmigrated rows still render.
+
+**Skill guide rewritten** (`mcp/skill-guide.ts`) — Object/Action
+vocabulary now leads, with a "Legacy tool names" appendix mapping
+each old tool to its V2 equivalent.
+
+Acceptance:
+- [x] `tests/e2e/task-context.test.ts` still green (7/7) — legacy
+      tools keep working unchanged in parallel
+- [x] New `tests/e2e/plan-items.test.ts` (8 tests, 50+ assertions) —
+      every new MCP tool + timeline replay + tool-registry check, all
+      green on first run
+- [x] Skill guide rewrite teaches the new vocabulary with legacy
+      names appendix
+- [x] Full harness 33/33 green (1 unrelated cross-system flake
+      retried green); typecheck + build clean; both 15.A + 15.B
+      smokes still pass
+
+#### 15.D — Frontend rebuild ✅ MVP shipped Apr 29, polish ongoing
+
+V2 workspace shell shipped behind a localStorage feature flag. V1 and
+V2 run **side-by-side**: dogfooders flip the toggle in **Settings →
+Plans → Plan workspace V2**, the takeover overlay swaps to the new
+shell. Existing V1 users see no behavior change. V1 components stay
+in place — they retire in 15.F when the flag flips default-on.
+
+**Files added (`src/frontend/components/plan/v2/`)**:
+- `PlanWorkspaceShellV2.tsx` — three-region shell with V2 chip in
+  header, Esc-to-minimize + slide-up entry inherited from 14.B
+- `PlanItemTree.tsx` — sidebar tree of mixed Objects + Actions,
+  recursive nesting, hover-revealed `+ New ▾` (Object / Action
+  picker) + kebab menu (history / delete), per-row status icon +
+  progress %
+- `PlanItemCanvas.tsx` — main canvas: breadcrumb with parent-chain
+  navigation, autosaving title + body editor (markdown textarea,
+  500ms debounced PUT), property chip row (status, scope, fileSpecs
+  count, copy-context, history), Notion-grade sizing (title 40px,
+  body 16px), single-column content flow (body → targets → context →
+  children → comments)
+- `PlanActivityDrawer.tsx` — right rail, plan_events feed
+  (event-type-tinted icons, click-to-jump), toggleable to a slim 32px
+  icon-only collapsed state
+- `PlanItemHistoryDrawer.tsx` — modal with versions list (1-click
+  Restore vN) + scoped events list
+- `SlashMenu.tsx` — `/` trigger in body: headings, todos, code
+  blocks, divider, quote, sub-Object creation, Action creation.
+  Chips (`[[item:uid|title]]`, `[[action:uid|title]]`) rendered by
+  BodyRenderer
+- `BodyRenderer.tsx` — markdown + inline chip parser: clickable
+  `[[item:UID|title]]` / `[[action:UID|title]]` chips with live
+  title resolution + kind icon + dead-link detection
+- `MentionPicker.tsx` — `@` trigger in body: mentions other plan
+  items by title, inserts inline chip
+- `ContextRail.tsx` — unified code-targets + reference-attachments
+  rail: FileRow (verb + path + expand for description), SymbolRow
+  (verb + kind + name + expand for signature/description), EdgeRow
+  (add/remove + from/to), AttachmentRow (URL, image, video, file_ref,
+  code_block, transcript with inline preview + lightbox). "+Add ▾"
+  menu with Targets (file/folder/symbol/edge) and References
+  (URL/image/file/folder/code/transcript). Drag-drop + clipboard
+  paste for images/videos
+- `AnchorPicker.tsx` — in-app browse-or-search modal: file tree left
+  pane, symbols right pane (from `/api/symbols/file`), search mode
+  across files + symbols, tabs (All/Files/Folders/Symbols/Recent),
+  recent picks persisted per-plan in localStorage
+- `CodeBlockPicker.tsx` — line-range selection from any project file,
+  creates a code_block attachment with the selected snippet
+- `PlanGitContextChip.tsx` — baseRef / targetBranch / targetWorktree
+  / autoCreateBranch chip with popover editor
+- `PlanDiffPanel.tsx` — proposed changes projection with drift
+  status chips per change
+- `PlanQualityNudge.tsx` — vagueness detector (body < 40 chars +
+  no context = vague; Action with body but no graph anchor =
+  untrackable); dismissible per session
+
+**Store added** (`src/frontend/stores/plan-items-store.ts`):
+- `itemsByUid: Record<string, PlanItem>` (flat; tree built
+  client-side via `buildItemTree` helper)
+- `events: PlanEvent[]` (newest-first, capped 500)
+- `selectedItemUid` + `history: { back, forward }` for cmd+[ / cmd+]
+- `contextByUid` cache (children + attachments + comments + recent
+  versions per item)
+- WS handlers: `onItemCreated / onItemUpdated / onItemMoved /
+  onItemDeleted / onItemEvent / onItemCommentAdded /
+  onItemAttachmentAdded`
+- CRUD wrappers around the new REST surface from 15.C, optimistic
+  with WS reconcile
+
+**Type changes (May 4)**:
+- `SymbolSpec` gained `filePath?: string` — pins a symbol to its
+  source file. AnchorPicker populates it when picking from the
+  symbol pane; without it, symbols float unanchored
+
+**WS hookups** (`useWebSocket.ts`): `plan-item-*` events flow into
+the V2 store. Old `task-*` events stay routed to V1 store. Dual-fire
+isolation; either UI works on its own data.
+
+**Settings toggle**: `Settings → Plans → Plan workspace V2`. Persists
+to `localStorage['codetrellis:planV2'] = '1'`. Beta chip + explainer.
+
+**App routing**: `App.tsx` swaps the takeover overlay between
+`PlanWorkspace` (V1) and `PlanWorkspaceShellV2` based on the flag.
+Same overlay shell + minimize chip; only the inner content changes.
+
+**Bonus fix shipped alongside (user-reported)**: `Settings → About`
+showed stale v0.1.0 because `src/shared/build-info.ts` is a committed
+snapshot that only updates on `prepackage`. Two fixes:
+1. `/api/build-info` now recomputes live from `package.json` + `git`
+   when running from source; falls back to BUILD_INFO when packaged.
+2. `predev` script regenerates `build-info.ts` so even the static
+   import is fresh on each dev session.
+
+Acceptance:
+- [x] J1 capture (legacy `PlanCreateModal` still works — V2 doesn't
+      need a new ⌘N modal for MVP; full ⌘N capture queued for 15.F)
+- [x] J2 hierarchy build — sidebar `+ New ▾` creates Object /
+      Action; mixed nesting works; depth user's call
+- [x] J3 drill + breadcrumb — sidebar click → canvas loads with
+      parent-chain breadcrumb + back/forward history stack
+- [x] J5 parallel agent presence — WS `plan-item-claimed` feeds into
+      activity drawer with author tint
+- [x] Frontend build clean (`npm run build`)
+- [x] LocalStorage flag `codetrellis:planV2 = '1'` opts dogfooders in
+- [x] Full harness 33/33 green (V1 untouched; new V2 surface tested
+      via 15.C `tests/e2e/plan-items.test.ts`)
+- [x] Slash menu (S6 — `/` in body inserts blocks + child items)
+- [x] `@` mention picker for cross-item references
+- [x] Unified ContextRail (file/symbol/edge targets + attachments)
+- [x] AnchorPicker (in-app browse + search — file tree + symbols)
+- [x] Notion-grade size pass (body 16px, title 40px, headers 12px)
+- [x] PlanQualityNudge (vagueness + untrackable detection)
+- [x] PlanGitContextChip (baseRef, targetBranch)
+- [x] CodeBlockPicker (line-range snippet from project files)
+
+#### 15.D.2 — Inline code context (@ tags + code browser) ⚡ NEXT
+
+The body-first authoring model. Replaces the modal-based AnchorPicker
+and separate ContextRail target section with inline `@` tagging in
+the body + a collapsible code browser panel.
+
+**The UX:** Type `@` in the body → inline browse/search picker opens
+(same file tree + symbol list as AnchorPicker, but as a dropdown, not
+a modal). Pick a file or symbol → chip inserted in body text + target
+auto-created on the item. For Actions: each target gets a CRUD verb
+(default `modify`). For Objects: targets are reference-only.
+
+**What gets built:**
+- `@` trigger in body editor → opens inline code picker (reusing
+  AnchorPicker's file tree traversal + `/api/symbols/file` fetch)
+- `@` chips render inline in body text as clickable pills (file icon +
+  path, or symbol icon + name)
+- Auto-derive `FileSpec` / `SymbolSpec` from @ chips (body text is the
+  source of truth; structured targets are a projection)
+- Targets strip below body — auto-populated from @ chips + API-added
+  targets. Each target shows verb badge (Actions) or reference icon
+  (Objects). Click to edit verb, × to remove, [Browse] to open code
+  browser
+- Code browser panel — expands below targets strip. Two columns: file
+  tree (left), symbols + imports (right). Click to add targets.
+  Collapses when done. Reactive: shows files already targeted with
+  verb badges inline
+- Edge declarations — select source symbol, then target symbol. Shows
+  as directional chips. Supports cross-action references (planned
+  symbols from other Actions show alongside real symbols)
+- Real-time: AI agent calls `update_item` with `fileSpecs` → targets
+  strip updates live. Human sees agent's intent appear as it's written
+
+**What already exists (to reuse):**
+- `AnchorPicker.tsx` — file tree + symbol search. Guts become the
+  inline picker + code browser panel
+- `ContextRail.tsx` — FileRow/SymbolRow/EdgeRow components stay for
+  the targets strip; AddMenu/AnchorPicker modal flow gets replaced
+- `/api/symbols/file?path=` — returns symbols for a file
+- `/api/symbols/search?q=` — search across all symbols
+- `/api/dependencies/file?path=` — file-level import edges (shows
+  "imports" context in the code browser)
+- `useProjectStore.fileTree` — FileTreeNode[] for the tree
+
+**What's NOT available yet (design for later):**
+- Symbol-level call graph (who calls whom) — backend only has
+  file-level deps. Edge declarations are user-authored intent
+- Query-based targets ("all callers of X") — design supports it
+  (`from: '*'` wildcard) but resolution is manual/agent-driven
+- Cross-action symbol resolution (planned symbols from other
+  Actions' symbolSpecs) — needs a plan-wide symbol index
+
+Acceptance:
+- [ ] `@` trigger opens inline picker in body editor
+- [ ] Picking a file/symbol inserts an @ chip in body AND creates a
+      FileSpec/SymbolSpec on the item
+- [ ] Targets strip auto-derives from @ chips + shows API-added
+      targets
+- [ ] Code browser panel opens via [Browse], shows file tree +
+      symbols, click to target
+- [ ] Works on Objects (reference) and Actions (verb)
+- [ ] AI agent adding fileSpecs via API appears in targets strip
+      in real-time
+- [ ] Non-code Actions (no @ tags) show no targets strip / browser
+- [ ] `npm run typecheck` + `npm run build` clean
+
+**Polish queued for 15.F**:
+- Plan timeline scrubber UI (S7 — header has the V2 chip but no
+  scrub control yet)
+- Drift overlay on graph nodes (S10)
+- Drag-drop reorder in sidebar
+- ⌘P plan switcher
+- Capture modal (⌘N)
+- Delete V1 components once flag is default-on
+
+#### 15.E — Disk layout migration
+
+`scripts/migrate-plans.ts` walks `<project>/.codetrellis/plans/<slug>/`
+and rewrites flat layout to tree-mirror layout. Front-matter preserves
+uid + kind + Action metadata. New importer dual-reads.
+
+Acceptance:
+- [ ] Existing plan-export harness still green
+- [ ] New harness: legacy-on-disk plan imports cleanly under V2 reader
+- [ ] Migrator dry-runs by default; `--write` + `--cleanup` flags
+      handle the destructive steps explicitly
+
+#### 15.F — Skill guide + tests + dogfooding
+
+Final polish before flipping the V2 default.
+
+- Skill guide rewritten around Object/Action vocabulary
+- "Don't silently stop on a blocker", "Always start with
+  read_item_full", "Mid-task → update_item with progressPercent" —
+  the same hygiene now in the new vocabulary
+- Harness suite expanded to cover: timeline replay, version restore,
+  cross-agent handoff scenario (Flow 4), parallel-agents (Flow 5)
+- Beta flip: V2 becomes default; V1 reachable via the flag for
+  bug-fix windows
+
+Acceptance:
+- [ ] Full harness ≥ pre-V2 count, all green
+- [ ] V2 flagged off → V1 still works (escape hatch for two minor
+      versions)
+
+---
+
+### Phase 16 — Plan Workspace UX Overhaul
+
+**Status:** planning (design agreed, no code yet)
+**Depends on:** Phase 15 (V2 data model + components)
+**Supersedes:** V1 workspace entirely
+**Design doc:** [PLAN-UX-OVERHAUL.md](PLAN-UX-OVERHAUL.md)
+**UX audit:** [UX-FLOW-AUDIT.md](UX-FLOW-AUDIT.md)
+
+Goal: Make V2 the **only** plan experience. Drop all V1 components.
+Make the workspace intuitive for both humans and AI agents to build
+plans, see proposed changes on the graph, and track progress.
+
+Sub-phases:
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 16.A | Drop V1 + fix plumbing (delete V1 components, remove `planV2Enabled`, fix `fetchPlan` error handling, rewire PlanPanel) | pending |
+| 16.B | Clean page experience (progressive disclosure, hide empty sections, body starts in edit mode, delay quality nudge, rename Object/Action) | pending |
+| 16.C | Plan dashboard + sidebar polish (redesign plan list, hover-to-add, status indicators, drag reorder) | pending |
+| 16.D | Code authoring polish (simplify +Add menu, merge TargetsStrip into ContextRail, blast radius, refactoring patterns) | pending |
+| 16.E | Graph integration (node → plan action, plan layers, split view, live highlighting) | pending |
 
 ---
 
@@ -1854,16 +2439,28 @@ src/
         edges/
           ImportEdge.tsx               — Custom edges with state-aware visuals + animated flow dots
       plan/
-        PlanList.tsx
-        PlanDetail.tsx                 — Plan header, progress, SpecRoom, PlanPhases, fallback flat task list
-        PlanPhases.tsx                 — Phase 12 §A: groups tasks by phase; expandable scope/prereqs/acceptance; "Unphased" bucket; create/edit modal
-        ProposedChanges.tsx            — Phase 12 §B: ProposedChange feed grouped by task with status filter chips + kind selector
-        PlanCreateModal.tsx            — Portaled modal; "Blank" + "From template" tabs (Phase 12 §G)
-        SpecRoom.tsx                   — Inside PlanDetail; type chips, search, tree-rendered doc list (Phase 12 §C)
-        SpecDocViewer.tsx              — Portaled modal; markdown + edit + version history + restore
-        SpecDocCreateModal.tsx         — Portaled modal; type picker grid + starter skeletons; orderHint + parent dropdown; auto-numbered titles for repeat types (Phase 12 §C, §F)
-        StatusBadge.tsx
-        CommentThread.tsx
+        PlanList.tsx                   — Phase 15: plan list with quick-create + template button + disk discovery
+        PlanDetail.tsx                 — V1: plan header, progress, SpecRoom, PlanPhases, fallback flat task list
+        PlanPhases.tsx                 — V1: Phase 12 §A groups tasks by phase
+        ProposedChanges.tsx            — Phase 12 §B: ProposedChange feed
+        PlanCreateModal.tsx            — Portaled modal; "Blank" + "From template" tabs
+        SpecRoom.tsx, SpecDocViewer.tsx, SpecDocCreateModal.tsx — V1 spec doc surfaces
+        StatusBadge.tsx, CommentThread.tsx
+        v2/                            — Phase 15 V2 workspace (behind planV2 flag)
+          PlanWorkspaceShellV2.tsx      — Three-region shell: sidebar + canvas + activity drawer
+          PlanItemTree.tsx              — Sidebar tree: mixed Objects + Actions, nested, hover controls
+          PlanItemCanvas.tsx            — Main canvas: breadcrumb, body editor, targets, context, comments
+          SlashMenu.tsx                 — `/` in body: headings, todos, code, child Objects/Actions
+          BodyRenderer.tsx              — Markdown + inline [[item:uid|title]] chip rendering
+          MentionPicker.tsx             — `@` trigger for cross-item references
+          ContextRail.tsx               — Code targets (file/symbol/edge) + reference attachments rail
+          AnchorPicker.tsx              — Browse-or-search modal: file tree + symbol list + search
+          CodeBlockPicker.tsx           — Line-range snippet selector from project files
+          PlanGitContextChip.tsx        — baseRef / targetBranch / worktree chip with popover
+          PlanDiffPanel.tsx             — Proposed changes + drift status projection
+          PlanQualityNudge.tsx          — Vagueness + untrackable Action detection
+          PlanActivityDrawer.tsx        — Right rail: plan_events feed, toggleable
+          PlanItemHistoryDrawer.tsx     — Per-item version list + restore + scoped events
       inspector/
         CodePreview.tsx                — Prism syntax highlight + git gutter + drift border + line selection + DriftBadge
         AddToTaskPopover.tsx           — Portaled modal; three modes (existing / new task / new plan)

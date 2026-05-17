@@ -1,0 +1,846 @@
+/**
+ * Plan item service — Phase 15 §15.A.
+ *
+ * The unified CRUD layer for `plan_items`. Replaces (eventually)
+ * `plan-service.ts` (tasks), `plan-documents-service.ts` (spec docs),
+ * `plan-phases-service.ts` (phases). For 15.A it sits alongside the
+ * old services; nothing reads from it until 15.C wires the new MCP
+ * surface.
+ *
+ * Two cross-cutting behaviours:
+ *
+ *  - **Version log (M1).** Every `updateItem` writes a row to
+ *    `plan_item_versions` capturing both `body` and a JSON snapshot
+ *    of the meaningful structured fields. Restoring a version reads
+ *    from this table and writes a new "post-restore" version + a
+ *    `plan_events: item_restored` row.
+ *
+ *  - **Structural events.** Create / move / re-parent / sort change /
+ *    delete / status flip / kind transmute all append rows to
+ *    `plan_events` via `plan-event-service.ts`. Drives the activity
+ *    rail + timeline scrubber.
+ *
+ * Action-only fields (`status`, `fileSpecs`, `assignee`, …) are
+ * silently ignored when `kind === 'object'`. Runtime guards in
+ * `claimItem` etc. surface a clear error rather than a silent
+ * mismatch.
+ *
+ * See `docs/PLAN-WORKSPACE-DESIGN.md` (v0.5) §Architecture for the
+ * tool surface this service backs.
+ */
+
+import { randomUUID } from 'node:crypto';
+import { getDb } from './database';
+import { markDirty } from './persistence';
+import { appendPlanEvent } from './plan-event-service';
+import type {
+  PlanItem,
+  PlanItemKind,
+  CreatePlanItemInput,
+  UpdatePlanItemInput,
+  PlanItemEdge,
+  FileSpec,
+  SymbolSpec,
+  TaskStatus,
+  PlanItemVersion,
+  PlanEvent,
+} from '../../shared/types';
+
+// =============================================================================
+// Constants & helpers
+// =============================================================================
+
+/**
+ * Common SELECT-list — central column order so every reader is
+ * consistent. Adding a column means updating one place.
+ */
+const ITEM_COLUMNS = `uid, plan_uid, parent_uid, sort_order, kind,
+  title, body, template,
+  status, assignee, assignee_type, assignee_model,
+  progress_percent, blocked_reason,
+  scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
+  author, author_type, created_at, updated_at, migrated_from`;
+
+function rowToItem(r: any[]): PlanItem {
+  return {
+    uid: r[0] as string,
+    planUid: r[1] as string,
+    parentUid: (r[2] as string | null) ?? null,
+    sortOrder: r[3] as number,
+    kind: r[4] as PlanItemKind,
+    title: r[5] as string,
+    body: (r[6] as string | null) ?? '',
+    template: (r[7] as string | null) ?? null,
+    status: (r[8] as TaskStatus | null) ?? null,
+    assignee: (r[9] as string | null) ?? null,
+    assigneeType: (r[10] as string | null) ?? null,
+    assigneeModel: (r[11] as string | null) ?? null,
+    progressPercent: (r[12] as number | null) ?? null,
+    blockedReason: (r[13] as string | null) ?? null,
+    scopePath: (r[14] as string | null) ?? null,
+    fileSpecs: parseJsonArray<FileSpec>(r[15] as string | null),
+    symbolSpecs: parseJsonArray<SymbolSpec>(r[16] as string | null),
+    newConnections: parseJsonArray<PlanItemEdge>(r[17] as string | null),
+    removedConnections: parseJsonArray<PlanItemEdge>(r[18] as string | null),
+    dependencies: parseJsonArray<string>(r[19] as string | null),
+    author: r[20] as string,
+    authorType: r[21] as string,
+    createdAt: r[22] as number,
+    updatedAt: r[23] as number,
+    migratedFrom: (r[24] as string | null) ?? null,
+  };
+}
+
+function parseJsonArray<T>(s: string | null): T[] {
+  if (!s) return [];
+  try {
+    const parsed = JSON.parse(s);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Structured fields we snapshot into `plan_item_versions.meta_snapshot`.
+ * Body is its own column. We keep this exhaustive so non-body changes
+ * (status flips, fileSpec edits, scopePath rename, …) are blameable.
+ */
+function metaSnapshotOf(item: PlanItem): Record<string, unknown> {
+  return {
+    title: item.title,
+    template: item.template,
+    status: item.status,
+    assignee: item.assignee,
+    assigneeType: item.assigneeType,
+    assigneeModel: item.assigneeModel,
+    progressPercent: item.progressPercent,
+    blockedReason: item.blockedReason,
+    scopePath: item.scopePath,
+    fileSpecs: item.fileSpecs,
+    symbolSpecs: item.symbolSpecs,
+    newConnections: item.newConnections,
+    removedConnections: item.removedConnections,
+    dependencies: item.dependencies,
+    parentUid: item.parentUid,
+    sortOrder: item.sortOrder,
+  };
+}
+
+// =============================================================================
+// Reads
+// =============================================================================
+
+export function getItem(uid: string): PlanItem | null {
+  const result = getDb().exec(
+    `SELECT ${ITEM_COLUMNS} FROM plan_items WHERE uid = ?`,
+    [uid],
+  );
+  if (!result[0]?.values[0]) return null;
+  return rowToItem(result[0].values[0] as any[]);
+}
+
+/**
+ * Direct children of an item, ordered by `sort_order`. Pass
+ * `parentUid=null` for the plan root's top-level items.
+ */
+export function getChildren(planUid: string, parentUid: string | null): PlanItem[] {
+  const db = getDb();
+  if (parentUid === null) {
+    const r = db.exec(
+      `SELECT ${ITEM_COLUMNS} FROM plan_items
+       WHERE plan_uid = ? AND parent_uid IS NULL
+       ORDER BY sort_order ASC, created_at ASC`,
+      [planUid],
+    );
+    return (r[0]?.values ?? []).map(rowToItem);
+  }
+  const r = db.exec(
+    `SELECT ${ITEM_COLUMNS} FROM plan_items
+     WHERE plan_uid = ? AND parent_uid = ?
+     ORDER BY sort_order ASC, created_at ASC`,
+    [planUid, parentUid],
+  );
+  return (r[0]?.values ?? []).map(rowToItem);
+}
+
+/**
+ * Every item in the plan, ordered. Cheap — used by the sidebar
+ * (which builds the tree client-side from `parentUid`).
+ */
+export function listAllItems(planUid: string): PlanItem[] {
+  const r = getDb().exec(
+    `SELECT ${ITEM_COLUMNS} FROM plan_items
+     WHERE plan_uid = ?
+     ORDER BY sort_order ASC, created_at ASC`,
+    [planUid],
+  );
+  return (r[0]?.values ?? []).map(rowToItem);
+}
+
+/**
+ * Lightweight tree query for the sidebar (S4). Returns only the
+ * fields the row needs to render — no body, no fileSpecs blob.
+ */
+export interface PlanItemSummary {
+  uid: string;
+  planUid: string;
+  parentUid: string | null;
+  sortOrder: number;
+  kind: PlanItemKind;
+  title: string;
+  template: string | null;
+  status: TaskStatus | null;
+  assignee: string | null;
+  progressPercent: number | null;
+  childCount: number;
+}
+
+export function listItemSummaries(planUid: string): PlanItemSummary[] {
+  const db = getDb();
+  const r = db.exec(
+    `SELECT i.uid, i.plan_uid, i.parent_uid, i.sort_order, i.kind,
+            i.title, i.template, i.status, i.assignee, i.progress_percent,
+            (SELECT COUNT(*) FROM plan_items c WHERE c.parent_uid = i.uid) AS child_count
+     FROM plan_items i
+     WHERE i.plan_uid = ?
+     ORDER BY i.sort_order ASC, i.created_at ASC`,
+    [planUid],
+  );
+  if (!r[0]) return [];
+  return r[0].values.map((row: any[]) => ({
+    uid: row[0] as string,
+    planUid: row[1] as string,
+    parentUid: (row[2] as string | null) ?? null,
+    sortOrder: row[3] as number,
+    kind: row[4] as PlanItemKind,
+    title: row[5] as string,
+    template: (row[6] as string | null) ?? null,
+    status: (row[7] as TaskStatus | null) ?? null,
+    assignee: (row[8] as string | null) ?? null,
+    progressPercent: (row[9] as number | null) ?? null,
+    childCount: (row[10] as number) ?? 0,
+  }));
+}
+
+// =============================================================================
+// Create
+// =============================================================================
+
+export function createItem(input: CreatePlanItemInput): PlanItem {
+  const db = getDb();
+  const uid = input.uid ?? randomUUID();
+  const now = Date.now();
+  const createdAt = input.createdAt ?? now;
+  const updatedAt = input.updatedAt ?? now;
+
+  // Derive sort_order: caller can pin it (migration uses this); else
+  // append at the end of the parent's child list.
+  let sortOrder = input.sortOrder;
+  if (sortOrder === undefined) {
+    const r = db.exec(
+      input.parentUid == null
+        ? `SELECT COALESCE(MAX(sort_order), -1) + 1
+           FROM plan_items WHERE plan_uid = ? AND parent_uid IS NULL`
+        : `SELECT COALESCE(MAX(sort_order), -1) + 1
+           FROM plan_items WHERE plan_uid = ? AND parent_uid = ?`,
+      input.parentUid == null ? [input.planUid] : [input.planUid, input.parentUid],
+    );
+    sortOrder = (r[0]?.values[0]?.[0] as number) ?? 0;
+  }
+
+  // Action-only field nullability: Objects keep the action columns
+  // NULL so the read layer cleanly distinguishes them.
+  const isAction = input.kind === 'action';
+
+  db.run(
+    `INSERT INTO plan_items
+       (uid, plan_uid, parent_uid, sort_order, kind,
+        title, body, template,
+        status, assignee, assignee_type, assignee_model,
+        progress_percent, blocked_reason,
+        scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
+        author, author_type, created_at, updated_at, migrated_from)
+     VALUES (?, ?, ?, ?, ?,
+             ?, ?, ?,
+             ?, ?, ?, ?,
+             ?, ?,
+             ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?)`,
+    [
+      uid, input.planUid, input.parentUid ?? null, sortOrder, input.kind,
+      input.title, input.body ?? '', input.template ?? null,
+      isAction ? (input.status ?? 'pending') : null,
+      isAction ? (input.assignee ?? null) : null,
+      isAction ? (input.assigneeType ?? null) : null,
+      isAction ? (input.assigneeModel ?? null) : null,
+      // Phase 15.B — migrator preserves legacy progress / blocker
+      // values; native creation passes neither so they default null.
+      isAction ? (input.progressPercent ?? null) : null,
+      isAction ? (input.blockedReason ?? null) : null,
+      isAction ? (input.scopePath ?? null) : null,
+      JSON.stringify(isAction ? (input.fileSpecs ?? []) : []),
+      JSON.stringify(isAction ? (input.symbolSpecs ?? []) : []),
+      JSON.stringify(isAction ? (input.newConnections ?? []) : []),
+      JSON.stringify(isAction ? (input.removedConnections ?? []) : []),
+      JSON.stringify(isAction ? (input.dependencies ?? []) : []),
+      input.author, input.authorType, createdAt, updatedAt,
+      input.migratedFrom ?? null,
+    ],
+  );
+
+  markDirty();
+
+  const item = getItem(uid);
+  if (!item) {
+    throw new Error(`createItem: failed to read back inserted item ${uid}`);
+  }
+
+  // Initial version row — row v1 with the just-inserted snapshot.
+  // Lets the per-item history drawer show "created" as the first entry.
+  writeVersionRow(item, 1, 'Created', input.author, input.authorType, createdAt);
+
+  // Structural event — drives the activity rail + scrubber.
+  appendPlanEvent({
+    planUid: input.planUid,
+    itemUid: uid,
+    eventType: 'item_created',
+    afterState: { uid, kind: input.kind, title: input.title, parentUid: input.parentUid ?? null, sortOrder },
+    summary: `${input.kind === 'action' ? '⚡' : '📋'} created "${input.title}"`,
+    author: input.author,
+    authorType: input.authorType,
+    createdAt,
+  });
+
+  return item;
+}
+
+// =============================================================================
+// Update
+// =============================================================================
+
+export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
+  const db = getDb();
+  const before = getItem(uid);
+  if (!before) return null;
+
+  const now = Date.now();
+  const sets: string[] = ['updated_at = ?'];
+  const params: any[] = [now];
+
+  // Two independent things to track:
+  //   - `contentChanged` — any non-structural field changed, so we
+  //     need a `plan_item_versions` row.
+  //   - `structuralEvents[]` — every structural change emits its
+  //     own `plan_events` row. Multiple can fire in one update
+  //     (e.g. a rename + a re-parent in the same call).
+  let contentChanged = false;
+  type EventDescriptor = {
+    eventType: PlanEvent['eventType'];
+    before: unknown;
+    after: unknown;
+    kind: 'reparented' | 'reordered' | 'renamed' | 'status_changed' | 'kind_transmuted';
+  };
+  const structuralEvents: EventDescriptor[] = [];
+
+  if (updates.title !== undefined && updates.title !== before.title) {
+    sets.push('title = ?'); params.push(updates.title);
+    contentChanged = true;
+    structuralEvents.push({
+      eventType: 'item_renamed',
+      before: { title: before.title },
+      after: { title: updates.title },
+      kind: 'renamed',
+    });
+  }
+  if (updates.body !== undefined && updates.body !== before.body) {
+    sets.push('body = ?'); params.push(updates.body);
+    contentChanged = true;
+  }
+  if (updates.template !== undefined && updates.template !== before.template) {
+    sets.push('template = ?'); params.push(updates.template);
+    contentChanged = true;
+  }
+
+  // Action-only fields — apply only when the row is an Action; on
+  // Objects they stay NULL.
+  if (before.kind === 'action') {
+    if (updates.status !== undefined && updates.status !== before.status) {
+      sets.push('status = ?'); params.push(updates.status);
+      contentChanged = true;
+      structuralEvents.push({
+        eventType: 'status_changed',
+        before: { status: before.status },
+        after: { status: updates.status },
+        kind: 'status_changed',
+      });
+    }
+    if (updates.assignee !== undefined && updates.assignee !== before.assignee) {
+      sets.push('assignee = ?'); params.push(updates.assignee);
+      contentChanged = true;
+    }
+    if (updates.assigneeType !== undefined && updates.assigneeType !== before.assigneeType) {
+      sets.push('assignee_type = ?'); params.push(updates.assigneeType);
+      contentChanged = true;
+    }
+    if (updates.assigneeModel !== undefined && updates.assigneeModel !== before.assigneeModel) {
+      sets.push('assignee_model = ?'); params.push(updates.assigneeModel);
+      contentChanged = true;
+    }
+    if (updates.progressPercent !== undefined && updates.progressPercent !== before.progressPercent) {
+      sets.push('progress_percent = ?'); params.push(updates.progressPercent);
+      contentChanged = true;
+    }
+    if (updates.blockedReason !== undefined && updates.blockedReason !== before.blockedReason) {
+      sets.push('blocked_reason = ?'); params.push(updates.blockedReason);
+      contentChanged = true;
+    }
+    if (updates.scopePath !== undefined && updates.scopePath !== before.scopePath) {
+      sets.push('scope_path = ?'); params.push(updates.scopePath);
+      contentChanged = true;
+    }
+    // Array/object fields: callers always replace whole-blob, so we
+    // unconditionally write when present (no deep-equal check). Cost:
+    // an extra version row when the caller passes an unchanged array.
+    // Acceptable trade-off vs. a deep-equal helper.
+    if (updates.fileSpecs !== undefined) {
+      sets.push('file_specs = ?'); params.push(JSON.stringify(updates.fileSpecs));
+      contentChanged = true;
+    }
+    if (updates.symbolSpecs !== undefined) {
+      sets.push('symbol_specs = ?'); params.push(JSON.stringify(updates.symbolSpecs));
+      contentChanged = true;
+    }
+    if (updates.newConnections !== undefined) {
+      sets.push('new_connections = ?'); params.push(JSON.stringify(updates.newConnections));
+      contentChanged = true;
+    }
+    if (updates.removedConnections !== undefined) {
+      sets.push('removed_conns = ?'); params.push(JSON.stringify(updates.removedConnections));
+      contentChanged = true;
+    }
+    if (updates.dependencies !== undefined) {
+      sets.push('dependencies = ?'); params.push(JSON.stringify(updates.dependencies));
+      contentChanged = true;
+    }
+  }
+
+  // Structural moves — re-parent and/or reorder. Each emits its own
+  // event independently; neither bumps the version log (pure
+  // structural change, body unchanged).
+  if (updates.parentUid !== undefined && updates.parentUid !== before.parentUid) {
+    sets.push('parent_uid = ?'); params.push(updates.parentUid);
+    structuralEvents.push({
+      eventType: 'reparented',
+      before: { parentUid: before.parentUid },
+      after: { parentUid: updates.parentUid },
+      kind: 'reparented',
+    });
+  }
+  if (updates.sortOrder !== undefined && updates.sortOrder !== before.sortOrder) {
+    sets.push('sort_order = ?'); params.push(updates.sortOrder);
+    structuralEvents.push({
+      eventType: 'reordered',
+      before: { sortOrder: before.sortOrder },
+      after: { sortOrder: updates.sortOrder },
+      kind: 'reordered',
+    });
+  }
+
+  // Nothing actually changed — skip the write.
+  if (sets.length === 1 /* just updated_at */) {
+    return before;
+  }
+
+  params.push(uid);
+  db.run(`UPDATE plan_items SET ${sets.join(', ')} WHERE uid = ?`, params);
+  markDirty();
+
+  const after = getItem(uid);
+  if (!after) return null;
+
+  // Per-item version row — written iff content changed. Pure
+  // re-parent / reorder skips the version log (those are tracked
+  // exclusively via plan_events).
+  if (contentChanged) {
+    writeVersionRow(after, nextVersionFor(uid), updates.changeSummary ?? null, updates.author, updates.authorType, now);
+  }
+
+  // Emit one plan_events row per structural change. A `body` edit
+  // alone produces zero events; a rename produces `item_renamed`; a
+  // body+rename produces `item_renamed`; a body+rename+reparent
+  // produces both `item_renamed` and `reparented`.
+  for (const ev of structuralEvents) {
+    appendPlanEvent({
+      planUid: after.planUid,
+      itemUid: after.uid,
+      eventType: ev.eventType,
+      beforeState: ev.before,
+      afterState: ev.after,
+      summary: structuralSummary(after, ev.kind, ev.before, ev.after),
+      author: updates.author,
+      authorType: updates.authorType,
+    });
+  }
+
+  return after;
+}
+
+// =============================================================================
+// Move (re-parent + reorder atomically)
+// =============================================================================
+
+export interface MoveItemInput {
+  newParentUid?: string | null;
+  newSortOrder?: number;
+  author: string;
+  authorType: string;
+  /** Optional — if absent, defaults to "moved <title>". */
+  summary?: string;
+}
+
+/**
+ * Re-parent and/or reorder. Single event written even when both
+ * change. Used by drag-drop in the sidebar.
+ */
+export function moveItem(uid: string, input: MoveItemInput): PlanItem | null {
+  const before = getItem(uid);
+  if (!before) return null;
+  const now = Date.now();
+  const db = getDb();
+
+  const sets: string[] = ['updated_at = ?'];
+  const params: any[] = [now];
+  let isReparent = false;
+  let isReorder = false;
+
+  if (input.newParentUid !== undefined && input.newParentUid !== before.parentUid) {
+    sets.push('parent_uid = ?'); params.push(input.newParentUid);
+    isReparent = true;
+  }
+  if (input.newSortOrder !== undefined && input.newSortOrder !== before.sortOrder) {
+    sets.push('sort_order = ?'); params.push(input.newSortOrder);
+    isReorder = true;
+  }
+  if (sets.length === 1) return before; // no-op
+
+  params.push(uid);
+  db.run(`UPDATE plan_items SET ${sets.join(', ')} WHERE uid = ?`, params);
+  markDirty();
+
+  appendPlanEvent({
+    planUid: before.planUid,
+    itemUid: uid,
+    eventType: isReparent ? 'item_moved' : 'reordered',
+    beforeState: { parentUid: before.parentUid, sortOrder: before.sortOrder },
+    afterState: {
+      parentUid: input.newParentUid ?? before.parentUid,
+      sortOrder: input.newSortOrder ?? before.sortOrder,
+    },
+    summary: input.summary ?? defaultMoveSummary(before, isReparent, isReorder),
+    author: input.author,
+    authorType: input.authorType,
+  });
+
+  return getItem(uid);
+}
+
+// =============================================================================
+// Delete (cascade)
+// =============================================================================
+
+export interface DeleteItemInput {
+  cascade?: boolean;
+  author: string;
+  authorType: string;
+}
+
+/**
+ * Delete an item and (by default) its descendants. Records `before_state`
+ * on the event so a future `restore_item` can put the tree back —
+ * "soft delete via append-only event log" rather than a tombstone column.
+ *
+ * Returns the uids of every item actually deleted (caller may use this
+ * to broadcast `plan-item-deleted` with the cascadedUids list).
+ */
+export function deleteItem(uid: string, input: DeleteItemInput): string[] {
+  const db = getDb();
+  const root = getItem(uid);
+  if (!root) return [];
+
+  const cascade = input.cascade !== false; // default true
+  const toDelete: string[] = cascade
+    ? collectSubtree(uid)
+    : [uid];
+
+  // Snapshot every row so we can replay on restore.
+  const beforeSnapshots: Array<{ uid: string; row: PlanItem }> = [];
+  for (const u of toDelete) {
+    const item = getItem(u);
+    if (item) beforeSnapshots.push({ uid: u, row: item });
+  }
+
+  // Hard-delete in reverse depth order so FKs don't bite (children
+  // first, parents last). collectSubtree returns a DFS order; reverse
+  // for safe deletion.
+  for (const u of [...toDelete].reverse()) {
+    db.run(`DELETE FROM plan_item_versions WHERE item_uid = ?`, [u]);
+    db.run(`DELETE FROM plan_items WHERE uid = ?`, [u]);
+  }
+  markDirty();
+
+  appendPlanEvent({
+    planUid: root.planUid,
+    itemUid: uid,
+    eventType: 'item_deleted',
+    beforeState: { items: beforeSnapshots, cascade },
+    summary: cascade && toDelete.length > 1
+      ? `🗑 deleted "${root.title}" + ${toDelete.length - 1} child${toDelete.length === 2 ? '' : 'ren'}`
+      : `🗑 deleted "${root.title}"`,
+    author: input.author,
+    authorType: input.authorType,
+  });
+
+  return toDelete;
+}
+
+function collectSubtree(rootUid: string): string[] {
+  const db = getDb();
+  const result: string[] = [];
+  const stack: string[] = [rootUid];
+  while (stack.length > 0) {
+    const u = stack.pop() as string;
+    result.push(u);
+    const r = db.exec(`SELECT uid FROM plan_items WHERE parent_uid = ?`, [u]);
+    if (r[0]) {
+      for (const row of r[0].values) stack.push(row[0] as string);
+    }
+  }
+  return result;
+}
+
+// =============================================================================
+// Versions (M1 — per-item history)
+// =============================================================================
+
+function nextVersionFor(itemUid: string): number {
+  const r = getDb().exec(
+    `SELECT COALESCE(MAX(version), 0) + 1 FROM plan_item_versions WHERE item_uid = ?`,
+    [itemUid],
+  );
+  return (r[0]?.values[0]?.[0] as number) ?? 1;
+}
+
+function writeVersionRow(
+  item: PlanItem,
+  version: number,
+  changeSummary: string | null,
+  author: string,
+  authorType: string,
+  createdAt: number,
+): void {
+  getDb().run(
+    `INSERT INTO plan_item_versions
+       (item_uid, version, body_snapshot, meta_snapshot, change_summary, author, author_type, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      item.uid,
+      version,
+      item.body ?? '',
+      JSON.stringify(metaSnapshotOf(item)),
+      changeSummary,
+      author,
+      authorType,
+      createdAt,
+    ],
+  );
+}
+
+export function listItemVersions(itemUid: string): PlanItemVersion[] {
+  const r = getDb().exec(
+    `SELECT id, item_uid, version, body_snapshot, meta_snapshot, change_summary, author, author_type, created_at
+     FROM plan_item_versions
+     WHERE item_uid = ?
+     ORDER BY version DESC`,
+    [itemUid],
+  );
+  if (!r[0]) return [];
+  return r[0].values.map((row: any[]) => ({
+    id: row[0] as number,
+    itemUid: row[1] as string,
+    version: row[2] as number,
+    bodySnapshot: (row[3] as string) ?? '',
+    metaSnapshot: parseJsonObj(row[4] as string | null),
+    changeSummary: (row[5] as string | null) ?? null,
+    author: row[6] as string,
+    authorType: row[7] as string,
+    createdAt: row[8] as number,
+  }));
+}
+
+function parseJsonObj(s: string | null): Record<string, unknown> {
+  if (!s) return {};
+  try {
+    const v = JSON.parse(s);
+    return typeof v === 'object' && v !== null ? v as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Restore an item to a prior version's body + structured fields.
+ * Writes a new version row with `change_summary: "Restored vN"` and
+ * appends a `plan_events: item_restored` row.
+ */
+export function restoreItemVersion(
+  itemUid: string,
+  version: number,
+  author: string,
+  authorType: string,
+): PlanItem | null {
+  const versions = listItemVersions(itemUid);
+  const target = versions.find((v) => v.version === version);
+  if (!target) return null;
+
+  const meta = target.metaSnapshot;
+  const updates: UpdatePlanItemInput = {
+    body: target.bodySnapshot,
+    title: typeof meta.title === 'string' ? meta.title : undefined,
+    template: meta.template === null || typeof meta.template === 'string' ? (meta.template as string | null) : undefined,
+    status: typeof meta.status === 'string' ? (meta.status as TaskStatus) : undefined,
+    assignee: typeof meta.assignee === 'string' || meta.assignee === null ? (meta.assignee as string | null) : undefined,
+    assigneeType: typeof meta.assigneeType === 'string' || meta.assigneeType === null ? (meta.assigneeType as string | null) : undefined,
+    assigneeModel: typeof meta.assigneeModel === 'string' || meta.assigneeModel === null ? (meta.assigneeModel as string | null) : undefined,
+    progressPercent: typeof meta.progressPercent === 'number' || meta.progressPercent === null ? (meta.progressPercent as number | null) : undefined,
+    blockedReason: typeof meta.blockedReason === 'string' || meta.blockedReason === null ? (meta.blockedReason as string | null) : undefined,
+    scopePath: typeof meta.scopePath === 'string' || meta.scopePath === null ? (meta.scopePath as string | null) : undefined,
+    fileSpecs: Array.isArray(meta.fileSpecs) ? (meta.fileSpecs as FileSpec[]) : undefined,
+    symbolSpecs: Array.isArray(meta.symbolSpecs) ? (meta.symbolSpecs as SymbolSpec[]) : undefined,
+    newConnections: Array.isArray(meta.newConnections) ? (meta.newConnections as PlanItemEdge[]) : undefined,
+    removedConnections: Array.isArray(meta.removedConnections) ? (meta.removedConnections as PlanItemEdge[]) : undefined,
+    dependencies: Array.isArray(meta.dependencies) ? (meta.dependencies as string[]) : undefined,
+    changeSummary: `Restored v${version}`,
+    author,
+    authorType,
+  };
+  const restored = updateItem(itemUid, updates);
+  if (!restored) return null;
+
+  appendPlanEvent({
+    planUid: restored.planUid,
+    itemUid,
+    eventType: 'item_restored',
+    afterState: { restoredFromVersion: version },
+    summary: `↩ restored "${restored.title}" to v${version}`,
+    author,
+    authorType,
+  });
+
+  return restored;
+}
+
+// =============================================================================
+// Action-only operations (claim)
+// =============================================================================
+
+export interface ClaimItemResult {
+  ok: boolean;
+  conflicts?: string[];
+  reason?: string;
+}
+
+/**
+ * Atomic claim — only succeeds if the Action is unclaimed (no
+ * assignee) AND status is `pending`. Returns conflicts list when
+ * other in-progress Actions in the same plan touch overlapping
+ * files. Mirrors the today's `plan-service.claimTask` semantics.
+ */
+export function claimItem(
+  uid: string,
+  agentId: string,
+  agentType: string,
+  model?: string,
+): ClaimItemResult {
+  const item = getItem(uid);
+  if (!item) return { ok: false, reason: 'Item not found' };
+  if (item.kind !== 'action') {
+    return { ok: false, reason: 'Only Actions can be claimed (this is an Object).' };
+  }
+  if (item.assignee || item.status !== 'pending') {
+    return { ok: false, reason: 'Action already claimed or not pending.' };
+  }
+
+  // Check file-overlap conflicts against other in-progress Actions
+  // in the same plan. Same heuristic as today's claim.
+  const myFiles = new Set<string>();
+  for (const fs of item.fileSpecs ?? []) {
+    if (fs.path) myFiles.add(fs.path);
+    if (fs.moveTo) myFiles.add(fs.moveTo);
+  }
+  const conflicts: string[] = [];
+  if (myFiles.size > 0) {
+    const others = listAllItems(item.planUid).filter((o) =>
+      o.uid !== uid &&
+      o.kind === 'action' &&
+      (o.status === 'in_progress' || o.status === 'assigned') &&
+      o.assignee !== agentId,
+    );
+    for (const other of others) {
+      const overlap = (other.fileSpecs ?? []).flatMap((fs) => [fs.path, fs.moveTo].filter(Boolean) as string[])
+        .filter((p) => myFiles.has(p));
+      if (overlap.length > 0) {
+        conflicts.push(`Action "${other.title}" (${other.assignee}) also affects: ${overlap.join(', ')}`);
+      }
+    }
+  }
+
+  updateItem(uid, {
+    status: 'assigned',
+    assignee: agentId,
+    assigneeType: agentType,
+    assigneeModel: model ?? null,
+    author: agentId,
+    authorType: 'agent',
+    changeSummary: 'Claimed',
+  });
+
+  return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
+}
+
+// =============================================================================
+// Helpers — summaries
+// =============================================================================
+
+function structuralSummary(
+  after: PlanItem,
+  kind: 'reparented' | 'reordered' | 'renamed' | 'status_changed' | 'kind_transmuted',
+  beforeState: unknown,
+  afterState: unknown,
+): string {
+  const icon = after.kind === 'action' ? '⚡' : '📋';
+  switch (kind) {
+    case 'renamed': {
+      const b = (beforeState as { title?: string } | undefined)?.title ?? '?';
+      return `${icon} renamed "${b}" → "${after.title}"`;
+    }
+    case 'status_changed': {
+      const b = (beforeState as { status?: string } | undefined)?.status ?? '?';
+      const a = (afterState as { status?: string } | undefined)?.status ?? '?';
+      return `${icon} "${after.title}" ${b} → ${a}`;
+    }
+    case 'reparented':
+      return `${icon} moved "${after.title}"`;
+    case 'reordered':
+      return `${icon} reordered "${after.title}"`;
+    case 'kind_transmuted':
+      return `${icon} transmuted "${after.title}"`;
+  }
+}
+
+function defaultMoveSummary(item: PlanItem, isReparent: boolean, isReorder: boolean): string {
+  const icon = item.kind === 'action' ? '⚡' : '📋';
+  if (isReparent && isReorder) return `${icon} moved "${item.title}"`;
+  if (isReparent) return `${icon} re-parented "${item.title}"`;
+  return `${icon} reordered "${item.title}"`;
+}

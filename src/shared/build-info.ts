@@ -7,7 +7,7 @@
  *   - the dev backend (run via tsx) can import it without an extra
  *     build step
  *
- * Forge's `generateAssets` hook re-runs this at packaging time so
+ * The `prepackage` npm script re-runs this at packaging time so
  * the DMG / EXE always carries fresh metadata.
  */
 export interface BuildInfo {
@@ -21,11 +21,11 @@ export interface BuildInfo {
 }
 
 export const BUILD_INFO: BuildInfo = {
-  "version": "0.1.0",
-  "buildTime": "2026-04-28T10:41:38.357Z",
-  "buildNumber": 57,
-  "commit": "a555ed3748008e0a91fe17acc9c847d8b7d1f85d",
-  "commitShort": "a555ed3",
+  "version": "0.1.3",
+  "buildTime": "2026-05-15T19:48:40.100Z",
+  "buildNumber": 92,
+  "commit": "28314e7833e89971b4dfea8228a93b9c6f696013",
+  "commitShort": "28314e7",
   "branch": "main",
   "dirty": true
 };

@@ -193,6 +193,34 @@ ipcMain.handle('dialog:open-project', async () => {
   return result.filePaths[0];
 });
 
+/**
+ * Phase 15 §15.D — generic file/folder picker for attachments.
+ * Multi-select + folders + filters all configurable. Returns
+ * absolute paths array (frontend converts to project-relative when
+ * appropriate). Null on cancel — distinct from empty array.
+ */
+ipcMain.handle('dialog:open-files', async (_event, options: {
+  multiSelect?: boolean;
+  allowFolders?: boolean;
+  filters?: Array<{ name: string; extensions: string[] }>;
+  defaultPath?: string;
+  title?: string;
+}) => {
+  if (!mainWindow) return null;
+  const properties: Array<'openFile' | 'openDirectory' | 'multiSelections'> = ['openFile'];
+  if (options?.allowFolders) properties.push('openDirectory');
+  if (options?.multiSelect) properties.push('multiSelections');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties,
+    filters: options?.filters,
+    defaultPath: options?.defaultPath,
+    title: options?.title ?? 'Pick files',
+    buttonLabel: 'Attach',
+  });
+  if (result.canceled) return null;
+  return result.filePaths;
+});
+
 ipcMain.handle('logs:reveal', async () => {
   const p = getCurrentLogPath();
   shell.showItemInFolder(p);

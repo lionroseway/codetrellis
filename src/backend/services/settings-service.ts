@@ -155,6 +155,7 @@ function mergeWithDefaults(raw: any): AppSettings {
     },
     plans: {
       defaultVisibility: raw?.plans?.defaultVisibility === 'local' ? 'local' : DEFAULT_SETTINGS.plans.defaultVisibility,
+      attachmentLocation: raw?.plans?.attachmentLocation === 'user' ? 'user' : DEFAULT_SETTINGS.plans.attachmentLocation,
     },
     data: {
       dataDirOverride: typeof raw?.data?.dataDirOverride === 'string' ? raw.data.dataDirOverride : DEFAULT_SETTINGS.data.dataDirOverride,

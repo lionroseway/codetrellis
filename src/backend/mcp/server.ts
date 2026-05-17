@@ -9,6 +9,14 @@ import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
 import * as planDocsService from '../services/plan-documents-service';
 import * as planPhasesService from '../services/plan-phases-service';
+import * as taskAttachmentsService from '../services/task-attachments-service';
+// Phase 15 §C — unified Object/Action surface. New canonical tools
+// register against `plan-item-service` + `plan-event-service` and
+// emit `plan-item-*` WS events. Old tools (claim_task, add_subtask,
+// add_plan_doc, …) keep working unchanged in parallel during the
+// 15.C → 15.F cutover; aliases / deprecation are 15.F's job.
+import * as planItemService from '../services/plan-item-service';
+import * as planEventService from '../services/plan-event-service';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import * as planChangesService from '../services/plan-changes-service';
@@ -265,6 +273,16 @@ function setupMcpServerInstance(): McpServer {
     moveTo: z.string().optional().describe('Target file path if action is "move"'),
   });
 
+  // Phase 14 §A — explicit CRUD intent on file ops. Mirrors symbol_specs.
+  // Paths resolve relative to the parent task's `scope_path` if set.
+  const fileSpecSchema = z.object({
+    path: z.string().describe('Path the spec applies to. Relative to the task\'s scope_path (or project root if unset).'),
+    action: z.enum(['create', 'modify', 'delete', 'move']),
+    moveTo: z.string().optional().describe('Destination path when action is "move".'),
+    isDir: z.boolean().optional().describe('Marker for directory-level intent.'),
+    description: z.string().optional().describe('Why / how this file changes.'),
+  });
+
   mcpServer.registerTool(
     'create_plan',
     {
@@ -275,13 +293,19 @@ function setupMcpServerInstance(): McpServer {
         project_path: z.string().describe('Absolute path to the project this plan is for'),
         tasks: z.array(z.object({
           description: z.string().describe('What this task does'),
-          affected_files: z.array(z.string()).optional().describe('Files this task will create/modify/delete'),
+          affected_files: z.array(z.string()).optional().describe('Files this task will create/modify/delete (legacy — prefer file_specs for CRUD intent)'),
           affected_symbols: z.array(z.string()).optional().describe('Functions/classes this task will add/change (names only — use symbol_specs for richer intent)'),
           new_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('New import relationships'),
           removed_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('Import relationships to remove'),
           dependencies: z.array(z.string()).optional().describe('Task UIDs that must complete before this one starts'),
           file_spec: z.string().optional().describe('Markdown describing what the file should do, its responsibility, exports, etc.'),
           symbol_specs: z.array(symbolSpecSchema).optional().describe('Per-symbol intent: name, kind, action, signature, etc. Richer than affected_symbols.'),
+          // --- Phase 14 §A task-as-context fields ---
+          body: z.string().optional().describe('Markdown design notes / rationale for this task. Read by agents picking up the task.'),
+          prompt: z.string().optional().describe('Markdown literally ready to paste at an agent. Use this when the task carries a precise prompt instead of free-form context.'),
+          scope_path: z.string().optional().describe('Folder this task is rooted at (e.g. "src/auth/"). Relative paths in file_specs resolve from here. Empty = project root.'),
+          file_specs: z.array(fileSpecSchema).optional().describe('Phase 14 §A — explicit CRUD intent on file ops. Mirrors symbol_specs. affected_files is derived from these.'),
+          parent_task_uid: z.string().optional().describe('Mark this task as a subtask of another task in the same plan.'),
         })).describe('Ordered list of tasks'),
       },
     },
@@ -296,6 +320,11 @@ function setupMcpServerInstance(): McpServer {
           dependencies: t.dependencies,
           fileSpec: t.file_spec,
           symbolSpecs: t.symbol_specs,
+          body: t.body,
+          prompt: t.prompt,
+          scopePath: t.scope_path ?? null,
+          fileSpecs: t.file_specs,
+          parentTaskUid: t.parent_task_uid ?? null,
         })) },
         'agent', 'mcp', project_path,
       );
@@ -354,10 +383,38 @@ function setupMcpServerInstance(): McpServer {
 
   // --- Task Management Tools ---
 
+  /**
+   * Build a full-context payload for a task: the task row, its phase
+   * (if any), its parent task (if any), subtasks, attachments, and
+   * comments. Shared between `read_task_full` and the post-claim
+   * payload returned by `claim_task` — agents that pick up a task
+   * shouldn't need a follow-up read to know what they're doing.
+   */
+  function readTaskFull(taskUid: string): {
+    task: ReturnType<typeof planService.getTaskByUid>;
+    parent: ReturnType<typeof planService.getTaskByUid> | null;
+    subtasks: ReturnType<typeof planService.getSubtasks>;
+    phase: ReturnType<typeof planPhasesService.getPhase> | null;
+    attachments: ReturnType<typeof taskAttachmentsService.listTaskAttachments>;
+    comments: ReturnType<typeof commentService.listCommentsFlat>;
+    plan: { uid: string; title: string; status: string } | null;
+  } | null {
+    const task = planService.getTaskByUid(taskUid);
+    if (!task) return null;
+    const parent = task.parentTaskUid ? planService.getTaskByUid(task.parentTaskUid) : null;
+    const subtasks = planService.getSubtasks(taskUid);
+    const phase = task.phaseUid ? planPhasesService.getPhase(task.phaseUid) : null;
+    const attachments = taskAttachmentsService.listTaskAttachments(taskUid);
+    const comments = commentService.listCommentsFlat(taskUid);
+    const planRow = planService.getPlan(task.planUid);
+    const plan = planRow ? { uid: planRow.uid, title: planRow.title, status: planRow.status } : null;
+    return { task, parent, subtasks, phase, attachments, comments, plan };
+  }
+
   mcpServer.registerTool(
     'claim_task',
     {
-      description: 'Claim a task from a plan. Only succeeds if the task is unclaimed and pending.',
+      description: 'Claim a task from a plan. Only succeeds if the task is unclaimed and pending. Returns the full task context (body / prompt / fileSpecs / attachments / comments / subtasks) in one round-trip — no follow-up `read_task_full` needed.',
       inputSchema: {
         plan_uid: z.string(),
         task_uid: z.string(),
@@ -373,29 +430,56 @@ function setupMcpServerInstance(): McpServer {
           broadcast('conflict-detected', { planUid: plan_uid, taskUid: task_uid, message: result.conflicts.join('; ') });
         }
         saveNow(() => exportDatabase());
+        const fullContext = readTaskFull(task_uid);
+        const message = result.conflicts
+          ? `Task claimed. WARNING: ${result.conflicts.join('; ')}`
+          : `Task ${task_uid} claimed.`;
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            ok: true,
+            message,
+            conflicts: result.conflicts ?? null,
+            ...fullContext,
+          }, null, 2) }],
+        };
       }
-      const msg = result.ok
-        ? (result.conflicts ? `Task claimed. WARNING: ${result.conflicts.join('; ')}` : `Task ${task_uid} claimed.`)
-        : 'Task already claimed or not pending.';
-      return { content: [{ type: 'text' as const, text: msg }] };
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          ok: false,
+          message: 'Task already claimed or not pending.',
+          reason: 'Task already claimed or not pending.',
+        }, null, 2) }],
+      };
     }
   );
 
   mcpServer.registerTool(
     'update_task',
     {
-      description: 'Update task status, or assign / reassign it to a phase. Use this to report progress: pending → in_progress → done. Pass phase_uid to bind the task to a phase, or empty string to clear.',
+      description: 'Update any field on a task. Common: status (pending → in_progress → done). Phase 14 §A also accepts body / prompt / scope_path / file_specs / parent_task_uid for task-as-context updates. Pass empty string for parent_task_uid to detach.',
       inputSchema: {
         plan_uid: z.string(),
         task_uid: z.string(),
         status: z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']).optional(),
         phase_uid: z.string().optional().describe('Bind this task to a phase. Empty string clears the binding.'),
+        description: z.string().optional(),
+        body: z.string().optional().describe('Phase 14 §A — markdown design notes / rationale.'),
+        prompt: z.string().optional().describe('Phase 14 §A — markdown ready to paste at an agent.'),
+        scope_path: z.string().optional().describe('Phase 14 §A — folder the task is rooted at. Empty string = project root.'),
+        file_specs: z.array(fileSpecSchema).optional().describe('Phase 14 §A — replace the task\'s file_specs (and recompute affected_files).'),
+        parent_task_uid: z.string().optional().describe('Phase 14 §A — bind this task as a subtask. Empty string detaches.'),
       },
     },
-    async ({ plan_uid, task_uid, status, phase_uid }) => {
+    async ({ plan_uid, task_uid, status, phase_uid, description, body, prompt, scope_path, file_specs, parent_task_uid }) => {
       const updates: Parameters<typeof planService.updateTask>[1] = {};
       if (status !== undefined) updates.status = status;
       if (phase_uid !== undefined) updates.phaseUid = phase_uid === '' ? null : phase_uid;
+      if (description !== undefined) updates.description = description;
+      if (body !== undefined) updates.body = body;
+      if (prompt !== undefined) updates.prompt = prompt;
+      if (scope_path !== undefined) updates.scopePath = scope_path === '' ? null : scope_path;
+      if (file_specs !== undefined) updates.fileSpecs = file_specs;
+      if (parent_task_uid !== undefined) updates.parentTaskUid = parent_task_uid === '' ? null : parent_task_uid;
       planService.updateTask(task_uid, updates);
       if (status !== undefined) {
         broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid, status });
@@ -403,8 +487,16 @@ function setupMcpServerInstance(): McpServer {
         broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid });
       }
       saveNow(() => exportDatabase());
-      const summary = [status && `status → ${status}`, phase_uid !== undefined && `phase → ${phase_uid || 'none'}`]
-        .filter(Boolean).join(', ');
+      const summary = [
+        status && `status → ${status}`,
+        phase_uid !== undefined && `phase → ${phase_uid || 'none'}`,
+        description !== undefined && 'description updated',
+        body !== undefined && 'body updated',
+        prompt !== undefined && 'prompt updated',
+        scope_path !== undefined && `scope_path → ${scope_path || 'none'}`,
+        file_specs !== undefined && `file_specs (${file_specs.length})`,
+        parent_task_uid !== undefined && `parent → ${parent_task_uid || 'none'}`,
+      ].filter(Boolean).join(', ');
       return { content: [{ type: 'text' as const, text: `Task ${task_uid} ${summary || 'unchanged'}` }] };
     }
   );
@@ -424,6 +516,222 @@ function setupMcpServerInstance(): McpServer {
       if (!task) return { content: [{ type: 'text' as const, text: 'No tasks available — all claimed, completed, or blocked by dependencies.' }] };
       return { content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }] };
     }
+  );
+
+  // --- Phase 14 §A: task-as-context tools ---
+  // Treat a task as a context blob (body / prompt / fileSpecs /
+  // attachments / comments / subtasks), not just a thin todo. Agents
+  // call `read_task_full` to get everything in one round-trip; humans
+  // and agents both leave structured chatter via `add_task_comment`,
+  // `update_task_progress`, and `set_task_blocked`; agents break work
+  // down via `add_subtask`; and rich inputs flow in via
+  // `add_task_attachment`.
+
+  mcpServer.registerTool(
+    'read_task_full',
+    {
+      description: 'One round-trip: returns task row + parent task (if subtask) + subtasks + bound phase (if any) + attachments + comments + minimal plan info. Use this when picking up a task instead of stitching together get_plan / get_comments / list_task_attachments.',
+      inputSchema: { task_uid: z.string() },
+    },
+    async ({ task_uid }) => {
+      const full = readTaskFull(task_uid);
+      if (!full) return { content: [{ type: 'text' as const, text: `Task ${task_uid} not found` }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(full, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'list_task_comments',
+    {
+      description: 'Read all comments on a task, ordered by creation time. Each comment carries `kind` (note / blocker / progress / question), `source` (agent / human), and optional `metadata` (e.g. `progressPercent` for `kind: "progress"`). Use this before continuing a task to see if a human or another agent left context.',
+      inputSchema: { task_uid: z.string() },
+    },
+    async ({ task_uid }) => {
+      const comments = commentService.listCommentsFlat(task_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(comments, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'add_task_comment',
+    {
+      description: 'Leave a structured comment on a task. `kind` is the first-class taxonomy (note / blocker / progress / question). When you hit a blocker, prefer this over silently stopping — the human sees blockers in the activity rail and can intervene. For progress, prefer `update_task_progress` so the percent + message land in one tool call.',
+      inputSchema: {
+        plan_uid: z.string().optional().describe('Plan uid (only used for the broadcast event).'),
+        task_uid: z.string(),
+        kind: z.enum(['note', 'blocker', 'progress', 'question']),
+        body: z.string().describe('Markdown body. Be specific — this becomes durable context.'),
+        parent_comment_uid: z.string().optional().describe('Reply to another comment.'),
+      },
+    },
+    async ({ plan_uid, task_uid, kind, body, parent_comment_uid }, extra: any) => {
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      const sessions = sessionService.getActiveSessions();
+      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
+      const author = session?.agentType ?? 'agent';
+      // Map the new `kind` taxonomy onto the legacy `commentType`
+      // chip so old UI keeps showing something sensible:
+      //   progress → status_update,  blocker → concern,
+      //   question → suggestion,     note    → comment.
+      const legacyType: 'status_update' | 'concern' | 'suggestion' | 'comment' =
+        kind === 'progress' ? 'status_update'
+        : kind === 'blocker' ? 'concern'
+        : kind === 'question' ? 'suggestion'
+        : 'comment';
+      const comment = commentService.addComment('task', task_uid, author, 'mcp', body, {
+        kind,
+        source: 'agent',
+        commentType: legacyType,
+        parentUid: parent_comment_uid,
+      });
+      const planUid = plan_uid ?? planService.getTaskByUid(task_uid)?.planUid ?? null;
+      broadcast('task-comment-added', { planUid, taskUid: task_uid, comment });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(comment, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'update_task_progress',
+    {
+      description: 'Report mid-task progress: a 0–100 percent + free-form message. Stored as a `kind: "progress"` comment with `metadata.progressPercent`, and the task\'s `progress_percent` column is updated so the UI can render an inline progress bar. Use frequently during long tasks so the human sees movement.',
+      inputSchema: {
+        task_uid: z.string(),
+        percent: z.number().int().min(0).max(100),
+        message: z.string().optional().describe('What you just did or are about to do.'),
+      },
+    },
+    async ({ task_uid, percent, message }, extra: any) => {
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      const sessions = sessionService.getActiveSessions();
+      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
+      const author = session?.agentType ?? 'agent';
+
+      planService.updateTask(task_uid, { progressPercent: percent });
+      const body = message?.trim() || `Progress: ${percent}%`;
+      const comment = commentService.addComment('task', task_uid, author, 'mcp', body, {
+        kind: 'progress',
+        source: 'agent',
+        commentType: 'status_update',
+        metadata: { progressPercent: percent },
+      });
+      const planUid = planService.getTaskByUid(task_uid)?.planUid ?? null;
+      broadcast('task-progress', { planUid, taskUid: task_uid, percent, message: body, commentUid: comment.uid });
+      broadcast('task-comment-added', { planUid, taskUid: task_uid, comment });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ task_uid, percent, message: body }, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'set_task_blocked',
+    {
+      description: 'Mark a task as blocked with an explicit reason. Sets status → blocked, stores the reason on the task, and adds a `kind: "blocker"` comment so the human sees it in the activity rail. Prefer this over silently stopping or claiming you "couldn\'t finish".',
+      inputSchema: {
+        task_uid: z.string(),
+        reason: z.string().describe('Why you\'re blocked, in markdown. Be specific so the human can unblock without a back-and-forth.'),
+      },
+    },
+    async ({ task_uid, reason }, extra: any) => {
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      const sessions = sessionService.getActiveSessions();
+      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
+      const author = session?.agentType ?? 'agent';
+
+      planService.updateTask(task_uid, { status: 'blocked', blockedReason: reason });
+      const comment = commentService.addComment('task', task_uid, author, 'mcp', reason, {
+        kind: 'blocker',
+        source: 'agent',
+        commentType: 'concern',
+      });
+      const planUid = planService.getTaskByUid(task_uid)?.planUid ?? null;
+      broadcast('task-blocked', { planUid, taskUid: task_uid, reason, commentUid: comment.uid });
+      broadcast('task-updated', { planUid, taskUid: task_uid, status: 'blocked' });
+      broadcast('task-comment-added', { planUid, taskUid: task_uid, comment });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ task_uid, status: 'blocked', reason }, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'add_subtask',
+    {
+      description: 'Break a task down by adding a subtask under it. Subtasks share the parent\'s plan (and inherit nothing else automatically — pass body / prompt / file_specs / scope_path explicitly when relevant). One level deep for v1; tree later. Returns the new subtask.',
+      inputSchema: {
+        parent_task_uid: z.string(),
+        description: z.string(),
+        body: z.string().optional(),
+        prompt: z.string().optional(),
+        scope_path: z.string().optional(),
+        file_specs: z.array(fileSpecSchema).optional(),
+      },
+    },
+    async ({ parent_task_uid, description, body, prompt, scope_path, file_specs }) => {
+      const parent = planService.getTaskByUid(parent_task_uid);
+      if (!parent) return { content: [{ type: 'text' as const, text: `Parent task ${parent_task_uid} not found` }] };
+      const subtask = planService.appendTaskToPlan(parent.planUid, {
+        description,
+        body,
+        prompt,
+        scopePath: scope_path ?? parent.scopePath ?? null,
+        fileSpecs: file_specs,
+        parentTaskUid: parent_task_uid,
+      });
+      if (!subtask) return { content: [{ type: 'text' as const, text: 'Failed to create subtask' }] };
+      broadcast('task-created', { planUid: parent.planUid, task: subtask, parentTaskUid: parent_task_uid });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(subtask, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'add_task_attachment',
+    {
+      description: 'Pin a URL / image / file_ref / code_block / transcript to a task. For images with raw bytes, pass `data_base64` + `content_type` and `project_root` — CodeTrellis writes the file under `<project_root>/.codetrellis/attachments/<task_uid>/<uid>.<ext>` and stores the project-relative path. For everything else (URLs, project-file refs, snippets), `value` is stored as-is.',
+      inputSchema: {
+        task_uid: z.string(),
+        kind: z.enum(['url', 'image', 'file_ref', 'code_block', 'transcript']),
+        value: z.string().describe('URL / file path / inline content depending on kind.'),
+        label: z.string().optional().describe('Short label shown in the UI rail.'),
+        content_type: z.string().optional().describe('MIME hint, e.g. image/png.'),
+        data_base64: z.string().optional().describe('For kind="image": raw image bytes encoded as base64. Requires project_root.'),
+        project_root: z.string().optional().describe('Required when data_base64 is set so the file lands in <project_root>/.codetrellis/attachments/.'),
+      },
+    },
+    async ({ task_uid, kind, value, label, content_type, data_base64, project_root }, extra: any) => {
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      const sessions = sessionService.getActiveSessions();
+      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
+      const author = session?.agentType ?? 'agent';
+      try {
+        const attachment = taskAttachmentsService.addAttachment({
+          targetType: 'task',
+          targetUid: task_uid,
+          kind,
+          value,
+          label,
+          contentType: content_type,
+          dataBase64: data_base64,
+          projectRoot: project_root,
+          author,
+          authorType: 'mcp',
+        });
+        const planUid = planService.getTaskByUid(task_uid)?.planUid ?? null;
+        broadcast('task-attachment-added', { planUid, taskUid: task_uid, attachment });
+        saveNow(() => exportDatabase());
+        return { content: [{ type: 'text' as const, text: JSON.stringify(attachment, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
+      }
+    },
   );
 
   // --- Plan Phase Tools ---
@@ -1021,10 +1329,13 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'get_drift_report',
     {
-      description: 'Check if you are still following the plan. Compares the baseline snapshot (captured at plan approval) against the current live state. Returns what has changed, what is on track, and what has drifted.',
-      inputSchema: { plan_uid: z.string() },
+      description: 'Check if you are still following the plan. Compares the baseline snapshot (captured at plan approval) against the current live state. Returns what has changed, what is on track, and what has drifted. Phase 14 §A also surfaces task comment activity since `since_ms` (or since the baseline snapshot when omitted) so a returning agent can see what humans / other agents have said while it was away.',
+      inputSchema: {
+        plan_uid: z.string(),
+        since_ms: z.number().int().optional().describe('Epoch ms cutoff for "comment activity since". Defaults to the baseline snapshot timestamp.'),
+      },
     },
-    async ({ plan_uid }) => {
+    async ({ plan_uid, since_ms }) => {
       // Find the baseline snapshot for this plan
       const snapshots = listSnapshots(plan_uid);
       if (snapshots.length === 0) {
@@ -1040,6 +1351,15 @@ function setupMcpServerInstance(): McpServer {
       const completedTasks = plan?.tasks.filter((t) => t.status === 'done').length || 0;
       const totalTasks = plan?.tasks.length || 0;
 
+      // Phase 14 §A: comment activity since `since_ms` (or the baseline
+      // snapshot's createdAt when not supplied). Surfaces blockers /
+      // progress / questions a returning agent shouldn't miss.
+      const since = since_ms ?? snapshots[0].createdAt;
+      const recentComments = commentService.listCommentsForPlanSince(plan_uid, since);
+      const blockers = recentComments.filter((c) => c.kind === 'blocker');
+      const questions = recentComments.filter((c) => c.kind === 'question');
+      const progressUpdates = recentComments.filter((c) => c.kind === 'progress');
+
       return { content: [{ type: 'text' as const, text: JSON.stringify({
         planTitle: plan?.title,
         taskProgress: `${completedTasks}/${totalTasks}`,
@@ -1049,6 +1369,15 @@ function setupMcpServerInstance(): McpServer {
         removedFiles: diff.removedFiles,
         addedEdges: diff.addedEdges.length,
         removedEdges: diff.removedEdges.length,
+        commentActivitySince: since,
+        commentSummary: {
+          total: recentComments.length,
+          blockers: blockers.length,
+          questions: questions.length,
+          progressUpdates: progressUpdates.length,
+        },
+        recentBlockers: blockers,
+        recentQuestions: questions,
       }, null, 2) }] };
     }
   );
@@ -1133,6 +1462,569 @@ function setupMcpServerInstance(): McpServer {
         }],
       };
     }
+  );
+
+  // ===========================================================================
+  // Phase 15 §C — unified Object/Action MCP surface.
+  //
+  // These tools talk to `plan-item-service` and treat Objects (context)
+  // and Actions (graph-anchored work items) as siblings in one tree.
+  // Replaces (eventually) `add_plan_doc` / `add_plan_phase` /
+  // `add_subtask` / `claim_task` / `read_task_full` / `update_task` /
+  // `add_task_*` / `set_task_blocked` / `update_task_progress`.
+  //
+  // The old tools stay registered alongside and keep writing to legacy
+  // tables for 15.C → 15.F. After the V1 frontend retires, alias the
+  // old tools to forwarders (15.F).
+  // ===========================================================================
+
+  // Reusable schema for the new file-edit (M2: line/symbol-precision).
+  const fileEditSchema = z.object({
+    lineRange: z.object({
+      start: z.number().int().min(1),
+      end: z.number().int().min(1),
+    }).optional(),
+    symbol: z.string().optional().describe('AST symbol name; resolves via the symbols table.'),
+    instruction: z.string().describe('Free-form natural language for the agent.'),
+    intent: z.enum(['add', 'modify', 'remove', 'replace']).optional(),
+  });
+
+  const itemFileSpecSchema = z.object({
+    path: z.string(),
+    action: z.enum(['create', 'modify', 'delete', 'move']),
+    moveTo: z.string().optional(),
+    isDir: z.boolean().optional(),
+    description: z.string().optional(),
+    edits: z.array(fileEditSchema).optional().describe('M2 per-file granular edits (line/symbol-pinned).'),
+  });
+
+  const planItemEdgeSchema = z.object({
+    from: z.string(),
+    to: z.string(),
+  });
+
+  const planItemKindEnum = z.enum(['object', 'action']);
+  const taskStatusEnum = z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']);
+  const itemCommentKindEnum = z.enum(['note', 'blocker', 'progress', 'question']);
+  const attachmentKindEnum = z.enum(['url', 'image', 'file_ref', 'code_block', 'transcript']);
+
+  // Tiny utility — pull author identity from the MCP transport's session.
+  function authorFromExtra(extra: any): { author: string; authorType: string } {
+    const sessionId = extra?.sessionInfo?.sessionId
+      ?? extra?.requestInfo?.headers?.['mcp-session-id']
+      ?? null;
+    const sessions = sessionService.getActiveSessions();
+    const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
+    const author = session?.agentType ?? 'agent';
+    return { author, authorType: 'mcp' };
+  }
+
+  // --- add_item ---------------------------------------------------------
+  mcpServer.registerTool(
+    'add_item',
+    {
+      description:
+        'Create an Object (durable context) or Action (graph-anchored work item) inside a plan. ' +
+        'Trees mix freely: Action can have an Object child (its references), Object can have an Action child (an embedded todo). ' +
+        'Action-only fields (status, fileSpecs, scope_path, …) are silently ignored on Objects. Phase 15 §C unified surface.',
+      inputSchema: {
+        plan_uid: z.string(),
+        kind: planItemKindEnum,
+        parent_uid: z.string().optional().describe('Omit for top-level. Trees mix Object + Action.'),
+        title: z.string(),
+        body: z.string().optional().describe('Markdown body.'),
+        template: z.string().optional().describe(
+          'Object: executive_summary | references | ux_journey | competitor_analysis | architecture | patterns | …'
+          + ' Action: phase | leaf | custom.'
+        ),
+        sort_order: z.number().int().optional().describe('Pinned position; auto-derived if omitted.'),
+        // Action-only
+        status: taskStatusEnum.optional(),
+        scope_path: z.string().optional(),
+        file_specs: z.array(itemFileSpecSchema).optional(),
+        new_connections: z.array(planItemEdgeSchema).optional(),
+        removed_connections: z.array(planItemEdgeSchema).optional(),
+        dependencies: z.array(z.string()).optional().describe('Other Action uids that must complete first.'),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.createItem({
+        planUid: args.plan_uid,
+        kind: args.kind,
+        parentUid: args.parent_uid ?? null,
+        sortOrder: args.sort_order,
+        title: args.title,
+        body: args.body ?? '',
+        template: args.template ?? null,
+        status: args.status,
+        scopePath: args.scope_path ?? null,
+        fileSpecs: args.file_specs,
+        newConnections: args.new_connections,
+        removedConnections: args.removed_connections,
+        dependencies: args.dependencies,
+        author: id.author,
+        authorType: id.authorType,
+      });
+      broadcast('plan-item-created', { planUid: item.planUid, item });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+    },
+  );
+
+  // --- get_item ---------------------------------------------------------
+  mcpServer.registerTool(
+    'get_item',
+    {
+      description: 'Fetch a single plan_items row without children / attachments / comments. Lightweight. Use read_item_full for the bundle.',
+      inputSchema: { uid: z.string() },
+    },
+    async ({ uid }) => {
+      const item = planItemService.getItem(uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${uid} not found` }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+    },
+  );
+
+  // --- read_item_full ---------------------------------------------------
+  mcpServer.registerTool(
+    'read_item_full',
+    {
+      description:
+        'One round-trip context bundle: item + parent (if any) + immediate children + attachments + comments + recent versions. ' +
+        'Use this when picking up an Action so you don\'t need separate calls for context. Replaces read_task_full for V2.',
+      inputSchema: { uid: z.string() },
+    },
+    async ({ uid }) => {
+      const item = planItemService.getItem(uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${uid} not found` }] };
+      const parent = item.parentUid ? planItemService.getItem(item.parentUid) : null;
+      const children = planItemService.getChildren(item.planUid, uid);
+      const attachments = taskAttachmentsService.listItemAttachments(uid);
+      const comments = commentService.listItemComments(uid);
+      const versions = planItemService.listItemVersions(uid).slice(0, 10);
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ item, parent, children, attachments, comments, versions }, null, 2),
+        }],
+      };
+    },
+  );
+
+  // --- update_item ------------------------------------------------------
+  mcpServer.registerTool(
+    'update_item',
+    {
+      description:
+        'Update any field on an Object or Action. Content edits (body, title, status, fileSpecs, …) write a row to plan_item_versions; ' +
+        'structural edits (parent_uid, sort_order) emit plan_events but skip the version log. ' +
+        'Pass empty string for nullable fields (parent_uid, scope_path, blocked_reason) to clear.',
+      inputSchema: {
+        uid: z.string(),
+        title: z.string().optional(),
+        body: z.string().optional(),
+        template: z.string().optional(),
+        // Action-only
+        status: taskStatusEnum.optional(),
+        assignee: z.string().optional(),
+        progress_percent: z.number().int().min(0).max(100).optional(),
+        blocked_reason: z.string().optional(),
+        scope_path: z.string().optional(),
+        file_specs: z.array(itemFileSpecSchema).optional(),
+        new_connections: z.array(planItemEdgeSchema).optional(),
+        removed_connections: z.array(planItemEdgeSchema).optional(),
+        dependencies: z.array(z.string()).optional(),
+        // Structural
+        parent_uid: z.string().optional().describe('Re-parent. Empty string detaches to top-level.'),
+        sort_order: z.number().int().optional(),
+        change_summary: z.string().optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.updateItem(args.uid, {
+        title: args.title,
+        body: args.body,
+        template: args.template,
+        status: args.status,
+        assignee: args.assignee,
+        progressPercent: args.progress_percent,
+        blockedReason: args.blocked_reason === '' ? null : args.blocked_reason,
+        scopePath: args.scope_path === '' ? null : args.scope_path,
+        fileSpecs: args.file_specs,
+        newConnections: args.new_connections,
+        removedConnections: args.removed_connections,
+        dependencies: args.dependencies,
+        parentUid: args.parent_uid === undefined ? undefined : (args.parent_uid === '' ? null : args.parent_uid),
+        sortOrder: args.sort_order,
+        changeSummary: args.change_summary,
+        author: id.author,
+        authorType: id.authorType,
+      });
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: args });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+    },
+  );
+
+  // --- move_item --------------------------------------------------------
+  mcpServer.registerTool(
+    'move_item',
+    {
+      description: 'Re-parent and/or reorder an item. Single plan_events row written for the combined move.',
+      inputSchema: {
+        uid: z.string(),
+        new_parent_uid: z.string().optional().describe('Empty string detaches to top-level.'),
+        new_sort_order: z.number().int().optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.moveItem(args.uid, {
+        newParentUid: args.new_parent_uid === undefined ? undefined : (args.new_parent_uid === '' ? null : args.new_parent_uid),
+        newSortOrder: args.new_sort_order,
+        author: id.author,
+        authorType: id.authorType,
+      });
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      broadcast('plan-item-moved', {
+        planUid: item.planUid,
+        itemUid: item.uid,
+        toParentUid: item.parentUid,
+        sortOrder: item.sortOrder,
+      });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+    },
+  );
+
+  // --- delete_item ------------------------------------------------------
+  mcpServer.registerTool(
+    'delete_item',
+    {
+      description:
+        'Delete an item. Default cascades to descendants. The full subtree is snapshotted in the plan_events row\'s ' +
+        'before_state so a future restore_item can put it back. Append-only soft-delete.',
+      inputSchema: {
+        uid: z.string(),
+        cascade: z.boolean().optional().describe('Default true. Pass false to fail the call when children exist.'),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const target = planItemService.getItem(args.uid);
+      if (!target) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      if (args.cascade === false) {
+        const children = planItemService.getChildren(target.planUid, target.uid);
+        if (children.length > 0) {
+          return { content: [{ type: 'text' as const, text: `Item has ${children.length} children; pass cascade=true to remove the subtree.` }] };
+        }
+      }
+      const cascadedUids = planItemService.deleteItem(args.uid, {
+        cascade: args.cascade !== false,
+        author: id.author,
+        authorType: id.authorType,
+      });
+      broadcast('plan-item-deleted', { planUid: target.planUid, itemUid: args.uid, cascadedUids });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, deleted: cascadedUids }, null, 2) }] };
+    },
+  );
+
+  // --- claim_item -------------------------------------------------------
+  mcpServer.registerTool(
+    'claim_item',
+    {
+      description:
+        'Atomically claim an Action (only succeeds if status=pending and unclaimed). Errors politely on Objects. ' +
+        'Returns full item context (item + parent + children + attachments + comments) in the success payload, ' +
+        'plus a `conflicts` list when other in-progress Actions touch overlapping files. Replaces claim_task for V2.',
+      inputSchema: {
+        uid: z.string(),
+        agent_type: z.string().optional(),
+        model: z.string().optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const result = planItemService.claimItem(
+        args.uid,
+        args.agent_type ?? id.author,
+        args.agent_type ?? 'mcp',
+        args.model,
+      );
+      if (!result.ok) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      }
+      const item = planItemService.getItem(args.uid);
+      const parent = item?.parentUid ? planItemService.getItem(item.parentUid) : null;
+      const children = item ? planItemService.getChildren(item.planUid, item.uid) : [];
+      const attachments = taskAttachmentsService.listItemAttachments(args.uid);
+      const comments = commentService.listItemComments(args.uid);
+      if (item) {
+        broadcast('plan-item-claimed', {
+          planUid: item.planUid,
+          itemUid: item.uid,
+          agentId: args.agent_type ?? id.author,
+          agentType: args.agent_type ?? 'mcp',
+        });
+        if (result.conflicts) {
+          broadcast('conflict-detected', { planUid: item.planUid, itemUid: item.uid, message: result.conflicts.join('; ') });
+        }
+      }
+      saveNow(() => exportDatabase());
+      const message = result.conflicts
+        ? `Item claimed. WARNING: ${result.conflicts.join('; ')}`
+        : `Item ${args.uid} claimed.`;
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments }, null, 2),
+        }],
+      };
+    },
+  );
+
+  // --- list_items -------------------------------------------------------
+  mcpServer.registerTool(
+    'list_items',
+    {
+      description:
+        'Cheap tree query — returns title + kind + status + sortOrder + childCount per item, no bodies. ' +
+        'Use as the sidebar/navigation read. Filter by parent_uid to fetch one nesting level at a time.',
+      inputSchema: {
+        plan_uid: z.string(),
+        parent_uid: z.string().optional().describe('Pass empty string for top-level only. Omit to get the whole plan.'),
+        kind: planItemKindEnum.optional(),
+      },
+    },
+    async (args) => {
+      const all = planItemService.listItemSummaries(args.plan_uid);
+      let filtered = all;
+      if (args.parent_uid !== undefined) {
+        const targetParent = args.parent_uid === '' ? null : args.parent_uid;
+        filtered = filtered.filter((i) => i.parentUid === targetParent);
+      }
+      if (args.kind) filtered = filtered.filter((i) => i.kind === args.kind);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(filtered, null, 2) }] };
+    },
+  );
+
+  // --- get_plan_timeline ------------------------------------------------
+  mcpServer.registerTool(
+    'get_plan_timeline',
+    {
+      description:
+        'Read the plan_events log — every structural mutation (item created/moved/deleted/renamed/reparented/reordered/status_changed/restored). ' +
+        'Drives the activity rail and the timeline scrubber. Filter with since_ms / kinds / limit.',
+      inputSchema: {
+        plan_uid: z.string(),
+        since_ms: z.number().int().optional(),
+        kinds: z.array(z.string()).optional().describe('Filter to specific event types.'),
+        limit: z.number().int().min(1).max(2000).optional(),
+      },
+    },
+    async (args) => {
+      const events = planEventService.listPlanEvents(args.plan_uid, {
+        sinceMs: args.since_ms,
+        eventTypes: args.kinds as any,
+        limit: args.limit,
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(events, null, 2) }] };
+    },
+  );
+
+  // --- restore_item_version --------------------------------------------
+  mcpServer.registerTool(
+    'restore_item_version',
+    {
+      description:
+        'Restore an item to a prior version from plan_item_versions. Writes a new version row and emits a plan_events: item_restored event.',
+      inputSchema: {
+        uid: z.string(),
+        version: z.number().int().min(1),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.restoreItemVersion(args.uid, args.version, id.author, id.authorType);
+      if (!item) {
+        return { content: [{ type: 'text' as const, text: `Could not restore — item or version not found.` }] };
+      }
+      broadcast('plan-item-version-saved', { planUid: item.planUid, itemUid: item.uid, restoredFrom: args.version });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+    },
+  );
+
+  // --- Item-context tools (renamed from task-context) ------------------
+  // These wrap the same underlying surface (commentService / progress
+  // updates / blocker flag / attachments) but write with target_type='item'
+  // and broadcast plan-item-comment-added / plan-item-progress events.
+
+  mcpServer.registerTool(
+    'list_item_comments',
+    {
+      description:
+        'Read all comments on an item, ordered chronologically. Each comment carries kind (note/blocker/progress/question) + source (agent/human) + optional metadata (e.g. progressPercent). ' +
+        'Replaces list_task_comments for V2.',
+      inputSchema: { uid: z.string() },
+    },
+    async ({ uid }) => {
+      const comments = commentService.listItemComments(uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(comments, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'add_item_comment',
+    {
+      description:
+        'Leave a structured comment on an item. kind=note/blocker/progress/question; source=agent (auto-set). ' +
+        'For blockers prefer set_item_blocked (which also flips status); for progress prefer update_item_progress (which also stamps progressPercent on the item).',
+      inputSchema: {
+        uid: z.string(),
+        kind: itemCommentKindEnum,
+        body: z.string(),
+        parent_comment_uid: z.string().optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.getItem(args.uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      const legacyType =
+        args.kind === 'progress' ? 'status_update' :
+        args.kind === 'blocker' ? 'concern' :
+        args.kind === 'question' ? 'suggestion' : 'comment';
+      const comment = commentService.addComment('item', args.uid, id.author, id.authorType, args.body, {
+        kind: args.kind,
+        source: 'agent',
+        commentType: legacyType,
+        parentUid: args.parent_comment_uid,
+      });
+      broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: args.uid, comment });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(comment, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'update_item_progress',
+    {
+      description:
+        'Mid-task progress heartbeat. Updates the Action\'s progressPercent column AND emits a kind=progress comment with metadata.progressPercent. ' +
+        'Call frequently during long Actions so the human sees movement.',
+      inputSchema: {
+        uid: z.string(),
+        percent: z.number().int().min(0).max(100),
+        message: z.string().optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.getItem(args.uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      if (item.kind !== 'action') {
+        return { content: [{ type: 'text' as const, text: 'Progress only applies to Actions (not Objects).' }] };
+      }
+      planItemService.updateItem(args.uid, {
+        progressPercent: args.percent,
+        author: id.author,
+        authorType: id.authorType,
+      });
+      const body = args.message?.trim() || `Progress: ${args.percent}%`;
+      const comment = commentService.addComment('item', args.uid, id.author, id.authorType, body, {
+        kind: 'progress',
+        source: 'agent',
+        commentType: 'status_update',
+        metadata: { progressPercent: args.percent },
+      });
+      broadcast('plan-item-progress', { planUid: item.planUid, itemUid: args.uid, percent: args.percent, message: body, commentUid: comment.uid });
+      broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: args.uid, comment });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ uid: args.uid, percent: args.percent, message: body }, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'set_item_blocked',
+    {
+      description:
+        'Mark an Action blocked with a reason. Sets status=blocked, stores blockedReason on the row, and emits a kind=blocker comment so the activity rail surfaces it. ' +
+        'Prefer this over silently stopping — humans see blockers prominently and can intervene.',
+      inputSchema: {
+        uid: z.string(),
+        reason: z.string(),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.getItem(args.uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      if (item.kind !== 'action') {
+        return { content: [{ type: 'text' as const, text: 'Only Actions can be blocked (not Objects).' }] };
+      }
+      planItemService.updateItem(args.uid, {
+        status: 'blocked',
+        blockedReason: args.reason,
+        author: id.author,
+        authorType: id.authorType,
+      });
+      const comment = commentService.addComment('item', args.uid, id.author, id.authorType, args.reason, {
+        kind: 'blocker',
+        source: 'agent',
+        commentType: 'concern',
+      });
+      broadcast('plan-item-blocked', { planUid: item.planUid, itemUid: args.uid, reason: args.reason, commentUid: comment.uid });
+      broadcast('plan-item-updated', { planUid: item.planUid, itemUid: args.uid, kind: 'action', changes: { status: 'blocked' } });
+      broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: args.uid, comment });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ uid: args.uid, status: 'blocked', reason: args.reason }, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'add_item_attachment',
+    {
+      description:
+        'Pin a URL / image / file_ref / code_block / transcript to an item. For images with raw bytes, pass data_base64 + content_type + project_root and the file lands under <project_root>/.codetrellis/attachments/<item_uid>/<uid>.<ext>.',
+      inputSchema: {
+        uid: z.string(),
+        kind: attachmentKindEnum,
+        value: z.string(),
+        label: z.string().optional(),
+        content_type: z.string().optional(),
+        data_base64: z.string().optional(),
+        project_root: z.string().optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const item = planItemService.getItem(args.uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      try {
+        const attachment = taskAttachmentsService.addAttachment({
+          targetType: 'item',
+          targetUid: args.uid,
+          kind: args.kind,
+          value: args.value,
+          label: args.label,
+          contentType: args.content_type,
+          dataBase64: args.data_base64,
+          projectRoot: args.project_root,
+          author: id.author,
+          authorType: id.authorType,
+        });
+        broadcast('plan-item-attachment-added', { planUid: item.planUid, itemUid: args.uid, attachment });
+        saveNow(() => exportDatabase());
+        return { content: [{ type: 'text' as const, text: JSON.stringify(attachment, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
+      }
+    },
   );
 
   // --- Resources ---

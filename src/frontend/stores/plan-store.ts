@@ -1,5 +1,17 @@
 import { create } from 'zustand';
-import type { Plan, Task, Comment, AgentSessionInfo, Deviation, PlanDocument, PlanPhase, PhaseStatus } from '@shared/types';
+import type { Plan, Task, Comment, AgentSessionInfo, Deviation, PlanDocument, PlanPhase, PhaseStatus, TaskAttachment, FileSpec, AttachmentKind } from '@shared/types';
+
+/**
+ * Phase 14 §B — per-task hydrated context. The Plan Workspace's
+ * TaskCard shows comments + attachments + subtasks inline; rather
+ * than fetch each per click, we cache the full bundle keyed by task
+ * uid and hydrate lazily on first expand.
+ */
+export interface TaskContextBundle {
+  comments: Comment[];
+  attachments: TaskAttachment[];
+  subtasks: Task[];
+}
 
 interface PlanState {
   plans: Plan[];
@@ -12,6 +24,16 @@ interface PlanState {
   planDocs: PlanDocument[];
   planPhases: PlanPhase[];
   selectedDocUid: string | null;
+  /** Phase 14 §B — task-uid → hydrated context (comments + attachments + subtasks). */
+  taskContexts: Record<string, TaskContextBundle>;
+  /** Phase 14 §B — plan-scoped activity feed (claims, progress, blockers, comments, …). */
+  activityEvents: Array<{
+    id: string;
+    timestamp: number;
+    type: string;
+    taskUid?: string;
+    payload: Record<string, unknown>;
+  }>;
 
   fetchPlans: (projectPath?: string) => Promise<void>;
   fetchPlan: (uid: string) => Promise<void>;
@@ -49,6 +71,34 @@ interface PlanState {
   onPlanDocUpdated: (doc: PlanDocument) => void;
   onPlanDocDeleted: (docUid: string) => void;
   onPlanPhaseChanged: (planUid: string) => void;
+
+  // --- Phase 14 §B — Plan Workspace ---
+  /** Hydrate `taskContexts[taskUid]` from `/api/tasks/:taskUid/full`. */
+  fetchTaskContext: (taskUid: string) => Promise<TaskContextBundle | null>;
+  /** Add a comment via REST, then push it into the task context cache. */
+  addTaskComment: (taskUid: string, kind: 'note' | 'blocker' | 'progress' | 'question', body: string) => Promise<Comment | null>;
+  /** Pin an attachment via REST. */
+  addTaskAttachment: (taskUid: string, input: { kind: AttachmentKind; value: string; label?: string; contentType?: string }) => Promise<TaskAttachment | null>;
+  /** Drop an attachment by uid. */
+  removeTaskAttachment: (taskUid: string, attachmentUid: string) => Promise<void>;
+  /** Mid-task progress heartbeat. */
+  reportTaskProgress: (taskUid: string, percent: number, message?: string) => Promise<void>;
+  /** Mark a task blocked with a reason. */
+  setTaskBlocked: (taskUid: string, reason: string) => Promise<void>;
+  /** Add a subtask under a task. */
+  addSubtask: (taskUid: string, input: { description: string; body?: string; prompt?: string; scopePath?: string | null; fileSpecs?: FileSpec[] }) => Promise<Task | null>;
+  /** Update task fields via REST (body / prompt / fileSpecs / scope_path / status / parent_task_uid). */
+  updateTaskFields: (planUid: string, taskUid: string, updates: Partial<Pick<Task, 'description' | 'status' | 'body' | 'prompt' | 'scopePath' | 'fileSpecs' | 'parentTaskUid' | 'phaseUid'>>) => Promise<void>;
+  /** Append an event to the plan-scoped activity feed. */
+  pushActivityEvent: (event: { type: string; taskUid?: string; payload: Record<string, unknown> }) => void;
+
+  /**
+   * Phase 15 §15.D — patch the plan's git context (baseRef /
+   * targetBranch / targetWorktree / autoCreateBranch). Optimistic
+   * apply on the active plan + plans list; WS plan-updated will
+   * reconcile from authoritative state.
+   */
+  updatePlanGitContext: (planUid: string, patch: Partial<Pick<Plan, 'baseRef' | 'targetBranch' | 'targetWorktree' | 'autoCreateBranch'>>) => Promise<void>;
 }
 
 export const usePlanStore = create<PlanState>((set, get) => ({
@@ -62,6 +112,8 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   planDocs: [],
   planPhases: [],
   selectedDocUid: null,
+  taskContexts: {},
+  activityEvents: [],
 
   fetchPlans: async (projectPath) => {
     const url = projectPath ? `/api/plans?project=${encodeURIComponent(projectPath)}` : '/api/plans';
@@ -72,6 +124,17 @@ export const usePlanStore = create<PlanState>((set, get) => ({
 
   fetchPlan: async (uid) => {
     const res = await fetch(`/api/plans/${uid}`);
+    if (!res.ok) {
+      // Don't set garbage state — surface the error via toast and bail.
+      const errText = await res.text().catch(() => `HTTP ${res.status}`);
+      const { useToastStore } = await import('./toast-store');
+      useToastStore.getState().addToast({
+        type: 'error',
+        title: 'Could not load plan',
+        message: errText || `Server returned ${res.status}`,
+      });
+      return;
+    }
     const plan = await res.json();
     set({ activePlan: plan, activePlanUid: uid });
     // Also fetch comments + spec docs + phases
@@ -83,6 +146,10 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   setActivePlan: async (uid) => {
     if (uid) {
       await get().fetchPlan(uid);
+
+      // If fetchPlan failed (res not ok), activePlanUid won't be set.
+      // Bail out — the error toast was already shown.
+      if (!get().activePlanUid) return;
 
       // Auto-enable projection when a plan is selected
       try {
@@ -122,7 +189,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         }
       }
     } else {
-      set({ activePlanUid: null, activePlan: null, comments: [], planDocs: [], selectedDocUid: null });
+      set({ activePlanUid: null, activePlan: null, comments: [], planDocs: [], selectedDocUid: null, taskContexts: {}, activityEvents: [] });
     }
   },
 
@@ -350,5 +417,209 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     if (get().activePlanUid === planUid) {
       get().fetchPlanPhases(planUid);
     }
+  },
+
+  // --- Phase 14 §B Plan Workspace actions ---
+
+  fetchTaskContext: async (taskUid) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskUid}/full`);
+      if (!res.ok) return null;
+      const full = await res.json();
+      const bundle: TaskContextBundle = {
+        comments: Array.isArray(full.comments) ? full.comments : [],
+        attachments: Array.isArray(full.attachments) ? full.attachments : [],
+        subtasks: Array.isArray(full.subtasks) ? full.subtasks : [],
+      };
+      set((s) => ({ taskContexts: { ...s.taskContexts, [taskUid]: bundle } }));
+      return bundle;
+    } catch {
+      return null;
+    }
+  },
+
+  addTaskComment: async (taskUid, kind, body) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskUid}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, body }),
+      });
+      if (!res.ok) return null;
+      const comment: Comment = await res.json();
+      // Optimistically add to taskContexts so the UI sees it before
+      // the WS round-trips back. The WS handler is idempotent on uid.
+      set((s) => {
+        const ctx = s.taskContexts[taskUid];
+        if (!ctx) return s;
+        if (ctx.comments.some((c) => c.uid === comment.uid)) return s;
+        return {
+          taskContexts: {
+            ...s.taskContexts,
+            [taskUid]: { ...ctx, comments: [...ctx.comments, comment] },
+          },
+        };
+      });
+      return comment;
+    } catch {
+      return null;
+    }
+  },
+
+  addTaskAttachment: async (taskUid, input) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskUid}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) return null;
+      const attachment: TaskAttachment = await res.json();
+      set((s) => {
+        const ctx = s.taskContexts[taskUid];
+        if (!ctx) return s;
+        if (ctx.attachments.some((a) => a.uid === attachment.uid)) return s;
+        return {
+          taskContexts: {
+            ...s.taskContexts,
+            [taskUid]: { ...ctx, attachments: [...ctx.attachments, attachment] },
+          },
+        };
+      });
+      return attachment;
+    } catch {
+      return null;
+    }
+  },
+
+  removeTaskAttachment: async (taskUid, attachmentUid) => {
+    try {
+      await fetch(`/api/attachments/${attachmentUid}`, { method: 'DELETE' });
+      set((s) => {
+        const ctx = s.taskContexts[taskUid];
+        if (!ctx) return s;
+        return {
+          taskContexts: {
+            ...s.taskContexts,
+            [taskUid]: { ...ctx, attachments: ctx.attachments.filter((a) => a.uid !== attachmentUid) },
+          },
+        };
+      });
+    } catch { /* WS will reconcile */ }
+  },
+
+  reportTaskProgress: async (taskUid, percent, message) => {
+    try {
+      await fetch(`/api/tasks/${taskUid}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ percent, message }),
+      });
+      // Optimistically bump progressPercent in activePlan; WS will
+      // reconcile body / comments.
+      set((s) => {
+        if (!s.activePlan) return s;
+        const tasks = s.activePlan.tasks.map((t) =>
+          t.uid === taskUid ? { ...t, progressPercent: percent } : t,
+        );
+        return { activePlan: { ...s.activePlan, tasks } };
+      });
+    } catch { /* WS will reconcile */ }
+  },
+
+  setTaskBlocked: async (taskUid, reason) => {
+    try {
+      await fetch(`/api/tasks/${taskUid}/blocked`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      set((s) => {
+        if (!s.activePlan) return s;
+        const tasks = s.activePlan.tasks.map((t) =>
+          t.uid === taskUid ? { ...t, status: 'blocked' as Task['status'], blockedReason: reason } : t,
+        );
+        return { activePlan: { ...s.activePlan, tasks } };
+      });
+    } catch { /* WS will reconcile */ }
+  },
+
+  addSubtask: async (taskUid, input) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskUid}/subtasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) return null;
+      const subtask: Task = await res.json();
+      set((s) => {
+        // Append to the active plan's task list, and to the parent's
+        // taskContext.subtasks if hydrated.
+        let activePlan = s.activePlan;
+        if (activePlan) {
+          activePlan = { ...activePlan, tasks: [...activePlan.tasks, subtask] };
+        }
+        const ctx = s.taskContexts[taskUid];
+        const updatedCtx = ctx ? { ...ctx, subtasks: [...ctx.subtasks, subtask] } : ctx;
+        return {
+          activePlan,
+          taskContexts: ctx ? { ...s.taskContexts, [taskUid]: updatedCtx! } : s.taskContexts,
+        };
+      });
+      return subtask;
+    } catch {
+      return null;
+    }
+  },
+
+  updateTaskFields: async (planUid, taskUid, updates) => {
+    // Map the camelCase fields the store uses onto the REST payload
+    // (server.ts pulls them right back out by the same name).
+    try {
+      await fetch(`/api/plans/${planUid}/tasks/${taskUid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      set((s) => {
+        if (!s.activePlan || s.activePlan.uid !== planUid) return s;
+        const tasks = s.activePlan.tasks.map((t) =>
+          t.uid === taskUid ? { ...t, ...updates } as Task : t,
+        );
+        return { activePlan: { ...s.activePlan, tasks } };
+      });
+    } catch { /* WS will reconcile */ }
+  },
+
+  updatePlanGitContext: async (planUid, patch) => {
+    try {
+      await fetch(`/api/plans/${planUid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      set((s) => ({
+        plans: s.plans.map((p) => (p.uid === planUid ? { ...p, ...patch } : p)),
+        activePlan:
+          s.activePlan && s.activePlan.uid === planUid
+            ? { ...s.activePlan, ...patch }
+            : s.activePlan,
+      }));
+    } catch {
+      /* WS plan-updated will reconcile */
+    }
+  },
+
+  pushActivityEvent: (event) => {
+    set((s) => {
+      const next = [
+        ...s.activityEvents,
+        { id: `${event.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, timestamp: Date.now(), ...event },
+      ];
+      // Cap the feed at 200 — older events scroll off (the server's
+      // durable comments table is the long-term record).
+      return { activityEvents: next.length > 200 ? next.slice(-200) : next };
+    });
   },
 }));

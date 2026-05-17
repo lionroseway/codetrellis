@@ -11,7 +11,7 @@
   },
   "main": "out/main/main.js",
   "scripts": {
-    "predev": "bash scripts/free-dev-ports.sh",
+    "predev": "bash scripts/free-dev-ports.sh && node scripts/generate-build-info.js",
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "predev:frontend": "bash scripts/free-dev-ports.sh 5173",
     "dev:frontend": "vite --config vite.web.config.ts",
@@ -36,6 +36,8 @@
     "test:headed": "playwright test --headed",
     "test:harness": "playwright test --config=playwright.harness.config.ts",
     "test:harness:headed": "playwright test --config=playwright.harness.config.ts --headed",
+    "smoke:plan-items": "tsx scripts/smoke-plan-items.ts",
+    "smoke:plan-migrate": "tsx scripts/smoke-plan-migrate.ts",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit"
   },

@@ -1,0 +1,145 @@
+import { useEffect, useState } from 'react';
+import { Allotment } from 'allotment';
+import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks } from 'lucide-react';
+import { useUiStore } from '../../../stores/ui-store';
+import { usePlanStore } from '../../../stores/plan-store';
+import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { StatusBadge } from '../StatusBadge';
+import { PlanItemTree } from './PlanItemTree';
+import { PlanItemCanvas } from './PlanItemCanvas';
+import { PlanActivityDrawer } from './PlanActivityDrawer';
+import { PlanItemHistoryDrawer } from './PlanItemHistoryDrawer';
+
+/**
+ * Phase 15 §15.D — V2 plan workspace shell.
+ *
+ * Three regions:
+ *   - Sidebar tree (PlanItemTree) — mixed Object + Action tree
+ *   - Main canvas (PlanItemCanvas) — one item at a time, breadcrumb,
+ *     body editor, side rail with metadata
+ *   - Activity drawer (PlanActivityDrawer) — plan_events feed
+ *     (toggleable to icon-only rail)
+ *
+ * The only plan workspace (V1 has been removed). Header preserves
+ * the minimize-to-chip pattern from 14.B.
+ *
+ * Entry animation is handled by App.tsx wrapping this in the
+ * absolute-positioned z-30 overlay.
+ */
+export function PlanWorkspaceShellV2() {
+  const plan = usePlanStore((s) => s.activePlan);
+  const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  const activityDrawerOpen = usePlanItemsStore((s) => s.activityDrawerOpen);
+
+  // Hydrate the V2 store whenever the active plan changes.
+  const hydratePlan = usePlanItemsStore((s) => s.hydratePlan);
+  const resetForPlan = usePlanItemsStore((s) => s.resetForPlan);
+  const activeStorePlanUid = usePlanItemsStore((s) => s.activePlanUid);
+
+  useEffect(() => {
+    if (!plan) return;
+    if (activeStorePlanUid !== plan.uid) {
+      resetForPlan(plan.uid);
+    }
+    hydratePlan(plan.uid);
+  }, [plan?.uid, activeStorePlanUid, hydratePlan, resetForPlan]);
+
+  // Esc minimizes (matches V1 behaviour from Phase 14.B).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t as HTMLElement).isContentEditable)) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setWorkspaceMode('graph');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setWorkspaceMode]);
+
+  // Entrance animation (matches V1 takeover).
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(t);
+  }, []);
+
+  if (!plan) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-[#070810] text-foreground-subtle text-sm gap-2">
+        <p>No plan selected.</p>
+        <button className="text-accent text-[12px] hover:text-accent-hover" onClick={() => setWorkspaceMode('graph')}>
+          ← Back to graph
+        </button>
+      </div>
+    );
+  }
+
+  const progress = plan.taskCount ? Math.round(((plan.completedTaskCount || 0) / (plan.taskCount || 1)) * 100) : 0;
+
+  return (
+    <div
+      className={`flex flex-col h-full bg-[#070810] origin-bottom transition-all duration-300 ease-out ${
+        shown ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-[0.985] translate-y-2'
+      }`}
+    >
+      {/* Header */}
+      <div className="border-b border-white/[0.06] px-4 py-2 flex items-center gap-3 bg-[#0a0b14]">
+        <button
+          onClick={() => setWorkspaceMode('graph')}
+          className="flex items-center gap-1.5 text-[12.5px] text-foreground-subtle hover:text-foreground transition-colors px-2.5 py-1 rounded hover:bg-white/[0.04]"
+          title="Minimize plan workspace (Esc) — plan stays selected, click the floating chip to restore"
+        >
+          <ChevronLeft size={13} />
+          <Minimize2 size={13} />
+        </button>
+        <div className="h-5 w-px bg-white/[0.08]" />
+        <ListChecks size={12} className="text-accent shrink-0" />
+        <h2 className="text-[13px] font-semibold text-foreground truncate flex-1">{plan.title}</h2>
+        <span className="text-[11px] uppercase tracking-wider text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30">
+          V2
+        </span>
+        <StatusBadge status={plan.status} />
+        <div className="flex items-center gap-2 text-[12px] text-foreground-subtle">
+          <span>{plan.completedTaskCount || 0}/{plan.taskCount || 0} actions</span>
+          <div className="h-1.5 w-24 rounded-full bg-white/[0.05] overflow-hidden">
+            <div className="h-full bg-accent/60 rounded-full transition-all" style={{ width: `${progress}%` }} />
+          </div>
+          <span>{progress}%</span>
+        </div>
+        <button
+          onClick={() => usePlanItemsStore.getState().toggleActivityDrawer()}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            activityDrawerOpen
+              ? 'border-accent/30 bg-accent/10 text-accent'
+              : 'border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+          }`}
+          title="Toggle activity drawer"
+        >
+          <ActivityIcon size={12} />
+          Activity
+        </button>
+      </div>
+
+      {/* Three regions */}
+      <div className="flex-1 min-h-0">
+        <Allotment>
+          <Allotment.Pane preferredSize={300} minSize={220}>
+            <PlanItemTree planUid={plan.uid} />
+          </Allotment.Pane>
+          <Allotment.Pane minSize={400}>
+            <PlanItemCanvas />
+          </Allotment.Pane>
+          {activityDrawerOpen && (
+            <Allotment.Pane preferredSize={320} minSize={240} maxSize={500}>
+              <PlanActivityDrawer />
+            </Allotment.Pane>
+          )}
+        </Allotment>
+      </div>
+
+      <PlanItemHistoryDrawer />
+    </div>
+  );
+}

@@ -347,7 +347,7 @@ function PlansSection({
           {(['shared', 'local'] as const).map((v) => (
             <button
               key={v}
-              onClick={() => onChange({ plans: { defaultVisibility: v } })}
+              onClick={() => onChange({ plans: { ...settings.plans, defaultVisibility: v } })}
               className={`px-3 py-1.5 text-[11.5px] rounded-md border transition-colors ${
                 settings.plans.defaultVisibility === v
                   ? 'border-accent/40 bg-accent/10 text-accent'
@@ -363,6 +363,33 @@ function PlansSection({
       <p className="text-[10px] text-foreground-subtle">
         Shared plans land at <code className="font-mono">&lt;project&gt;/.codetrellis/plans/&lt;slug&gt;/</code>. See [PLAN-EXPORT.md](docs/PLAN-EXPORT.md).
       </p>
+
+      <Field label="Attachment storage">
+        <div className="flex gap-2">
+          {(['project', 'user'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => onChange({ plans: { ...settings.plans, attachmentLocation: v } })}
+              className={`px-3 py-1.5 text-[11.5px] rounded-md border transition-colors ${
+                settings.plans.attachmentLocation === v
+                  ? 'border-accent/40 bg-accent/10 text-accent'
+                  : 'border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+              }`}
+              title={v === 'project'
+                ? 'Attached images / videos / files land in <project>/.codetrellis/attachments/<item-uid>/ — they ride with the plan in git'
+                : 'Attached images / videos / files land in your user data dir — out of git, lighter repos, but does not follow plans across machines'}
+            >
+              {v === 'project' ? 'Project (commit with plan)' : 'User data (out of git)'}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <p className="text-[10px] text-foreground-subtle">
+        Pasted / dropped / picked image + video bytes write here. URLs and project-file refs are
+        unaffected (they store paths, not bytes).
+      </p>
+
     </>
   );
 }

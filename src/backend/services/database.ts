@@ -298,6 +298,155 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_recent_projects_opened ON recent_projects(last_opened_at DESC);
   `);
 
+  // Phase 15 §15.D — plan-level git context. Captures user intent
+  // ("base off `main`, land on `feat/auth`, optionally use this
+  // worktree") so the runner / agent integration knows where to diff
+  // and commit. No git commands are executed at write time — these
+  // are pure metadata for now.
+  try { db.run(`ALTER TABLE plans ADD COLUMN base_ref TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plans ADD COLUMN target_branch TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plans ADD COLUMN target_worktree TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plans ADD COLUMN auto_create_branch INTEGER DEFAULT 0`); } catch { /* exists */ }
+
+  // Phase 14 §A — task-as-context fields. Run as ALTER TABLE inside
+  // try/catch so existing DBs migrate cleanly and fresh installs land
+  // in the same shape. Mirrors the lazy-migration pattern already used
+  // by `resolved_path`, `phase_uid`, `order_hint`, `parent_doc_uid`.
+  //
+  // - `parent_task_uid` — subtask parent (one level for v1, tree later)
+  // - `body`            — markdown design notes / agent-readable detail
+  // - `prompt`          — markdown ready to paste at an agent
+  // - `scope_path`      — folder this task is rooted at; relative paths
+  //                       in `file_specs` resolve from here
+  // - `file_specs`      — JSON FileSpec[] — explicit CRUD intent on file ops
+  // - `progress_percent`— 0..100, free-form `update_task_progress`
+  // - `blocked_reason`  — free-form reason when status === 'blocked'
+  try { db.run(`ALTER TABLE tasks ADD COLUMN parent_task_uid TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE tasks ADD COLUMN body TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE tasks ADD COLUMN prompt TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE tasks ADD COLUMN scope_path TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE tasks ADD COLUMN file_specs TEXT DEFAULT '[]'`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE tasks ADD COLUMN progress_percent INTEGER`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE tasks ADD COLUMN blocked_reason TEXT`); } catch { /* exists */ }
+  // `phase_uid` was historically added lazily by resolveImports() (so it
+  // depended on whether a project scan ran). Pulled into initDatabase here
+  // so the schema is consistent regardless of scan history — fresh boots
+  // without a scan still get the column. The matching ALTER in
+  // resolveImports stays for back-compat (try/catch swallows the
+  // duplicate-column error harmlessly).
+  try { db.run(`ALTER TABLE tasks ADD COLUMN phase_uid TEXT`); } catch { /* exists */ }
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_uid)`); } catch { /* exists */ }
+
+  // Phase 14 §A — first-class task chatter:
+  //   - `kind`     — 'note' | 'blocker' | 'progress' | 'question'
+  //   - `source`   — 'agent' | 'human'
+  //   - `metadata` — JSON bag (today: progressPercent for kind='progress')
+  // The existing `comment_type` column stays so old plans keep
+  // rendering with their legacy taxonomy.
+  try { db.run(`ALTER TABLE comments ADD COLUMN kind TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE comments ADD COLUMN source TEXT`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE comments ADD COLUMN metadata TEXT`); } catch { /* exists */ }
+
+  // Phase 14 §A — task / plan-doc attachments rail. Single table covers
+  // both targets via target_type so the UI can render task and doc
+  // rails uniformly without a second table.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS attachments (
+      uid TEXT PRIMARY KEY,
+      target_type TEXT NOT NULL,
+      target_uid TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      value TEXT NOT NULL,
+      label TEXT,
+      content_type TEXT,
+      author TEXT NOT NULL,
+      author_type TEXT NOT NULL DEFAULT 'human',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_attachments_target ON attachments(target_uid);
+    CREATE INDEX IF NOT EXISTS idx_attachments_target_type ON attachments(target_type, target_uid);
+  `);
+
+  // Phase 15 §15.A — Object/Action unified model. Replaces (eventually)
+  // plan_documents + plan_phases + tasks. For now the new tables are
+  // built alongside; nothing reads from them until §15.C wires the
+  // service layer + MCP tools. See `docs/PLAN-WORKSPACE-DESIGN.md`
+  // (v0.5) for the full schema design.
+  //
+  //   - plan_items          — unified tree (kind = 'object' | 'action')
+  //   - plan_item_versions  — per-item edit history (M1)
+  //   - plan_events         — append-only structural mutation log
+  //                           (drives the activity rail + timeline
+  //                            scrubber — "show how plans shift")
+  //
+  // Old tables stay readable; the service layer dual-reads during
+  // the cutover window. Migration script lives in §15.B.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS plan_items (
+      uid              TEXT PRIMARY KEY,
+      plan_uid         TEXT NOT NULL REFERENCES plans(uid),
+      parent_uid       TEXT REFERENCES plan_items(uid),
+      sort_order       INTEGER NOT NULL DEFAULT 0,
+      kind             TEXT NOT NULL,
+      title            TEXT NOT NULL,
+      body             TEXT NOT NULL DEFAULT '',
+      template         TEXT,
+      status           TEXT,
+      assignee         TEXT,
+      assignee_type    TEXT,
+      assignee_model   TEXT,
+      progress_percent INTEGER,
+      blocked_reason   TEXT,
+      scope_path       TEXT,
+      file_specs       TEXT NOT NULL DEFAULT '[]',
+      symbol_specs     TEXT NOT NULL DEFAULT '[]',
+      new_connections  TEXT NOT NULL DEFAULT '[]',
+      removed_conns    TEXT NOT NULL DEFAULT '[]',
+      dependencies     TEXT NOT NULL DEFAULT '[]',
+      author           TEXT NOT NULL,
+      author_type      TEXT NOT NULL DEFAULT 'human',
+      created_at       INTEGER NOT NULL,
+      updated_at       INTEGER NOT NULL,
+      migrated_from    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_plan_items_plan       ON plan_items(plan_uid);
+    CREATE INDEX IF NOT EXISTS idx_plan_items_parent     ON plan_items(parent_uid);
+    CREATE INDEX IF NOT EXISTS idx_plan_items_kind       ON plan_items(kind);
+    CREATE INDEX IF NOT EXISTS idx_plan_items_status     ON plan_items(status);
+    CREATE INDEX IF NOT EXISTS idx_plan_items_sort       ON plan_items(plan_uid, parent_uid, sort_order);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_items_migrated ON plan_items(migrated_from);
+
+    CREATE TABLE IF NOT EXISTS plan_item_versions (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_uid        TEXT NOT NULL REFERENCES plan_items(uid),
+      version         INTEGER NOT NULL,
+      body_snapshot   TEXT,
+      meta_snapshot   TEXT,
+      change_summary  TEXT,
+      author          TEXT NOT NULL,
+      author_type     TEXT NOT NULL DEFAULT 'human',
+      created_at      INTEGER NOT NULL,
+      UNIQUE(item_uid, version)
+    );
+    CREATE INDEX IF NOT EXISTS idx_plan_item_versions_item ON plan_item_versions(item_uid);
+
+    CREATE TABLE IF NOT EXISTS plan_events (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_uid     TEXT NOT NULL REFERENCES plans(uid),
+      item_uid     TEXT,
+      event_type   TEXT NOT NULL,
+      before_state TEXT,
+      after_state  TEXT,
+      summary      TEXT NOT NULL,
+      author       TEXT NOT NULL,
+      author_type  TEXT NOT NULL DEFAULT 'human',
+      created_at   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_plan_events_plan ON plan_events(plan_uid, created_at);
+    CREATE INDEX IF NOT EXISTS idx_plan_events_item ON plan_events(item_uid, created_at);
+    CREATE INDEX IF NOT EXISTS idx_plan_events_type ON plan_events(event_type);
+  `);
+
   console.log('[DB] SQLite initialized');
 }
 

@@ -18,6 +18,10 @@ import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
 import * as commentService from './services/comment-service';
 import * as sessionService from './services/session-service';
+import * as taskAttachmentsService from './services/task-attachments-service';
+// Phase 15 §C — unified Object/Action surface backing the V2 frontend.
+import * as planItemService from './services/plan-item-service';
+import * as planEventService from './services/plan-event-service';
 import {
   recordProjectOpen,
   listRecentProjects,
@@ -983,9 +987,19 @@ app.get('/api/plans/:uid', (req, res) => {
 
 // Update plan
 app.put('/api/plans/:uid', (req, res) => {
-  const { title, description, status } = req.body;
+  // Phase 15 §15.D — accept the git-context fields alongside the
+  // existing title/description/status. Each is optional; missing
+  // means "leave alone", `null` clears.
+  const {
+    title, description, status,
+    baseRef, targetBranch, targetWorktree, autoCreateBranch,
+  } = req.body;
   const plan = planService.getPlan(req.params.uid);
-  planService.updatePlan(req.params.uid, { title, description, status }, 'user');
+  planService.updatePlan(
+    req.params.uid,
+    { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
+    'user',
+  );
 
   // Auto-capture trellis snapshot when plan is approved
   if (status === 'approved' && plan?.projectPath) {
@@ -1013,17 +1027,23 @@ app.get('/api/plans/:uid/tasks', (req, res) => {
   res.json(planService.getTasksByPlan(req.params.uid));
 });
 
-// Update task — accepts the full set of task fields.
+// Update task — accepts the full set of task fields, including the
+// Phase 14 §A task-as-context fields.
 app.put('/api/plans/:uid/tasks/:taskUid', (req, res) => {
   const {
     status, assignee, assigneeType, assigneeModel, description,
     affectedFiles, affectedSymbols, newConnections, removedConnections,
     dependencies, fileSpec, symbolSpecs, phaseUid,
+    // Phase 14 §A
+    parentTaskUid, body, prompt, scopePath, fileSpecs,
+    progressPercent, blockedReason,
   } = req.body;
   planService.updateTask(req.params.taskUid, {
     status, assignee, assigneeType, assigneeModel, description,
     affectedFiles, affectedSymbols, newConnections, removedConnections,
     dependencies, fileSpec, symbolSpecs, phaseUid,
+    parentTaskUid, body, prompt, scopePath, fileSpecs,
+    progressPercent, blockedReason,
   });
   broadcast('task-updated', { planUid: req.params.uid, taskUid: req.params.taskUid, status });
   saveNow(() => exportDatabase());
@@ -1051,13 +1071,18 @@ app.post('/api/plans/:uid/tasks/:taskUid/code-reference', (req, res) => {
 
 // Append a brand-new task to a plan (used by the "Add to plan as new task" flow).
 app.post('/api/plans/:uid/tasks', (req, res) => {
-  const { description, affectedFiles, affectedSymbols, fileSpec } = req.body || {};
+  const {
+    description, affectedFiles, affectedSymbols, fileSpec,
+    // Phase 14 §A
+    body, prompt, scopePath, fileSpecs, parentTaskUid,
+  } = req.body || {};
   if (!description || typeof description !== 'string') {
     res.status(400).json({ error: 'description is required' });
     return;
   }
   const task = planService.appendTaskToPlan(req.params.uid, {
     description, affectedFiles, affectedSymbols, fileSpec,
+    body, prompt, scopePath, fileSpecs, parentTaskUid,
   });
   if (!task) {
     res.status(404).json({ error: 'Plan not found' });
@@ -1085,6 +1110,499 @@ app.post('/api/plans/:uid/tasks/:taskUid/claim', (req, res) => {
 app.get('/api/plans/:uid/next-task', (req, res) => {
   const task = planService.getNextTask(req.params.uid);
   res.json(task || { none: true });
+});
+
+// --- Phase 14 §A — Task-as-context endpoints ---
+// REST mirrors of the new MCP tools so the frontend Plan Workspace
+// can hydrate task context, attachments, comments, and subtasks
+// without going through the SSE wire.
+
+/** Full task context: task + parent + subtasks + phase + attachments + comments. */
+app.get('/api/tasks/:taskUid/full', (req, res) => {
+  const taskUid = req.params.taskUid;
+  const task = planService.getTaskByUid(taskUid);
+  if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
+  const parent = task.parentTaskUid ? planService.getTaskByUid(task.parentTaskUid) : null;
+  const subtasks = planService.getSubtasks(taskUid);
+  const attachments = taskAttachmentsService.listTaskAttachments(taskUid);
+  const comments = commentService.listCommentsFlat(taskUid);
+  res.json({ task, parent, subtasks, attachments, comments });
+});
+
+/** List task attachments. */
+app.get('/api/tasks/:taskUid/attachments', (req, res) => {
+  res.json(taskAttachmentsService.listTaskAttachments(req.params.taskUid));
+});
+
+/** Add a task attachment (URL, file_ref, code_block, transcript, image-via-base64). */
+app.post('/api/tasks/:taskUid/attachments', (req, res) => {
+  const { kind, value, label, contentType, dataBase64, projectRoot } = req.body || {};
+  if (!kind || value == null) {
+    res.status(400).json({ error: 'kind and value are required' });
+    return;
+  }
+  try {
+    const attachment = taskAttachmentsService.addAttachment({
+      targetType: 'task',
+      targetUid: req.params.taskUid,
+      kind,
+      value,
+      label,
+      contentType,
+      dataBase64,
+      projectRoot,
+      author: getAuthorKey('human'),
+      authorType: 'human',
+    });
+    const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
+    broadcast('task-attachment-added', { planUid, taskUid: req.params.taskUid, attachment });
+    saveNow(() => exportDatabase());
+    res.json(attachment);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Delete a task attachment. */
+app.delete('/api/attachments/:uid', (req, res) => {
+  const ok = taskAttachmentsService.deleteAttachment(req.params.uid);
+  if (!ok) { res.status(404).json({ error: 'Attachment not found' }); return; }
+  broadcast('task-attachment-removed', { uid: req.params.uid });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+/** List task comments (flat, ordered, includes Phase 14 kind/source/metadata). */
+app.get('/api/tasks/:taskUid/comments', (req, res) => {
+  res.json(commentService.listCommentsFlat(req.params.taskUid));
+});
+
+/** Add a structured task comment (kind: note / blocker / progress / question). */
+app.post('/api/tasks/:taskUid/comments', (req, res) => {
+  const { kind, body, parentCommentUid, source } = req.body || {};
+  if (!body || typeof body !== 'string') {
+    res.status(400).json({ error: 'body is required' });
+    return;
+  }
+  // Map the Phase 14 §A kind onto the legacy commentType chip so old
+  // UI keeps showing something sensible.
+  const legacyType = kind === 'progress' ? 'status_update'
+    : kind === 'blocker' ? 'concern'
+    : kind === 'question' ? 'suggestion'
+    : 'comment';
+  const comment = commentService.addComment(
+    'task', req.params.taskUid, getAuthorKey('human'), 'human', body,
+    { kind, source: source ?? 'human', commentType: legacyType, parentUid: parentCommentUid },
+  );
+  const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
+  broadcast('task-comment-added', { planUid, taskUid: req.params.taskUid, comment });
+  saveNow(() => exportDatabase());
+  res.json(comment);
+});
+
+/** Report mid-task progress: 0–100 + optional message. */
+app.post('/api/tasks/:taskUid/progress', (req, res) => {
+  const { percent, message } = req.body || {};
+  if (typeof percent !== 'number' || percent < 0 || percent > 100) {
+    res.status(400).json({ error: 'percent must be a number between 0 and 100' });
+    return;
+  }
+  planService.updateTask(req.params.taskUid, { progressPercent: percent });
+  const body = (typeof message === 'string' && message.trim()) ? message.trim() : `Progress: ${percent}%`;
+  const comment = commentService.addComment(
+    'task', req.params.taskUid, getAuthorKey('human'), 'human', body,
+    { kind: 'progress', source: 'human', commentType: 'status_update', metadata: { progressPercent: percent } },
+  );
+  const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
+  broadcast('task-progress', { planUid, taskUid: req.params.taskUid, percent, message: body, commentUid: comment.uid });
+  broadcast('task-comment-added', { planUid, taskUid: req.params.taskUid, comment });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true, percent, message: body, commentUid: comment.uid });
+});
+
+/** Mark a task blocked with a reason. */
+app.post('/api/tasks/:taskUid/blocked', (req, res) => {
+  const { reason } = req.body || {};
+  if (!reason || typeof reason !== 'string') {
+    res.status(400).json({ error: 'reason is required' });
+    return;
+  }
+  planService.updateTask(req.params.taskUid, { status: 'blocked', blockedReason: reason });
+  const comment = commentService.addComment(
+    'task', req.params.taskUid, getAuthorKey('human'), 'human', reason,
+    { kind: 'blocker', source: 'human', commentType: 'concern' },
+  );
+  const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
+  broadcast('task-blocked', { planUid, taskUid: req.params.taskUid, reason, commentUid: comment.uid });
+  broadcast('task-updated', { planUid, taskUid: req.params.taskUid, status: 'blocked' });
+  broadcast('task-comment-added', { planUid, taskUid: req.params.taskUid, comment });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+/** Add a subtask under an existing task. */
+app.post('/api/tasks/:taskUid/subtasks', (req, res) => {
+  const parent = planService.getTaskByUid(req.params.taskUid);
+  if (!parent) { res.status(404).json({ error: 'Parent task not found' }); return; }
+  const { description, body, prompt, scopePath, fileSpecs } = req.body || {};
+  if (!description || typeof description !== 'string') {
+    res.status(400).json({ error: 'description is required' });
+    return;
+  }
+  const subtask = planService.appendTaskToPlan(parent.planUid, {
+    description, body, prompt,
+    scopePath: scopePath ?? parent.scopePath ?? null,
+    fileSpecs,
+    parentTaskUid: req.params.taskUid,
+  });
+  if (!subtask) { res.status(500).json({ error: 'Failed to create subtask' }); return; }
+  broadcast('task-created', { planUid: parent.planUid, task: subtask, parentTaskUid: req.params.taskUid });
+  saveNow(() => exportDatabase());
+  res.json(subtask);
+});
+
+/** Direct subtask listing (useful for refreshing without /full). */
+app.get('/api/tasks/:taskUid/subtasks', (req, res) => {
+  res.json(planService.getSubtasks(req.params.taskUid));
+});
+
+// =============================================================================
+// Phase 15 §C — unified Object/Action REST surface for `plan_items`.
+// =============================================================================
+// REST mirrors of the new MCP tools so the V2 frontend (15.D) can hydrate
+// the workspace without going through SSE. Old endpoints (above) keep
+// working in parallel during the cutover; aliases / deprecation are 15.F.
+
+/** List items (cheap tree query — title + kind + status + childCount, no bodies). */
+app.get('/api/plans/:planUid/items', (req, res) => {
+  const summaries = planItemService.listItemSummaries(req.params.planUid);
+  let filtered = summaries;
+  if (typeof req.query.parent_uid === 'string') {
+    const target = req.query.parent_uid === '' ? null : req.query.parent_uid;
+    filtered = filtered.filter((i) => i.parentUid === target);
+  }
+  if (typeof req.query.kind === 'string') {
+    filtered = filtered.filter((i) => i.kind === req.query.kind);
+  }
+  res.json(filtered);
+});
+
+/** Plan timeline (plan_events feed). */
+app.get('/api/plans/:planUid/timeline', (req, res) => {
+  const sinceMs = typeof req.query.since_ms === 'string' ? Number(req.query.since_ms) : undefined;
+  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+  const kindsRaw = req.query.kinds;
+  const kinds = typeof kindsRaw === 'string' ? kindsRaw.split(',').filter(Boolean) : undefined;
+  res.json(planEventService.listPlanEvents(req.params.planUid, {
+    sinceMs: Number.isFinite(sinceMs) ? sinceMs : undefined,
+    eventTypes: kinds as any,
+    limit: Number.isFinite(limit) ? limit : undefined,
+  }));
+});
+
+/** Create an item (Object or Action). */
+app.post('/api/plans/:planUid/items', (req, res) => {
+  const {
+    kind, parentUid, sortOrder, title, body, template,
+    status, scopePath, fileSpecs, newConnections, removedConnections, dependencies,
+  } = req.body || {};
+  if (!kind || !title) {
+    res.status(400).json({ error: 'kind and title are required' });
+    return;
+  }
+  try {
+    const item = planItemService.createItem({
+      planUid: req.params.planUid,
+      kind,
+      parentUid: parentUid ?? null,
+      sortOrder,
+      title,
+      body: body ?? '',
+      template: template ?? null,
+      status,
+      scopePath: scopePath ?? null,
+      fileSpecs,
+      newConnections,
+      removedConnections,
+      dependencies,
+      author: getAuthorKey('human'),
+      authorType: 'human',
+    });
+    broadcast('plan-item-created', { planUid: item.planUid, item });
+    saveNow(() => exportDatabase());
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Get a single item (without children / attachments / comments). */
+app.get('/api/items/:uid', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(item);
+});
+
+/** Read full bundle: item + parent + children + attachments + comments + recent versions. */
+app.get('/api/items/:uid/full', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const parent = item.parentUid ? planItemService.getItem(item.parentUid) : null;
+  const children = planItemService.getChildren(item.planUid, req.params.uid);
+  const attachments = taskAttachmentsService.listItemAttachments(req.params.uid);
+  const comments = commentService.listItemComments(req.params.uid);
+  const versions = planItemService.listItemVersions(req.params.uid).slice(0, 10);
+  res.json({ item, parent, children, attachments, comments, versions });
+});
+
+/** Update any field on an item. */
+app.put('/api/items/:uid', (req, res) => {
+  const body = req.body ?? {};
+  const item = planItemService.updateItem(req.params.uid, {
+    title: body.title,
+    body: body.body,
+    template: body.template,
+    status: body.status,
+    assignee: body.assignee,
+    progressPercent: body.progressPercent,
+    blockedReason: body.blockedReason,
+    scopePath: body.scopePath,
+    fileSpecs: body.fileSpecs,
+    newConnections: body.newConnections,
+    removedConnections: body.removedConnections,
+    dependencies: body.dependencies,
+    parentUid: body.parentUid,
+    sortOrder: body.sortOrder,
+    changeSummary: body.changeSummary,
+    author: getAuthorKey('human'),
+    authorType: 'human',
+  });
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: body });
+  saveNow(() => exportDatabase());
+  res.json(item);
+});
+
+/** Move (re-parent + reorder, single event). */
+app.post('/api/items/:uid/move', (req, res) => {
+  const { newParentUid, newSortOrder } = req.body || {};
+  const item = planItemService.moveItem(req.params.uid, {
+    newParentUid: newParentUid === undefined ? undefined : (newParentUid === '' ? null : newParentUid),
+    newSortOrder,
+    author: getAuthorKey('human'),
+    authorType: 'human',
+  });
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  broadcast('plan-item-moved', { planUid: item.planUid, itemUid: item.uid, toParentUid: item.parentUid, sortOrder: item.sortOrder });
+  saveNow(() => exportDatabase());
+  res.json(item);
+});
+
+/** Delete (cascade by default; pass ?cascade=false to require empty children). */
+app.delete('/api/items/:uid', (req, res) => {
+  const target = planItemService.getItem(req.params.uid);
+  if (!target) { res.status(404).json({ error: 'Item not found' }); return; }
+  const cascade = req.query.cascade !== 'false';
+  if (!cascade) {
+    const kids = planItemService.getChildren(target.planUid, req.params.uid);
+    if (kids.length > 0) {
+      res.status(409).json({ error: `Item has ${kids.length} children; pass ?cascade=true to remove the subtree.` });
+      return;
+    }
+  }
+  const cascadedUids = planItemService.deleteItem(req.params.uid, {
+    cascade,
+    author: getAuthorKey('human'),
+    authorType: 'human',
+  });
+  broadcast('plan-item-deleted', { planUid: target.planUid, itemUid: req.params.uid, cascadedUids });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true, deleted: cascadedUids });
+});
+
+/** Atomically claim an Action. */
+app.post('/api/items/:uid/claim', (req, res) => {
+  const { agentId, agentType, model } = req.body || {};
+  const result = planItemService.claimItem(
+    req.params.uid,
+    agentId || getAuthorKey('human'),
+    agentType || 'human',
+    model,
+  );
+  if (result.ok) {
+    const item = planItemService.getItem(req.params.uid);
+    if (item) {
+      broadcast('plan-item-claimed', { planUid: item.planUid, itemUid: item.uid, agentId: agentId || 'human', agentType: agentType || 'human' });
+      if (result.conflicts) {
+        broadcast('conflict-detected', { planUid: item.planUid, itemUid: item.uid, message: result.conflicts.join('; ') });
+      }
+    }
+    saveNow(() => exportDatabase());
+  }
+  res.json(result);
+});
+
+/** Restore item to a prior version. */
+app.post('/api/items/:uid/restore-version/:version', (req, res) => {
+  const v = Number(req.params.version);
+  if (!Number.isFinite(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+  const item = planItemService.restoreItemVersion(req.params.uid, v, getAuthorKey('human'), 'human');
+  if (!item) { res.status(404).json({ error: 'Item or version not found' }); return; }
+  broadcast('plan-item-version-saved', { planUid: item.planUid, itemUid: item.uid, restoredFrom: v });
+  saveNow(() => exportDatabase());
+  res.json(item);
+});
+
+/** List item versions (history drawer). */
+app.get('/api/items/:uid/versions', (req, res) => {
+  res.json(planItemService.listItemVersions(req.params.uid));
+});
+
+/** List item events (per-item shift drawer). */
+app.get('/api/items/:uid/events', (req, res) => {
+  res.json(planEventService.listItemEvents(req.params.uid));
+});
+
+// --- Item-context endpoints (renamed task-context for V2) -------------------
+
+/** Comments. */
+app.get('/api/items/:uid/comments', (req, res) => {
+  res.json(commentService.listItemComments(req.params.uid));
+});
+app.post('/api/items/:uid/comments', (req, res) => {
+  const { kind, body, parentCommentUid, source } = req.body || {};
+  if (!body || typeof body !== 'string') { res.status(400).json({ error: 'body is required' }); return; }
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const legacyType =
+    kind === 'progress' ? 'status_update' :
+    kind === 'blocker' ? 'concern' :
+    kind === 'question' ? 'suggestion' : 'comment';
+  const comment = commentService.addComment(
+    'item',
+    req.params.uid,
+    getAuthorKey('human'),
+    'human',
+    body,
+    { kind, source: source ?? 'human', commentType: legacyType, parentUid: parentCommentUid },
+  );
+  broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: req.params.uid, comment });
+  saveNow(() => exportDatabase());
+  res.json(comment);
+});
+
+/** Mid-task progress (Action only). */
+app.post('/api/items/:uid/progress', (req, res) => {
+  const { percent, message } = req.body || {};
+  if (typeof percent !== 'number' || percent < 0 || percent > 100) {
+    res.status(400).json({ error: 'percent must be a number 0-100' });
+    return;
+  }
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  if (item.kind !== 'action') { res.status(400).json({ error: 'Progress only applies to Actions.' }); return; }
+  planItemService.updateItem(req.params.uid, { progressPercent: percent, author: getAuthorKey('human'), authorType: 'human' });
+  const body = (typeof message === 'string' && message.trim()) ? message.trim() : `Progress: ${percent}%`;
+  const comment = commentService.addComment('item', req.params.uid, getAuthorKey('human'), 'human', body, {
+    kind: 'progress', source: 'human', commentType: 'status_update', metadata: { progressPercent: percent },
+  });
+  broadcast('plan-item-progress', { planUid: item.planUid, itemUid: req.params.uid, percent, message: body, commentUid: comment.uid });
+  broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: req.params.uid, comment });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true, percent, message: body, commentUid: comment.uid });
+});
+
+/** Block an Action with a reason. */
+app.post('/api/items/:uid/blocked', (req, res) => {
+  const { reason } = req.body || {};
+  if (!reason || typeof reason !== 'string') { res.status(400).json({ error: 'reason is required' }); return; }
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  if (item.kind !== 'action') { res.status(400).json({ error: 'Only Actions can be blocked.' }); return; }
+  planItemService.updateItem(req.params.uid, { status: 'blocked', blockedReason: reason, author: getAuthorKey('human'), authorType: 'human' });
+  const comment = commentService.addComment('item', req.params.uid, getAuthorKey('human'), 'human', reason, {
+    kind: 'blocker', source: 'human', commentType: 'concern',
+  });
+  broadcast('plan-item-blocked', { planUid: item.planUid, itemUid: req.params.uid, reason, commentUid: comment.uid });
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: req.params.uid, kind: 'action', changes: { status: 'blocked' } });
+  broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: req.params.uid, comment });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+/** Item attachments. */
+app.get('/api/items/:uid/attachments', (req, res) => {
+  res.json(taskAttachmentsService.listItemAttachments(req.params.uid));
+});
+app.post('/api/items/:uid/attachments', (req, res) => {
+  const { kind, value, label, contentType, dataBase64, projectRoot } = req.body || {};
+  if (!kind || value == null) { res.status(400).json({ error: 'kind and value are required' }); return; }
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  try {
+    const attachment = taskAttachmentsService.addAttachment({
+      targetType: 'item',
+      targetUid: req.params.uid,
+      kind, value, label, contentType, dataBase64, projectRoot,
+      author: getAuthorKey('human'),
+      authorType: 'human',
+    });
+    broadcast('plan-item-attachment-added', { planUid: item.planUid, itemUid: req.params.uid, attachment });
+    saveNow(() => exportDatabase());
+    res.json(attachment);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * Phase 15 §15.D — serve raw bytes of an inline image / video
+ * attachment so the V2 canvas can `<img src>` / `<video>` it.
+ *
+ * Looks up the attachment by uid, resolves its stored `value` to an
+ * absolute path on disk (handles both `.codetrellis/...` project-
+ * relative and `userdata://...` user-data forms), and streams the
+ * file. Returns 404 for any attachment whose value isn't a file
+ * (URL / file_ref pointing at project files / code_block / transcript).
+ *
+ * The endpoint exists so the renderer doesn't need direct filesystem
+ * access — works in both Electron and dev/web mode.
+ */
+app.get('/api/attachments/:uid/file', (req, res) => {
+  const db = getDb();
+  const r = db.exec(
+    `SELECT value, target_uid, content_type FROM attachments WHERE uid = ?`,
+    [req.params.uid],
+  );
+  const row = r[0]?.values[0];
+  if (!row) { res.status(404).json({ error: 'Attachment not found' }); return; }
+  const value = row[0] as string;
+  const targetUid = row[1] as string;
+  const contentType = (row[2] as string | null) ?? 'application/octet-stream';
+
+  // Resolve project root from the parent item -> plan -> project_path.
+  // Cheap join — runs once per attachment fetch.
+  let projectRoot: string | undefined;
+  const parent = db.exec(
+    `SELECT p.project_path FROM plan_items i JOIN plans p ON p.uid = i.plan_uid WHERE i.uid = ?`,
+    [targetUid],
+  );
+  const projectPath = parent[0]?.values[0]?.[0] as string | undefined;
+  if (projectPath) projectRoot = projectPath;
+
+  const abs = taskAttachmentsService.resolveAttachmentAbsPath(value, projectRoot);
+  if (!abs) {
+    res.status(404).json({ error: 'Attachment value is not a file', value });
+    return;
+  }
+  if (!fs.existsSync(abs)) {
+    res.status(404).json({ error: 'Attachment file missing on disk', path: abs });
+    return;
+  }
+  // Caching is fine — the file is immutable (uid in the path).
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Content-Type', contentType);
+  fs.createReadStream(abs).pipe(res);
 });
 
 // Plan versions
@@ -1408,6 +1926,15 @@ app.post('/api/comments', (req, res) => {
   res.json(comment);
 });
 
+/** Phase 15 §15.D — delete a comment (hard-delete, no tombstone). */
+app.delete('/api/comments/:uid', (req, res) => {
+  const ok = commentService.deleteComment(req.params.uid);
+  if (!ok) { res.status(404).json({ error: 'Comment not found' }); return; }
+  broadcast('comment-deleted', { uid: req.params.uid });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
 // --- Sessions API ---
 
 app.get('/api/sessions', (_req, res) => {
@@ -1451,8 +1978,66 @@ app.get('/api/logs/path', (_req, res) => {
 
 // --- Build info (so Settings → About can show what's actually running) ---
 
+/**
+ * In dev (running from source) the committed `BUILD_INFO` constant
+ * goes stale fast — every version bump in `package.json` would
+ * require re-running `scripts/generate-build-info.js`. The user
+ * reported the panel showing v0.1.0 when the repo was actually at
+ * v0.1.3 because the committed snapshot pre-dated the version bumps.
+ *
+ * Fix: recompute live from `package.json` + `git` on every request
+ * when we can. In packaged Electron (no source tree), `git` and the
+ * source `package.json` both fail; we fall through to BUILD_INFO.
+ *
+ * Cheap: a few git invocations per Settings → About open. No caching
+ * needed at this volume.
+ */
+function liveBuildInfo(): typeof BUILD_INFO | null {
+  try {
+    const pkgPath = path.resolve(process.cwd(), 'package.json');
+    if (!fs.existsSync(pkgPath)) return null;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    if (pkg.name !== 'codetrellis') return null;
+
+    const runGit = (args: string[]): string => {
+      try {
+        return execFileSync('git', args, {
+          cwd: process.cwd(),
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+      } catch {
+        return '';
+      }
+    };
+
+    const commit = runGit(['rev-parse', 'HEAD']);
+    const branch = runGit(['rev-parse', '--abbrev-ref', 'HEAD']);
+    const buildNumberStr = runGit(['rev-list', '--count', 'HEAD']);
+    const buildNumber = buildNumberStr ? Number(buildNumberStr) : 0;
+    const dirty = runGit(['status', '--porcelain']).length > 0;
+
+    // We use `process.uptime()` to imply a "this server is freshly
+    // running" feel — the buildTime in dev is the boot time, not the
+    // last commit time. Closer to "what you're actually running."
+    const buildTime = new Date(Date.now() - process.uptime() * 1000).toISOString();
+
+    return {
+      version: pkg.version || BUILD_INFO.version,
+      buildTime,
+      buildNumber: Number.isFinite(buildNumber) ? buildNumber : BUILD_INFO.buildNumber,
+      commit: commit || BUILD_INFO.commit,
+      commitShort: commit ? commit.slice(0, 7) : BUILD_INFO.commitShort,
+      branch: branch || BUILD_INFO.branch,
+      dirty,
+    };
+  } catch {
+    return null;
+  }
+}
+
 app.get('/api/build-info', (_req, res) => {
-  res.json(BUILD_INFO);
+  res.json(liveBuildInfo() ?? BUILD_INFO);
 });
 
 // --- OTA update polling (against codetrellis.dev with GitHub fallback) ---

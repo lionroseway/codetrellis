@@ -35,6 +35,21 @@ export interface McpSettings {
 
 export type DefaultPlanVisibility = 'shared' | 'local';
 
+/**
+ * Phase 15 §15.D — where do uploaded image / video / pasted-bytes
+ * attachments live on disk?
+ *
+ *   - `'project'` (default): under `<project>/.codetrellis/attachments/<item-uid>/`.
+ *     Rides with the plan in git — portable, but inflates repo size.
+ *   - `'user'`: under `<userDataDir>/codetrellis/attachments/<item-uid>/`.
+ *     Stays out of git — lighter repos, but doesn't follow the plan
+ *     when shared across devices / agents.
+ *
+ * Pure file-ref / URL / code_block / transcript attachments are
+ * unaffected (they store paths or inline content, not bytes).
+ */
+export type AttachmentLocation = 'project' | 'user';
+
 export interface PlansSettings {
   /**
    * Default visibility for newly-created plans. `shared` = export to
@@ -42,6 +57,11 @@ export interface PlansSettings {
    * Phase 13 §A reads this when materialising new plans.
    */
   defaultVisibility: DefaultPlanVisibility;
+  /**
+   * Phase 15 §15.D — where uploaded image/video bytes land.
+   * Default `'project'` so attachments ride with the plan in git.
+   */
+  attachmentLocation: AttachmentLocation;
 }
 
 export interface DataSettings {
@@ -73,6 +93,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   plans: {
     defaultVisibility: 'shared',
+    attachmentLocation: 'project',
   },
   data: {
     dataDirOverride: '',

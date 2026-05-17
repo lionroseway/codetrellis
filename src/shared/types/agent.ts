@@ -8,7 +8,11 @@ export type AgentEventType =
   | 'conformity_check'
   | 'file_changed'
   | 'session_start'
-  | 'session_end';
+  | 'session_end'
+  // Phase 11+ — every MCP tool call broadcasts on this channel with
+  // a normalized `{ tool, args, agentType, durationMs }` payload.
+  | 'tool_call'
+  | 'tool_error';
 
 export interface AgentEvent {
   id: string;

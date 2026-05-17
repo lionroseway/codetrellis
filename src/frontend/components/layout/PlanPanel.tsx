@@ -4,9 +4,7 @@ import { useUiStore } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { PlanList } from '../plan/PlanList';
-import { PlanDetail } from '../plan/PlanDetail';
 import { CommentThread } from '../plan/CommentThread';
-import { PlanCreateModal } from '../plan/PlanCreateModal';
 import { ProposedChanges } from '../plan/ProposedChanges';
 
 type Tab = 'plans' | 'timeline' | 'changes' | 'proposed' | 'comments';
@@ -57,7 +55,6 @@ export function PlanPanel() {
   const expanded = useUiStore((s) => s.planPanelExpanded);
   const togglePlanPanelExpanded = useUiStore((s) => s.togglePlanPanelExpanded);
   const [activeTab, setActiveTab] = useState<Tab>('plans');
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const events = useAgentStore((s) => s.events);
   const status = useAgentStore((s) => s.status);
@@ -130,9 +127,7 @@ export function PlanPanel() {
 
       <div className="flex-1 overflow-y-auto p-2">
         {activeTab === 'plans' && (
-          activePlan
-            ? <PlanDetail />
-            : <PlanList onCreateClick={() => setShowCreateModal(true)} />
+          <PlanList />
         )}
 
         {activeTab === 'timeline' && (
@@ -194,7 +189,6 @@ export function PlanPanel() {
         {activeTab === 'comments' && <CommentThread />}
       </div>
 
-      {showCreateModal && <PlanCreateModal onClose={() => setShowCreateModal(false)} />}
     </div>
   );
 }

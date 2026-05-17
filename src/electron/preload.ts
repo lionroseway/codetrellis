@@ -54,9 +54,30 @@ const codetrellisIpc = {
   },
 };
 
+/**
+ * Phase 15 §15.D — native file picker. Multi-select + folders +
+ * file-type filters. Returns absolute paths or null on cancel.
+ */
+interface OpenFilePickerOptions {
+  /** Allow picking multiple files / folders. */
+  multiSelect?: boolean;
+  /** Allow picking directories alongside files. */
+  allowFolders?: boolean;
+  /** File-type filters (Electron `dialog.showOpenDialog` shape). */
+  filters?: Array<{ name: string; extensions: string[] }>;
+  /** Default starting path. */
+  defaultPath?: string;
+  /** Dialog window title. */
+  title?: string;
+}
+
 const electronAPI = {
   openProjectDialog: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:open-project'),
+
+  /** Phase 15 §15.D — generic file/folder picker for attachments. */
+  openFilePicker: (options?: OpenFilePickerOptions): Promise<string[] | null> =>
+    ipcRenderer.invoke('dialog:open-files', options ?? {}),
 
   // Reveal the current day's log file in Finder / Explorer.
   revealLogs: (): Promise<string> => ipcRenderer.invoke('logs:reveal'),

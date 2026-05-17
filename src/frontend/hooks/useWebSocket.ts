@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useAgentStore } from '../stores/agent-store';
 import { usePlanStore } from '../stores/plan-store';
+import { usePlanItemsStore } from '../stores/plan-items-store';
 import { useToastStore } from '../stores/toast-store';
 import { useProjectStore } from '../stores/project-store';
-import type { AgentEvent } from '../../shared/types';
+import type { AgentEvent, Comment } from '../../shared/types';
 
 /**
  * Connects to the backend WebSocket and routes messages
@@ -85,6 +86,14 @@ export function useWebSocket() {
           }
           if (type === 'task-updated') {
             usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, payload.status || 'assigned');
+            const planUidUpd = payload?.planUid as string | undefined;
+            if (usePlanStore.getState().activePlanUid === planUidUpd) {
+              usePlanStore.getState().pushActivityEvent({
+                type: 'task-updated',
+                taskUid: payload.taskUid,
+                payload,
+              });
+            }
             if (payload.status === 'done') {
               useToastStore.getState().addToast({ type: 'success', title: 'Task completed', message: `Task marked as done` });
             }
@@ -108,11 +117,202 @@ export function useWebSocket() {
           if (type === 'task-claimed') {
             usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, 'assigned');
             useToastStore.getState().addToast({ type: 'info', title: 'Task claimed', message: `Assigned to ${payload.agentId || 'agent'}` });
+            const planUid = payload?.planUid as string | undefined;
+            if (usePlanStore.getState().activePlanUid === planUid) {
+              usePlanStore.getState().pushActivityEvent({
+                type: 'task-claimed',
+                taskUid: payload.taskUid,
+                payload,
+              });
+            }
           }
           if (type === 'comment-added') {
             usePlanStore.getState().onCommentAdded(payload.comment);
             useToastStore.getState().addToast({ type: 'info', title: 'New comment', message: payload.comment?.body?.substring(0, 60) });
           }
+          // --- Phase 14 §A task chatter ---
+          if (type === 'task-comment-added') {
+            const taskUid = payload?.taskUid as string | undefined;
+            const planUid = payload?.planUid as string | undefined;
+            const comment = payload?.comment;
+            const store = usePlanStore.getState();
+            if (taskUid && comment) {
+              // Fold into taskContexts cache if hydrated.
+              usePlanStore.setState((s) => {
+                const ctx = s.taskContexts[taskUid];
+                if (!ctx) return s;
+                if (ctx.comments.some((c: Comment) => c.uid === comment.uid)) return s;
+                return {
+                  taskContexts: {
+                    ...s.taskContexts,
+                    [taskUid]: { ...ctx, comments: [...ctx.comments, comment] },
+                  },
+                };
+              });
+              if (store.activePlanUid === planUid) {
+                store.pushActivityEvent({ type: 'task-comment-added', taskUid, payload });
+              }
+            }
+            // Avoid double-toasting on agent-driven progress / blockers
+            // — those have their own toasts below. Plain notes / questions
+            // get a quiet info toast so the user notices.
+            if (comment?.kind === 'note' || comment?.kind === 'question') {
+              useToastStore.getState().addToast({
+                type: 'info',
+                title: comment.kind === 'question' ? 'Agent asked a question' : 'New task note',
+                message: comment.body?.substring(0, 80),
+                duration: 5000,
+              });
+            }
+          }
+          if (type === 'task-progress') {
+            const taskUid = payload?.taskUid as string | undefined;
+            const planUid = payload?.planUid as string | undefined;
+            const percent = payload?.percent as number | undefined;
+            if (taskUid && typeof percent === 'number') {
+              usePlanStore.setState((s) => {
+                if (!s.activePlan) return s;
+                const tasks = s.activePlan.tasks.map((t) =>
+                  t.uid === taskUid ? { ...t, progressPercent: percent } : t,
+                );
+                return { activePlan: { ...s.activePlan, tasks } };
+              });
+              if (usePlanStore.getState().activePlanUid === planUid) {
+                usePlanStore.getState().pushActivityEvent({ type: 'task-progress', taskUid, payload });
+              }
+            }
+          }
+          if (type === 'task-blocked') {
+            const taskUid = payload?.taskUid as string | undefined;
+            const planUid = payload?.planUid as string | undefined;
+            const reason = payload?.reason as string | undefined;
+            if (taskUid) {
+              usePlanStore.setState((s) => {
+                if (!s.activePlan) return s;
+                const tasks = s.activePlan.tasks.map((t) =>
+                  t.uid === taskUid ? { ...t, status: 'blocked' as const, blockedReason: reason ?? null } : t,
+                );
+                return { activePlan: { ...s.activePlan, tasks } };
+              });
+              if (usePlanStore.getState().activePlanUid === planUid) {
+                usePlanStore.getState().pushActivityEvent({ type: 'task-blocked', taskUid, payload });
+              }
+              useToastStore.getState().addToast({
+                type: 'warning',
+                title: 'Task blocked',
+                message: reason ? reason.slice(0, 100) : 'Agent flagged a blocker',
+                duration: 8000,
+              });
+            }
+          }
+          if (type === 'task-attachment-added') {
+            const taskUid = payload?.taskUid as string | undefined;
+            const planUid = payload?.planUid as string | undefined;
+            const attachment = payload?.attachment;
+            if (taskUid && attachment) {
+              usePlanStore.setState((s) => {
+                const ctx = s.taskContexts[taskUid];
+                if (!ctx) return s;
+                if (ctx.attachments.some((a) => a.uid === attachment.uid)) return s;
+                return {
+                  taskContexts: {
+                    ...s.taskContexts,
+                    [taskUid]: { ...ctx, attachments: [...ctx.attachments, attachment] },
+                  },
+                };
+              });
+              if (usePlanStore.getState().activePlanUid === planUid) {
+                usePlanStore.getState().pushActivityEvent({ type: 'task-attachment-added', taskUid, payload });
+              }
+            }
+          }
+          if (type === 'task-attachment-removed') {
+            const uid = payload?.uid as string | undefined;
+            if (uid) {
+              usePlanStore.setState((s) => {
+                const next: typeof s.taskContexts = {};
+                for (const [k, v] of Object.entries(s.taskContexts)) {
+                  next[k] = { ...v, attachments: v.attachments.filter((a) => a.uid !== uid) };
+                }
+                return { taskContexts: next };
+              });
+            }
+          }
+          if (type === 'task-created') {
+            const planUid = payload?.planUid as string | undefined;
+            const task = payload?.task;
+            const parentTaskUid = payload?.parentTaskUid as string | undefined;
+            if (task) {
+              usePlanStore.setState((s) => {
+                if (!s.activePlan || s.activePlan.uid !== planUid) return s;
+                if (s.activePlan.tasks.some((t) => t.uid === task.uid)) return s;
+                let taskContexts = s.taskContexts;
+                if (parentTaskUid && taskContexts[parentTaskUid]) {
+                  taskContexts = {
+                    ...taskContexts,
+                    [parentTaskUid]: {
+                      ...taskContexts[parentTaskUid],
+                      subtasks: [...taskContexts[parentTaskUid].subtasks, task],
+                    },
+                  };
+                }
+                return {
+                  activePlan: { ...s.activePlan, tasks: [...s.activePlan.tasks, task] },
+                  taskContexts,
+                };
+              });
+              if (usePlanStore.getState().activePlanUid === planUid) {
+                usePlanStore.getState().pushActivityEvent({ type: 'task-created', taskUid: task.uid, payload });
+              }
+            }
+          }
+          // --- Phase 15 §15.D — V2 plan-item event handlers ---
+          if (type === 'plan-item-created') {
+            const item = payload?.item;
+            if (item) usePlanItemsStore.getState().onItemCreated(item);
+          }
+          if (type === 'plan-item-updated') {
+            const planUid = payload?.planUid as string | undefined;
+            const itemUid = payload?.itemUid as string | undefined;
+            if (planUid && itemUid) {
+              usePlanItemsStore.getState().onItemUpdated(planUid, itemUid, payload?.changes ?? {});
+            }
+          }
+          if (type === 'plan-item-moved') {
+            const itemUid = payload?.itemUid as string | undefined;
+            if (itemUid) {
+              usePlanItemsStore.getState().onItemMoved(
+                itemUid,
+                (payload?.toParentUid as string | null | undefined) ?? null,
+                Number(payload?.sortOrder ?? 0),
+              );
+            }
+          }
+          if (type === 'plan-item-deleted') {
+            const itemUid = payload?.itemUid as string | undefined;
+            const cascadedUids = Array.isArray(payload?.cascadedUids) ? payload!.cascadedUids as string[] : [];
+            if (itemUid) usePlanItemsStore.getState().onItemDeleted(itemUid, cascadedUids);
+          }
+          if (type === 'plan-item-comment-added') {
+            const itemUid = payload?.itemUid as string | undefined;
+            const comment = payload?.comment;
+            if (itemUid && comment) usePlanItemsStore.getState().onItemCommentAdded(itemUid, comment);
+          }
+          if (type === 'plan-item-attachment-added') {
+            const itemUid = payload?.itemUid as string | undefined;
+            const attachment = payload?.attachment;
+            if (itemUid && attachment) usePlanItemsStore.getState().onItemAttachmentAdded(itemUid, attachment);
+          }
+          if (type === 'plan-item-progress' || type === 'plan-item-blocked' || type === 'plan-item-claimed' || type === 'plan-item-version-saved') {
+            // These already cascade through plan-item-updated; nothing
+            // additional needed here unless the V2 UI wants its own
+            // toast/animation later.
+          }
+          if (type === 'plan-event') {
+            const event = payload?.event;
+            if (event) usePlanItemsStore.getState().onItemEvent(event);
+          }
+
           if (type === 'plan-doc-created') {
             usePlanStore.getState().onPlanDocCreated(payload.doc);
             useToastStore.getState().addToast({ type: 'info', title: 'Spec doc added', message: payload.doc?.title });

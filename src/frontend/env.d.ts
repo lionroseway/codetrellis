@@ -11,6 +11,17 @@
 interface ElectronAPI {
   /** Native open-folder dialog. */
   openProjectDialog: () => Promise<string | null>;
+  /**
+   * Phase 15 §15.D — generic file/folder picker for attachments.
+   * Returns absolute paths array, or null on cancel.
+   */
+  openFilePicker: (options?: {
+    multiSelect?: boolean;
+    allowFolders?: boolean;
+    filters?: Array<{ name: string; extensions: string[] }>;
+    defaultPath?: string;
+    title?: string;
+  }) => Promise<string[] | null>;
   /** Reveal the current day's log file in Finder / Explorer. */
   revealLogs: () => Promise<string>;
   /** Absolute path of the current day's log file. */

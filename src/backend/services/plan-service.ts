@@ -1,7 +1,34 @@
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
-import type { Plan, Task, PlanVersion, CreatePlanInput, PlanStatus } from '../../shared/types';
+import type { Plan, Task, PlanVersion, CreatePlanInput, PlanStatus, FileSpec } from '../../shared/types';
+
+/**
+ * Compute `affectedFiles` from `fileSpecs`. Phase 14 §A treats
+ * `affectedFiles` as a derived view — every fileSpec contributes its
+ * `path` (and `moveTo` for moves) so the existing drift / graph
+ * machinery keeps working. Returns a deduped array.
+ */
+function deriveAffectedFiles(fileSpecs: FileSpec[] | undefined, existing: string[] | undefined): string[] {
+  if (!fileSpecs || fileSpecs.length === 0) return existing ?? [];
+  const set = new Set<string>();
+  for (const fs of fileSpecs) {
+    if (fs.path) set.add(fs.path);
+    if (fs.moveTo) set.add(fs.moveTo);
+  }
+  // Preserve ordering: fileSpec paths first, then any extras the caller
+  // had in `affectedFiles` that aren't covered by a spec yet.
+  const ordered: string[] = Array.from(set);
+  if (existing) {
+    for (const p of existing) {
+      if (!set.has(p)) {
+        ordered.push(p);
+        set.add(p);
+      }
+    }
+  }
+  return ordered;
+}
 
 /**
  * Phase 13 §B auto-sync hook. Lazy-required to dodge the import
@@ -37,24 +64,34 @@ export function createPlan(
   for (let i = 0; i < input.tasks.length; i++) {
     const t = input.tasks[i];
     const taskUid = randomUUID();
+    const fileSpecs: FileSpec[] = t.fileSpecs ?? [];
+    const affectedFiles = deriveAffectedFiles(fileSpecs, t.affectedFiles);
     db.run(
-      `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, parent_task_uid, body, prompt, scope_path, file_specs, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [taskUid, uid, i, t.description,
-        JSON.stringify(t.affectedFiles || []), JSON.stringify(t.affectedSymbols || []),
+        JSON.stringify(affectedFiles), JSON.stringify(t.affectedSymbols || []),
         JSON.stringify(t.newConnections || []), JSON.stringify(t.removedConnections || []),
         JSON.stringify(t.dependencies || []),
         t.fileSpec ?? null, JSON.stringify(t.symbolSpecs || []),
+        t.parentTaskUid ?? null,
+        t.body ?? null, t.prompt ?? null,
+        t.scopePath ?? null, JSON.stringify(fileSpecs),
         now, now]
     );
     tasks.push({
       uid: taskUid, planUid: uid, sortOrder: i, description: t.description,
       status: 'pending', assignee: null, assigneeType: null, assigneeModel: null,
-      affectedFiles: t.affectedFiles || [], affectedSymbols: t.affectedSymbols || [],
+      affectedFiles, affectedSymbols: t.affectedSymbols || [],
       newConnections: t.newConnections || [], removedConnections: t.removedConnections || [],
       dependencies: t.dependencies || [],
       fileSpec: t.fileSpec, symbolSpecs: t.symbolSpecs || [],
       phaseUid: null,
+      parentTaskUid: t.parentTaskUid ?? null,
+      body: t.body, prompt: t.prompt,
+      scopePath: t.scopePath ?? null,
+      fileSpecs,
+      progressPercent: null, blockedReason: null,
       createdAt: now, updatedAt: now,
     });
   }
@@ -77,28 +114,55 @@ export function createPlan(
   return plan;
 }
 
+/**
+ * Phase 15 §15.D — column list for plans, including the git-context
+ * fields (`base_ref`, `target_branch`, `target_worktree`,
+ * `auto_create_branch`). Centralised so getPlan / listPlans / version
+ * snapshots all stay in lockstep.
+ */
+const PLAN_COLUMNS = `uid, title, description, status, author, author_type, project_path, created_at, updated_at,
+        base_ref, target_branch, target_worktree, auto_create_branch`;
+
+function rowToPlanCore(r: any[]): Plan {
+  return {
+    uid: r[0] as string,
+    title: r[1] as string,
+    description: r[2] as string,
+    status: r[3] as PlanStatus,
+    author: r[4] as string,
+    authorType: r[5] as string,
+    projectPath: r[6] as string,
+    createdAt: r[7] as number,
+    updatedAt: r[8] as number,
+    baseRef: (r[9] as string | null) ?? null,
+    targetBranch: (r[10] as string | null) ?? null,
+    targetWorktree: (r[11] as string | null) ?? null,
+    autoCreateBranch: !!(r[12] as number | null),
+  };
+}
+
 export function getPlan(planUid: string): (Plan & { tasks: Task[] }) | null {
   const db = getDb();
   const result = db.exec(
-    `SELECT uid, title, description, status, author, author_type, project_path, created_at, updated_at FROM plans WHERE uid = ?`,
+    `SELECT ${PLAN_COLUMNS} FROM plans WHERE uid = ?`,
     [planUid]
   );
   if (!result[0]?.values[0]) return null;
   const r = result[0].values[0];
 
   const tasks = getTasksByPlan(planUid);
+  const core = rowToPlanCore(r);
   return {
-    uid: r[0] as string, title: r[1] as string, description: r[2] as string,
-    status: r[3] as PlanStatus, author: r[4] as string, authorType: r[5] as string,
-    projectPath: r[6] as string, createdAt: r[7] as number, updatedAt: r[8] as number,
-    taskCount: tasks.length, completedTaskCount: tasks.filter((t) => t.status === 'done').length,
+    ...core,
+    taskCount: tasks.length,
+    completedTaskCount: tasks.filter((t) => t.status === 'done').length,
     tasks,
   };
 }
 
 export function listPlans(projectPath?: string, statusFilter?: string): Plan[] {
   const db = getDb();
-  let query = `SELECT uid, title, description, status, author, author_type, project_path, created_at, updated_at FROM plans WHERE status != 'archived'`;
+  let query = `SELECT ${PLAN_COLUMNS} FROM plans WHERE status != 'archived'`;
   const params: string[] = [];
 
   if (projectPath) { query += ` AND project_path = ?`; params.push(projectPath); }
@@ -109,21 +173,27 @@ export function listPlans(projectPath?: string, statusFilter?: string): Plan[] {
   if (!result[0]) return [];
 
   return result[0].values.map((r: any[]) => {
+    const core = rowToPlanCore(r);
     const counts = db.exec(
       `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
       [r[0]]
     );
     return {
-      uid: r[0], title: r[1], description: r[2], status: r[3] as PlanStatus,
-      author: r[4], authorType: r[5], projectPath: r[6],
-      createdAt: r[7], updatedAt: r[8],
+      ...core,
       taskCount: (counts[0]?.values[0]?.[0] as number) || 0,
       completedTaskCount: (counts[0]?.values[0]?.[1] as number) || 0,
     };
   });
 }
 
-export function updatePlan(planUid: string, changes: Partial<Pick<Plan, 'title' | 'description' | 'status'>>, author: string): void {
+export function updatePlan(
+  planUid: string,
+  changes: Partial<Pick<Plan,
+    'title' | 'description' | 'status'
+    | 'baseRef' | 'targetBranch' | 'targetWorktree' | 'autoCreateBranch'
+  >>,
+  author: string,
+): void {
   const db = getDb();
   const now = Date.now();
   const sets: string[] = ['updated_at = ?'];
@@ -132,6 +202,12 @@ export function updatePlan(planUid: string, changes: Partial<Pick<Plan, 'title' 
   if (changes.title !== undefined) { sets.push('title = ?'); params.push(changes.title); }
   if (changes.description !== undefined) { sets.push('description = ?'); params.push(changes.description); }
   if (changes.status !== undefined) { sets.push('status = ?'); params.push(changes.status); }
+  // Phase 15 §15.D — git context. `null` clears, value sets, missing
+  // leaves untouched. autoCreateBranch is stored as 0/1 INTEGER.
+  if (changes.baseRef !== undefined) { sets.push('base_ref = ?'); params.push(changes.baseRef); }
+  if (changes.targetBranch !== undefined) { sets.push('target_branch = ?'); params.push(changes.targetBranch); }
+  if (changes.targetWorktree !== undefined) { sets.push('target_worktree = ?'); params.push(changes.targetWorktree); }
+  if (changes.autoCreateBranch !== undefined) { sets.push('auto_create_branch = ?'); params.push(changes.autoCreateBranch ? 1 : 0); }
 
   params.push(planUid);
   db.run(`UPDATE plans SET ${sets.join(', ')} WHERE uid = ?`, params);
@@ -157,17 +233,20 @@ export function deletePlan(planUid: string): void {
   notifyMutation(planUid);
 }
 
-export function getTasksByPlan(planUid: string): Task[] {
-  const result = getDb().exec(
-    `SELECT uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model,
+/**
+ * Common SELECT-list for tasks. Centralised so getTasksByPlan,
+ * getTaskByUid, getSubtasks all read the same column order — adding a
+ * column means updating one place.
+ */
+const TASK_COLUMNS = `uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model,
             affected_files, affected_symbols, new_connections, removed_connections, dependencies,
-            file_spec, symbol_specs, phase_uid, created_at, updated_at
-     FROM tasks WHERE plan_uid = ? ORDER BY sort_order`,
-    [planUid]
-  );
-  if (!result[0]) return [];
+            file_spec, symbol_specs, phase_uid,
+            parent_task_uid, body, prompt, scope_path, file_specs,
+            progress_percent, blocked_reason,
+            created_at, updated_at`;
 
-  return result[0].values.map((r: any[]) => ({
+function rowToTask(r: any[]): Task {
+  return {
     uid: r[0], planUid: r[1], sortOrder: r[2], description: r[3],
     status: r[4] as Task['status'], assignee: r[5], assigneeType: r[6], assigneeModel: r[7],
     affectedFiles: JSON.parse(r[8] || '[]'), affectedSymbols: JSON.parse(r[9] || '[]'),
@@ -176,8 +255,37 @@ export function getTasksByPlan(planUid: string): Task[] {
     fileSpec: (r[13] as string | null) ?? undefined,
     symbolSpecs: JSON.parse(r[14] || '[]'),
     phaseUid: (r[15] as string | null) ?? null,
-    createdAt: r[16], updatedAt: r[17],
-  }));
+    parentTaskUid: (r[16] as string | null) ?? null,
+    body: (r[17] as string | null) ?? undefined,
+    prompt: (r[18] as string | null) ?? undefined,
+    scopePath: (r[19] as string | null) ?? null,
+    fileSpecs: JSON.parse(r[20] || '[]'),
+    progressPercent: (r[21] as number | null) ?? null,
+    blockedReason: (r[22] as string | null) ?? null,
+    createdAt: r[23], updatedAt: r[24],
+  };
+}
+
+export function getTasksByPlan(planUid: string): Task[] {
+  const result = getDb().exec(
+    `SELECT ${TASK_COLUMNS} FROM tasks WHERE plan_uid = ? ORDER BY sort_order`,
+    [planUid]
+  );
+  if (!result[0]) return [];
+  return result[0].values.map(rowToTask);
+}
+
+/**
+ * Phase 14 §A — fetch direct children of a task (subtasks). Returns
+ * an empty array when none exist. Ordered by `sort_order`.
+ */
+export function getSubtasks(parentTaskUid: string): Task[] {
+  const result = getDb().exec(
+    `SELECT ${TASK_COLUMNS} FROM tasks WHERE parent_task_uid = ? ORDER BY sort_order`,
+    [parentTaskUid],
+  );
+  if (!result[0]) return [];
+  return result[0].values.map(rowToTask);
 }
 
 export function updateTask(
@@ -186,6 +294,8 @@ export function updateTask(
     'status' | 'assignee' | 'assigneeType' | 'assigneeModel' | 'description'
     | 'affectedFiles' | 'affectedSymbols' | 'newConnections' | 'removedConnections'
     | 'dependencies' | 'fileSpec' | 'symbolSpecs' | 'phaseUid'
+    | 'parentTaskUid' | 'body' | 'prompt' | 'scopePath' | 'fileSpecs'
+    | 'progressPercent' | 'blockedReason'
   >>,
 ): void {
   const now = Date.now();
@@ -197,7 +307,6 @@ export function updateTask(
   if (updates.assigneeType !== undefined) { sets.push('assignee_type = ?'); params.push(updates.assigneeType); }
   if (updates.assigneeModel !== undefined) { sets.push('assignee_model = ?'); params.push(updates.assigneeModel); }
   if (updates.description !== undefined) { sets.push('description = ?'); params.push(updates.description); }
-  if (updates.affectedFiles !== undefined) { sets.push('affected_files = ?'); params.push(JSON.stringify(updates.affectedFiles)); }
   if (updates.affectedSymbols !== undefined) { sets.push('affected_symbols = ?'); params.push(JSON.stringify(updates.affectedSymbols)); }
   if (updates.newConnections !== undefined) { sets.push('new_connections = ?'); params.push(JSON.stringify(updates.newConnections)); }
   if (updates.removedConnections !== undefined) { sets.push('removed_connections = ?'); params.push(JSON.stringify(updates.removedConnections)); }
@@ -205,6 +314,24 @@ export function updateTask(
   if (updates.fileSpec !== undefined) { sets.push('file_spec = ?'); params.push(updates.fileSpec); }
   if (updates.symbolSpecs !== undefined) { sets.push('symbol_specs = ?'); params.push(JSON.stringify(updates.symbolSpecs)); }
   if (updates.phaseUid !== undefined) { sets.push('phase_uid = ?'); params.push(updates.phaseUid); }
+  if (updates.parentTaskUid !== undefined) { sets.push('parent_task_uid = ?'); params.push(updates.parentTaskUid); }
+  if (updates.body !== undefined) { sets.push('body = ?'); params.push(updates.body); }
+  if (updates.prompt !== undefined) { sets.push('prompt = ?'); params.push(updates.prompt); }
+  if (updates.scopePath !== undefined) { sets.push('scope_path = ?'); params.push(updates.scopePath); }
+  if (updates.progressPercent !== undefined) { sets.push('progress_percent = ?'); params.push(updates.progressPercent); }
+  if (updates.blockedReason !== undefined) { sets.push('blocked_reason = ?'); params.push(updates.blockedReason); }
+
+  // `affectedFiles` is now a derived view of `fileSpecs`. If the caller
+  // supplies fileSpecs we recompute affected_files from them (merging
+  // with anything also passed via affectedFiles directly). If only
+  // affectedFiles is supplied, store it as-is for back-compat.
+  if (updates.fileSpecs !== undefined) {
+    const merged = deriveAffectedFiles(updates.fileSpecs, updates.affectedFiles);
+    sets.push('file_specs = ?'); params.push(JSON.stringify(updates.fileSpecs));
+    sets.push('affected_files = ?'); params.push(JSON.stringify(merged));
+  } else if (updates.affectedFiles !== undefined) {
+    sets.push('affected_files = ?'); params.push(JSON.stringify(updates.affectedFiles));
+  }
 
   params.push(taskUid);
   getDb().run(`UPDATE tasks SET ${sets.join(', ')} WHERE uid = ?`, params);
@@ -267,36 +394,31 @@ export function appendTaskCodeReference(taskUid: string, ref: {
 
 export function getTaskByUid(taskUid: string): Task | null {
   const result = getDb().exec(
-    `SELECT uid, plan_uid, sort_order, description, status, assignee, assignee_type, assignee_model,
-            affected_files, affected_symbols, new_connections, removed_connections, dependencies,
-            file_spec, symbol_specs, phase_uid, created_at, updated_at
-     FROM tasks WHERE uid = ?`,
+    `SELECT ${TASK_COLUMNS} FROM tasks WHERE uid = ?`,
     [taskUid],
   );
   if (!result[0]?.values[0]) return null;
-  const r = result[0].values[0] as any[];
-  return {
-    uid: r[0], planUid: r[1], sortOrder: r[2], description: r[3],
-    status: r[4] as Task['status'], assignee: r[5], assigneeType: r[6], assigneeModel: r[7],
-    affectedFiles: JSON.parse(r[8] || '[]'), affectedSymbols: JSON.parse(r[9] || '[]'),
-    newConnections: JSON.parse(r[10] || '[]'), removedConnections: JSON.parse(r[11] || '[]'),
-    dependencies: JSON.parse(r[12] || '[]'),
-    fileSpec: (r[13] as string | null) ?? undefined,
-    symbolSpecs: JSON.parse(r[14] || '[]'),
-    phaseUid: (r[15] as string | null) ?? null,
-    createdAt: r[16], updatedAt: r[17],
-  };
+  return rowToTask(result[0].values[0] as any[]);
 }
 
 /**
  * Append a task to a plan and optionally seed it with a code reference. The
  * task gets appended to the end of the existing task list.
+ *
+ * Accepts the Phase 14 §A task-as-context fields too — pass `body`,
+ * `prompt`, `scopePath`, `fileSpecs`, or `parentTaskUid` to seed the
+ * full shape. `affectedFiles` is derived from `fileSpecs` (deduped).
  */
 export function appendTaskToPlan(planUid: string, input: {
   description: string;
   affectedFiles?: string[];
   fileSpec?: string;
   affectedSymbols?: string[];
+  body?: string;
+  prompt?: string;
+  scopePath?: string | null;
+  fileSpecs?: FileSpec[];
+  parentTaskUid?: string | null;
 }): Task | null {
   const db = getDb();
   const planExists = db.exec(`SELECT uid FROM plans WHERE uid = ?`, [planUid]);
@@ -307,13 +429,19 @@ export function appendTaskToPlan(planUid: string, input: {
   const taskUid = randomUUID();
   const now = Date.now();
 
+  const fileSpecs = input.fileSpecs ?? [];
+  const affectedFiles = deriveAffectedFiles(fileSpecs, input.affectedFiles);
+
   db.run(
-    `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?, '[]', '[]', '[]', ?, '[]', ?, ?)`,
+    `INSERT INTO tasks (uid, plan_uid, sort_order, description, status, affected_files, affected_symbols, new_connections, removed_connections, dependencies, file_spec, symbol_specs, parent_task_uid, body, prompt, scope_path, file_specs, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, '[]', '[]', '[]', ?, '[]', ?, ?, ?, ?, ?, ?, ?)`,
     [taskUid, planUid, nextOrder, input.description,
-      JSON.stringify(input.affectedFiles || []),
+      JSON.stringify(affectedFiles),
       JSON.stringify(input.affectedSymbols || []),
       input.fileSpec ?? null,
+      input.parentTaskUid ?? null,
+      input.body ?? null, input.prompt ?? null,
+      input.scopePath ?? null, JSON.stringify(fileSpecs),
       now, now],
   );
 

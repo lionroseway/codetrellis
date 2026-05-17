@@ -13,6 +13,17 @@ export interface SelectedNodeMeta {
   parentFilePath?: string;
 }
 
+/**
+ * Phase 14 §B — top-level layout mode. `'graph'` is the historical
+ * canvas + bottom plan strip layout; `'plan'` is the full-canvas
+ * three-region plan workspace (Spec rail | Tasks | Activity rail).
+ *
+ * The mode is decoupled from `activePlan` so the user can switch back
+ * to the graph without losing the active plan, and we can still pop
+ * the workspace open when a plan is selected from the graph.
+ */
+export type WorkspaceMode = 'graph' | 'plan';
+
 interface UiState {
   sidebarVisible: boolean;
   inspectorVisible: boolean;
@@ -23,6 +34,11 @@ interface UiState {
   selectedNodeId: string | null;
   selectedNodeKind: SelectedNodeKind;
   selectedNodeMeta: SelectedNodeMeta;
+
+  /** Phase 14 §B — graph (canvas + bottom strip) vs plan (full-canvas workspace). */
+  workspaceMode: WorkspaceMode;
+  setWorkspaceMode: (mode: WorkspaceMode) => void;
+  toggleWorkspaceMode: () => void;
 
   /** When true, the bottom plan panel grows to a much taller size, overriding Allotment's default sizing. */
   planPanelExpanded: boolean;
@@ -74,6 +90,10 @@ export const useUiStore = create<UiState>((set) => ({
   driftComparePlanUid: null,
   learnTrellisOpen: false,
   setLearnTrellisOpen: (open) => set({ learnTrellisOpen: open }),
+
+  workspaceMode: 'graph',
+  setWorkspaceMode: (mode) => set({ workspaceMode: mode }),
+  toggleWorkspaceMode: () => set((s) => ({ workspaceMode: s.workspaceMode === 'graph' ? 'plan' : 'graph' })),
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleInspector: () => set((s) => ({ inspectorVisible: !s.inspectorVisible })),
