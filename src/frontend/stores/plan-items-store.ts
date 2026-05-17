@@ -402,7 +402,8 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       // Apply only known fields from `changes` so we don't smuggle in junk.
       const safeChanges: Partial<PlanItem> = {};
       const keys = ['title', 'body', 'template', 'status', 'assignee', 'progressPercent', 'blockedReason',
-        'scopePath', 'fileSpecs', 'symbolSpecs', 'newConnections', 'removedConnections', 'parentUid', 'sortOrder'] as const;
+        'scopePath', 'fileSpecs', 'symbolSpecs', 'newConnections', 'removedConnections', 'parentUid', 'sortOrder',
+        'skills', 'skillsMode', 'claimPolicy', 'claimPolicyMode', 'executionConfig', 'executionConfigMode'] as const;
       for (const k of keys) {
         if (k in changes) (safeChanges as Record<string, unknown>)[k] = changes[k];
       }

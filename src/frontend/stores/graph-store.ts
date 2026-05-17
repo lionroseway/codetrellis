@@ -56,6 +56,11 @@ interface GraphState {
   toggleProjection: () => void;
   setProjectionData: (data: ProjectionData | null) => void;
   clearGraph: () => void;
+
+  /** Phase 17.C — multi-select on graph for batch planning. */
+  selectedNodeIds: string[];
+  setSelectedNodeIds: (ids: string[]) => void;
+  clearSelection: () => void;
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -140,5 +145,11 @@ export const useGraphStore = create<GraphState>((set) => ({
     currentSnapshot: null,
     baselineCommitHash: null,
     baselineShortCommitHash: null,
+    selectedNodeIds: [],
   }),
+
+  // Phase 17.C — multi-select
+  selectedNodeIds: [],
+  setSelectedNodeIds: (ids) => set({ selectedNodeIds: ids }),
+  clearSelection: () => set({ selectedNodeIds: [] }),
 }));

@@ -5,6 +5,7 @@ import {
   Controls,
   MiniMap,
   Panel,
+  SelectionMode,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -13,6 +14,7 @@ import {
   type Node,
   type Edge,
   type NodeMouseHandler,
+  type OnSelectionChangeFunc,
 } from '@xyflow/react';
 import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
@@ -30,6 +32,7 @@ import { DirectoryNode } from '../graph/nodes/DirectoryNode';
 import { FileNode } from '../graph/nodes/FileNode';
 import { SymbolNode } from '../graph/nodes/SymbolNode';
 import { ImportEdge } from '../graph/edges/ImportEdge';
+import { SelectionActionBar } from '../graph/SelectionActionBar';
 import { WelcomeScreen } from '../WelcomeScreen';
 
 const nodeTypes = {
@@ -84,7 +87,7 @@ export function MainCanvas() {
 
   // Phase 16.E — right-click context menu for graph nodes
   const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; nodePath: string; nodeLabel: string;
+    x: number; y: number; nodePath: string; nodeLabel: string; nodeType?: string;
   } | null>(null);
 
   // Dependency edges from backend
@@ -659,6 +662,15 @@ export function MainCanvas() {
     [setSelectedNode],
   );
 
+  // Phase 17.C — multi-select sync from ReactFlow → graph store
+  const setSelectedNodeIds = useGraphStore((s) => s.setSelectedNodeIds);
+  const handleSelectionChange: OnSelectionChangeFunc = useCallback(
+    ({ nodes: selectedNodes }) => {
+      setSelectedNodeIds(selectedNodes.map((n) => n.id));
+    },
+    [setSelectedNodeIds],
+  );
+
   const onNodeContextMenu: NodeMouseHandler = useCallback(
     (event, node) => {
       event.preventDefault();
@@ -667,11 +679,13 @@ export function MainCanvas() {
         ? data.filePath
         : typeof node.id === 'string' ? node.id : '';
       const nodeLabel = typeof data.label === 'string' ? data.label : nodePath.split('/').pop() || 'node';
+      const nodeType = typeof data.nodeType === 'string' ? data.nodeType : undefined;
       setContextMenu({
         x: (event as unknown as MouseEvent).clientX,
         y: (event as unknown as MouseEvent).clientY,
         nodePath,
         nodeLabel,
+        nodeType,
       });
     },
     [],
@@ -725,11 +739,16 @@ export function MainCanvas() {
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
+        onSelectionChange={handleSelectionChange}
         onPaneClick={() => setContextMenu(null)}
         onMoveStart={() => setContextMenu(null)}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable
+        selectionOnDrag={false}
+        selectionMode={SelectionMode.Partial}
+        selectionKeyCode="Shift"
+        multiSelectionKeyCode="Shift"
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
@@ -955,18 +974,22 @@ export function MainCanvas() {
           y={contextMenu.y}
           nodePath={contextMenu.nodePath}
           nodeLabel={contextMenu.nodeLabel}
+          nodeType={contextMenu.nodeType}
           onClose={() => setContextMenu(null)}
         />
       )}
+
+      {/* Phase 17.C — Multi-select action bar */}
+      <SelectionActionBar />
     </div>
   );
 }
 
 /* ─── Phase 16.E — Right-click context menu for graph nodes ───────────── */
 function NodeContextMenu({
-  x, y, nodePath, nodeLabel, onClose,
+  x, y, nodePath, nodeLabel, nodeType, onClose,
 }: {
-  x: number; y: number; nodePath: string; nodeLabel: string; onClose: () => void;
+  x: number; y: number; nodePath: string; nodeLabel: string; nodeType?: string; onClose: () => void;
 }) {
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
   const setActivePlan = usePlanStore((s) => s.setActivePlan);
@@ -1041,6 +1064,45 @@ function NodeContextMenu({
     }
   };
 
+  // Phase 17.C — "Scope plan to this" for package/directory nodes
+  const handleScopePlan = async () => {
+    onClose();
+    let planUid = activePlanUid;
+    if (!planUid) {
+      if (!root) {
+        addToast({ type: 'error', title: 'No project open', message: 'Open a project first.', duration: 3000 });
+        return;
+      }
+      try {
+        const res = await fetch('/api/plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: `Plan: ${nodeLabel}`, description: '', projectPath: root, tasks: [] }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const plan = await res.json();
+        planUid = plan.uid;
+        await setActivePlan(plan.uid);
+      } catch (err) {
+        addToast({ type: 'error', title: 'Could not create plan', message: String(err), duration: 3000 });
+        return;
+      }
+    }
+    const item = await createItem({
+      planUid: planUid!,
+      kind: 'action',
+      title: `Scope: ${nodeLabel}`,
+      scopePath: nodePath,
+    });
+    if (item) {
+      usePlanItemsStore.getState().selectItem(item.uid);
+      setWorkspaceMode('plan');
+      // Focus graph view on this scope
+      useGraphStore.getState().setScopePath(nodePath);
+      addToast({ type: 'success', title: 'Scoped task created', message: `Scoped to ${nodeLabel}`, duration: 2500 });
+    }
+  };
+
   // Escape key dismisses the menu
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
@@ -1090,6 +1152,15 @@ function NodeContextMenu({
         <Zap size={13} className="text-accent" />
         {activePlanUid ? 'New task for this' : 'Plan a change'}
       </button>
+      {(nodeType === 'package' || nodeType === 'directory') && (
+        <button
+          onClick={handleScopePlan}
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-accent/10 text-foreground-muted hover:text-foreground transition-colors"
+        >
+          <Filter size={13} className="text-amber-400" />
+          Scope plan to this
+        </button>
+      )}
     </div>
   );
 }

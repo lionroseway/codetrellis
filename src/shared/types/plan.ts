@@ -254,6 +254,62 @@ export interface AgentSessionInfo {
   connectedAt: number;
   lastSeen: number;
   status: 'active' | 'inactive';
+  /** Phase 17.N — declared agent capabilities for skill matching. */
+  capabilities?: AgentCapability[];
+}
+
+// =============================================================================
+// Phase 17.N-Q — Skill bindings, Claim restrictions, Execution config
+// =============================================================================
+
+/**
+ * 17.N — A named capability an agent declares on registration.
+ * Used for matching against item skill requirements.
+ */
+export interface AgentCapability {
+  name: string;
+  source: 'mcp' | 'skill' | 'lang' | 'plugin';
+}
+
+/**
+ * 17.N — A required skill on a plan item. When `required` is true,
+ * only agents with a matching capability can claim the item.
+ */
+export interface Skill {
+  name: string;
+  source: 'mcp' | 'skill' | 'lang' | 'plugin';
+  required: boolean;
+}
+
+/** Override mode for cascadeable properties (17.P). */
+export type CascadeMode = 'inherit' | 'replace' | 'none';
+
+/**
+ * 17.O — Controls who can claim/work on a plan item.
+ */
+export interface ClaimPolicy {
+  mode: 'any' | 'agent-only' | 'human-only' | 'assigned' | 'match-skills';
+  /** If mode='assigned', the specific agent session or human identity. */
+  assignTo?: string | null;
+  assignToType?: 'agent' | 'human';
+  /** Restrict to specific agent types (e.g. 'claude-code', 'cursor'). */
+  allowedAgentTypes?: string[];
+  /** Restrict to specific models (e.g. 'claude-opus-4'). */
+  allowedModels?: string[];
+}
+
+/**
+ * 17.Q — Per-item execution configuration. Cascades down the tree
+ * so parents can set defaults for all children.
+ */
+export interface ExecutionConfig {
+  model?: string | null;
+  reasoningEffort?: 'low' | 'medium' | 'high' | null;
+  systemPrompt?: string | null;
+  allowedTools?: string[] | null;
+  deniedTools?: string[] | null;
+  maxTokens?: number | null;
+  temperature?: number | null;
 }
 
 /**
@@ -505,6 +561,18 @@ export interface PlanItem {
   /** Other Action uids that must complete before this one. */
   dependencies?: string[];
 
+  // --- Phase 17.N-Q — Routing & execution rules (cascadeable) ---
+  /** 17.N — Required skills. Empty array or undefined = no requirements. */
+  skills?: Skill[];
+  /** 17.P — How skills merge with parent. */
+  skillsMode?: CascadeMode;
+  /** 17.O — Claim policy. Null/undefined = inherit from parent. */
+  claimPolicy?: ClaimPolicy | null;
+  claimPolicyMode?: 'inherit' | 'replace';
+  /** 17.Q — Per-item execution settings. Null = inherit from parent. */
+  executionConfig?: ExecutionConfig | null;
+  executionConfigMode?: 'inherit' | 'replace';
+
   // Common metadata
   author: string;
   authorType: string;
@@ -597,6 +665,13 @@ export interface CreatePlanItemInput {
   newConnections?: PlanItemEdge[];
   removedConnections?: PlanItemEdge[];
   dependencies?: string[];
+  // Phase 17.N-Q — routing / execution
+  skills?: Skill[];
+  skillsMode?: CascadeMode;
+  claimPolicy?: ClaimPolicy | null;
+  claimPolicyMode?: 'inherit' | 'replace';
+  executionConfig?: ExecutionConfig | null;
+  executionConfigMode?: 'inherit' | 'replace';
   // Caller identity
   author: string;
   authorType: string;
@@ -629,6 +704,13 @@ export interface UpdatePlanItemInput {
   newConnections?: PlanItemEdge[];
   removedConnections?: PlanItemEdge[];
   dependencies?: string[];
+  // Phase 17.N-Q — routing / execution
+  skills?: Skill[];
+  skillsMode?: CascadeMode;
+  claimPolicy?: ClaimPolicy | null;
+  claimPolicyMode?: 'inherit' | 'replace';
+  executionConfig?: ExecutionConfig | null;
+  executionConfigMode?: 'inherit' | 'replace';
   parentUid?: string | null;   // re-parent — emits plan_events
   sortOrder?: number;          // reorder — emits plan_events
   /** Optional human-readable why-summary. Lands in plan_item_versions.changeSummary. */

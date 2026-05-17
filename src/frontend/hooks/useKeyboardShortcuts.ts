@@ -52,6 +52,8 @@ export function useKeyboardShortcuts() {
 
       if (e.key === 'Escape') {
         useUiStore.getState().setSelectedNode(null);
+        // Phase 17.C — clear multi-select on graph
+        useGraphStore.getState().clearSelection();
       }
     }
 

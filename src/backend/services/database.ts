@@ -403,6 +403,13 @@ export async function initDatabase(): Promise<void> {
       new_connections  TEXT NOT NULL DEFAULT '[]',
       removed_conns    TEXT NOT NULL DEFAULT '[]',
       dependencies     TEXT NOT NULL DEFAULT '[]',
+      -- Phase 17.N-Q: routing & execution rules
+      skills             TEXT NOT NULL DEFAULT '[]',
+      skills_mode        TEXT DEFAULT 'inherit',
+      claim_policy       TEXT DEFAULT NULL,
+      claim_policy_mode  TEXT DEFAULT 'inherit',
+      execution_config   TEXT DEFAULT NULL,
+      execution_config_mode TEXT DEFAULT 'inherit',
       author           TEXT NOT NULL,
       author_type      TEXT NOT NULL DEFAULT 'human',
       created_at       INTEGER NOT NULL,
@@ -446,6 +453,17 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_plan_events_item ON plan_events(item_uid, created_at);
     CREATE INDEX IF NOT EXISTS idx_plan_events_type ON plan_events(event_type);
   `);
+
+  // Phase 17.N-Q — add routing/execution columns to existing plan_items tables
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN skills_mode TEXT DEFAULT 'inherit'`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN claim_policy TEXT DEFAULT NULL`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN claim_policy_mode TEXT DEFAULT 'inherit'`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN execution_config TEXT DEFAULT NULL`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN execution_config_mode TEXT DEFAULT 'inherit'`); } catch { /* exists */ }
+
+  // Phase 17.N — agent capabilities for skill matching
+  try { db.run(`ALTER TABLE agent_sessions ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
 
   console.log('[DB] SQLite initialized');
 }

@@ -44,6 +44,10 @@ import type {
   TaskStatus,
   PlanItemVersion,
   PlanEvent,
+  Skill,
+  ClaimPolicy,
+  ExecutionConfig,
+  CascadeMode,
 } from '../../shared/types';
 
 // =============================================================================
@@ -59,6 +63,7 @@ const ITEM_COLUMNS = `uid, plan_uid, parent_uid, sort_order, kind,
   status, assignee, assignee_type, assignee_model,
   progress_percent, blocked_reason,
   scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
+  skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
   author, author_type, created_at, updated_at, migrated_from`;
 
 function rowToItem(r: any[]): PlanItem {
@@ -83,11 +88,18 @@ function rowToItem(r: any[]): PlanItem {
     newConnections: parseJsonArray<PlanItemEdge>(r[17] as string | null),
     removedConnections: parseJsonArray<PlanItemEdge>(r[18] as string | null),
     dependencies: parseJsonArray<string>(r[19] as string | null),
-    author: r[20] as string,
-    authorType: r[21] as string,
-    createdAt: r[22] as number,
-    updatedAt: r[23] as number,
-    migratedFrom: (r[24] as string | null) ?? null,
+    // Phase 17.N-Q
+    skills: parseJsonArray<Skill>(r[20] as string | null),
+    skillsMode: (r[21] as CascadeMode | null) ?? 'inherit',
+    claimPolicy: parseJsonOrNull<ClaimPolicy>(r[22] as string | null),
+    claimPolicyMode: (r[23] as 'inherit' | 'replace' | null) ?? 'inherit',
+    executionConfig: parseJsonOrNull<ExecutionConfig>(r[24] as string | null),
+    executionConfigMode: (r[25] as 'inherit' | 'replace' | null) ?? 'inherit',
+    author: r[26] as string,
+    authorType: r[27] as string,
+    createdAt: r[28] as number,
+    updatedAt: r[29] as number,
+    migratedFrom: (r[30] as string | null) ?? null,
   };
 }
 
@@ -98,6 +110,15 @@ function parseJsonArray<T>(s: string | null): T[] {
     return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];
+  }
+}
+
+function parseJsonOrNull<T>(s: string | null): T | null {
+  if (!s) return null;
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    return null;
   }
 }
 
@@ -124,6 +145,13 @@ function metaSnapshotOf(item: PlanItem): Record<string, unknown> {
     dependencies: item.dependencies,
     parentUid: item.parentUid,
     sortOrder: item.sortOrder,
+    // Phase 17.N-Q
+    skills: item.skills,
+    skillsMode: item.skillsMode,
+    claimPolicy: item.claimPolicy,
+    claimPolicyMode: item.claimPolicyMode,
+    executionConfig: item.executionConfig,
+    executionConfigMode: item.executionConfigMode,
   };
 }
 
@@ -260,11 +288,13 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
         status, assignee, assignee_type, assignee_model,
         progress_percent, blocked_reason,
         scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
+        skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
         author, author_type, created_at, updated_at, migrated_from)
      VALUES (?, ?, ?, ?, ?,
              ?, ?, ?,
              ?, ?, ?, ?,
              ?, ?,
+             ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?)`,
     [
@@ -284,6 +314,13 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
       JSON.stringify(isAction ? (input.newConnections ?? []) : []),
       JSON.stringify(isAction ? (input.removedConnections ?? []) : []),
       JSON.stringify(isAction ? (input.dependencies ?? []) : []),
+      // Phase 17.N-Q
+      JSON.stringify(input.skills ?? []),
+      input.skillsMode ?? 'inherit',
+      input.claimPolicy ? JSON.stringify(input.claimPolicy) : null,
+      input.claimPolicyMode ?? 'inherit',
+      input.executionConfig ? JSON.stringify(input.executionConfig) : null,
+      input.executionConfigMode ?? 'inherit',
       input.author, input.authorType, createdAt, updatedAt,
       input.migratedFrom ?? null,
     ],
@@ -423,6 +460,32 @@ export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem 
       sets.push('dependencies = ?'); params.push(JSON.stringify(updates.dependencies));
       contentChanged = true;
     }
+  }
+
+  // Phase 17.N-Q — routing / execution fields (apply to both kinds)
+  if (updates.skills !== undefined) {
+    sets.push('skills = ?'); params.push(JSON.stringify(updates.skills));
+    contentChanged = true;
+  }
+  if (updates.skillsMode !== undefined && updates.skillsMode !== before.skillsMode) {
+    sets.push('skills_mode = ?'); params.push(updates.skillsMode);
+    contentChanged = true;
+  }
+  if (updates.claimPolicy !== undefined) {
+    sets.push('claim_policy = ?'); params.push(updates.claimPolicy ? JSON.stringify(updates.claimPolicy) : null);
+    contentChanged = true;
+  }
+  if (updates.claimPolicyMode !== undefined && updates.claimPolicyMode !== before.claimPolicyMode) {
+    sets.push('claim_policy_mode = ?'); params.push(updates.claimPolicyMode);
+    contentChanged = true;
+  }
+  if (updates.executionConfig !== undefined) {
+    sets.push('execution_config = ?'); params.push(updates.executionConfig ? JSON.stringify(updates.executionConfig) : null);
+    contentChanged = true;
+  }
+  if (updates.executionConfigMode !== undefined && updates.executionConfigMode !== before.executionConfigMode) {
+    sets.push('execution_config_mode = ?'); params.push(updates.executionConfigMode);
+    contentChanged = true;
   }
 
   // Structural moves — re-parent and/or reorder. Each emits its own
@@ -751,16 +814,78 @@ export interface ClaimItemResult {
 }
 
 /**
+ * Phase 17.P — Resolve the effective claim policy by walking up the tree.
+ * Returns the nearest non-null policy (the item's own or inherited from ancestors).
+ * Defaults to `{ mode: 'any' }` if no policy is set anywhere in the chain.
+ */
+export function resolveClaimPolicy(item: PlanItem): ClaimPolicy {
+  // If item has its own policy set (not inherit mode), use it
+  if (item.claimPolicyMode === 'replace' && item.claimPolicy) {
+    return item.claimPolicy;
+  }
+  if (item.claimPolicy && item.claimPolicyMode !== 'inherit') {
+    return item.claimPolicy;
+  }
+
+  // Walk up parents
+  let cur = item.parentUid ? getItem(item.parentUid) : null;
+  while (cur) {
+    if (cur.claimPolicy) {
+      if (cur.claimPolicyMode === 'replace' || cur.claimPolicyMode !== 'inherit') {
+        return cur.claimPolicy;
+      }
+      // Has a policy but mode is inherit — use it (it's the nearest one)
+      return cur.claimPolicy;
+    }
+    cur = cur.parentUid ? getItem(cur.parentUid) : null;
+  }
+  return { mode: 'any' };
+}
+
+/**
+ * Phase 17.P — Resolve effective skills by walking up the tree and merging.
+ */
+export function resolveSkills(item: PlanItem): Skill[] {
+  const chain: PlanItem[] = [];
+  let cur: PlanItem | null = item;
+  while (cur) {
+    chain.unshift(cur);
+    cur = cur.parentUid ? getItem(cur.parentUid) : null;
+  }
+
+  let resolved: Skill[] = [];
+  for (const ancestor of chain) {
+    const skills = ancestor.skills ?? [];
+    if (skills.length === 0 && ancestor.skillsMode === 'inherit') continue;
+    if (ancestor.skillsMode === 'replace') {
+      resolved = [...skills];
+    } else if (ancestor.skillsMode === 'none') {
+      resolved = [];
+    } else {
+      // inherit — merge (later additions override same-name)
+      const byName = new Map(resolved.map((s) => [s.name, s]));
+      for (const s of skills) byName.set(s.name, s);
+      resolved = Array.from(byName.values());
+    }
+  }
+  return resolved;
+}
+
+/**
  * Atomic claim — only succeeds if the Action is unclaimed (no
  * assignee) AND status is `pending`. Returns conflicts list when
  * other in-progress Actions in the same plan touch overlapping
  * files. Mirrors the today's `plan-service.claimTask` semantics.
+ *
+ * Phase 17.O: Enforces claim policy — rejects claims that violate
+ * human-only, assigned, agent-type, or skill requirements.
  */
 export function claimItem(
   uid: string,
   agentId: string,
   agentType: string,
   model?: string,
+  capabilities?: Array<{ name: string; source: string }>,
 ): ClaimItemResult {
   const item = getItem(uid);
   if (!item) return { ok: false, reason: 'Item not found' };
@@ -769,6 +894,53 @@ export function claimItem(
   }
   if (item.assignee || item.status !== 'pending') {
     return { ok: false, reason: 'Action already claimed or not pending.' };
+  }
+
+  // Phase 17.O — Claim policy enforcement
+  const policy = resolveClaimPolicy(item);
+  if (policy.mode === 'human-only') {
+    return { ok: false, reason: 'This task is restricted to human-only completion.' };
+  }
+  if (policy.mode === 'assigned') {
+    if (policy.assignToType === 'human') {
+      return { ok: false, reason: 'This task is assigned to a human.' };
+    }
+    if (policy.assignTo && policy.assignTo !== agentId) {
+      return { ok: false, reason: `This task is assigned to a specific agent (${policy.assignTo}).` };
+    }
+  }
+  if (policy.allowedAgentTypes && policy.allowedAgentTypes.length > 0) {
+    if (!policy.allowedAgentTypes.includes(agentType)) {
+      return { ok: false, reason: `This task is restricted to agent types: ${policy.allowedAgentTypes.join(', ')}. You are: ${agentType}.` };
+    }
+  }
+  if (policy.allowedModels && policy.allowedModels.length > 0 && model) {
+    if (!policy.allowedModels.includes(model)) {
+      return { ok: false, reason: `This task is restricted to models: ${policy.allowedModels.join(', ')}. You are using: ${model}.` };
+    }
+  }
+
+  // Phase 17.N — Skill matching
+  if (policy.mode === 'match-skills' || policy.mode === 'any') {
+    const requiredSkills = resolveSkills(item).filter((s) => s.required);
+    if (requiredSkills.length > 0 && capabilities) {
+      const capNames = new Set(capabilities.map((c) => c.name));
+      const missing = requiredSkills.filter((s) => !capNames.has(s.name));
+      if (missing.length > 0) {
+        return {
+          ok: false,
+          reason: `This task requires skills you don't have: ${missing.map((s) => `${s.name} (${s.source})`).join(', ')}.`,
+        };
+      }
+    } else if (requiredSkills.length > 0 && !capabilities) {
+      // Agent didn't declare capabilities — can't claim skill-gated items
+      if (policy.mode === 'match-skills') {
+        return {
+          ok: false,
+          reason: `This task requires skills (${requiredSkills.map((s) => s.name).join(', ')}) but you haven't declared capabilities. Use register_session with capabilities.`,
+        };
+      }
+    }
   }
 
   // Check file-overlap conflicts against other in-progress Actions

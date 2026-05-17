@@ -1066,24 +1066,28 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'register_session',
     {
-      description: 'Register this agent connection with CodeTrellis. Identifies who you are and what model you use. Upgrades the auto-registered session for this transport so the human can tell agents apart in the Connected Agents list.',
+      description: 'Register this agent connection with CodeTrellis. Identifies who you are, what model you use, and what capabilities you have. Capabilities are used for skill-matching when claiming tasks — declare your MCP servers, language proficiencies, and skills so CodeTrellis can route the right tasks to you.',
       inputSchema: {
         agent_type: z.string().describe('Agent type, e.g. claude-code, cursor, aider'),
         model: z.string().optional().describe('Model name, e.g. claude-opus-4, gpt-4o'),
+        capabilities: z.array(z.object({
+          name: z.string().describe('Capability name, e.g. "playwright", "typescript", "@refactor"'),
+          source: z.enum(['mcp', 'skill', 'lang', 'plugin']).describe('Where this capability comes from'),
+        })).optional().describe('Capabilities this agent has — MCP servers, skills, languages, plugins'),
       },
     },
-    async ({ agent_type, model }, extra: any) => {
+    async ({ agent_type, model, capabilities }, extra: any) => {
       // Prefer the caller's actual transport sessionId so multiple
       // simultaneous agents stay attributed correctly. Fall back to a
       // synthetic id only if the transport context is missing.
       const sessionId = extra?.sessionInfo?.sessionId
         ?? extra?.requestInfo?.headers?.['mcp-session-id']
         ?? `mcp-${Date.now()}`;
-      sessionService.registerSession(sessionId, agent_type, model);
-      broadcast('session-registered', { sessionId, agentType: agent_type, model });
+      sessionService.registerSession(sessionId, agent_type, model, capabilities);
+      broadcast('session-registered', { sessionId, agentType: agent_type, model, capabilities });
       broadcast('mcp-session-changed', { reason: 'register', sessionId });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Session registered: ${sessionId} (${agent_type}${model ? ` / ${model}` : ''})` }] };
+      return { content: [{ type: 'text' as const, text: `Session registered: ${sessionId} (${agent_type}${model ? ` / ${model}` : ''}${capabilities?.length ? ` with ${capabilities.length} capabilities` : ''})` }] };
     }
   );
 
@@ -1740,7 +1744,8 @@ function setupMcpServerInstance(): McpServer {
       description:
         'Atomically claim an Action (only succeeds if status=pending and unclaimed). Errors politely on Objects. ' +
         'Returns full item context (item + parent + children + attachments + comments) in the success payload, ' +
-        'plus a `conflicts` list when other in-progress Actions touch overlapping files. Replaces claim_task for V2.',
+        'plus a `conflicts` list when other in-progress Actions touch overlapping files. Replaces claim_task for V2. ' +
+        'Respects claim policies (human-only, assigned, agent-type restrictions) and skill requirements.',
       inputSchema: {
         uid: z.string(),
         agent_type: z.string().optional(),
@@ -1749,11 +1754,17 @@ function setupMcpServerInstance(): McpServer {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(extra);
+      const sessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      // Fetch agent capabilities from the session for skill matching
+      const capabilities = sessionId ? sessionService.getSessionCapabilities(sessionId) : undefined;
       const result = planItemService.claimItem(
         args.uid,
         args.agent_type ?? id.author,
         args.agent_type ?? 'mcp',
         args.model,
+        capabilities,
       );
       if (!result.ok) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
