@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useGraphStore } from '../stores/graph-store';
 import { useUiStore } from '../stores/ui-store';
+import { useTerminalStore } from '../stores/terminal-store';
 
 /**
  * Global keyboard shortcuts:
@@ -9,6 +10,7 @@ import { useUiStore } from '../stores/ui-store';
  * - Cmd+B: Toggle sidebar
  * - Cmd+J: Toggle agent panel
  * - Cmd+\: Toggle split view (workspace + graph)
+ * - Cmd+`: Toggle terminal panel
  * - Escape: Deselect node
  */
 export function useKeyboardShortcuts() {
@@ -48,6 +50,12 @@ export function useKeyboardShortcuts() {
       if (meta && e.key === '\\') {
         e.preventDefault();
         useUiStore.getState().toggleSplitView();
+      }
+
+      // Cmd+` — toggle terminal panel
+      if (meta && e.key === '`') {
+        e.preventDefault();
+        useTerminalStore.getState().togglePanel();
       }
 
       if (e.key === 'Escape') {

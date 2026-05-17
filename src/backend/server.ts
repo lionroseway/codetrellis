@@ -55,6 +55,7 @@ import {
 } from './services/plan-documents-service';
 import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
 import * as externalRefsService from './services/external-refs-service';
+import * as terminalService from './services/terminal-service';
 import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
 import {
   getUpdateState,
@@ -140,6 +141,102 @@ export function broadcast(type: string, payload: unknown): void {
     }
   }
 }
+
+// --- Terminal WebSocket (separate from the event broadcast WS) ---
+// Terminal I/O is high-bandwidth binary; we keep it on its own WS
+// path so it doesn't clog the `/ws` event channel.
+const terminalWss = new WebSocketServer({ server, path: '/ws/terminal' });
+
+// Map terminal ID → connected frontend WS(s)
+const terminalClients = new Map<string, Set<WebSocket>>();
+
+terminalWss.on('connection', (ws, req) => {
+  // Client connects with ?id=<terminal-id>
+  const url = new URL(req.url ?? '', 'http://localhost');
+  const termId = url.searchParams.get('id');
+  if (!termId) {
+    ws.close(4000, 'Missing terminal id query param');
+    return;
+  }
+
+  // Register this WS for the terminal
+  if (!terminalClients.has(termId)) {
+    terminalClients.set(termId, new Set());
+  }
+  terminalClients.get(termId)!.add(ws);
+
+  ws.on('message', (msg) => {
+    // Messages from frontend → write to PTY
+    const data = msg.toString();
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.type === 'input') {
+        terminalService.writeTerminal(termId, parsed.data);
+      } else if (parsed.type === 'resize') {
+        terminalService.resizeTerminal(termId, parsed.cols, parsed.rows);
+      }
+    } catch {
+      // Raw text — treat as input
+      terminalService.writeTerminal(termId, data);
+    }
+  });
+
+  ws.on('close', () => {
+    const set = terminalClients.get(termId);
+    if (set) {
+      set.delete(ws);
+      if (set.size === 0) terminalClients.delete(termId);
+    }
+  });
+});
+
+// Wire terminal service output → connected WS clients
+terminalService.onTerminalData((id, data) => {
+  const set = terminalClients.get(id);
+  if (!set) return;
+  const msg = JSON.stringify({ type: 'output', data });
+  for (const ws of set) {
+    if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+  }
+});
+
+terminalService.onTerminalExit((id, code) => {
+  const set = terminalClients.get(id);
+  if (!set) return;
+  const msg = JSON.stringify({ type: 'exit', code });
+  for (const ws of set) {
+    if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+  }
+  terminalClients.delete(id);
+});
+
+// --- Terminal REST API ---
+
+app.get('/api/terminals', (_req, res) => {
+  res.json(terminalService.listTerminals());
+});
+
+app.post('/api/terminals', (req, res) => {
+  const { preset, cwd, cols, rows, title } = req.body ?? {};
+  const session = terminalService.createTerminal({ preset, cwd, cols, rows, title });
+  broadcast('terminal-created', { session });
+  res.json(session);
+});
+
+app.post('/api/terminals/:id/inject', (req, res) => {
+  const { text } = req.body;
+  if (!text) { res.status(400).json({ error: 'text required' }); return; }
+  const ok = terminalService.injectPrompt(req.params.id, text);
+  if (!ok) { res.status(404).json({ error: 'Terminal not found or dead' }); return; }
+  res.json({ ok: true });
+});
+
+app.delete('/api/terminals/:id', (req, res) => {
+  const ok = terminalService.killTerminal(req.params.id);
+  if (!ok) { res.status(404).json({ error: 'Terminal not found' }); return; }
+  broadcast('terminal-killed', { id: req.params.id });
+  res.json({ ok: true });
+});
 
 // --- API Routes ---
 

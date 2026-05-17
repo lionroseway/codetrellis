@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Activity, Database, Cpu, Copy, Check } from 'lucide-react';
+import { Activity, Database, Cpu, Copy, Check, SquareTerminal } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useAgentStore } from '../../stores/agent-store';
+import { useTerminalStore } from '../../stores/terminal-store';
 
 export function StatusBar() {
   const scanStatus = useProjectStore((s) => s.scanStatus);
@@ -50,6 +51,15 @@ export function StatusBar() {
           {eventCount}
         </span>
       )}
+
+      <button
+        onClick={() => useTerminalStore.getState().togglePanel()}
+        className="flex items-center gap-1 hover:text-foreground transition-all"
+        title="Toggle terminal (Cmd+`)"
+      >
+        <SquareTerminal size={9} />
+        Terminal
+      </button>
 
       <button onClick={handleCopyMcpConfig} className="flex items-center gap-1 hover:text-foreground transition-all" title="Copy MCP config">
         <Database size={9} />

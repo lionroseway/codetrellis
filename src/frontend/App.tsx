@@ -17,6 +17,7 @@ import { McpGuideModal } from './components/McpGuideModal';
 import { GettingStarted } from './components/GettingStarted';
 import { LearnTrellis, LEARN_TRELLIS_SEEN_KEY } from './components/LearnTrellis';
 import { ToastContainer } from './components/Toast';
+import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
@@ -199,6 +200,7 @@ export function App() {
           <MinimizedPlanChip onRestore={() => setWorkspaceMode('plan')} />
         )}
       </div>
+      <TerminalPanel />
       <StatusBar />
       <FolderPickerModal />
       <McpGuideModal />

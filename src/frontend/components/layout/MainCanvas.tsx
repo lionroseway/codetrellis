@@ -16,7 +16,7 @@ import {
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -34,6 +34,7 @@ import { SymbolNode } from '../graph/nodes/SymbolNode';
 import { ImportEdge } from '../graph/edges/ImportEdge';
 import { SelectionActionBar } from '../graph/SelectionActionBar';
 import { WelcomeScreen } from '../WelcomeScreen';
+import { useTerminalStore } from '../../stores/terminal-store';
 
 const nodeTypes = {
   packageNode: PackageNode,
@@ -1064,6 +1065,33 @@ function NodeContextMenu({
     }
   };
 
+  // Phase 17.B — "Explain with agent" — spawns/reuses an agent terminal
+  const terminalStore = useTerminalStore();
+  const handleExplainWithAgent = async () => {
+    onClose();
+    // Find or create an agent terminal
+    let session = terminalStore.sessions.find((s) => s.preset !== 'shell' && s.alive);
+    if (!session) {
+      session = await terminalStore.createSession('claude') ?? undefined;
+      if (!session) {
+        addToast({ type: 'error', title: 'Failed to create terminal' });
+        return;
+      }
+      // Wait for the agent CLI to initialize
+      await new Promise((r) => setTimeout(r, 1500));
+    } else {
+      terminalStore.setActiveSession(session.id);
+      terminalStore.setOpen(true);
+    }
+
+    // Build the explain prompt
+    const relPath = nodePath;
+    const prompt = buildExplainPrompt(relPath, nodeLabel, nodeType);
+
+    // Inject the prompt into the terminal
+    await terminalStore.injectPrompt(session.id, prompt);
+  };
+
   // Phase 17.C — "Scope plan to this" for package/directory nodes
   const handleScopePlan = async () => {
     onClose();
@@ -1161,8 +1189,44 @@ function NodeContextMenu({
           Scope plan to this
         </button>
       )}
+      <div className="h-px bg-white/[0.06] mx-1.5 my-1" />
+      <button
+        onClick={handleExplainWithAgent}
+        className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-purple-500/10 text-foreground-muted hover:text-foreground transition-colors"
+      >
+        <Sparkles size={13} className="text-purple-400" />
+        Explain with agent
+      </button>
     </div>
   );
+}
+
+/**
+ * Phase 17.B — Build a context-rich prompt for an agent to explain a
+ * module/file/symbol. The prompt tells the agent what to look at and
+ * asks for a structured explanation.
+ */
+function buildExplainPrompt(filePath: string, label: string, nodeType?: string): string {
+  const what = nodeType === 'symbol'
+    ? `the symbol "${label}"`
+    : nodeType === 'directory' || nodeType === 'package'
+    ? `the directory "${label}"`
+    : `the file "${label}"`;
+
+  const path = filePath ? ` at \`${filePath}\`` : '';
+
+  return [
+    `Explain ${what}${path}. I want to understand:`,
+    '',
+    '1. What does it do? (purpose and responsibilities)',
+    '2. What are its key exports / public interface?',
+    '3. What does it depend on? (imports, services it calls)',
+    '4. What depends on it? (who imports it, who calls its functions)',
+    '5. Any patterns or conventions it follows?',
+    '',
+    'Keep it concise but thorough. Use code references where helpful.',
+    '',
+  ].join('\n');
 }
 
 function preserveNodePositions(previousNodes: Node[], nextNodes: Node[]): Node[] {
