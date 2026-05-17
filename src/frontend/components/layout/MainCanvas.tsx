@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   ReactFlow,
   Background,
@@ -726,6 +726,7 @@ export function MainCanvas() {
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={() => setContextMenu(null)}
+        onMoveStart={() => setContextMenu(null)}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable
@@ -1040,10 +1041,35 @@ function NodeContextMenu({
     }
   };
 
+  // Escape key dismisses the menu
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
+  // Viewport clamping — prevent menu from rendering off-screen
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<CSSProperties>({ left: x, top: y });
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const pad = 8;
+    let left = x;
+    let top = y;
+    if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+    if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+    if (left < pad) left = pad;
+    if (top < pad) top = pad;
+    setPos({ left, top });
+  }, [x, y]);
+
   return (
     <div
+      ref={menuRef}
       className="fixed z-50 rounded-lg border border-white/[0.1] bg-[#0c0e1a]/95 backdrop-blur-md shadow-xl p-1.5 min-w-[200px] text-[12.5px]"
-      style={{ left: x, top: y }}
+      style={pos}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="px-2.5 py-1.5 text-[11px] text-foreground-subtle uppercase tracking-wider font-medium truncate max-w-[200px]">

@@ -8,6 +8,7 @@ import { useUiStore } from '../stores/ui-store';
  * - Cmd+1/2/3: Switch depth (Package/File/Symbol)
  * - Cmd+B: Toggle sidebar
  * - Cmd+J: Toggle agent panel
+ * - Cmd+\: Toggle split view (workspace + graph)
  * - Escape: Deselect node
  */
 export function useKeyboardShortcuts() {
@@ -41,6 +42,12 @@ export function useKeyboardShortcuts() {
       if (meta && e.key === 'j') {
         e.preventDefault();
         useUiStore.getState().toggleAgentPanel();
+      }
+
+      // Cmd+\ — toggle split view (plan workspace + graph side by side)
+      if (meta && e.key === '\\') {
+        e.preventDefault();
+        useUiStore.getState().toggleSplitView();
       }
 
       if (e.key === 'Escape') {

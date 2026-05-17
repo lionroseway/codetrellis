@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, ChevronRight, FileText, Zap, Plus, MoreHorizontal,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User, History, Trash2,
+  GripVertical,
 } from 'lucide-react';
 import { usePlanItemsStore, buildItemTree } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
@@ -16,20 +17,32 @@ const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
   skipped: { Icon: SkipForward, tint: 'text-zinc-500' },
 };
 
+type DropPosition = 'above' | 'below' | 'inside';
+
+interface DragState {
+  draggedUid: string | null;
+  overUid: string | null;
+  position: DropPosition | null;
+}
+
 /**
- * Phase 15 §15.D — sidebar tree of mixed Objects + Actions.
+ * Phase 15 §15.D / Phase 16 — sidebar tree of Pages + Tasks.
  *
  * Renders the full tree from `planItemsStore.itemsByUid` keyed by
  * `parentUid`. Click a row → selects in canvas. Click chevron →
  * expand/collapse. Hover → reveals inline `+` (add child) and `⋯`
  * (rename / delete / open history) menu.
+ *
+ * Phase 16: drag-and-drop reordering and reparenting.
  */
 export function PlanItemTree({ planUid }: { planUid: string }) {
   const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
   const selectedItemUid = usePlanItemsStore((s) => s.selectedItemUid);
   const selectItem = usePlanItemsStore((s) => s.selectItem);
   const createItem = usePlanItemsStore((s) => s.createItem);
+  const moveItem = usePlanItemsStore((s) => s.moveItem);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [drag, setDrag] = useState<DragState>({ draggedUid: null, overUid: null, position: null });
 
   const { rootUids, childrenByParent } = useMemo(
     () => buildItemTree(itemsByUid),
@@ -39,14 +52,71 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   const toggle = (uid: string) =>
     setExpanded((prev) => ({ ...prev, [uid]: !prev[uid] }));
 
+  // Compute sorted sibling uids for a given parentUid
+  const getSiblingUids = (parentUid: string | null): string[] => {
+    if (!parentUid) return rootUids;
+    return childrenByParent[parentUid] ?? [];
+  };
+
+  const handleDrop = (targetUid: string, position: DropPosition) => {
+    const { draggedUid } = drag;
+    if (!draggedUid || draggedUid === targetUid) return;
+
+    const draggedItem = itemsByUid[draggedUid];
+    const targetItem = itemsByUid[targetUid];
+    if (!draggedItem || !targetItem) return;
+
+    // Prevent dropping onto own descendants
+    const isDescendant = (parentUid: string, childUid: string): boolean => {
+      const children = childrenByParent[parentUid] ?? [];
+      for (const c of children) {
+        if (c === childUid) return true;
+        if (isDescendant(c, childUid)) return true;
+      }
+      return false;
+    };
+    if (isDescendant(draggedUid, targetUid)) return;
+
+    let newParentUid: string | null;
+    let newSortOrder: number;
+
+    if (position === 'inside') {
+      // Drop as child of target
+      newParentUid = targetUid;
+      const existingChildren = childrenByParent[targetUid] ?? [];
+      newSortOrder = existingChildren.length > 0
+        ? Math.max(...existingChildren.map((u) => itemsByUid[u]?.sortOrder ?? 0)) + 1
+        : 0;
+      // Auto-expand the target
+      setExpanded((prev) => ({ ...prev, [targetUid]: true }));
+    } else {
+      // Drop as sibling (above or below target)
+      newParentUid = targetItem.parentUid;
+      const siblings = getSiblingUids(targetItem.parentUid);
+      const targetIndex = siblings.indexOf(targetUid);
+      const insertIndex = position === 'above' ? targetIndex : targetIndex + 1;
+
+      // Compute sort order: midpoint between neighbors
+      const prevItem = insertIndex > 0 ? itemsByUid[siblings[insertIndex - 1]] : null;
+      const nextItem = insertIndex < siblings.length ? itemsByUid[siblings[insertIndex]] : null;
+      const prevOrder = prevItem?.sortOrder ?? -1;
+      const nextOrder = nextItem?.sortOrder ?? prevOrder + 2;
+      newSortOrder = (prevOrder + nextOrder) / 2;
+    }
+
+    moveItem(draggedUid, { newParentUid, newSortOrder });
+  };
+
   const renderNode = (uid: string, depth: number): React.ReactNode => {
     const item = itemsByUid[uid];
     if (!item) return null;
     const childUids = childrenByParent[uid] ?? [];
     const isOpen = expanded[uid] ?? true;
     const isSelected = selectedItemUid === uid;
+    const isDragged = drag.draggedUid === uid;
+    const isDropTarget = drag.overUid === uid;
     return (
-      <div key={uid}>
+      <div key={uid} className={isDragged ? 'opacity-40' : ''}>
         <ItemRow
           item={item}
           depth={depth}
@@ -55,6 +125,10 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
           isOpen={isOpen}
           onToggle={() => toggle(uid)}
           onClick={() => selectItem(uid)}
+          drag={drag}
+          setDrag={setDrag}
+          isDropTarget={isDropTarget}
+          onDrop={handleDrop}
         />
         {isOpen && childUids.length > 0 && (
           <div>{childUids.map((c) => renderNode(c, depth + 1))}</div>
@@ -77,7 +151,11 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
         <NewButton planUid={planUid} parentUid={null} createItem={createItem} />
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1.5">
+      <div
+        className="flex-1 overflow-y-auto py-1.5"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => setDrag({ draggedUid: null, overUid: null, position: null })}
+      >
         {rootUids.length === 0 ? (
           <div className="px-3 py-7 text-center">
             <p className="text-[12.5px] text-foreground-subtle italic leading-relaxed">
@@ -108,6 +186,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
 
 function ItemRow({
   item, depth, isSelected, hasChildren, isOpen, onToggle, onClick,
+  drag, setDrag, isDropTarget, onDrop,
 }: {
   item: PlanItem;
   depth: number;
@@ -116,26 +195,101 @@ function ItemRow({
   isOpen: boolean;
   onToggle: () => void;
   onClick: () => void;
+  drag: DragState;
+  setDrag: (d: DragState) => void;
+  isDropTarget: boolean;
+  onDrop: (targetUid: string, position: DropPosition) => void;
 }) {
   const createItem = usePlanItemsStore((s) => s.createItem);
   const deleteItem = usePlanItemsStore((s) => s.deleteItem);
   const openHistoryDrawer = usePlanItemsStore((s) => s.openHistoryDrawer);
   const addToast = useToastStore((s) => s.addToast);
   const [menuOpen, setMenuOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   const KindIcon = item.kind === 'action' ? Zap : FileText;
   const statusMeta = item.kind === 'action' && item.status
     ? STATUS_ICON[item.status]
     : null;
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.uid);
+    setDrag({ draggedUid: item.uid, overUid: null, position: null });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (drag.draggedUid === item.uid) return;
+
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const y = e.clientY - rect.top;
+    const third = rect.height / 3;
+    let position: DropPosition;
+    if (y < third) position = 'above';
+    else if (y > third * 2) position = 'below';
+    else position = 'inside';
+
+    if (drag.overUid !== item.uid || drag.position !== position) {
+      setDrag({ ...drag, overUid: item.uid, position });
+    }
+  };
+
+  const handleDragLeave = () => {
+    if (drag.overUid === item.uid) {
+      setDrag({ ...drag, overUid: null, position: null });
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (drag.draggedUid && drag.position) {
+      onDrop(item.uid, drag.position);
+    }
+    setDrag({ draggedUid: null, overUid: null, position: null });
+  };
+
+  const handleDragEnd = () => {
+    setDrag({ draggedUid: null, overUid: null, position: null });
+  };
+
+  // Visual indicators for drop position
+  const dropIndicator = isDropTarget && drag.position && drag.draggedUid !== item.uid;
+
   return (
     <div
-      className={`group flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer rounded-md mx-1.5 ${
-        isSelected ? 'bg-accent/10 ring-1 ring-accent/30' : 'hover:bg-white/[0.03]'
-      }`}
+      ref={rowRef}
+      className={[
+        'group relative flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer rounded-md mx-1.5',
+        isSelected ? 'bg-accent/10 ring-1 ring-accent/30' : 'hover:bg-white/[0.03]',
+        dropIndicator && drag.position === 'inside' ? 'ring-1 ring-accent/50 bg-accent/5' : '',
+      ].join(' ')}
       style={{ paddingLeft: 6 + depth * 14 }}
       onClick={onClick}
+      draggable
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onDragEnd={handleDragEnd}
     >
+      {/* Drop position indicators */}
+      {dropIndicator && drag.position === 'above' && (
+        <div className="absolute left-2 right-2 top-0 h-0.5 bg-accent rounded-full" />
+      )}
+      {dropIndicator && drag.position === 'below' && (
+        <div className="absolute left-2 right-2 bottom-0 h-0.5 bg-accent rounded-full" />
+      )}
+
+      {/* Drag handle (visible on hover) */}
+      <div className="opacity-0 group-hover:opacity-60 shrink-0 cursor-grab active:cursor-grabbing -ml-0.5 mr-0">
+        <GripVertical size={10} className="text-foreground-subtle" />
+      </div>
+
       <button
         onClick={(e) => { e.stopPropagation(); onToggle(); }}
         className={`shrink-0 w-3.5 h-3.5 flex items-center justify-center text-foreground-subtle ${hasChildren ? '' : 'invisible'}`}
