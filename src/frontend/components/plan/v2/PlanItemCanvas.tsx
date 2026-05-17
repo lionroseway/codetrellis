@@ -3,7 +3,7 @@ import {
   ChevronRight, FileText, Zap, Folder, Copy, History,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User,
   AlertTriangle, MessageSquare, HelpCircle, Activity, Hash,
-  X,
+  X, Import,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { usePlanStore } from '../../../stores/plan-store';
@@ -21,7 +21,9 @@ import { ItemRoutingPanel } from './ItemRoutingPanel';
 import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
 import { PlanTemplateChooser } from './PlanTemplateChooser';
+import { PlanImportModal } from './PlanImportModal';
 import { CodebaseOrientation } from './CodebaseOrientation';
+import { PlanCompletionSummary } from './PlanCompletionSummary';
 import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
 import type {
   PlanItem, TaskStatus, Comment,
@@ -302,6 +304,7 @@ function PlanHomePage() {
 
   const [title, setTitle] = useState(plan?.title ?? '');
   const [description, setDescription] = useState(plan?.description ?? '');
+  const [showImportModal, setShowImportModal] = useState(false);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -414,6 +417,10 @@ function PlanHomePage() {
               when there's something to diff (any Action with intent). */}
           <PlanDiffPanel planUid={plan.uid} />
 
+          {/* Phase 17.M — Completion retrospective. Auto-shown when
+              every action is done/skipped or plan status is 'completed'. */}
+          <PlanCompletionSummary />
+
           {/* Children */}
           {topLevel.length > 0 && (
             <section>
@@ -450,12 +457,12 @@ function PlanHomePage() {
               {/* Phase 17.E — Smart templates */}
               <PlanTemplateChooser />
 
-              {/* Or start blank */}
+              {/* Or start blank / import */}
               <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015] p-7 text-center space-y-4">
                 <p className="text-[14px] text-foreground-muted leading-relaxed">
-                  Or start blank — just type above, or seed structure manually.
+                  Or start blank, or import from an existing source.
                 </p>
-                <div className="flex justify-center gap-2.5">
+                <div className="flex justify-center gap-2.5 flex-wrap">
                   <button
                     onClick={async () => {
                       const item = await createItem({ planUid: plan.uid, kind: 'object', title: 'New page' });
@@ -474,12 +481,19 @@ function PlanHomePage() {
                   >
                     <Zap size={13} /> New task
                   </button>
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 text-[13px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
+                  >
+                    <Import size={13} /> Import
+                  </button>
                 </div>
               </div>
             </>
           )}
         </div>
       </div>
+      {showImportModal && <PlanImportModal onClose={() => setShowImportModal(false)} />}
     </div>
   );
 }

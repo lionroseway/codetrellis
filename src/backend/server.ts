@@ -56,6 +56,7 @@ import {
 import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
 import * as externalRefsService from './services/external-refs-service';
 import * as terminalService from './services/terminal-service';
+import * as planImportService from './services/plan-import-service';
 import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
 import {
   getUpdateState,
@@ -1887,6 +1888,72 @@ app.post('/api/plans/import', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// Phase 17.I — Import plan from external source (GitHub issue, conversation, diff, session)
+app.post('/api/plans/import-external', (req, res) => {
+  const { source, projectPath, ...input } = req.body;
+  if (!source || !projectPath) {
+    res.status(400).json({ error: 'source and projectPath required' });
+    return;
+  }
+
+  let result: planImportService.PlanImportResult;
+  try {
+    switch (source) {
+      case 'github_issue':
+        result = planImportService.importFromGitHubIssue(input);
+        break;
+      case 'conversation':
+        result = planImportService.importFromConversation(input);
+        break;
+      case 'git_diff':
+        result = planImportService.importFromGitDiff(input);
+        break;
+      case 'claude_session':
+        result = planImportService.importFromClaudeSession(input);
+        break;
+      default:
+        res.status(400).json({ error: `Unknown source: ${source}` });
+        return;
+    }
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+
+  // Create the plan
+  const plan = planService.createPlan(
+    { title: result.title, description: result.description, tasks: [] },
+    getAuthorKey('human'),
+    'human',
+    projectPath,
+  );
+
+  // Create child items
+  const createdItems: string[] = [];
+  for (const item of result.items) {
+    const created = planItemService.createItem({
+      planUid: plan.uid,
+      kind: item.kind,
+      title: item.title,
+      body: item.body,
+      fileSpecs: item.fileSpecs,
+      scopePath: item.scopePath,
+      author: getAuthorKey('human'),
+      authorType: 'human',
+    });
+    createdItems.push(created.uid);
+  }
+
+  broadcast('plan-created', { plan });
+  saveNow(() => exportDatabase());
+  res.json({
+    plan,
+    itemCount: createdItems.length,
+    source: result.source,
+    metadata: result.metadata,
+  });
 });
 
 app.get('/api/plans/discover', (req, res) => {
