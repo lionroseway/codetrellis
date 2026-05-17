@@ -158,6 +158,235 @@ exist yet — did you mean to create it?")
 
 ---
 
+## Part 2.5: Routing & Execution Rules (Who Does What, With What)
+
+This is the control layer between authoring and handoff. It answers
+three questions the current system can't: **who** can work on an item,
+**what tools** they should use, and **how** those rules flow through
+the tree.
+
+### 17.N — Skill & Plugin Bindings
+
+**Problem:** A task says "write Playwright tests" but the agent that
+claims it doesn't have Playwright MCP installed. Or a task should use
+a specific refactoring skill, but there's no way to say so.
+
+**Concept:** Each item can declare **required skills** — named
+capabilities that an agent must have to claim or execute the item.
+
+```
+skills: [
+  { name: "playwright",  source: "mcp",    required: true  },
+  { name: "typescript",   source: "lang",   required: false },
+  { name: "@refactor",    source: "skill",  required: true  },
+]
+```
+
+**Source types:**
+- `mcp` — an MCP server/tool the agent must have connected (e.g.,
+  Playwright, GitHub, database)
+- `skill` — a named slash-command or workflow the agent supports
+  (e.g., `@refactor`, `@test-gen`)
+- `lang` — a language/framework the agent should be proficient in
+  (advisory, not enforced)
+- `plugin` — a specific CodeTrellis plugin or extension
+
+**How it works:**
+
+| Step | What happens |
+|------|--------------|
+| Human adds skills in the item properties panel | Skills appear as chips below the status row. Autocomplete from connected agent capabilities + known MCP servers. |
+| Agent calls `get_next_task()` | Backend checks `item.skills` against `agent_session.capabilities`. Only returns items the agent can satisfy. |
+| Agent calls `claim_item()` | Backend validates: if item has required skills the agent lacks, claim is rejected with a clear error: "This task requires the 'playwright' MCP server." |
+| Readiness check (17.G) | "⚠ Task 3 requires 'playwright' but no connected agent has it" |
+
+**Agent capability registration:**
+
+When an agent connects via MCP, it optionally declares capabilities:
+
+```
+register_session({
+  agentType: "claude-code",
+  model: "claude-opus-4",
+  capabilities: [
+    { name: "playwright", source: "mcp" },
+    { name: "typescript", source: "lang" },
+  ]
+})
+```
+
+If an agent doesn't declare capabilities, it's treated as
+"general-purpose" and can claim items with no required skills, but
+not items that require specific skills.
+
+### 17.O — Claim Restrictions (Who Can Work on This)
+
+**Problem:** Some items should only be worked on by a specific agent.
+Some should be human-only (no agent can claim). Some should be open to
+any agent. Currently every agent can claim every pending item.
+
+**Concept:** Each item has a `claimPolicy` that controls who can work
+on it.
+
+```typescript
+interface ClaimPolicy {
+  /** Who can claim this item. */
+  mode: 'any'           // Any agent can claim (default)
+       | 'agent-only'   // Only AI agents (not manually completable)
+       | 'human-only'   // No agent can claim; human marks done manually
+       | 'assigned'     // Only the specifically assigned agent/human
+       | 'match-skills' // Any agent whose capabilities match required skills
+       ;
+
+  /** If mode='assigned', who specifically. */
+  assignTo?: string | null;       // session ID or human identity
+  assignToType?: 'agent' | 'human';
+
+  /** Allowed agent types (e.g., only 'claude-code', not 'cursor'). */
+  allowedAgentTypes?: string[];
+
+  /** Allowed models (e.g., only 'claude-opus-4'). */
+  allowedModels?: string[];
+}
+```
+
+**UI:**
+
+In the item properties panel, a "Who works on this" dropdown:
+- **Anyone** (default) — any connected agent can claim
+- **Specific agent** → shows connected agents, pick one
+- **Human only** — no AI; human marks done via checkbox
+- **By capability** — auto-match based on required skills
+- **Agent type** → checkboxes: Claude Code, Cursor, Aider, etc.
+
+**Backend enforcement:**
+
+`get_next_task()` filters by claim policy before returning items.
+`claim_item()` validates against the policy and rejects with a clear
+message: "This task is restricted to human-only completion."
+
+### 17.P — Cascade & Inheritance
+
+**Problem:** A plan has 20 tasks. The user wants all of them to use
+the Playwright MCP and be restricted to Claude Code — but ONE task
+should use Cursor instead. Setting this per-task is tedious.
+
+**Concept:** Item properties cascade down the tree, with per-item
+overrides.
+
+**How cascading works:**
+
+```
+Plan root
+├── Page: "Auth refactor" ← skills: [typescript, @refactor]
+│   ├── Task: "Refactor login"     ← inherits: [typescript, @refactor]
+│   ├── Task: "Refactor signup"    ← inherits: [typescript, @refactor]
+│   └── Task: "Write tests"       ← override: [typescript, playwright]
+└── Page: "UI update"    ← skills: [react], claimPolicy: human-only
+    ├── Task: "Redesign nav"       ← inherits: human-only
+    └── Task: "Fix mobile layout"  ← override: claimPolicy: any
+```
+
+**Cascadeable properties:**
+
+| Property | Cascades? | Override? |
+|----------|-----------|-----------|
+| `skills` | Yes — children inherit parent's skills (merged, not replaced) | Yes — child can add/remove/replace |
+| `claimPolicy.mode` | Yes — children inherit parent's policy | Yes — child can override |
+| `claimPolicy.allowedAgentTypes` | Yes | Yes |
+| `scopePath` | Yes — children resolve relative paths from parent's scope | Yes |
+| `constraints` (17.F) | Yes — parent constraints apply to all children | Yes — child can relax or tighten |
+| `template` | No — each item picks its own template | n/a |
+| `status` | No — each item tracks independently | n/a |
+| `fileSpecs` | No — each item has its own targets | n/a |
+
+**Override mechanics:**
+
+Each item stores only its **local** values. The effective (resolved)
+value is computed at read time by walking up the tree:
+
+```typescript
+function resolveSkills(item: PlanItem, itemsByUid: Record<string, PlanItem>): Skill[] {
+  const chain: PlanItem[] = [];
+  let cur: PlanItem | null = item;
+  while (cur) {
+    chain.unshift(cur);
+    cur = cur.parentUid ? itemsByUid[cur.parentUid] : null;
+  }
+  // Merge skills up the chain. Later items override earlier.
+  let resolved: Skill[] = [];
+  for (const ancestor of chain) {
+    if (ancestor.skillsOverride === 'replace') {
+      resolved = ancestor.skills ?? [];
+    } else {
+      resolved = mergeSkills(resolved, ancestor.skills ?? []);
+    }
+  }
+  return resolved;
+}
+```
+
+**Override modes per property:**
+- `inherit` (default) — use parent's value, merge with local additions
+- `replace` — ignore parent, use only local value
+- `none` — explicitly clear this property (no skills, no policy)
+
+**UI for cascading:**
+
+In the item properties panel, each cascadeable property shows:
+- The **effective** (resolved) value
+- A subtle "(inherited from Auth refactor)" label if it came from a parent
+- An "Override" link to set a local value
+- A "Reset" link to clear the override and re-inherit
+
+When setting properties on a Page (object), a note says:
+"These settings will apply to all child tasks unless overridden."
+
+**Backend:**
+
+`get_next_task()` and `claim_item()` call `resolveClaimPolicy(item)`
+which walks the tree. The raw DB columns store only local overrides;
+the API response includes both `raw` and `resolved` values.
+
+---
+
+### Schema Changes Required
+
+```sql
+-- New columns on plan_items
+ALTER TABLE plan_items ADD COLUMN skills           TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE plan_items ADD COLUMN skills_mode      TEXT DEFAULT 'inherit';  -- inherit | replace | none
+ALTER TABLE plan_items ADD COLUMN claim_policy      TEXT DEFAULT NULL;       -- JSON ClaimPolicy or null (inherit)
+ALTER TABLE plan_items ADD COLUMN claim_policy_mode TEXT DEFAULT 'inherit';  -- inherit | replace
+
+-- New columns on agent_sessions
+ALTER TABLE agent_sessions ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]';
+```
+
+```typescript
+// Added to PlanItem interface
+skills?: Skill[];
+skillsMode?: 'inherit' | 'replace' | 'none';
+claimPolicy?: ClaimPolicy | null;
+claimPolicyMode?: 'inherit' | 'replace';
+
+// Added to AgentSessionInfo interface
+capabilities?: AgentCapability[];
+
+interface Skill {
+  name: string;
+  source: 'mcp' | 'skill' | 'lang' | 'plugin';
+  required: boolean;
+}
+
+interface AgentCapability {
+  name: string;
+  source: 'mcp' | 'skill' | 'lang' | 'plugin';
+}
+```
+
+---
+
 ## Part 3: Handoff (Plan → Agent)
 
 ### 17.H — One-Click Handoff
@@ -241,6 +470,23 @@ file that IS in the plan. User needs to know.
 **Leverages:** deviation-service.ts already produces `Deviation[]`
 with types, severity, and resolution states. Just needs UI.
 
+**Current gap:** The backend broadcasts `deviation-detected` WS events
+and the frontend shows a toast, but the PlanDiffPanel doesn't
+auto-refresh on WS events — it requires manual refresh. This needs
+fixing: the drift panel should be reactive, updating in real-time as
+deviations are detected during execution.
+
+**Fix:** Wire `useWebSocket` to call a `refreshDriftStatus()` action
+on the plan-items-store when `deviation-detected` fires. The
+PlanDiffPanel should subscribe to this store rather than fetching on
+button-click.
+
+**Cascade integration:** If a parent Page has a `scopePath` constraint
+(17.F), drift detection should check ALL child tasks against that
+scope — not just the individual task's fileSpecs. A child task
+completing successfully but violating the parent's scope fence should
+still flag drift.
+
 ---
 
 ## Part 5: After Execution
@@ -268,6 +514,9 @@ with types, severity, and resolution states. Just needs UI.
 | **P0** | 17.C Selection-driven planning | 2d | High | Core workflow — multi-select is how real plans start |
 | **P0** | 17.D Symbol-aware expansion | 2d | High | Precision gap — agents need function-level targeting |
 | **P0** | 17.H One-click handoff | 1d | High | Completes the loop — without this, last mile is manual |
+| **P0** | 17.O Claim restrictions | 1.5d | High | Control — who works on what is fundamental |
+| **P1** | 17.N Skill & plugin bindings | 2d | High | Ensures right agent gets right task |
+| **P1** | 17.P Cascade & inheritance | 2d | High | Scalability — setting rules on 20 tasks individually is unworkable |
 | **P1** | 17.F Constraints & guardrails | 2d | High | Safety — prevents agents from going off-rails |
 | **P1** | 17.J Live execution dashboard | 2d | High | Visibility — user needs to see what's happening |
 | **P1** | 17.K Approval gates | 1.5d | High | Control — humans need veto power |
