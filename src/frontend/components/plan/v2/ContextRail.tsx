@@ -254,13 +254,13 @@ export function ContextRail({
           {addOpen && (
             <AddMenu
               isAction={isAction}
-              onTargetFile={() => openPicker({ role: 'target', allow: { file: true } })}
+              onTargetFile={() => openPicker({ role: 'target', allow: { file: true, folder: true, symbol: true } })}
               onTargetFolder={() => openPicker({ role: 'target', allow: { folder: true } })}
               onTargetSymbol={() => openPicker({ role: 'target', allow: { symbol: true } })}
               onTargetEdge={() => { setAddOpen(false); setPending('edge'); }}
               onUrl={() => { setAddOpen(false); setPending('url'); }}
               onPickImageOrVideo={onPickImageOrVideo}
-              onRefFile={() => openPicker({ role: 'reference', allow: { file: true } })}
+              onRefFile={() => openPicker({ role: 'reference', allow: { file: true, folder: true, symbol: true } })}
               onRefFolder={() => openPicker({ role: 'reference', allow: { folder: true } })}
               onCodeBlock={() => { setAddOpen(false); setPending('code_block'); }}
               onTranscript={() => { setAddOpen(false); setPending('transcript'); }}
@@ -376,30 +376,21 @@ function AddMenu({
   onTranscript: () => void;
 }) {
   return (
-    <div className="absolute top-full right-0 mt-1.5 z-30 w-[320px] rounded-xl border border-white/[0.1] bg-[#0d0e16] shadow-2xl shadow-black/60 p-2 text-[13px]">
+    <div className="absolute top-full right-0 mt-1.5 z-30 w-[280px] rounded-xl border border-white/[0.1] bg-[#0d0e16] shadow-2xl shadow-black/60 p-2 text-[13px]">
+      {/* For tasks: browse adds targets (drift-tracked). For pages: adds references. */}
+      <MenuItem
+        icon={FileText}
+        label="Browse files / symbols"
+        hint="Search the project tree"
+        onClick={isAction ? onTargetFile : onRefFile}
+      />
       {isAction && (
-        <>
-          <MenuHeading>Targets</MenuHeading>
-          <p className="px-2.5 pb-1.5 text-[11.5px] text-foreground-subtle leading-snug">
-            Visible to drift detection. Verb required.
-          </p>
-          <MenuItem icon={FileText} label="File" hint="Browse the project" onClick={onTargetFile} />
-          <MenuItem icon={Folder} label="Folder" hint="Refactor everything inside" onClick={onTargetFolder} />
-          <MenuItem icon={Hash} label="Symbol" hint="Function, class, interface…" onClick={onTargetSymbol} />
-          <MenuItem icon={ArrowRight} label="Edge" hint="Add or remove a graph link" onClick={onTargetEdge} />
-          <div className="my-2 border-t border-white/[0.06]" />
-        </>
+        <MenuItem icon={ArrowRight} label="Add graph edge" hint="Link nodes on the map" onClick={onTargetEdge} />
       )}
-      <MenuHeading>References</MenuHeading>
-      <p className="px-2.5 pb-1.5 text-[11.5px] text-foreground-subtle leading-snug">
-        Reading material — context for humans + agents.
-      </p>
-      <MenuItem icon={Link2} label="URL" onClick={onUrl} />
-      <MenuItem icon={ImageIcon} label="Image / video" hint="From disk" onClick={onPickImageOrVideo} />
-      <MenuItem icon={FileText} label="File reference" hint="Browse — path only" onClick={onRefFile} />
-      <MenuItem icon={FolderOpen} label="Folder reference" hint="Browse — path only" onClick={onRefFolder} />
-      <MenuItem icon={Code} label="Code snippet" hint="Snapshot of selected lines" onClick={onCodeBlock} />
-      <MenuItem icon={Box} label="Transcript" hint="Paste a chat / call log" onClick={onTranscript} />
+      <div className="my-1.5 border-t border-white/[0.06]" />
+      <MenuItem icon={Link2} label="URL" hint="Paste a link" onClick={onUrl} />
+      <MenuItem icon={ImageIcon} label="Image / video" hint="Upload from disk" onClick={onPickImageOrVideo} />
+      <MenuItem icon={Code} label="Paste text" hint="Code snippet or transcript" onClick={onCodeBlock} />
     </div>
   );
 }
