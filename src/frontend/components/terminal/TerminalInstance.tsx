@@ -72,7 +72,7 @@ export function TerminalInstance({
 
     // Connect WebSocket
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws/terminal?id=${sessionId}`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/terminal-ws?id=${sessionId}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

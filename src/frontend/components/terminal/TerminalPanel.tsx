@@ -23,11 +23,11 @@ import { useTerminalStore } from '../../stores/terminal-store';
 
 export type AgentPreset = 'claude' | 'codex' | 'aider' | 'shell';
 
-const PRESET_META: Record<AgentPreset, { label: string; color: string }> = {
-  claude: { label: 'Claude', color: 'text-accent' },
-  codex: { label: 'Codex', color: 'text-green-400' },
-  aider: { label: 'Aider', color: 'text-purple-400' },
-  shell: { label: 'Shell', color: 'text-foreground-muted' },
+const PRESET_META: Record<AgentPreset, { label: string; color: string; accent: string; bg: string }> = {
+  claude: { label: 'Claude', color: 'text-orange-300', accent: 'bg-orange-400', bg: 'bg-orange-400/10' },
+  codex: { label: 'Codex', color: 'text-green-400', accent: 'bg-green-400', bg: 'bg-green-400/10' },
+  aider: { label: 'Aider', color: 'text-purple-400', accent: 'bg-purple-400', bg: 'bg-purple-400/10' },
+  shell: { label: 'Shell', color: 'text-blue-400', accent: 'bg-blue-400', bg: 'bg-blue-400/10' },
 };
 
 export function TerminalPanel() {
@@ -91,9 +91,9 @@ export function TerminalPanel() {
           return (
             <div
               key={s.id}
-              className={`group flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded cursor-pointer transition-colors ${
+              className={`group flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded cursor-pointer transition-colors relative overflow-hidden ${
                 isActive
-                  ? 'bg-white/[0.06] text-foreground'
+                  ? `${meta.bg} text-foreground`
                   : 'text-foreground-subtle hover:text-foreground hover:bg-white/[0.03]'
               }`}
               onClick={() => {
@@ -101,6 +101,10 @@ export function TerminalPanel() {
                 if (!isOpen) setOpen(true);
               }}
             >
+              {/* Color accent bar */}
+              {isActive && (
+                <div className={`absolute left-0 top-[3px] bottom-[3px] w-[2px] rounded-r ${meta.accent}`} />
+              )}
               {s.preset !== 'shell' ? (
                 <Sparkles size={10} className={meta.color} />
               ) : (
@@ -108,7 +112,7 @@ export function TerminalPanel() {
               )}
               <span className="truncate max-w-[100px]">{s.title}</span>
               {!s.alive && (
-                <span className="text-[9px] text-red-400 uppercase">exited</span>
+                <span className="text-[9px] text-red-400/80 uppercase tracking-wider font-medium">exited</span>
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); killSession(s.id); }}
@@ -138,6 +142,7 @@ export function TerminalPanel() {
                     onClick={() => handleNewTerminal(preset)}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] text-left"
                   >
+                    <span className={`w-2 h-2 rounded-full ${meta.accent}`} />
                     {preset !== 'shell' ? (
                       <Sparkles size={11} className={meta.color} />
                     ) : (

@@ -84,7 +84,7 @@ function PackageNodeComponent({ data }: NodeProps) {
             <div className="space-y-1">
               {d.topFiles.slice(0, 4).map((file) => (
                 <div key={file} className="truncate text-[11px] text-zinc-100/88">
-                  {file}
+                  {file.split('/').pop()}
                 </div>
               ))}
             </div>

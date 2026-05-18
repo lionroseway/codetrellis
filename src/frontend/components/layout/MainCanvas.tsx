@@ -269,6 +269,9 @@ export function MainCanvas() {
         let nextDiffHasChanges = false;
         let nextGitHasChanges = false;
         let latestCommitHash: string | null = null;
+        // Track the effective git status to update the project store
+        // *after* the state updater returns (avoids setState-in-render).
+        let pendingGitStatus: typeof gitStatus | null = null;
 
         setDiffData((previous) => {
           const incomingGit = gitStatus && !gitStatus.error
@@ -306,7 +309,7 @@ export function MainCanvas() {
             effectiveGit?.untracked?.length,
           );
           latestCommitHash = effectiveGit?.commitHash ?? null;
-          setProjectGitStatus(effectiveGit || null);
+          pendingGitStatus = effectiveGit || null;
 
           if (baselineMode === 'auto' && headAdvanced && !incomingGitHasChanges) {
             cleanRefreshStreakRef.current = 0;
@@ -381,6 +384,12 @@ export function MainCanvas() {
           }
           return previous;
         });
+
+        // Update the project store outside the state updater to avoid
+        // "Cannot update a component while rendering a different component".
+        if (pendingGitStatus !== null) {
+          setProjectGitStatus(pendingGitStatus);
+        }
 
         if (
           nextDiffHasChanges ||
@@ -966,6 +975,9 @@ export function MainCanvas() {
             snapshotName={currentSnapshot?.name}
           />
         </Panel>
+
+        {/* Phase 17.C — Multi-select action bar (must be inside ReactFlow for useReactFlow()) */}
+        <SelectionActionBar />
       </ReactFlow>
 
       {/* Phase 16.E — Node context menu */}
@@ -979,9 +991,6 @@ export function MainCanvas() {
           onClose={() => setContextMenu(null)}
         />
       )}
-
-      {/* Phase 17.C — Multi-select action bar */}
-      <SelectionActionBar />
     </div>
   );
 }

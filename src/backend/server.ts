@@ -99,8 +99,11 @@ app.use((req, res, next) => {
 
 const server = http.createServer(app);
 
-// WebSocket server for real-time events (agent events, scan progress, file changes)
-const wss = new WebSocketServer({ server, path: '/ws' });
+// WebSocket servers — use `noServer` mode so we can manually route
+// the HTTP upgrade event.  Two WSS instances bound to the same
+// `server` via `{ server, path }` both fire on every upgrade and
+// one corrupts the other's handshake → "Invalid frame header".
+const wss = new WebSocketServer({ noServer: true });
 const clients = new Set<WebSocket>();
 
 wss.on('connection', (ws) => {
@@ -146,7 +149,7 @@ export function broadcast(type: string, payload: unknown): void {
 // --- Terminal WebSocket (separate from the event broadcast WS) ---
 // Terminal I/O is high-bandwidth binary; we keep it on its own WS
 // path so it doesn't clog the `/ws` event channel.
-const terminalWss = new WebSocketServer({ server, path: '/ws/terminal' });
+const terminalWss = new WebSocketServer({ noServer: true });
 
 // Map terminal ID → connected frontend WS(s)
 const terminalClients = new Map<string, Set<WebSocket>>();
@@ -211,6 +214,27 @@ terminalService.onTerminalExit((id, code) => {
   terminalClients.delete(id);
 });
 
+// --- Manual HTTP upgrade routing ---
+// Route each incoming WebSocket upgrade to the correct WSS based on
+// the request pathname.  This avoids the "Invalid frame header" bug
+// that occurs when two WSS instances both bind to `{ server }`.
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url ?? '', 'http://localhost').pathname;
+
+  if (pathname === '/terminal-ws') {
+    terminalWss.handleUpgrade(request, socket, head, (ws) => {
+      terminalWss.emit('connection', ws, request);
+    });
+  } else if (pathname === '/ws') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    // Not a known WS path — destroy the socket
+    socket.destroy();
+  }
+});
+
 // --- Terminal REST API ---
 
 app.get('/api/terminals', (_req, res) => {
@@ -218,10 +242,16 @@ app.get('/api/terminals', (_req, res) => {
 });
 
 app.post('/api/terminals', (req, res) => {
-  const { preset, cwd, cols, rows, title } = req.body ?? {};
-  const session = terminalService.createTerminal({ preset, cwd, cols, rows, title });
-  broadcast('terminal-created', { session });
-  res.json(session);
+  try {
+    const { preset, cwd, cols, rows, title } = req.body ?? {};
+    const session = terminalService.createTerminal({ preset, cwd, cols, rows, title });
+    broadcast('terminal-created', { session });
+    res.json(session);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[terminal] Failed to create terminal:', message);
+    res.status(500).json({ error: 'Failed to create terminal', detail: message });
+  }
 });
 
 app.post('/api/terminals/:id/inject', (req, res) => {
@@ -1075,6 +1105,16 @@ app.post('/api/plans', (req, res) => {
   broadcast('plan-created', { plan });
   saveNow(() => exportDatabase());
   res.json(plan);
+});
+
+// Discover plan directories (must be before /:uid to avoid "discover" matching as uid)
+app.get('/api/plans/discover', (req, res) => {
+  const projectRoot = req.query.project as string | undefined;
+  if (!projectRoot) {
+    res.status(400).json({ error: 'project query param required' });
+    return;
+  }
+  res.json(discoverPlanDirs(projectRoot));
 });
 
 // Get plan
@@ -1954,15 +1994,6 @@ app.post('/api/plans/import-external', (req, res) => {
     source: result.source,
     metadata: result.metadata,
   });
-});
-
-app.get('/api/plans/discover', (req, res) => {
-  const projectRoot = req.query.project as string | undefined;
-  if (!projectRoot) {
-    res.status(400).json({ error: 'project query param required' });
-    return;
-  }
-  res.json(discoverPlanDirs(projectRoot));
 });
 
 app.get('/api/plans/:uid/file-status', (req, res) => {

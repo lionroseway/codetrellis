@@ -463,7 +463,7 @@ function buildClusterView(
         childCount: files.length,
         expanded: false,
         onToggle: () => onToggle(clusterId),
-        topFiles: topFiles.map((f) => f.name),
+        topFiles: topFiles.map((f) => f.path),
         // Full file list (relative paths) — consumed by Inspector to drill into a cluster
         files: files.map((f) => f.path),
         connectionCount: totalConnections,

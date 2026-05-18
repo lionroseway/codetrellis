@@ -15,11 +15,16 @@ export default defineConfig({
     alias: {
       '@shared': path.resolve(__dirname, 'src/shared'),
     },
+    dedupe: ['react', 'react-dom'],
   },
   server: {
     port: 5173,
     proxy: {
       '/api': 'http://localhost:3001',
+      '/terminal-ws': {
+        target: 'ws://localhost:3001',
+        ws: true,
+      },
       '/ws': {
         target: 'ws://localhost:3001',
         ws: true,

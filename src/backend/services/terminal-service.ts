@@ -67,16 +67,19 @@ function getDefaultShell(): string {
  * Build the command + args for a given agent preset.
  */
 function presetCommand(preset: AgentPreset): { file: string; args: string[] } {
+  const shell = getDefaultShell();
+  // Spawn as a login shell (-l) so the user's profile (.zshrc, .bash_profile)
+  // is sourced — this gives colored prompts, aliases, PATH, etc.
   switch (preset) {
     case 'claude':
-      return { file: getDefaultShell(), args: [] };
+      return { file: shell, args: ['-l'] };
     case 'codex':
-      return { file: getDefaultShell(), args: [] };
+      return { file: shell, args: ['-l'] };
     case 'aider':
-      return { file: getDefaultShell(), args: [] };
+      return { file: shell, args: ['-l'] };
     case 'shell':
     default:
-      return { file: getDefaultShell(), args: [] };
+      return { file: shell, args: ['-l'] };
   }
 }
 
@@ -118,6 +121,10 @@ export function createTerminal(opts: {
     ...process.env,
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor',
+    // Enable colored output for ls, grep, and other tools
+    CLICOLOR: '1',
+    CLICOLOR_FORCE: '1',
+    LSCOLORS: 'GxFxCxDxBxegedabagaced',
     // Avoid pager for git and other tools inside the terminal
     GIT_PAGER: '',
     PAGER: '',
