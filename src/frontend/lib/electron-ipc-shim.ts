@@ -239,15 +239,11 @@ function installWebSocketShim(bridge: CodetrellisIpcBridge): void {
    * Returns null if this isn't a terminal URL.
    */
   function extractTerminalId(url: string): string | null {
-    try {
-      // The URL might be ws:// or wss:// — parse it as http to
-      // extract the pathname + query reliably.
-      const u = new URL(url.replace(/^ws/, 'http'));
-      if (u.pathname === '/terminal-ws') {
-        return u.searchParams.get('id');
-      }
-    } catch { /* not a valid URL */ }
-    return null;
+    // Use a regex instead of URL parsing because in Electron's
+    // file:// mode the WebSocket URL has no host (`ws:///terminal-ws?…`)
+    // which makes the URL constructor throw.
+    const m = url.match(/\/terminal-ws\b.*[?&]id=([^&]+)/);
+    return m ? m[1] : null;
   }
 
   /** Broadcast-only WebSocket (event channel /ws). */
