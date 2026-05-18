@@ -1081,7 +1081,7 @@ function NodeContextMenu({
     // Find or create an agent terminal
     let session = terminalStore.sessions.find((s) => s.preset !== 'shell' && s.alive);
     if (!session) {
-      session = await terminalStore.createSession('claude') ?? undefined;
+      session = await terminalStore.createSession('claude', { cwd: root ?? undefined }) ?? undefined;
       if (!session) {
         addToast({ type: 'error', title: 'Failed to create terminal' });
         return;

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { TerminalInstance } from './TerminalInstance';
 import { useTerminalStore } from '../../stores/terminal-store';
+import { useProjectStore } from '../../stores/project-store';
 
 export type AgentPreset = 'claude' | 'codex' | 'aider' | 'shell';
 
@@ -57,11 +58,13 @@ export function TerminalPanel() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showPresetMenu]);
 
+  const projectRoot = useProjectStore((s) => s.root);
+
   const handleNewTerminal = useCallback(async (preset: AgentPreset) => {
     setShowPresetMenu(false);
-    await createSession(preset);
+    await createSession(preset, { cwd: projectRoot ?? undefined });
     if (!isOpen) setOpen(true);
-  }, [createSession, isOpen, setOpen]);
+  }, [createSession, isOpen, setOpen, projectRoot]);
 
   if (!isOpen && sessions.length === 0) {
     return null; // Don't render anything if no terminals and panel closed
