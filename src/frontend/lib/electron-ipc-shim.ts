@@ -42,9 +42,17 @@ interface BroadcastMessage {
   payload: unknown;
 }
 
+interface TerminalMessage {
+  type: string;
+  data?: string;
+  code?: number;
+}
+
 interface CodetrellisIpcBridge {
   api: (req: IpcRequest) => Promise<IpcResponse>;
   onWsEvent: (cb: (msg: BroadcastMessage) => void) => () => void;
+  terminalSend: (termId: string, data: { type: string; [key: string]: unknown }) => void;
+  onTerminalData: (termId: string, cb: (msg: TerminalMessage) => void) => () => void;
 }
 
 declare global {
@@ -225,13 +233,31 @@ async function ipcFetch(
  *     push WS messages back (broadcasts are one-way).
  */
 function installWebSocketShim(bridge: CodetrellisIpcBridge): void {
-  class IpcWebSocket extends EventTarget implements WebSocket {
+  /**
+   * Extract terminal ID from a WebSocket URL like
+   * `ws://localhost:3001/terminal-ws?id=term-1-abc123`.
+   * Returns null if this isn't a terminal URL.
+   */
+  function extractTerminalId(url: string): string | null {
+    try {
+      // The URL might be ws:// or wss:// — parse it as http to
+      // extract the pathname + query reliably.
+      const u = new URL(url.replace(/^ws/, 'http'));
+      if (u.pathname === '/terminal-ws') {
+        return u.searchParams.get('id');
+      }
+    } catch { /* not a valid URL */ }
+    return null;
+  }
+
+  /** Broadcast-only WebSocket (event channel /ws). */
+  class IpcBroadcastWebSocket extends EventTarget implements WebSocket {
     readonly url: string;
     readonly protocol = '';
     readonly extensions = '';
     readonly bufferedAmount = 0;
     binaryType: BinaryType = 'blob';
-    readyState: number = 0; // CONNECTING
+    readyState: number = 0;
     onopen: ((this: WebSocket, ev: Event) => void) | null = null;
     onclose: ((this: WebSocket, ev: CloseEvent) => void) | null = null;
     onmessage: ((this: WebSocket, ev: MessageEvent) => void) | null = null;
@@ -251,15 +277,8 @@ function installWebSocketShim(bridge: CodetrellisIpcBridge): void {
     constructor(url: string | URL, _protocols?: string | string[]) {
       super();
       this.url = typeof url === 'string' ? url : url.toString();
-
-      // Subscribe and become "open" on the next tick so anything
-      // attaching `.onmessage` or `addEventListener('open', ...)`
-      // synchronously after construction sees the events arrive.
       queueMicrotask(() => {
         this.unsubscribe = bridge.onWsEvent((msg) => {
-          // The original WebSocket protocol sent
-          // `JSON.stringify({ type, payload })` — preserve the wire
-          // format so consumers don't need to change.
           const wireMessage = JSON.stringify(msg);
           const ev = new MessageEvent('message', { data: wireMessage });
           this.onmessage?.call(this as unknown as WebSocket, ev);
@@ -273,10 +292,7 @@ function installWebSocketShim(bridge: CodetrellisIpcBridge): void {
     }
 
     send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-      // No-op — the renderer never pushes broadcast events to the
-      // backend over the WebSocket in current usage. If we ever
-      // need bidirectional, add an `ipcRenderer.send('ws:client→server', data)`
-      // path on the preload + main side.
+      // No-op — broadcast channel is one-way.
     }
 
     close(code = 1000, reason = ''): void {
@@ -293,8 +309,93 @@ function installWebSocketShim(bridge: CodetrellisIpcBridge): void {
     }
   }
 
+  /** Bidirectional WebSocket for terminal PTY I/O. */
+  class IpcTerminalWebSocket extends EventTarget implements WebSocket {
+    readonly url: string;
+    readonly protocol = '';
+    readonly extensions = '';
+    readonly bufferedAmount = 0;
+    binaryType: BinaryType = 'blob';
+    readyState: number = 0;
+    onopen: ((this: WebSocket, ev: Event) => void) | null = null;
+    onclose: ((this: WebSocket, ev: CloseEvent) => void) | null = null;
+    onmessage: ((this: WebSocket, ev: MessageEvent) => void) | null = null;
+    onerror: ((this: WebSocket, ev: Event) => void) | null = null;
+
+    static readonly CONNECTING = 0;
+    static readonly OPEN = 1;
+    static readonly CLOSING = 2;
+    static readonly CLOSED = 3;
+    readonly CONNECTING = 0;
+    readonly OPEN = 1;
+    readonly CLOSING = 2;
+    readonly CLOSED = 3;
+
+    private termId: string;
+    private unsubscribe: (() => void) | null = null;
+
+    constructor(url: string | URL, termId: string) {
+      super();
+      this.url = typeof url === 'string' ? url : url.toString();
+      this.termId = termId;
+      queueMicrotask(() => {
+        this.unsubscribe = bridge.onTerminalData(this.termId, (msg) => {
+          const wireMessage = JSON.stringify(msg);
+          const ev = new MessageEvent('message', { data: wireMessage });
+          this.onmessage?.call(this as unknown as WebSocket, ev);
+          this.dispatchEvent(ev);
+        });
+        this.readyState = this.OPEN;
+        const openEv = new Event('open');
+        this.onopen?.call(this as unknown as WebSocket, openEv);
+        this.dispatchEvent(openEv);
+      });
+    }
+
+    send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+      if (this.readyState !== this.OPEN) return;
+      const str = typeof data === 'string' ? data : new TextDecoder().decode(data as ArrayBuffer);
+      try {
+        const parsed = JSON.parse(str);
+        bridge.terminalSend(this.termId, parsed);
+      } catch {
+        // Raw text — treat as keyboard input
+        bridge.terminalSend(this.termId, { type: 'input', data: str });
+      }
+    }
+
+    close(code = 1000, reason = ''): void {
+      if (this.readyState === this.CLOSED) return;
+      this.readyState = this.CLOSING;
+      this.unsubscribe?.();
+      this.unsubscribe = null;
+      queueMicrotask(() => {
+        this.readyState = this.CLOSED;
+        const ev = new CloseEvent('close', { code, reason, wasClean: true });
+        this.onclose?.call(this as unknown as WebSocket, ev);
+        this.dispatchEvent(ev);
+      });
+    }
+  }
+
+  // Replace the global WebSocket — route terminal URLs to the
+  // bidirectional IPC class, everything else to broadcast-only.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).WebSocket = IpcWebSocket;
+  (window as any).WebSocket = class IpcWebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      const termId = extractTerminalId(urlStr);
+      if (termId) {
+        return new IpcTerminalWebSocket(url, termId) as unknown as IpcWebSocket;
+      }
+      return new IpcBroadcastWebSocket(url, protocols) as unknown as IpcWebSocket;
+    }
+    // Static constants required by the WebSocket spec
+    static readonly CONNECTING = 0;
+    static readonly OPEN = 1;
+    static readonly CLOSING = 2;
+    static readonly CLOSED = 3;
+  };
 }
 
 // =============================================================

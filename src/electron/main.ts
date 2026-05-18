@@ -6,6 +6,7 @@ import {
   addBroadcastTarget,
 } from '../backend/server';
 import { dispatch, type IpcRequest } from '../backend/services/ipc-dispatcher';
+import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
 
 // Mirror console.* to <dataDir>/logs/<YYYY-MM-DD>.log so the
@@ -228,3 +229,42 @@ ipcMain.handle('logs:reveal', async () => {
 });
 
 ipcMain.handle('logs:get-path', async () => getCurrentLogPath());
+
+// =============================================================
+// Terminal IPC — bidirectional PTY I/O
+// =============================================================
+
+// Track which terminal IDs have a renderer listener so we only
+// forward data for active connections.
+const terminalIpcListeners = new Set<string>();
+
+// Wire terminal service output → renderer IPC
+terminalService.onTerminalData((id, data) => {
+  if (!terminalIpcListeners.has(id) || !mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(`codetrellis:terminal-data:${id}`, { type: 'output', data });
+});
+
+terminalService.onTerminalExit((id, code) => {
+  if (!terminalIpcListeners.has(id) || !mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(`codetrellis:terminal-data:${id}`, { type: 'exit', code });
+  terminalIpcListeners.delete(id);
+});
+
+// Renderer connects to a terminal — start forwarding output
+ipcMain.on('codetrellis:terminal-connect', (_event, termId: string) => {
+  terminalIpcListeners.add(termId);
+});
+
+// Renderer disconnects from a terminal
+ipcMain.on('codetrellis:terminal-disconnect', (_event, termId: string) => {
+  terminalIpcListeners.delete(termId);
+});
+
+// Renderer sends keyboard input / resize to a terminal
+ipcMain.on('codetrellis:terminal-send', (_event, termId: string, msg: { type: string; data?: string; cols?: number; rows?: number }) => {
+  if (msg.type === 'input' && msg.data) {
+    terminalService.writeTerminal(termId, msg.data);
+  } else if (msg.type === 'resize' && msg.cols && msg.rows) {
+    terminalService.resizeTerminal(termId, msg.cols, msg.rows);
+  }
+});

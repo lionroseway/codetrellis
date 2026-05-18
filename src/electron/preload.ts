@@ -52,6 +52,28 @@ const codetrellisIpc = {
     ipcRenderer.on('codetrellis:ws-event', handler);
     return () => ipcRenderer.removeListener('codetrellis:ws-event', handler);
   },
+
+  // --- Terminal IPC (bidirectional) ---
+
+  /** Send data (keyboard input / resize) to a terminal PTY. */
+  terminalSend: (termId: string, data: { type: string; [key: string]: unknown }): void => {
+    ipcRenderer.send('codetrellis:terminal-send', termId, data);
+  },
+
+  /** Subscribe to output from a specific terminal. Returns unsubscribe fn. */
+  onTerminalData: (
+    termId: string,
+    callback: (msg: { type: string; data?: string; code?: number }) => void,
+  ): (() => void) => {
+    const channel = `codetrellis:terminal-data:${termId}`;
+    const handler = (_e: Electron.IpcRendererEvent, msg: { type: string; data?: string; code?: number }) => callback(msg);
+    ipcRenderer.on(channel, handler);
+    ipcRenderer.send('codetrellis:terminal-connect', termId);
+    return () => {
+      ipcRenderer.removeListener(channel, handler);
+      ipcRenderer.send('codetrellis:terminal-disconnect', termId);
+    };
+  },
 };
 
 /**

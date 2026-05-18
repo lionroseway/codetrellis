@@ -43,16 +43,26 @@ interface TerminalSessionInfo {
 const sessions = new Map<string, TerminalSession>();
 let counter = 0;
 
-// Listener for terminal data — set by the WebSocket integration layer
-let dataListener: ((id: string, data: string) => void) | null = null;
-let exitListener: ((id: string, code: number) => void) | null = null;
+// Listeners for terminal data — supports multiple consumers so both
+// the WebSocket layer (web mode) and the Electron IPC layer can
+// coexist without overwriting each other.
+const dataListeners: Array<(id: string, data: string) => void> = [];
+const exitListeners: Array<(id: string, code: number) => void> = [];
 
-export function onTerminalData(fn: (id: string, data: string) => void) {
-  dataListener = fn;
+export function onTerminalData(fn: (id: string, data: string) => void): () => void {
+  dataListeners.push(fn);
+  return () => {
+    const idx = dataListeners.indexOf(fn);
+    if (idx >= 0) dataListeners.splice(idx, 1);
+  };
 }
 
-export function onTerminalExit(fn: (id: string, code: number) => void) {
-  exitListener = fn;
+export function onTerminalExit(fn: (id: string, code: number) => void): () => void {
+  exitListeners.push(fn);
+  return () => {
+    const idx = exitListeners.indexOf(fn);
+    if (idx >= 0) exitListeners.splice(idx, 1);
+  };
 }
 
 /**
@@ -151,14 +161,14 @@ export function createTerminal(opts: {
 
   sessions.set(id, session);
 
-  // Pipe PTY output to the data listener
+  // Pipe PTY output to all registered listeners
   pty.onData((data) => {
-    if (dataListener) dataListener(id, data);
+    for (const fn of dataListeners) fn(id, data);
   });
 
   pty.onExit(({ exitCode }) => {
     session.alive = false;
-    if (exitListener) exitListener(id, exitCode);
+    for (const fn of exitListeners) fn(id, exitCode);
   });
 
   // For agent presets, type the agent command after a short delay
