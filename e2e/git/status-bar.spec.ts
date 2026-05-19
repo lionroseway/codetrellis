@@ -51,9 +51,9 @@ test.describe('Status bar', () => {
     );
     expect(res.ok()).toBeTruthy();
     const status = await res.json();
-    expect(typeof status.staged).toBe('number');
-    expect(typeof status.unstaged).toBe('number');
-    expect(typeof status.untracked).toBe('number');
+    expect(Array.isArray(status.staged)).toBe(true);
+    expect(Array.isArray(status.unstaged)).toBe(true);
+    expect(Array.isArray(status.untracked)).toBe(true);
   });
 
   test('health endpoint returns ok', async ({ request }) => {
