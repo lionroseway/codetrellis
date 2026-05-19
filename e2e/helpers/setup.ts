@@ -50,23 +50,26 @@ export async function gotoWithProject(
     .first()
     .waitFor({ timeout: 10_000 });
 
-  // Scan via API then inject into Zustand stores
+  // Scan via API then inject into Zustand stores.
+  // Note: The WASM tree-sitter parser can become unstable after many
+  // sequential scans (>40). When running large test suites, split into
+  // groups of ~40 tests or restart the server between groups.
   await page.evaluate(async (pp: string) => {
-    // Scan — retry once if backend is slow
+    // Scan — retry up to 3 times with increasing delays
     let result: any;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await fetch('/api/project/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath: pp }),
-      });
-      const text = await res.text();
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
+        const res = await fetch('/api/project/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectPath: pp }),
+        });
+        const text = await res.text();
         result = JSON.parse(text);
         break;
       } catch {
-        if (attempt === 0) await new Promise((r) => setTimeout(r, 2000));
-        else throw new Error(`/api/project/scan non-JSON: ${text.slice(0, 100)}`);
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        else throw new Error(`/api/project/scan failed after 3 attempts`);
       }
     }
 
