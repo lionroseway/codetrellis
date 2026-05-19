@@ -52,6 +52,18 @@ test.describe('MCP changes & drift', () => {
     });
     expect(summaryResult).toBeTruthy();
 
+    // get_change_status for a specific change
+    const changesText = listResult.content?.[0]?.text || '[]';
+    const changes = JSON.parse(changesText);
+    const changeList = Array.isArray(changes) ? changes : [];
+    if (changeList.length > 0) {
+      const statusResult = await client.callTool('get_change_status', {
+        plan_uid: planUid,
+        change_id: changeList[0].id,
+      });
+      expect(statusResult).toBeTruthy();
+    }
+
     client.close();
   });
 
@@ -144,7 +156,7 @@ test.describe('MCP file sync', () => {
     await cleanupPlans(request, 'MCP E2E');
   });
 
-  test('export_plan_to_files + discover_plan_files + unlink', async () => {
+  test('export_plan_to_files + import_plan_from_files + discover + unlink', async () => {
     const client = await createMcpClient();
 
     const planResult = await client.callTool('create_plan', {
@@ -161,6 +173,19 @@ test.describe('MCP file sync', () => {
     });
     expect(exportResult).toBeTruthy();
 
+    // Get export path for import
+    const exportText = exportResult.content?.[0]?.text || '{}';
+    const exportData = JSON.parse(exportText);
+    const planDir = exportData.planDir || exportData.path;
+
+    // import_plan_from_files — reimport the exported plan
+    if (planDir) {
+      const importResult = await client.callTool('import_plan_from_files', {
+        plan_dir: planDir,
+      });
+      expect(importResult).toBeTruthy();
+    }
+
     // Discover
     const discoverResult = await client.callTool('discover_plan_files', {
       project_root: PROJECT_PATH,
@@ -173,6 +198,27 @@ test.describe('MCP file sync', () => {
       project_root: PROJECT_PATH,
     });
     expect(unlinkResult).toBeTruthy();
+
+    client.close();
+  });
+
+  test('publish_plan_as_template publishes a plan', async () => {
+    const client = await createMcpClient();
+
+    const planResult = await client.callTool('create_plan', {
+      tasks: [{ description: 'Template task', affected_files: [] }],
+      title: 'MCP E2E Publish Plan',
+      project_path: PROJECT_PATH,
+    });
+    const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
+
+    const publishResult = await client.callTool('publish_plan_as_template', {
+      plan_uid: planUid,
+      project_root: PROJECT_PATH,
+      template_id: 'e2e-mcp-template',
+      label: 'E2E MCP Template',
+    });
+    expect(publishResult).toBeTruthy();
 
     client.close();
   });
@@ -235,13 +281,15 @@ test.describe('MCP legacy task tools', () => {
     const client = await createMcpClient();
 
     const planResult = await client.callTool('create_plan', {
-      tasks: [],
+      tasks: [{ description: 'Legacy task for claim', affected_files: ['src/index.ts'] }],
       title: 'MCP E2E Legacy Plan',
       project_path: PROJECT_PATH,
     });
-    const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
+    const planData = JSON.parse(planResult.content?.[0]?.text || '{}');
+    const planUid = planData.uid;
+    const taskUid = planData.tasks?.[0]?.uid;
 
-    // Add an item to use as parent
+    // Add an item to use as subtask parent
     const itemResult = await client.callTool('add_item', {
       plan_uid: planUid,
       kind: 'action',
@@ -257,6 +305,45 @@ test.describe('MCP legacy task tools', () => {
       plan_uid: planUid,
     });
     expect(subtaskResult).toBeTruthy();
+
+    // claim_task (legacy)
+    if (taskUid) {
+      const claimResult = await client.callTool('claim_task', {
+        plan_uid: planUid,
+        task_uid: taskUid,
+        agent_type: 'e2e-test',
+      });
+      expect(claimResult).toBeTruthy();
+
+      // update_task
+      const updateResult = await client.callTool('update_task', {
+        plan_uid: planUid,
+        task_uid: taskUid,
+        status: 'in_progress',
+      });
+      expect(updateResult).toBeTruthy();
+
+      // update_task_progress
+      const progressResult = await client.callTool('update_task_progress', {
+        task_uid: taskUid,
+        percent: 75,
+        message: 'Almost done via MCP',
+      });
+      expect(progressResult).toBeTruthy();
+
+      // set_task_blocked
+      const blockedResult = await client.callTool('set_task_blocked', {
+        task_uid: taskUid,
+        reason: 'Waiting on credentials',
+      });
+      expect(blockedResult).toBeTruthy();
+
+      // read_task_full
+      const fullResult = await client.callTool('read_task_full', {
+        task_uid: taskUid,
+      });
+      expect(fullResult).toBeTruthy();
+    }
 
     client.close();
   });

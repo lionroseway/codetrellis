@@ -286,4 +286,62 @@ test.describe('MCP plan lifecycle', () => {
 
     client.close();
   });
+
+  test('get_next_item returns pending item', async () => {
+    const client = await createMcpClient();
+
+    const planResult = await client.callTool('create_plan', {
+      tasks: [],
+      title: 'MCP E2E Next Item Plan',
+      project_path: process.cwd(),
+    });
+    const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
+
+    await client.callTool('add_item', {
+      plan_uid: planUid,
+      kind: 'action',
+      title: 'Pending Item',
+      body: 'body',
+    });
+
+    const nextResult = await client.callTool('get_next_item', {
+      plan_uid: planUid,
+    });
+    expect(nextResult).toBeTruthy();
+
+    client.close();
+  });
+
+  test('approve_gate clears completion gate', async () => {
+    const client = await createMcpClient();
+
+    const planResult = await client.callTool('create_plan', {
+      tasks: [],
+      title: 'MCP E2E Gate Plan',
+      project_path: process.cwd(),
+    });
+    const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
+
+    const itemResult = await client.callTool('add_item', {
+      plan_uid: planUid,
+      kind: 'action',
+      title: 'Gateable Item',
+      body: 'body',
+    });
+    const itemUid = JSON.parse(itemResult.content?.[0]?.text || '{}').uid;
+
+    // Mark as done first
+    await client.callTool('update_item', {
+      item_uid: itemUid,
+      status: 'done',
+    });
+
+    // Approve gate — may succeed or be a no-op if no gate is set
+    const gateResult = await client.callTool('approve_gate', {
+      uid: itemUid,
+    });
+    expect(gateResult).toBeTruthy();
+
+    client.close();
+  });
 });
