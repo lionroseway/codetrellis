@@ -4,6 +4,7 @@ import { usePlanStore } from '../stores/plan-store';
 import { usePlanItemsStore } from '../stores/plan-items-store';
 import { useToastStore } from '../stores/toast-store';
 import { useProjectStore } from '../stores/project-store';
+import { useTerminalStore } from '../stores/terminal-store';
 import type { AgentEvent, Comment } from '../../shared/types';
 
 /**
@@ -34,6 +35,9 @@ export function useWebSocket() {
         // widget shows agents that were already connected before the
         // UI loaded.
         usePlanStore.getState().fetchSessions().catch(() => {});
+        // Hydrate terminal sessions created before the UI loaded
+        // (e.g. via API / MCP).
+        useTerminalStore.getState().hydrate().catch(() => {});
       };
 
       ws.onmessage = (event) => {
@@ -414,6 +418,16 @@ export function useWebSocket() {
             // on open; if it's currently open, the user may want to
             // reload — but we don't have a clean push channel into
             // SettingsModal yet. Future: dispatch a window event.
+          }
+
+          // --- Terminal session lifecycle ---
+          if (type === 'terminal-created') {
+            const session = payload?.session;
+            if (session) useTerminalStore.getState().onTerminalCreated(session);
+          }
+          if (type === 'terminal-killed') {
+            const id = payload?.id as string | undefined;
+            if (id) useTerminalStore.getState().onTerminalKilled(id);
           }
 
           // Execution tracking — mark files as actively being worked on

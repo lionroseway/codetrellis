@@ -86,7 +86,7 @@ function computeChecks(plan: Plan, items: PlanItem[]): ReadinessCheck[] {
   const allFiles = new Set<string>();
   for (const a of actions) {
     for (const fs of a.fileSpecs ?? []) {
-      allFiles.add(fs.path);
+      if (typeof fs?.path === 'string') allFiles.add(fs.path);
     }
   }
   checks.push({
@@ -117,7 +117,7 @@ function computeChecks(plan: Plan, items: PlanItem[]): ReadinessCheck[] {
     const body = (a.body ?? '').toLowerCase();
     const hasTestKeyword = body.includes('test') || body.includes('spec') || body.includes('jest') || body.includes('vitest');
     const hasTestFile = (a.fileSpecs ?? []).some((fs) =>
-      fs.path.includes('test') || fs.path.includes('spec') || fs.path.includes('__tests__'),
+      typeof fs?.path === 'string' && (fs.path.includes('test') || fs.path.includes('spec') || fs.path.includes('__tests__')),
     );
     return hasTestKeyword || hasTestFile;
   });

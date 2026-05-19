@@ -54,10 +54,10 @@ export function StatusBar() {
 
       <button
         onClick={() => useTerminalStore.getState().togglePanel()}
-        className="flex items-center gap-1 hover:text-foreground transition-all"
-        title="Toggle terminal (Cmd+`)"
+        className="flex items-center gap-1.5 px-2 py-0.5 -my-0.5 rounded border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.08] hover:text-foreground hover:border-white/[0.15] transition-all text-[10.5px]"
+        title="Toggle terminal (⌘`)"
       >
-        <SquareTerminal size={9} />
+        <SquareTerminal size={11} />
         Terminal
       </button>
 

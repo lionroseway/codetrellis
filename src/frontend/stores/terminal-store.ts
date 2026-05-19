@@ -40,6 +40,10 @@ interface TerminalState {
   hydrate: () => Promise<void>;
   /** Mark a session as exited (called from WS exit message). */
   markExited: (id: string) => void;
+  /** Called when a terminal-created broadcast arrives (e.g. created by API / MCP). */
+  onTerminalCreated: (session: TerminalSessionInfo) => void;
+  /** Called when a terminal-killed broadcast arrives. */
+  onTerminalKilled: (id: string) => void;
 }
 
 export const useTerminalStore = create<TerminalState>((set, get) => ({
@@ -48,7 +52,16 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   isOpen: false,
 
   setOpen: (open) => set({ isOpen: open }),
-  togglePanel: () => set((s) => ({ isOpen: !s.isOpen })),
+  togglePanel: () => {
+    const s = get();
+    if (!s.isOpen && s.sessions.length === 0) {
+      // Opening with no sessions — auto-create a shell terminal
+      set({ isOpen: true });
+      get().createSession('shell');
+      return;
+    }
+    set({ isOpen: !s.isOpen });
+  },
   setActiveSession: (id) => set({ activeSessionId: id }),
 
   createSession: async (preset = 'shell', opts) => {
@@ -122,5 +135,28 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
         ss.id === id ? { ...ss, alive: false } : ss,
       ),
     }));
+  },
+
+  onTerminalCreated: (session) => {
+    set((s) => {
+      // Dedup — we may have already added it via createSession()
+      if (s.sessions.some((ss) => ss.id === session.id)) return s;
+      return {
+        sessions: [...s.sessions, session],
+      };
+    });
+  },
+
+  onTerminalKilled: (id) => {
+    set((s) => {
+      const remaining = s.sessions.filter((ss) => ss.id !== id);
+      const nextActive = remaining.length > 0
+        ? remaining[remaining.length - 1].id
+        : null;
+      return {
+        sessions: remaining,
+        activeSessionId: s.activeSessionId === id ? nextActive : s.activeSessionId,
+      };
+    });
   },
 }));

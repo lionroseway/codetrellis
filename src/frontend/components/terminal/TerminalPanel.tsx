@@ -66,26 +66,26 @@ export function TerminalPanel() {
     if (!isOpen) setOpen(true);
   }, [createSession, isOpen, setOpen, projectRoot]);
 
-  if (!isOpen && sessions.length === 0) {
-    return null; // Don't render anything if no terminals and panel closed
-  }
-
   return (
     <div className={`border-t border-white/[0.06] bg-[#0a0b14] flex flex-col ${
-      isOpen ? 'h-[40vh] min-h-[200px]' : 'h-8'
+      isOpen ? 'h-[40vh] min-h-[200px]' : 'h-[30px]'
     } transition-all duration-200`}>
-      {/* Tab bar */}
-      <div className="flex items-center gap-0.5 px-2 h-8 shrink-0 border-b border-white/[0.04] bg-[#080916]">
+      {/* Tab bar — always visible */}
+      <div className="flex items-center gap-0.5 px-2 h-[30px] shrink-0 border-b border-white/[0.04] bg-[#080916]">
         <button
           onClick={togglePanel}
-          className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-foreground-subtle hover:text-foreground transition-colors rounded"
-          title={isOpen ? 'Collapse terminal' : 'Expand terminal'}
+          className="flex items-center gap-1.5 px-2 py-1 text-[11.5px] text-foreground-subtle hover:text-foreground transition-colors rounded"
+          title={isOpen ? 'Collapse terminal (⌘`)' : 'Open terminal (⌘`)'}
         >
-          <SquareTerminal size={12} />
+          <SquareTerminal size={13} />
+          <span className="font-medium">Terminal</span>
+          {sessions.length > 0 && (
+            <span className="text-[10px] text-foreground-subtle/60 tabular-nums">{sessions.length}</span>
+          )}
           {isOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
         </button>
 
-        <div className="h-4 w-px bg-white/[0.06] mx-1" />
+        {sessions.length > 0 && <div className="h-4 w-px bg-white/[0.06] mx-1" />}
 
         {/* Tabs */}
         {sessions.map((s) => {
@@ -137,7 +137,7 @@ export function TerminalPanel() {
             <Plus size={11} />
           </button>
           {showPresetMenu && (
-            <div className="absolute left-0 top-full mt-1 z-50 min-w-[140px] rounded-lg border border-white/[0.10] bg-[#0c0e1a]/98 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] py-1">
+            <div className="absolute left-0 bottom-full mb-1 z-50 min-w-[140px] rounded-lg border border-white/[0.10] bg-[#0c0e1a]/98 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] py-1">
               {(Object.entries(PRESET_META) as Array<[AgentPreset, typeof PRESET_META.shell]>).map(
                 ([preset, meta]) => (
                   <button
