@@ -108,7 +108,15 @@ const clients = new Set<WebSocket>();
 
 wss.on('connection', (ws) => {
   clients.add(ws);
+  ws.on('error', (err) => {
+    console.error('[WS] Client socket error:', err.message);
+    clients.delete(ws);
+  });
   ws.on('close', () => clients.delete(ws));
+});
+
+wss.on('error', (err) => {
+  console.error('[WS] Server error:', err.message);
 });
 
 /**
@@ -559,6 +567,7 @@ app.get('/api/fs/browse', (req, res) => {
 });
 
 // Scan a project directory
+let scanInFlight = false;
 app.post('/api/project/scan', async (req, res) => {
   const { projectPath } = req.body;
   if (!projectPath || typeof projectPath !== 'string') {
@@ -571,95 +580,114 @@ app.post('/api/project/scan', async (req, res) => {
     return;
   }
 
-  console.log(`[API] Scanning project: ${projectPath}`);
+  // Prevent concurrent scans — the second request would call clearAstData()
+  // mid-parse, corrupting the DB.  A boolean flag is sufficient because
+  // Node.js is single-threaded: the check-and-set is synchronous, and
+  // concurrency only arises when we hit the `await parseFiles()` below.
+  if (scanInFlight) {
+    res.status(409).json({ error: 'A scan is already in progress' });
+    return;
+  }
+  scanInFlight = true;
 
-  // Drop AST data from any previously-scanned project. Without this,
-  // files/symbols/imports accumulate across project switches and queries
-  // like search return the union of every project ever opened.
-  clearAstData();
-
-  // Record this project as recently opened (best-effort — don't fail scan if it errors)
   try {
-    const branchInfo = getGitBranchName(projectPath);
-    recordProjectOpen(projectPath, branchInfo);
+    console.log(`[API] Scanning project: ${projectPath}`);
+
+    // Drop AST data from any previously-scanned project. Without this,
+    // files/symbols/imports accumulate across project switches and queries
+    // like search return the union of every project ever opened.
+    clearAstData();
+
+    // Record this project as recently opened (best-effort — don't fail scan if it errors)
+    try {
+      const branchInfo = getGitBranchName(projectPath);
+      recordProjectOpen(projectPath, branchInfo);
+    } catch (err) {
+      console.warn('[API] Failed to record recent project:', err);
+    }
+
+    const monorepoConfig = detectMonorepo(projectPath);
+    const fileTree = scanDirectory(projectPath);
+    const fileCount = countFiles(fileTree);
+
+    // Parse all source files for AST data
+    const filePaths = collectFilePaths(fileTree);
+    const parsedFiles = await parseFiles(filePaths);
+
+    for (const parsed of parsedFiles) {
+      storeParsedFile(parsed, projectPath);
+    }
+
+    // Discover systems (npm packages, Python projects, Rust crates, ...)
+    // and use them to build the workspace-alias map. Without this, only
+    // relative imports resolve — workspace-aliased imports like `@swf/ui`
+    // get dropped, leaving apps disconnected from their package layer.
+    const systems = discoverSystems(projectPath);
+    const aliasMap = buildAliasMap(systems);
+    console.log(`[API] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
+    for (const sys of systems) {
+      console.log(`[API]   · ${sys.relativeRoot || '(root)'} · ${sys.manifestKind} · ${sys.language} · ${sys.packageName ?? sys.name}`);
+    }
+
+    // Resolve import paths to actual files. Per-language dispatch: each
+    // file's language picks the right resolver (TS / Python / Rust /
+    // PHP / Java / ...). Systems list is needed by Python / Rust / PHP /
+    // Java to anchor absolute imports at the importer's project root.
+    resolveImports(projectPath, aliasMap, systems);
+
+    // Cross-system pass — match HTTP callsites (and later SQL / etc.)
+    // across languages so PHP+Python+SQL stops looking like 3 islands.
+    try {
+      recomputeCrossSystemEdges();
+    } catch (err) {
+      console.warn('[API] Cross-system pass failed:', err);
+    }
+
+    const stats = getDbStats();
+    console.log(`[API] Parsed ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports, ${stats.resolvedImports} resolved`);
+
+    // Capture baseline snapshot for diffing
+    const depEdges = getDependencyEdges();
+    const fileData = parsedFiles.map((f) => ({
+      path: f.path.startsWith('/') ? path.relative(projectPath, f.path) : f.path,
+      hash: f.contentHash,
+      symbolCount: f.symbols.length,
+    }));
+    setBaseline(captureSnapshot(fileData, depEdges), getGitHeadCommit(projectPath) || undefined);
+
+    // Start watching for file changes
+    startWatching(projectPath);
+
+    // Start watching for Claude Code sessions
+    startClaudeCodeWatcher(projectPath);
+
+    // Phase 13 §B: watch <project>/.codetrellis/plans/ so external
+    // edits (post `git pull`, hand-edits, another tool) flow into the
+    // DB without requiring an explicit Import click.
+    try {
+      startPlanFileWatcher(projectPath);
+    } catch (err) {
+      console.warn('[API] Plan file watcher failed to start:', err);
+    }
+
+    // Convert Map to plain object for JSON serialization
+    const depGraph: Record<string, string[]> = {};
+    monorepoConfig.dependencyGraph.forEach((v, k) => { depGraph[k] = v; });
+
+    res.json({
+      monorepoConfig: { ...monorepoConfig, dependencyGraph: depGraph },
+      fileTree,
+      fileCount,
+      astStats: stats,
+    });
   } catch (err) {
-    console.warn('[API] Failed to record recent project:', err);
+    console.error('[API] Scan failed:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Scan failed' });
+    }
+  } finally {
+    scanInFlight = false;
   }
-
-  const monorepoConfig = detectMonorepo(projectPath);
-  const fileTree = scanDirectory(projectPath);
-  const fileCount = countFiles(fileTree);
-
-  // Parse all source files for AST data
-  const filePaths = collectFilePaths(fileTree);
-  const parsedFiles = await parseFiles(filePaths);
-
-  for (const parsed of parsedFiles) {
-    storeParsedFile(parsed, projectPath);
-  }
-
-  // Discover systems (npm packages, Python projects, Rust crates, ...)
-  // and use them to build the workspace-alias map. Without this, only
-  // relative imports resolve — workspace-aliased imports like `@swf/ui`
-  // get dropped, leaving apps disconnected from their package layer.
-  const systems = discoverSystems(projectPath);
-  const aliasMap = buildAliasMap(systems);
-  console.log(`[API] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
-  for (const sys of systems) {
-    console.log(`[API]   · ${sys.relativeRoot || '(root)'} · ${sys.manifestKind} · ${sys.language} · ${sys.packageName ?? sys.name}`);
-  }
-
-  // Resolve import paths to actual files. Per-language dispatch: each
-  // file's language picks the right resolver (TS / Python / Rust /
-  // PHP / Java / ...). Systems list is needed by Python / Rust / PHP /
-  // Java to anchor absolute imports at the importer's project root.
-  resolveImports(projectPath, aliasMap, systems);
-
-  // Cross-system pass — match HTTP callsites (and later SQL / etc.)
-  // across languages so PHP+Python+SQL stops looking like 3 islands.
-  try {
-    recomputeCrossSystemEdges();
-  } catch (err) {
-    console.warn('[API] Cross-system pass failed:', err);
-  }
-
-  const stats = getDbStats();
-  console.log(`[API] Parsed ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports, ${stats.resolvedImports} resolved`);
-
-  // Capture baseline snapshot for diffing
-  const depEdges = getDependencyEdges();
-  const fileData = parsedFiles.map((f) => ({
-    path: f.path.startsWith('/') ? path.relative(projectPath, f.path) : f.path,
-    hash: f.contentHash,
-    symbolCount: f.symbols.length,
-  }));
-  setBaseline(captureSnapshot(fileData, depEdges), getGitHeadCommit(projectPath) || undefined);
-
-  // Start watching for file changes
-  startWatching(projectPath);
-
-  // Start watching for Claude Code sessions
-  startClaudeCodeWatcher(projectPath);
-
-  // Phase 13 §B: watch <project>/.codetrellis/plans/ so external
-  // edits (post `git pull`, hand-edits, another tool) flow into the
-  // DB without requiring an explicit Import click.
-  try {
-    startPlanFileWatcher(projectPath);
-  } catch (err) {
-    console.warn('[API] Plan file watcher failed to start:', err);
-  }
-
-  // Convert Map to plain object for JSON serialization
-  const depGraph: Record<string, string[]> = {};
-  monorepoConfig.dependencyGraph.forEach((v, k) => { depGraph[k] = v; });
-
-  res.json({
-    monorepoConfig: { ...monorepoConfig, dependencyGraph: depGraph },
-    fileTree,
-    fileCount,
-    astStats: stats,
-  });
 });
 
 // Symbol search
@@ -2361,6 +2389,17 @@ app.put('/api/settings', (req, res) => {
 app.get('/api/identity/git-defaults', (req, res) => {
   const projectPath = (req.query.project as string | undefined) || undefined;
   res.json(readGitIdentity(projectPath));
+});
+
+// --- Global error handler (must be after all routes) ---
+// The 4-argument signature tells Express this is an error handler.
+// Catches synchronous throws in route handlers that slip past local
+// try/catch blocks.  Without this, unhandled errors crash the process.
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Backend] Unhandled route error:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // --- Server lifecycle ---

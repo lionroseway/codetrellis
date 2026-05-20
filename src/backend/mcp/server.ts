@@ -47,6 +47,7 @@ import * as externalRefsService from '../services/external-refs-service';
  */
 const DEFAULT_MCP_PORT = 19432;
 const MAX_PORT_ATTEMPTS = 10;
+const MAX_MCP_CONNECTIONS = 20;
 
 // Per-session McpServer instances, keyed by transport sessionId.
 // Each agent connection gets its own McpServer object — sharing a
@@ -2336,6 +2337,15 @@ export async function startMcpServer(): Promise<void> {
     }
 
     if (req.url === '/sse' && req.method === 'GET') {
+      // Guard against resource exhaustion from runaway retry loops or
+      // too many simultaneous agents.
+      if (connectedTransports.size >= MAX_MCP_CONNECTIONS) {
+        console.warn(`[MCP] Connection limit reached (${MAX_MCP_CONNECTIONS}), rejecting new SSE client`);
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Too many MCP connections' }));
+        return;
+      }
+
       const transport = new SSEServerTransport('/messages', res);
       const sessionId = transport.sessionId;
       connectedTransports.set(sessionId, transport);

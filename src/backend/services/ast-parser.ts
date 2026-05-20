@@ -168,15 +168,41 @@ export function parseVirtualFile(filePath: string, content: string): ParsedFile 
 }
 
 /**
+ * Yield to the event loop so HTTP / WebSocket / MCP connections stay
+ * responsive during long CPU-bound work.  `setImmediate` fires after
+ * the I/O poll phase; this is the cheapest way to let queued network
+ * callbacks execute.
+ */
+const yieldToEventLoop = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * How many files to parse before yielding. Each file is a synchronous
+ * `readFileSync` + tree-sitter WASM `parser.parse()`. A batch of 8
+ * takes ~20-40ms on typical source files, which keeps the event loop
+ * responsive without adding excessive scheduling overhead.
+ */
+const PARSE_BATCH_SIZE = 8;
+
+/**
  * Parse all source files in a list. Returns only files that could be parsed.
+ *
+ * Yields to the event loop every PARSE_BATCH_SIZE files so the server
+ * can serve HTTP requests, answer WebSocket pings, and send MCP SSE
+ * heartbeats during large scans.
  */
 export async function parseFiles(filePaths: string[]): Promise<ParsedFile[]> {
   await initParser();
 
   const results: ParsedFile[] = [];
-  for (const fp of filePaths) {
-    const parsed = parseFile(fp);
+  for (let i = 0; i < filePaths.length; i++) {
+    const parsed = parseFile(filePaths[i]);
     if (parsed) results.push(parsed);
+
+    // Yield every N files so the event loop isn't starved
+    if ((i + 1) % PARSE_BATCH_SIZE === 0) {
+      await yieldToEventLoop();
+    }
   }
   return results;
 }

@@ -518,13 +518,20 @@ export function exportDatabase(): Uint8Array {
  */
 export function clearAstData(): void {
   const d = getDb();
-  // Order matters: cross_system_edges + callsites reference files via
-  // FK; clear them first so the cascading deletes don't surprise us.
-  try { d.run(`DELETE FROM cross_system_edges`); } catch { /* table may not exist on first run */ }
-  try { d.run(`DELETE FROM callsites`); } catch { /* same */ }
-  d.run(`DELETE FROM imports`);
-  d.run(`DELETE FROM symbols`);
-  d.run(`DELETE FROM files`);
+  d.run('BEGIN');
+  try {
+    // Order matters: cross_system_edges + callsites reference files via
+    // FK; clear them first so the cascading deletes don't surprise us.
+    try { d.run(`DELETE FROM cross_system_edges`); } catch { /* table may not exist on first run */ }
+    try { d.run(`DELETE FROM callsites`); } catch { /* same */ }
+    d.run(`DELETE FROM imports`);
+    d.run(`DELETE FROM symbols`);
+    d.run(`DELETE FROM files`);
+    d.run('COMMIT');
+  } catch (err) {
+    try { d.run('ROLLBACK'); } catch { /* rollback best-effort */ }
+    throw err;
+  }
 }
 
 /**
@@ -532,49 +539,58 @@ export function clearAstData(): void {
  */
 export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
   const d = getDb();
-  const relativePath = path.relative(projectRoot, parsed.path);
+  // Wrap in a transaction so last_insert_rowid() is guaranteed to return
+  // *this* file's ID, and a mid-write failure leaves no partial data.
+  d.run('BEGIN');
+  try {
+    const relativePath = path.relative(projectRoot, parsed.path);
 
-  // Upsert file record
-  d.run(`DELETE FROM files WHERE path = ?`, [parsed.path]);
-  d.run(
-    `INSERT INTO files (path, relative_path, language, content_hash, last_parsed) VALUES (?, ?, ?, ?, ?)`,
-    [parsed.path, relativePath, parsed.language, parsed.contentHash, Date.now()]
-  );
-
-  const fileIdResult = d.exec(`SELECT last_insert_rowid() as id`);
-  const fileId = fileIdResult[0]?.values[0]?.[0] as number;
-
-  // Store symbols
-  for (const sym of parsed.symbols) {
-    insertSymbol(d, fileId, null, sym);
-  }
-
-  // Store imports
-  for (const imp of parsed.imports) {
+    // Upsert file record
+    d.run(`DELETE FROM files WHERE path = ?`, [parsed.path]);
     d.run(
-      `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace) VALUES (?, ?, ?, ?, ?)`,
-      [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0]
+      `INSERT INTO files (path, relative_path, language, content_hash, last_parsed) VALUES (?, ?, ?, ?, ?)`,
+      [parsed.path, relativePath, parsed.language, parsed.contentHash, Date.now()]
     );
-  }
 
-  // Store callsites (cross-system MVP). Replace any existing rows for
-  // this file so re-parsing on save doesn't accumulate stale rows.
-  d.run(`DELETE FROM callsites WHERE file_id = ?`, [fileId]);
-  for (const cs of parsed.callsites ?? []) {
-    d.run(
-      `INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        fileId,
-        cs.kind,
-        cs.protocol,
-        cs.method ?? null,
-        cs.urlPattern ?? null,
-        cs.sqlText ?? null,
-        cs.line ?? null,
-        cs.context ?? null,
-      ]
-    );
+    const fileIdResult = d.exec(`SELECT last_insert_rowid() as id`);
+    const fileId = fileIdResult[0]?.values[0]?.[0] as number;
+
+    // Store symbols
+    for (const sym of parsed.symbols) {
+      insertSymbol(d, fileId, null, sym);
+    }
+
+    // Store imports
+    for (const imp of parsed.imports) {
+      d.run(
+        `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace) VALUES (?, ?, ?, ?, ?)`,
+        [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0]
+      );
+    }
+
+    // Store callsites (cross-system MVP). Replace any existing rows for
+    // this file so re-parsing on save doesn't accumulate stale rows.
+    d.run(`DELETE FROM callsites WHERE file_id = ?`, [fileId]);
+    for (const cs of parsed.callsites ?? []) {
+      d.run(
+        `INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          fileId,
+          cs.kind,
+          cs.protocol,
+          cs.method ?? null,
+          cs.urlPattern ?? null,
+          cs.sqlText ?? null,
+          cs.line ?? null,
+          cs.context ?? null,
+        ]
+      );
+    }
+    d.run('COMMIT');
+  } catch (err) {
+    try { d.run('ROLLBACK'); } catch { /* rollback best-effort */ }
+    throw err;
   }
 }
 
