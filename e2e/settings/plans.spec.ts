@@ -13,7 +13,7 @@ test.describe('Settings plans', () => {
 
     await page.locator('button[title*="Settings"]').click();
     await page.waitForTimeout(500);
-    await page.getByRole('button', { name: 'Plans' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Plans' }).click();
     await page.waitForTimeout(300);
 
     // Shared and Local toggle buttons
@@ -26,7 +26,7 @@ test.describe('Settings plans', () => {
 
     await page.locator('button[title*="Settings"]').click();
     await page.waitForTimeout(500);
-    await page.getByRole('button', { name: 'Plans' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Plans' }).click();
     await page.waitForTimeout(300);
 
     // Click Local toggle

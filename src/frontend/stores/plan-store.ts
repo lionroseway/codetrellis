@@ -353,13 +353,24 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   },
 
   onPlanCreated: (plan) => {
-    set((s) => ({ plans: [plan, ...s.plans] }));
+    set((s) => {
+      // Deduplicate — WS may fire before/after fetchPlans resolves
+      if (s.plans.some((p) => p.uid === plan.uid)) return s;
+      return { plans: [plan, ...s.plans] };
+    });
   },
 
   onPlanUpdated: (planUid) => {
-    // Refresh the plan if it's the active one
+    // Refresh the plan if it's the active one.
+    // Use the current project filter so we don't briefly flash
+    // plans from other projects (which causes duplicate-key
+    // warnings when fetchPlans(root) replaces the list).
     const state = get();
-    state.fetchPlans();
+    (async () => {
+      const { useProjectStore } = await import('./project-store');
+      const root = useProjectStore.getState().root;
+      state.fetchPlans(root || undefined);
+    })();
     if (state.activePlanUid === planUid) {
       state.fetchPlan(planUid);
     }

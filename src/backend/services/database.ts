@@ -685,6 +685,52 @@ export function getFileHash(filePath: string): string | null {
 }
 
 /**
+ * Bulk-fetch every stored file path → content_hash. Used by
+ * incremental scan to decide which files actually need re-parsing.
+ */
+export function getAllFileHashes(): Map<string, string> {
+  const d = getDb();
+  const results = d.exec(`SELECT path, content_hash FROM files`);
+  const map = new Map<string, string>();
+  if (results[0]) {
+    for (const row of results[0].values) {
+      map.set(row[0] as string, row[1] as string);
+    }
+  }
+  return map;
+}
+
+/**
+ * Remove DB rows for files that no longer exist on disk (deleted /
+ * renamed). Cascading FKs take care of symbols, imports, callsites.
+ */
+export function removeStaleFiles(stalePaths: string[]): void {
+  if (stalePaths.length === 0) return;
+  const d = getDb();
+  d.run('BEGIN');
+  try {
+    // cross_system_edges reference file_id; delete those first to
+    // avoid FK constraint errors on DBs without deferred FK support.
+    for (const p of stalePaths) {
+      try {
+        d.run(
+          `DELETE FROM cross_system_edges WHERE source_file_id IN (SELECT id FROM files WHERE path = ?) OR target_file_id IN (SELECT id FROM files WHERE path = ?)`,
+          [p, p],
+        );
+      } catch { /* table may not exist */ }
+      try { d.run(`DELETE FROM callsites WHERE file_id IN (SELECT id FROM files WHERE path = ?)`, [p]); } catch { /* same */ }
+      d.run(`DELETE FROM imports WHERE file_id IN (SELECT id FROM files WHERE path = ?)`, [p]);
+      d.run(`DELETE FROM symbols WHERE file_id IN (SELECT id FROM files WHERE path = ?)`, [p]);
+      d.run(`DELETE FROM files WHERE path = ?`, [p]);
+    }
+    d.run('COMMIT');
+  } catch (err) {
+    try { d.run('ROLLBACK'); } catch { /* best-effort */ }
+    throw err;
+  }
+}
+
+/**
  * Resolve import paths to absolute file paths and update the database.
  *
  * Dispatches per-language: TS imports go through resolvers/typescript,

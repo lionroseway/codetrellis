@@ -186,8 +186,9 @@ export async function seedPlan(
  * Assumes the page is already at the app with a project open.
  */
 export async function openPlan(page: Page, planTitle: string) {
-  // Click Plans tab
-  await page.getByRole('button', { name: 'Plans', exact: true }).click();
+  // Click Plans tab — use .first() because 'Plans' may appear in
+  // both the PlanPanel tab bar and other contexts.
+  await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
   // Click the plan row
   await page.locator(`text=${planTitle}`).first().click();
   // Wait for workspace to load

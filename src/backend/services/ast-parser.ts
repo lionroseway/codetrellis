@@ -60,8 +60,36 @@ const GRAMMAR_DIR = (() => {
   return dev; // last resort — caller will log a "grammar missing" warning
 })();
 
+// ============================================================
+// PARSER LIFECYCLE — init, health tracking, reinit
+// ============================================================
+
 let initialized = false;
 const parsersByGrammar = new Map<string, any>();
+
+/**
+ * How many `parser.parse()` calls since last init. WASM tree-sitter
+ * accumulates internal memory pressure that, after thousands of
+ * parses, can trigger "RuntimeError: memory access out of bounds".
+ * We proactively reinitialise before reaching that threshold.
+ */
+let parsesSinceInit = 0;
+
+/**
+ * Parse budget — reinitialise the WASM parsers after this many
+ * `parse()` calls. Empirically, corruption appears around 4000+
+ * parses in a single process lifetime. A budget of 2000 gives a 2×
+ * safety margin. Each full scan of CodeTrellis itself is ~200 files,
+ * so this allows ~10 full scans before a proactive recycle.
+ */
+const PARSE_BUDGET = 2000;
+
+/**
+ * How many consecutive parse errors before we declare the parser
+ * unhealthy and force a reinitialisation.
+ */
+const MAX_CONSECUTIVE_ERRORS = 3;
+let consecutiveParseErrors = 0;
 
 /**
  * Initialize tree-sitter WASM runtime and load every plugin grammar
@@ -74,6 +102,22 @@ export async function initParser(): Promise<void> {
   await TreeSitter.init({
     locateFile: () => path.join(GRAMMAR_DIR, 'tree-sitter.wasm'),
   });
+
+  await loadGrammars();
+
+  initialized = true;
+  parsesSinceInit = 0;
+  consecutiveParseErrors = 0;
+  console.log(`[AST] Initialized with grammars: ${[...parsersByGrammar.keys()].join(', ')}`);
+}
+
+/**
+ * Load (or reload) all grammar WASM files into fresh parser instances.
+ */
+async function loadGrammars(): Promise<void> {
+  // Delete existing parser instances so the WASM GC can reclaim
+  // their internal buffers.
+  parsersByGrammar.clear();
 
   for (const plugin of PARSER_PLUGINS) {
     if (parsersByGrammar.has(plugin.grammarKey)) continue;
@@ -93,10 +137,28 @@ export async function initParser(): Promise<void> {
       console.warn(`[AST] Failed to load grammar for ${plugin.language}:`, err);
     }
   }
-
-  initialized = true;
-  console.log(`[AST] Initialized with grammars: ${[...parsersByGrammar.keys()].join(', ')}`);
 }
+
+/**
+ * Reinitialise all parser instances. Called when:
+ * - the parse budget is exhausted (proactive)
+ * - consecutive parse errors suggest WASM memory corruption (reactive)
+ *
+ * This discards every parser and reloads grammars from WASM. The
+ * TreeSitter.init() call is NOT repeated — the WASM runtime itself
+ * persists; only per-language parser objects are recycled.
+ */
+export async function reinitParsers(): Promise<void> {
+  console.log(`[AST] Reinitialising parsers (${parsesSinceInit} parses since last init)`);
+  await loadGrammars();
+  parsesSinceInit = 0;
+  consecutiveParseErrors = 0;
+  console.log(`[AST] Parsers reinitialised: ${[...parsersByGrammar.keys()].join(', ')}`);
+}
+
+// ============================================================
+// PARSING — with health checks
+// ============================================================
 
 /**
  * Get the parser plugin + tree-sitter parser instance for a file.
@@ -116,9 +178,23 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
   if (!dispatch) return null;
   const { plugin, parser } = dispatch;
 
-  const tree = parser.parse(content);
-  const root = tree.rootNode;
+  let tree: any;
+  try {
+    tree = parser.parse(content);
+    parsesSinceInit++;
+    consecutiveParseErrors = 0; // healthy parse — reset error streak
+  } catch (err) {
+    consecutiveParseErrors++;
+    const msg = String(err);
+    if (msg.includes('memory access out of bounds') || msg.includes('RuntimeError')) {
+      console.error(`[AST] WASM memory error parsing ${filePath} (${consecutiveParseErrors} consecutive errors, ${parsesSinceInit} total parses)`);
+    } else {
+      console.warn(`[AST] Parse error for ${filePath}:`, err);
+    }
+    return null;
+  }
 
+  const root = tree.rootNode;
   const contentHash = createHash('md5').update(content).digest('hex');
   const symbols = plugin.extractSymbols(root);
   const imports = plugin.extractImports(root);
@@ -144,6 +220,19 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
     exports,
     callsites,
   };
+}
+
+/**
+ * Compute a content hash for a file without parsing it. Used by
+ * incremental scan to decide which files need re-parsing.
+ */
+export function computeFileHash(filePath: string): string | null {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return createHash('md5').update(content).digest('hex');
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -190,13 +279,40 @@ const PARSE_BATCH_SIZE = 8;
  * Yields to the event loop every PARSE_BATCH_SIZE files so the server
  * can serve HTTP requests, answer WebSocket pings, and send MCP SSE
  * heartbeats during large scans.
+ *
+ * Includes three durability layers:
+ * 1. Proactive reinit when the parse budget is near-exhausted
+ * 2. Reactive reinit when consecutive errors suggest WASM corruption
+ * 3. Single retry after reinit so transient corruption doesn't lose data
  */
 export async function parseFiles(filePaths: string[]): Promise<ParsedFile[]> {
   await initParser();
 
+  // Layer 1: proactive reinit — if we're close to budget, recycle now
+  // before starting the batch. Cheaper than hitting corruption mid-scan.
+  if (parsesSinceInit + filePaths.length > PARSE_BUDGET) {
+    await reinitParsers();
+  }
+
   const results: ParsedFile[] = [];
   for (let i = 0; i < filePaths.length; i++) {
-    const parsed = parseFile(filePaths[i]);
+    let parsed = parseFile(filePaths[i]);
+
+    // Layer 2: reactive reinit — consecutive errors mean the WASM
+    // parser is in a bad state. Reinitialise and retry the failed file.
+    if (!parsed && consecutiveParseErrors >= MAX_CONSECUTIVE_ERRORS) {
+      console.warn(`[AST] ${MAX_CONSECUTIVE_ERRORS} consecutive parse errors — reinitialising parsers`);
+      await reinitParsers();
+      // Layer 3: retry once after reinit
+      parsed = parseFile(filePaths[i]);
+      if (!parsed) {
+        // Still failing after reinit — likely a file-specific issue,
+        // not WASM corruption. Reset the error counter so we don't
+        // reinit again on the next file.
+        consecutiveParseErrors = 0;
+      }
+    }
+
     if (parsed) results.push(parsed);
 
     // Yield every N files so the event loop isn't starved
@@ -205,4 +321,23 @@ export async function parseFiles(filePaths: string[]): Promise<ParsedFile[]> {
     }
   }
   return results;
+}
+
+/**
+ * Return current parser health stats for diagnostics.
+ */
+export function getParserHealth(): {
+  initialized: boolean;
+  parsesSinceInit: number;
+  parseBudget: number;
+  consecutiveErrors: number;
+  loadedGrammars: string[];
+} {
+  return {
+    initialized,
+    parsesSinceInit,
+    parseBudget: PARSE_BUDGET,
+    consecutiveErrors: consecutiveParseErrors,
+    loadedGrammars: [...parsersByGrammar.keys()],
+  };
 }

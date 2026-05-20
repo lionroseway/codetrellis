@@ -599,11 +599,21 @@ export function MainCanvas() {
 
   const displayGraphData = useMemo(() => {
     const hasPlanHighlights = planHighlightPaths.size > 0;
+    // Deduplicate nodes by id — the graph builder should produce
+    // unique ids, but projection / ghost / cross-system passes can
+    // occasionally produce a duplicate that crashes ReactFlow.
+    const rawNodes = graphData?.nodes ?? [];
+    const seenIds = new Set<string>();
+    const safeNodes: typeof rawNodes = [];
+    for (const n of rawNodes) {
+      if (!seenIds.has(n.id)) { seenIds.add(n.id); safeNodes.push(n); }
+    }
+    const safeEdges = graphData?.edges ?? [];
 
-    if (!selectedNodeId && !hasPlanHighlights) return graphData;
+    if (!selectedNodeId && !hasPlanHighlights) return { nodes: safeNodes, edges: safeEdges };
 
     return {
-      nodes: graphData.nodes.map((node) => {
+      nodes: safeNodes.map((node) => {
         const data = (node.data || {}) as Record<string, unknown>;
         const nodePath = typeof data.fullPath === 'string' ? data.fullPath : node.id;
         return {
@@ -611,13 +621,13 @@ export function MainCanvas() {
           data: {
             ...data,
             relatedToSelection: selectedNodeId
-              ? node.id === selectedNodeId || graphData.edges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id))
+              ? node.id === selectedNodeId || safeEdges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id))
               : false,
             planHighlighted: hasPlanHighlights && planHighlightPaths.has(nodePath),
           },
         };
       }),
-      edges: graphData.edges.map((edge) => ({
+      edges: safeEdges.map((edge) => ({
         ...edge,
         data: {
           ...(edge.data || {}),
@@ -628,8 +638,8 @@ export function MainCanvas() {
     };
   }, [graphData, selectedNodeId, planHighlightPaths]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData.edges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
 
   const selectedCommitLabel = useMemo(() => {
     if (baselineMode === 'auto') return 'Track HEAD';
@@ -642,8 +652,8 @@ export function MainCanvas() {
   }, [baselineMode, baselineCommitHash, baselineShortCommitHash, recentCommits]);
 
   useEffect(() => {
-    setNodes((prev) => preserveNodePositions(prev, displayGraphData.nodes));
-    setEdges(displayGraphData.edges);
+    setNodes((prev) => preserveNodePositions(prev, displayGraphData?.nodes ?? []));
+    setEdges(displayGraphData?.edges ?? []);
   }, [displayGraphData, setNodes, setEdges]);
 
   const onNodeClick: NodeMouseHandler = useCallback(
