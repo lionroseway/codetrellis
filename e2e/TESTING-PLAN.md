@@ -903,6 +903,614 @@ e2e/
 | keyboard/ | 1 | ~10 |
 | **Total** | **75** | **~325** |
 
+---
+
+### 15. API COVERAGE (4 files, ~40 tests)
+
+HTTP-only tests that exercise every backend route without a browser.
+Fast, deterministic, no tree-sitter instability.
+
+```
+e2e/
+├── api-coverage/
+│   ├── baseline-snapshot.spec.ts    — trellis capture, list, get, diff
+│   ├── graph-analysis.spec.ts       — dependencies, symbols, cross-system, architecture
+│   ├── plan-changes.spec.ts         — proposed changes, deviations, drift, reconcile
+│   ├── comments-global.spec.ts      — global comment CRUD (targetUid/targetType)
+│   ├── git-advanced.spec.ts         — branch, info, diff, log, worktrees, onboarding, browse
+│   └── remaining-routes.spec.ts     — attachments, external refs, sessions, settings, updates, templates
+```
+
+#### `api-coverage/baseline-snapshot.spec.ts`
+| Test | Method |
+|------|--------|
+| POST /api/trellis/capture creates snapshot | POST, verify id |
+| GET /api/trellis/snapshots lists snapshots | GET, verify array |
+| GET /api/trellis/:id returns full snapshot | GET by id |
+| GET /api/trellis/:id/diff returns diff vs live | GET diff |
+
+#### `api-coverage/graph-analysis.spec.ts`
+| Test | Method |
+|------|--------|
+| GET /api/dependencies returns all edges | GET |
+| GET /api/dependencies/file returns per-file deps | GET with ?path= |
+| GET /api/symbols/search finds symbols | GET with ?q= |
+| GET /api/symbols/file returns file symbols | GET with ?path= |
+| GET /api/cross-system-edges returns pairings | GET |
+| GET /api/architecture returns analysis | GET |
+| GET /api/conformity returns report | GET |
+
+#### `api-coverage/remaining-routes.spec.ts`
+| Test | Method |
+|------|--------|
+| DELETE /api/attachments/:uid removes attachment | DELETE |
+| GET /api/plans/:uid/changes/:changeId (URL-encoded) | GET |
+| POST /api/plans/import-external imports plan | POST |
+| POST /api/recent-projects/pin pins project | POST |
+| DELETE /api/recent-projects/:id removes project | DELETE |
+| POST /api/terminals/:id/inject injects prompt | POST |
+| POST /api/plans/from-template creates from template | POST |
+| External refs CRUD (POST/GET/PUT/DELETE) | All methods |
+| POST /api/sessions registers session | POST |
+| GET+PUT /api/settings round-trip | GET, PUT |
+| GET /api/updates/status returns update info | GET |
+
+---
+
+### 16. MCP WIRE PROTOCOL (5 files, ~39 tests)
+
+Tests the real MCP SSE transport — the same JSON-RPC protocol that
+Claude Code, Codex, Cursor, and custom agents use. Each test connects
+over SSE, performs the initialize handshake, calls tools, and verifies
+responses. Uses `helpers/mcp-client.ts` (lightweight JSON-RPC client).
+
+```
+e2e/
+├── helpers/
+│   └── mcp-client.ts                — JSON-RPC over SSE client
+├── mcp-tools/
+│   ├── protocol-handshake.spec.ts   — SSE connect, initialize, tools/list
+│   ├── graph-tools.spec.ts          — search_symbols, get_dependencies, architecture, conformity
+│   ├── plan-lifecycle.spec.ts       — plan CRUD, item CRUD, move, claim, progress, gate, timeline
+│   ├── docs-phases-comments.spec.ts — plan docs, phases, comments, attachments, external refs
+│   └── changes-drift-templates.spec.ts — changes, drift, templates, file sync, sessions, legacy tasks
+```
+
+#### `mcp-tools/protocol-handshake.spec.ts`
+| Test | Interactions |
+|------|-------------|
+| SSE connect + initialize + tools/list | Connect, handshake, list all tools |
+| Core tool names present | Verify known tool names in list |
+| Session registration via wire | register_session via MCP |
+
+#### `mcp-tools/graph-tools.spec.ts`
+| Test | Interactions |
+|------|-------------|
+| search_symbols returns results | callTool, verify response |
+| get_dependencies returns edges | callTool with file path |
+| list_cross_system_edges returns data | callTool |
+| check_architecture returns analysis | callTool |
+| check_conformity returns report | callTool |
+
+#### `mcp-tools/plan-lifecycle.spec.ts` (12 tests)
+| Test | Interactions |
+|------|-------------|
+| create_plan → get_plan → update_plan → list_plans | Full CRUD lifecycle |
+| add_item → get_item → update_item → list_items | Item CRUD |
+| read_item_full returns bundled context | callTool, verify response |
+| move_item changes parent | Create parent + child, move |
+| claim_item assigns agent | callTool with agent_id |
+| update_item_progress + set_item_blocked | Progress + blocked flow |
+| delete_item removes item | callTool, verify gone |
+| get_plan_timeline returns events | callTool after seeding events |
+| report_plan returns summary | callTool |
+| get_next_item returns pending | callTool |
+| approve_gate clears gate | Mark done, then approve |
+
+#### `mcp-tools/docs-phases-comments.spec.ts` (7 tests)
+| Test | Interactions |
+|------|-------------|
+| Plan doc CRUD + search | add → get → list → update → search |
+| Phase CRUD + delete | add → list → update → delete |
+| Plan-level comments | add_comment → get_comments |
+| Item comments | add_item_comment → list_item_comments |
+| Item attachments | add_item_attachment |
+| External refs lifecycle | add → list → remove |
+
+#### `mcp-tools/changes-drift-templates.spec.ts` (12 tests)
+| Test | Interactions |
+|------|-------------|
+| list_proposed_changes + get_changes_summary | callTool after seeding file_specs |
+| detect_deviations + get_deviations + get_drift_report | Full drift pipeline |
+| reconcile processes deviation | callTool with action='detect' |
+| list_plan_templates | callTool |
+| create_plan_from_template | List templates, create from first |
+| export + import + discover + unlink | File sync round-trip |
+| publish_plan_as_template | callTool |
+| register_session + set_active_plan + capture_checkpoint | Session lifecycle |
+| Legacy: add_subtask + claim_task + update_task + progress + blocked | Legacy task tools |
+| Legacy: task comments + attachments | add_task_comment, list, attachment |
+| get_next_task + read_task_full | Legacy task retrieval |
+| restore_item_version | Create, update, restore to v1 |
+
+---
+
+### 17. LIVE AGENT GOLDEN CHAINS (NEW — the full loop)
+
+The crown jewel. These tests use CodeTrellis's built-in terminal to
+spawn a real Claude Code session, inject commands via the terminal
+inject API, and verify the entire observable surface end-to-end:
+terminal → agent → MCP tool calls → plan updates → graph changes →
+WebSocket events → UI rendering → visual indicators.
+
+The fixture repo at `tests/fixtures/sample-app/` is the target
+codebase. Tests reset it via `git checkout HEAD --` between runs.
+
+#### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Playwright (test runner)                                │
+│                                                          │
+│  1. Open CodeTrellis UI → scan fixture repo              │
+│  2. Spawn terminal with "claude" preset                  │
+│  3. Inject prompt: "build this plan, then execute it"    │
+│  4. Agent authors plan via MCP (create_plan, add_item…)  │
+│  5. Agent executes plan (claim, edit, progress, done)    │
+│  6. Verify UI updates (graph, plan panel, status bar)    │
+│  7. Screenshot for visual regression                     │
+└────────────┬────────────────────────────────────────┬────┘
+             │                                        │
+    ┌────────▼────────┐                    ┌──────────▼──────────┐
+    │  Terminal PTY    │                    │  Browser UI         │
+    │  (node-pty)      │                    │  (React + ReactFlow)│
+    │                  │                    │                     │
+    │  claude --dan... │                    │  Graph nodes        │
+    │  ← inject text   │                    │  Plan panel         │
+    │  → MCP calls     │                    │  Status bar         │
+    └────────┬─────────┘                    │  Agent widget       │
+             │                              │  Toast notifications│
+    ┌────────▼────────────┐                 └─────────────────────┘
+    │  MCP Server (:19432)│
+    │  ← tool calls       │
+    │  → broadcast events │
+    └─────────────────────┘
+```
+
+#### Two test modes: pre-seeded plan vs agent-authored plan
+
+These are fundamentally different code paths and both need coverage:
+
+| Mode | What's tested | Who builds the plan |
+|------|---------------|---------------------|
+| **Pre-seeded** | Execution engine, progress tracking, WebSocket delivery, UI updates | Test harness seeds plan via REST API before agent starts |
+| **Agent-authored** | Full authoring loop (`create_plan`, `add_item`, `add_plan_doc`, `add_plan_phase`) + execution | Agent builds plan from scratch via MCP tools during the test |
+
+Both use the same terminal inject → verify pattern. The difference
+is what the injected prompt tells Claude to do.
+
+#### How Claude knows it's being tested
+
+The injected prompt gives Claude a deterministic script. We control
+the output by being explicit about what to do and what markers to
+emit so Playwright knows when each phase completes.
+
+**Prompt A — Execute a pre-seeded plan:**
+
+The test harness creates the plan via the REST API, then tells Claude
+to find and execute it:
+
+```
+You are being used inside a CodeTrellis E2E test harness.
+Do NOT improvise, create new plans, or deviate from these instructions.
+
+A plan called "E2E Pre-seeded: Error Handling" already exists in CodeTrellis.
+Use `list_plans` to find it, then `set_active_plan` to activate it.
+
+Then execute every action item in the plan:
+1. Use `get_next_item` to get the next pending item
+2. Call `claim_item` for it
+3. Read the affected file(s) listed in the item's file_specs
+4. Make the exact edit described in the item body
+5. Call `update_item_progress` with percent=100, message="Complete"
+6. Call `update_item` with status="done"
+7. Repeat from step 1 until `get_next_item` returns no more items
+
+When all items are done, say "ALL_TASKS_COMPLETE" on a new line.
+```
+
+**Prompt B — Author a plan from scratch, then execute:**
+
+No pre-seeding. Claude builds the entire plan via MCP tools. The
+prompt specifies the exact structure to create:
+
+```
+You are being used inside a CodeTrellis E2E test harness.
+Your job is to build a plan from scratch and then execute it.
+Do NOT improvise or add extra steps beyond what is specified.
+
+STEP 1 — BUILD THE PLAN:
+Use `create_plan` with these exact parameters:
+  - title: "E2E Agent-Authored: Error Handling"
+  - project_path: "/path/to/tests/fixtures/sample-app"
+  - tasks: []
+
+Then use `add_item` to add these exact items:
+  Item 1 (kind: "action"):
+    - title: "Add try-catch to API fetch calls"
+    - body: "Wrap the fetch() calls in api.ts with try-catch blocks"
+    - file_specs: [{ path: "packages/web/src/api.ts", action: "modify" }]
+  Item 2 (kind: "action"):
+    - title: "Add error boundary to UserList"
+    - body: "Add React error boundary wrapper to UserList.tsx"
+    - file_specs: [{ path: "packages/web/src/UserList.tsx", action: "modify" }]
+
+Then use `add_plan_doc` to add an executive summary:
+  - doc_type: "executive"
+  - title: "Error Handling Improvement"
+  - body: "This plan adds error handling to the web frontend."
+
+Then use `add_plan_phase`:
+  - title: "Phase 1: Core error handling"
+  - phase_number: 1
+
+When the plan is fully built, say "PLAN_READY" on a new line.
+
+STEP 2 — EXECUTE THE PLAN:
+For each action item you just created:
+1. Call `claim_item` for the item
+2. Read the affected file using your Read tool
+3. Make the edit described in the item body
+4. Call `update_item_progress` with percent=100, message="Complete"
+5. Call `update_item` with status="done"
+
+When all items are done, say "ALL_TASKS_COMPLETE" on a new line.
+```
+
+**Prompt C — Author then deliberately deviate:**
+
+Same authoring as Prompt B, but the execution deviates:
+
+```
+You are being used inside a CodeTrellis E2E test harness.
+Build the plan exactly as specified in STEP 1 below, but when
+executing, deliberately deviate as described in STEP 2.
+
+STEP 1 — BUILD THE PLAN:
+(same as Prompt B — create_plan, add_item × 2, add_plan_doc, add_plan_phase)
+When built, say "PLAN_READY" on a new line.
+
+STEP 2 — EXECUTE WITH DEVIATIONS:
+- Complete Item 1 (api.ts) as specified — claim, edit, progress, done
+- SKIP Item 2 entirely — do NOT touch UserList.tsx
+- ALSO edit a file NOT in the plan: add a comment to
+  services/api/app/db.py saying "// modified outside plan scope"
+When done, say "DEVIATION_COMPLETE" on a new line.
+```
+
+**Prompt D — Execute pre-seeded plan with deviations:**
+
+Same as Prompt C's deviation behavior, but against a pre-seeded plan:
+
+```
+You are being used inside a CodeTrellis E2E test harness.
+A plan called "E2E Pre-seeded: Error Handling" already exists.
+Use `list_plans` to find it and `set_active_plan` to activate it.
+
+Execute with these deliberate deviations:
+- Complete the first action item as specified
+- SKIP the second action item — do NOT touch the file it targets
+- ALSO edit services/api/app/db.py (not in the plan) — add a comment
+When done, say "DEVIATION_COMPLETE" on a new line.
+```
+
+This gives us a 2×2 matrix:
+
+| | Normal execution | Deliberate deviation |
+|---|---|---|
+| **Pre-seeded plan** | Prompt A | Prompt D |
+| **Agent-authored plan** | Prompt B | Prompt C |
+
+All four combinations are tested. Each exercises different code paths
+through the plan authoring, execution, and drift detection systems.
+
+#### Test structure
+
+```
+e2e/
+├── live-agent/
+│   ├── helpers/
+│   │   ├── agent-harness.ts         — spawn terminal, inject, wait for events
+│   │   ├── fixture-reset.ts         — git checkout HEAD -- tests/fixtures/sample-app
+│   │   ├── prompts.ts               — all inject prompts (A/B/C/D) as constants
+│   │   └── mock-agent.ts            — scripted MCP agent for CI (no Claude needed)
+│   │
+│   ├── preseeded-execution.spec.ts  — Prompt A: agent executes pre-seeded plan
+│   ├── agent-authored-flow.spec.ts  — Prompt B: agent builds + executes plan
+│   ├── preseeded-deviation.spec.ts  — Prompt D: pre-seeded plan, deliberate drift
+│   ├── authored-deviation.spec.ts   — Prompt C: agent-built plan, deliberate drift
+│   ├── file-watcher-pipeline.spec.ts— agent edits file → re-parse → graph update
+│   ├── multi-agent-contention.spec.ts — two agents claim same task
+│   ├── visual-indicators.spec.ts    — color coding, status icons, badges
+│   └── claude-jsonl-watcher.spec.ts — JSONL tail → agent events → timeline
+```
+
+#### `live-agent/helpers/agent-harness.ts`
+
+```typescript
+// Core harness utilities for live agent tests.
+
+export interface AgentHarness {
+  /** Spawn a terminal with Claude preset, return terminal ID. */
+  spawnAgent(cwd: string): Promise<string>;
+
+  /** Inject a prompt into the terminal (types it as if user typed). */
+  inject(termId: string, text: string): Promise<void>;
+
+  /** Seed a plan via REST API (for pre-seeded test modes). */
+  seedPlan(opts: {
+    title: string;
+    items: Array<{ title: string; body: string; fileSpecs: Array<{ path: string; action: string }> }>;
+    doc?: { title: string; body: string };
+    phase?: { title: string; number: number };
+  }): Promise<{ planUid: string; itemUids: string[] }>;
+
+  /** Wait for a specific WebSocket broadcast event. */
+  waitForEvent(
+    eventType: string,
+    match?: Record<string, unknown>,
+    timeout?: number
+  ): Promise<unknown>;
+
+  /** Wait for terminal output containing a string. */
+  waitForOutput(termId: string, needle: string, timeout?: number): Promise<void>;
+
+  /** Reset the fixture repo to a clean state. */
+  resetFixture(): Promise<void>;
+
+  /** Kill the terminal and clean up. */
+  cleanup(termId: string): Promise<void>;
+}
+```
+
+#### `live-agent/preseeded-execution.spec.ts` (~8 tests)
+
+**Prompt A path**: test harness creates the plan, agent finds and
+executes it. Tests the execution engine in isolation — plan already
+exists with known structure, agent just needs to work through it.
+
+| Test | What it verifies |
+|------|------------------|
+| Pre-seed plan + items + doc + phase via REST API | Plan exists before agent starts |
+| Agent connects and appears in ConnectedAgents widget | Terminal spawn → MCP register_session → UI widget |
+| Agent finds plan via list_plans → set_active_plan | Agent discovers existing plan, activates it |
+| Agent claims first task → "assigned" badge appears | claim_item → plan-item-claimed → UI badge |
+| Agent reads affected file → file-read event in timeline | Read tool use → agent-event → Timeline tab row |
+| Agent edits file → file-changed event + graph re-renders | Write tool → file watcher → broadcast → graph update |
+| Agent reports progress → progress bar updates | update_item_progress → plan-item-progress → UI bar |
+| Agent marks all tasks done → completion summary appears | Terminal "ALL_TASKS_COMPLETE", PlanCompletionSummary renders |
+
+#### `live-agent/agent-authored-flow.spec.ts` (~12 tests)
+
+**Prompt B path**: agent builds the plan from scratch via MCP tools,
+then executes it. Tests the full authoring → execution loop.
+
+| Test | What it verifies |
+|------|------------------|
+| **Plan authoring phase** | |
+| Agent connects and appears in ConnectedAgents widget | Terminal spawn → MCP register_session → UI widget updates |
+| Agent creates plan via MCP → plan appears in Plans list | create_plan → plan-created broadcast → UI list row |
+| Agent adds action items → items appear in item tree | add_item × N → plan-item-created → tree rows render |
+| Agent adds plan doc → doc appears in plan workspace | add_plan_doc → plan-doc-created → doc tab content |
+| Agent adds phase → phase appears in phase list | add_plan_phase → plan-phase-created → phase row |
+| Terminal shows "PLAN_READY" → plan is fully authored | PTY output marker, all items/docs/phases exist via API |
+| **Plan execution phase** | |
+| Agent claims first task → "assigned" badge appears | claim_item → plan-item-claimed broadcast → UI badge |
+| Agent reads affected file → file-read event in timeline | Read tool use → agent-event broadcast → Timeline tab row |
+| Agent edits file → file-changed event + graph re-renders | Write tool → file watcher → broadcast → graph node update |
+| Agent reports progress → progress bar updates | update_item_progress → plan-item-progress → UI bar |
+| Agent marks task done → checkmark + next task auto-selected | update_item status=done → broadcast → UI checkmark |
+| All tasks complete → plan completion summary appears | Terminal shows "ALL_TASKS_COMPLETE", PlanCompletionSummary renders |
+
+#### `live-agent/preseeded-deviation.spec.ts` (~6 tests)
+
+**Prompt D path**: pre-seeded plan, agent deliberately deviates.
+Tests drift detection against a known, stable plan structure.
+
+| Test | What it verifies |
+|------|------------------|
+| Pre-seed plan with 2 items via REST API | Plan exists with known scope before agent starts |
+| Agent completes item 1 correctly → "satisfied" change | Item done, file edited as planned → green status |
+| Agent skips item 2 → "missing" change detected | Plan expects edit to UserList.tsx, not touched |
+| Agent edits unplanned file → "unexpected" change detected | db.py edited outside plan scope → red drift row |
+| Drift badge shows unresolved count > 0 | Deviation count → drift-badge → number visible |
+| Deviation rows render with correct severity colors | Red=unexpected, amber=missing, green=satisfied |
+
+#### `live-agent/authored-deviation.spec.ts` (~8 tests)
+
+**Prompt C path**: agent builds the plan itself, then deliberately
+deviates during execution. Tests the full authoring + drift loop —
+the plan the agent drifts from is also the plan the agent created.
+
+| Test | What it verifies |
+|------|------------------|
+| **Plan authoring** | |
+| Agent builds plan with 2 action items targeting specific files | create_plan + add_item × 2 → plan exists with known scope |
+| Terminal shows "PLAN_READY" | Authoring complete marker |
+| **Deliberate deviation during execution** | |
+| Agent completes item 1 correctly → "satisfied" change | Item done, file edited as planned → green status |
+| Agent skips item 2 → "missing" change detected | Plan expects edit to UserList.tsx, agent doesn't touch it |
+| Agent edits unplanned file (db.py) → "unexpected" change | File edit outside plan scope → drift report shows unexpected |
+| Drift badge shows unresolved count in plan header | Deviation count → drift-badge component → number > 0 |
+| Deviation rows show all three severity states | satisfied (green), missing (amber), unexpected (red) |
+| Accept deviation → row clears, count decreases | Click accept → reconcile → badge updates |
+
+#### `live-agent/file-watcher-pipeline.spec.ts` (~5 tests)
+
+Verifies the chokidar → tree-sitter → graph → WebSocket pipeline.
+
+| Test | What it verifies |
+|------|------------------|
+| File edit triggers `file-changed` broadcast | Write to fixture file → chokidar detects → broadcast |
+| New file triggers `file-added` broadcast + appears in sidebar | Create file → broadcast → sidebar git indicator "U" |
+| Deleted file triggers `file-removed` broadcast + removed from graph | Delete → broadcast → node disappears |
+| AST re-parse updates symbol count in inspector | Edit to add a function → re-scan → inspector shows new symbol |
+| Cross-system edge updates when HTTP callsite added | Add fetch('/api/new') → cross-system-changed → new edge in graph |
+
+#### `live-agent/multi-agent-contention.spec.ts` (~4 tests)
+
+Two terminal sessions, two agents, same plan.
+
+| Test | What it verifies |
+|------|------------------|
+| Two agents register → ConnectedAgents shows count=2 | Two register_session calls → widget shows "2" |
+| Both claim same task → one wins, one gets conflict | Concurrent claim_item → conflict-detected broadcast |
+| Conflict toast appears in UI | conflict-detected → toast notification renders |
+| Agents can work different tasks concurrently | Agent A claims task 1, Agent B claims task 2 → both succeed |
+
+#### `live-agent/visual-indicators.spec.ts` (~10 tests)
+
+Screenshot-verified visual regression for status states.
+
+| Test | What it verifies |
+|------|------------------|
+| Pending item → gray circle icon in item tree | Status icon rendering |
+| In-progress item → blue spinner/arrow icon | Status icon rendering |
+| Done item → green checkmark icon | Status icon rendering |
+| Blocked item → red warning icon + reason banner | Status + banner text |
+| Skipped item → gray strike-through icon | Status icon rendering |
+| Plan node in graph has highlight ring (amber) | Graph overlay when plan active |
+| Ghost node for planned-but-not-existing file | Dashed border, reduced opacity |
+| File node shows git badge (M/U/A) with correct colors | Orange=modified, emerald=untracked, sky=staged |
+| Agent type color in ConnectedAgents: Claude=amber | Agent widget color coding |
+| Progress bar segments: done=green, in_progress=blue, blocked=red | Segmented progress bar colors |
+
+#### `live-agent/claude-jsonl-watcher.spec.ts` (~4 tests)
+
+Tests the Claude Code session JSONL watcher pipeline. Requires either
+a real Claude Code session or a mock JSONL file.
+
+| Test | What it verifies |
+|------|------------------|
+| JSONL watcher detects active Claude Code session | findActiveSession returns match for project path |
+| Tool use entry in JSONL → agent-event broadcast | Write JSONL line → watcher parses → broadcast fires |
+| File read events appear in Timeline tab | agent-event with action=read → Timeline row |
+| File write events appear in Timeline tab | agent-event with action=write → Timeline row |
+
+**Mock strategy**: Create a temp directory mimicking
+`~/.claude/sessions/` and `~/.claude/projects/`, write a fake session
+JSON + JSONL file, and point the watcher at the temp dir via an env
+var `CLAUDE_CODE_DIR` override.
+
+---
+
+### 18. PARSER & CALLSITE VALIDATION (2 files, ~15 tests)
+
+Unit-style E2E tests that scan the fixture repo and verify the parser
+pipeline produces correct output. No browser needed.
+
+```
+e2e/
+├── parsers/
+│   ├── tree-sitter-languages.spec.ts — per-language parse verification
+│   └── callsite-extractors.spec.ts   — HTTP/SQL/subprocess pattern matching
+```
+
+#### `parsers/tree-sitter-languages.spec.ts` (~8 tests)
+
+Scans `tests/fixtures/sample-app/` and verifies symbol extraction.
+
+| Test | What it verifies |
+|------|------------------|
+| TypeScript: extracts functions, interfaces, classes from .ts | Symbol count + names from types.ts |
+| TSX: extracts React components from .tsx | Component names from UserList.tsx |
+| JavaScript: extracts exports from .js | (add a .js fixture file) |
+| Python: extracts functions, classes from .py | Symbol names from main.py, users.py |
+| Import resolution: TS relative imports resolved | api.ts imports from shared → edge exists |
+| Import resolution: workspace alias @sample/shared resolved | Alias → real path mapping |
+| Cross-file dependency count matches expected | Known edge count for fixture |
+| Sequential scan stability (no WASM crash under 20 files) | Scan all fixture files, no crash |
+
+#### `parsers/callsite-extractors.spec.ts` (~7 tests)
+
+Verifies pattern matching for cross-system coupling.
+
+| Test | What it verifies |
+|------|------------------|
+| TS: fetch('/api/users') extracted as HTTP callsite | Pattern match on fetch() |
+| TS: axios.get('/api/orders') extracted | Pattern match on axios |
+| Python: @router.get('/api/users') extracted as HTTP endpoint | FastAPI decorator pattern |
+| Python: requests.get() extracted as HTTP callsite | requests library pattern |
+| Cross-system pairing: TS fetch ↔ Python route matched | Same path → edge created |
+| SQL: CREATE TABLE extracted from .sql | SQL pattern match |
+| subprocess: os.system() / exec() extracted | Subprocess pattern match |
+
+---
+
+### 19. WEBSOCKET EVENT DELIVERY (1 file, ~15 tests)
+
+Verifies that all 44+ broadcast event types are actually delivered to
+connected WebSocket clients with the correct payload shape.
+
+```
+e2e/
+├── websocket/
+│   └── broadcast-events.spec.ts     — event delivery + payload shape verification
+```
+
+#### `websocket/broadcast-events.spec.ts`
+
+Strategy: Open a WebSocket connection to the backend, trigger each
+event via the corresponding API call, verify the event arrives with
+the expected `type` field and payload keys.
+
+| Test | Events verified |
+|------|----------------|
+| Plan CRUD events | plan-created, plan-updated |
+| Plan item events | plan-item-created, plan-item-updated, plan-item-deleted, plan-item-moved |
+| Plan item lifecycle events | plan-item-claimed, plan-item-progress, plan-item-blocked, plan-item-version-saved |
+| Plan item comment/attachment | plan-item-comment-added, plan-item-attachment-added |
+| Plan doc events | plan-doc-created, plan-doc-updated, plan-doc-deleted |
+| Plan phase events | plan-phase-created, plan-phase-updated, plan-phase-deleted |
+| Plan file sync events | plan-exported, plan-imported, plan-unlinked, plan-template-published |
+| Legacy task events | task-created, task-updated, task-claimed, task-progress, task-blocked |
+| Legacy task comment/attachment | task-comment-added, task-attachment-added, task-attachment-removed |
+| Comment events | comment-added, comment-deleted |
+| External ref events | external-ref-added, external-ref-updated, external-ref-deleted |
+| Conflict events | conflict-detected |
+| Session events | mcp-session-changed |
+| Settings events | settings-changed, mcp-port-config-changed |
+| Terminal events | terminal-created, terminal-killed |
+| Trellis events | trellis-captured |
+| System events | update-available |
+
+---
+
+## Totals (Updated)
+
+| Folder | Files | Tests |
+|--------|-------|-------|
+| onboarding/ | 4 | ~20 |
+| project/ | 3 | ~15 |
+| graph/ | 11 | ~55 |
+| sidebar/ | 3 | ~12 |
+| inspector/ | 5 | ~15 |
+| plan/ | 15 | ~70 |
+| plan-execution/ | 10 | ~35 |
+| agent/ | 3 | ~15 |
+| terminal/ | 4 | ~15 |
+| settings/ | 8 | ~30 |
+| git/ | 2 | ~10 |
+| external-refs/ | 1 | ~8 |
+| realtime/ | 5 | ~15 |
+| keyboard/ | 1 | ~10 |
+| api-coverage/ | 6 | ~40 |
+| mcp-tools/ | 5 | ~39 |
+| live-agent/ | 8 | ~57 |
+| parsers/ | 2 | ~15 |
+| websocket/ | 1 | ~15 |
+| **Total** | **97** | **~491** |
+
 ## Implementation Priority
 
 **Wave 1 — Core flows (blocks everything else):**
@@ -919,3 +1527,428 @@ agent/, terminal/, settings/, git/
 
 **Wave 5 — Advanced/integration:**
 external-refs/, realtime/, keyboard/
+
+**Wave 6 — API & MCP contract tests (no browser):**
+api-coverage/, mcp-tools/
+
+**Wave 7 — Live agent golden chains (full loop):**
+live-agent/, parsers/, websocket/
+
+---
+
+## Wave 7 — Live Agent Testing Strategy
+
+### Prerequisites
+
+Before live-agent tests can run:
+
+1. **Fixture repo** — `tests/fixtures/sample-app/` (already exists)
+   with known file structure, import graph, and cross-system pairings.
+
+2. **Terminal inject API** — `POST /api/terminals/:id/inject` (already
+   exists) to pipe commands into a running PTY session.
+
+3. **Claude Code availability** — Either Claude Code CLI installed on
+   the test machine, OR a mock agent that responds to MCP tool calls
+   in a scripted manner. CI uses the mock; local dev can use real
+   Claude.
+
+4. **Fixture reset** — `git checkout HEAD -- tests/fixtures/sample-app`
+   in `beforeEach` to ensure clean state between tests.
+
+5. **WebSocket test helper** — A utility that connects to the backend
+   WS and collects broadcast events, with `waitForEvent(type, match)`
+   for assertions.
+
+### The inject-and-verify pattern
+
+Every live-agent test follows the same structural pattern, but with
+different setup and prompts depending on which quadrant of the 2×2
+matrix it covers.
+
+**Pre-seeded plan + normal execution (Prompt A):**
+
+```typescript
+test('agent executes pre-seeded plan end-to-end', async ({ page, request }) => {
+  // 1. Open project (fixture repo) in the UI
+  await gotoWithProject(page, FIXTURE_PATH);
+
+  // 2. PRE-SEED the plan via REST API — agent doesn't author this one
+  const { planUid, itemUids } = await harness.seedPlan({
+    title: 'E2E Pre-seeded: Error Handling',
+    items: [
+      {
+        title: 'Add try-catch to API fetch calls',
+        body: 'Wrap the fetch() calls in api.ts with try-catch blocks',
+        fileSpecs: [{ path: 'packages/web/src/api.ts', action: 'modify' }],
+      },
+      {
+        title: 'Add error boundary to UserList',
+        body: 'Add React error boundary wrapper to UserList.tsx',
+        fileSpecs: [{ path: 'packages/web/src/UserList.tsx', action: 'modify' }],
+      },
+    ],
+    doc: { title: 'Error Handling Improvement', body: 'Adds error handling.' },
+    phase: { title: 'Phase 1: Core error handling', number: 1 },
+  });
+
+  // 3. Verify plan is visible in UI before agent starts
+  await expect(page.locator('text=E2E Pre-seeded: Error Handling')).toBeVisible();
+
+  // 4. Spawn terminal, inject Prompt A — "find this plan and execute it"
+  const termId = await harness.spawnAgent(FIXTURE_PATH);
+  await harness.inject(termId, PROMPT_A);  // "list_plans, find it, execute it"
+
+  // 5. Wait for execution
+  await wsHelper.waitForEvent('plan-item-updated', { status: 'done' }, 60_000);
+  await harness.waitForOutput(termId, 'ALL_TASKS_COMPLETE', 120_000);
+
+  // 6. Verify all items done
+  const items = await (await request.get(`/api/plans/${planUid}/items`)).json();
+  expect(items.every((i: any) => i.status === 'done')).toBe(true);
+  await expect(page.locator('[data-testid="item-status-done"]')).toBeVisible();
+
+  await harness.cleanup(termId);
+});
+```
+
+**Agent-authored plan + normal execution (Prompt B):**
+
+```typescript
+test('agent authors and executes plan end-to-end', async ({ page, request }) => {
+  // 1. Open project — NO pre-seeding, plan list should be empty
+  await gotoWithProject(page, FIXTURE_PATH);
+
+  // 2. Spawn terminal, inject Prompt B — "build this plan, then execute it"
+  const termId = await harness.spawnAgent(FIXTURE_PATH);
+  await harness.inject(termId, PROMPT_B);
+
+  // 3. Wait for plan AUTHORING to complete
+  await wsHelper.waitForEvent('plan-created', {}, 30_000);
+  await wsHelper.waitForEvent('plan-item-created', {}, 10_000);
+  await wsHelper.waitForEvent('plan-doc-created', {}, 10_000);
+  await wsHelper.waitForEvent('plan-phase-created', {}, 10_000);
+  await harness.waitForOutput(termId, 'PLAN_READY', 60_000);
+
+  // 4. Verify the agent-authored plan appeared in the UI
+  await expect(page.locator('text=E2E Agent-Authored: Error Handling')).toBeVisible();
+  const plans = await (await request.get('/api/plans')).json();
+  const plan = plans.find((p: any) => p.title === 'E2E Agent-Authored: Error Handling');
+  expect(plan).toBeTruthy();
+
+  // 5. Verify items, doc, phase exist — all created by the agent
+  const items = await (await request.get(`/api/plans/${plan.uid}/items`)).json();
+  expect(items.length).toBe(2);
+  const docs = await (await request.get(`/api/plans/${plan.uid}/docs`)).json();
+  expect(docs.length).toBeGreaterThanOrEqual(1);
+
+  // 6. Wait for EXECUTION to complete
+  await wsHelper.waitForEvent('plan-item-updated', { status: 'done' }, 60_000);
+  await harness.waitForOutput(termId, 'ALL_TASKS_COMPLETE', 120_000);
+
+  // 7. Verify completion
+  await expect(page.locator('[data-testid="item-status-done"]')).toBeVisible();
+
+  await harness.cleanup(termId);
+});
+```
+
+### Deviation test patterns
+
+Both deviation specs share the same assertion tail — the difference
+is how the plan gets created.
+
+**Pre-seeded plan deviation (Prompt D):**
+
+```typescript
+test('pre-seeded plan: agent deviates → drift detected', async ({ page, request }) => {
+  await gotoWithProject(page, FIXTURE_PATH);
+
+  // Plan exists before agent starts
+  const { planUid } = await harness.seedPlan({
+    title: 'E2E Pre-seeded: Error Handling',
+    items: [
+      { title: 'Edit api.ts', body: '...', fileSpecs: [{ path: 'packages/web/src/api.ts', action: 'modify' }] },
+      { title: 'Edit UserList.tsx', body: '...', fileSpecs: [{ path: 'packages/web/src/UserList.tsx', action: 'modify' }] },
+    ],
+  });
+
+  const termId = await harness.spawnAgent(FIXTURE_PATH);
+  await harness.inject(termId, PROMPT_D);  // "find plan, execute with deviations"
+
+  // ...shared assertion tail (see below)
+});
+```
+
+**Agent-authored plan deviation (Prompt C):**
+
+```typescript
+test('agent-authored plan: agent deviates → drift detected', async ({ page, request }) => {
+  await gotoWithProject(page, FIXTURE_PATH);
+
+  // No pre-seeding — agent creates the plan itself
+  const termId = await harness.spawnAgent(FIXTURE_PATH);
+  await harness.inject(termId, PROMPT_C);  // "build plan, then deviate"
+
+  // Wait for authoring
+  await wsHelper.waitForEvent('plan-created', {}, 30_000);
+  await harness.waitForOutput(termId, 'PLAN_READY', 60_000);
+  const plans = await (await request.get('/api/plans')).json();
+  const planUid = plans.find((p: any) => p.title.includes('Agent-Authored')).uid;
+
+  // ...shared assertion tail (see below)
+});
+```
+
+**Shared assertion tail (both tests):**
+
+```typescript
+// Wait for partial execution + deviation marker
+await wsHelper.waitForEvent('plan-item-updated', { status: 'done' }, 60_000);
+await harness.waitForOutput(termId, 'DEVIATION_COMPLETE', 120_000);
+
+// Trigger drift detection
+await request.post(`/api/plans/${planUid}/detect-deviations`);
+
+// Verify drift badge shows unresolved count > 0
+await expect(page.locator('[data-testid="drift-badge"]')).toContainText(/[1-9]/);
+
+// Verify all three deviation states rendered:
+// ✅ satisfied (api.ts edited as planned) → green
+// ⚠️ missing (UserList.tsx never touched) → amber
+// 🔴 unexpected (db.py edited outside plan) → red
+await expect(page.locator('[data-testid="deviation-row-unexpected"]')).toBeVisible();
+await expect(page.locator('[data-testid="deviation-row-missing"]')).toBeVisible();
+
+const unexpected = page.locator('[data-testid="deviation-row-unexpected"]');
+await expect(unexpected).toHaveCSS('border-left-color', /red|rgb\(239/);
+
+const missing = page.locator('[data-testid="deviation-row-missing"]');
+await expect(missing).toHaveCSS('border-left-color', /amber|rgb\(245/);
+
+// Screenshot for visual regression
+await page.screenshot({ path: 'screenshots/deviation-detected.png' });
+
+await harness.cleanup(termId);
+```
+
+### Mock agent fallback (CI without Claude Code)
+
+For CI environments without Claude Code installed, the mock agent
+connects via MCP and makes the same tool calls Claude would — just
+scripted. Two modes mirror the two plan origins:
+
+```typescript
+// e2e/live-agent/helpers/mock-agent.ts
+
+/**
+ * Mock agent that AUTHORS a plan via MCP then executes it.
+ * Mirrors Prompt B (agent-authored flow).
+ */
+export async function runMockAgentAuthored(fixture: string) {
+  const client = await createMcpClient();
+
+  await client.callTool('register_session', {
+    agent_type: 'mock-test',
+    agent_model: 'harness/1.0',
+    project_path: fixture,
+  });
+
+  // ── Author the plan (same calls real Claude would make) ──
+
+  const planResult = await client.callTool('create_plan', {
+    tasks: [],
+    title: 'E2E Agent-Authored: Error Handling',
+    project_path: fixture,
+  });
+  const planUid = JSON.parse(planResult.content[0].text).uid;
+
+  await client.callTool('set_active_plan', { plan_uid: planUid });
+
+  const item1 = await client.callTool('add_item', {
+    plan_uid: planUid,
+    kind: 'action',
+    title: 'Add try-catch to API fetch calls',
+    body: 'Wrap the fetch() calls in api.ts with try-catch blocks',
+    file_specs: [{ path: 'packages/web/src/api.ts', action: 'modify' }],
+  });
+  const item1Uid = JSON.parse(item1.content[0].text).uid;
+
+  const item2 = await client.callTool('add_item', {
+    plan_uid: planUid,
+    kind: 'action',
+    title: 'Add error boundary to UserList',
+    body: 'Add React error boundary wrapper to UserList.tsx',
+    file_specs: [{ path: 'packages/web/src/UserList.tsx', action: 'modify' }],
+  });
+  const item2Uid = JSON.parse(item2.content[0].text).uid;
+
+  await client.callTool('add_plan_doc', {
+    plan_uid: planUid,
+    doc_type: 'executive',
+    title: 'Error Handling Improvement',
+    body: 'This plan adds error handling to the web frontend.',
+  });
+
+  await client.callTool('add_plan_phase', {
+    plan_uid: planUid,
+    title: 'Phase 1: Core error handling',
+    phase_number: 1,
+  });
+
+  // ── Execute ──
+  await executePlanItems(client, fixture, [item1Uid, item2Uid]);
+
+  client.close();
+  return planUid;
+}
+
+/**
+ * Mock agent that EXECUTES a pre-seeded plan.
+ * Mirrors Prompt A (pre-seeded flow).
+ */
+export async function runMockAgentPreseeded(fixture: string, planUid: string) {
+  const client = await createMcpClient();
+
+  await client.callTool('register_session', {
+    agent_type: 'mock-test',
+    agent_model: 'harness/1.0',
+    project_path: fixture,
+  });
+
+  await client.callTool('set_active_plan', { plan_uid: planUid });
+
+  // Work through items using get_next_item (same as Prompt A)
+  let next = await client.callTool('get_next_item', { plan_uid: planUid });
+  while (next?.content?.[0]?.text) {
+    const item = JSON.parse(next.content[0].text);
+    if (!item?.uid) break;
+    await executeSingleItem(client, fixture, item.uid);
+    next = await client.callTool('get_next_item', { plan_uid: planUid });
+  }
+
+  client.close();
+}
+
+/** Shared: claim → edit → progress → done for one item. */
+async function executeSingleItem(client: McpClient, fixture: string, itemUid: string) {
+  await client.callTool('claim_item', {
+    item_uid: itemUid,
+    agent_id: 'mock-agent',
+    agent_type: 'test',
+  });
+
+  const item = await client.callTool('get_item', { item_uid: itemUid });
+  const parsed = JSON.parse(item.content[0].text);
+  for (const spec of parsed.fileSpecs || []) {
+    fs.appendFileSync(
+      path.join(fixture, spec.path),
+      `\n// Modified by mock agent at ${Date.now()}\n`
+    );
+  }
+
+  await client.callTool('update_item_progress', {
+    item_uid: itemUid, percent: 100, message: 'Complete',
+  });
+
+  await client.callTool('update_item', {
+    item_uid: itemUid, status: 'done',
+  });
+}
+
+async function executePlanItems(client: McpClient, fixture: string, uids: string[]) {
+  for (const uid of uids) await executeSingleItem(client, fixture, uid);
+}
+```
+
+### Environment detection
+
+Each test supports both real Claude and mock agent, with the same
+assertions either way. The `CODETRELLIS_REAL_AGENT` env var controls
+which path runs:
+
+```typescript
+const USE_REAL_CLAUDE = process.env.CODETRELLIS_REAL_AGENT === '1';
+
+// ── Agent-authored path (Prompt B) ──
+test('agent-authored: full plan lifecycle', async ({ page, request }) => {
+  let planUid: string;
+
+  if (USE_REAL_CLAUDE) {
+    const termId = await harness.spawnAgent(FIXTURE_PATH);
+    await harness.inject(termId, PROMPT_B);
+    await wsHelper.waitForEvent('plan-created', {}, 30_000);
+    planUid = await getPlanUidByTitle(request, 'E2E Agent-Authored: Error Handling');
+    await harness.waitForOutput(termId, 'ALL_TASKS_COMPLETE', 120_000);
+    await harness.cleanup(termId);
+  } else {
+    planUid = await runMockAgentAuthored(FIXTURE_PATH);
+  }
+
+  // Same assertions — plan was authored + executed by agent
+  const items = await (await request.get(`/api/plans/${planUid}/items`)).json();
+  expect(items.every((i: any) => i.status === 'done')).toBe(true);
+  expect(items.length).toBe(2);
+  const docs = await (await request.get(`/api/plans/${planUid}/docs`)).json();
+  expect(docs.length).toBeGreaterThanOrEqual(1);
+  await expect(page.locator('[data-testid="item-status-done"]')).toBeVisible();
+});
+
+// ── Pre-seeded path (Prompt A) ──
+test('pre-seeded: agent executes existing plan', async ({ page, request }) => {
+  // Seed the plan before the agent starts
+  const { planUid } = await harness.seedPlan({
+    title: 'E2E Pre-seeded: Error Handling',
+    items: [
+      { title: 'Edit api.ts', body: '...', fileSpecs: [{ path: 'packages/web/src/api.ts', action: 'modify' }] },
+      { title: 'Edit UserList.tsx', body: '...', fileSpecs: [{ path: 'packages/web/src/UserList.tsx', action: 'modify' }] },
+    ],
+  });
+
+  if (USE_REAL_CLAUDE) {
+    const termId = await harness.spawnAgent(FIXTURE_PATH);
+    await harness.inject(termId, PROMPT_A);
+    await harness.waitForOutput(termId, 'ALL_TASKS_COMPLETE', 120_000);
+    await harness.cleanup(termId);
+  } else {
+    await runMockAgentPreseeded(FIXTURE_PATH, planUid);
+  }
+
+  // Same assertions — plan items should all be done
+  const items = await (await request.get(`/api/plans/${planUid}/items`)).json();
+  expect(items.every((i: any) => i.status === 'done')).toBe(true);
+  await expect(page.locator('[data-testid="item-status-done"]')).toBeVisible();
+});
+```
+
+### Visual regression baselines
+
+Live-agent tests capture screenshots at key moments:
+
+| Moment | Filename | What it captures |
+|--------|----------|------------------|
+| Agent connected | `agent-connected.png` | ConnectedAgents widget showing 1 agent |
+| Task claimed | `task-claimed.png` | Item tree with "assigned" badge |
+| Progress 50% | `progress-halfway.png` | Progress bar at 50% |
+| Task done | `task-done.png` | Green checkmark on item |
+| Deviation detected | `deviation-detected.png` | Drift badge + deviation rows |
+| Plan complete | `plan-complete.png` | Completion summary panel |
+| Graph with plan overlay | `graph-plan-overlay.png` | Highlight rings on planned files |
+| Ghost node | `ghost-node.png` | Dashed border for planned-but-not-existing file |
+
+These are stored in `e2e/screenshots/baselines/` and compared via
+`expect(screenshot).toMatchSnapshot()` with a configurable threshold.
+
+---
+
+## Remaining Gaps (honest assessment)
+
+After all waves are implemented, these areas would still lack coverage:
+
+| Area | Risk | Reason |
+|------|------|--------|
+| Electron wrapper | Low | Untested on macOS 26 (SIGKILL bug). Desktop-only concern. |
+| Performance under load | Medium | No benchmarks for large repos (10k+ files). |
+| Browser cross-matrix | Low | Only Chromium tested. Firefox/Safari not core targets. |
+| Real LLM reasoning quality | N/A | Out of scope — we test plumbing, not AI judgment. |
+| Offline / network failure modes | Low | Desktop scenario, not web service. |
