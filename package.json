@@ -16,7 +16,7 @@
     "predev:frontend": "bash scripts/free-dev-ports.sh 5173",
     "dev:frontend": "vite --config vite.web.config.ts",
     "predev:backend": "bash scripts/free-dev-ports.sh 19432 3001",
-    "dev:backend": "tsx watch src/backend/index.ts",
+    "dev:backend": "tsx watch --watch-path=src/backend --watch-path=src/shared src/backend/index.ts",
     "dev:electron": "electron-vite dev",
     "prepackage": "node scripts/build-icons.js && node scripts/generate-build-info.js",
     "package": "electron-vite build && electron-builder",

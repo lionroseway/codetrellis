@@ -43,6 +43,14 @@ interface TerminalSessionInfo {
 const sessions = new Map<string, TerminalSession>();
 let counter = 0;
 
+/**
+ * Maximum concurrent PTY sessions. Each session is a full shell process
+ * with its own PID, file descriptors, and memory. Unbounded creation
+ * (e.g. from multiple concurrent agents each requesting terminals) can
+ * exhaust PIDs / file descriptors and crash the backend.
+ */
+const MAX_TERMINAL_SESSIONS = 20;
+
 // Listeners for terminal data — supports multiple consumers so both
 // the WebSocket layer (web mode) and the Electron IPC layer can
 // coexist without overwriting each other.
@@ -111,6 +119,8 @@ function presetInitCommand(preset: AgentPreset): string | null {
 
 /**
  * Create a new terminal session.
+ * Throws if the session limit is reached — callers (REST route)
+ * should catch and return 503 / a user-facing message.
  */
 export function createTerminal(opts: {
   preset?: AgentPreset;
@@ -119,6 +129,20 @@ export function createTerminal(opts: {
   rows?: number;
   title?: string;
 }): TerminalSessionInfo {
+  // Reap dead sessions first — a terminal whose PTY exited still sits
+  // in the map until explicitly killed. Auto-reap keeps the count
+  // honest so users don't hit the limit with all-dead sessions.
+  for (const [id, s] of sessions) {
+    if (!s.alive) sessions.delete(id);
+  }
+
+  if (sessions.size >= MAX_TERMINAL_SESSIONS) {
+    throw new Error(
+      `Terminal session limit reached (${MAX_TERMINAL_SESSIONS}). ` +
+      `Close unused terminals before opening new ones.`,
+    );
+  }
+
   const id = `term-${++counter}-${Date.now().toString(36)}`;
   const preset = opts.preset ?? 'shell';
   const cwd = opts.cwd ?? process.cwd();

@@ -106,7 +106,28 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const clients = new Set<WebSocket>();
 
+/**
+ * Maximum concurrent WebSocket clients on the event channel.
+ * Each Playwright test page opens 1-2 WS connections; a sustained
+ * test suite can accumulate hundreds. Unbounded growth causes
+ * O(n) broadcast cost per event and memory pressure.
+ */
+const MAX_WS_CLIENTS = 100;
+
+/**
+ * When a client has more than this many bytes queued in the kernel
+ * send buffer, skip it during broadcast. Prevents a single slow
+ * consumer (e.g. a disconnecting browser tab) from blocking the
+ * event loop via backpressure.
+ */
+const WS_BACKPRESSURE_THRESHOLD = 64 * 1024; // 64 KB
+
 wss.on('connection', (ws) => {
+  if (clients.size >= MAX_WS_CLIENTS) {
+    console.warn(`[WS] Client limit reached (${MAX_WS_CLIENTS}) — rejecting connection`);
+    ws.close(1013, 'Server busy');
+    return;
+  }
   clients.add(ws);
   ws.on('error', (err) => {
     console.error('[WS] Client socket error:', err.message);
@@ -137,6 +158,10 @@ export function broadcast(type: string, payload: unknown): void {
   const message = JSON.stringify({ type, payload });
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
+      // Skip clients whose send buffer is backed up — a slow consumer
+      // (disconnecting tab, overloaded browser) shouldn't stall the
+      // broadcast loop or cause unbounded kernel buffer growth.
+      if (client.bufferedAmount > WS_BACKPRESSURE_THRESHOLD) continue;
       client.send(message);
     }
   }
@@ -258,7 +283,8 @@ app.post('/api/terminals', (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[terminal] Failed to create terminal:', message);
-    res.status(500).json({ error: 'Failed to create terminal', detail: message });
+    const status = message.includes('limit reached') ? 503 : 500;
+    res.status(status).json({ error: 'Failed to create terminal', detail: message });
   }
 });
 
@@ -281,7 +307,22 @@ app.delete('/api/terminals/:id', (req, res) => {
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now(), parser: getParserHealth() });
+  const heap = process.memoryUsage();
+  res.json({
+    status: 'ok',
+    timestamp: Date.now(),
+    parser: getParserHealth(),
+    memory: {
+      heapUsedMB: Math.round(heap.heapUsed / 1024 / 1024),
+      heapTotalMB: Math.round(heap.heapTotal / 1024 / 1024),
+      rssMB: Math.round(heap.rss / 1024 / 1024),
+      externalMB: Math.round(heap.external / 1024 / 1024),
+    },
+    connections: {
+      wsClients: clients.size,
+      terminalSessions: terminalService.listTerminals().length,
+    },
+  });
 });
 
 // Get git branch for a path
