@@ -148,17 +148,17 @@ search tool if needed.
 - `get_plan_timeline` — plan-level event feed
 - `list_external_refs` / `add_external_ref` / `remove_external_ref`
 
-### Plan Files / Templates (7) — KEEP but need V2 migration
-- `export_plan_to_files` — ⚠️ V1 only, ignores plan_items
-- `import_plan_from_files` — ⚠️ V1 only, creates V1 tasks
-- `discover_plan_files` — reads `.codetrellis/` directory
-- `unlink_plan_from_files`
-- `publish_plan_as_template` — ⚠️ V1 only
-- `list_plan_templates`
-- `create_plan_from_template` — ⚠️ V1 only, seeds V1 tasks
+### Plan Files / Templates (7) — ✅ V2 migrated (Phase C)
+- `export_plan_to_files` — ✅ V2 tree layout (items/ directory)
+- `import_plan_from_files` — ✅ V2 items from disk, V1 backward compat
+- `discover_plan_files` — reads `.codetrellis/` directory (no change)
+- `unlink_plan_from_files` — no change needed
+- `publish_plan_as_template` — ✅ V2 item tree snapshot
+- `list_plan_templates` — ✅ returns version + itemCount for V2 templates
+- `create_plan_from_template` — ✅ creates V2 items from V2 templates
 
-### Changes / Deviations (7) — KEEP but need V2 migration
-- `detect_deviations` — ⚠️ only reads V1 `tasks`, ignores `plan_items`
+### Changes / Deviations (7) — ✅ V2 migrated (Phase B)
+- `detect_deviations` — ✅ reads both V1 tasks and V2 plan_items
 - `get_deviations`
 - `reconcile`
 - `check_conformity`
@@ -250,16 +250,36 @@ with items, and see updates in the V2 UI in real time.
 - [x] **B3.** `get_drift_report` uses V2 item counts (falls back to
       V1 tasks for legacy plans with no V2 items)
 
-### Phase C — File Sync & Templates (do later)
+### Phase C — File Sync & Templates (done)
 **Goal:** Plans can be exported/imported/templated using V2 item trees.
 
-- [ ] **C1.** New YAML schema for V2 items (supports kind, nesting,
-      Object vs Action, templates, skills, constraints, approval gates)
-- [ ] **C2.** `export_plan_to_files` serialises V2 item tree
-- [ ] **C3.** `import_plan_from_files` creates V2 items
-- [ ] **C4.** `publish_plan_as_template` snapshots V2 item tree
-- [ ] **C5.** `create_plan_from_template` seeds V2 items
-- [ ] **C6.** Backward compat: import V1 YAML → V2 items
+- [x] **C1.** New YAML schema for V2 items — tree layout under `items/`
+      directory mirrors parent/child nesting. Items with children become
+      directories with `_self.yaml`; leaves are plain `.yaml` files.
+      `plan.yaml` gets `version: 2` field. All V2 fields serialised
+      (kind, template, skills, constraints, claimPolicy, executionConfig,
+      requiresApproval, inline comments + attachments).
+- [x] **C2.** `export_plan_to_files` detects V2 items via
+      `planItemService.listAllItems()` — routes to V2 tree writer.
+      V1 fallback for legacy plans without V2 items.
+- [x] **C3.** `import_plan_from_files` detects V2 format via
+      `version: 2` in plan.yaml or existence of `items/` directory.
+      Recursively walks the tree, upserts items via
+      `planItemService.createItem / updateItem`. Broadcasts
+      `plan-item-created` events so V2 UI updates in real time.
+- [x] **C4.** `publish_plan_as_template` snapshots V2 item tree as
+      nested `items` array in `template.yaml`. Large bodies written
+      as separate markdown files via `bodyPath`. Runtime fields
+      (status, assignee, progress) stripped. Cascading properties
+      (skills, constraints, executionConfig) preserved.
+- [x] **C5.** `create_plan_from_template` detects V2 templates
+      (has `items` array) and creates V2 plan_items recursively.
+      Broadcasts `plan-item-created` events. Response includes
+      `version: 2` and `itemCount`.
+- [x] **C6.** Backward compat: V1 YAML import still works (phases/
+      tasks/docs) — detected by absence of `version: 2` and `items/`
+      directory. V1 templates (phases+docs shape) still apply via
+      the legacy path. Both formats coexist.
 
 ### Phase D — Intelligence (future)
 **Goal:** Agents get richer context from the codebase graph.

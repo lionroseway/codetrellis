@@ -29,6 +29,8 @@ import { stringify as stringifyYaml } from 'yaml';
 import * as planService from './plan-service';
 import * as planPhasesService from './plan-phases-service';
 import * as planDocsService from './plan-documents-service';
+import * as planItemService from './plan-item-service';
+import type { PlanItem } from '../../shared/types';
 
 export interface PublishTemplateInput {
   planUid: string;
@@ -65,6 +67,120 @@ export function publishPlanAsTemplate(input: PublishTemplateInput): PublishTempl
   const plan = planService.getPlan(input.planUid);
   if (!plan) throw new Error(`Plan ${input.planUid} not found`);
 
+  // Detect V2 items — if any exist, use V2 template format.
+  const v2Items = planItemService.listAllItems(input.planUid);
+  if (v2Items.length > 0) {
+    return publishV2Template(input, plan, v2Items);
+  }
+
+  return publishV1Template(input, plan);
+}
+
+/** V2 path — snapshot item tree into template.yaml with nested `items` array. */
+function publishV2Template(
+  input: PublishTemplateInput,
+  plan: { title: string; description: string },
+  allItems: PlanItem[],
+): PublishTemplateResult {
+  const templateDir = path.join(input.projectRoot, '.codetrellis', 'templates', input.templateId);
+  ensureDir(templateDir);
+  ensureDir(path.join(templateDir, 'docs'));
+
+  // Build parent→children map
+  const childrenOf = new Map<string | null, PlanItem[]>();
+  for (const item of allItems) {
+    const list = childrenOf.get(item.parentUid) ?? [];
+    list.push(item);
+    childrenOf.set(item.parentUid, list);
+  }
+  for (const list of childrenOf.values()) {
+    list.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
+  }
+
+  const files: string[] = [];
+
+  // Write large item bodies as separate markdown files
+  function serializeItemForTemplate(item: PlanItem): Record<string, unknown> {
+    const obj: Record<string, unknown> = {
+      kind: item.kind,
+      title: item.title,
+    };
+
+    // Write large bodies to separate files for readability
+    if (item.body && item.body.length > 500) {
+      const bodySlug = slugify(item.title) || item.kind;
+      const bodyPath = `docs/${bodySlug}.md`;
+      writeFileAtomic(path.join(templateDir, bodyPath), item.body);
+      files.push(path.join(templateDir, bodyPath));
+      obj.bodyPath = bodyPath;
+    } else if (item.body) {
+      obj.body = item.body;
+    }
+
+    if (item.template) obj.template = item.template;
+
+    // Preserve structural/policy fields (useful in templates)
+    if (item.scopePath) obj.scopePath = item.scopePath;
+    if (item.fileSpecs?.length) obj.fileSpecs = item.fileSpecs;
+    if (item.symbolSpecs?.length) obj.symbolSpecs = item.symbolSpecs;
+    if (item.dependencies?.length) obj.dependencies = item.dependencies;
+
+    // Cascading properties — template-worthy
+    if (item.skills?.length) {
+      obj.skills = item.skills;
+      if (item.skillsMode && item.skillsMode !== 'inherit') obj.skillsMode = item.skillsMode;
+    }
+    if (item.claimPolicy) {
+      obj.claimPolicy = item.claimPolicy;
+      if (item.claimPolicyMode && item.claimPolicyMode !== 'inherit') obj.claimPolicyMode = item.claimPolicyMode;
+    }
+    if (item.executionConfig) {
+      obj.executionConfig = item.executionConfig;
+      if (item.executionConfigMode && item.executionConfigMode !== 'inherit') obj.executionConfigMode = item.executionConfigMode;
+    }
+    if (item.constraints) {
+      obj.constraints = item.constraints;
+      if (item.constraintsMode && item.constraintsMode !== 'inherit') obj.constraintsMode = item.constraintsMode;
+    }
+    if (item.requiresApproval) obj.requiresApproval = true;
+
+    // Scrub runtime fields: status, assignee, progressPercent, blockedReason,
+    // newConnections, removedConnections — these are project-specific.
+
+    // Recurse into children
+    const children = childrenOf.get(item.uid) ?? [];
+    if (children.length > 0) {
+      obj.children = children.map(serializeItemForTemplate);
+    }
+
+    return obj;
+  }
+
+  const roots = childrenOf.get(null) ?? [];
+  const yamlBody = {
+    id: input.templateId,
+    version: 2,
+    label: input.label ?? plan.title,
+    shortDescription: input.shortDescription ?? plan.description.split('\n')[0].slice(0, 140),
+    longDescription: input.longDescription ?? plan.description,
+    defaultTitle: input.defaultTitle ?? plan.title,
+    defaultPlanDescription: input.defaultPlanDescription ?? plan.description,
+    placeholders: input.placeholders?.length ? input.placeholders : undefined,
+    items: roots.map(serializeItemForTemplate),
+  };
+
+  const yamlPath = path.join(templateDir, 'template.yaml');
+  writeFileAtomic(yamlPath, stringifyYaml(yamlBody));
+  files.unshift(yamlPath);
+
+  return { templateDir, files };
+}
+
+/** V1 path — snapshot phases + tasks + docs (legacy format). */
+function publishV1Template(
+  input: PublishTemplateInput,
+  plan: { title: string; description: string; tasks: Array<{ phaseUid: string | null; description: string; affectedFiles?: string[] | null }> },
+): PublishTemplateResult {
   const phases = planPhasesService.listPhases(input.planUid);
   const tasks = plan.tasks;
   const docs = planDocsService.listPlanDocuments(input.planUid);
@@ -73,10 +189,6 @@ export function publishPlanAsTemplate(input: PublishTemplateInput): PublishTempl
   ensureDir(templateDir);
   ensureDir(path.join(templateDir, 'docs'));
 
-  // Group tasks by phase for the YAML's `phases[].tasks[]` shape. Tasks
-  // not bound to a phase get dropped from the template — templates are
-  // intentionally phased; if you have a flat plan, publishing it as a
-  // template doesn't really make sense yet (could add later).
   const tasksByPhase = new Map<string, typeof tasks>();
   for (const t of tasks) {
     if (!t.phaseUid) continue;
@@ -85,15 +197,9 @@ export function publishPlanAsTemplate(input: PublishTemplateInput): PublishTempl
     tasksByPhase.set(t.phaseUid, bucket);
   }
 
-  // Doc bodies live as separate markdown files referenced via
-  // `bodyPath` in template.yaml. Keeps the YAML manageable.
   const docEntries: Array<{
-    key: string;
-    docType: string;
-    title: string;
-    orderHint: string | null;
-    parentKey: string | null;
-    bodyPath: string;
+    key: string; docType: string; title: string;
+    orderHint: string | null; parentKey: string | null; bodyPath: string;
   }> = [];
 
   const docKeyByUid = new Map<string, string>();
@@ -105,15 +211,10 @@ export function publishPlanAsTemplate(input: PublishTemplateInput): PublishTempl
     const bodyPath = path.join('docs', fname);
     writeFileAtomic(path.join(templateDir, bodyPath), d.body || '');
     docEntries.push({
-      key,
-      docType: d.docType,
-      title: d.title,
-      orderHint: d.orderHint,
-      parentKey: null, // resolved below once all keys are known
-      bodyPath: bodyPath.replace(/\\/g, '/'), // forward slashes in YAML
+      key, docType: d.docType, title: d.title,
+      orderHint: d.orderHint, parentKey: null, bodyPath: bodyPath.replace(/\\/g, '/'),
     });
   }
-  // Now resolve parentKey now that every key is known.
   for (let i = 0; i < docEntries.length; i++) {
     const d = docs[i];
     if (d.parentDocUid) {
@@ -128,28 +229,22 @@ export function publishPlanAsTemplate(input: PublishTemplateInput): PublishTempl
     longDescription: input.longDescription ?? plan.description,
     defaultTitle: input.defaultTitle ?? plan.title,
     defaultPlanDescription: input.defaultPlanDescription ?? plan.description,
-    placeholders: input.placeholders && input.placeholders.length ? input.placeholders : undefined,
+    placeholders: input.placeholders?.length ? input.placeholders : undefined,
     phases: phases.map((p) => {
       const phaseTasks = (tasksByPhase.get(p.uid) ?? []).map((t) => ({
         description: t.description,
         affectedFiles: t.affectedFiles ?? [],
       }));
       return {
-        phaseNumber: p.phaseNumber,
-        title: p.title,
-        scope: p.scope || undefined,
-        prerequisites: p.prerequisites || undefined,
+        phaseNumber: p.phaseNumber, title: p.title,
+        scope: p.scope || undefined, prerequisites: p.prerequisites || undefined,
         acceptanceCriteria: p.acceptanceCriteria || undefined,
-        // status + gitCheckpoint scrubbed — fresh template starts at pending
         tasks: phaseTasks.length ? phaseTasks : undefined,
       };
     }),
     docs: docEntries.map((d) => ({
-      key: d.key,
-      docType: d.docType,
-      title: d.title,
-      orderHint: d.orderHint || undefined,
-      parentKey: d.parentKey || undefined,
+      key: d.key, docType: d.docType, title: d.title,
+      orderHint: d.orderHint || undefined, parentKey: d.parentKey || undefined,
       bodyPath: d.bodyPath,
     })),
   };

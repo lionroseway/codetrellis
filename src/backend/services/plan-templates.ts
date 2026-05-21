@@ -782,19 +782,36 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
  * came from. Project-local wins when an id collides — lets a team
  * override a built-in or a global template per-project.
  */
-export function listTemplates(projectRoot?: string): Array<Pick<PlanTemplate, 'id' | 'label' | 'shortDescription' | 'longDescription' | 'defaultTitle' | 'source' | 'placeholders'> & { phaseCount: number; docCount: number }> {
+export function listTemplates(projectRoot?: string): Array<Pick<PlanTemplate, 'id' | 'label' | 'shortDescription' | 'longDescription' | 'defaultTitle' | 'source' | 'placeholders'> & { phaseCount: number; docCount: number; version?: number; itemCount?: number }> {
   const all = collectTemplates(projectRoot);
-  return all.map((t) => ({
-    id: t.id,
-    label: t.label,
-    shortDescription: t.shortDescription,
-    longDescription: t.longDescription,
-    defaultTitle: t.defaultTitle,
-    source: t.source ?? 'builtin',
-    placeholders: t.placeholders,
-    phaseCount: t.phases.length,
-    docCount: t.docs.length,
-  }));
+  return all.map((t) => {
+    const tplAny = t as any;
+    const isV2 = Array.isArray(tplAny.items) && tplAny.items.length > 0;
+    return {
+      id: t.id,
+      label: t.label,
+      shortDescription: t.shortDescription,
+      longDescription: t.longDescription,
+      defaultTitle: t.defaultTitle,
+      source: t.source ?? 'builtin',
+      placeholders: t.placeholders,
+      phaseCount: t.phases.length,
+      docCount: t.docs.length,
+      ...(isV2 ? { version: 2, itemCount: countTemplateItems(tplAny.items) } : {}),
+    };
+  });
+}
+
+/** Recursively count items in a V2 template tree. */
+function countTemplateItems(items: any[]): number {
+  let count = 0;
+  for (const item of items) {
+    count++;
+    if (Array.isArray(item.children)) {
+      count += countTemplateItems(item.children);
+    }
+  }
+  return count;
 }
 
 export function getTemplate(id: string, projectRoot?: string): PlanTemplate | null {
@@ -901,7 +918,7 @@ function readTemplate(tplDir: string, source: PlanTemplateSource): PlanTemplate 
       default: typeof p.default === 'string' ? p.default : undefined,
     }));
 
-  return {
+  const result: PlanTemplate & { items?: any[] } = {
     id: String(raw.id),
     label: String(raw.label),
     shortDescription: String(raw.shortDescription ?? ''),
@@ -913,6 +930,33 @@ function readTemplate(tplDir: string, source: PlanTemplateSource): PlanTemplate 
     placeholders: placeholders.length ? placeholders : undefined,
     source,
   };
+
+  // V2 templates have an `items` array instead of (or alongside) phases/docs.
+  if (Array.isArray(raw.items) && raw.items.length > 0) {
+    result.items = resolveItemBodyPaths(raw.items, tplDir);
+  }
+
+  return result;
+}
+
+/**
+ * Recursively resolve bodyPath references in a V2 template item tree.
+ * If an item has a `bodyPath` and no `body`, read the file.
+ */
+function resolveItemBodyPaths(items: any[], tplDir: string): any[] {
+  return items.map((item) => {
+    const resolved = { ...item };
+    if (!resolved.body && typeof resolved.bodyPath === 'string') {
+      const bodyFile = path.join(tplDir, resolved.bodyPath);
+      if (fs.existsSync(bodyFile)) {
+        resolved.body = fs.readFileSync(bodyFile, 'utf-8');
+      }
+    }
+    if (Array.isArray(resolved.children)) {
+      resolved.children = resolveItemBodyPaths(resolved.children, tplDir);
+    }
+    return resolved;
+  });
 }
 
 function safeReaddir(dir: string): string[] {
@@ -954,5 +998,23 @@ export function substitutePlaceholders(
       title: sub(d.title) ?? d.title,
       body: sub(d.body) ?? d.body,
     })),
-  };
+    // V2 items — substitute placeholders recursively
+    ...((template as any).items ? { items: substituteItemPlaceholders((template as any).items, sub) } : {}),
+  } as PlanTemplate;
+}
+
+function substituteItemPlaceholders(
+  items: any[],
+  sub: (s: string | undefined) => string | undefined,
+): any[] {
+  return items.map((item) => {
+    const result = { ...item };
+    if (typeof result.title === 'string') result.title = sub(result.title) ?? result.title;
+    if (typeof result.body === 'string') result.body = sub(result.body) ?? result.body;
+    if (typeof result.scopePath === 'string') result.scopePath = sub(result.scopePath) ?? result.scopePath;
+    if (Array.isArray(result.children)) {
+      result.children = substituteItemPlaceholders(result.children, sub);
+    }
+    return result;
+  });
 }

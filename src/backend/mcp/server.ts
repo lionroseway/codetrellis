@@ -377,7 +377,7 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'export_plan_to_files',
     {
-      description: 'Round-trip a plan to disk: writes plan + phases + tasks + spec docs as YAML / markdown under `<projectRoot>/.codetrellis/plans/<slug>/`. Idempotent — re-exporting overwrites the same files. Use this so plans can be committed to git and shared across devices / agents (see codetrellis://skill/power-user for the multi-device flow).',
+      description: 'Round-trip a plan to disk as YAML under `<projectRoot>/.codetrellis/plans/<slug>/`. Plans with V2 items export a nested `items/` tree (version 2); legacy plans export the old phases/tasks/docs layout. Idempotent — re-exporting overwrites the same files. Use this so plans can be committed to git and shared across devices / agents.',
       inputSchema: {
         plan_uid: z.string(),
         project_root: z.string().describe('Absolute path to the project repo root. The .codetrellis/ directory will be created inside it.'),
@@ -403,7 +403,7 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'import_plan_from_files',
     {
-      description: 'Read a plan directory (`.codetrellis/plans/<slug>/`) from disk and upsert it into the DB. UID is the canonical id — re-importing the same directory is idempotent. Returns the plan + phase + task + doc counts. Use after `git pull` to sync external changes.',
+      description: 'Read a plan directory (`.codetrellis/plans/<slug>/`) from disk and upsert it into the DB. Detects V2 format (version:2 or items/ directory) automatically — V2 imports create plan_items, V1 imports create legacy tasks/phases/docs. UID-based upsert is idempotent. Use after `git pull` to sync external changes.',
       inputSchema: {
         plan_dir: z.string().describe('Absolute path to the plan directory (or directly to plan.yaml).'),
       },
@@ -413,15 +413,22 @@ function setupMcpServerInstance(): McpServer {
       try {
         const result = importPlan(plan_dir);
         broadcast('plan-imported', { planUid: result.plan.uid, source: plan_dir });
+        // Broadcast V2 item events so the UI updates in real time
+        if (result.version === 2) {
+          for (const item of result.items) {
+            broadcast('plan-item-created', { item });
+          }
+        }
         saveNow(() => exportDatabase());
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
               plan: { uid: result.plan.uid, title: result.plan.title },
-              phaseCount: result.phases.length,
-              taskCount: result.tasks.length,
-              docCount: result.docs.length,
+              version: result.version,
+              ...(result.version === 2
+                ? { itemCount: result.items.length }
+                : { phaseCount: result.phases.length, taskCount: result.tasks.length, docCount: result.docs.length }),
               warnings: result.warnings,
             }, null, 2),
           }],
@@ -469,7 +476,7 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'publish_plan_as_template',
     {
-      description: 'Snapshot a plan as a reusable template under `<project_root>/.codetrellis/templates/<template_id>/`. Strips project-specific bits (statuses, assignees, git checkpoints) and produces a `template.yaml` + `docs/<order>-<slug>.md` shape that other projects can `git clone` into their own `.codetrellis/templates/`. Phase 13 §C.',
+      description: 'Snapshot a plan as a reusable template under `<project_root>/.codetrellis/templates/<template_id>/`. Plans with V2 items produce a template with a nested `items` tree; legacy plans produce the old phases/docs shape. Strips runtime fields (statuses, assignees). The result can be shared via git.',
       inputSchema: {
         plan_uid: z.string(),
         project_root: z.string(),
@@ -520,7 +527,7 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'create_plan_from_template',
     {
-      description: 'Create a new plan from a template — seeds the plan, phases (with scope / prereqs / acceptance), and spec docs (with orderHint / parent refs) in one transactional sweep. Use list_plan_templates first to pick a template_id. Most common: "mass-refactor" (swf-style 6 phases + executive overview + per-phase docs + cross-cutting patterns/testing/security). For Phase 13 §C disk templates that declare `placeholders`, pass `placeholder_values` to fill them in.',
+      description: 'Create a new plan from a template in one call. V2 templates (with items tree) create V2 plan_items directly; legacy templates create phases + docs. Use list_plan_templates to pick a template_id. Pass `placeholder_values` for templates with `{{key}}` placeholders.',
       inputSchema: {
         template_id: z.string().describe('e.g. "mass-refactor"'),
         project_path: z.string(),
@@ -551,18 +558,22 @@ function setupMcpServerInstance(): McpServer {
           placeholderValues: placeholder_values,
         });
         broadcast('plan-created', { plan: result.plan });
-        for (const phase of result.phases) broadcast('plan-phase-created', { phase });
-        for (const doc of result.docs) broadcast('plan-doc-created', { doc });
+        if (result.version === 2) {
+          for (const item of result.items) broadcast('plan-item-created', { item });
+        } else {
+          for (const phase of result.phases) broadcast('plan-phase-created', { phase });
+          for (const doc of result.docs) broadcast('plan-doc-created', { doc });
+        }
         saveNow(() => exportDatabase());
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
               plan: result.plan,
-              phaseCount: result.phases.length,
-              docCount: result.docs.length,
-              taskCount: result.tasks.length,
-              hint: 'Read get_plan_doc(plan_uid, doc_type=\"executive_summary\") first, then list_plan_phases(plan_uid).',
+              version: result.version,
+              ...(result.version === 2
+                ? { itemCount: result.items.length, hint: 'Use list_items(plan_uid) to browse the plan tree.' }
+                : { phaseCount: result.phases.length, docCount: result.docs.length, taskCount: result.tasks.length }),
             }, null, 2),
           }],
         };

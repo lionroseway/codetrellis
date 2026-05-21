@@ -31,11 +31,13 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import * as planService from './plan-service';
 import * as planPhasesService from './plan-phases-service';
 import * as planDocsService from './plan-documents-service';
+import * as planItemService from './plan-item-service';
 import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
 import { getDb } from './database';
 import type {
   Plan,
+  PlanItem,
   PlanPhase,
   Task,
   PlanDocument,
@@ -82,28 +84,49 @@ export interface ExportPlanResult {
 
 export interface ImportPlanResult {
   plan: Plan;
+  /** V1 legacy — empty for V2 imports. */
   phases: PlanPhase[];
+  /** V1 legacy — empty for V2 imports. */
   tasks: Task[];
+  /** V1 legacy — empty for V2 imports. */
   docs: PlanDocument[];
+  /** V2 items created/updated during import. Empty for V1 imports. */
+  items: PlanItem[];
+  /** Format version: 2 for V2, 1 for legacy V1. */
+  version: 1 | 2;
   warnings: string[];
 }
 
 /**
  * Export a plan to disk under `<projectRoot>/.codetrellis/plans/<slug>/`.
  * Idempotent: re-exporting the same plan overwrites the same files.
+ *
+ * Plans with V2 items write the new tree layout (version: 2 + items/).
+ * Legacy plans without V2 items fall back to V1 (phases/tasks/docs/).
  */
 export function exportPlan(planUid: string, projectRoot: string): ExportPlanResult {
   const plan = planService.getPlan(planUid);
   if (!plan) throw new Error(`Plan ${planUid} not found`);
 
+  const slug = makePlanSlug(plan);
+  const planDir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  ensureDir(planDir);
+
+  // Detect V2 items — if any exist, use V2 export path.
+  const v2Items = planItemService.listAllItems(planUid);
+  if (v2Items.length > 0) {
+    return exportPlanV2(plan, planDir, v2Items, projectRoot);
+  }
+
+  return exportPlanV1(plan, planDir, planUid, projectRoot);
+}
+
+/** V1 export path — phases + tasks + docs as separate directories. */
+function exportPlanV1(plan: Plan & { tasks: Task[] }, planDir: string, planUid: string, projectRoot: string): ExportPlanResult {
   const phases = planPhasesService.listPhases(planUid);
   const tasks = plan.tasks;
   const docs = planDocsService.listPlanDocuments(planUid);
 
-  const slug = makePlanSlug(plan);
-  const planDir = path.join(projectRoot, '.codetrellis', 'plans', slug);
-
-  ensureDir(planDir);
   ensureDir(path.join(planDir, 'phases'));
   ensureDir(path.join(planDir, 'tasks'));
   ensureDir(path.join(planDir, 'docs'));
@@ -123,9 +146,7 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
     files.push(fpath);
   }
 
-  // tasks/ — include Phase 14 §A attachments + comments inline so a
-  // single task.yaml round-trips the full task-as-context blob. Bigger
-  // files but git-diff stays scoped.
+  // tasks/
   for (const task of tasks) {
     const fname = `${pad3(task.sortOrder)}-${slugify(task.description) || 'task'}.yaml`;
     const fpath = path.join(planDir, 'tasks', fname);
@@ -135,7 +156,7 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
     files.push(fpath);
   }
 
-  // docs/ — markdown body with YAML front-matter for metadata
+  // docs/
   for (const doc of docs) {
     const orderPrefix = doc.orderHint ? `${doc.orderHint}-` : '';
     const fname = `${orderPrefix}${slugify(doc.title) || doc.docType}.md`;
@@ -144,10 +165,79 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
     files.push(fpath);
   }
 
-  // Ensure .codetrellis/.gitignore exists so cache/ stays out of git.
   ensureCodetrellisGitignore(path.join(projectRoot, '.codetrellis'));
-
   return { planDir, files };
+}
+
+/** V2 export path — unified item tree mirroring parent/child nesting. */
+function exportPlanV2(plan: Plan, planDir: string, allItems: PlanItem[], projectRoot: string): ExportPlanResult {
+  const files: string[] = [];
+
+  // plan.yaml with version: 2
+  const planFile = path.join(planDir, 'plan.yaml');
+  writeFileAtomic(planFile, stringifyYaml(serializePlan(plan, 2)));
+  files.push(planFile);
+
+  // Build parent→children map
+  const childrenOf = new Map<string | null, PlanItem[]>();
+  for (const item of allItems) {
+    const key = item.parentUid;
+    const list = childrenOf.get(key) ?? [];
+    list.push(item);
+    childrenOf.set(key, list);
+  }
+
+  // Sort children by sortOrder within each parent
+  for (const list of childrenOf.values()) {
+    list.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
+  }
+
+  // Write the item tree recursively
+  const itemsDir = path.join(planDir, 'items');
+  ensureDir(itemsDir);
+  const roots = childrenOf.get(null) ?? [];
+  writeItemChildren(roots, itemsDir, childrenOf, files);
+
+  ensureCodetrellisGitignore(path.join(projectRoot, '.codetrellis'));
+  return { planDir, files };
+}
+
+/**
+ * Recursively write a list of sibling items into a directory.
+ * - Leaf items (no children) → `<sort>-<slug>.yaml`
+ * - Items with children → `<sort>-<slug>/` directory with `_self.yaml` + children
+ */
+function writeItemChildren(
+  items: PlanItem[],
+  parentDir: string,
+  childrenOf: Map<string | null, PlanItem[]>,
+  files: string[],
+): void {
+  for (const item of items) {
+    const children = childrenOf.get(item.uid) ?? [];
+    const slug = slugify(item.title) || item.kind;
+    const prefix = pad3(item.sortOrder);
+
+    if (children.length === 0) {
+      // Leaf — single YAML file
+      const fname = `${prefix}-${slug}.yaml`;
+      const fpath = path.join(parentDir, fname);
+      writeFileAtomic(fpath, stringifyYaml(serializeItem(item)));
+      files.push(fpath);
+    } else {
+      // Has children — directory with _self.yaml
+      const dirName = `${prefix}-${slug}`;
+      const dirPath = path.join(parentDir, dirName);
+      ensureDir(dirPath);
+
+      const selfPath = path.join(dirPath, '_self.yaml');
+      writeFileAtomic(selfPath, stringifyYaml(serializeItem(item)));
+      files.push(selfPath);
+
+      // Recurse into children
+      writeItemChildren(children, dirPath, childrenOf, files);
+    }
+  }
 }
 
 /**
@@ -185,10 +275,21 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   const planUid = planRaw.uid as string;
   const projectPath = (planRaw.projectPath as string) || '.';
 
-  // 1. Plan upsert.
+  // 1. Plan upsert (same for V1 and V2).
   upsertPlan(planUid, planRaw, projectPath);
 
-  // 2. Phases — read every yaml under phases/, upsert each.
+  // 2. Detect format: version:2 in plan.yaml OR items/ directory → V2.
+  const isV2 = planRaw.version === 2 || fs.existsSync(path.join(planDir, 'items'));
+
+  if (isV2) {
+    return importPlanV2(planDir, planUid, warnings);
+  }
+  return importPlanV1(planDir, planUid, warnings);
+}
+
+/** V1 import path — reads phases/, tasks/, docs/ directories. */
+function importPlanV1(planDir: string, planUid: string, warnings: string[]): ImportPlanResult {
+  // Phases
   const phaseDir = path.join(planDir, 'phases');
   if (fs.existsSync(phaseDir)) {
     for (const fname of fs.readdirSync(phaseDir)) {
@@ -196,10 +297,7 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
       const fpath = path.join(phaseDir, fname);
       try {
         const raw = parseYaml(fs.readFileSync(fpath, 'utf-8'));
-        if (!raw?.uid) {
-          warnings.push(`Skipping ${fpath} — missing uid`);
-          continue;
-        }
+        if (!raw?.uid) { warnings.push(`Skipping ${fpath} — missing uid`); continue; }
         upsertPhase(planUid, raw);
       } catch (err) {
         warnings.push(`Failed to import phase ${fname}: ${err instanceof Error ? err.message : err}`);
@@ -207,7 +305,7 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
     }
   }
 
-  // 3. Tasks — read every yaml under tasks/, upsert each.
+  // Tasks
   const taskDir = path.join(planDir, 'tasks');
   if (fs.existsSync(taskDir)) {
     for (const fname of fs.readdirSync(taskDir)) {
@@ -215,10 +313,7 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
       const fpath = path.join(taskDir, fname);
       try {
         const raw = parseYaml(fs.readFileSync(fpath, 'utf-8'));
-        if (!raw?.uid) {
-          warnings.push(`Skipping ${fpath} — missing uid`);
-          continue;
-        }
+        if (!raw?.uid) { warnings.push(`Skipping ${fpath} — missing uid`); continue; }
         upsertTask(planUid, raw);
       } catch (err) {
         warnings.push(`Failed to import task ${fname}: ${err instanceof Error ? err.message : err}`);
@@ -226,7 +321,7 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
     }
   }
 
-  // 4. Docs — read every md under docs/, parse front-matter + body.
+  // Docs
   const docDir = path.join(planDir, 'docs');
   if (fs.existsSync(docDir)) {
     for (const fname of fs.readdirSync(docDir)) {
@@ -234,10 +329,7 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
       const fpath = path.join(docDir, fname);
       try {
         const { meta, body } = parseFrontMatter(fs.readFileSync(fpath, 'utf-8'));
-        if (!meta.uid) {
-          warnings.push(`Skipping ${fpath} — missing uid in front-matter`);
-          continue;
-        }
+        if (!meta.uid) { warnings.push(`Skipping ${fpath} — missing uid in front-matter`); continue; }
         upsertDoc(planUid, meta, body);
       } catch (err) {
         warnings.push(`Failed to import doc ${fname}: ${err instanceof Error ? err.message : err}`);
@@ -245,7 +337,6 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
     }
   }
 
-  // Return the freshly-imported state.
   const updatedPlan = planService.getPlan(planUid);
   if (!updatedPlan) throw new Error(`Plan ${planUid} disappeared after import`);
 
@@ -254,8 +345,215 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
     phases: planPhasesService.listPhases(planUid),
     tasks: updatedPlan.tasks,
     docs: planDocsService.listPlanDocuments(planUid),
+    items: [],
+    version: 1,
     warnings,
   };
+}
+
+/** V2 import path — reads items/ tree recursively, creates V2 plan_items. */
+function importPlanV2(planDir: string, planUid: string, warnings: string[]): ImportPlanResult {
+  const itemsDir = path.join(planDir, 'items');
+  const importedItems: PlanItem[] = [];
+
+  if (fs.existsSync(itemsDir)) {
+    importItemsFromDir(itemsDir, planUid, null, warnings, importedItems);
+  }
+
+  const updatedPlan = planService.getPlan(planUid);
+  if (!updatedPlan) throw new Error(`Plan ${planUid} disappeared after import`);
+
+  return {
+    plan: updatedPlan,
+    phases: [],
+    tasks: [],
+    docs: [],
+    items: importedItems,
+    version: 2,
+    warnings,
+  };
+}
+
+/**
+ * Recursively import items from a directory. Entries are processed in
+ * sorted order (filenames carry sort-order prefixes).
+ *
+ * - `.yaml` file → leaf item
+ * - directory with `_self.yaml` → item with children (recurse)
+ */
+function importItemsFromDir(
+  dir: string,
+  planUid: string,
+  parentUid: string | null,
+  warnings: string[],
+  collected: PlanItem[],
+): void {
+  const entries = fs.readdirSync(dir).sort();
+
+  for (const entry of entries) {
+    if (entry === '_self.yaml') continue; // handled by parent
+    const fullPath = path.join(dir, entry);
+
+    try {
+      const stat = fs.statSync(fullPath);
+
+      if (stat.isFile() && (entry.endsWith('.yaml') || entry.endsWith('.yml'))) {
+        // Leaf item
+        const raw = parseYaml(fs.readFileSync(fullPath, 'utf-8'));
+        if (!raw?.uid) { warnings.push(`Skipping ${fullPath} — missing uid`); continue; }
+        const item = upsertItem(planUid, parentUid, raw, warnings);
+        if (item) collected.push(item);
+      } else if (stat.isDirectory()) {
+        // Item with children — read _self.yaml first
+        const selfPath = path.join(fullPath, '_self.yaml');
+        if (!fs.existsSync(selfPath)) {
+          warnings.push(`Skipping directory ${fullPath} — no _self.yaml`);
+          continue;
+        }
+        const raw = parseYaml(fs.readFileSync(selfPath, 'utf-8'));
+        if (!raw?.uid) { warnings.push(`Skipping ${selfPath} — missing uid`); continue; }
+        const item = upsertItem(planUid, parentUid, raw, warnings);
+        if (item) {
+          collected.push(item);
+          // Recurse into children
+          importItemsFromDir(fullPath, planUid, item.uid, warnings, collected);
+        }
+      }
+    } catch (err) {
+      warnings.push(`Failed to import ${entry}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+}
+
+/**
+ * Upsert a V2 plan item by UID. Creates if new, updates if existing.
+ * Also upserts inline attachments and comments.
+ */
+function upsertItem(
+  planUid: string,
+  parentUid: string | null,
+  raw: any,
+  warnings: string[],
+): PlanItem | null {
+  const uid = String(raw.uid);
+  const existing = planItemService.getItem(uid);
+
+  const kind = raw.kind === 'object' ? 'object' : 'action';
+  const now = Date.now();
+
+  if (existing) {
+    // Update existing item
+    planItemService.updateItem(uid, {
+      title: typeof raw.title === 'string' ? raw.title : undefined,
+      body: typeof raw.body === 'string' ? raw.body : undefined,
+      template: raw.template ?? null,
+      status: isTaskStatus(raw.status) ? raw.status : undefined,
+      assignee: raw.assignee ?? null,
+      assigneeType: raw.assigneeType ?? null,
+      assigneeModel: raw.assigneeModel ?? null,
+      progressPercent: typeof raw.progressPercent === 'number' ? raw.progressPercent : undefined,
+      blockedReason: raw.blockedReason ?? null,
+      scopePath: raw.scopePath ?? null,
+      fileSpecs: Array.isArray(raw.fileSpecs) ? raw.fileSpecs : undefined,
+      symbolSpecs: Array.isArray(raw.symbolSpecs) ? raw.symbolSpecs : undefined,
+      newConnections: Array.isArray(raw.newConnections) ? raw.newConnections : undefined,
+      removedConnections: Array.isArray(raw.removedConnections) ? raw.removedConnections : undefined,
+      dependencies: Array.isArray(raw.dependencies) ? raw.dependencies : undefined,
+      skills: Array.isArray(raw.skills) ? raw.skills : undefined,
+      skillsMode: raw.skillsMode ?? undefined,
+      claimPolicy: raw.claimPolicy ?? undefined,
+      claimPolicyMode: raw.claimPolicyMode ?? undefined,
+      executionConfig: raw.executionConfig ?? undefined,
+      executionConfigMode: raw.executionConfigMode ?? undefined,
+      constraints: raw.constraints ?? undefined,
+      constraintsMode: raw.constraintsMode ?? undefined,
+      requiresApproval: typeof raw.requiresApproval === 'boolean' ? raw.requiresApproval : undefined,
+      parentUid,
+      author: 'file-import',
+      authorType: 'system',
+    });
+  } else {
+    // Create new item with preserved UID
+    planItemService.createItem({
+      uid,
+      planUid,
+      parentUid,
+      sortOrder: typeof raw.sortOrder === 'number' ? raw.sortOrder : undefined,
+      kind,
+      title: String(raw.title ?? ''),
+      body: typeof raw.body === 'string' ? raw.body : '',
+      template: raw.template ?? null,
+      status: isTaskStatus(raw.status) ? raw.status : 'pending',
+      assignee: raw.assignee ?? null,
+      assigneeType: raw.assigneeType ?? null,
+      assigneeModel: raw.assigneeModel ?? null,
+      progressPercent: typeof raw.progressPercent === 'number' ? raw.progressPercent : null,
+      blockedReason: raw.blockedReason ?? null,
+      scopePath: raw.scopePath ?? null,
+      fileSpecs: Array.isArray(raw.fileSpecs) ? raw.fileSpecs : [],
+      symbolSpecs: Array.isArray(raw.symbolSpecs) ? raw.symbolSpecs : [],
+      newConnections: Array.isArray(raw.newConnections) ? raw.newConnections : [],
+      removedConnections: Array.isArray(raw.removedConnections) ? raw.removedConnections : [],
+      dependencies: Array.isArray(raw.dependencies) ? raw.dependencies : [],
+      skills: Array.isArray(raw.skills) ? raw.skills : [],
+      skillsMode: raw.skillsMode ?? 'inherit',
+      claimPolicy: raw.claimPolicy ?? null,
+      claimPolicyMode: raw.claimPolicyMode ?? 'inherit',
+      executionConfig: raw.executionConfig ?? null,
+      executionConfigMode: raw.executionConfigMode ?? 'inherit',
+      constraints: raw.constraints ?? null,
+      constraintsMode: raw.constraintsMode ?? 'inherit',
+      requiresApproval: raw.requiresApproval === true,
+      author: String(raw.author ?? 'human'),
+      authorType: String(raw.authorType ?? 'human'),
+      createdAt: toEpoch(raw.createdAt) ?? now,
+      updatedAt: toEpoch(raw.updatedAt) ?? now,
+    });
+  }
+
+  const item = planItemService.getItem(uid);
+
+  // Inline attachments
+  if (Array.isArray(raw.attachments)) {
+    for (const a of raw.attachments) {
+      if (!a?.uid || !a?.kind || a?.value == null) continue;
+      taskAttachmentsService.upsertAttachment({
+        uid: String(a.uid),
+        targetType: 'item',
+        targetUid: uid,
+        kind: String(a.kind) as AttachmentKind,
+        value: String(a.value),
+        label: a.label ?? null,
+        contentType: a.contentType ?? null,
+        author: String(a.author ?? 'human'),
+        authorType: String(a.authorType ?? 'human'),
+        createdAt: toEpoch(a.createdAt) ?? Date.now(),
+      });
+    }
+  }
+
+  // Inline comments
+  if (Array.isArray(raw.comments)) {
+    for (const c of raw.comments) {
+      if (!c?.uid || !c?.body) continue;
+      upsertComment({
+        uid: String(c.uid),
+        targetType: 'item',
+        targetUid: uid,
+        parentUid: c.parentUid ?? null,
+        author: String(c.author ?? 'human'),
+        authorType: String(c.authorType ?? 'human'),
+        body: String(c.body),
+        commentType: (c.commentType as CommentType | undefined) ?? 'comment',
+        kind: (c.kind as CommentKind | null) ?? null,
+        source: (c.source as CommentSource | null) ?? null,
+        metadata: c.metadata ?? null,
+        createdAt: toEpoch(c.createdAt) ?? Date.now(),
+      });
+    }
+  }
+
+  return item;
 }
 
 /**
@@ -397,7 +695,7 @@ export function startPlanFileWatcher(projectRoot: string): void {
     ignoreInitial: true,
     persistent: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
-    depth: 4, // plans/<slug>/{phases|tasks|docs}/file.yaml
+    depth: 10, // V2 items/ tree can nest deeply
   });
 
   watcher.on('all', (event, filePath) => {
@@ -471,9 +769,10 @@ export function stopPlanFileWatcher(projectRoot: string): void {
 function findContainingPlanDir(filePath: string, plansRoot: string): string | null {
   // filePath looks like:
   //   <plansRoot>/<slug>/plan.yaml
-  //   <plansRoot>/<slug>/phases/01-foundation.yaml
-  //   <plansRoot>/<slug>/tasks/001-add-types.yaml
-  //   <plansRoot>/<slug>/docs/00-overview.md
+  //   <plansRoot>/<slug>/phases/01-foundation.yaml       (V1)
+  //   <plansRoot>/<slug>/tasks/001-add-types.yaml        (V1)
+  //   <plansRoot>/<slug>/docs/00-overview.md             (V1)
+  //   <plansRoot>/<slug>/items/000-foo/001-bar.yaml      (V2, any depth)
   // We want <plansRoot>/<slug>.
   if (!filePath.startsWith(plansRoot)) return null;
   const rel = path.relative(plansRoot, filePath);
@@ -493,8 +792,9 @@ function hasGitConflictMarkers(content: string): boolean {
 
 // --- Serialization ---
 
-function serializePlan(plan: Plan & { tasks?: Task[] }) {
+function serializePlan(plan: Plan & { tasks?: Task[] }, version?: 1 | 2) {
   return {
+    ...(version === 2 ? { version: 2 } : {}),
     uid: plan.uid,
     title: plan.title,
     description: plan.description,
@@ -505,6 +805,101 @@ function serializePlan(plan: Plan & { tasks?: Task[] }) {
     createdAt: new Date(plan.createdAt).toISOString(),
     updatedAt: new Date(plan.updatedAt).toISOString(),
   };
+}
+
+/**
+ * Serialize a V2 PlanItem to a plain object for YAML output.
+ * Includes inline comments + attachments (same pattern as V1 tasks).
+ * Omits null/empty fields to keep YAML clean.
+ */
+function serializeItem(item: PlanItem): Record<string, unknown> {
+  const attachments = taskAttachmentsService.listItemAttachments(item.uid);
+  const comments = commentService.listItemComments(item.uid);
+
+  const obj: Record<string, unknown> = {
+    uid: item.uid,
+    kind: item.kind,
+    sortOrder: item.sortOrder,
+    title: item.title,
+  };
+
+  if (item.body) obj.body = item.body;
+  if (item.template) obj.template = item.template;
+
+  // Action-only fields — only include when present
+  if (item.kind === 'action') {
+    if (item.status) obj.status = item.status;
+    if (item.assignee) {
+      obj.assignee = item.assignee;
+      if (item.assigneeType) obj.assigneeType = item.assigneeType;
+      if (item.assigneeModel) obj.assigneeModel = item.assigneeModel;
+    }
+    if (item.progressPercent != null) obj.progressPercent = item.progressPercent;
+    if (item.blockedReason) obj.blockedReason = item.blockedReason;
+    if (item.scopePath) obj.scopePath = item.scopePath;
+    if (item.fileSpecs?.length) obj.fileSpecs = item.fileSpecs;
+    if (item.symbolSpecs?.length) obj.symbolSpecs = item.symbolSpecs;
+    if (item.newConnections?.length) obj.newConnections = item.newConnections;
+    if (item.removedConnections?.length) obj.removedConnections = item.removedConnections;
+    if (item.dependencies?.length) obj.dependencies = item.dependencies;
+  }
+
+  // Cascading properties (both kinds)
+  if (item.skills?.length) {
+    obj.skills = item.skills;
+    if (item.skillsMode && item.skillsMode !== 'inherit') obj.skillsMode = item.skillsMode;
+  }
+  if (item.claimPolicy) {
+    obj.claimPolicy = item.claimPolicy;
+    if (item.claimPolicyMode && item.claimPolicyMode !== 'inherit') obj.claimPolicyMode = item.claimPolicyMode;
+  }
+  if (item.executionConfig) {
+    obj.executionConfig = item.executionConfig;
+    if (item.executionConfigMode && item.executionConfigMode !== 'inherit') obj.executionConfigMode = item.executionConfigMode;
+  }
+  if (item.constraints) {
+    obj.constraints = item.constraints;
+    if (item.constraintsMode && item.constraintsMode !== 'inherit') obj.constraintsMode = item.constraintsMode;
+  }
+  if (item.requiresApproval) obj.requiresApproval = true;
+
+  // Metadata
+  obj.author = item.author;
+  obj.authorType = item.authorType;
+  obj.createdAt = new Date(item.createdAt).toISOString();
+  obj.updatedAt = new Date(item.updatedAt).toISOString();
+
+  // Inline attachments
+  if (attachments.length) {
+    obj.attachments = attachments.map((a) => ({
+      uid: a.uid,
+      kind: a.kind,
+      value: a.value,
+      label: a.label ?? null,
+      contentType: a.contentType ?? null,
+      author: a.author,
+      authorType: a.authorType,
+      createdAt: new Date(a.createdAt).toISOString(),
+    }));
+  }
+
+  // Inline comments
+  if (comments.length) {
+    obj.comments = comments.map((c) => ({
+      uid: c.uid,
+      parentUid: c.parentUid,
+      author: c.author,
+      authorType: c.authorType,
+      body: c.body,
+      commentType: c.commentType,
+      kind: c.kind ?? null,
+      source: c.source ?? null,
+      metadata: c.metadata ?? null,
+      createdAt: new Date(c.createdAt).toISOString(),
+    }));
+  }
+
+  return obj;
 }
 
 function serializePhase(phase: PlanPhase) {
@@ -772,7 +1167,7 @@ function upsertTask(planUid: string, raw: any): void {
  */
 function upsertComment(input: {
   uid: string;
-  targetType: 'plan' | 'task';
+  targetType: 'plan' | 'task' | 'item';
   targetUid: string;
   parentUid: string | null;
   author: string;

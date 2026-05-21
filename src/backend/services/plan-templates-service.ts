@@ -1,20 +1,23 @@
 /**
- * Apply a plan template — turns a `PlanTemplate` into real DB rows
- * (plan + phases + tasks + spec docs). Wires `parentDocUid` from the
- * template's `parentKey` references after the docs are created.
+ * Apply a plan template — turns a `PlanTemplate` into real DB rows.
  *
- * Single transactional sweep at the service layer: if any step fails
- * the caller gets the partial state. Good enough for the desktop /
- * single-user case; if we ever need true atomicity we can wrap in a
- * SAVEPOINT.
+ * V2 templates (with `items` array): creates plan metadata + V2 items
+ * via plan-item-service. No V1 phases/tasks/docs involved.
+ *
+ * V1 templates (with `phases` + `docs`): creates plan + phases + tasks
+ * + spec docs via the legacy services. Kept for backward compat with
+ * existing templates.
  */
 
-import type { Plan, PlanDocument, PlanPhase, Task } from '../../shared/types';
+import fs from 'node:fs';
+import path from 'node:path';
+import type { Plan, PlanDocument, PlanItem, PlanPhase, Task } from '../../shared/types';
 import { createPlan } from './plan-service';
 import { createPhase } from './plan-phases-service';
 import { createPlanDocument } from './plan-documents-service';
 import { updateTask } from './plan-service';
 import { getTasksByPlan } from './plan-service';
+import * as planItemService from './plan-item-service';
 import { getTemplate, substitutePlaceholders } from './plan-templates';
 
 export interface ApplyTemplateInput {
@@ -38,9 +41,16 @@ export interface ApplyTemplateInput {
 
 export interface ApplyTemplateResult {
   plan: Plan;
+  /** V1 legacy — empty for V2 templates. */
   phases: PlanPhase[];
+  /** V1 legacy — empty for V2 templates. */
   docs: PlanDocument[];
+  /** V1 legacy — empty for V2 templates. */
   tasks: Task[];
+  /** V2 items created. Empty for V1 templates. */
+  items: PlanItem[];
+  /** Template format: 2 for V2, 1 for legacy. */
+  version: 1 | 2;
 }
 
 export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
@@ -70,9 +80,111 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
   const title = (input.title ?? template.defaultTitle).replace('{name}', input.title ?? '');
   const description = input.description ?? template.defaultPlanDescription;
 
-  // 1. Plan + skeleton tasks. createPlan needs `tasks` up front; we
-  //    seed all phase tasks together with a `__phaseRef` we'll resolve
-  //    once phases exist, so order_in_plan stays predictable.
+  // Detect V2 template format: has `items` array
+  const templateAny = template as any;
+  if (Array.isArray(templateAny.items) && templateAny.items.length > 0) {
+    return applyV2Template(templateAny, title, description, author, authorType, input);
+  }
+
+  return applyV1Template(template, title, description, author, authorType, input);
+}
+
+/** V2 path — create plan metadata + V2 items from nested `items` tree. */
+function applyV2Template(
+  template: any,
+  title: string,
+  description: string,
+  author: string,
+  authorType: string,
+  input: ApplyTemplateInput,
+): ApplyTemplateResult {
+  // Create plan container (no V1 tasks).
+  const plan = createPlan(
+    { title, description, tasks: [] },
+    author, authorType, input.projectPath,
+  );
+
+  // Recursively create V2 items from the template's items tree.
+  const createdItems: PlanItem[] = [];
+
+  function createItemsRecursive(
+    templateItems: any[],
+    parentUid: string | null,
+    sortBase: number,
+  ): void {
+    for (let i = 0; i < templateItems.length; i++) {
+      const t = templateItems[i];
+      const kind = t.kind === 'object' ? 'object' : 'action';
+
+      // Resolve bodyPath if body is in a separate file
+      let body = t.body ?? '';
+      if (t.bodyPath && input.projectPath) {
+        // bodyPath is relative to the template directory. Since we
+        // don't have the template dir here, we rely on the body having
+        // been inlined by substitutePlaceholders or the loader.
+        // For disk templates, the loader reads bodyPath.
+        // Fallback: use whatever body we have.
+      }
+
+      const item = planItemService.createItem({
+        planUid: plan.uid,
+        parentUid,
+        sortOrder: sortBase + i,
+        kind,
+        title: String(t.title ?? ''),
+        body,
+        template: t.template ?? null,
+        // Action defaults — template items start as pending
+        status: kind === 'action' ? 'pending' : undefined,
+        scopePath: t.scopePath ?? null,
+        fileSpecs: Array.isArray(t.fileSpecs) ? t.fileSpecs : [],
+        symbolSpecs: Array.isArray(t.symbolSpecs) ? t.symbolSpecs : [],
+        dependencies: Array.isArray(t.dependencies) ? t.dependencies : [],
+        // Cascading properties from template
+        skills: Array.isArray(t.skills) ? t.skills : [],
+        skillsMode: t.skillsMode ?? 'inherit',
+        claimPolicy: t.claimPolicy ?? null,
+        claimPolicyMode: t.claimPolicyMode ?? 'inherit',
+        executionConfig: t.executionConfig ?? null,
+        executionConfigMode: t.executionConfigMode ?? 'inherit',
+        constraints: t.constraints ?? null,
+        constraintsMode: t.constraintsMode ?? 'inherit',
+        requiresApproval: t.requiresApproval === true,
+        author,
+        authorType,
+      });
+
+      createdItems.push(item);
+
+      // Recurse into children
+      if (Array.isArray(t.children) && t.children.length > 0) {
+        createItemsRecursive(t.children, item.uid, 0);
+      }
+    }
+  }
+
+  createItemsRecursive(template.items, null, 0);
+
+  return {
+    plan,
+    phases: [],
+    docs: [],
+    tasks: [],
+    items: createdItems,
+    version: 2,
+  };
+}
+
+/** V1 path — create plan + phases + tasks + spec docs (legacy format). */
+function applyV1Template(
+  template: any,
+  title: string,
+  description: string,
+  author: string,
+  authorType: string,
+  input: ApplyTemplateInput,
+): ApplyTemplateResult {
+  // 1. Plan + skeleton tasks.
   type SeedTask = { description: string; affectedFiles?: string[]; phaseRef: number };
   const seedTasks: SeedTask[] = [];
   for (const phase of template.phases) {
@@ -94,14 +206,10 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
         affectedFiles: t.affectedFiles,
       })),
     },
-    author,
-    authorType,
-    input.projectPath,
+    author, authorType, input.projectPath,
   );
 
-  // 2. Phases (in template order; createPhase auto-numbers if omitted,
-  //    but we pass phase_number explicitly so the template author owns
-  //    the numbering).
+  // 2. Phases
   const phases: PlanPhase[] = [];
   const phaseByNumber = new Map<number, PlanPhase>();
   for (const p of template.phases) {
@@ -118,10 +226,7 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
     phaseByNumber.set(p.phaseNumber, created);
   }
 
-  // 3. Bind seed tasks to their phase. createPlan returned them in
-  //    seedTasks order, so we can re-fetch + match by description +
-  //    sort_order. (Description match is fine for the template path —
-  //    seed tasks are deterministic per template.)
+  // 3. Bind seed tasks to their phase.
   const dbTasks = getTasksByPlan(plan.uid);
   for (let i = 0; i < seedTasks.length && i < dbTasks.length; i++) {
     const seed = seedTasks[i];
@@ -132,7 +237,7 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
     }
   }
 
-  // 4. Spec docs — create in template order so parentKey refs resolve.
+  // 4. Spec docs
   const docs: PlanDocument[] = [];
   const docByKey = new Map<string, PlanDocument>();
   for (const d of template.docs) {
@@ -156,5 +261,7 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
     phases,
     docs,
     tasks: getTasksByPlan(plan.uid),
+    items: [],
+    version: 1,
   };
 }
