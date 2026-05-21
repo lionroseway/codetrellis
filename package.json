@@ -1,7 +1,7 @@
 {
   "name": "codetrellis",
   "productName": "CodeTrellis",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
   "license": "Apache-2.0",
   "homepage": "https://codetrellis.dev",
@@ -36,6 +36,9 @@
     "test:headed": "playwright test --headed",
     "test:harness": "playwright test --config=playwright.harness.config.ts",
     "test:harness:headed": "playwright test --config=playwright.harness.config.ts --headed",
+    "capture": "playwright test --config=playwright.marketing.config.ts",
+    "capture:screenshots": "playwright test --config=playwright.marketing.config.ts screenshots",
+    "capture:videos": "playwright test --config=playwright.marketing.config.ts videos",
     "smoke:plan-items": "tsx scripts/smoke-plan-items.ts",
     "smoke:plan-migrate": "tsx scripts/smoke-plan-migrate.ts",
     "lint": "eslint src/",

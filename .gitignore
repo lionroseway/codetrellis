@@ -9,6 +9,7 @@ dist/
 *.log
 .claude/
 test-results/
+marketing-assets/test-results/
 playwright-report/
 .codetrellis/
 
