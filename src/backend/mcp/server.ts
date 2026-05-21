@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { searchSymbols, getDependencyEdges, getFileDependencies, getDbStats } from '../services/database';
+import { searchSymbols, getDependencyEdges, getFileDependencies, getDbStats, getDb } from '../services/database';
 import { broadcast } from '../server';
 import { z } from 'zod';
 import * as planService from '../services/plan-service';
@@ -1428,7 +1428,7 @@ function setupMcpServerInstance(): McpServer {
       },
     },
     async ({ plan_uid, query, limit }) => {
-      const db = (await import('../services/database')).getDb();
+      const db = getDb();
       const q = `%${query}%`;
       const r = db.exec(
         `SELECT uid, title, body, kind, status, parent_uid FROM plan_items
@@ -1850,6 +1850,206 @@ function setupMcpServerInstance(): McpServer {
     async () => {
       broadcast('ui-refresh', {});
       return { content: [{ type: 'text' as const, text: 'UI refresh triggered' }] };
+    },
+  );
+
+  // --- Phase D: Intelligence Tools ---
+
+  mcpServer.registerTool(
+    'suggest_specs',
+    {
+      description:
+        'Query the codebase graph for a given scope (directory or file path) and return candidate fileSpecs and symbolSpecs. ' +
+        'Use this to populate an Action\'s fileSpecs/symbolSpecs based on what actually exists in the codebase — avoids guessing file paths or symbol names. ' +
+        'Returns files under the scope, their symbols, and dependency edges (imports in + out).',
+      inputSchema: {
+        scope_path: z.string().describe('Relative path prefix to scope the query (e.g. "src/backend/services" or "src/frontend/stores/plan-store.ts"). Matches files whose relative_path starts with this string.'),
+        include_symbols: z.boolean().optional().describe('Include symbols (functions, classes, etc) for each file. Default true.'),
+        include_deps: z.boolean().optional().describe('Include import edges (in/out) for each file. Default true.'),
+        limit: z.number().int().min(1).max(200).optional().describe('Max files to return. Default 50.'),
+      },
+    },
+    async ({ scope_path, include_symbols, include_deps, limit }) => {
+      const db = getDb();
+      const maxFiles = limit ?? 50;
+      const wantSymbols = include_symbols !== false;
+      const wantDeps = include_deps !== false;
+
+      // Find files under the scope
+      const filesResult = db.exec(
+        `SELECT id, path, relative_path, language FROM files
+         WHERE relative_path LIKE ? OR relative_path = ?
+         ORDER BY relative_path
+         LIMIT ?`,
+        [`${scope_path}%`, scope_path, maxFiles],
+      );
+      if (!filesResult[0]) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ scopePath: scope_path, files: [], message: 'No files found under this scope' }, null, 2) }] };
+      }
+
+      const files = filesResult[0].values.map((row: any[]) => {
+        const fileId = row[0] as number;
+        const filePath = row[1] as string;
+        const relativePath = row[2] as string;
+        const language = row[3] as string;
+
+        const entry: Record<string, unknown> = {
+          path: relativePath,
+          language,
+          suggestedFileSpec: { path: relativePath, action: 'modify', description: '' },
+        };
+
+        // Symbols
+        if (wantSymbols) {
+          const syms = db.exec(
+            `SELECT name, kind, start_line, end_line FROM symbols
+             WHERE file_id = ? AND parent_symbol_id IS NULL
+             ORDER BY start_line`,
+            [fileId],
+          );
+          if (syms[0]) {
+            entry.symbols = syms[0].values.map((s: any[]) => ({
+              name: s[0] as string,
+              kind: s[1] as string,
+              startLine: s[2] as number,
+              endLine: s[3] as number,
+              suggestedSymbolSpec: {
+                name: s[0] as string,
+                kind: s[1] as string,
+                action: 'modify',
+                filePath: relativePath,
+                description: '',
+              },
+            }));
+          }
+        }
+
+        // Dependencies
+        if (wantDeps) {
+          const importsOut = db.exec(
+            `SELECT f2.relative_path, i.specifiers FROM imports i
+             JOIN files f2 ON i.resolved_path = f2.path
+             WHERE i.file_id = ? AND i.resolved_path IS NOT NULL
+             LIMIT 30`,
+            [fileId],
+          );
+          const importsIn = db.exec(
+            `SELECT f1.relative_path, i.specifiers FROM imports i
+             JOIN files f1 ON i.file_id = f1.id
+             WHERE i.resolved_path = ?
+             LIMIT 30`,
+            [filePath],
+          );
+          if (importsOut[0]) {
+            entry.imports = importsOut[0].values.map((r: any[]) => ({
+              target: r[0], specifiers: JSON.parse((r[1] as string) || '[]'),
+            }));
+          }
+          if (importsIn[0]) {
+            entry.importedBy = importsIn[0].values.map((r: any[]) => ({
+              source: r[0], specifiers: JSON.parse((r[1] as string) || '[]'),
+            }));
+          }
+        }
+
+        return entry;
+      });
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            scopePath: scope_path,
+            fileCount: files.length,
+            files,
+            hint: 'Copy suggestedFileSpec / suggestedSymbolSpec into your add_item fileSpecs / symbolSpecs and fill in the description + action fields.',
+          }, null, 2),
+        }],
+      };
+    },
+  );
+
+  mcpServer.registerTool(
+    'get_plan_summary',
+    {
+      description:
+        'Returns plan health in a single call: completion percentage, status breakdown, blocked/pending/done counts, ' +
+        'deviation count, and comment activity. Use this for a quick dashboard view before diving into details.',
+      inputSchema: {
+        plan_uid: z.string(),
+      },
+    },
+    async ({ plan_uid }) => {
+      const plan = planService.getPlan(plan_uid);
+      if (!plan) return { content: [{ type: 'text' as const, text: 'Plan not found' }] };
+
+      // V2 items
+      const items = planItemService.listItemSummaries(plan_uid);
+      const objects = items.filter((i) => i.kind === 'object');
+      const actions = items.filter((i) => i.kind === 'action');
+
+      // Status breakdown
+      const statusCounts: Record<string, number> = {};
+      for (const a of actions) {
+        const s = a.status ?? 'pending';
+        statusCounts[s] = (statusCounts[s] || 0) + 1;
+      }
+
+      const doneCount = statusCounts['done'] ?? 0;
+      const blockedCount = statusCounts['blocked'] ?? 0;
+      const inProgressCount = statusCounts['in_progress'] ?? 0;
+      const pendingCount = statusCounts['pending'] ?? 0;
+      const totalActions = actions.length;
+      const completionPercent = totalActions > 0 ? Math.round((doneCount / totalActions) * 100) : 0;
+
+      // Weighted progress: average of all action progressPercent values
+      // (items without progress set count as 0% if pending, 100% if done)
+      let progressSum = 0;
+      for (const a of actions) {
+        if (a.status === 'done') progressSum += 100;
+        else if (a.progressPercent != null) progressSum += a.progressPercent;
+      }
+      const weightedProgress = totalActions > 0 ? Math.round(progressSum / totalActions) : 0;
+
+      // Deviations
+      const deviations = getDeviations(plan_uid);
+      const pendingDeviations = deviations.filter((d) => d.resolution === 'pending');
+
+      // Recent comment activity (last 24 hours)
+      const oneDayAgo = Date.now() - 86400000;
+      const recentComments = commentService.listCommentsForPlanSince(plan_uid, oneDayAgo);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            plan: { uid: plan.uid, title: plan.title, status: plan.status },
+            items: {
+              total: items.length,
+              objects: objects.length,
+              actions: totalActions,
+            },
+            progress: {
+              completionPercent,
+              weightedProgress,
+              byStatus: statusCounts,
+              done: doneCount,
+              inProgress: inProgressCount,
+              blocked: blockedCount,
+              pending: pendingCount,
+            },
+            deviations: {
+              total: deviations.length,
+              pending: pendingDeviations.length,
+            },
+            recentActivity: {
+              commentsLast24h: recentComments.length,
+              blockers: recentComments.filter((c) => c.kind === 'blocker').length,
+              questions: recentComments.filter((c) => c.kind === 'question').length,
+            },
+          }, null, 2),
+        }],
+      };
     },
   );
 

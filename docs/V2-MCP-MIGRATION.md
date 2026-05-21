@@ -281,15 +281,20 @@ with items, and see updates in the V2 UI in real time.
       directory. V1 templates (phases+docs shape) still apply via
       the legacy path. Both formats coexist.
 
-### Phase D — Intelligence (future)
+### Phase D — Intelligence (done)
 **Goal:** Agents get richer context from the codebase graph.
 
-- [ ] **D1.** `suggest_specs(scope_path)` — queries dependency graph,
-      returns candidate fileSpecs and symbolSpecs for a given scope
-- [ ] **D2.** `search_items(query)` — full-text search across item
-      bodies within a plan
-- [ ] **D3.** Plan-level summary tool — returns plan health (% done,
-      blocked count, drift score) in a single call
+- [x] **D1.** `suggest_specs(scope_path)` — queries files, symbols,
+      and dependency edges under a scope path. Returns pre-shaped
+      `suggestedFileSpec` / `suggestedSymbolSpec` objects agents can
+      copy directly into `add_item` fileSpecs/symbolSpecs.
+- [x] **D2.** `search_items(query)` — LIKE search across item titles
+      and bodies within a plan (implemented in Phase A as A9). FTS
+      upgrade deferred until scale demands it.
+- [x] **D3.** `get_plan_summary(plan_uid)` — single-call plan health
+      dashboard: completion %, weighted progress, status breakdown
+      (done/in_progress/blocked/pending), deviation count, and 24h
+      comment activity (blockers, questions).
 
 ---
 
