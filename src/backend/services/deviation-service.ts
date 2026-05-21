@@ -1,42 +1,75 @@
 import { getDb } from './database';
 import { getTasksByPlan } from './plan-service';
+import { listAllItems } from './plan-item-service';
 import { getDependencyEdges, getFileSymbols } from './database';
 import { markDirty } from './persistence';
 import { broadcast } from '../server';
-import type { Deviation } from '../../shared/types';
+import type { Deviation, PlanItem } from '../../shared/types';
+
+/**
+ * Unified file/connection expectations from both V1 tasks and V2 items.
+ */
+interface WorkUnit {
+  label: string;            // description (V1) or title (V2)
+  status: string | null;
+  affectedFiles: string[];  // flattened from affectedFiles (V1) or fileSpecs[].path (V2)
+  newConnections: Array<{ from: string; to: string }>;
+}
+
+/** Extract work units from V1 tasks. */
+function v1WorkUnits(planUid: string): WorkUnit[] {
+  const tasks = getTasksByPlan(planUid);
+  return tasks.map((t) => ({
+    label: t.description,
+    status: t.status,
+    affectedFiles: t.affectedFiles ?? [],
+    newConnections: t.newConnections ?? [],
+  }));
+}
+
+/** Extract work units from V2 items (Actions only). */
+function v2WorkUnits(planUid: string): WorkUnit[] {
+  const items = listAllItems(planUid);
+  return items
+    .filter((i: PlanItem) => i.kind === 'action')
+    .map((i: PlanItem) => ({
+      label: i.title,
+      status: i.status ?? null,
+      affectedFiles: (i.fileSpecs ?? []).map((fs) => fs.path),
+      newConnections: (i.newConnections ?? []).map((c) => ({ from: c.from, to: c.to })),
+    }));
+}
 
 /**
  * Detect deviations between a plan's expectations and the actual codebase state.
- * Called after file changes to check if reality matches the plan.
+ * Reads both V1 tasks and V2 plan items (Actions) so drift detection works
+ * regardless of which tool surface created the work items.
  */
 export function detectDeviations(planUid: string): Deviation[] {
   const db = getDb();
-  const tasks = getTasksByPlan(planUid);
+  const units = [...v1WorkUnits(planUid), ...v2WorkUnits(planUid)];
   const deviations: Deviation[] = [];
   const now = Date.now();
 
-  // Collect all expected files from in-progress or done tasks
-  const expectedFiles = new Set<string>();
-  const taskFileMap = new Map<string, string>(); // file → task description
+  // Collect all expected files from in-progress or done work units
+  const taskFileMap = new Map<string, string>(); // file → work unit label
 
-  for (const task of tasks) {
-    if (task.status === 'in_progress' || task.status === 'done') {
-      for (const file of task.affectedFiles) {
-        expectedFiles.add(file);
-        taskFileMap.set(file, task.description);
+  for (const unit of units) {
+    if (unit.status === 'in_progress' || unit.status === 'done') {
+      for (const file of unit.affectedFiles) {
+        taskFileMap.set(file, unit.label);
       }
     }
   }
 
   // Check for expected files that don't exist in the DB
-  for (const [file, taskDesc] of taskFileMap) {
+  for (const [file, label] of taskFileMap) {
     const result = db.exec(`SELECT id FROM files WHERE relative_path = ? OR path LIKE ?`, [file, `%${file}`]);
     if (!result[0]?.values[0]) {
-      // File expected but not found — might be a new file that hasn't been created yet
-      const task = tasks.find((t) => t.affectedFiles.includes(file) && t.status === 'done');
-      if (task) {
+      const doneUnit = units.find((u) => u.status === 'done' && u.affectedFiles.includes(file));
+      if (doneUnit) {
         deviations.push(createDeviation(db, planUid, 'missing_file', 'warning',
-          `Task "${taskDesc}" expected file "${file}" but it doesn't exist`, now));
+          `"${label}" expected file "${file}" but it doesn't exist`, now));
       }
     }
   }
@@ -49,10 +82,10 @@ export function detectDeviations(planUid: string): Deviation[] {
 
   const edgeSet = new Set(edges.map((e) => `${e.sourceRelative}->${e.targetRelative}`));
 
-  for (const task of tasks) {
-    if (task.status !== 'done') continue;
+  for (const unit of units) {
+    if (unit.status !== 'done') continue;
 
-    for (const conn of task.newConnections) {
+    for (const conn of unit.newConnections) {
       if (!edgeSet.has(`${conn.from}->${conn.to}`)) {
         deviations.push(createDeviation(db, planUid, 'missing_import', 'info',
           `Expected import ${conn.from} → ${conn.to} not found`, now));
@@ -70,7 +103,9 @@ export function detectDeviations(planUid: string): Deviation[] {
 
 /**
  * Check if a changed file deviates from any active plan.
- * Called by the file watcher after re-parsing.
+ * Called by the file watcher after re-parsing. Checks both V1 tasks
+ * and V2 items so unexpected file changes are caught regardless of
+ * which tool surface created the plan.
  */
 export function checkFileDeviation(relativePath: string): void {
   const db = getDb();
@@ -81,17 +116,16 @@ export function checkFileDeviation(relativePath: string): void {
 
   for (const row of plansResult[0].values) {
     const planUid = row[0] as string;
-    const tasks = getTasksByPlan(planUid);
+    const units = [...v1WorkUnits(planUid), ...v2WorkUnits(planUid)];
 
-    // Check if this file is in any task's affected files
-    const isExpected = tasks.some((t) =>
-      t.affectedFiles.some((f) => relativePath.includes(f) || f.includes(relativePath))
+    // Check if this file is in any work unit's affected files
+    const isExpected = units.some((u) =>
+      u.affectedFiles.some((f) => relativePath.includes(f) || f.includes(relativePath))
     );
 
     if (!isExpected) {
-      // File changed but not in any task — unexpected modification
       createDeviation(db, planUid, 'unexpected_file', 'info',
-        `File "${relativePath}" was modified but is not listed in any task`, Date.now());
+        `File "${relativePath}" was modified but is not listed in any plan item`, Date.now());
 
       broadcast('deviation-detected', {
         deviation: {

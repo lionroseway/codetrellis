@@ -95,6 +95,20 @@ function summarizeArgs(args: any): string {
 }
 
 /**
+ * Build a tool result with broadcast metadata so agents know the UI
+ * was notified. `subscribers` is the number of WS + IPC clients that
+ * received the message (0 means no UI is connected).
+ */
+function resultWithMeta(data: any, subscribers: number) {
+  return {
+    content: [{
+      type: 'text' as const,
+      text: JSON.stringify({ ...data, _meta: { broadcast: true, subscribers } }, null, 2),
+    }],
+  };
+}
+
+/**
  * Look up agent metadata for an MCP transport session id, if it has
  * registered itself via `register_session`. We match by the most
  * recent active session for the transport — agents that never call
@@ -276,11 +290,11 @@ function setupMcpServerInstance(): McpServer {
         { title, description: description || '', tasks: [] },
         'agent', 'mcp', project_path,
       );
-      broadcast('plan-created', { plan });
+      const n = broadcast('plan-created', { plan });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify({
+      return resultWithMeta({
         uid: plan.uid, title: plan.title, status: plan.status, projectPath: plan.projectPath,
-      }, null, 2) }] };
+      }, n);
     }
   );
 
@@ -322,9 +336,9 @@ function setupMcpServerInstance(): McpServer {
     },
     async ({ plan_uid, title, description, status }) => {
       planService.updatePlan(plan_uid, { title, description, status }, 'agent');
-      broadcast('plan-updated', { planUid: plan_uid });
+      const n = broadcast('plan-updated', { planUid: plan_uid });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Plan ${plan_uid} updated.` }] };
+      return resultWithMeta({ ok: true, planUid: plan_uid }, n);
     }
   );
 
@@ -641,8 +655,8 @@ function setupMcpServerInstance(): McpServer {
           broadcast('mcp-session-changed', { reason: 'set_active_plan', planUid: plan_uid });
         }
       }
-      broadcast('ui-navigate', { target: 'plan', planUid: plan_uid });
-      return { content: [{ type: 'text' as const, text: `Active plan set to ${plan_uid} — UI navigated to plan view.` }] };
+      const n = broadcast('ui-navigate', { target: 'plan', planUid: plan_uid });
+      return resultWithMeta({ ok: true, planUid: plan_uid, navigated: true }, n);
     }
   );
 
@@ -757,10 +771,15 @@ function setupMcpServerInstance(): McpServer {
         return { content: [{ type: 'text' as const, text: 'Could not compute diff.' }] };
       }
 
-      // Also get plan tasks for context
+      // V2 item progress + fallback to V1 tasks for legacy plans
       const plan = planService.getPlan(plan_uid);
-      const completedTasks = plan?.tasks.filter((t) => t.status === 'done').length || 0;
-      const totalTasks = plan?.tasks.length || 0;
+      const items = planItemService.listItemSummaries(plan_uid);
+      const v2Actions = items.filter((i) => i.kind === 'action');
+      const completedItems = v2Actions.filter((i) => i.status === 'done').length;
+      const totalItems = v2Actions.length;
+      // Fall back to V1 task counts if no V2 items exist
+      const completedTasks = totalItems > 0 ? completedItems : (plan?.tasks.filter((t) => t.status === 'done').length || 0);
+      const totalTasks = totalItems > 0 ? totalItems : (plan?.tasks.length || 0);
 
       // Phase 14 §A: comment activity since `since_ms` (or the baseline
       // snapshot's createdAt when not supplied). Surfaces blockers /
@@ -814,7 +833,7 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'report_plan',
     {
-      description: '[Legacy] Report a plan. Prefer create_plan instead.',
+      description: '[Legacy] Report a plan. Creates plan metadata and V2 Actions for each step. Prefer create_plan + bulk_add_items.',
       inputSchema: {
         title: z.string(),
         steps: z.array(z.object({
@@ -824,14 +843,29 @@ function setupMcpServerInstance(): McpServer {
       },
     },
     async ({ title, steps }) => {
-      // Delegate to create_plan
       const plan = planService.createPlan(
-        { title, description: '', tasks: steps.map((s: any) => ({ description: s.description, affectedFiles: s.files })) },
+        { title, description: '', tasks: [] },
         'agent', 'mcp', '',
       );
-      broadcast('plan-created', { plan });
+      // Create V2 items for each step
+      for (const step of steps) {
+        planItemService.createItem({
+          planUid: plan.uid,
+          kind: 'action',
+          parentUid: null,
+          title: step.description,
+          body: '',
+          template: null,
+          status: 'pending',
+          scopePath: null,
+          fileSpecs: step.files?.map((f) => ({ path: f, action: 'modify' as const })),
+          author: 'agent',
+          authorType: 'mcp',
+        });
+      }
+      const n = broadcast('plan-created', { plan });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Plan "${title}" created with UID: ${plan.uid}` }] };
+      return resultWithMeta({ uid: plan.uid, title, steps: steps.length }, n);
     }
   );
 
@@ -972,9 +1006,9 @@ function setupMcpServerInstance(): McpServer {
         author: id.author,
         authorType: id.authorType,
       });
-      broadcast('plan-item-created', { planUid: item.planUid, item });
+      const n = broadcast('plan-item-created', { planUid: item.planUid, item });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+      return resultWithMeta(item, n);
     },
   );
 
@@ -1009,6 +1043,7 @@ function setupMcpServerInstance(): McpServer {
       const id = authorFromExtra(extra);
       const tempToReal = new Map<string, string>();
       const created: any[] = [];
+      let lastN = 0;
       for (const raw of args.items) {
         let parentUid = raw.parent_uid ?? null;
         if (parentUid && tempToReal.has(parentUid)) {
@@ -1032,11 +1067,12 @@ function setupMcpServerInstance(): McpServer {
           authorType: id.authorType,
         });
         if (raw._temp_uid) tempToReal.set(raw._temp_uid, item.uid);
-        broadcast('plan-item-created', { planUid: item.planUid, item });
+        const n = broadcast('plan-item-created', { planUid: item.planUid, item });
         created.push({ _temp_uid: raw._temp_uid ?? null, uid: item.uid, title: item.title, kind: item.kind });
+        lastN = n;
       }
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ created: created.length, items: created }, null, 2) }] };
+      return resultWithMeta({ created: created.length, items: created }, lastN);
     },
   );
 
@@ -1131,9 +1167,9 @@ function setupMcpServerInstance(): McpServer {
         authorType: id.authorType,
       });
       if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
-      broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: args });
+      const n = broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: args });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+      return resultWithMeta(item, n);
     },
   );
 
@@ -1157,14 +1193,14 @@ function setupMcpServerInstance(): McpServer {
         authorType: id.authorType,
       });
       if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
-      broadcast('plan-item-moved', {
+      const n = broadcast('plan-item-moved', {
         planUid: item.planUid,
         itemUid: item.uid,
         toParentUid: item.parentUid,
         sortOrder: item.sortOrder,
       });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+      return resultWithMeta(item, n);
     },
   );
 
@@ -1195,9 +1231,9 @@ function setupMcpServerInstance(): McpServer {
         author: id.author,
         authorType: id.authorType,
       });
-      broadcast('plan-item-deleted', { planUid: target.planUid, itemUid: args.uid, cascadedUids });
+      const n = broadcast('plan-item-deleted', { planUid: target.planUid, itemUid: args.uid, cascadedUids });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, deleted: cascadedUids }, null, 2) }] };
+      return resultWithMeta({ ok: true, deleted: cascadedUids }, n);
     },
   );
 
@@ -1238,8 +1274,9 @@ function setupMcpServerInstance(): McpServer {
       const children = item ? planItemService.getChildren(item.planUid, item.uid) : [];
       const attachments = taskAttachmentsService.listItemAttachments(args.uid);
       const comments = commentService.listItemComments(args.uid);
+      let n = 0;
       if (item) {
-        broadcast('plan-item-claimed', {
+        n = broadcast('plan-item-claimed', {
           planUid: item.planUid,
           itemUid: item.uid,
           agentId: args.agent_type ?? id.author,
@@ -1253,12 +1290,7 @@ function setupMcpServerInstance(): McpServer {
       const message = result.conflicts
         ? `Item claimed. WARNING: ${result.conflicts.join('; ')}`
         : `Item ${args.uid} claimed.`;
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments }, null, 2),
-        }],
-      };
+      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments }, n);
     },
   );
 
@@ -1328,9 +1360,9 @@ function setupMcpServerInstance(): McpServer {
         authorType: id.authorType,
         changeSummary: 'Approval gate cleared',
       });
-      broadcast('plan-item-updated', { planUid: item.planUid, itemUid: args.uid, changes: { requiresApproval: false } });
+      const n = broadcast('plan-item-updated', { planUid: item.planUid, itemUid: args.uid, changes: { requiresApproval: false } });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Approval gate on "${item.title}" cleared. Next item can now be claimed.` }] };
+      return resultWithMeta({ ok: true, itemUid: args.uid, title: item.title, gateCleared: true }, n);
     },
   );
 
@@ -1451,9 +1483,9 @@ function setupMcpServerInstance(): McpServer {
       if (!item) {
         return { content: [{ type: 'text' as const, text: `Could not restore — item or version not found.` }] };
       }
-      broadcast('plan-item-version-saved', { planUid: item.planUid, itemUid: item.uid, restoredFrom: args.version });
+      const n = broadcast('plan-item-version-saved', { planUid: item.planUid, itemUid: item.uid, restoredFrom: args.version });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+      return resultWithMeta(item, n);
     },
   );
 
@@ -1503,9 +1535,9 @@ function setupMcpServerInstance(): McpServer {
         commentType: legacyType,
         parentUid: args.parent_comment_uid,
       });
-      broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: args.uid, comment });
+      const n = broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: args.uid, comment });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(comment, null, 2) }] };
+      return resultWithMeta(comment, n);
     },
   );
 
@@ -1540,10 +1572,10 @@ function setupMcpServerInstance(): McpServer {
         commentType: 'status_update',
         metadata: { progressPercent: args.percent },
       });
-      broadcast('plan-item-progress', { planUid: item.planUid, itemUid: args.uid, percent: args.percent, message: body, commentUid: comment.uid });
+      const n = broadcast('plan-item-progress', { planUid: item.planUid, itemUid: args.uid, percent: args.percent, message: body, commentUid: comment.uid });
       broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: args.uid, comment });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ uid: args.uid, percent: args.percent, message: body }, null, 2) }] };
+      return resultWithMeta({ uid: args.uid, percent: args.percent, message: body }, n);
     },
   );
 
@@ -1576,11 +1608,11 @@ function setupMcpServerInstance(): McpServer {
         source: 'agent',
         commentType: 'concern',
       });
-      broadcast('plan-item-blocked', { planUid: item.planUid, itemUid: args.uid, reason: args.reason, commentUid: comment.uid });
+      const n = broadcast('plan-item-blocked', { planUid: item.planUid, itemUid: args.uid, reason: args.reason, commentUid: comment.uid });
       broadcast('plan-item-updated', { planUid: item.planUid, itemUid: args.uid, kind: 'action', changes: { status: 'blocked' } });
       broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: args.uid, comment });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ uid: args.uid, status: 'blocked', reason: args.reason }, null, 2) }] };
+      return resultWithMeta({ uid: args.uid, status: 'blocked', reason: args.reason }, n);
     },
   );
 
@@ -1616,9 +1648,9 @@ function setupMcpServerInstance(): McpServer {
           author: id.author,
           authorType: id.authorType,
         });
-        broadcast('plan-item-attachment-added', { planUid: item.planUid, itemUid: args.uid, attachment });
+        const n = broadcast('plan-item-attachment-added', { planUid: item.planUid, itemUid: args.uid, attachment });
         saveNow(() => exportDatabase());
-        return { content: [{ type: 'text' as const, text: JSON.stringify(attachment, null, 2) }] };
+        return resultWithMeta(attachment, n);
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
       }
@@ -1708,9 +1740,9 @@ function setupMcpServerInstance(): McpServer {
     },
     async ({ plan_uid }) => {
       planService.deletePlan(plan_uid);
-      broadcast('plan-deleted', { planUid: plan_uid });
+      const n = broadcast('plan-deleted', { planUid: plan_uid });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Deleted plan ${plan_uid}` }] };
+      return resultWithMeta({ ok: true, planUid: plan_uid }, n);
     },
   );
 
@@ -1734,17 +1766,18 @@ function setupMcpServerInstance(): McpServer {
         uids = plan_uids;
       }
       let deleted = 0;
+      let lastN = 0;
       for (const uid of uids) {
         try {
           planService.deletePlan(uid);
-          broadcast('plan-deleted', { planUid: uid });
+          lastN = broadcast('plan-deleted', { planUid: uid });
           deleted++;
         } catch {
           // skip plans that don't exist
         }
       }
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Deleted ${deleted} plan(s)` }] };
+      return resultWithMeta({ ok: true, deleted }, lastN);
     },
   );
 

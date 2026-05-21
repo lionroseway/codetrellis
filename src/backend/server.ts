@@ -154,8 +154,9 @@ export function addBroadcastTarget(target: BroadcastTarget): () => void {
   return () => extraBroadcastTargets.delete(target);
 }
 
-export function broadcast(type: string, payload: unknown): void {
+export function broadcast(type: string, payload: unknown): number {
   const message = JSON.stringify({ type, payload });
+  let sent = 0;
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
       // Skip clients whose send buffer is backed up — a slow consumer
@@ -163,6 +164,7 @@ export function broadcast(type: string, payload: unknown): void {
       // broadcast loop or cause unbounded kernel buffer growth.
       if (client.bufferedAmount > WS_BACKPRESSURE_THRESHOLD) continue;
       client.send(message);
+      sent++;
     }
   }
   // Also fan out to any non-WS targets (Electron renderer via IPC, etc.).
@@ -171,12 +173,14 @@ export function broadcast(type: string, payload: unknown): void {
     for (const target of extraBroadcastTargets) {
       try {
         target(decoded);
+        sent++;
       } catch {
         // A bad target shouldn't take down the broadcast loop; the
         // worst case is that one renderer misses an event.
       }
     }
   }
+  return sent;
 }
 
 // --- Terminal WebSocket (separate from the event broadcast WS) ---

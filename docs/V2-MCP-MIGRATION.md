@@ -229,7 +229,7 @@ with items, and see updates in the V2 UI in real time.
       shows the plan
 - [x] **A5.** Add `bulk_add_items` tool — accept array of items,
       create in order, return UIDs. Cuts 23 sequential calls to 1-2.
-- [ ] **A6.** Tool result payloads include `_meta: { broadcast: true }`
+- [x] **A6.** Tool result payloads include `_meta: { broadcast: true }`
       so agents know the UI was notified
 - [x] **A7.** `list_items` — add `status` filter, `limit`/`offset`,
       and `title_contains` search so agents can query efficiently
@@ -243,10 +243,12 @@ with items, and see updates in the V2 UI in real time.
 ### Phase B — Deviation & Conformity (do next)
 **Goal:** Drift detection and conformity checking work against V2 items.
 
-- [ ] **B1.** `detect_deviations` reads `plan_items` (kind='action')
-      in addition to (or instead of) V1 tasks
-- [ ] **B2.** `check_conformity` / `report_plan` uses V2 item tree
-- [ ] **B3.** `get_drift_report` aggregates from V2 items
+- [x] **B1.** `detect_deviations` reads `plan_items` (kind='action')
+      in addition to V1 tasks via unified WorkUnit abstraction
+- [x] **B2.** `check_conformity` is architecture-level (no plan data).
+      `report_plan` now creates V2 items instead of V1 tasks.
+- [x] **B3.** `get_drift_report` uses V2 item counts (falls back to
+      V1 tasks for legacy plans with no V2 items)
 
 ### Phase C — File Sync & Templates (do later)
 **Goal:** Plans can be exported/imported/templated using V2 item trees.
