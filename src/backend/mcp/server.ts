@@ -7,14 +7,9 @@ import { z } from 'zod';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
-import * as planDocsService from '../services/plan-documents-service';
-import * as planPhasesService from '../services/plan-phases-service';
 import * as taskAttachmentsService from '../services/task-attachments-service';
-// Phase 15 §C — unified Object/Action surface. New canonical tools
-// register against `plan-item-service` + `plan-event-service` and
-// emit `plan-item-*` WS events. Old tools (claim_task, add_subtask,
-// add_plan_doc, …) keep working unchanged in parallel during the
-// 15.C → 15.F cutover; aliases / deprecation are 15.F's job.
+// Phase 15 §C — unified Object/Action MCP surface. V1 task/phase/doc
+// tools retired; agents use add_item / bulk_add_items / update_item etc.
 import * as planItemService from '../services/plan-item-service';
 import * as planEventService from '../services/plan-event-service';
 import { applyTemplate } from '../services/plan-templates-service';
@@ -266,86 +261,51 @@ function setupMcpServerInstance(): McpServer {
 
   // --- Plan Management Tools ---
 
-  const symbolSpecSchema = z.object({
-    name: z.string().describe('Symbol name (e.g. "verifyToken")'),
-    kind: z.enum(['function', 'class', 'interface', 'type', 'method', 'enum']),
-    action: z.enum(['add', 'modify', 'remove', 'move']),
-    description: z.string().optional().describe('What the symbol does or why it changes'),
-    signature: z.string().optional().describe('Type signature, e.g. "verifyToken(token: string, secret: string): JwtPayload"'),
-    moveTo: z.string().optional().describe('Target file path if action is "move"'),
-  });
-
-  // Phase 14 §A — explicit CRUD intent on file ops. Mirrors symbol_specs.
-  // Paths resolve relative to the parent task's `scope_path` if set.
-  const fileSpecSchema = z.object({
-    path: z.string().describe('Path the spec applies to. Relative to the task\'s scope_path (or project root if unset).'),
-    action: z.enum(['create', 'modify', 'delete', 'move']),
-    moveTo: z.string().optional().describe('Destination path when action is "move".'),
-    isDir: z.boolean().optional().describe('Marker for directory-level intent.'),
-    description: z.string().optional().describe('Why / how this file changes.'),
-  });
-
   mcpServer.registerTool(
     'create_plan',
     {
-      description: 'Create a structured plan in CodeTrellis describing what you intend to do. Express architectural intent at the file, symbol, and edge level — agents and humans both read this as the spec. Returns the plan UID.',
+      description: 'Create a new plan in CodeTrellis. Returns the plan UID. Use add_item or bulk_add_items to populate it with Objects (context pages) and Actions (work items).',
       inputSchema: {
         title: z.string().describe('Brief title of the plan'),
         description: z.string().optional().describe('Detailed description of what this plan achieves'),
         project_path: z.string().describe('Absolute path to the project this plan is for'),
-        tasks: z.array(z.object({
-          description: z.string().describe('What this task does'),
-          affected_files: z.array(z.string()).optional().describe('Files this task will create/modify/delete (legacy — prefer file_specs for CRUD intent)'),
-          affected_symbols: z.array(z.string()).optional().describe('Functions/classes this task will add/change (names only — use symbol_specs for richer intent)'),
-          new_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('New import relationships'),
-          removed_connections: z.array(z.object({ from: z.string(), to: z.string() })).optional().describe('Import relationships to remove'),
-          dependencies: z.array(z.string()).optional().describe('Task UIDs that must complete before this one starts'),
-          file_spec: z.string().optional().describe('Markdown describing what the file should do, its responsibility, exports, etc.'),
-          symbol_specs: z.array(symbolSpecSchema).optional().describe('Per-symbol intent: name, kind, action, signature, etc. Richer than affected_symbols.'),
-          // --- Phase 14 §A task-as-context fields ---
-          body: z.string().optional().describe('Markdown design notes / rationale for this task. Read by agents picking up the task.'),
-          prompt: z.string().optional().describe('Markdown literally ready to paste at an agent. Use this when the task carries a precise prompt instead of free-form context.'),
-          scope_path: z.string().optional().describe('Folder this task is rooted at (e.g. "src/auth/"). Relative paths in file_specs resolve from here. Empty = project root.'),
-          file_specs: z.array(fileSpecSchema).optional().describe('Phase 14 §A — explicit CRUD intent on file ops. Mirrors symbol_specs. affected_files is derived from these.'),
-          parent_task_uid: z.string().optional().describe('Mark this task as a subtask of another task in the same plan.'),
-        })).describe('Ordered list of tasks'),
       },
     },
-    async ({ title, description, project_path, tasks }) => {
+    async ({ title, description, project_path }) => {
       const plan = planService.createPlan(
-        { title, description: description || '', tasks: tasks.map((t: any) => ({
-          description: t.description,
-          affectedFiles: t.affected_files,
-          affectedSymbols: t.affected_symbols,
-          newConnections: t.new_connections,
-          removedConnections: t.removed_connections,
-          dependencies: t.dependencies,
-          fileSpec: t.file_spec,
-          symbolSpecs: t.symbol_specs,
-          body: t.body,
-          prompt: t.prompt,
-          scopePath: t.scope_path ?? null,
-          fileSpecs: t.file_specs,
-          parentTaskUid: t.parent_task_uid ?? null,
-        })) },
+        { title, description: description || '', tasks: [] },
         'agent', 'mcp', project_path,
       );
       broadcast('plan-created', { plan });
       saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(plan, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({
+        uid: plan.uid, title: plan.title, status: plan.status, projectPath: plan.projectPath,
+      }, null, 2) }] };
     }
   );
 
   mcpServer.registerTool(
     'get_plan',
     {
-      description: 'Read a plan by its UID. Returns the full plan with all tasks, status, and metadata.',
+      description: 'Read a plan by its UID. Returns plan metadata and a summary of its items (count by kind, status breakdown). Use list_items to browse the item tree.',
       inputSchema: { plan_uid: z.string().describe('Plan UID') },
     },
     async ({ plan_uid }) => {
       const plan = planService.getPlan(plan_uid);
       if (!plan) return { content: [{ type: 'text' as const, text: 'Plan not found' }] };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(plan, null, 2) }] };
+      const items = planItemService.listItemSummaries(plan_uid);
+      const objectCount = items.filter((i) => i.kind === 'object').length;
+      const actionCount = items.filter((i) => i.kind === 'action').length;
+      const statusCounts: Record<string, number> = {};
+      for (const i of items) {
+        if (i.status) statusCounts[i.status] = (statusCounts[i.status] || 0) + 1;
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify({
+        uid: plan.uid, title: plan.title, description: plan.description,
+        status: plan.status, projectPath: plan.projectPath,
+        createdAt: plan.createdAt, updatedAt: plan.updatedAt,
+        items: { total: items.length, objects: objectCount, actions: actionCount, byStatus: statusCounts },
+      }, null, 2) }] };
     }
   );
 
@@ -371,464 +331,32 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'list_plans',
     {
-      description: 'List all plans, optionally filtered by project path or status.',
+      description: 'List plans, optionally filtered by project path or status. Returns lightweight summaries with V2 item counts. Use limit/offset for pagination.',
       inputSchema: {
         project_path: z.string().optional(),
         status: z.string().optional(),
+        limit: z.number().int().min(1).max(100).optional().describe('Max plans to return (default 20)'),
+        offset: z.number().int().min(0).optional().describe('Skip this many plans (default 0)'),
       },
     },
-    async ({ project_path, status }) => {
-      const plans = planService.listPlans(project_path, status);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(plans, null, 2) }] };
+    async ({ project_path, status, limit, offset }) => {
+      const all = planService.listPlans(project_path, status);
+      const start = offset ?? 0;
+      const end = start + (limit ?? 20);
+      const page = all.slice(start, end);
+      const summaries = page.map((p: any) => ({
+        uid: p.uid, title: p.title, status: p.status, projectPath: p.projectPath,
+        itemCount: planItemService.listItemSummaries(p.uid).length,
+        createdAt: p.createdAt, updatedAt: p.updatedAt,
+      }));
+      return { content: [{ type: 'text' as const, text: JSON.stringify({
+        total: all.length, offset: start, limit: limit ?? 20, plans: summaries,
+      }, null, 2) }] };
     }
   );
 
-  // --- Task Management Tools ---
-
-  /**
-   * Build a full-context payload for a task: the task row, its phase
-   * (if any), its parent task (if any), subtasks, attachments, and
-   * comments. Shared between `read_task_full` and the post-claim
-   * payload returned by `claim_task` — agents that pick up a task
-   * shouldn't need a follow-up read to know what they're doing.
-   */
-  function readTaskFull(taskUid: string): {
-    task: ReturnType<typeof planService.getTaskByUid>;
-    parent: ReturnType<typeof planService.getTaskByUid> | null;
-    subtasks: ReturnType<typeof planService.getSubtasks>;
-    phase: ReturnType<typeof planPhasesService.getPhase> | null;
-    attachments: ReturnType<typeof taskAttachmentsService.listTaskAttachments>;
-    comments: ReturnType<typeof commentService.listCommentsFlat>;
-    plan: { uid: string; title: string; status: string } | null;
-  } | null {
-    const task = planService.getTaskByUid(taskUid);
-    if (!task) return null;
-    const parent = task.parentTaskUid ? planService.getTaskByUid(task.parentTaskUid) : null;
-    const subtasks = planService.getSubtasks(taskUid);
-    const phase = task.phaseUid ? planPhasesService.getPhase(task.phaseUid) : null;
-    const attachments = taskAttachmentsService.listTaskAttachments(taskUid);
-    const comments = commentService.listCommentsFlat(taskUid);
-    const planRow = planService.getPlan(task.planUid);
-    const plan = planRow ? { uid: planRow.uid, title: planRow.title, status: planRow.status } : null;
-    return { task, parent, subtasks, phase, attachments, comments, plan };
-  }
-
-  mcpServer.registerTool(
-    'claim_task',
-    {
-      description: 'Claim a task from a plan. Only succeeds if the task is unclaimed and pending. Returns the full task context (body / prompt / fileSpecs / attachments / comments / subtasks) in one round-trip — no follow-up `read_task_full` needed.',
-      inputSchema: {
-        plan_uid: z.string(),
-        task_uid: z.string(),
-        agent_type: z.string().optional().describe('e.g. claude-code, cursor'),
-        model: z.string().optional().describe('e.g. claude-opus-4'),
-      },
-    },
-    async ({ plan_uid, task_uid, agent_type, model }) => {
-      const result = planService.claimTask(task_uid, agent_type || 'mcp-agent', agent_type || 'mcp', model);
-      if (result.ok) {
-        broadcast('task-claimed', { planUid: plan_uid, taskUid: task_uid, agentId: agent_type || 'mcp-agent' });
-        if (result.conflicts) {
-          broadcast('conflict-detected', { planUid: plan_uid, taskUid: task_uid, message: result.conflicts.join('; ') });
-        }
-        saveNow(() => exportDatabase());
-        const fullContext = readTaskFull(task_uid);
-        const message = result.conflicts
-          ? `Task claimed. WARNING: ${result.conflicts.join('; ')}`
-          : `Task ${task_uid} claimed.`;
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            ok: true,
-            message,
-            conflicts: result.conflicts ?? null,
-            ...fullContext,
-          }, null, 2) }],
-        };
-      }
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({
-          ok: false,
-          message: 'Task already claimed or not pending.',
-          reason: 'Task already claimed or not pending.',
-        }, null, 2) }],
-      };
-    }
-  );
-
-  mcpServer.registerTool(
-    'update_task',
-    {
-      description: 'Update any field on a task. Common: status (pending → in_progress → done). Phase 14 §A also accepts body / prompt / scope_path / file_specs / parent_task_uid for task-as-context updates. Pass empty string for parent_task_uid to detach.',
-      inputSchema: {
-        plan_uid: z.string(),
-        task_uid: z.string(),
-        status: z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']).optional(),
-        phase_uid: z.string().optional().describe('Bind this task to a phase. Empty string clears the binding.'),
-        description: z.string().optional(),
-        body: z.string().optional().describe('Phase 14 §A — markdown design notes / rationale.'),
-        prompt: z.string().optional().describe('Phase 14 §A — markdown ready to paste at an agent.'),
-        scope_path: z.string().optional().describe('Phase 14 §A — folder the task is rooted at. Empty string = project root.'),
-        file_specs: z.array(fileSpecSchema).optional().describe('Phase 14 §A — replace the task\'s file_specs (and recompute affected_files).'),
-        parent_task_uid: z.string().optional().describe('Phase 14 §A — bind this task as a subtask. Empty string detaches.'),
-      },
-    },
-    async ({ plan_uid, task_uid, status, phase_uid, description, body, prompt, scope_path, file_specs, parent_task_uid }) => {
-      const updates: Parameters<typeof planService.updateTask>[1] = {};
-      if (status !== undefined) updates.status = status;
-      if (phase_uid !== undefined) updates.phaseUid = phase_uid === '' ? null : phase_uid;
-      if (description !== undefined) updates.description = description;
-      if (body !== undefined) updates.body = body;
-      if (prompt !== undefined) updates.prompt = prompt;
-      if (scope_path !== undefined) updates.scopePath = scope_path === '' ? null : scope_path;
-      if (file_specs !== undefined) updates.fileSpecs = file_specs;
-      if (parent_task_uid !== undefined) updates.parentTaskUid = parent_task_uid === '' ? null : parent_task_uid;
-      planService.updateTask(task_uid, updates);
-      if (status !== undefined) {
-        broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid, status });
-      } else {
-        broadcast('task-updated', { planUid: plan_uid, taskUid: task_uid });
-      }
-      saveNow(() => exportDatabase());
-      const summary = [
-        status && `status → ${status}`,
-        phase_uid !== undefined && `phase → ${phase_uid || 'none'}`,
-        description !== undefined && 'description updated',
-        body !== undefined && 'body updated',
-        prompt !== undefined && 'prompt updated',
-        scope_path !== undefined && `scope_path → ${scope_path || 'none'}`,
-        file_specs !== undefined && `file_specs (${file_specs.length})`,
-        parent_task_uid !== undefined && `parent → ${parent_task_uid || 'none'}`,
-      ].filter(Boolean).join(', ');
-      return { content: [{ type: 'text' as const, text: `Task ${task_uid} ${summary || 'unchanged'}` }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'get_next_task',
-    {
-      description: 'Get the next available unclaimed task from a plan, respecting dependency order. Pass phase_uid to scope to a single phase (use empty string to scope to "no phase" tasks only).',
-      inputSchema: {
-        plan_uid: z.string(),
-        phase_uid: z.string().optional().describe('Restrict to a phase. Empty string = unphased tasks only. Omit = any phase.'),
-      },
-    },
-    async ({ plan_uid, phase_uid }) => {
-      const phaseFilter = phase_uid === undefined ? undefined : (phase_uid === '' ? null : phase_uid);
-      const task = planService.getNextTask(plan_uid, phaseFilter);
-      if (!task) return { content: [{ type: 'text' as const, text: 'No tasks available — all claimed, completed, or blocked by dependencies.' }] };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }] };
-    }
-  );
-
-  // --- Phase 14 §A: task-as-context tools ---
-  // Treat a task as a context blob (body / prompt / fileSpecs /
-  // attachments / comments / subtasks), not just a thin todo. Agents
-  // call `read_task_full` to get everything in one round-trip; humans
-  // and agents both leave structured chatter via `add_task_comment`,
-  // `update_task_progress`, and `set_task_blocked`; agents break work
-  // down via `add_subtask`; and rich inputs flow in via
-  // `add_task_attachment`.
-
-  mcpServer.registerTool(
-    'read_task_full',
-    {
-      description: 'One round-trip: returns task row + parent task (if subtask) + subtasks + bound phase (if any) + attachments + comments + minimal plan info. Use this when picking up a task instead of stitching together get_plan / get_comments / list_task_attachments.',
-      inputSchema: { task_uid: z.string() },
-    },
-    async ({ task_uid }) => {
-      const full = readTaskFull(task_uid);
-      if (!full) return { content: [{ type: 'text' as const, text: `Task ${task_uid} not found` }] };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(full, null, 2) }] };
-    },
-  );
-
-  mcpServer.registerTool(
-    'list_task_comments',
-    {
-      description: 'Read all comments on a task, ordered by creation time. Each comment carries `kind` (note / blocker / progress / question), `source` (agent / human), and optional `metadata` (e.g. `progressPercent` for `kind: "progress"`). Use this before continuing a task to see if a human or another agent left context.',
-      inputSchema: { task_uid: z.string() },
-    },
-    async ({ task_uid }) => {
-      const comments = commentService.listCommentsFlat(task_uid);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(comments, null, 2) }] };
-    },
-  );
-
-  mcpServer.registerTool(
-    'add_task_comment',
-    {
-      description: 'Leave a structured comment on a task. `kind` is the first-class taxonomy (note / blocker / progress / question). When you hit a blocker, prefer this over silently stopping — the human sees blockers in the activity rail and can intervene. For progress, prefer `update_task_progress` so the percent + message land in one tool call.',
-      inputSchema: {
-        plan_uid: z.string().optional().describe('Plan uid (only used for the broadcast event).'),
-        task_uid: z.string(),
-        kind: z.enum(['note', 'blocker', 'progress', 'question']),
-        body: z.string().describe('Markdown body. Be specific — this becomes durable context.'),
-        parent_comment_uid: z.string().optional().describe('Reply to another comment.'),
-      },
-    },
-    async ({ plan_uid, task_uid, kind, body, parent_comment_uid }, extra: any) => {
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
-      const sessions = sessionService.getActiveSessions();
-      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
-      const author = session?.agentType ?? 'agent';
-      // Map the new `kind` taxonomy onto the legacy `commentType`
-      // chip so old UI keeps showing something sensible:
-      //   progress → status_update,  blocker → concern,
-      //   question → suggestion,     note    → comment.
-      const legacyType: 'status_update' | 'concern' | 'suggestion' | 'comment' =
-        kind === 'progress' ? 'status_update'
-        : kind === 'blocker' ? 'concern'
-        : kind === 'question' ? 'suggestion'
-        : 'comment';
-      const comment = commentService.addComment('task', task_uid, author, 'mcp', body, {
-        kind,
-        source: 'agent',
-        commentType: legacyType,
-        parentUid: parent_comment_uid,
-      });
-      const planUid = plan_uid ?? planService.getTaskByUid(task_uid)?.planUid ?? null;
-      broadcast('task-comment-added', { planUid, taskUid: task_uid, comment });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(comment, null, 2) }] };
-    },
-  );
-
-  mcpServer.registerTool(
-    'update_task_progress',
-    {
-      description: 'Report mid-task progress: a 0–100 percent + free-form message. Stored as a `kind: "progress"` comment with `metadata.progressPercent`, and the task\'s `progress_percent` column is updated so the UI can render an inline progress bar. Use frequently during long tasks so the human sees movement.',
-      inputSchema: {
-        task_uid: z.string(),
-        percent: z.number().int().min(0).max(100),
-        message: z.string().optional().describe('What you just did or are about to do.'),
-      },
-    },
-    async ({ task_uid, percent, message }, extra: any) => {
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
-      const sessions = sessionService.getActiveSessions();
-      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
-      const author = session?.agentType ?? 'agent';
-
-      planService.updateTask(task_uid, { progressPercent: percent });
-      const body = message?.trim() || `Progress: ${percent}%`;
-      const comment = commentService.addComment('task', task_uid, author, 'mcp', body, {
-        kind: 'progress',
-        source: 'agent',
-        commentType: 'status_update',
-        metadata: { progressPercent: percent },
-      });
-      const planUid = planService.getTaskByUid(task_uid)?.planUid ?? null;
-      broadcast('task-progress', { planUid, taskUid: task_uid, percent, message: body, commentUid: comment.uid });
-      broadcast('task-comment-added', { planUid, taskUid: task_uid, comment });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ task_uid, percent, message: body }, null, 2) }] };
-    },
-  );
-
-  mcpServer.registerTool(
-    'set_task_blocked',
-    {
-      description: 'Mark a task as blocked with an explicit reason. Sets status → blocked, stores the reason on the task, and adds a `kind: "blocker"` comment so the human sees it in the activity rail. Prefer this over silently stopping or claiming you "couldn\'t finish".',
-      inputSchema: {
-        task_uid: z.string(),
-        reason: z.string().describe('Why you\'re blocked, in markdown. Be specific so the human can unblock without a back-and-forth.'),
-      },
-    },
-    async ({ task_uid, reason }, extra: any) => {
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
-      const sessions = sessionService.getActiveSessions();
-      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
-      const author = session?.agentType ?? 'agent';
-
-      planService.updateTask(task_uid, { status: 'blocked', blockedReason: reason });
-      const comment = commentService.addComment('task', task_uid, author, 'mcp', reason, {
-        kind: 'blocker',
-        source: 'agent',
-        commentType: 'concern',
-      });
-      const planUid = planService.getTaskByUid(task_uid)?.planUid ?? null;
-      broadcast('task-blocked', { planUid, taskUid: task_uid, reason, commentUid: comment.uid });
-      broadcast('task-updated', { planUid, taskUid: task_uid, status: 'blocked' });
-      broadcast('task-comment-added', { planUid, taskUid: task_uid, comment });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ task_uid, status: 'blocked', reason }, null, 2) }] };
-    },
-  );
-
-  mcpServer.registerTool(
-    'add_subtask',
-    {
-      description: 'Break a task down by adding a subtask under it. Subtasks share the parent\'s plan (and inherit nothing else automatically — pass body / prompt / file_specs / scope_path explicitly when relevant). One level deep for v1; tree later. Returns the new subtask.',
-      inputSchema: {
-        parent_task_uid: z.string(),
-        description: z.string(),
-        body: z.string().optional(),
-        prompt: z.string().optional(),
-        scope_path: z.string().optional(),
-        file_specs: z.array(fileSpecSchema).optional(),
-      },
-    },
-    async ({ parent_task_uid, description, body, prompt, scope_path, file_specs }) => {
-      const parent = planService.getTaskByUid(parent_task_uid);
-      if (!parent) return { content: [{ type: 'text' as const, text: `Parent task ${parent_task_uid} not found` }] };
-      const subtask = planService.appendTaskToPlan(parent.planUid, {
-        description,
-        body,
-        prompt,
-        scopePath: scope_path ?? parent.scopePath ?? null,
-        fileSpecs: file_specs,
-        parentTaskUid: parent_task_uid,
-      });
-      if (!subtask) return { content: [{ type: 'text' as const, text: 'Failed to create subtask' }] };
-      broadcast('task-created', { planUid: parent.planUid, task: subtask, parentTaskUid: parent_task_uid });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(subtask, null, 2) }] };
-    },
-  );
-
-  mcpServer.registerTool(
-    'add_task_attachment',
-    {
-      description: 'Pin a URL / image / file_ref / code_block / transcript to a task. For images with raw bytes, pass `data_base64` + `content_type` and `project_root` — CodeTrellis writes the file under `<project_root>/.codetrellis/attachments/<task_uid>/<uid>.<ext>` and stores the project-relative path. For everything else (URLs, project-file refs, snippets), `value` is stored as-is.',
-      inputSchema: {
-        task_uid: z.string(),
-        kind: z.enum(['url', 'image', 'file_ref', 'code_block', 'transcript']),
-        value: z.string().describe('URL / file path / inline content depending on kind.'),
-        label: z.string().optional().describe('Short label shown in the UI rail.'),
-        content_type: z.string().optional().describe('MIME hint, e.g. image/png.'),
-        data_base64: z.string().optional().describe('For kind="image": raw image bytes encoded as base64. Requires project_root.'),
-        project_root: z.string().optional().describe('Required when data_base64 is set so the file lands in <project_root>/.codetrellis/attachments/.'),
-      },
-    },
-    async ({ task_uid, kind, value, label, content_type, data_base64, project_root }, extra: any) => {
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
-      const sessions = sessionService.getActiveSessions();
-      const session = sessionId ? sessions.find((s) => s.sessionId === sessionId) : null;
-      const author = session?.agentType ?? 'agent';
-      try {
-        const attachment = taskAttachmentsService.addAttachment({
-          targetType: 'task',
-          targetUid: task_uid,
-          kind,
-          value,
-          label,
-          contentType: content_type,
-          dataBase64: data_base64,
-          projectRoot: project_root,
-          author,
-          authorType: 'mcp',
-        });
-        const planUid = planService.getTaskByUid(task_uid)?.planUid ?? null;
-        broadcast('task-attachment-added', { planUid, taskUid: task_uid, attachment });
-        saveNow(() => exportDatabase());
-        return { content: [{ type: 'text' as const, text: JSON.stringify(attachment, null, 2) }] };
-      } catch (err) {
-        return { content: [{ type: 'text' as const, text: `Failed: ${err instanceof Error ? err.message : err}` }] };
-      }
-    },
-  );
-
-  // --- Plan Phase Tools ---
-
-  const phaseStatusEnum = z.enum(['pending', 'in_progress', 'done', 'blocked']);
-
-  mcpServer.registerTool(
-    'add_plan_phase',
-    {
-      description: 'Add a phase to a plan. A phase is a first-class checkpoint with its own scope, prerequisites, git checkpoint, and acceptance criteria — modelled on the swf "01-PHASE-1-FOUNDATION" pattern. phase_number auto-picks the next slot if omitted. Tasks bind to a phase via update_task(..., phase_uid).',
-      inputSchema: {
-        plan_uid: z.string(),
-        title: z.string(),
-        phase_number: z.number().int().optional(),
-        scope: z.string().optional().describe('Markdown describing what this phase covers'),
-        prerequisites: z.string().optional().describe('Markdown — what must be done before this phase starts'),
-        git_checkpoint: z.string().optional().describe('Commit hash, tag, or label captured at phase start'),
-        acceptance_criteria: z.string().optional().describe('Markdown — ideally a checklist of "- [ ] …" items'),
-        status: phaseStatusEnum.optional(),
-      },
-    },
-    async ({ plan_uid, title, phase_number, scope, prerequisites, git_checkpoint, acceptance_criteria, status }) => {
-      const phase = planPhasesService.createPhase({
-        planUid: plan_uid,
-        phaseNumber: phase_number,
-        title,
-        scope,
-        prerequisites,
-        gitCheckpoint: git_checkpoint ?? null,
-        acceptanceCriteria: acceptance_criteria,
-        status,
-      });
-      broadcast('plan-phase-created', { phase });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(phase, null, 2) }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'list_plan_phases',
-    {
-      description: 'List all phases for a plan, ordered by phase_number. Returns the full phase rows (small payload, no need for a summary variant).',
-      inputSchema: { plan_uid: z.string() },
-    },
-    async ({ plan_uid }) => {
-      const phases = planPhasesService.listPhases(plan_uid);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(phases, null, 2) }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'update_plan_phase',
-    {
-      description: 'Update any field on a phase — title, scope, prerequisites, git checkpoint, acceptance criteria, status, or phase_number. Pass empty string for git_checkpoint to clear.',
-      inputSchema: {
-        phase_uid: z.string(),
-        title: z.string().optional(),
-        phase_number: z.number().int().optional(),
-        scope: z.string().optional(),
-        prerequisites: z.string().optional(),
-        git_checkpoint: z.string().optional(),
-        acceptance_criteria: z.string().optional(),
-        status: phaseStatusEnum.optional(),
-      },
-    },
-    async ({ phase_uid, title, phase_number, scope, prerequisites, git_checkpoint, acceptance_criteria, status }) => {
-      const phase = planPhasesService.updatePhase(phase_uid, {
-        title,
-        phaseNumber: phase_number,
-        scope,
-        prerequisites,
-        gitCheckpoint: git_checkpoint === '' ? null : git_checkpoint,
-        acceptanceCriteria: acceptance_criteria,
-        status,
-      });
-      if (!phase) return { content: [{ type: 'text' as const, text: `Phase ${phase_uid} not found` }] };
-      broadcast('plan-phase-updated', { phase });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(phase, null, 2) }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'delete_plan_phase',
-    {
-      description: 'Delete a phase. Tasks that reference it have their phase_uid cleared (they survive, just become unphased).',
-      inputSchema: { phase_uid: z.string() },
-    },
-    async ({ phase_uid }) => {
-      planPhasesService.deletePhase(phase_uid);
-      broadcast('plan-phase-deleted', { phaseUid: phase_uid });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Phase ${phase_uid} deleted` }] };
-    }
-  );
+  // V1 task/phase/doc tools removed — see docs/V2-MCP-MIGRATION.md.
+  // Agents use add_item / update_item / bulk_add_items (Phase 15 §C) instead.
 
   // --- Plan File Sync (Phase 13 §A) ---
 
@@ -1096,7 +624,7 @@ function setupMcpServerInstance(): McpServer {
   mcpServer.registerTool(
     'set_active_plan',
     {
-      description: 'Associate this agent session with a plan, indicating you are working on it. Other connected agents see your active plan in the Connected Agents widget.',
+      description: 'Associate this agent session with a plan and navigate the UI to show it. Other connected agents see your active plan in the Connected Agents widget.',
       inputSchema: { plan_uid: z.string() },
     },
     async ({ plan_uid }, extra: any) => {
@@ -1107,15 +635,14 @@ function setupMcpServerInstance(): McpServer {
         sessionService.setActivePlan(sessionId, plan_uid);
         broadcast('mcp-session-changed', { reason: 'set_active_plan', sessionId, planUid: plan_uid });
       } else {
-        // Fall back to most-recent if the transport context isn't
-        // available (rare — only if the SDK ever calls without extra).
         const sessions = sessionService.getActiveSessions();
         if (sessions.length > 0) {
           sessionService.setActivePlan(sessions[sessions.length - 1].sessionId, plan_uid);
           broadcast('mcp-session-changed', { reason: 'set_active_plan', planUid: plan_uid });
         }
       }
-      return { content: [{ type: 'text' as const, text: `Active plan set to ${plan_uid}` }] };
+      broadcast('ui-navigate', { target: 'plan', planUid: plan_uid });
+      return { content: [{ type: 'text' as const, text: `Active plan set to ${plan_uid} — UI navigated to plan view.` }] };
     }
   );
 
@@ -1163,128 +690,6 @@ function setupMcpServerInstance(): McpServer {
     async ({ plan_uid }) => {
       const devs = detectDeviations(plan_uid);
       return { content: [{ type: 'text' as const, text: JSON.stringify({ detected: devs.length, deviations: devs }, null, 2) }] };
-    }
-  );
-
-  // --- Plan Spec Document Tools ---
-  // Spec docs let agents attach structured context (architecture, patterns,
-  // testing strategy, security notes, examples, research, etc.) to a plan
-  // without bloating the agent's context window. Fetch only what you need.
-
-  const docTypeDescription =
-    'One of: executive_summary, architecture, patterns, examples, research, testing, security, ux_ui, constraints, acceptance_criteria, rollout, custom. Custom strings are accepted.';
-
-  mcpServer.registerTool(
-    'add_plan_doc',
-    {
-      description: 'Attach a spec document to a plan — patterns to follow, security considerations, test strategy, examples, research notes, etc. Doc body is markdown. Use this instead of stuffing everything into the plan description. Use order_hint ("00", "01", "01.5") to control sort order in the spec room (matches the swf "00-EXECUTIVE / 01-PHASE-1 / …" file convention). Use parent_doc_uid to nest the doc under another doc (e.g. per-phase test docs under one "testing" parent).',
-      inputSchema: {
-        plan_uid: z.string(),
-        doc_type: z.string().describe(docTypeDescription),
-        title: z.string().describe('Short human-readable title for the doc'),
-        body: z.string().describe('Markdown body — the actual spec content'),
-        order_hint: z.string().optional().describe('Sortable string like "00", "01", "01.5". Lex compare; nulls sort last.'),
-        parent_doc_uid: z.string().optional().describe('UID of a parent doc this nests under.'),
-      },
-    },
-    async ({ plan_uid, doc_type, title, body, order_hint, parent_doc_uid }) => {
-      const doc = planDocsService.createPlanDocument({
-        planUid: plan_uid,
-        docType: doc_type,
-        title,
-        body,
-        author: 'agent',
-        authorType: 'mcp',
-        orderHint: order_hint ?? null,
-        parentDocUid: parent_doc_uid ?? null,
-      });
-      broadcast('plan-doc-created', { doc });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(doc, null, 2) }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'update_plan_doc',
-    {
-      description: 'Update the body, title, type, ordering, or nesting of an existing spec doc. Body changes increment the version and snapshot the previous body for traceability.',
-      inputSchema: {
-        doc_uid: z.string(),
-        title: z.string().optional(),
-        body: z.string().optional(),
-        doc_type: z.string().optional().describe(docTypeDescription),
-        order_hint: z.string().optional().describe('New sort hint (e.g. "01.5"). Pass empty string to clear.'),
-        parent_doc_uid: z.string().optional().describe('New parent doc uid. Pass empty string to clear.'),
-        change_summary: z.string().optional().describe('Why this update was made — shows up in the version history'),
-      },
-    },
-    async ({ doc_uid, title, body, doc_type, order_hint, parent_doc_uid, change_summary }) => {
-      const doc = planDocsService.updatePlanDocument(doc_uid, {
-        title, body, docType: doc_type, changeSummary: change_summary, author: 'agent',
-        orderHint: order_hint === '' ? null : order_hint,
-        parentDocUid: parent_doc_uid === '' ? null : parent_doc_uid,
-      });
-      if (!doc) {
-        return { content: [{ type: 'text' as const, text: `Doc ${doc_uid} not found` }] };
-      }
-      broadcast('plan-doc-updated', { doc });
-      saveNow(() => exportDatabase());
-      return { content: [{ type: 'text' as const, text: JSON.stringify(doc, null, 2) }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'get_plan_doc',
-    {
-      description: 'Fetch a single spec doc, either by its uid or by (plan_uid + doc_type). Returns the full markdown body. Use list_plan_docs first if you need to know what is available.',
-      inputSchema: {
-        doc_uid: z.string().optional().describe('Direct uid of the doc to fetch'),
-        plan_uid: z.string().optional().describe('Plan uid (required if doc_uid not given)'),
-        doc_type: z.string().optional().describe('Doc type to fetch from the plan (required if doc_uid not given). ' + docTypeDescription),
-      },
-    },
-    async ({ doc_uid, plan_uid, doc_type }) => {
-      let doc = null;
-      if (doc_uid) {
-        doc = planDocsService.getPlanDocument(doc_uid);
-      } else if (plan_uid && doc_type) {
-        doc = planDocsService.getPlanDocumentByType(plan_uid, doc_type);
-      } else {
-        return { content: [{ type: 'text' as const, text: 'Provide either doc_uid or (plan_uid + doc_type).' }] };
-      }
-      if (!doc) {
-        return { content: [{ type: 'text' as const, text: 'Document not found' }] };
-      }
-      return { content: [{ type: 'text' as const, text: JSON.stringify(doc, null, 2) }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'list_plan_docs',
-    {
-      description: 'List the spec docs attached to a plan. Returns a lightweight index (uid, type, title, length) — fetch full bodies separately with get_plan_doc to keep context small.',
-      inputSchema: {
-        plan_uid: z.string(),
-      },
-    },
-    async ({ plan_uid }) => {
-      const summaries = planDocsService.listPlanDocumentSummaries(plan_uid);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(summaries, null, 2) }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    'search_plan_docs',
-    {
-      description: 'Substring search across the title and body of all spec docs in a plan. Returns matches with a short excerpt around the hit. Use this to find guidance on a specific topic without reading every doc.',
-      inputSchema: {
-        plan_uid: z.string(),
-        query: z.string(),
-      },
-    },
-    async ({ plan_uid, query }) => {
-      const results = planDocsService.searchPlanDocuments(plan_uid, query);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
     }
   );
 
@@ -1475,13 +880,8 @@ function setupMcpServerInstance(): McpServer {
   //
   // These tools talk to `plan-item-service` and treat Objects (context)
   // and Actions (graph-anchored work items) as siblings in one tree.
-  // Replaces (eventually) `add_plan_doc` / `add_plan_phase` /
-  // `add_subtask` / `claim_task` / `read_task_full` / `update_task` /
-  // `add_task_*` / `set_task_blocked` / `update_task_progress`.
-  //
-  // The old tools stay registered alongside and keep writing to legacy
-  // tables for 15.C → 15.F. After the V1 frontend retires, alias the
-  // old tools to forwarders (15.F).
+  // V1 task/phase/doc tools have been retired — this is the canonical
+  // surface for all plan item operations.
   // ===========================================================================
 
   // Reusable schema for the new file-edit (M2: line/symbol-precision).
@@ -1575,6 +975,68 @@ function setupMcpServerInstance(): McpServer {
       broadcast('plan-item-created', { planUid: item.planUid, item });
       saveNow(() => exportDatabase());
       return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
+    },
+  );
+
+  // --- bulk_add_items ---------------------------------------------------
+  mcpServer.registerTool(
+    'bulk_add_items',
+    {
+      description:
+        'Create multiple Objects and/or Actions in one call. Items are created in array order. ' +
+        'Use _temp_uid in an item and reference it as parent_uid in later items to build nested trees in a single call. ' +
+        'Returns the created items with their real UIDs.',
+      inputSchema: {
+        plan_uid: z.string(),
+        items: z.array(z.object({
+          _temp_uid: z.string().optional().describe('Temporary ID for referencing as parent_uid in later items in this batch'),
+          kind: planItemKindEnum,
+          parent_uid: z.string().optional().describe('Real UID or _temp_uid of a preceding item in this batch'),
+          title: z.string(),
+          body: z.string().optional(),
+          template: z.string().optional(),
+          sort_order: z.number().int().optional(),
+          status: taskStatusEnum.optional(),
+          scope_path: z.string().optional(),
+          file_specs: z.array(itemFileSpecSchema).optional(),
+          new_connections: z.array(planItemEdgeSchema).optional(),
+          removed_connections: z.array(planItemEdgeSchema).optional(),
+          dependencies: z.array(z.string()).optional(),
+        })),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(extra);
+      const tempToReal = new Map<string, string>();
+      const created: any[] = [];
+      for (const raw of args.items) {
+        let parentUid = raw.parent_uid ?? null;
+        if (parentUid && tempToReal.has(parentUid)) {
+          parentUid = tempToReal.get(parentUid)!;
+        }
+        const item = planItemService.createItem({
+          planUid: args.plan_uid,
+          kind: raw.kind,
+          parentUid,
+          sortOrder: raw.sort_order,
+          title: raw.title,
+          body: raw.body ?? '',
+          template: raw.template ?? null,
+          status: raw.status,
+          scopePath: raw.scope_path ?? null,
+          fileSpecs: raw.file_specs,
+          newConnections: raw.new_connections,
+          removedConnections: raw.removed_connections,
+          dependencies: raw.dependencies,
+          author: id.author,
+          authorType: id.authorType,
+        });
+        if (raw._temp_uid) tempToReal.set(raw._temp_uid, item.uid);
+        broadcast('plan-item-created', { planUid: item.planUid, item });
+        created.push({ _temp_uid: raw._temp_uid ?? null, uid: item.uid, title: item.title, kind: item.kind });
+      }
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ created: created.length, items: created }, null, 2) }] };
     },
   );
 
@@ -1877,23 +1339,74 @@ function setupMcpServerInstance(): McpServer {
     'list_items',
     {
       description:
-        'Cheap tree query — returns title + kind + status + sortOrder + childCount per item, no bodies. ' +
-        'Use as the sidebar/navigation read. Filter by parent_uid to fetch one nesting level at a time.',
+        'Query items in a plan. Returns title + kind + status + sortOrder + childCount per item (no bodies). ' +
+        'Filter by parent_uid (one level), kind, status, or title substring. Use limit/offset for large plans.',
       inputSchema: {
         plan_uid: z.string(),
         parent_uid: z.string().optional().describe('Pass empty string for top-level only. Omit to get the whole plan.'),
         kind: planItemKindEnum.optional(),
+        status: taskStatusEnum.optional().describe('Filter to items with this status'),
+        title_contains: z.string().optional().describe('Case-insensitive substring match on title'),
+        limit: z.number().int().min(1).max(500).optional().describe('Max items to return (default 100)'),
+        offset: z.number().int().min(0).optional().describe('Skip this many items (default 0)'),
       },
     },
     async (args) => {
-      const all = planItemService.listItemSummaries(args.plan_uid);
-      let filtered = all;
+      let all = planItemService.listItemSummaries(args.plan_uid);
       if (args.parent_uid !== undefined) {
         const targetParent = args.parent_uid === '' ? null : args.parent_uid;
-        filtered = filtered.filter((i) => i.parentUid === targetParent);
+        all = all.filter((i) => i.parentUid === targetParent);
       }
-      if (args.kind) filtered = filtered.filter((i) => i.kind === args.kind);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(filtered, null, 2) }] };
+      if (args.kind) all = all.filter((i) => i.kind === args.kind);
+      if (args.status) all = all.filter((i) => i.status === args.status);
+      if (args.title_contains) {
+        const q = args.title_contains.toLowerCase();
+        all = all.filter((i) => i.title.toLowerCase().includes(q));
+      }
+      const total = all.length;
+      const start = args.offset ?? 0;
+      const end = start + (args.limit ?? 100);
+      const page = all.slice(start, end);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ total, offset: start, limit: args.limit ?? 100, items: page }, null, 2) }] };
+    },
+  );
+
+  // --- search_items -----------------------------------------------------
+  mcpServer.registerTool(
+    'search_items',
+    {
+      description:
+        'Search item titles and bodies within a plan. Returns matches with a short excerpt around the hit. ' +
+        'Case-insensitive substring match.',
+      inputSchema: {
+        plan_uid: z.string(),
+        query: z.string().describe('Search string (case-insensitive substring)'),
+        limit: z.number().int().min(1).max(50).optional().describe('Max results (default 20)'),
+      },
+    },
+    async ({ plan_uid, query, limit }) => {
+      const db = (await import('../services/database')).getDb();
+      const q = `%${query}%`;
+      const r = db.exec(
+        `SELECT uid, title, body, kind, status, parent_uid FROM plan_items
+         WHERE plan_uid = ? AND (title LIKE ? COLLATE NOCASE OR body LIKE ? COLLATE NOCASE)
+         ORDER BY updated_at DESC
+         LIMIT ?`,
+        [plan_uid, q, q, limit ?? 20],
+      );
+      if (!r[0]) return { content: [{ type: 'text' as const, text: JSON.stringify({ query, results: [] }, null, 2) }] };
+      const results = r[0].values.map((row: any[]) => {
+        const body = (row[2] as string) || '';
+        const lowerBody = body.toLowerCase();
+        const idx = lowerBody.indexOf(query.toLowerCase());
+        const excerptStart = Math.max(0, idx - 60);
+        const excerptEnd = Math.min(body.length, idx + query.length + 60);
+        const excerpt = idx >= 0
+          ? (excerptStart > 0 ? '...' : '') + body.slice(excerptStart, excerptEnd) + (excerptEnd < body.length ? '...' : '')
+          : '';
+        return { uid: row[0], title: row[1], excerpt, kind: row[3], status: row[4], parentUid: row[5] };
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ query, results }, null, 2) }] };
     },
   );
 
@@ -2180,6 +1693,119 @@ function setupMcpServerInstance(): McpServer {
       broadcast('external-ref-deleted', { uid: args.uid });
       saveNow(() => exportDatabase());
       return { content: [{ type: 'text' as const, text: `Removed external ref ${args.uid}` }] };
+    },
+  );
+
+  // --- Plan Deletion Tools ---
+
+  mcpServer.registerTool(
+    'delete_plan',
+    {
+      description: 'Delete (archive) a plan from CodeTrellis. Removes it from the plan list. Use list_plans first to find the uid.',
+      inputSchema: {
+        plan_uid: z.string().describe('UID of the plan to delete'),
+      },
+    },
+    async ({ plan_uid }) => {
+      planService.deletePlan(plan_uid);
+      broadcast('plan-deleted', { planUid: plan_uid });
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Deleted plan ${plan_uid}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'bulk_delete_plans',
+    {
+      description: 'Delete multiple plans at once. Useful for cleaning up test/demo plans. Pass "all" to delete every plan, or a list of uids.',
+      inputSchema: {
+        plan_uids: z.union([
+          z.literal('all'),
+          z.array(z.string()),
+        ]).describe('"all" to delete every plan, or an array of plan UIDs to delete'),
+      },
+    },
+    async ({ plan_uids }) => {
+      let uids: string[];
+      if (plan_uids === 'all') {
+        const allPlans = planService.listPlans();
+        uids = allPlans.map((p: any) => p.uid);
+      } else {
+        uids = plan_uids;
+      }
+      let deleted = 0;
+      for (const uid of uids) {
+        try {
+          planService.deletePlan(uid);
+          broadcast('plan-deleted', { planUid: uid });
+          deleted++;
+        } catch {
+          // skip plans that don't exist
+        }
+      }
+      saveNow(() => exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Deleted ${deleted} plan(s)` }] };
+    },
+  );
+
+  // --- UI Navigation Tools ---
+  // These broadcast events to the frontend, which drives the UI state.
+  // Agents can use these to navigate the CodeTrellis interface — open
+  // a plan, switch to graph view, toggle panels, refresh state.
+
+  mcpServer.registerTool(
+    'navigate_to',
+    {
+      description: 'Navigate the CodeTrellis UI to a specific view. Use this to show the user what you are working on — open the plan workspace, switch to graph view, or enable split view.',
+      inputSchema: {
+        target: z.enum(['plan', 'graph', 'split', 'timeline']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with timeline'),
+        plan_uid: z.string().optional().describe('If navigating to plan/split/timeline, which plan to show. If omitted, keeps the current active plan.'),
+      },
+    },
+    async ({ target, plan_uid }) => {
+      broadcast('ui-navigate', { target, planUid: plan_uid });
+      return { content: [{ type: 'text' as const, text: `Navigated to ${target}${plan_uid ? ` (plan ${plan_uid})` : ''}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'open_plan',
+    {
+      description: 'Open a specific plan in the CodeTrellis UI. Switches to plan workspace mode and loads the plan. The user will see the plan immediately.',
+      inputSchema: {
+        plan_uid: z.string().describe('UID of the plan to open'),
+        split_view: z.boolean().optional().describe('Also enable split view (plan + graph side-by-side)'),
+      },
+    },
+    async ({ plan_uid, split_view }) => {
+      broadcast('ui-navigate', { target: split_view ? 'split' : 'plan', planUid: plan_uid });
+      return { content: [{ type: 'text' as const, text: `Opened plan ${plan_uid}${split_view ? ' in split view' : ''}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'toggle_panel',
+    {
+      description: 'Toggle a UI panel on or off in the CodeTrellis interface.',
+      inputSchema: {
+        panel: z.enum(['sidebar', 'inspector', 'terminal', 'split']).describe('Which panel to toggle'),
+      },
+    },
+    async ({ panel }) => {
+      broadcast('ui-toggle', { panel });
+      return { content: [{ type: 'text' as const, text: `Toggled ${panel} panel` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'refresh_ui',
+    {
+      description: 'Force the CodeTrellis UI to refresh its plan list and active plan. Use this after making changes that the UI might not have picked up.',
+      inputSchema: {},
+    },
+    async () => {
+      broadcast('ui-refresh', {});
+      return { content: [{ type: 'text' as const, text: 'UI refresh triggered' }] };
     },
   );
 

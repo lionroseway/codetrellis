@@ -1276,7 +1276,30 @@ app.put('/api/plans/:uid', (req, res) => {
 // Delete (archive) plan
 app.delete('/api/plans/:uid', (req, res) => {
   planService.deletePlan(req.params.uid);
+  broadcast('plan-deleted', { planUid: req.params.uid });
+  saveNow(() => exportDatabase());
   res.json({ ok: true });
+});
+
+// Bulk delete plans
+app.post('/api/plans/bulk-delete', (req, res) => {
+  const { uids } = req.body || {};
+  if (!Array.isArray(uids) || uids.length === 0) {
+    res.status(400).json({ error: 'uids must be a non-empty array' });
+    return;
+  }
+  let deleted = 0;
+  for (const uid of uids) {
+    try {
+      planService.deletePlan(uid);
+      broadcast('plan-deleted', { planUid: uid });
+      deleted++;
+    } catch {
+      // skip plans that don't exist
+    }
+  }
+  saveNow(() => exportDatabase());
+  res.json({ ok: true, deleted });
 });
 
 // List tasks for a plan

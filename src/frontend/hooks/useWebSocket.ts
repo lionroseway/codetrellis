@@ -5,7 +5,8 @@ import { usePlanItemsStore } from '../stores/plan-items-store';
 import { useToastStore } from '../stores/toast-store';
 import { useProjectStore } from '../stores/project-store';
 import { useTerminalStore } from '../stores/terminal-store';
-import type { AgentEvent, Comment } from '../../shared/types';
+import { useUiStore } from '../stores/ui-store';
+import type { AgentEvent } from '../../shared/types';
 
 /**
  * Connects to the backend WebSocket and routes messages
@@ -88,187 +89,13 @@ export function useWebSocket() {
           if (type === 'plan-updated') {
             usePlanStore.getState().onPlanUpdated(payload.planUid);
           }
-          if (type === 'task-updated') {
-            usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, payload.status || 'assigned');
-            const planUidUpd = payload?.planUid as string | undefined;
-            if (usePlanStore.getState().activePlanUid === planUidUpd) {
-              usePlanStore.getState().pushActivityEvent({
-                type: 'task-updated',
-                taskUid: payload.taskUid,
-                payload,
-              });
-            }
-            if (payload.status === 'done') {
-              useToastStore.getState().addToast({ type: 'success', title: 'Task completed', message: `Task marked as done` });
-            }
-            if (payload.status === 'in_progress') {
-              const isAuto = payload.source === 'auto-progress';
-              useToastStore.getState().addToast({
-                type: 'info',
-                title: isAuto ? 'Task auto-started' : 'Task started',
-                message: isAuto ? 'A file in this task changed — moved to in_progress' : 'Agent is working on a task',
-              });
-            }
-          }
-          if (type === 'task-completion-suggested') {
-            useToastStore.getState().addToast({
-              type: 'success',
-              title: 'Task may be done',
-              message: `All ${payload.changeCount} proposed changes are satisfied — review and mark done if you agree.`,
-              duration: 8000,
-            });
-          }
-          if (type === 'task-claimed') {
-            usePlanStore.getState().onTaskUpdated(payload.planUid, payload.taskUid, 'assigned');
-            useToastStore.getState().addToast({ type: 'info', title: 'Task claimed', message: `Assigned to ${payload.agentId || 'agent'}` });
-            const planUid = payload?.planUid as string | undefined;
-            if (usePlanStore.getState().activePlanUid === planUid) {
-              usePlanStore.getState().pushActivityEvent({
-                type: 'task-claimed',
-                taskUid: payload.taskUid,
-                payload,
-              });
-            }
+          if (type === 'plan-deleted') {
+            usePlanStore.getState().onPlanDeleted(payload.planUid);
+            useToastStore.getState().addToast({ type: 'info', title: 'Plan deleted', message: 'A plan was removed' });
           }
           if (type === 'comment-added') {
             usePlanStore.getState().onCommentAdded(payload.comment);
             useToastStore.getState().addToast({ type: 'info', title: 'New comment', message: payload.comment?.body?.substring(0, 60) });
-          }
-          // --- Phase 14 §A task chatter ---
-          if (type === 'task-comment-added') {
-            const taskUid = payload?.taskUid as string | undefined;
-            const planUid = payload?.planUid as string | undefined;
-            const comment = payload?.comment;
-            const store = usePlanStore.getState();
-            if (taskUid && comment) {
-              // Fold into taskContexts cache if hydrated.
-              usePlanStore.setState((s) => {
-                const ctx = s.taskContexts[taskUid];
-                if (!ctx) return s;
-                if (ctx.comments.some((c: Comment) => c.uid === comment.uid)) return s;
-                return {
-                  taskContexts: {
-                    ...s.taskContexts,
-                    [taskUid]: { ...ctx, comments: [...ctx.comments, comment] },
-                  },
-                };
-              });
-              if (store.activePlanUid === planUid) {
-                store.pushActivityEvent({ type: 'task-comment-added', taskUid, payload });
-              }
-            }
-            // Avoid double-toasting on agent-driven progress / blockers
-            // — those have their own toasts below. Plain notes / questions
-            // get a quiet info toast so the user notices.
-            if (comment?.kind === 'note' || comment?.kind === 'question') {
-              useToastStore.getState().addToast({
-                type: 'info',
-                title: comment.kind === 'question' ? 'Agent asked a question' : 'New task note',
-                message: comment.body?.substring(0, 80),
-                duration: 5000,
-              });
-            }
-          }
-          if (type === 'task-progress') {
-            const taskUid = payload?.taskUid as string | undefined;
-            const planUid = payload?.planUid as string | undefined;
-            const percent = payload?.percent as number | undefined;
-            if (taskUid && typeof percent === 'number') {
-              usePlanStore.setState((s) => {
-                if (!s.activePlan) return s;
-                const tasks = s.activePlan.tasks.map((t) =>
-                  t.uid === taskUid ? { ...t, progressPercent: percent } : t,
-                );
-                return { activePlan: { ...s.activePlan, tasks } };
-              });
-              if (usePlanStore.getState().activePlanUid === planUid) {
-                usePlanStore.getState().pushActivityEvent({ type: 'task-progress', taskUid, payload });
-              }
-            }
-          }
-          if (type === 'task-blocked') {
-            const taskUid = payload?.taskUid as string | undefined;
-            const planUid = payload?.planUid as string | undefined;
-            const reason = payload?.reason as string | undefined;
-            if (taskUid) {
-              usePlanStore.setState((s) => {
-                if (!s.activePlan) return s;
-                const tasks = s.activePlan.tasks.map((t) =>
-                  t.uid === taskUid ? { ...t, status: 'blocked' as const, blockedReason: reason ?? null } : t,
-                );
-                return { activePlan: { ...s.activePlan, tasks } };
-              });
-              if (usePlanStore.getState().activePlanUid === planUid) {
-                usePlanStore.getState().pushActivityEvent({ type: 'task-blocked', taskUid, payload });
-              }
-              useToastStore.getState().addToast({
-                type: 'warning',
-                title: 'Task blocked',
-                message: reason ? reason.slice(0, 100) : 'Agent flagged a blocker',
-                duration: 8000,
-              });
-            }
-          }
-          if (type === 'task-attachment-added') {
-            const taskUid = payload?.taskUid as string | undefined;
-            const planUid = payload?.planUid as string | undefined;
-            const attachment = payload?.attachment;
-            if (taskUid && attachment) {
-              usePlanStore.setState((s) => {
-                const ctx = s.taskContexts[taskUid];
-                if (!ctx) return s;
-                if (ctx.attachments.some((a) => a.uid === attachment.uid)) return s;
-                return {
-                  taskContexts: {
-                    ...s.taskContexts,
-                    [taskUid]: { ...ctx, attachments: [...ctx.attachments, attachment] },
-                  },
-                };
-              });
-              if (usePlanStore.getState().activePlanUid === planUid) {
-                usePlanStore.getState().pushActivityEvent({ type: 'task-attachment-added', taskUid, payload });
-              }
-            }
-          }
-          if (type === 'task-attachment-removed') {
-            const uid = payload?.uid as string | undefined;
-            if (uid) {
-              usePlanStore.setState((s) => {
-                const next: typeof s.taskContexts = {};
-                for (const [k, v] of Object.entries(s.taskContexts)) {
-                  next[k] = { ...v, attachments: v.attachments.filter((a) => a.uid !== uid) };
-                }
-                return { taskContexts: next };
-              });
-            }
-          }
-          if (type === 'task-created') {
-            const planUid = payload?.planUid as string | undefined;
-            const task = payload?.task;
-            const parentTaskUid = payload?.parentTaskUid as string | undefined;
-            if (task) {
-              usePlanStore.setState((s) => {
-                if (!s.activePlan || s.activePlan.uid !== planUid) return s;
-                if (s.activePlan.tasks.some((t) => t.uid === task.uid)) return s;
-                let taskContexts = s.taskContexts;
-                if (parentTaskUid && taskContexts[parentTaskUid]) {
-                  taskContexts = {
-                    ...taskContexts,
-                    [parentTaskUid]: {
-                      ...taskContexts[parentTaskUid],
-                      subtasks: [...taskContexts[parentTaskUid].subtasks, task],
-                    },
-                  };
-                }
-                return {
-                  activePlan: { ...s.activePlan, tasks: [...s.activePlan.tasks, task] },
-                  taskContexts,
-                };
-              });
-              if (usePlanStore.getState().activePlanUid === planUid) {
-                usePlanStore.getState().pushActivityEvent({ type: 'task-created', taskUid: task.uid, payload });
-              }
-            }
           }
           // --- Phase 15 §15.D — V2 plan-item event handlers ---
           if (type === 'plan-item-created') {
@@ -317,20 +144,6 @@ export function useWebSocket() {
             if (event) usePlanItemsStore.getState().onItemEvent(event);
           }
 
-          if (type === 'plan-doc-created') {
-            usePlanStore.getState().onPlanDocCreated(payload.doc);
-            useToastStore.getState().addToast({ type: 'info', title: 'Spec doc added', message: payload.doc?.title });
-          }
-          if (type === 'plan-doc-updated') {
-            usePlanStore.getState().onPlanDocUpdated(payload.doc);
-          }
-          if (type === 'plan-doc-deleted') {
-            usePlanStore.getState().onPlanDocDeleted(payload.docUid);
-          }
-          if (type === 'plan-phase-created' || type === 'plan-phase-updated') {
-            const planUid = payload?.phase?.planUid as string | undefined;
-            if (planUid) usePlanStore.getState().onPlanPhaseChanged(planUid);
-          }
           if (type === 'plan-imported') {
             // An external import (MCP, another window, future
             // auto-sync) loaded a plan. Refresh the list so the
@@ -379,14 +192,6 @@ export function useWebSocket() {
               duration: 12000,
             });
           }
-          if (type === 'plan-phase-deleted') {
-            // Phase deleted — refetch phases for whichever plan is
-            // active. We don't have planUid in the payload, but
-            // onPlanPhaseChanged short-circuits if there's no active
-            // plan, so this is safe.
-            const active = usePlanStore.getState().activePlanUid;
-            if (active) usePlanStore.getState().onPlanPhaseChanged(active);
-          }
           if (type === 'deviation-detected') {
             useToastStore.getState().addToast({ type: 'warning', title: 'Deviation detected', message: payload.deviation?.description, duration: 8000 });
           }
@@ -420,6 +225,45 @@ export function useWebSocket() {
             // SettingsModal yet. Future: dispatch a window event.
           }
 
+          // --- UI navigation (driven by MCP agent) ---
+          if (type === 'ui-navigate') {
+            const target = payload?.target as string | undefined;
+            const planUid = payload?.planUid as string | undefined;
+            if (target === 'plan' || target === 'plans') {
+              useUiStore.getState().setWorkspaceMode('plan');
+              if (planUid) {
+                usePlanStore.getState().setActivePlan(planUid);
+              }
+            } else if (target === 'graph') {
+              useUiStore.getState().setWorkspaceMode('graph');
+            } else if (target === 'split') {
+              useUiStore.getState().setSplitView(true);
+              if (planUid) {
+                usePlanStore.getState().setActivePlan(planUid);
+              }
+            } else if (target === 'timeline') {
+              useUiStore.getState().setWorkspaceMode('plan');
+              // Timeline is inside the plan workspace — opening plan mode is enough
+            }
+          }
+          if (type === 'ui-toggle') {
+            const panel = payload?.panel as string | undefined;
+            if (panel === 'sidebar') useUiStore.getState().toggleSidebar();
+            if (panel === 'inspector') useUiStore.getState().toggleInspector();
+            if (panel === 'terminal') useUiStore.getState().toggleAgentPanel();
+            if (panel === 'split') useUiStore.getState().toggleSplitView();
+          }
+          if (type === 'ui-refresh') {
+            // Force a full plan list refresh
+            (async () => {
+              const { useProjectStore } = await import('../stores/project-store');
+              const root = useProjectStore.getState().root;
+              usePlanStore.getState().fetchPlans(root || undefined);
+              const activePlan = usePlanStore.getState().activePlanUid;
+              if (activePlan) usePlanStore.getState().fetchPlan(activePlan);
+            })();
+          }
+
           // --- Terminal session lifecycle ---
           if (type === 'terminal-created') {
             const session = payload?.session;
@@ -430,23 +274,6 @@ export function useWebSocket() {
             if (id) useTerminalStore.getState().onTerminalKilled(id);
           }
 
-          // Execution tracking — mark files as actively being worked on
-          if (type === 'task-updated' && payload.status === 'in_progress') {
-            // Fetch task details to get affected files
-            const planUid = payload.planUid as string;
-            const taskUid = payload.taskUid as string;
-            fetch(`/api/plans/${planUid}`)
-              .then((r) => r.json())
-              .then((plan) => {
-                const task = plan.tasks?.find((t: any) => t.uid === taskUid);
-                if (task?.affectedFiles) {
-                  for (const file of task.affectedFiles) {
-                    useAgentStore.getState().markFileChanged(file);
-                  }
-                }
-              })
-              .catch(() => {});
-          }
         } catch {
           // ignore malformed messages
         }

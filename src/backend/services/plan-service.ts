@@ -44,6 +44,11 @@ function notifyMutation(planUid: string): void {
   } catch { /* auto-sync not available — fine, manual export still works */ }
 }
 
+/** Strip trailing slashes so `/foo/bar/` and `/foo/bar` match in queries. */
+function normalizePath(p: string): string {
+  return p.replace(/\/+$/, '') || p;
+}
+
 export function createPlan(
   input: CreatePlanInput,
   author: string,
@@ -53,11 +58,12 @@ export function createPlan(
   const db = getDb();
   const uid = randomUUID();
   const now = Date.now();
+  const normalizedPath = normalizePath(projectPath);
 
   db.run(
     `INSERT INTO plans (uid, title, description, status, author, author_type, project_path, created_at, updated_at)
      VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?)`,
-    [uid, input.title, input.description || '', author, authorType, projectPath, now, now]
+    [uid, input.title, input.description || '', author, authorType, normalizedPath, now, now]
   );
 
   const tasks: Task[] = [];
@@ -165,7 +171,7 @@ export function listPlans(projectPath?: string, statusFilter?: string): Plan[] {
   let query = `SELECT ${PLAN_COLUMNS} FROM plans WHERE status != 'archived'`;
   const params: string[] = [];
 
-  if (projectPath) { query += ` AND project_path = ?`; params.push(projectPath); }
+  if (projectPath) { query += ` AND project_path = ?`; params.push(normalizePath(projectPath)); }
   if (statusFilter) { query += ` AND status = ?`; params.push(statusFilter); }
   query += ` ORDER BY updated_at DESC`;
 

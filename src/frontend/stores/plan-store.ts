@@ -64,6 +64,7 @@ interface PlanState {
 
   // Called by WebSocket handler
   onPlanCreated: (plan: Plan) => void;
+  onPlanDeleted: (planUid: string) => void;
   onPlanUpdated: (planUid: string) => void;
   onTaskUpdated: (planUid: string, taskUid: string, status: string) => void;
   onCommentAdded: (comment: Comment) => void;
@@ -353,10 +354,29 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   },
 
   onPlanCreated: (plan) => {
+    // Optimistic prepend for instant visibility
     set((s) => {
-      // Deduplicate — WS may fire before/after fetchPlans resolves
       if (s.plans.some((p) => p.uid === plan.uid)) return s;
       return { plans: [plan, ...s.plans] };
+    });
+    // Also do a full server re-fetch so the project filter is applied
+    // correctly (in case the agent's project_path doesn't exactly match
+    // the UI's current root, or the optimistic append gets stale).
+    (async () => {
+      const { useProjectStore } = await import('./project-store');
+      const root = useProjectStore.getState().root;
+      get().fetchPlans(root || undefined);
+    })();
+  },
+
+  onPlanDeleted: (planUid) => {
+    set((s) => {
+      const plans = s.plans.filter((p) => p.uid !== planUid);
+      // If the deleted plan is the active one, clear it
+      if (s.activePlanUid === planUid) {
+        return { plans, activePlan: null, activePlanUid: null, comments: [], planDocs: [], selectedDocUid: null, taskContexts: {}, activityEvents: [] };
+      }
+      return { plans };
     });
   },
 
