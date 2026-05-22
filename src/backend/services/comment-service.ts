@@ -189,25 +189,28 @@ export function listItemComments(itemUid: string): Comment[] {
 }
 
 /**
- * Comments authored since `since` (ms epoch) on either a single task
- * or every task in a plan. Used by `get_drift_report` to surface
- * "comment activity since last check".
+ * Comments authored since `since` (ms epoch) on any item in a plan.
+ * Queries V2 plan_items first, falls back to legacy tasks table for
+ * older plans. Used by `get_drift_report` and `get_plan_summary`.
  */
 export function listCommentsForPlanSince(planUid: string, since: number): Comment[] {
   const db = getDb();
-  // Pull task uids for the plan, then fetch comments for any of them.
-  const taskRows = db.exec(`SELECT uid FROM tasks WHERE plan_uid = ?`, [planUid]);
-  const taskUids: string[] = (taskRows[0]?.values ?? []).map((r: any[]) => r[0] as string);
-  if (taskUids.length === 0) return [];
-  // Build a parameterised IN clause. SQLite-via-sql.js doesn't support
-  // array bindings so we splat the placeholders.
-  const placeholders = taskUids.map(() => '?').join(', ');
+  // V2: pull item uids from plan_items
+  const itemRows = db.exec(`SELECT uid FROM plan_items WHERE plan_uid = ?`, [planUid]);
+  let targetUids: string[] = (itemRows[0]?.values ?? []).map((r: any[]) => r[0] as string);
+  // Fallback: legacy tasks table for pre-migration plans
+  if (targetUids.length === 0) {
+    const taskRows = db.exec(`SELECT uid FROM tasks WHERE plan_uid = ?`, [planUid]);
+    targetUids = (taskRows[0]?.values ?? []).map((r: any[]) => r[0] as string);
+  }
+  if (targetUids.length === 0) return [];
+  const placeholders = targetUids.map(() => '?').join(', ');
   const result = db.exec(
     `SELECT ${COMMENT_COLUMNS}
      FROM comments
      WHERE target_uid IN (${placeholders}) AND created_at > ?
      ORDER BY created_at ASC`,
-    [...taskUids, since],
+    [...targetUids, since],
   );
   if (!result[0]) return [];
   return result[0].values.map((r: any[]): Comment => rowToComment(r));

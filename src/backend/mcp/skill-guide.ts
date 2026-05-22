@@ -266,8 +266,6 @@ edges.
 |------|-------------|
 | \`register_session(agent_type, model?, capabilities?)\` | Identify yourself; declare skills for task routing |
 | \`set_active_plan(plan_uid)\` | Declare which plan you're working on |
-| \`add_comment(target_uid, body, comment_type?)\` | Leave a comment on a plan |
-| \`get_comments(target_uid)\` | Read plan-level comments |
 
 ### UI control
 

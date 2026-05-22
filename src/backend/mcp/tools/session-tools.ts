@@ -11,7 +11,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'register_session',
     {
-      description: 'Register this agent connection with CodeTrellis. Identifies who you are, what model you use, and what capabilities you have. Capabilities are used for skill-matching when claiming tasks — declare your MCP servers, language proficiencies, and skills so CodeTrellis can route the right tasks to you.',
+      description: 'Register this agent connection with CodeTrellis. Identifies who you are, what model you use, and what capabilities you have. Capabilities are used for skill-matching when claiming Actions — declare your MCP servers, language proficiencies, and skills so CodeTrellis can route the right work to you.',
       inputSchema: {
         agent_type: z.string().describe('Agent type, e.g. claude-code, cursor, aider'),
         model: z.string().optional().describe('Model name, e.g. claude-opus-4, gpt-4o'),

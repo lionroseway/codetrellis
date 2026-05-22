@@ -112,13 +112,6 @@ exact parity | **No** = no MCP coverage
 | View activity feed | `get_plan_timeline` | **Yes** | Filterable by event type |
 | Click event to jump to item | — | **No** | UI navigation from event row |
 
-## Plan-Level Comments (Legacy)
-
-| UI Action | MCP Tool | Coverage | Notes |
-|---|---|---|---|
-| Add plan/task comment | `add_comment` | **Yes** | |
-| List plan/task comments | `get_comments` | **Yes** | |
-
 ## Drift / Deviations
 
 | UI Action | MCP Tool | Coverage | Notes |
@@ -235,6 +228,20 @@ exact parity | **No** = no MCP coverage
 | Pin/unpin project | — | **No** | |
 | Remove from recents | — | **No** | |
 
+## MCP Resources
+
+Read-only data endpoints agents can fetch via `resources/read`.
+
+| Resource URI | What it provides |
+|---|---|
+| `codetrellis://skill` | Project-state-tailored agent guide (plans, systems, sessions) |
+| `codetrellis://skill/quickstart` | First-time agent quickstart flow |
+| `codetrellis://skill/power-user` | Deep usage guide (drift, multi-agent, phases) |
+| `project://graph` | Full dependency graph as JSON (all file-to-file import edges) |
+| `codetrellis://plans` | List of all plans |
+| `codetrellis://sessions` | Active agent sessions |
+| `project://stats` | Database stats (file count, symbol count, edge count) |
+
 ---
 
 ## Coverage Summary
@@ -257,51 +264,10 @@ exact parity | **No** = no MCP coverage
 | Settings | 7 | 6 | 0 | 1 |
 | Welcome screen | 4 | 2 | 0 | 2 |
 | Diagnostics / help | 3 | 3 | 0 | 0 |
-| **Total** | **133** | **111** | **6** | **16** |
+| MCP resources | 7 | 7 | 0 | 0 |
+| **Total** | **138** | **118** | **6** | **14** |
 
-**83% covered** — remaining gaps are check-for-updates, pin/unpin
-projects, and a handful of UI-only interactions (right-click menus,
-2D/3D toggle, drag-drop).
-
----
-
-## Implemented MCP Tools (Phase 18)
-
-### Tier 1 — Agent Workbench Essentials (DONE)
-
-| Tool | Domain | Status |
-|---|---|---|
-| `terminal_create` | Terminal | Done |
-| `terminal_write` | Terminal | Done |
-| `terminal_read` | Terminal | Done |
-| `terminal_list` | Terminal | Done |
-| `terminal_kill` | Terminal | Done |
-| `terminal_resize` | Terminal | Done |
-| `screenshot` | UI | Done |
-| `select_item` | UI Nav | Done |
-| `open_project` | Project | Done |
-
-### Tier 2 — Graph Visual Control (DONE)
-
-| Tool | Domain | Status |
-|---|---|---|
-| `graph_focus` | Graph | Done |
-| `graph_select` | Graph | Done |
-| `graph_set_mode` | Graph | Done |
-| `graph_set_scope` | Graph | Done |
-| `graph_set_layout` | Graph | Done |
-| `graph_set_depth` | Graph | Done |
-| `graph_export` | Graph | Done |
-| `graph_snapshot` | Graph | Done |
-
-### Tier 3 — Full Parity (DONE)
-
-| Tool | Domain | Status |
-|---|---|---|
-| `delete_item_comment` | Items | Done |
-| `delete_item_attachment` | Items | Done |
-| `rescan_project` | Project | Done |
-| `set_baseline` | Project | Done |
-| `list_recent_projects` | Project | Done |
-| `import_external` | Plans | Done |
-| `copy_plan_as_prompt` | Plans | Done |
+**87 MCP tools + 7 MCP resources = 94 endpoints.** UI action coverage
+is **85%** — remaining gaps are check-for-updates, pin/unpin projects,
+and a handful of UI-only interactions (right-click menus, 2D/3D toggle,
+drag-drop).

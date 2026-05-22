@@ -55,7 +55,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'list_proposed_changes',
     {
-      description: 'Granular CRUD feed projected from a plan\'s tasks: every affected file, symbol_spec, new_connection, and removed_connection becomes one ProposedChange row with operation (add/modify/remove/move), kind (file/symbol/connection), target, and a drift status (planned / in_progress / satisfied / missing / unexpected). Use this instead of walking task fields by hand to ask "what\'s left in this plan?".',
+      description: 'Granular CRUD feed projected from a plan\'s Actions: every affected file, symbol_spec, new_connection, and removed_connection becomes one ProposedChange row with operation (add/modify/remove/move), kind (file/symbol/connection), target, and a drift status (planned / in_progress / satisfied / missing / unexpected). Use this instead of walking item fields by hand to ask "what\'s left in this plan?".',
       inputSchema: { plan_uid: z.string() },
     },
     async ({ plan_uid }) => {
@@ -96,7 +96,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'get_drift_report',
     {
       description:
-        'Check if you are still following the plan. Compares the baseline snapshot (captured at plan approval) against the current live state. Returns what has changed, what is on track, and what has drifted. Phase 14 §A also surfaces task comment activity since `since_ms` (or since the baseline snapshot when omitted) so a returning agent can see what humans / other agents have said while it was away.',
+        'Check if you are still following the plan. Compares the baseline snapshot (captured at plan approval) against the current live state. Returns what has changed, what is on track, and what has drifted. Also surfaces comment activity since `since_ms` (or since the baseline snapshot when omitted) so a returning agent can see what humans / other agents have said while it was away.',
       inputSchema: {
         plan_uid: z.string(),
         since_ms: z.number().int().optional().describe('Epoch ms cutoff for "comment activity since". Defaults to the baseline snapshot timestamp.'),
@@ -114,11 +114,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
 
       const plan = deps.planService.getPlan(plan_uid);
       const items = deps.planItemService.listItemSummaries(plan_uid);
-      const v2Actions = items.filter((i: any) => i.kind === 'action');
-      const completedItems = v2Actions.filter((i: any) => i.status === 'done').length;
-      const totalItems = v2Actions.length;
-      const completedTasks = totalItems > 0 ? completedItems : (plan?.tasks.filter((t: any) => t.status === 'done').length || 0);
-      const totalTasks = totalItems > 0 ? totalItems : (plan?.tasks.length || 0);
+      const actions = items.filter((i: any) => i.kind === 'action');
+      const completedTasks = actions.filter((i: any) => i.status === 'done').length;
+      const totalTasks = actions.length;
 
       const since = since_ms ?? snapshots[0].createdAt;
       const recentComments = deps.commentService.listCommentsForPlanSince(plan_uid, since);

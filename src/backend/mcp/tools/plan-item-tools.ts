@@ -183,7 +183,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'One round-trip context bundle: item + parent (if any) + immediate children + attachments + comments + recent versions. ' +
-        'Use this when picking up an Action so you don\'t need separate calls for context. Replaces read_task_full for V2.',
+        'Use this when picking up an Action so you don\'t need separate calls for context.',
       inputSchema: { uid: z.string() },
     },
     async ({ uid }) => {
@@ -333,7 +333,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Atomically claim an Action (only succeeds if status=pending and unclaimed). Errors politely on Objects. ' +
         'Returns full item context (item + parent + children + attachments + comments) in the success payload, ' +
-        'plus a `conflicts` list when other in-progress Actions touch overlapping files. Replaces claim_task for V2. ' +
+        'plus a `conflicts` list when other in-progress Actions touch overlapping files. ' +
         'Respects claim policies (human-only, assigned, agent-type restrictions) and skill requirements.',
       inputSchema: {
         uid: z.string(),
@@ -388,7 +388,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'get_next_item',
     {
       description:
-        'Get the next claimable Action from a plan (V2). Respects dependency order and approval gates. ' +
+        'Get the next claimable Action from a plan. Respects dependency order and approval gates. ' +
         'When an approval gate blocks the next item, returns a `gated` payload telling you to wait.',
       inputSchema: {
         plan_uid: z.string(),
@@ -589,8 +589,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'list_item_comments',
     {
       description:
-        'Read all comments on an item, ordered chronologically. Each comment carries kind (note/blocker/progress/question) + source (agent/human) + optional metadata (e.g. progressPercent). ' +
-        'Replaces list_task_comments for V2.',
+        'Read all comments on an item, ordered chronologically. Each comment carries kind (note/blocker/progress/question) + source (agent/human) + optional metadata (e.g. progressPercent).',
       inputSchema: { uid: z.string() },
     },
     async ({ uid }) => {

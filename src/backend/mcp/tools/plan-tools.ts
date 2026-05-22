@@ -81,7 +81,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'list_plans',
     {
-      description: 'List plans, optionally filtered by project path or status. Returns lightweight summaries with V2 item counts. Use limit/offset for pagination.',
+      description: 'List plans, optionally filtered by project path or status. Returns lightweight summaries with item counts. Use limit/offset for pagination.',
       inputSchema: {
         project_path: z.string().optional(),
         status: z.string().optional(),
@@ -156,51 +156,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
-  // Legacy tool — kept for backward compatibility
-  server.registerTool(
-    'report_plan',
-    {
-      description: '[Legacy] Report a plan. Creates plan metadata and V2 Actions for each step. Prefer create_plan + bulk_add_items.',
-      inputSchema: {
-        title: z.string(),
-        steps: z.array(z.object({
-          description: z.string(),
-          files: z.array(z.string()).optional(),
-        })),
-      },
-    },
-    async ({ title, steps }) => {
-      const plan = deps.planService.createPlan(
-        { title, description: '', tasks: [] },
-        'agent', 'mcp', '',
-      );
-      for (const step of steps) {
-        deps.planItemService.createItem({
-          planUid: plan.uid,
-          kind: 'action',
-          parentUid: null,
-          title: step.description,
-          body: '',
-          template: null,
-          status: 'pending',
-          scopePath: null,
-          fileSpecs: step.files?.map((f) => ({ path: f, action: 'modify' as const })),
-          author: 'agent',
-          authorType: 'mcp',
-        });
-      }
-      const n = deps.broadcast('plan-created', { plan });
-      deps.saveNow(() => deps.exportDatabase());
-      return resultWithMeta({ uid: plan.uid, title, steps: steps.length }, n);
-    },
-  );
-
   // --- Plan File Sync ---
 
   server.registerTool(
     'export_plan_to_files',
     {
-      description: 'Round-trip a plan to disk as YAML under `<projectRoot>/.codetrellis/plans/<slug>/`. Plans with V2 items export a nested `items/` tree (version 2); legacy plans export the old phases/tasks/docs layout. Idempotent — re-exporting overwrites the same files. Use this so plans can be committed to git and shared across devices / agents.',
+      description: 'Round-trip a plan to disk as YAML under `<projectRoot>/.codetrellis/plans/<slug>/`. Exports a nested `items/` tree layout. Idempotent — re-exporting overwrites the same files. Use this so plans can be committed to git and shared across devices / agents.',
       inputSchema: {
         plan_uid: z.string(),
         project_root: z.string().describe('Absolute path to the project repo root. The .codetrellis/ directory will be created inside it.'),
@@ -225,7 +186,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'import_plan_from_files',
     {
-      description: 'Read a plan directory (`.codetrellis/plans/<slug>/`) from disk and upsert it into the DB. Detects V2 format (version:2 or items/ directory) automatically — V2 imports create plan_items, V1 imports create legacy tasks/phases/docs. UID-based upsert is idempotent. Use after `git pull` to sync external changes.',
+      description: 'Read a plan directory (`.codetrellis/plans/<slug>/`) from disk and upsert it into the DB. Detects format automatically. UID-based upsert is idempotent. Use after `git pull` to sync external changes.',
       inputSchema: {
         plan_dir: z.string().describe('Absolute path to the plan directory (or directly to plan.yaml).'),
       },
@@ -234,7 +195,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       try {
         const result = deps.planFileService.importPlan(plan_dir);
         deps.broadcast('plan-imported', { planUid: result.plan.uid, source: plan_dir });
-        if (result.version === 2) {
+        if (result.items) {
           for (const item of result.items) {
             deps.broadcast('plan-item-created', { item });
           }
@@ -245,10 +206,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
             type: 'text' as const,
             text: JSON.stringify({
               plan: { uid: result.plan.uid, title: result.plan.title },
-              version: result.version,
-              ...(result.version === 2
-                ? { itemCount: result.items.length }
-                : { phaseCount: result.phases.length, taskCount: result.tasks.length, docCount: result.docs.length }),
+              itemCount: result.items?.length ?? 0,
               warnings: result.warnings,
             }, null, 2),
           }],
@@ -296,7 +254,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'publish_plan_as_template',
     {
-      description: 'Snapshot a plan as a reusable template under `<project_root>/.codetrellis/templates/<template_id>/`. Plans with V2 items produce a template with a nested `items` tree; legacy plans produce the old phases/docs shape. Strips runtime fields (statuses, assignees). The result can be shared via git.',
+      description: 'Snapshot a plan as a reusable template under `<project_root>/.codetrellis/templates/<template_id>/`. Produces a template with a nested items tree. Strips runtime fields (statuses, assignees). The result can be shared via git.',
       inputSchema: {
         plan_uid: z.string(),
         project_root: z.string(),
@@ -331,7 +289,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'list_plan_templates',
     {
-      description: 'List the available plan templates. Includes built-ins, user-global templates from `~/.codetrellis/templates/`, and project-local templates from `<project_root>/.codetrellis/templates/` when project_root is provided. Each template seeds a plan + phases + spec docs in one go.',
+      description: 'List the available plan templates. Includes built-ins, user-global templates from `~/.codetrellis/templates/`, and project-local templates from `<project_root>/.codetrellis/templates/` when project_root is provided. Each template seeds a full plan tree in one go.',
       inputSchema: {
         project_root: z.string().optional().describe('Project root for picking up team-published templates from `.codetrellis/templates/`. Optional — without it, only built-ins + user-global templates are returned.'),
       },
@@ -344,7 +302,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'create_plan_from_template',
     {
-      description: 'Create a new plan from a template in one call. V2 templates (with items tree) create V2 plan_items directly; legacy templates create phases + docs. Use list_plan_templates to pick a template_id. Pass `placeholder_values` for templates with `{{key}}` placeholders.',
+      description: 'Create a new plan from a template in one call. Use list_plan_templates to pick a template_id. Pass `placeholder_values` for templates with `{{key}}` placeholders.',
       inputSchema: {
         template_id: z.string().describe('e.g. "mass-refactor"'),
         project_path: z.string(),
@@ -372,11 +330,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
           placeholderValues: placeholder_values,
         });
         deps.broadcast('plan-created', { plan: result.plan });
-        if (result.version === 2) {
+        if (result.items) {
           for (const item of result.items) deps.broadcast('plan-item-created', { item });
-        } else {
-          for (const phase of result.phases) deps.broadcast('plan-phase-created', { phase });
-          for (const doc of result.docs) deps.broadcast('plan-doc-created', { doc });
         }
         deps.saveNow(() => deps.exportDatabase());
         return {
@@ -384,10 +339,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
             type: 'text' as const,
             text: JSON.stringify({
               plan: result.plan,
-              version: result.version,
-              ...(result.version === 2
-                ? { itemCount: result.items.length, hint: 'Use list_items(plan_uid) to browse the plan tree.' }
-                : { phaseCount: result.phases.length, docCount: result.docs.length, taskCount: result.tasks.length }),
+              itemCount: result.items?.length ?? 0,
+              hint: 'Use list_items(plan_uid) to browse the plan tree.',
             }, null, 2),
           }],
         };
@@ -484,36 +437,4 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
-  // --- Legacy Comment Tools ---
-
-  server.registerTool(
-    'add_comment',
-    {
-      description: 'Leave a comment on a plan or task. Use this to communicate with the user or other agents.',
-      inputSchema: {
-        target_uid: z.string().describe('Plan UID or Task UID to comment on'),
-        body: z.string().describe('Comment text (markdown supported)'),
-        comment_type: z.enum(['comment', 'suggestion', 'approval', 'concern', 'status_update']).optional(),
-        parent_uid: z.string().optional().describe('Parent comment UID for threading'),
-      },
-    },
-    async ({ target_uid, body, comment_type, parent_uid }) => {
-      const comment = deps.commentService.addComment('plan', target_uid, 'agent', 'mcp', body, comment_type || 'comment', parent_uid);
-      deps.broadcast('comment-added', { comment });
-      deps.saveNow(() => deps.exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Comment added to ${target_uid}` }] };
-    },
-  );
-
-  server.registerTool(
-    'get_comments',
-    {
-      description: 'Read all comments on a plan or task.',
-      inputSchema: { target_uid: z.string() },
-    },
-    async ({ target_uid }) => {
-      const comments = deps.commentService.getComments(target_uid);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(comments, null, 2) }] };
-    },
-  );
 }
