@@ -628,13 +628,30 @@ function BodyEditor({ item }: { item: PlanItem }) {
   const [body, setBody] = useState(item.body ?? '');
   // Start in edit mode when the body is empty — no click-to-enter needed.
   const [editingBody, setEditingBody] = useState(!(item.body ?? '').trim());
+  // Track whether the user has actually typed in the body textarea.
+  // Prevents clobbering server body with empty local state when
+  // fetchItemFull hasn't resolved yet (hydration returns summaries
+  // without body, so the initial local state is '').
+  const userEditedBody = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset local state when the selected item flips.
+  // When the user navigates to a different item, reset everything.
   useEffect(() => {
+    userEditedBody.current = false;
     setTitle(item.title);
     setBody(item.body ?? '');
+    setEditingBody(!(item.body ?? '').trim());
   }, [item.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When the body arrives from fetchItemFull (hydration returns
+  // summaries without body; the full item lands async and we must
+  // pick it up). Only sync when the user hasn't started editing.
+  useEffect(() => {
+    if (!userEditedBody.current) {
+      setBody(item.body ?? '');
+      setEditingBody(!(item.body ?? '').trim());
+    }
+  }, [item.body]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced autosave for title.
   const saveTitle = (next: string) => {
@@ -647,16 +664,23 @@ function BodyEditor({ item }: { item: PlanItem }) {
 
   const saveBody = async () => {
     setEditingBody(false);
+    if (!userEditedBody.current) return; // never touched — don't clobber
     if (body !== (item.body ?? '')) {
       await updateItem(item.uid, { body });
     }
+  };
+
+  // Wrap setBody so every user keystroke marks the ref.
+  const setBodyFromUser = (next: string) => {
+    userEditedBody.current = true;
+    setBody(next);
   };
 
   // Slash menu — sub-pages and Actions land as children of THIS item.
   const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
   const slash = useSlashMenu({
     textareaRef: bodyTextareaRef,
-    onChange: setBody,
+    onChange: setBodyFromUser,
     parentItemUid: item.uid,
   });
   // 15.D.2 — when user @-mentions a file or symbol, also write to
@@ -679,7 +703,7 @@ function BodyEditor({ item }: { item: PlanItem }) {
   };
   const mention = useMentionPicker({
     textareaRef: bodyTextareaRef,
-    onChange: setBody,
+    onChange: setBodyFromUser,
     onFileTarget: handleFileTarget,
     onSymbolTarget: handleSymbolTarget,
   });
@@ -700,7 +724,7 @@ function BodyEditor({ item }: { item: PlanItem }) {
             autoFocus
             ref={bodyTextareaRef}
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={(e) => setBodyFromUser(e.target.value)}
             onBlur={saveBody}
             onKeyDown={(e) => {
               slash.textareaProps.onKeyDown(e);
@@ -710,6 +734,7 @@ function BodyEditor({ item }: { item: PlanItem }) {
               if (e.key === 'Escape') {
                 setBody(item.body ?? '');
                 setEditingBody(false);
+                userEditedBody.current = false;
               }
               if ((e.metaKey || e.ctrlKey) && e.key === 's') {
                 e.preventDefault();
