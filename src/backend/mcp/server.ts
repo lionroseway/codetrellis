@@ -31,7 +31,7 @@ import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-sys
 import * as terminalService from '../services/terminal-service';
 import * as planFileService from '../services/plan-file-service';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
-import { getSettings } from '../services/settings-service';
+import { getSettings, updateSettings } from '../services/settings-service';
 import * as externalRefsService from '../services/external-refs-service';
 import { listRecentProjects } from '../services/recent-projects-service';
 import * as planImportService from '../services/plan-import-service';
@@ -2806,6 +2806,65 @@ function setupMcpServerInstance(): McpServer {
       const refs = externalRefsService.getExternalRefsByPlan(plan_uid);
       const prompt = buildPlanPrompt(plan, items, refs);
       return { content: [{ type: 'text' as const, text: prompt }] };
+    },
+  );
+
+  // ── Settings ──────────────────────────────────────────────────────────
+
+  mcpServer.registerTool(
+    'get_settings',
+    {
+      description:
+        'Read the current CodeTrellis settings — identity (display name, email), MCP server config (port, auto-detect), ' +
+        'plan defaults (visibility, attachment location), and data directory.',
+      inputSchema: {},
+    },
+    async () => {
+      const settings = getSettings();
+      return { content: [{ type: 'text' as const, text: JSON.stringify(settings, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'update_settings',
+    {
+      description:
+        'Update CodeTrellis settings. Pass only the fields you want to change — ' +
+        'unmentioned fields are preserved. Nested objects are deep-merged. ' +
+        'Note: changing the MCP port requires a server restart to take effect.',
+      inputSchema: {
+        identity: z.object({
+          displayName: z.string().optional().describe('Display name shown in attributions.'),
+          email: z.string().optional().describe('Email used as canonical author key.'),
+        }).optional().describe('Identity settings.'),
+        mcp: z.object({
+          port: z.number().optional().describe('Preferred MCP port (default 19432).'),
+          autodetectOnCollision: z.boolean().optional().describe('Try next ports if preferred is in use.'),
+        }).optional().describe('MCP server settings.'),
+        plans: z.object({
+          defaultVisibility: z.enum(['shared', 'local']).optional().describe('"shared" = export to .codetrellis/plans/, "local" = DB-only.'),
+          attachmentLocation: z.enum(['project', 'user']).optional().describe('"project" = in repo, "user" = user data dir.'),
+        }).optional().describe('Plan default settings.'),
+      },
+    },
+    async ({ identity, mcp, plans }) => {
+      const patch: any = {};
+      if (identity) patch.identity = identity;
+      if (mcp) patch.mcp = mcp;
+      if (plans) patch.plans = plans;
+
+      const updated = updateSettings(patch);
+      broadcast('settings-changed', { settings: updated });
+
+      const changes: string[] = [];
+      if (identity?.displayName !== undefined) changes.push(`display name → "${identity.displayName}"`);
+      if (identity?.email !== undefined) changes.push(`email → "${identity.email}"`);
+      if (mcp?.port !== undefined) changes.push(`MCP port → ${mcp.port} (restart needed)`);
+      if (mcp?.autodetectOnCollision !== undefined) changes.push(`auto-detect port → ${mcp.autodetectOnCollision}`);
+      if (plans?.defaultVisibility !== undefined) changes.push(`plan visibility → ${plans.defaultVisibility}`);
+      if (plans?.attachmentLocation !== undefined) changes.push(`attachment location → ${plans.attachmentLocation}`);
+
+      return { content: [{ type: 'text' as const, text: `Settings updated: ${changes.join(', ')}` }] };
     },
   );
 

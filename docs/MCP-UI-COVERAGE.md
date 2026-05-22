@@ -209,11 +209,12 @@ exact parity | **No** = no MCP coverage
 
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
-| Change display name | — | **No** | |
-| Change email | — | **No** | |
-| Change MCP port | — | **No** | |
-| Change plans visibility | — | **No** | |
-| Change attachment location | — | **No** | |
+| Read all settings | `get_settings` | **Yes** | Returns full settings JSON |
+| Change display name | `update_settings` | **Yes** | `identity.displayName` |
+| Change email | `update_settings` | **Yes** | `identity.email` |
+| Change MCP port | `update_settings` | **Yes** | `mcp.port` (restart needed) |
+| Change plans visibility | `update_settings` | **Yes** | `plans.defaultVisibility` |
+| Change attachment location | `update_settings` | **Yes** | `plans.attachmentLocation` |
 | Check for updates | — | **No** | |
 
 ## Welcome Screen
@@ -244,12 +245,13 @@ exact parity | **No** = no MCP coverage
 | UI navigation | 12 | 6 | 0 | 6 |
 | Terminal panel | 10 | 9 | 1 | 0 |
 | Project / session | 7 | 5 | 0 | 2 |
-| Settings | 6 | 0 | 0 | 6 |
+| Settings | 7 | 6 | 0 | 1 |
 | Welcome screen | 4 | 2 | 0 | 2 |
-| **Total** | **128** | **98** | **5** | **25** |
+| **Total** | **129** | **104** | **5** | **20** |
 
-**77% covered** (was 56%) — remaining gaps are mostly settings,
-niche welcome screen actions, and a few UI-only interactions.
+**81% covered** (was 56%) — remaining gaps are check-for-updates,
+pin/unpin projects, and a handful of UI-only interactions (right-click
+menus, clipboard paste, 2D/3D toggle).
 
 ---
 
