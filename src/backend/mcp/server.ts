@@ -32,6 +32,7 @@ import * as terminalService from '../services/terminal-service';
 import * as planFileService from '../services/plan-file-service';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
 import { getSettings, updateSettings } from '../services/settings-service';
+import { tailLog, getCurrentLogPath, getLogDir } from '../services/logger';
 import * as externalRefsService from '../services/external-refs-service';
 import { listRecentProjects } from '../services/recent-projects-service';
 import * as planImportService from '../services/plan-import-service';
@@ -2865,6 +2866,134 @@ function setupMcpServerInstance(): McpServer {
       if (plans?.attachmentLocation !== undefined) changes.push(`attachment location → ${plans.attachmentLocation}`);
 
       return { content: [{ type: 'text' as const, text: `Settings updated: ${changes.join(', ')}` }] };
+    },
+  );
+
+  // ── Clipboard ────────────────────────────────────────────────────────
+
+  mcpServer.registerTool(
+    'clipboard_write',
+    {
+      description:
+        'Copy text to the user\'s clipboard. Use this to share code snippets, plan prompts, ' +
+        'architecture summaries, or any text the user might want to paste elsewhere.',
+      inputSchema: {
+        text: z.string().describe('The text to copy to the clipboard.'),
+      },
+    },
+    async ({ text }) => {
+      broadcast('ui-clipboard-write', { text });
+      return { content: [{ type: 'text' as const, text: `Copied ${text.length} chars to clipboard` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'clipboard_read',
+    {
+      description:
+        'Read the current contents of the user\'s clipboard. Useful for importing text the user ' +
+        'has copied from another app (a GitHub issue, a Slack message, code from their editor, etc.).',
+      inputSchema: {},
+    },
+    async () => {
+      // Clipboard read requires the frontend to access navigator.clipboard.readText()
+      // and send the result back, same pattern as screenshots.
+      const nonce = `cb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const p = new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pendingScreenshots.delete(nonce);
+          reject(new Error('Clipboard read timed out — is the CodeTrellis UI open and focused?'));
+        }, 10_000);
+        pendingScreenshots.set(nonce, { resolve, reject, timer });
+      });
+
+      broadcast('ui-clipboard-read', { nonce });
+
+      try {
+        const text = await p;
+        return { content: [{ type: 'text' as const, text: text || '(clipboard is empty)' }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: err instanceof Error ? err.message : String(err) }], isError: true };
+      }
+    },
+  );
+
+  // ── Logs ─────────────────────────────────────────────────────────────
+
+  mcpServer.registerTool(
+    'get_logs',
+    {
+      description:
+        'Read the tail of the CodeTrellis application log. Returns the most recent log entries ' +
+        'from the current day\'s log file. Useful for diagnosing errors, checking parse results, ' +
+        'or understanding what happened during a scan or agent operation.',
+      inputSchema: {
+        lines: z.number().optional().describe('Approximate number of lines to return (default ~500). Max constrained by 64KB.'),
+        filter: z.string().optional().describe('Optional grep-style filter — only return lines containing this string (case-insensitive).'),
+      },
+    },
+    async ({ lines, filter }) => {
+      const maxBytes = Math.min((lines ?? 500) * 200, 64 * 1024);
+      let content = tailLog(maxBytes);
+
+      if (filter) {
+        const lower = filter.toLowerCase();
+        content = content
+          .split('\n')
+          .filter((line) => line.toLowerCase().includes(lower))
+          .join('\n');
+      }
+
+      if (!content.trim()) {
+        return { content: [{ type: 'text' as const, text: '(no log entries found)' }] };
+      }
+
+      return { content: [{ type: 'text' as const, text: content }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'get_log_path',
+    {
+      description:
+        'Get the path to the current log file and logs directory. Useful if the agent needs ' +
+        'to tell the user where to find logs, or to read logs directly from disk.',
+      inputSchema: {},
+    },
+    async () => {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            currentLogFile: getCurrentLogPath(),
+            logDirectory: getLogDir(),
+          }, null, 2),
+        }],
+      };
+    },
+  );
+
+  // ── App Guide / Instructions ─────────────────────────────────────────
+
+  mcpServer.registerTool(
+    'get_app_guide',
+    {
+      description:
+        'Get instructions on how to use CodeTrellis. Returns a comprehensive markdown guide ' +
+        'covering available MCP tools, workflows, and best practices. Three flavors: ' +
+        '"summary" = project-state-tailored overview with active plans and agents, ' +
+        '"quickstart" = minimum viable agent workflow (register → find plan → claim → work → verify → done), ' +
+        '"power-user" = deep features (phased plans, multi-agent, spec docs, drift, snapshots).',
+      inputSchema: {
+        flavor: z.enum(['summary', 'quickstart', 'power-user']).optional().describe(
+          'Which guide to return. Default "summary". Use "quickstart" for first-time setup, "power-user" for advanced features.',
+        ),
+      },
+    },
+    async ({ flavor }) => {
+      const guide = buildSkillGuide(flavor ?? 'summary');
+      return { content: [{ type: 'text' as const, text: guide }] };
     },
   );
 

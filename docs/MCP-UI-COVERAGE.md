@@ -65,7 +65,7 @@ exact parity | **No** = no MCP coverage
 | Edit item body (markdown) | `update_item` | **Yes** | |
 | Change item status | `update_item` | **Yes** | |
 | Toggle approval gate | `update_item` | **Yes** | requiresApproval field |
-| Copy item context to clipboard | — | **No** | Serialises item for clipboard |
+| Copy item context to clipboard | `clipboard_write` + `copy_plan_as_prompt` | **Yes** | Serialise then copy |
 | View item version history | — | **Partial** | `read_item_full` returns versions but no dedicated history view tool |
 | Slash commands in body (/, @) | — | **No** | Rich text shortcuts, inline only |
 
@@ -80,7 +80,7 @@ exact parity | **No** = no MCP coverage
 | Mark item blocked | `set_item_blocked` | **Yes** | |
 | Add attachment (URL/image/code/transcript) | `add_item_attachment` | **Yes** | |
 | Remove attachment | `delete_item_attachment` | **Yes** | |
-| Paste image/video from clipboard | — | **No** | Canvas-level paste handler |
+| Paste image/video from clipboard | `clipboard_read` + `add_item_attachment` | **Partial** | Text clipboard; images use attachment API |
 | Drag-drop file as attachment | — | **No** | |
 
 ## Item Targets (fileSpecs / symbolSpecs / edges)
@@ -247,11 +247,11 @@ exact parity | **No** = no MCP coverage
 | Project / session | 7 | 5 | 0 | 2 |
 | Settings | 7 | 6 | 0 | 1 |
 | Welcome screen | 4 | 2 | 0 | 2 |
-| **Total** | **129** | **104** | **5** | **20** |
+| **Total** | **129** | **107** | **6** | **16** |
 
-**81% covered** (was 56%) — remaining gaps are check-for-updates,
+**83% covered** (was 56%) — remaining gaps are check-for-updates,
 pin/unpin projects, and a handful of UI-only interactions (right-click
-menus, clipboard paste, 2D/3D toggle).
+menus, 2D/3D toggle, drag-drop).
 
 ---
 

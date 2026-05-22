@@ -485,6 +485,40 @@ export function useWebSocket() {
             })();
           }
 
+          // --- Clipboard write (MCP clipboard_write tool) ---
+          if (type === 'ui-clipboard-write') {
+            const text = payload?.text as string | undefined;
+            if (text !== undefined) {
+              navigator.clipboard.writeText(text).catch((err) => {
+                console.error('[WS] Clipboard write failed:', err);
+              });
+            }
+          }
+
+          // --- Clipboard read (MCP clipboard_read tool) ---
+          if (type === 'ui-clipboard-read') {
+            const nonce = payload?.nonce as string | undefined;
+            if (nonce) {
+              (async () => {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  await fetch('/api/screenshot-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nonce, data: text }),
+                  });
+                } catch (err) {
+                  console.error('[WS] Clipboard read failed:', err);
+                  await fetch('/api/screenshot-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nonce, data: '' }),
+                  }).catch(() => {});
+                }
+              })();
+            }
+          }
+
         } catch {
           // ignore malformed messages
         }
