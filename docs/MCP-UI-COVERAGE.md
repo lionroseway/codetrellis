@@ -38,6 +38,7 @@ exact parity | **No** = no MCP coverage
 | Import plan from disk | `import_plan_from_files` | **Yes** | V1 + V2 YAML formats |
 | Export plan to disk | `export_plan_to_files` | **Yes** | V1 + V2 tree layout |
 | Discover plan files on disk | `discover_plan_files` | **Yes** | |
+| Unlink plan from disk sync | `unlink_plan_from_files` | **Yes** | Shared → Local toggle |
 | Publish plan as template | `publish_plan_as_template` | **Yes** | |
 | Import from external (GitHub issue, conversation, etc.) | `import_external` | **Yes** | Conversation/markdown text import |
 | Copy plan as prompt (handoff) | `copy_plan_as_prompt` | **Yes** | Returns markdown prompt text |
@@ -217,6 +218,14 @@ exact parity | **No** = no MCP coverage
 | Change attachment location | `update_settings` | **Yes** | `plans.attachmentLocation` |
 | Check for updates | — | **No** | |
 
+## Diagnostics / Help
+
+| UI Action | MCP Tool | Coverage | Notes |
+|---|---|---|---|
+| Read application logs | `get_logs` | **Yes** | Tail with optional grep filter |
+| Get log file path | `get_log_path` | **Yes** | Current log file + directory |
+| Get usage guide | `get_app_guide` | **Yes** | summary / quickstart / power-user flavors |
+
 ## Welcome Screen
 
 | UI Action | MCP Tool | Coverage | Notes |
@@ -232,7 +241,7 @@ exact parity | **No** = no MCP coverage
 
 | Domain | Total Actions | MCP Covered | Partial | Not Covered |
 |---|---|---|---|---|
-| Plan management | 17 | 17 | 0 | 0 |
+| Plan management | 18 | 18 | 0 | 0 |
 | Plan items (CRUD) | 22 | 19 | 1 | 2 |
 | Comments / progress / attachments | 9 | 7 | 0 | 2 |
 | Item targets (fileSpecs etc.) | 8 | 8 | 0 | 0 |
@@ -247,11 +256,12 @@ exact parity | **No** = no MCP coverage
 | Project / session | 7 | 5 | 0 | 2 |
 | Settings | 7 | 6 | 0 | 1 |
 | Welcome screen | 4 | 2 | 0 | 2 |
-| **Total** | **129** | **107** | **6** | **16** |
+| Diagnostics / help | 3 | 3 | 0 | 0 |
+| **Total** | **133** | **111** | **6** | **16** |
 
-**83% covered** (was 56%) — remaining gaps are check-for-updates,
-pin/unpin projects, and a handful of UI-only interactions (right-click
-menus, 2D/3D toggle, drag-drop).
+**83% covered** — remaining gaps are check-for-updates, pin/unpin
+projects, and a handful of UI-only interactions (right-click menus,
+2D/3D toggle, drag-drop).
 
 ---
 
