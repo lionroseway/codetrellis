@@ -28,6 +28,7 @@ import { buildSkillGuide } from './skill-guide';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge a circular dependency that no longer applies.
 import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-system-service';
+import * as terminalService from '../services/terminal-service';
 import * as planFileService from '../services/plan-file-service';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
 import { getSettings } from '../services/settings-service';
@@ -2050,6 +2051,326 @@ function setupMcpServerInstance(): McpServer {
           }, null, 2),
         }],
       };
+    },
+  );
+
+  // =================================================================
+  // Phase 18: Agent Workbench — Terminal, Screenshot, UI Control
+  // =================================================================
+  //
+  // These tools let an AI agent fully control the CodeTrellis
+  // workspace: spawn and interact with terminals, capture screenshots,
+  // navigate the graph, and drive the UI. Together with the existing
+  // plan/item/graph tools, they make CodeTrellis a complete agent
+  // workbench that can be operated end-to-end via MCP.
+
+  // --- Terminal Tools ---
+
+  const agentPresetEnum = z.enum(['shell', 'claude', 'codex', 'aider']);
+
+  mcpServer.registerTool(
+    'terminal_create',
+    {
+      description:
+        'Create a new terminal session in CodeTrellis. Returns the session ID for use with terminal_write / terminal_read. ' +
+        'Preset "shell" opens a plain shell; "claude", "codex", "aider" open a shell and launch that agent after 500ms. ' +
+        'Multiple terminals can run concurrently (up to 20). The terminal is visible in the CodeTrellis UI.',
+      inputSchema: {
+        preset: agentPresetEnum.optional().describe('Agent preset or plain shell. Default: "shell".'),
+        cwd: z.string().optional().describe('Working directory. Defaults to the active project root.'),
+        title: z.string().optional().describe('Tab title. Auto-generated if omitted.'),
+      },
+    },
+    async ({ preset, cwd, title }) => {
+      try {
+        const session = terminalService.createTerminal({
+          preset: preset ?? 'shell',
+          cwd,
+          title,
+        });
+        broadcast('terminal-created', { session });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(session, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
+  mcpServer.registerTool(
+    'terminal_write',
+    {
+      description:
+        'Send input to a terminal session (keystrokes, commands). The text is written as-is — include "\\n" to press Enter. ' +
+        'Use terminal_list to find active session IDs. Each terminal is independent — target the right one.',
+      inputSchema: {
+        session_id: z.string().describe('Terminal session ID (from terminal_create or terminal_list).'),
+        input: z.string().describe('Text to write. Include "\\n" to execute a command.'),
+      },
+    },
+    async ({ session_id, input }) => {
+      const ok = terminalService.writeTerminal(session_id, input);
+      if (!ok) {
+        return { content: [{ type: 'text' as const, text: `Terminal ${session_id} not found or not alive.` }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: `Wrote ${input.length} chars to ${session_id}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'terminal_read',
+    {
+      description:
+        'Read recent output from a terminal session. Returns the last N lines of terminal output with ANSI codes stripped (plain text). ' +
+        'Useful for checking command results, build output, test results, or agent responses. ' +
+        'The terminal keeps a 64KB scrollback buffer — older output is lost.',
+      inputSchema: {
+        session_id: z.string().describe('Terminal session ID.'),
+        lines: z.number().int().min(1).max(500).optional().describe('Number of lines to return. Default 50.'),
+      },
+    },
+    async ({ session_id, lines }) => {
+      const output = terminalService.readTerminalOutput(session_id, lines);
+      if (output === null) {
+        return { content: [{ type: 'text' as const, text: `Terminal ${session_id} not found.` }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: output }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'terminal_list',
+    {
+      description:
+        'List all terminal sessions with their ID, preset, title, PID, and alive status. ' +
+        'Use this to find the right session_id for terminal_write / terminal_read.',
+      inputSchema: {
+        alive_only: z.boolean().optional().describe('Only show alive sessions. Default true.'),
+      },
+    },
+    async ({ alive_only }) => {
+      let sessions = terminalService.listTerminals();
+      if (alive_only !== false) {
+        sessions = sessions.filter((s) => s.alive);
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(sessions, null, 2) }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'terminal_kill',
+    {
+      description: 'Kill a terminal session. The terminal tab is removed from the CodeTrellis UI.',
+      inputSchema: {
+        session_id: z.string().describe('Terminal session ID to kill.'),
+      },
+    },
+    async ({ session_id }) => {
+      const ok = terminalService.killTerminal(session_id);
+      if (!ok) {
+        return { content: [{ type: 'text' as const, text: `Terminal ${session_id} not found.` }], isError: true };
+      }
+      broadcast('terminal-killed', { id: session_id });
+      return { content: [{ type: 'text' as const, text: `Killed terminal ${session_id}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'terminal_resize',
+    {
+      description: 'Resize a terminal session (cols × rows). Useful before reading output to ensure clean line wrapping.',
+      inputSchema: {
+        session_id: z.string(),
+        cols: z.number().int().min(40).max(400).describe('Column width.'),
+        rows: z.number().int().min(10).max(100).describe('Row height.'),
+      },
+    },
+    async ({ session_id, cols, rows }) => {
+      const ok = terminalService.resizeTerminal(session_id, cols, rows);
+      if (!ok) {
+        return { content: [{ type: 'text' as const, text: `Terminal ${session_id} not found or not alive.` }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: `Resized ${session_id} to ${cols}×${rows}` }] };
+    },
+  );
+
+  // --- Screenshot Tool ---
+
+  /**
+   * Screenshot capture uses a request/response pattern over the main
+   * WS broadcast channel. The MCP tool broadcasts `ui-screenshot-request`
+   * with a nonce; the frontend captures the viewport and sends back
+   * `ui-screenshot-response` with the nonce + base64 PNG data via
+   * POST /api/screenshot-response. The tool awaits the response with
+   * a timeout.
+   *
+   * This works in both web mode and Electron mode because it delegates
+   * capture to the renderer (which has access to the DOM).
+   */
+  const pendingScreenshots = new Map<string, {
+    resolve: (data: string) => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+
+  // Wire up the response endpoint — called once at server setup time.
+  // The REST route is registered in the tool handler's first call.
+  let screenshotRouteRegistered = false;
+
+  mcpServer.registerTool(
+    'screenshot',
+    {
+      description:
+        'Capture a screenshot of the CodeTrellis UI and return it as a base64-encoded PNG image. ' +
+        'Use this to see the current state of the graph, plan workspace, terminal output, or any other part of the UI. ' +
+        'The screenshot is taken from the connected browser/Electron window. ' +
+        'Optionally target a specific panel to capture only that area.',
+      inputSchema: {
+        panel: z.enum(['full', 'graph', 'plan', 'terminal']).optional().describe(
+          'Which panel to capture. "full" = entire window (default). "graph" = dependency graph canvas. "plan" = plan workspace. "terminal" = terminal panel.',
+        ),
+      },
+    },
+    async ({ panel }) => {
+      const nonce = `ss-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const target = panel ?? 'full';
+
+      // Register the REST response route on first use
+      if (!screenshotRouteRegistered) {
+        screenshotRouteRegistered = true;
+        // The route is already set up in server.ts via the
+        // screenshotResponseHandler export — we just need to resolve
+        // the pending promise here.
+      }
+
+      const p = new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pendingScreenshots.delete(nonce);
+          reject(new Error('Screenshot timed out — is the CodeTrellis UI open in a browser?'));
+        }, 10_000);
+        pendingScreenshots.set(nonce, { resolve, reject, timer });
+      });
+
+      broadcast('ui-screenshot-request', { nonce, panel: target });
+
+      try {
+        const base64 = await p;
+        return {
+          content: [{
+            type: 'image' as const,
+            data: base64,
+            mimeType: 'image/png',
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: err instanceof Error ? err.message : String(err) }], isError: true };
+      }
+    },
+  );
+
+  // Export the screenshot response handler so server.ts can wire the
+  // POST /api/screenshot-response route.
+  (globalThis as any).__screenshotResolve = (nonce: string, data: string) => {
+    const pending = pendingScreenshots.get(nonce);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingScreenshots.delete(nonce);
+      pending.resolve(data);
+    }
+  };
+
+  // --- UI Navigation (extended) ---
+
+  mcpServer.registerTool(
+    'select_item',
+    {
+      description:
+        'Navigate the plan workspace to a specific item by UID. The item will be selected in the sidebar tree and ' +
+        'its body/properties will appear in the canvas. If the plan workspace is not open, it will be opened automatically.',
+      inputSchema: {
+        item_uid: z.string().describe('UID of the plan item to select.'),
+        plan_uid: z.string().optional().describe('Plan UID (auto-detected from the item if omitted).'),
+      },
+    },
+    async ({ item_uid, plan_uid }) => {
+      // If plan_uid not provided, look it up from the item
+      let resolvedPlanUid = plan_uid;
+      if (!resolvedPlanUid) {
+        const item = planItemService.getItem(item_uid);
+        if (!item) {
+          return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found.` }], isError: true };
+        }
+        resolvedPlanUid = item.planUid;
+      }
+      // Open the plan workspace and select the item
+      broadcast('ui-navigate', { target: 'plan', planUid: resolvedPlanUid });
+      broadcast('ui-select-item', { planUid: resolvedPlanUid, itemUid: item_uid });
+      return { content: [{ type: 'text' as const, text: `Selected item ${item_uid} in plan ${resolvedPlanUid}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'open_project',
+    {
+      description:
+        'Open and scan a project directory in CodeTrellis. This triggers a full AST parse of the codebase, ' +
+        'building the dependency graph. Use this during onboarding to load a project for the first time.',
+      inputSchema: {
+        path: z.string().describe('Absolute path to the project root directory.'),
+      },
+    },
+    async ({ path: projectPath }) => {
+      // Broadcast to the frontend to open this project
+      broadcast('ui-open-project', { path: projectPath });
+      return { content: [{ type: 'text' as const, text: `Opening project: ${projectPath}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'graph_focus',
+    {
+      description:
+        'Focus the dependency graph on a specific file or directory. Pans and zooms the graph canvas to center the target node. ' +
+        'Use this to visually show the user a specific part of the architecture.',
+      inputSchema: {
+        path: z.string().describe('Relative path of the file or directory to focus on (e.g. "src/backend/services/plan-item-service.ts").'),
+        highlight: z.boolean().optional().describe('Briefly highlight the node with a glow effect. Default true.'),
+      },
+    },
+    async ({ path: targetPath, highlight }) => {
+      broadcast('ui-graph-focus', { path: targetPath, highlight: highlight !== false });
+      return { content: [{ type: 'text' as const, text: `Focused graph on ${targetPath}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'graph_set_mode',
+    {
+      description:
+        'Set the graph trellis mode — changes the overlay displayed on the dependency graph. ' +
+        '"live" = current state, "baseline" = snapshot comparison, "planned" = show plan targets, "diff" = show changes.',
+      inputSchema: {
+        mode: z.enum(['live', 'baseline', 'planned', 'diff']).describe('Trellis overlay mode.'),
+      },
+    },
+    async ({ mode }) => {
+      broadcast('ui-graph-mode', { mode });
+      return { content: [{ type: 'text' as const, text: `Set graph mode to ${mode}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'graph_set_scope',
+    {
+      description:
+        'Set the graph scope filter to show only files under a specific directory or package path. ' +
+        'Pass an empty string to clear the scope and show the full graph.',
+      inputSchema: {
+        scope_path: z.string().describe('Directory path to scope to (e.g. "src/backend/services"). Empty string to clear.'),
+      },
+    },
+    async ({ scope_path }) => {
+      broadcast('ui-graph-scope', { scopePath: scope_path });
+      return { content: [{ type: 'text' as const, text: scope_path ? `Scoped graph to ${scope_path}` : 'Cleared graph scope' }] };
     },
   );
 

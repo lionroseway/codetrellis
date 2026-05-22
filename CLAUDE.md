@@ -65,9 +65,66 @@ session-JSONL watcher for richer chat-derived signals.
 
 ## Commands
 
-- `npm start` — Run in development mode with HMR
+- `npm run dev` — Run in web mode with HMR (Express :3001 + Vite :5173)
 - `npm run build` — Build for production
-- `npm run package` — Package the Electron app (untested on macOS 26)
-- `npm run make` — Create distributable installers (same caveat)
+- `npm run package:mac` — Build macOS DMGs (arm64 + x64)
+- `npm run package:win` — Build Windows installers (Setup + Portable exe)
+- `npm run package:linux` — Build Linux packages (AppImage, deb, rpm)
 - `npm run lint` — Run ESLint
 - `npm run typecheck` — Run TypeScript type checking
+
+## Releasing
+
+Source stays in the private `codetrellis` repo. Releases (binaries +
+release notes) go to the **public** repo
+[lionroseway/codetrellis-releases](https://github.com/lionroseway/codetrellis-releases).
+
+### Automated (preferred)
+
+```bash
+npm run release            # builds all platforms, uploads to GitHub
+npm run release -- --dry-run   # build only, no upload
+npm run release -- --skip-build  # upload existing out/make/* artifacts
+```
+
+Runs `scripts/release.sh`. Requires a clean working tree and
+`gh auth status` to be logged in. Reads the version from
+`package.json`.
+
+### Manual steps
+
+1. **Bump version** in `package.json`.
+2. **Build artifacts** — from macOS you can build all three platforms:
+   ```bash
+   npm run package:mac          # arm64 + x64 DMGs and zips
+   npm run package:win          # NSIS Setup + Portable exe (x64)
+   npx electron-builder --linux AppImage --x64   # x64 AppImage
+   ```
+   `node-pty` prevents cross-compiling arm64 Linux from macOS.
+   Artifacts land in `out/make/`.
+3. **Update the releases repo README** — bump the version in the
+   download table at `/Users/saif/Workspaces/AILAR/codetrellis-releases/README.md`,
+   commit, and push to `main`.
+4. **Create the GitHub release** on the releases repo:
+   ```bash
+   gh release create v0.1.X \
+     out/make/CodeTrellis-0.1.X-arm64.dmg \
+     out/make/CodeTrellis-0.1.X-x64.dmg \
+     out/make/CodeTrellis-Setup-0.1.X.exe \
+     out/make/CodeTrellis-Portable-0.1.X.exe \
+     out/make/CodeTrellis-0.1.X.AppImage \
+     --repo lionroseway/codetrellis-releases \
+     --title "v0.1.X" \
+     --notes-file <release-notes-file>
+   ```
+5. **Commit the version bump** in the source repo.
+
+### Expected artifacts per release
+
+| Platform | File | Notes |
+|---|---|---|
+| macOS Apple Silicon | `CodeTrellis-X.Y.Z-arm64.dmg` | Unsigned — users need `xattr -cr` |
+| macOS Intel | `CodeTrellis-X.Y.Z-x64.dmg` | Unsigned |
+| Windows installer | `CodeTrellis-Setup-X.Y.Z.exe` | NSIS, unsigned (SmartScreen warning) |
+| Windows portable | `CodeTrellis-Portable-X.Y.Z.exe` | No install needed |
+| Linux x64 | `CodeTrellis-X.Y.Z.AppImage` | `chmod +x` to run |

@@ -274,6 +274,123 @@ export function useWebSocket() {
             if (id) useTerminalStore.getState().onTerminalKilled(id);
           }
 
+          // --- Screenshot capture (MCP screenshot tool) ---
+          if (type === 'ui-screenshot-request') {
+            const nonce = payload?.nonce as string | undefined;
+            const panel = payload?.panel as string | undefined;
+            if (nonce) {
+              (async () => {
+                try {
+                  const { toPng } = await import('html-to-image');
+                  // Select the target element based on panel
+                  let target: HTMLElement | null = null;
+                  if (panel === 'graph') {
+                    target = document.querySelector('[data-panel="graph"]') as HTMLElement
+                      ?? document.querySelector('.react-flow') as HTMLElement;
+                  } else if (panel === 'plan') {
+                    target = document.querySelector('[data-panel="plan"]') as HTMLElement;
+                  } else if (panel === 'terminal') {
+                    target = document.querySelector('[data-panel="terminal"]') as HTMLElement;
+                  }
+                  // Default to full viewport
+                  if (!target) target = document.body;
+
+                  const dataUrl = await toPng(target, {
+                    backgroundColor: '#06070d',
+                    pixelRatio: 1, // 1x for reasonable file size
+                  });
+                  // Strip the data:image/png;base64, prefix
+                  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+                  await fetch('/api/screenshot-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nonce, data: base64 }),
+                  });
+                } catch (err) {
+                  console.error('[Screenshot] Capture failed:', err);
+                  // Send empty response so the MCP tool doesn't hang
+                  await fetch('/api/screenshot-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nonce, data: '' }),
+                  }).catch(() => {});
+                }
+              })();
+            }
+          }
+
+          // --- UI item selection (MCP select_item tool) ---
+          if (type === 'ui-select-item') {
+            const planUid = payload?.planUid as string | undefined;
+            const itemUid = payload?.itemUid as string | undefined;
+            if (planUid && itemUid) {
+              // Make sure the plan is active and hydrated, then select
+              usePlanStore.getState().setActivePlan(planUid);
+              const { usePlanItemsStore } = require('../stores/plan-items-store');
+              // Give hydration a moment to land, then select
+              setTimeout(() => {
+                usePlanItemsStore.getState().selectItem(itemUid);
+              }, 300);
+            }
+          }
+
+          // --- Open project (MCP open_project tool) ---
+          if (type === 'ui-open-project') {
+            const projectPath = payload?.path as string | undefined;
+            if (projectPath) {
+              (async () => {
+                try {
+                  const { useProjectStore } = await import('../stores/project-store');
+                  const { getAPI } = await import('../bridge');
+                  useProjectStore.getState().setRoot(projectPath);
+                  await getAPI().scanProject(projectPath);
+                } catch (err) {
+                  console.error('[WS] Failed to open project:', err);
+                }
+              })();
+            }
+          }
+
+          // --- Graph focus (MCP graph_focus tool) ---
+          if (type === 'ui-graph-focus') {
+            const targetPath = payload?.path as string | undefined;
+            const highlight = payload?.highlight as boolean | undefined;
+            if (targetPath) {
+              (async () => {
+                const { useGraphStore } = await import('../stores/graph-store');
+                useGraphStore.getState().focusNode(targetPath, highlight !== false);
+              })();
+            }
+          }
+
+          // --- Graph mode (MCP graph_set_mode tool) ---
+          if (type === 'ui-graph-mode') {
+            const mode = payload?.mode as string | undefined;
+            if (mode) {
+              (async () => {
+                const { useGraphStore } = await import('../stores/graph-store');
+                const store = useGraphStore.getState();
+                if ('setTrellisMode' in store) {
+                  (store as any).setTrellisMode(mode);
+                }
+              })();
+            }
+          }
+
+          // --- Graph scope (MCP graph_set_scope tool) ---
+          if (type === 'ui-graph-scope') {
+            const scopePath = payload?.scopePath as string | undefined;
+            if (scopePath !== undefined) {
+              (async () => {
+                const { useGraphStore } = await import('../stores/graph-store');
+                const store = useGraphStore.getState();
+                if ('setScopePath' in store) {
+                  (store as any).setScopePath(scopePath || null);
+                }
+              })();
+            }
+          }
+
         } catch {
           // ignore malformed messages
         }

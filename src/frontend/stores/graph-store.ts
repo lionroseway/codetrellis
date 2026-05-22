@@ -61,6 +61,11 @@ interface GraphState {
   selectedNodeIds: string[];
   setSelectedNodeIds: (ids: string[]) => void;
   clearSelection: () => void;
+
+  /** Phase 18 — MCP graph_focus: pending focus target for the canvas. */
+  pendingFocus: { path: string; highlight: boolean } | null;
+  focusNode: (path: string, highlight?: boolean) => void;
+  clearPendingFocus: () => void;
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -152,4 +157,9 @@ export const useGraphStore = create<GraphState>((set) => ({
   selectedNodeIds: [],
   setSelectedNodeIds: (ids) => set({ selectedNodeIds: ids }),
   clearSelection: () => set({ selectedNodeIds: [] }),
+
+  // Phase 18 — MCP graph_focus
+  pendingFocus: null,
+  focusNode: (path, highlight = true) => set({ pendingFocus: { path, highlight } }),
+  clearPendingFocus: () => set({ pendingFocus: null }),
 }));

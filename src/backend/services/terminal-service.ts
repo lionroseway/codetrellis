@@ -44,6 +44,25 @@ const sessions = new Map<string, TerminalSession>();
 let counter = 0;
 
 /**
+ * Per-session output ring buffer for `terminal_read`. Stores the last
+ * RING_BUFFER_MAX_BYTES of PTY output so MCP tools can read recent
+ * terminal content without needing a live WS connection.
+ */
+const RING_BUFFER_MAX_BYTES = 64 * 1024; // 64 KB per session
+const outputBuffers = new Map<string, string>();
+
+function appendToBuffer(id: string, data: string): void {
+  const existing = outputBuffers.get(id) ?? '';
+  const combined = existing + data;
+  // Trim from the front if over budget
+  if (combined.length > RING_BUFFER_MAX_BYTES) {
+    outputBuffers.set(id, combined.slice(combined.length - RING_BUFFER_MAX_BYTES));
+  } else {
+    outputBuffers.set(id, combined);
+  }
+}
+
+/**
  * Maximum concurrent PTY sessions. Each session is a full shell process
  * with its own PID, file descriptors, and memory. Unbounded creation
  * (e.g. from multiple concurrent agents each requesting terminals) can
@@ -185,8 +204,9 @@ export function createTerminal(opts: {
 
   sessions.set(id, session);
 
-  // Pipe PTY output to all registered listeners
+  // Pipe PTY output to ring buffer + all registered listeners
   pty.onData((data) => {
+    appendToBuffer(id, data);
     for (const fn of dataListeners) fn(id, data);
   });
 
@@ -247,6 +267,7 @@ export function killTerminal(id: string): boolean {
   s.alive = false;
   s.pty.kill();
   sessions.delete(id);
+  outputBuffers.delete(id);
   return true;
 }
 
@@ -273,6 +294,26 @@ export function killAllTerminals(): void {
     s.pty.kill();
   }
   sessions.clear();
+  outputBuffers.clear();
+}
+
+/**
+ * Read recent output from a terminal's ring buffer.
+ * Returns the last `lines` lines (default 50). ANSI escape codes are
+ * stripped so the output is readable as plain text.
+ */
+export function readTerminalOutput(id: string, lines?: number): string | null {
+  const buf = outputBuffers.get(id);
+  if (buf === undefined) return null;
+  // Strip ANSI escape sequences for clean text output
+  const clean = buf.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+    .replace(/\x1b\].*?\x07/g, '')     // OSC sequences
+    .replace(/\x1b[()][A-Z0-9]/g, '')  // character set selects
+    .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, ''); // control chars (keep \n \r)
+  const allLines = clean.split('\n');
+  const maxLines = lines ?? 50;
+  const tail = allLines.slice(-maxLines);
+  return tail.join('\n');
 }
 
 function sessionToInfo(s: TerminalSession): TerminalSessionInfo {

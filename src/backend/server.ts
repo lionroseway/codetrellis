@@ -307,6 +307,23 @@ app.delete('/api/terminals/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Screenshot response endpoint (MCP screenshot tool) ---
+// The MCP `screenshot` tool broadcasts a request to the frontend;
+// the frontend captures the viewport and POSTs the base64 PNG here.
+app.post('/api/screenshot-response', (req, res) => {
+  const { nonce, data } = req.body || {};
+  if (!nonce || !data) {
+    res.status(400).json({ error: 'nonce and data are required' });
+    return;
+  }
+  const resolver = (globalThis as any).__screenshotResolve as
+    ((nonce: string, data: string) => void) | undefined;
+  if (resolver) {
+    resolver(nonce, data);
+  }
+  res.json({ ok: true });
+});
+
 // --- API Routes ---
 
 // Health check
