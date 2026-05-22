@@ -519,6 +519,63 @@ export function useWebSocket() {
             }
           }
 
+          // --- Close project tab (MCP close_project tool) ---
+          if (type === 'ui-close-project') {
+            const path = payload?.path as string | undefined;
+            if (path) {
+              const tabs = useProjectStore.getState().tabs;
+              const tab = tabs.find((t: any) => t.root === path);
+              if (tab) {
+                useProjectStore.getState().removeTab(tab.id);
+              }
+            }
+          }
+
+          // --- Item navigation back/forward (MCP navigate_item_back/forward tools) ---
+          if (type === 'ui-navigate-item-back') {
+            usePlanItemsStore.getState().navigateBack();
+          }
+          if (type === 'ui-navigate-item-forward') {
+            usePlanItemsStore.getState().navigateForward();
+          }
+
+          // --- Activity drawer toggle (MCP toggle_activity_drawer tool) ---
+          if (type === 'ui-toggle-activity-drawer') {
+            usePlanItemsStore.getState().toggleActivityDrawer();
+          }
+
+          // --- History drawer (MCP open_history_drawer tool) ---
+          if (type === 'ui-open-history-drawer') {
+            const itemUid = payload?.itemUid as string | undefined;
+            if (itemUid) {
+              usePlanItemsStore.getState().openHistoryDrawer(itemUid);
+            }
+          }
+
+          // --- Settings modal (MCP open_settings tool) ---
+          if (type === 'ui-open-settings') {
+            window.dispatchEvent(new CustomEvent('open-settings'));
+          }
+
+          // --- MCP guide modal (MCP open_mcp_guide tool) ---
+          if (type === 'ui-open-mcp-guide') {
+            window.dispatchEvent(new CustomEvent('open-mcp-guide'));
+          }
+
+          // --- Graph projection toggle (MCP graph_toggle_projection tool) ---
+          if (type === 'ui-graph-toggle-projection') {
+            (async () => {
+              const { useGraphStore } = await import('../stores/graph-store');
+              const store = useGraphStore.getState();
+              const enabled = payload?.enabled as boolean | undefined;
+              if (enabled === undefined) {
+                store.toggleProjection();
+              } else if (enabled !== store.projectionEnabled) {
+                store.toggleProjection();
+              }
+            })();
+          }
+
         } catch {
           // ignore malformed messages
         }

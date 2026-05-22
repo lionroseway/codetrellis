@@ -62,6 +62,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
   );
 
   server.registerResource(
+    'codetrellis://skill/ui-nav',
+    'codetrellis://skill/ui-nav',
+    {
+      description: 'CodeTrellis UI navigator skill — focused guide for a sub-agent that drives the UI while the primary agent works. Covers views, graph control, item navigation, and common sequences.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://skill/ui-nav',
+        mimeType: 'text/markdown',
+        text: deps.buildSkillGuide('ui-nav'),
+      }],
+    }),
+  );
+
+  server.registerResource(
     'project://graph',
     'project://graph',
     {

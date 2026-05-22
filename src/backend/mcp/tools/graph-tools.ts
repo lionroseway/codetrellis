@@ -113,6 +113,23 @@ export function register(server: McpServer, deps: ToolDeps): void {
   );
 
   server.registerTool(
+    'graph_toggle_projection',
+    {
+      description:
+        'Toggle the plan projection overlay on the dependency graph. When enabled, the graph highlights files and symbols ' +
+        'that are targeted by the active plan (Planned/Diff trellis modes). When disabled, shows the raw dependency graph.',
+      inputSchema: {
+        enabled: z.boolean().optional().describe('Explicitly set projection on or off. If omitted, toggles the current state.'),
+      },
+    },
+    async ({ enabled }) => {
+      deps.broadcast('ui-graph-toggle-projection', { enabled });
+      const label = enabled === true ? 'enabled' : enabled === false ? 'disabled' : 'toggled';
+      return { content: [{ type: 'text' as const, text: `Projection ${label}` }] };
+    },
+  );
+
+  server.registerTool(
     'graph_export',
     {
       description:

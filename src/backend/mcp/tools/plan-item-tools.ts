@@ -583,6 +583,23 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+  server.registerTool(
+    'list_item_versions',
+    {
+      description:
+        'List all saved versions of an item, ordered by version number. Each version captures the item\'s body, title, status, ' +
+        'and structured fields (fileSpecs, symbolSpecs, connections) at the time of each update. Use this to see how an item evolved.',
+      inputSchema: { uid: z.string() },
+    },
+    async ({ uid }) => {
+      const versions = deps.planItemService.listItemVersions(uid);
+      if (versions.length === 0) {
+        return { content: [{ type: 'text' as const, text: `No versions found for item ${uid}` }] };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(versions, null, 2) }] };
+    },
+  );
+
   // --- Item Comments ---
 
   server.registerTool(

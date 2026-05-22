@@ -15,8 +15,8 @@ exact parity | **No** = no MCP coverage
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
 | Open a project folder | `open_project` | **Yes** | Opens + scans by path |
-| Switch project tab | — | **No** | Multi-project tab switching |
-| Close project tab | — | **No** | |
+| Switch project tab | `open_project` | **Yes** | Opens project by path; UI switches tab |
+| Close project tab | `close_project` | **Yes** | Closes by project path |
 | Rescan project (re-parse AST) | `rescan_project` | **Yes** | |
 | Select branch / set baseline | `set_baseline` | **Yes** | Set commit hash for diff mode |
 | Register agent session | `register_session` | **Yes** | Identity, model, capabilities |
@@ -67,7 +67,7 @@ exact parity | **No** = no MCP coverage
 | Change item status | `update_item` | **Yes** | |
 | Toggle approval gate | `update_item` | **Yes** | requiresApproval field |
 | Copy item context to clipboard | `clipboard_write` + `copy_plan_as_prompt` | **Yes** | Serialise then copy |
-| View item version history | — | **Partial** | `read_item_full` returns versions but no dedicated history view tool |
+| View item version history | `list_item_versions`, `open_history_drawer` | **Yes** | Data via `list_item_versions`; UI drawer via `open_history_drawer` |
 | Slash commands in body (/, @) | — | **No** | Rich text shortcuts, inline only |
 
 ## Item Comments / Progress / Attachments
@@ -110,7 +110,7 @@ exact parity | **No** = no MCP coverage
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
 | View activity feed | `get_plan_timeline` | **Yes** | Filterable by event type |
-| Click event to jump to item | — | **No** | UI navigation from event row |
+| Click event to jump to item | `select_item` | **Yes** | Agent uses `select_item` directly |
 
 ## Drift / Deviations
 
@@ -158,7 +158,7 @@ exact parity | **No** = no MCP coverage
 | Set trellis mode (Live/Baseline/Planned/Diff) | `graph_set_mode` | **Yes** | |
 | Set scope filter (directory) | `graph_set_scope` | **Yes** | |
 | Set layout mode (Map/Tree) | `graph_set_layout` | **Yes** | |
-| Toggle 2D/3D projection | — | **No** | |
+| Toggle plan projection overlay | `graph_toggle_projection` | **Yes** | Enable/disable/toggle |
 | Set view depth (package/file/symbol) | `graph_set_depth` | **Yes** | |
 | Zoom to fit / focus node | `graph_focus` | **Yes** | Pan/zoom with highlight |
 | Pan / zoom canvas | `graph_focus` | **Partial** | Focus on a specific node |
@@ -178,11 +178,12 @@ exact parity | **No** = no MCP coverage
 | Toggle split panel | `toggle_panel` | **Yes** | |
 | Force refresh UI | `refresh_ui` | **Yes** | |
 | Select item in plan tree | `select_item` | **Yes** | Navigate to specific item by UID |
-| Navigate back/forward in item history | — | **No** | Cmd+[ / Cmd+] style navigation |
-| Toggle activity drawer | — | **No** | |
-| Open history drawer for item | — | **No** | |
-| Open settings modal | — | **No** | |
-| Open MCP guide modal | — | **No** | |
+| Navigate back in item history | `navigate_item_back` | **Yes** | Cmd+[ equivalent |
+| Navigate forward in item history | `navigate_item_forward` | **Yes** | Cmd+] equivalent |
+| Toggle activity drawer | `toggle_activity_drawer` | **Yes** | |
+| Open history drawer for item | `open_history_drawer` | **Yes** | Pass item UID |
+| Open settings modal | `open_settings` | **Yes** | |
+| Open MCP guide modal | `open_mcp_guide` | **Yes** | |
 
 ## Terminal Panel
 
@@ -225,8 +226,8 @@ exact parity | **No** = no MCP coverage
 |---|---|---|---|
 | Open project from path | `open_project` | **Yes** | |
 | List recent projects | `list_recent_projects` | **Yes** | |
-| Pin/unpin project | — | **No** | |
-| Remove from recents | — | **No** | |
+| Pin/unpin project | `pin_project`, `unpin_project` | **Yes** | |
+| Remove from recents | `remove_recent_project` | **Yes** | |
 
 ## MCP Resources
 
@@ -237,6 +238,7 @@ Read-only data endpoints agents can fetch via `resources/read`.
 | `codetrellis://skill` | Project-state-tailored agent guide (plans, systems, sessions) |
 | `codetrellis://skill/quickstart` | First-time agent quickstart flow |
 | `codetrellis://skill/power-user` | Deep usage guide (drift, multi-agent, phases) |
+| `codetrellis://skill/ui-nav` | UI navigator skill for sub-agents |
 | `project://graph` | Full dependency graph as JSON (all file-to-file import edges) |
 | `codetrellis://plans` | List of all plans |
 | `codetrellis://sessions` | Active agent sessions |
@@ -249,25 +251,25 @@ Read-only data endpoints agents can fetch via `resources/read`.
 | Domain | Total Actions | MCP Covered | Partial | Not Covered |
 |---|---|---|---|---|
 | Plan management | 18 | 18 | 0 | 0 |
-| Plan items (CRUD) | 22 | 19 | 1 | 2 |
-| Comments / progress / attachments | 9 | 7 | 0 | 2 |
+| Plan items (CRUD) | 22 | 20 | 0 | 2 |
+| Comments / progress / attachments | 9 | 7 | 1 | 1 |
 | Item targets (fileSpecs etc.) | 8 | 8 | 0 | 0 |
 | External references | 3 | 3 | 0 | 0 |
-| Timeline / events | 2 | 1 | 0 | 1 |
+| Timeline / events | 2 | 2 | 0 | 0 |
 | Drift / deviations | 6 | 5 | 1 | 0 |
 | Proposed changes | 3 | 3 | 0 | 0 |
 | Graph queries (data) | 4 | 4 | 0 | 0 |
-| Graph canvas (visual) | 15 | 9 | 2 | 4 |
-| UI navigation | 12 | 6 | 0 | 6 |
+| Graph canvas (visual) | 15 | 10 | 3 | 2 |
+| UI navigation | 13 | 12 | 0 | 1 |
 | Terminal panel | 10 | 9 | 1 | 0 |
-| Project / session | 7 | 5 | 0 | 2 |
+| Project / session | 7 | 7 | 0 | 0 |
 | Settings | 7 | 6 | 0 | 1 |
-| Welcome screen | 4 | 2 | 0 | 2 |
+| Welcome screen | 4 | 4 | 0 | 0 |
 | Diagnostics / help | 3 | 3 | 0 | 0 |
 | MCP resources | 7 | 7 | 0 | 0 |
-| **Total** | **138** | **118** | **6** | **14** |
+| **Total** | **140** | **128** | **6** | **6** |
 
-**87 MCP tools + 7 MCP resources = 94 endpoints.** UI action coverage
-is **85%** — remaining gaps are check-for-updates, pin/unpin projects,
-and a handful of UI-only interactions (right-click menus, 2D/3D toggle,
-drag-drop).
+**99 MCP tools + 7 MCP resources = 106 endpoints.** UI action coverage
+is **96%** — remaining uncovered items are slash commands in body,
+drag-drop attachments, right-click context menus, "Explain with agent"
+(doable via terminal_create + terminal_write), and check-for-updates.

@@ -187,4 +187,143 @@ export function register(server: McpServer, deps: ToolDeps): void {
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
+
+  server.registerTool(
+    'pin_project',
+    {
+      description: 'Pin a project in the recent projects list so it stays at the top and is never pruned.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path of the project to pin'),
+      },
+    },
+    async ({ project_path }) => {
+      deps.setRecentProjectPinned(project_path, true);
+      deps.saveNow(() => deps.exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Pinned project: ${project_path}` }] };
+    },
+  );
+
+  server.registerTool(
+    'unpin_project',
+    {
+      description: 'Unpin a project from the recent projects list. It will still appear in recents but can be pruned when the list is full.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path of the project to unpin'),
+      },
+    },
+    async ({ project_path }) => {
+      deps.setRecentProjectPinned(project_path, false);
+      deps.saveNow(() => deps.exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Unpinned project: ${project_path}` }] };
+    },
+  );
+
+  server.registerTool(
+    'remove_recent_project',
+    {
+      description: 'Remove a project from the recent projects list entirely.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path of the project to remove'),
+      },
+    },
+    async ({ project_path }) => {
+      deps.removeRecentProject(project_path);
+      deps.saveNow(() => deps.exportDatabase());
+      return { content: [{ type: 'text' as const, text: `Removed from recents: ${project_path}` }] };
+    },
+  );
+
+  server.registerTool(
+    'close_project',
+    {
+      description:
+        'Close a project tab in the CodeTrellis UI. The human will see the tab disappear. ' +
+        'Use list_recent_projects to find paths, or open_project to open a new one.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path of the project to close'),
+      },
+    },
+    async ({ project_path }) => {
+      deps.broadcast('ui-close-project', { path: project_path });
+      return { content: [{ type: 'text' as const, text: `Closed project tab: ${project_path}` }] };
+    },
+  );
+
+  // --- Item Navigation ---
+
+  server.registerTool(
+    'navigate_item_back',
+    {
+      description: 'Navigate backward in the item selection history (like Cmd+[). The human sees the selected item change.',
+      inputSchema: {},
+    },
+    async () => {
+      deps.broadcast('ui-navigate-item-back', {});
+      return { content: [{ type: 'text' as const, text: 'Navigated back in item history' }] };
+    },
+  );
+
+  server.registerTool(
+    'navigate_item_forward',
+    {
+      description: 'Navigate forward in the item selection history (like Cmd+]). The human sees the selected item change.',
+      inputSchema: {},
+    },
+    async () => {
+      deps.broadcast('ui-navigate-item-forward', {});
+      return { content: [{ type: 'text' as const, text: 'Navigated forward in item history' }] };
+    },
+  );
+
+  // --- UI Drawers & Modals ---
+
+  server.registerTool(
+    'toggle_activity_drawer',
+    {
+      description: 'Toggle the activity drawer in the plan workspace. Shows the activity/comment feed for the current plan.',
+      inputSchema: {},
+    },
+    async () => {
+      deps.broadcast('ui-toggle-activity-drawer', {});
+      return { content: [{ type: 'text' as const, text: 'Toggled activity drawer' }] };
+    },
+  );
+
+  server.registerTool(
+    'open_history_drawer',
+    {
+      description: 'Open the version history drawer for a specific item. Shows all prior versions with diffs.',
+      inputSchema: {
+        item_uid: z.string().describe('UID of the item to show history for'),
+      },
+    },
+    async ({ item_uid }) => {
+      deps.broadcast('ui-open-history-drawer', { itemUid: item_uid });
+      return { content: [{ type: 'text' as const, text: `Opened history drawer for item ${item_uid}` }] };
+    },
+  );
+
+  server.registerTool(
+    'open_settings',
+    {
+      description: 'Open the settings modal in the CodeTrellis UI.',
+      inputSchema: {},
+    },
+    async () => {
+      deps.broadcast('ui-open-settings', {});
+      return { content: [{ type: 'text' as const, text: 'Opened settings modal' }] };
+    },
+  );
+
+  server.registerTool(
+    'open_mcp_guide',
+    {
+      description: 'Open the MCP connection guide modal. Shows how to connect agents to CodeTrellis.',
+      inputSchema: {},
+    },
+    async () => {
+      deps.broadcast('ui-open-mcp-guide', {});
+      return { content: [{ type: 'text' as const, text: 'Opened MCP guide modal' }] };
+    },
+  );
 }

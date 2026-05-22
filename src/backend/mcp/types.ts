@@ -66,6 +66,8 @@ export interface ToolDeps {
   listCrossSystemEdges: typeof import('../services/cross-system-service').listCrossSystemEdges;
   getCrossSystemStats: typeof import('../services/cross-system-service').getCrossSystemStats;
   listRecentProjects: typeof import('../services/recent-projects-service').listRecentProjects;
+  removeRecentProject: typeof import('../services/recent-projects-service').removeRecentProject;
+  setRecentProjectPinned: typeof import('../services/recent-projects-service').setRecentProjectPinned;
   getSettings: typeof import('../services/settings-service').getSettings;
   updateSettings: typeof import('../services/settings-service').updateSettings;
   tailLog: typeof import('../services/logger').tailLog;

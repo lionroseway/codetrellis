@@ -2,9 +2,10 @@
  * Agent skill / "how to use CodeTrellis" markdown guides.
  *
  * Surfaced via MCP resources `codetrellis://skill` (project-tailored
- * summary), `codetrellis://skill/quickstart` (first-time flow), and
- * `codetrellis://skill/power-user` (deep usage). Agents fetch these
- * on connect so they don't need out-of-band briefing.
+ * summary), `codetrellis://skill/quickstart` (first-time flow),
+ * `codetrellis://skill/power-user` (deep usage), and
+ * `codetrellis://skill/ui-nav` (UI navigator for sub-agents).
+ * Agents fetch these on connect so they don't need out-of-band briefing.
  *
  * Also returned by the `get_app_guide` MCP tool.
  */
@@ -13,11 +14,12 @@ import * as planService from '../services/plan-service';
 import * as planItemService from '../services/plan-item-service';
 import * as sessionService from '../services/session-service';
 
-export type SkillFlavor = 'summary' | 'quickstart' | 'power-user';
+export type SkillFlavor = 'summary' | 'quickstart' | 'power-user' | 'ui-nav';
 
 export function buildSkillGuide(flavor: SkillFlavor): string {
   if (flavor === 'quickstart') return QUICKSTART;
   if (flavor === 'power-user') return POWER_USER;
+  if (flavor === 'ui-nav') return UI_NAV;
   return projectStateSummary() + '\n\n' + PHILOSOPHY + '\n\n' + TOOL_REFERENCE;
 }
 
@@ -224,6 +226,7 @@ edges.
 | \`list_items(plan_uid, ...)\` | Query items by parent / kind / status / title |
 | \`search_items(plan_uid, query)\` | Full-text search across titles and bodies |
 | \`restore_item_version(uid, version)\` | Roll back to a prior version |
+| \`list_item_versions(uid)\` | See how an item evolved over time |
 | \`get_plan_timeline(plan_uid, ...)\` | Event log of every structural mutation |
 | \`suggest_specs(scope_path, ...)\` | Query the graph for candidate fileSpecs / symbolSpecs |
 
@@ -274,12 +277,22 @@ edges.
 | \`navigate_to(target, plan_uid?)\` | Switch to plan / graph / split / timeline view |
 | \`open_plan(plan_uid, split_view?)\` | Open a specific plan |
 | \`select_item(item_uid, plan_uid?)\` | Navigate to a specific item in the plan tree |
+| \`navigate_item_back()\` | Go back in item selection history (Cmd+[) |
+| \`navigate_item_forward()\` | Go forward in item selection history (Cmd+]) |
 | \`toggle_panel(panel)\` | Show/hide sidebar / inspector / terminal / split |
+| \`toggle_activity_drawer()\` | Toggle the activity/comment feed drawer |
+| \`open_history_drawer(item_uid)\` | Open version history for a specific item |
+| \`open_settings()\` | Open the settings modal |
+| \`open_mcp_guide()\` | Open the MCP connection guide |
 | \`refresh_ui()\` | Force UI refresh |
 | \`open_project(path)\` | Open and scan a project directory |
 | \`rescan_project(project_path?)\` | Re-parse the codebase AST |
 | \`set_baseline(commit_hash)\` | Set the git baseline for diff mode |
 | \`list_recent_projects()\` | Discover recently opened projects |
+| \`pin_project(project_path)\` | Pin a project to the top of recents |
+| \`unpin_project(project_path)\` | Unpin a project |
+| \`remove_recent_project(project_path)\` | Remove a project from recents |
+| \`close_project(project_path)\` | Close a project tab in the UI |
 
 ### Graph visual control
 
@@ -291,6 +304,7 @@ edges.
 | \`graph_set_scope(scope_path)\` | Filter to a directory |
 | \`graph_set_layout(layout)\` | map (force-directed) or tree (dagre) |
 | \`graph_set_depth(depth)\` | package / file / symbol detail level |
+| \`graph_toggle_projection(enabled?)\` | Toggle plan projection overlay on the graph |
 | \`graph_export()\` | Export graph as PNG image |
 | \`graph_snapshot(include_metadata?)\` | Structured JSON of all nodes + edges |
 
@@ -343,6 +357,7 @@ edges.
 | \`codetrellis://skill\` | This project-tailored summary |
 | \`codetrellis://skill/quickstart\` | First-time agent workflow |
 | \`codetrellis://skill/power-user\` | Deep features guide |
+| \`codetrellis://skill/ui-nav\` | UI navigator skill (for sub-agents) |
 | \`codetrellis://plans\` | All plans as JSON |
 | \`codetrellis://sessions\` | Active agent sessions |
 | \`project://graph\` | Full dependency graph as JSON |
@@ -587,3 +602,122 @@ When something isn't working as expected:
 - \`get_log_path()\` — find the log file on disk
 - \`get_settings()\` / \`update_settings(...)\` — check and modify
   configuration (identity, MCP port, plan defaults)`;
+
+// ── UI Navigation skill — loadable by sub-agents ───────────────────
+
+const UI_NAV = `# CodeTrellis UI Navigator
+
+You are a sub-agent responsible for driving the CodeTrellis UI while
+the primary agent works. The human is watching the screen — your job
+is to make the right things visible at the right time so they can
+follow along.
+
+## Your tools
+
+### Views & panels
+
+| Tool | Effect on screen |
+|------|-----------------|
+| \`navigate_to(target, plan_uid?)\` | Switch main view: "plan" / "graph" / "split" / "timeline" |
+| \`open_plan(plan_uid, split_view?)\` | Open a plan; human sees the plan tree |
+| \`toggle_panel(panel)\` | Show/hide "sidebar" / "inspector" / "terminal" / "split" |
+| \`toggle_activity_drawer()\` | Slide the activity/comment feed open or closed |
+| \`refresh_ui()\` | Force the UI to re-fetch everything |
+
+### Item navigation
+
+| Tool | Effect on screen |
+|------|-----------------|
+| \`select_item(item_uid, plan_uid?)\` | Highlight a specific Object or Action in the plan tree |
+| \`navigate_item_back()\` | Go back in selection history (like Cmd+[) |
+| \`navigate_item_forward()\` | Go forward (like Cmd+]) |
+| \`open_history_drawer(item_uid)\` | Open the version history panel for an item |
+
+### Graph control
+
+| Tool | Effect on screen |
+|------|-----------------|
+| \`graph_focus(path, highlight?)\` | Pan + zoom + highlight a file or symbol node |
+| \`graph_select(paths[])\` | Select multiple nodes (like shift-click) |
+| \`graph_set_mode(mode)\` | "live" / "baseline" / "planned" / "diff" overlay |
+| \`graph_set_scope(scope_path)\` | Filter the graph to a directory |
+| \`graph_set_layout(layout)\` | "map" (force-directed) or "tree" (dagre) |
+| \`graph_set_depth(depth)\` | "package" / "file" / "symbol" detail level |
+| \`graph_toggle_projection(enabled?)\` | Toggle the plan projection overlay |
+| \`graph_export()\` | Capture the graph as a PNG |
+| \`graph_snapshot(include_metadata?)\` | Get structured JSON of all visible nodes + edges |
+
+### Project management
+
+| Tool | Effect on screen |
+|------|-----------------|
+| \`open_project(path)\` | Open a project — new tab appears |
+| \`close_project(project_path)\` | Close a project tab |
+| \`rescan_project(project_path?)\` | Re-parse the codebase |
+| \`set_baseline(commit_hash)\` | Set the diff baseline commit |
+| \`list_recent_projects()\` | List available projects |
+| \`pin_project(path)\` / \`unpin_project(path)\` | Pin/unpin in recents |
+
+### Modals
+
+| Tool | Effect on screen |
+|------|-----------------|
+| \`open_settings()\` | Settings modal pops up |
+| \`open_mcp_guide()\` | MCP connection guide pops up |
+
+### Capture
+
+| Tool | Effect on screen |
+|------|-----------------|
+| \`screenshot(panel?)\` | Capture as PNG: "full" / "graph" / "plan" / "terminal" |
+| \`clipboard_write(text)\` | Copy text to the user's clipboard |
+
+## Common sequences
+
+### "Show me how these files connect"
+1. \`navigate_to('graph')\` — switch to graph view
+2. \`graph_set_scope('src/backend/services')\` — filter to the area
+3. \`graph_set_depth('file')\` — file-level view
+4. \`graph_focus('src/backend/services/auth-service.ts')\` — zoom to the node
+5. \`graph_select(['auth-service.ts', 'session-service.ts', 'user-service.ts'])\` — highlight related files
+
+### "Walk me through the plan"
+1. \`open_plan(plan_uid)\` — open the plan
+2. \`select_item(first_object_uid)\` — start with the first Object
+3. Pause, let the human read
+4. \`select_item(first_action_uid)\` — move to the first Action
+5. Continue stepping through items
+
+### "Show the plan alongside the graph"
+1. \`navigate_to('split', plan_uid)\` — plan + graph side by side
+2. \`graph_set_mode('planned')\` — show what the plan targets
+3. \`graph_toggle_projection(true)\` — ensure projection is on
+4. \`select_item(action_uid)\` — clicking an item highlights its files in the graph
+
+### "What changed since the baseline?"
+1. \`set_baseline(commit_hash)\` — set the reference point
+2. \`navigate_to('graph')\` — switch to graph
+3. \`graph_set_mode('diff')\` — show the diff overlay
+4. \`screenshot('graph')\` — capture for discussion
+
+### "Compare before and after"
+1. \`graph_set_mode('baseline')\` — show the original state
+2. \`screenshot('graph')\` — capture "before"
+3. \`graph_set_mode('live')\` — switch to current state
+4. \`screenshot('graph')\` — capture "after"
+
+## Guidelines
+
+- **Pace yourself.** The human needs time to look. Don't fire 10
+  commands in a burst — step through, pause, then continue.
+- **Narrate.** When the primary agent sends you instructions like
+  "show the auth module", tell the human what you're about to show
+  before you show it.
+- **Combine graph + plan.** Split view is powerful — highlight a
+  file in the graph, then select the Action that modifies it.
+- **Use screenshots** when the primary agent needs to see what's
+  on screen. You're the eyes.
+- **Stay in your lane.** You drive the UI. You don't create plans,
+  claim Actions, or write code. If the primary agent asks you to
+  do something outside UI control, say so.
+`;

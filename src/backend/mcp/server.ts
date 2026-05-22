@@ -35,7 +35,7 @@ import { saveNow } from '../services/persistence';
 import { getSettings, updateSettings } from '../services/settings-service';
 import { tailLog, getCurrentLogPath, getLogDir } from '../services/logger';
 import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-system-service';
-import { listRecentProjects } from '../services/recent-projects-service';
+import { listRecentProjects, removeRecentProject, setRecentProjectPinned } from '../services/recent-projects-service';
 import { buildSkillGuide } from './skill-guide';
 
 // ── Tool & resource modules ─────────────────────────────────────────
@@ -167,6 +167,8 @@ function buildToolDeps(): ToolDeps {
     listCrossSystemEdges,
     getCrossSystemStats,
     listRecentProjects,
+    removeRecentProject,
+    setRecentProjectPinned,
     getSettings,
     updateSettings,
     tailLog,

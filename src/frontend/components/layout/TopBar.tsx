@@ -311,6 +311,13 @@ export function TopBar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const updateAvailable = useUpdateAvailable(settingsOpen);
 
+  // Allow MCP to open settings via CustomEvent
+  useEffect(() => {
+    const handler = () => setSettingsOpen(true);
+    window.addEventListener('open-settings', handler);
+    return () => window.removeEventListener('open-settings', handler);
+  }, []);
+
   return (
     <div className="glass-panel flex items-center h-11 px-3 border-b gap-2 shrink-0 overflow-visible relative z-40">
       <img src="./icon.png" alt="" className="w-5 h-5 shrink-0" />
