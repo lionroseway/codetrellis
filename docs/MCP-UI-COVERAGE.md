@@ -14,11 +14,11 @@ exact parity | **No** = no MCP coverage
 
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
-| Open a project folder | — | **No** | Agent can't tell CT to scan a new project |
+| Open a project folder | `open_project` | **Yes** | Opens + scans by path |
 | Switch project tab | — | **No** | Multi-project tab switching |
 | Close project tab | — | **No** | |
-| Rescan project (re-parse AST) | — | **No** | Triggers POST /api/scan internally |
-| Select branch / set baseline | — | **No** | Agent can't switch baseline commit |
+| Rescan project (re-parse AST) | `rescan_project` | **Yes** | |
+| Select branch / set baseline | `set_baseline` | **Yes** | Set commit hash for diff mode |
 | Register agent session | `register_session` | **Yes** | Identity, model, capabilities |
 | Set active plan for session | `set_active_plan` | **Yes** | Links agent to a plan + navigates UI |
 
@@ -39,8 +39,8 @@ exact parity | **No** = no MCP coverage
 | Export plan to disk | `export_plan_to_files` | **Yes** | V1 + V2 tree layout |
 | Discover plan files on disk | `discover_plan_files` | **Yes** | |
 | Publish plan as template | `publish_plan_as_template` | **Yes** | |
-| Import from external (GitHub issue, conversation, etc.) | — | **No** | PlanImportModal handles 4 source types |
-| Copy plan as prompt (handoff) | — | **No** | Serialises plan to markdown for clipboard |
+| Import from external (GitHub issue, conversation, etc.) | `import_external` | **Yes** | Conversation/markdown text import |
+| Copy plan as prompt (handoff) | `copy_plan_as_prompt` | **Yes** | Returns markdown prompt text |
 | Push plan to specific agent | — | **Partial** | `set_active_plan` exists but not push-to-other-agent |
 
 ## Plan Items (Objects & Actions)
@@ -75,11 +75,11 @@ exact parity | **No** = no MCP coverage
 |---|---|---|---|
 | Add comment (note/blocker/progress/question) | `add_item_comment` | **Yes** | |
 | List comments | `list_item_comments` | **Yes** | |
-| Delete comment | — | **No** | UI has it, MCP doesn't |
+| Delete comment | `delete_item_comment` | **Yes** | |
 | Report progress (%) | `update_item_progress` | **Yes** | |
 | Mark item blocked | `set_item_blocked` | **Yes** | |
 | Add attachment (URL/image/code/transcript) | `add_item_attachment` | **Yes** | |
-| Remove attachment | — | **No** | UI has it, MCP doesn't |
+| Remove attachment | `delete_item_attachment` | **Yes** | |
 | Paste image/video from clipboard | — | **No** | Canvas-level paste handler |
 | Drag-drop file as attachment | — | **No** | |
 
@@ -156,19 +156,20 @@ exact parity | **No** = no MCP coverage
 
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
-| Click node to select | — | **No** | |
+| Click node to select | `graph_select` | **Yes** | Select by path(s) |
 | Right-click node context menu | — | **No** | |
-| Multi-select nodes (shift-click) | — | **No** | |
-| "Plan these" from selection | — | **No** | Creates plan from selected files |
-| "Add to task" from selection | — | **No** | |
-| Set trellis mode (Live/Baseline/Planned/Diff) | — | **No** | |
-| Set scope filter (directory) | — | **No** | |
-| Set layout mode (Map/Tree) | — | **No** | |
+| Multi-select nodes (shift-click) | `graph_select` | **Yes** | Pass array of paths |
+| "Plan these" from selection | — | **Partial** | Select via `graph_select`, then use plan tools |
+| "Add to task" from selection | — | **Partial** | Select via `graph_select`, then `update_item` |
+| Set trellis mode (Live/Baseline/Planned/Diff) | `graph_set_mode` | **Yes** | |
+| Set scope filter (directory) | `graph_set_scope` | **Yes** | |
+| Set layout mode (Map/Tree) | `graph_set_layout` | **Yes** | |
 | Toggle 2D/3D projection | — | **No** | |
-| Set view depth (1-5+) | — | **No** | |
-| Zoom to fit | — | **No** | |
-| Pan / zoom canvas | — | **No** | |
-| Export graph as PNG | — | **No** | |
+| Set view depth (package/file/symbol) | `graph_set_depth` | **Yes** | |
+| Zoom to fit / focus node | `graph_focus` | **Yes** | Pan/zoom with highlight |
+| Pan / zoom canvas | `graph_focus` | **Partial** | Focus on a specific node |
+| Export graph as PNG | `graph_export` | **Yes** | Returns base64 PNG |
+| Get graph data (structured) | `graph_snapshot` | **Yes** | Returns JSON nodes + edges |
 | "Explain with agent" from context menu | — | **No** | Injects prompt into terminal |
 
 ## UI Navigation
@@ -182,7 +183,7 @@ exact parity | **No** = no MCP coverage
 | Toggle terminal | `toggle_panel` | **Yes** | |
 | Toggle split panel | `toggle_panel` | **Yes** | |
 | Force refresh UI | `refresh_ui` | **Yes** | |
-| Select item in plan tree | — | **No** | Navigate to specific item within a plan |
+| Select item in plan tree | `select_item` | **Yes** | Navigate to specific item by UID |
 | Navigate back/forward in item history | — | **No** | Cmd+[ / Cmd+] style navigation |
 | Toggle activity drawer | — | **No** | |
 | Open history drawer for item | — | **No** | |
@@ -193,14 +194,16 @@ exact parity | **No** = no MCP coverage
 
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
-| Create new terminal session | — | **No** | With agent preset (Claude/Codex/Aider/Shell) |
-| Switch active terminal tab | — | **No** | |
-| Kill terminal session | — | **No** | |
-| Toggle terminal panel | `toggle_panel` | **Partial** | Can show/hide but can't interact |
-| Type in terminal | — | **No** | |
-| Read terminal output | — | **No** | |
-| Inject prompt into terminal | — | **No** | Used by "Explain with agent" |
-| Screenshot terminal content | — | **No** | |
+| Create new terminal session | `terminal_create` | **Yes** | With agent preset (claude/codex/aider/shell) |
+| Switch active terminal tab | — | **Partial** | Agents target sessions by ID directly |
+| Kill terminal session | `terminal_kill` | **Yes** | |
+| Toggle terminal panel | `toggle_panel` | **Yes** | Can show/hide |
+| Type in terminal | `terminal_write` | **Yes** | Send keystrokes / commands |
+| Read terminal output | `terminal_read` | **Yes** | Last N lines, ANSI-stripped |
+| List active terminals | `terminal_list` | **Yes** | Preset, PID, status |
+| Resize terminal | `terminal_resize` | **Yes** | Cols × rows |
+| Inject prompt into terminal | `terminal_write` | **Yes** | Same as type |
+| Screenshot terminal content | `screenshot` | **Yes** | Panel target: "terminal" |
 
 ## Settings
 
@@ -217,8 +220,8 @@ exact parity | **No** = no MCP coverage
 
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
-| Open project from path | — | **No** | |
-| List recent projects | — | **No** | |
+| Open project from path | `open_project` | **Yes** | |
+| List recent projects | `list_recent_projects` | **Yes** | |
 | Pin/unpin project | — | **No** | |
 | Remove from recents | — | **No** | |
 
@@ -228,73 +231,65 @@ exact parity | **No** = no MCP coverage
 
 | Domain | Total Actions | MCP Covered | Partial | Not Covered |
 |---|---|---|---|---|
-| Plan management | 17 | 15 | 1 | 1 |
+| Plan management | 17 | 17 | 0 | 0 |
 | Plan items (CRUD) | 22 | 19 | 1 | 2 |
-| Comments / progress / attachments | 9 | 5 | 0 | 4 |
+| Comments / progress / attachments | 9 | 7 | 0 | 2 |
 | Item targets (fileSpecs etc.) | 8 | 8 | 0 | 0 |
 | External references | 3 | 3 | 0 | 0 |
 | Timeline / events | 2 | 1 | 0 | 1 |
 | Drift / deviations | 6 | 5 | 1 | 0 |
 | Proposed changes | 3 | 3 | 0 | 0 |
 | Graph queries (data) | 4 | 4 | 0 | 0 |
-| Graph canvas (visual) | 14 | 0 | 0 | 14 |
-| UI navigation | 12 | 5 | 0 | 7 |
-| Terminal panel | 8 | 0 | 1 | 7 |
-| Project / session | 7 | 2 | 0 | 5 |
+| Graph canvas (visual) | 15 | 9 | 2 | 4 |
+| UI navigation | 12 | 6 | 0 | 6 |
+| Terminal panel | 10 | 9 | 1 | 0 |
+| Project / session | 7 | 5 | 0 | 2 |
 | Settings | 6 | 0 | 0 | 6 |
-| Welcome screen | 4 | 0 | 0 | 4 |
-| **Total** | **125** | **70** | **4** | **51** |
+| Welcome screen | 4 | 2 | 0 | 2 |
+| **Total** | **128** | **98** | **5** | **25** |
 
-**56% covered, 44% uncovered** — mostly in visual/interactive areas
-(graph canvas, terminal, settings, project management).
+**77% covered** (was 56%) — remaining gaps are mostly settings,
+niche welcome screen actions, and a few UI-only interactions.
 
 ---
 
-## Proposed New MCP Tools (Priority Order)
+## Implemented MCP Tools (Phase 18)
 
-### Tier 1 — Agent Workbench Essentials
+### Tier 1 — Agent Workbench Essentials (DONE)
 
-These make CodeTrellis a full agent workspace, not just a planning
-tool. Critical for onboarding flows where the agent needs to run
-the app end-to-end.
-
-| Tool | Domain | What It Does |
+| Tool | Domain | Status |
 |---|---|---|
-| `terminal_create` | Terminal | Create a new terminal session (preset: shell/claude/codex/aider, cwd) |
-| `terminal_write` | Terminal | Send keystrokes or a command string to a terminal session |
-| `terminal_read` | Terminal | Read the last N lines of terminal output from a session |
-| `terminal_list` | Terminal | List active terminal sessions with their preset, PID, status |
-| `terminal_kill` | Terminal | Kill a terminal session |
-| `screenshot` | UI | Capture the current viewport as a base64 PNG (or specific panel: graph, plan, terminal) |
-| `select_item` | UI Nav | Navigate the plan canvas to a specific item by UID |
-| `open_project` | Project | Open/scan a project by path (what the folder picker does) |
+| `terminal_create` | Terminal | Done |
+| `terminal_write` | Terminal | Done |
+| `terminal_read` | Terminal | Done |
+| `terminal_list` | Terminal | Done |
+| `terminal_kill` | Terminal | Done |
+| `terminal_resize` | Terminal | Done |
+| `screenshot` | UI | Done |
+| `select_item` | UI Nav | Done |
+| `open_project` | Project | Done |
 
-### Tier 2 — Graph Visual Control
+### Tier 2 — Graph Visual Control (DONE)
 
-Let agents drive the graph canvas — essential for architecture
-review, blast-radius analysis, and presentation.
-
-| Tool | Domain | What It Does |
+| Tool | Domain | Status |
 |---|---|---|
-| `graph_focus` | Graph | Zoom/pan to center a specific file or symbol node |
-| `graph_select` | Graph | Select one or more nodes (mirrors click / shift-click) |
-| `graph_set_mode` | Graph | Set trellis mode (live/baseline/planned/diff) |
-| `graph_set_scope` | Graph | Set the scope filter to a directory/package path |
-| `graph_set_layout` | Graph | Switch between map (force) and tree (dagre) layout |
-| `graph_set_depth` | Graph | Set view depth (1-5+) |
-| `graph_export` | Graph | Export current graph view as PNG (returns base64) |
-| `graph_snapshot` | Graph | Return structured graph data (nodes + edges + positions) |
+| `graph_focus` | Graph | Done |
+| `graph_select` | Graph | Done |
+| `graph_set_mode` | Graph | Done |
+| `graph_set_scope` | Graph | Done |
+| `graph_set_layout` | Graph | Done |
+| `graph_set_depth` | Graph | Done |
+| `graph_export` | Graph | Done |
+| `graph_snapshot` | Graph | Done |
 
-### Tier 3 — Full Parity
+### Tier 3 — Full Parity (DONE)
 
-Close remaining gaps for complete programmatic control.
-
-| Tool | Domain | What It Does |
+| Tool | Domain | Status |
 |---|---|---|
-| `delete_item_comment` | Items | Delete a comment by UID |
-| `delete_item_attachment` | Items | Delete an attachment by UID |
-| `rescan_project` | Project | Trigger a fresh AST re-parse |
-| `set_baseline` | Project | Set the baseline commit/branch for diff mode |
-| `list_recent_projects` | Project | Return recent projects list |
-| `import_external` | Plans | Import from GitHub issue / conversation / git diff |
-| `copy_plan_as_prompt` | Plans | Serialise plan to markdown prompt string |
+| `delete_item_comment` | Items | Done |
+| `delete_item_attachment` | Items | Done |
+| `rescan_project` | Project | Done |
+| `set_baseline` | Project | Done |
+| `list_recent_projects` | Project | Done |
+| `import_external` | Plans | Done |
+| `copy_plan_as_prompt` | Plans | Done |

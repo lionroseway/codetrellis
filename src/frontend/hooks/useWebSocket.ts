@@ -391,6 +391,100 @@ export function useWebSocket() {
             }
           }
 
+          // --- Graph select (MCP graph_select tool) ---
+          if (type === 'ui-graph-select') {
+            const paths = payload?.paths as string[] | undefined;
+            if (paths) {
+              (async () => {
+                const { useGraphStore } = await import('../stores/graph-store');
+                // Paths come in as relative file paths; node IDs match these
+                useGraphStore.getState().setSelectedNodeIds(paths);
+              })();
+            }
+          }
+
+          // --- Graph layout (MCP graph_set_layout tool) ---
+          if (type === 'ui-graph-layout') {
+            const layout = payload?.layout as string | undefined;
+            if (layout === 'map' || layout === 'tree') {
+              (async () => {
+                const { useGraphStore } = await import('../stores/graph-store');
+                useGraphStore.getState().setLayoutMode(layout);
+              })();
+            }
+          }
+
+          // --- Graph depth (MCP graph_set_depth tool) ---
+          if (type === 'ui-graph-depth') {
+            const depth = payload?.depth as string | undefined;
+            if (depth === 'package' || depth === 'file' || depth === 'symbol') {
+              (async () => {
+                const { useGraphStore } = await import('../stores/graph-store');
+                useGraphStore.getState().setViewDepth(depth);
+              })();
+            }
+          }
+
+          // --- Graph snapshot request (MCP graph_snapshot tool) ---
+          if (type === 'ui-graph-snapshot-request') {
+            const nonce = payload?.nonce as string | undefined;
+            const includeMetadata = payload?.includeMetadata as boolean | undefined;
+            if (nonce) {
+              (async () => {
+                try {
+                  const { useGraphStore } = await import('../stores/graph-store');
+                  const { nodes, edges } = useGraphStore.getState();
+                  // Build a compact representation of the graph
+                  const snapshot = {
+                    nodeCount: nodes.length,
+                    edgeCount: edges.length,
+                    nodes: nodes.map((n) => ({
+                      id: n.id,
+                      type: n.type,
+                      label: n.label,
+                      filePath: n.filePath,
+                      parentId: n.parentId,
+                      changeStatus: n.changeStatus,
+                      ...(includeMetadata ? { metadata: n.metadata } : {}),
+                    })),
+                    edges: edges.map((e) => ({
+                      id: e.id,
+                      source: e.source,
+                      target: e.target,
+                      type: e.type,
+                      label: e.label,
+                      changeStatus: e.changeStatus,
+                    })),
+                  };
+                  await fetch('/api/screenshot-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nonce, data: JSON.stringify(snapshot) }),
+                  });
+                } catch (err) {
+                  console.error('[WS] Graph snapshot failed:', err);
+                  await fetch('/api/screenshot-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nonce, data: '{"error":"snapshot capture failed"}' }),
+                  }).catch(() => {});
+                }
+              })();
+            }
+          }
+
+          // --- Set baseline (MCP set_baseline tool) ---
+          if (type === 'ui-set-baseline') {
+            const commitHash = payload?.commitHash as string | null | undefined;
+            (async () => {
+              const { useGraphStore } = await import('../stores/graph-store');
+              useGraphStore.getState().setBaselineReference({
+                commitHash: commitHash ?? null,
+                shortCommitHash: commitHash ? commitHash.slice(0, 7) : null,
+              });
+            })();
+          }
+
         } catch {
           // ignore malformed messages
         }

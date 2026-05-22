@@ -2,7 +2,7 @@ import http from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { searchSymbols, getDependencyEdges, getFileDependencies, getDbStats, getDb } from '../services/database';
-import { broadcast } from '../server';
+import { broadcast, getBoundBackendPort } from '../server';
 import { z } from 'zod';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
@@ -33,6 +33,8 @@ import * as planFileService from '../services/plan-file-service';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
 import { getSettings } from '../services/settings-service';
 import * as externalRefsService from '../services/external-refs-service';
+import { listRecentProjects } from '../services/recent-projects-service';
+import * as planImportService from '../services/plan-import-service';
 
 /**
  * Default + max-attempt range. The user-configured port comes from
@@ -124,6 +126,106 @@ function inferAgentFromSession(sessionId: string | null): { type: string | null;
   if (sessions.length === 0) return { type: 'mcp-agent', model: null };
   const latest = sessions[sessions.length - 1];
   return { type: latest.agentType ?? 'mcp-agent', model: latest.model ?? null };
+}
+
+// ── Plan-to-prompt serialisation (mirrors frontend HandoffButton logic) ──
+
+function buildPlanPrompt(
+  plan: { title: string; description?: string | null; baseRef?: string | null; targetBranch?: string | null; autoCreateBranch?: boolean },
+  items: Array<{ uid: string; kind: string; title: string; body?: string | null; status?: string | null; sortOrder: number; scopePath?: string | null; fileSpecs?: any[]; symbolSpecs?: any[]; constraints?: any }>,
+  refs?: Array<{ title: string; url: string; kind: string }>,
+): string {
+  const lines: string[] = [`# ${plan.title}`];
+  if (plan.description) lines.push('', plan.description);
+  lines.push('');
+
+  if (plan.baseRef || plan.targetBranch) {
+    lines.push('## Git Context');
+    if (plan.baseRef) lines.push(`- Base: \`${plan.baseRef}\``);
+    if (plan.targetBranch) lines.push(`- Target branch: \`${plan.targetBranch}\``);
+    if (plan.autoCreateBranch) lines.push(`- Auto-create branch: yes`);
+    lines.push('');
+  }
+
+  const actions = items
+    .filter((i) => i.kind === 'action' && (i.status === 'pending' || i.status === 'assigned'))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  if (actions.length > 0) {
+    lines.push('## Tasks', '');
+    for (const action of actions) {
+      lines.push(`### ${action.title}`);
+      if (action.body) lines.push('', action.body);
+      if (action.scopePath) lines.push('', `Scope: \`${action.scopePath}\``);
+      appendFileSpecs(lines, action.fileSpecs);
+      appendSymbolSpecs(lines, action.symbolSpecs);
+      appendConstraints(lines, action.constraints);
+      lines.push('');
+    }
+  }
+
+  if (refs && refs.length > 0) {
+    lines.push('## External References', '');
+    for (const ref of refs) lines.push(`- [${ref.title}](${ref.url})${ref.kind !== 'url' ? ` (${ref.kind.replace(/_/g, ' ')})` : ''}`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+function buildItemPrompt(
+  item: { title: string; body?: string | null; scopePath?: string | null; fileSpecs?: any[]; symbolSpecs?: any[]; constraints?: any },
+  plan: { title: string; baseRef?: string | null; targetBranch?: string | null },
+): string {
+  const lines: string[] = [`# Task: ${item.title}`];
+  if (item.body) lines.push('', item.body);
+  lines.push('');
+  if (item.scopePath) lines.push(`**Scope:** \`${item.scopePath}\``);
+  appendFileSpecs(lines, item.fileSpecs);
+  appendSymbolSpecs(lines, item.symbolSpecs);
+  appendConstraints(lines, item.constraints);
+  if (plan.baseRef || plan.targetBranch) {
+    lines.push('', '## Git Context');
+    if (plan.baseRef) lines.push(`- Base: \`${plan.baseRef}\``);
+    if (plan.targetBranch) lines.push(`- Branch: \`${plan.targetBranch}\``);
+  }
+  return lines.join('\n');
+}
+
+function appendFileSpecs(lines: string[], fileSpecs?: any[]): void {
+  if (!fileSpecs?.length) return;
+  lines.push('', '**Files:**');
+  for (const fs of fileSpecs) {
+    const editsStr = (fs.edits ?? [])
+      .filter((e: any) => e.instruction)
+      .map((e: any) => e.symbol ? `  - ${e.symbol}: ${e.instruction}` : `  - ${e.instruction}`)
+      .join('\n');
+    lines.push(`- \`${fs.path}\` (${fs.action})${fs.description ? ` — ${fs.description}` : ''}`);
+    if (editsStr) lines.push(editsStr);
+  }
+}
+
+function appendSymbolSpecs(lines: string[], symbolSpecs?: any[]): void {
+  if (!symbolSpecs?.length) return;
+  lines.push('', '**Symbols:**');
+  for (const ss of symbolSpecs) {
+    lines.push(`- ${ss.action} \`${ss.name}\`${ss.filePath ? ` in \`${ss.filePath}\`` : ''}${ss.description ? ` — ${ss.description}` : ''}`);
+  }
+}
+
+function appendConstraints(lines: string[], constraints?: any): void {
+  if (!constraints) return;
+  const c = constraints;
+  lines.push('', '**Guardrails:**');
+  if (c.excludePaths?.length) lines.push(`- Do NOT modify: ${c.excludePaths.map((p: string) => `\`${p}\``).join(', ')}`);
+  if (c.lockInterfaces) lines.push('- Do NOT change function/method signatures');
+  if (c.requireTests) lines.push('- Must include tests for all changes');
+  if (c.requireLint) lines.push('- Must pass lint/format before completing');
+  if (c.maxFilesTouched) lines.push(`- Max ${c.maxFilesTouched} files may be touched`);
+  if (c.maxLinesChanged) lines.push(`- Max ${c.maxLinesChanged} lines changed`);
+  if (c.customRules?.length) {
+    for (const rule of c.customRules) lines.push(`- ${rule}`);
+  }
 }
 
 /**
@@ -2371,6 +2473,339 @@ function setupMcpServerInstance(): McpServer {
     async ({ scope_path }) => {
       broadcast('ui-graph-scope', { scopePath: scope_path });
       return { content: [{ type: 'text' as const, text: scope_path ? `Scoped graph to ${scope_path}` : 'Cleared graph scope' }] };
+    },
+  );
+
+  // ── Tier 2: Graph Visual Control ──────────────────────────────────────
+
+  mcpServer.registerTool(
+    'graph_select',
+    {
+      description:
+        'Select one or more nodes on the dependency graph by their file/directory path. ' +
+        'Mirrors shift-click multi-select. Selected nodes can then be used with "Plan these" or "Add to task" actions. ' +
+        'Pass an empty array to clear the selection.',
+      inputSchema: {
+        paths: z.array(z.string()).describe(
+          'Array of relative file or directory paths to select (e.g. ["src/backend/server.ts", "src/frontend/App.tsx"]). Empty array to clear.',
+        ),
+      },
+    },
+    async ({ paths }) => {
+      broadcast('ui-graph-select', { paths });
+      const msg = paths.length === 0
+        ? 'Cleared graph selection'
+        : `Selected ${paths.length} node(s) on graph`;
+      return { content: [{ type: 'text' as const, text: msg }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'graph_set_layout',
+    {
+      description:
+        'Switch the graph layout algorithm. "map" = force-directed (d3-force) layout for organic exploration. ' +
+        '"tree" = hierarchical (dagre) layout for structured top-down view.',
+      inputSchema: {
+        layout: z.enum(['map', 'tree']).describe('Layout algorithm: "map" (force-directed) or "tree" (hierarchical dagre).'),
+      },
+    },
+    async ({ layout }) => {
+      broadcast('ui-graph-layout', { layout });
+      return { content: [{ type: 'text' as const, text: `Set graph layout to ${layout}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'graph_set_depth',
+    {
+      description:
+        'Set the graph view depth — controls what level of detail is shown. ' +
+        '"package" = show only packages/directories (highest level). ' +
+        '"file" = show individual files within packages. ' +
+        '"symbol" = show classes, functions, and methods within files (most detailed).',
+      inputSchema: {
+        depth: z.enum(['package', 'file', 'symbol']).describe('View depth level.'),
+      },
+    },
+    async ({ depth }) => {
+      broadcast('ui-graph-depth', { depth });
+      return { content: [{ type: 'text' as const, text: `Set graph view depth to ${depth}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'graph_export',
+    {
+      description:
+        'Export the current graph view as a PNG image. Returns the graph canvas as a base64-encoded image. ' +
+        'Useful for saving a visual snapshot of the architecture or sharing with team members.',
+      inputSchema: {},
+    },
+    async () => {
+      // Reuse the screenshot infrastructure but target specifically the graph panel
+      const nonce = `ge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const p = new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pendingScreenshots.delete(nonce);
+          reject(new Error('Graph export timed out — is the CodeTrellis UI open with the graph visible?'));
+        }, 10_000);
+        pendingScreenshots.set(nonce, { resolve, reject, timer });
+      });
+
+      broadcast('ui-screenshot-request', { nonce, panel: 'graph' });
+
+      try {
+        const base64 = await p;
+        return {
+          content: [{
+            type: 'image' as const,
+            data: base64,
+            mimeType: 'image/png',
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: err instanceof Error ? err.message : String(err) }], isError: true };
+      }
+    },
+  );
+
+  mcpServer.registerTool(
+    'graph_snapshot',
+    {
+      description:
+        'Return a structured JSON snapshot of the current graph data — all nodes and edges with their types, ' +
+        'paths, and relationships. Use this to programmatically analyse the architecture without needing the visual canvas. ' +
+        'Much lighter than a screenshot and gives exact data for reasoning about dependencies.',
+      inputSchema: {
+        include_metadata: z.boolean().optional().describe('Include full metadata for each node (default false — keeps response compact).'),
+      },
+    },
+    async ({ include_metadata }) => {
+      // The graph data is maintained in the backend's architecture service
+      // We broadcast a request and get the data from the frontend store,
+      // OR we can read directly from the in-memory architecture if available.
+      // For simplicity and accuracy (matching what the user sees), request from frontend.
+      const nonce = `gs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const p = new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pendingScreenshots.delete(nonce);
+          reject(new Error('Graph snapshot timed out — is the CodeTrellis UI open?'));
+        }, 10_000);
+        pendingScreenshots.set(nonce, { resolve, reject, timer });
+      });
+
+      broadcast('ui-graph-snapshot-request', { nonce, includeMetadata: include_metadata !== false });
+
+      try {
+        const json = await p;
+        return { content: [{ type: 'text' as const, text: json }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: err instanceof Error ? err.message : String(err) }], isError: true };
+      }
+    },
+  );
+
+  // ── Tier 3: Full Parity ───────────────────────────────────────────────
+
+  mcpServer.registerTool(
+    'delete_item_comment',
+    {
+      description:
+        'Delete a comment from a plan item by its UID.',
+      inputSchema: {
+        comment_uid: z.string().describe('UID of the comment to delete.'),
+      },
+    },
+    async ({ comment_uid }) => {
+      const ok = commentService.deleteComment(comment_uid);
+      if (!ok) {
+        return { content: [{ type: 'text' as const, text: `Comment ${comment_uid} not found` }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: `Deleted comment ${comment_uid}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'delete_item_attachment',
+    {
+      description:
+        'Delete an attachment from a plan item by its UID.',
+      inputSchema: {
+        attachment_uid: z.string().describe('UID of the attachment to delete.'),
+      },
+    },
+    async ({ attachment_uid }) => {
+      const ok = taskAttachmentsService.deleteAttachment(attachment_uid);
+      if (!ok) {
+        return { content: [{ type: 'text' as const, text: `Attachment ${attachment_uid} not found` }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: `Deleted attachment ${attachment_uid}` }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'rescan_project',
+    {
+      description:
+        'Trigger a fresh AST re-parse of the currently open project. Use this after making changes to ensure ' +
+        'the dependency graph and symbol index are up to date. Equivalent to hitting the "Rescan" button in the UI.',
+      inputSchema: {
+        project_path: z.string().optional().describe(
+          'Absolute path of the project to scan. If omitted, rescans the currently open project.',
+        ),
+      },
+    },
+    async ({ project_path }) => {
+      try {
+        // Use the same REST endpoint the UI uses
+        const port = getBoundBackendPort();
+        const res = await fetch(`http://localhost:${port}/api/project/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectPath: project_path }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          return { content: [{ type: 'text' as const, text: `Rescan failed: ${(body as any).error || res.statusText}` }], isError: true };
+        }
+        return { content: [{ type: 'text' as const, text: `Rescan complete${project_path ? ` for ${project_path}` : ''}` }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Rescan failed: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
+  mcpServer.registerTool(
+    'set_baseline',
+    {
+      description:
+        'Set the baseline commit hash for diff mode. The graph\'s "diff" and "baseline" modes compare ' +
+        'the current state against this reference point. Pass null to clear.',
+      inputSchema: {
+        commit_hash: z.string().nullable().describe('Full or short git commit hash to use as the baseline. Null to clear.'),
+      },
+    },
+    async ({ commit_hash }) => {
+      broadcast('ui-set-baseline', { commitHash: commit_hash });
+      const msg = commit_hash
+        ? `Set baseline to commit ${commit_hash}`
+        : 'Cleared baseline reference';
+      return { content: [{ type: 'text' as const, text: msg }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'list_recent_projects',
+    {
+      description:
+        'List recently opened projects with their paths, display names, branches, and pinned status. ' +
+        'Useful for discovering available projects to open.',
+      inputSchema: {},
+    },
+    async () => {
+      const projects = listRecentProjects();
+      if (projects.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No recent projects found.' }] };
+      }
+      const lines = projects.map((p) =>
+        `- ${p.pinned ? '📌 ' : ''}**${p.displayName}** — \`${p.path}\`${p.branch ? ` (${p.branch})` : ''}`
+      );
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  mcpServer.registerTool(
+    'import_external',
+    {
+      description:
+        'Import a plan from external text — a conversation transcript, markdown notes, ' +
+        'GitHub issue body, or any structured text. Extracts action items, file references, ' +
+        'and creates a plan with items automatically. Good for turning chat discussions or ' +
+        'issue descriptions into actionable CodeTrellis plans.',
+      inputSchema: {
+        text: z.string().describe('The text content to import (markdown, conversation, issue body, etc.).'),
+        title: z.string().optional().describe('Optional title for the new plan. Auto-generated if omitted.'),
+      },
+    },
+    async ({ text, title }) => {
+      try {
+        const result = planImportService.importFromConversation({ text, title });
+
+        // Create the plan from the imported data — use empty tasks array
+        // since we'll create V2 items separately.
+        const plan = planService.createPlan(
+          { title: result.title, description: result.description, tasks: [] },
+          'mcp-agent',
+          'mcp',
+          '',
+        );
+
+        // Create items from the extracted data
+        let itemCount = 0;
+        for (const imported of result.items) {
+          planItemService.createItem({
+            planUid: plan.uid,
+            kind: imported.kind,
+            title: imported.title,
+            body: imported.body,
+            fileSpecs: imported.fileSpecs,
+            scopePath: imported.scopePath,
+            author: 'mcp-agent',
+            authorType: 'mcp',
+          });
+          itemCount++;
+        }
+
+        broadcast('plan-imported', { planUid: plan.uid, source: 'mcp-import' });
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Imported plan "${plan.title}" (${plan.uid}) with ${itemCount} items`,
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Import failed: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
+  mcpServer.registerTool(
+    'copy_plan_as_prompt',
+    {
+      description:
+        'Serialise a plan (or a single item) as a markdown prompt suitable for handing off to an AI agent. ' +
+        'Returns the formatted prompt text that includes tasks, file targets, constraints, and git context. ' +
+        'Equivalent to the "Copy as prompt" handoff button in the UI.',
+      inputSchema: {
+        plan_uid: z.string().describe('UID of the plan to serialise.'),
+        item_uid: z.string().optional().describe('If provided, serialise only this item instead of the full plan.'),
+      },
+    },
+    async ({ plan_uid, item_uid }) => {
+      const plan = planService.getPlan(plan_uid);
+      if (!plan) {
+        return { content: [{ type: 'text' as const, text: `Plan ${plan_uid} not found` }], isError: true };
+      }
+
+      const items = planItemService.listAllItems(plan_uid);
+
+      if (item_uid) {
+        // Single-item prompt
+        const item = items.find((i: any) => i.uid === item_uid);
+        if (!item) {
+          return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found in plan ${plan_uid}` }], isError: true };
+        }
+        const prompt = buildItemPrompt(item, plan);
+        return { content: [{ type: 'text' as const, text: prompt }] };
+      }
+
+      // Full plan prompt
+      const refs = externalRefsService.getExternalRefsByPlan(plan_uid);
+      const prompt = buildPlanPrompt(plan, items, refs);
+      return { content: [{ type: 'text' as const, text: prompt }] };
     },
   );
 
