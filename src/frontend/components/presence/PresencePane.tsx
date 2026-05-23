@@ -77,13 +77,43 @@ const TONE_ICON_COLOR: Record<string, string> = {
 
 let cachedVoice: SpeechSynthesisVoice | null = null;
 
+// High-quality voices across platforms, in preference order. The first
+// one that exists wins.
+const PREFER_VOICES = [
+  'samantha', 'alex', 'allison', 'ava', 'tom', 'nicky',
+  'daniel', 'karen', 'moira', 'tessa', 'serena', 'fiona',
+  'google us english', 'google uk english female', 'google uk english male',
+  'microsoft aria', 'microsoft jenny', 'microsoft guy', 'microsoft zira', 'microsoft david',
+];
+
+// Novelty / robotic / low-quality voices macOS ships and often lists first
+// — skip these (they're the "rasping old man" culprits).
+const AVOID_VOICES = [
+  'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos',
+  'good news', 'grandma', 'grandpa', 'jester', 'junior', 'kathy', 'organ',
+  'pipe organ', 'princess', 'ralph', 'fred', 'reed', 'rocko', 'sandy',
+  'shelley', 'superstar', 'trinoids', 'whisper', 'wobble', 'zarvox',
+  'flo', 'eddy', 'deranged', 'hysterical', 'bruce', 'agnes', 'victoria', 'vicki',
+];
+
 function getPreferredVoice(): SpeechSynthesisVoice | null {
   if (cachedVoice) return cachedVoice;
   const voices = speechSynthesis.getVoices();
-  // Prefer an English voice
-  cachedVoice = voices.find((v) => v.lang.startsWith('en') && v.localService) ??
-    voices.find((v) => v.lang.startsWith('en')) ??
-    voices[0] ?? null;
+  const en = voices.filter((v) => v.lang.startsWith('en'));
+  const named = (n: string) =>
+    en.find((v) => v.name.toLowerCase() === n || v.name.toLowerCase().startsWith(n));
+  const avoided = (v: SpeechSynthesisVoice) =>
+    AVOID_VOICES.some((a) => v.name.toLowerCase().includes(a));
+
+  cachedVoice =
+    // 1. A known high-quality voice, by preference order
+    PREFER_VOICES.map(named).find((v): v is SpeechSynthesisVoice => !!v) ??
+    // 2. First non-novelty local English voice
+    en.find((v) => v.localService && !avoided(v)) ??
+    // 3. Any non-novelty English voice
+    en.find((v) => !avoided(v)) ??
+    // 4. Last resort
+    en[0] ?? voices[0] ?? null;
   return cachedVoice;
 }
 

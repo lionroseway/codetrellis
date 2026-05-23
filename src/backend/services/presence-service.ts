@@ -88,10 +88,17 @@ export function postReply(text: string): UserReply {
 }
 
 /**
- * Consume the oldest pending reply. Returns null if none waiting.
- * Used by await_user_input to drain the reply queue.
+ * Consume the oldest pending reply created at or after `since`.
+ *
+ * Replies older than `since` answered an earlier prompt — they are
+ * discarded rather than returned, so await_user_input never replays a
+ * stale reply buffered before its prompt was shown. The queue is ordered
+ * by creation time (push order), so all stale entries sit at the front.
  */
-export function consumeReply(): UserReply | null {
+export function consumeReply(since = 0): UserReply | null {
+  while (pendingReplies.length > 0 && pendingReplies[0].createdAt < since) {
+    pendingReplies.shift();
+  }
   return pendingReplies.shift() ?? null;
 }
 

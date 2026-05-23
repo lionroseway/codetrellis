@@ -118,14 +118,16 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async ({ prompt, timeout_ms }) => {
       const clampedTimeout = Math.min(timeout_ms ?? 60000, 300000);
+      const startedAt = Date.now();
 
       // Broadcast the prompt hint so the UI can show it
       if (prompt) {
         deps.broadcast('presence-input-prompt', { prompt });
       }
 
-      // Check if there's already a queued reply
-      const immediate = deps.presenceService.consumeReply();
+      // Only honour a reply entered at/after this prompt was shown —
+      // never replay a stale reply buffered from an earlier question.
+      const immediate = deps.presenceService.consumeReply(startedAt);
       if (immediate) {
         return { content: [{ type: 'text' as const, text: JSON.stringify({
           text: immediate.text, at: immediate.createdAt,
