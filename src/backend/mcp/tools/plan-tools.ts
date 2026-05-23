@@ -114,10 +114,19 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid }) => {
+      const plan = deps.planService.getPlan(plan_uid);
       deps.planService.deletePlan(plan_uid);
+      // Clean up disk files (parity with REST DELETE /api/plans/:uid)
+      let diskRemoved = false;
+      if (plan?.projectPath) {
+        try {
+          const result = deps.planFileService.unlinkPlan(plan_uid, plan.projectPath);
+          diskRemoved = result.removed;
+        } catch { /* best-effort */ }
+      }
       const n = deps.broadcast('plan-deleted', { planUid: plan_uid });
       deps.saveNow(() => deps.exportDatabase());
-      return resultWithMeta({ ok: true, planUid: plan_uid }, n);
+      return resultWithMeta({ ok: true, planUid: plan_uid, diskRemoved }, n);
     },
   );
 
@@ -144,7 +153,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       let lastN = 0;
       for (const uid of uids) {
         try {
+          const plan = deps.planService.getPlan(uid);
           deps.planService.deletePlan(uid);
+          // Clean up disk files (parity with REST POST /api/plans/bulk-delete)
+          if (plan?.projectPath) {
+            try { deps.planFileService.unlinkPlan(uid, plan.projectPath); } catch { /* best-effort */ }
+          }
           lastN = deps.broadcast('plan-deleted', { planUid: uid });
           deleted++;
         } catch {
