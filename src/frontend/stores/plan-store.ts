@@ -100,6 +100,11 @@ interface PlanState {
    * reconcile from authoritative state.
    */
   updatePlanGitContext: (planUid: string, patch: Partial<Pick<Plan, 'baseRef' | 'targetBranch' | 'targetWorktree' | 'autoCreateBranch'>>) => Promise<void>;
+
+  /** Delete a plan (archives in DB + removes disk files). */
+  deletePlan: (planUid: string) => Promise<boolean>;
+  /** Bulk-delete plans by UID. */
+  bulkDeletePlans: (planUids: string[]) => Promise<number>;
 }
 
 export const usePlanStore = create<PlanState>((set, get) => ({
@@ -639,6 +644,35 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       }));
     } catch {
       /* WS plan-updated will reconcile */
+    }
+  },
+
+  deletePlan: async (planUid) => {
+    try {
+      const res = await fetch(`/api/plans/${planUid}`, { method: 'DELETE' });
+      if (!res.ok) return false;
+      // Optimistic removal (WS plan-deleted will also fire)
+      get().onPlanDeleted(planUid);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  bulkDeletePlans: async (planUids) => {
+    try {
+      const res = await fetch('/api/plans/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uids: planUids }),
+      });
+      if (!res.ok) return 0;
+      const data = await res.json();
+      // Optimistic removal
+      for (const uid of planUids) get().onPlanDeleted(uid);
+      return data.deleted ?? 0;
+    } catch {
+      return 0;
     }
   },
 

@@ -1263,10 +1263,24 @@ app.put('/api/plans/:uid', (req, res) => {
 
 // Delete (archive) plan
 app.delete('/api/plans/:uid', (req, res) => {
-  planService.deletePlan(req.params.uid);
-  broadcast('plan-deleted', { planUid: req.params.uid });
+  const planUid = req.params.uid;
+  const plan = planService.getPlan(planUid);
+  const removeDisk = req.query.disk !== 'false'; // default: also remove disk files
+
+  planService.deletePlan(planUid);
+
+  // Also remove on-disk .codetrellis/plans/<slug>/ if the plan has a project path
+  let diskRemoved = false;
+  if (removeDisk && plan?.projectPath) {
+    try {
+      const result = unlinkPlan(planUid, plan.projectPath);
+      diskRemoved = result.removed;
+    } catch { /* best-effort */ }
+  }
+
+  broadcast('plan-deleted', { planUid });
   saveNow(() => exportDatabase());
-  res.json({ ok: true });
+  res.json({ ok: true, diskRemoved });
 });
 
 // Bulk delete plans
@@ -1279,7 +1293,12 @@ app.post('/api/plans/bulk-delete', (req, res) => {
   let deleted = 0;
   for (const uid of uids) {
     try {
+      const plan = planService.getPlan(uid);
       planService.deletePlan(uid);
+      // Also clean up disk files
+      if (plan?.projectPath) {
+        try { unlinkPlan(uid, plan.projectPath); } catch { /* best-effort */ }
+      }
       broadcast('plan-deleted', { planUid: uid });
       deleted++;
     } catch {
