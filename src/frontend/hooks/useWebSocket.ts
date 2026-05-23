@@ -234,17 +234,26 @@ export function useWebSocket() {
             const target = payload?.target as string | undefined;
             const planUid = payload?.planUid as string | undefined;
             if (target === 'plan' || target === 'plans') {
-              useUiStore.getState().setWorkspaceMode('plan');
-              if (planUid) {
-                usePlanStore.getState().setActivePlan(planUid);
-              }
+              // Await setActivePlan so activePlanUid is set before the
+              // workspace mode flips — otherwise the render condition
+              // (workspaceMode === 'plan' && activePlanUid) fails when
+              // no plan was previously open.
+              (async () => {
+                if (planUid) {
+                  await usePlanStore.getState().setActivePlan(planUid);
+                }
+                useUiStore.getState().setWorkspaceMode('plan');
+              })();
             } else if (target === 'graph') {
               useUiStore.getState().setWorkspaceMode('graph');
             } else if (target === 'split') {
-              useUiStore.getState().setSplitView(true);
-              if (planUid) {
-                usePlanStore.getState().setActivePlan(planUid);
-              }
+              (async () => {
+                if (planUid) {
+                  await usePlanStore.getState().setActivePlan(planUid);
+                }
+                useUiStore.getState().setSplitView(true);
+                useUiStore.getState().setWorkspaceMode('plan');
+              })();
             } else if (target === 'timeline') {
               useUiStore.getState().setWorkspaceMode('plan');
               // Timeline is inside the plan workspace — opening plan mode is enough
