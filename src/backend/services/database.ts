@@ -476,6 +476,9 @@ export async function initDatabase(): Promise<void> {
   // Phase 17.N — agent capabilities for skill matching
   try { db.run(`ALTER TABLE agent_sessions ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
 
+  // Phase 17.B+ — host terminal ID for self-write detection
+  try { db.run(`ALTER TABLE agent_sessions ADD COLUMN host_terminal_id TEXT DEFAULT NULL`); } catch { /* exists */ }
+
   // Phase 17.R — external references table
   db.run(`
     CREATE TABLE IF NOT EXISTS external_refs (

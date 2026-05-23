@@ -47,14 +47,36 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'Use terminal_list to find active session IDs. Each terminal is independent — target the right one. ' +
         'Set focus: true to switch the UI to this terminal tab so the user sees the output live. ' +
         'IMPORTANT: Before writing, make sure you know what is running in the target terminal (use terminal_read first). ' +
-        'Never write to your own host terminal — if you are running inside a CodeTrellis terminal, writing to it creates a feedback loop.',
+        'Never write to your own host terminal — if you registered with host_terminal_id, writes to that terminal are blocked automatically.',
       inputSchema: {
         session_id: z.string().describe('Terminal session ID (from terminal_create or terminal_list).'),
         input: z.string().describe('Text to write. Include "\\n" to execute a command.'),
         focus: z.boolean().optional().describe('Focus this terminal tab in the UI before writing. Default false.'),
       },
     },
-    async ({ session_id, input, focus }) => {
+    async ({ session_id, input, focus }, extra: any) => {
+      // ── Self-write guard ──────────────────────────────────────────
+      // If the caller registered with a host_terminal_id, block writes
+      // to that terminal to prevent the agent from typing into its own
+      // stdin (which creates a feedback loop).
+      const callerSessionId = extra?.sessionInfo?.sessionId
+        ?? extra?.requestInfo?.headers?.['mcp-session-id']
+        ?? null;
+      if (callerSessionId) {
+        const hostTerminalId = deps.sessionService.getHostTerminalId(callerSessionId);
+        if (hostTerminalId && hostTerminalId === session_id) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `BLOCKED: Terminal ${session_id} is your own host terminal. Writing to it would create a feedback loop ` +
+                `(you'd be typing into your own stdin). Use terminal_write only for OTHER terminals. ` +
+                `If you need to run commands, execute them directly in your own shell — don't route them through terminal_write.`,
+            }],
+            isError: true,
+          };
+        }
+      }
+
       // Unescape common terminal escape sequences. MCP clients (including
       // Claude Code) may send literal two-char sequences like \n \r \t
       // instead of the actual control bytes, because the JSON layer

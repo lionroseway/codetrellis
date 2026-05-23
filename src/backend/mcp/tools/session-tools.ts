@@ -13,7 +13,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'register_session',
     {
-      description: 'Register this agent connection with CodeTrellis. Identifies who you are, what model you use, and what capabilities you have. Capabilities are used for skill-matching when claiming Actions — declare your MCP servers, language proficiencies, and skills so CodeTrellis can route the right work to you.',
+      description:
+        'Register this agent connection with CodeTrellis. Identifies who you are, what model you use, and what capabilities you have. ' +
+        'Capabilities are used for skill-matching when claiming Actions — declare your MCP servers, language proficiencies, and skills so CodeTrellis can route the right work to you.\n\n' +
+        'If you are running inside a CodeTrellis terminal, the environment variable CODETRELLIS_HOST_TERMINAL will be set to your ' +
+        'host terminal\'s session ID. Pass it as host_terminal_id so CodeTrellis can prevent you from accidentally writing to your ' +
+        'own terminal via terminal_write (which would create a feedback loop).',
       inputSchema: {
         agent_type: z.string().describe('Agent type, e.g. claude-code, cursor, aider'),
         model: z.string().optional().describe('Model name, e.g. claude-opus-4, gpt-4o'),
@@ -21,17 +26,28 @@ export function register(server: McpServer, deps: ToolDeps): void {
           name: z.string().describe('Capability name, e.g. "playwright", "typescript", "@refactor"'),
           source: z.enum(['mcp', 'skill', 'lang', 'plugin']).describe('Where this capability comes from'),
         })).optional().describe('Capabilities this agent has — MCP servers, skills, languages, plugins'),
+        host_terminal_id: z.string().optional().describe(
+          'If you are running inside a CodeTrellis terminal, pass the value of the CODETRELLIS_HOST_TERMINAL ' +
+          'environment variable here. This enables self-write protection — terminal_write will reject writes ' +
+          'to your own host terminal to prevent feedback loops.',
+        ),
       },
     },
-    async ({ agent_type, model, capabilities }, extra: any) => {
+    async ({ agent_type, model, capabilities, host_terminal_id }, extra: any) => {
       const sessionId = extra?.sessionInfo?.sessionId
         ?? extra?.requestInfo?.headers?.['mcp-session-id']
         ?? `mcp-${Date.now()}`;
-      deps.sessionService.registerSession(sessionId, agent_type, model, capabilities);
+      deps.sessionService.registerSession(sessionId, agent_type, model, capabilities, host_terminal_id);
       deps.broadcast('session-registered', { sessionId, agentType: agent_type, model, capabilities });
       deps.broadcast('mcp-session-changed', { reason: 'register', sessionId });
       deps.saveNow(() => deps.exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Session registered: ${sessionId} (${agent_type}${model ? ` / ${model}` : ''}${capabilities?.length ? ` with ${capabilities.length} capabilities` : ''})` }] };
+      const parts = [
+        `Session registered: ${sessionId} (${agent_type}${model ? ` / ${model}` : ''}${capabilities?.length ? ` with ${capabilities.length} capabilities` : ''})`,
+      ];
+      if (host_terminal_id) {
+        parts.push(`Self-write protection enabled: writes to terminal ${host_terminal_id} will be blocked from this session.`);
+      }
+      return { content: [{ type: 'text' as const, text: parts.join('\n') }] };
     },
   );
 

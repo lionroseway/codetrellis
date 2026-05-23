@@ -269,7 +269,7 @@ edges.
 
 | Tool | What it does |
 |------|-------------|
-| \`register_session(agent_type, model?, capabilities?)\` | Identify yourself; declare skills for task routing |
+| \`register_session(agent_type, model?, capabilities?, host_terminal_id?)\` | Identify yourself; declare skills for task routing. Pass host_terminal_id from \`$CODETRELLIS_HOST_TERMINAL\` env var if running inside a CodeTrellis terminal |
 | \`set_active_plan(plan_uid)\` | Declare which plan you're working on |
 | \`setup_agent_permissions(project_path)\` | Auto-approve all CodeTrellis MCP tools for this project (writes .claude/settings.local.json) |
 
@@ -397,7 +397,10 @@ done cleanly.
 
 1. **Register yourself** — \`register_session(agent_type, model?)\`
    so you appear in the connected-agents list and your work is
-   attributed correctly.
+   attributed correctly. **If you are running inside a CodeTrellis
+   terminal**, the env var \`CODETRELLIS_HOST_TERMINAL\` will be set —
+   pass it as \`host_terminal_id\` to enable self-write protection
+   (prevents you from accidentally writing to your own terminal).
 
 2. **Enable smooth tool flow** —
    \`setup_agent_permissions(project_path)\` writes a
@@ -875,8 +878,23 @@ different specialization needed):
 
 | Tool | What it does |
 |------|-------------|
-| \`register_session(agent_type, model?, capabilities?)\` | Register your agent identity. Shows in the Connected Agents widget. |
+| \`register_session(agent_type, model?, capabilities?, host_terminal_id?)\` | Register your agent identity. Shows in the Connected Agents widget. Pass \`host_terminal_id\` if running inside a CodeTrellis terminal (see below). |
 | \`set_active_plan(plan_uid)\` | Link your session to a plan. The UI navigates to show it. |
+
+## Self-write protection
+
+When CodeTrellis creates a terminal, it sets the env var
+\`CODETRELLIS_HOST_TERMINAL=<session_id>\` in the PTY environment.
+If you are an agent running inside a CodeTrellis terminal:
+
+1. Read \`$CODETRELLIS_HOST_TERMINAL\` from your environment
+2. Pass it to \`register_session(host_terminal_id=...)\`
+3. Any \`terminal_write\` call targeting your own host terminal will
+   be **blocked** with an error — preventing a feedback loop where
+   you'd type into your own stdin
+
+This is automatic once registered. You can still write to any OTHER
+terminal — only your own host terminal is protected.
 
 ## Approval gates and dependencies
 

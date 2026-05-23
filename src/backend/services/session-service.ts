@@ -2,14 +2,24 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { AgentSessionInfo, AgentCapability } from '../../shared/types';
 
-export function registerSession(sessionId: string, agentType: string, model?: string, capabilities?: AgentCapability[]): void {
+export function registerSession(sessionId: string, agentType: string, model?: string, capabilities?: AgentCapability[], hostTerminalId?: string): void {
   const now = Date.now();
   getDb().run(
-    `INSERT OR REPLACE INTO agent_sessions (session_id, agent_type, model, capabilities, connected_at, last_seen, status)
-     VALUES (?, ?, ?, ?, ?, ?, 'active')`,
-    [sessionId, agentType, model || null, JSON.stringify(capabilities ?? []), now, now]
+    `INSERT OR REPLACE INTO agent_sessions (session_id, agent_type, model, capabilities, host_terminal_id, connected_at, last_seen, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+    [sessionId, agentType, model || null, JSON.stringify(capabilities ?? []), hostTerminalId || null, now, now]
   );
   markDirty();
+}
+
+/** Look up the host terminal ID for an MCP session (for self-write detection). */
+export function getHostTerminalId(sessionId: string): string | null {
+  const result = getDb().exec(
+    `SELECT host_terminal_id FROM agent_sessions WHERE session_id = ?`,
+    [sessionId]
+  );
+  if (!result[0]?.values[0]) return null;
+  return (result[0].values[0][0] as string) ?? null;
 }
 
 /** Phase 17.N — Update capabilities for an existing session. */

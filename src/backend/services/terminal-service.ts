@@ -181,6 +181,10 @@ export function createTerminal(opts: {
     // Avoid pager for git and other tools inside the terminal
     GIT_PAGER: '',
     PAGER: '',
+    // Self-write detection: agents running inside this PTY can read
+    // this env var and pass it to register_session(host_terminal_id=...)
+    // so terminal_write can reject writes to their own host terminal.
+    CODETRELLIS_HOST_TERMINAL: id,
   };
 
   const pty = ptySpawn(file, args, {
