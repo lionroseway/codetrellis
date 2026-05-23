@@ -44,11 +44,30 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'detect_deviations',
     {
-      description: 'Run deviation detection for a plan — compares plan expectations against actual codebase state.',
+      description: 'Run deviation detection for a plan — compares plan expectations against actual codebase state. Also detects unexpected files (changed since the baseline snapshot but not in any plan item\'s fileSpecs).',
       inputSchema: { plan_uid: z.string() },
     },
     async ({ plan_uid }) => {
-      const devs = deps.detectDeviations(plan_uid);
+      // Compute changed files from the baseline snapshot so we can detect
+      // unexpected files (changed since baseline but not in any fileSpec).
+      const plan = deps.planService.getPlan(plan_uid);
+      const projectPath = plan?.projectPath ?? process.cwd();
+      const snapshots = deps.listSnapshots(plan_uid);
+      let changedFiles: string[] | undefined;
+
+      if (snapshots.length > 0) {
+        const rawDiff = deps.computeTrellisDiff(snapshots[0].id);
+        if (rawDiff) {
+          // Filter out phantom entries — files the DB has but filesystem doesn't
+          const allChanged = [...rawDiff.addedFiles, ...rawDiff.modifiedFiles];
+          changedFiles = allChanged.filter((f) => {
+            const abs = f.startsWith('/') ? f : `${projectPath}/${f}`;
+            return fs.existsSync(abs);
+          });
+        }
+      }
+
+      const devs = deps.detectDeviations(plan_uid, changedFiles);
       return { content: [{ type: 'text' as const, text: JSON.stringify({ detected: devs.length, deviations: devs }, null, 2) }] };
     },
   );
