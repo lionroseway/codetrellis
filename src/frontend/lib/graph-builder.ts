@@ -405,12 +405,28 @@ export function buildDependencyGraph(
   return {
     nodes: laidOut.nodes.map((node) => {
       const fullPath = ((node.data || {}) as any).fullPath || '';
+
+      // In "planned" mode, show plan-alignment states (planned_add / planned_modify /
+      // planned_remove) instead of raw git states (staged / unstaged / untracked).
+      // In "diff" mode, show both.
+      let nodeStates: string[];
+      if (trellisMode === 'planned') {
+        const ps = plannedStateMap.get(node.id) || (fullPath ? plannedStateMap.get(fullPath) : undefined);
+        nodeStates = ps ? [ps] : [];
+      } else if (trellisMode === 'diff') {
+        const git = gitStateMap.get(node.id) || (fullPath ? gitStateMap.get(fullPath) : []) || [];
+        const ps = plannedStateMap.get(node.id) || (fullPath ? plannedStateMap.get(fullPath) : undefined);
+        nodeStates = ps ? [...git, ps] : git;
+      } else {
+        nodeStates = gitStateMap.get(node.id) || (fullPath ? gitStateMap.get(fullPath) : []) || [];
+      }
+
       return {
         ...node,
         data: {
           ...(node.data || {}),
           mode: trellisMode,
-          gitStates: gitStateMap.get(node.id) || (fullPath ? gitStateMap.get(fullPath) : []) || [],
+          gitStates: nodeStates,
         },
       };
     }),

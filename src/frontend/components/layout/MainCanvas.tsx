@@ -1015,7 +1015,7 @@ export function MainCanvas() {
  * target node and optionally highlights it with a brief flash.
  */
 function GraphFocusHandler() {
-  const { getNodes, setCenter } = useReactFlow();
+  const { getNodes, setCenter, fitView } = useReactFlow();
   const pendingFocus = useGraphStore((s) => s.pendingFocus);
   const clearPendingFocus = useGraphStore((s) => s.clearPendingFocus);
 
@@ -1023,13 +1023,32 @@ function GraphFocusHandler() {
     if (!pendingFocus) return;
     const { path, highlight } = pendingFocus;
 
-    // Find the node whose id (or data.filePath) matches the requested path.
+    // Find the node whose id (or data.fullPath / data.filePath) matches
+    // the requested path. Also check suffix matching for relative vs
+    // absolute path variants, and check cluster nodes whose `files`
+    // array contains the path.
     const allNodes = getNodes();
-    const target = allNodes.find((n) => {
-      if (n.id === path) return true;
+
+    const pathMatch = (candidate: string) =>
+      candidate === path || candidate.endsWith('/' + path) || path.endsWith('/' + candidate);
+
+    let target = allNodes.find((n) => {
+      if (pathMatch(n.id)) return true;
       const data = (n.data || {}) as Record<string, unknown>;
-      return data.filePath === path;
+      if (typeof data.fullPath === 'string' && pathMatch(data.fullPath)) return true;
+      if (typeof data.filePath === 'string' && pathMatch(data.filePath)) return true;
+      return false;
     });
+
+    // If no direct match, check cluster nodes whose `files` array
+    // contains the path — the file is inside a collapsed cluster.
+    if (!target) {
+      target = allNodes.find((n) => {
+        const data = (n.data || {}) as Record<string, unknown>;
+        if (!Array.isArray(data.files)) return false;
+        return (data.files as string[]).some((f) => pathMatch(f));
+      });
+    }
 
     if (!target) {
       // Node not in current view — clear so we don't spin.
@@ -1037,17 +1056,26 @@ function GraphFocusHandler() {
       return;
     }
 
-    // Center viewport on the node (with a comfortable zoom level).
+    // Center viewport on the node. For large graphs, use fitView on
+    // just this node for reliable centering — setCenter can miss if
+    // the zoom level doesn't match the layout spread.
     const nodeWidth = target.measured?.width ?? target.width ?? 200;
     const nodeHeight = target.measured?.height ?? target.height ?? 60;
     const centerX = (target.position.x ?? 0) + nodeWidth / 2;
     const centerY = (target.position.y ?? 0) + nodeHeight / 2;
-    setCenter(centerX, centerY, { zoom: 1.2, duration: 600 });
+
+    if (allNodes.length > 80) {
+      // Large graph: fitView on the single node is more reliable than
+      // setCenter because it calculates the correct zoom automatically.
+      fitView({ nodes: [{ id: target.id }], duration: 600, padding: 0.5 });
+    } else {
+      setCenter(centerX, centerY, { zoom: 1.2, duration: 600 });
+    }
 
     // Highlight flash: add a temporary CSS class to the DOM node.
     if (highlight) {
       requestAnimationFrame(() => {
-        const el = document.querySelector(`[data-id="${CSS.escape(target.id)}"]`);
+        const el = document.querySelector(`[data-id="${CSS.escape(target!.id)}"]`);
         if (el) {
           el.classList.add('graph-focus-highlight');
           setTimeout(() => el.classList.remove('graph-focus-highlight'), 1800);
@@ -1056,7 +1084,7 @@ function GraphFocusHandler() {
     }
 
     clearPendingFocus();
-  }, [pendingFocus, getNodes, setCenter, clearPendingFocus]);
+  }, [pendingFocus, getNodes, setCenter, fitView, clearPendingFocus]);
 
   // Render nothing — purely side-effect component.
   return null;

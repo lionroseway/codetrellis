@@ -205,12 +205,18 @@ function FileNodeComponent({ data }: NodeProps) {
           <span
             key={state}
             className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
+              state === 'planned_add' ? 'border-emerald-300/24 bg-emerald-500/14 text-emerald-100' :
+              state === 'planned_modify' ? 'border-amber-300/24 bg-amber-500/14 text-amber-100' :
+              state === 'planned_remove' ? 'border-red-300/24 bg-red-500/14 text-red-100' :
               state === 'untracked' ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100' :
               state === 'staged' ? 'border-sky-300/20 bg-sky-500/10 text-sky-100' :
               'border-orange-300/20 bg-orange-500/10 text-orange-100'
             }`}
           >
-            {state}
+            {state === 'planned_add' ? 'planned +' :
+             state === 'planned_modify' ? 'planned ~' :
+             state === 'planned_remove' ? 'planned −' :
+             state}
           </span>
         ))}
       </div>
