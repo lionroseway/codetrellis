@@ -118,6 +118,51 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const completedTasks = actions.filter((i: any) => i.status === 'done').length;
       const totalTasks = actions.length;
 
+      // ── Plan-aware classification ──────────────────────────────
+      // Cross-reference the raw file diff against the plan's declared
+      // fileSpecs so the agent sees "on track" vs "unexpected" vs "missing".
+      const changesSummary = deps.planChangesService.summarizeChanges(plan_uid);
+
+      // Build the set of planned file paths from V2 items' fileSpecs
+      const allItems = deps.planItemService.listAllItems(plan_uid);
+      const plannedPaths = new Set<string>();
+      for (const item of allItems) {
+        if ((item as any).kind !== 'action') continue;
+        for (const fs of (item as any).fileSpecs ?? []) {
+          plannedPaths.add(fs.path);
+        }
+      }
+
+      const allChangedFiles = new Set([
+        ...diff.addedFiles,
+        ...diff.modifiedFiles,
+        ...diff.removedFiles,
+      ]);
+
+      const onTrack: string[] = [];
+      const unexpected: string[] = [];
+      const missing: string[] = [];
+
+      for (const file of allChangedFiles) {
+        // Check if any planned path matches (suffix match for relative paths)
+        const isPlanned = [...plannedPaths].some(
+          (p) => file === p || file.endsWith('/' + p) || p.endsWith('/' + file),
+        );
+        if (isPlanned) {
+          onTrack.push(file);
+        } else {
+          unexpected.push(file);
+        }
+      }
+
+      // Files that are planned but not yet changed
+      for (const planned of plannedPaths) {
+        const wasChanged = [...allChangedFiles].some(
+          (f) => f === planned || f.endsWith('/' + planned) || planned.endsWith('/' + f),
+        );
+        if (!wasChanged) missing.push(planned);
+      }
+
       const since = since_ms ?? snapshots[0].createdAt;
       const recentComments = deps.commentService.listCommentsForPlanSince(plan_uid, since);
       const blockers = recentComments.filter((c: any) => c.kind === 'blocker');
@@ -127,6 +172,18 @@ export function register(server: McpServer, deps: ToolDeps): void {
       return { content: [{ type: 'text' as const, text: JSON.stringify({
         planTitle: plan?.title,
         taskProgress: `${completedTasks}/${totalTasks}`,
+        // Plan-aware classification
+        planAlignment: {
+          onTrack: onTrack.length,
+          unexpected: unexpected.length,
+          missing: missing.length,
+          onTrackFiles: onTrack,
+          unexpectedFiles: unexpected,
+          missingFiles: missing,
+        },
+        // Granular proposed-changes summary (from plan-changes-service)
+        changesSummary,
+        // Raw diff (still useful for full picture)
         filesChanged: diff.addedFiles.length + diff.modifiedFiles.length,
         addedFiles: diff.addedFiles,
         modifiedFiles: diff.modifiedFiles,

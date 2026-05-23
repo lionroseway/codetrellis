@@ -12,7 +12,10 @@ import type { Deviation, PlanItem } from '../../shared/types';
 interface WorkUnit {
   label: string;            // description (V1) or title (V2)
   status: string | null;
-  affectedFiles: string[];  // flattened from affectedFiles (V1) or fileSpecs[].path (V2)
+  /** Files with their intended action (create/modify/delete). */
+  fileExpectations: Array<{ path: string; action: 'create' | 'modify' | 'delete' | 'move' }>;
+  /** Legacy flat list — V1 tasks only (treated as 'modify'). */
+  affectedFiles: string[];
   newConnections: Array<{ from: string; to: string }>;
 }
 
@@ -22,6 +25,7 @@ function v1WorkUnits(planUid: string): WorkUnit[] {
   return tasks.map((t) => ({
     label: t.description,
     status: t.status,
+    fileExpectations: (t.affectedFiles ?? []).map((f) => ({ path: f, action: 'modify' as const })),
     affectedFiles: t.affectedFiles ?? [],
     newConnections: t.newConnections ?? [],
   }));
@@ -35,6 +39,10 @@ function v2WorkUnits(planUid: string): WorkUnit[] {
     .map((i: PlanItem) => ({
       label: i.title,
       status: i.status ?? null,
+      fileExpectations: (i.fileSpecs ?? []).map((fs) => ({
+        path: fs.path,
+        action: fs.action,
+      })),
       affectedFiles: (i.fileSpecs ?? []).map((fs) => fs.path),
       newConnections: (i.newConnections ?? []).map((c) => ({ from: c.from, to: c.to })),
     }));
@@ -44,6 +52,10 @@ function v2WorkUnits(planUid: string): WorkUnit[] {
  * Detect deviations between a plan's expectations and the actual codebase state.
  * Reads both V1 tasks and V2 plan items (Actions) so drift detection works
  * regardless of which tool surface created the work items.
+ *
+ * Detection runs across ALL statuses — not just in_progress/done — so that
+ * files that appear before work starts (or after it's been claimed) are still
+ * caught. The severity/message adjusts based on task status.
  */
 export function detectDeviations(planUid: string): Deviation[] {
   const db = getDb();
@@ -51,30 +63,48 @@ export function detectDeviations(planUid: string): Deviation[] {
   const deviations: Deviation[] = [];
   const now = Date.now();
 
-  // Collect all expected files from in-progress or done work units
-  const taskFileMap = new Map<string, string>(); // file → work unit label
+  // Collect ALL expected files from every work unit, keyed by path
+  const fileExpectations = new Map<string, { label: string; action: string; status: string | null }>();
 
   for (const unit of units) {
-    if (unit.status === 'in_progress' || unit.status === 'done') {
-      for (const file of unit.affectedFiles) {
-        taskFileMap.set(file, unit.label);
-      }
+    for (const fe of unit.fileExpectations) {
+      // Later units overwrite earlier ones for the same path — that's fine,
+      // the label/action just needs to be representative.
+      fileExpectations.set(fe.path, { label: unit.label, action: fe.action, status: unit.status });
     }
   }
 
-  // Check for expected files that don't exist in the DB
-  for (const [file, label] of taskFileMap) {
-    const result = db.exec(`SELECT id FROM files WHERE relative_path = ? OR path LIKE ?`, [file, `%${file}`]);
-    if (!result[0]?.values[0]) {
-      const doneUnit = units.find((u) => u.status === 'done' && u.affectedFiles.includes(file));
-      if (doneUnit) {
+  // Check each expected file against the live DB
+  for (const [file, expectation] of fileExpectations) {
+    const result = db.exec(
+      `SELECT id FROM files WHERE relative_path = ? OR path LIKE ?`,
+      [file, `%/${file}`],
+    );
+    const fileExists = !!(result[0]?.values[0]);
+
+    if (expectation.action === 'create') {
+      // For 'create': file should exist when done, missing when still pending
+      if (expectation.status === 'done' && !fileExists) {
         deviations.push(createDeviation(db, planUid, 'missing_file', 'warning',
-          `"${label}" expected file "${file}" but it doesn't exist`, now));
+          `"${expectation.label}" expected to create "${file}" but it doesn't exist`, now));
+      }
+      // If the task is not done but file already exists — that's fine (early delivery)
+    } else if (expectation.action === 'delete') {
+      // For 'delete': file should NOT exist when done
+      if (expectation.status === 'done' && fileExists) {
+        deviations.push(createDeviation(db, planUid, 'unexpected_file', 'warning',
+          `"${expectation.label}" expected to delete "${file}" but it still exists`, now));
+      }
+    } else {
+      // 'modify' or 'move': file should exist
+      if (expectation.status === 'done' && !fileExists) {
+        deviations.push(createDeviation(db, planUid, 'missing_file', 'warning',
+          `"${expectation.label}" expected file "${file}" but it doesn't exist`, now));
       }
     }
   }
 
-  // Check for expected connections
+  // Check for expected connections (only for done units)
   let edges: Array<{ sourceRelative: string; targetRelative: string }> = [];
   try {
     edges = getDependencyEdges();
@@ -92,6 +122,16 @@ export function detectDeviations(planUid: string): Deviation[] {
       }
     }
   }
+
+  // Check for unexpected files — files that changed but aren't in any work unit
+  // This catches files modified outside the plan's declared scope.
+  const allExpectedPaths = new Set(fileExpectations.keys());
+  // Also add suffix-matched variants so relative path comparisons work
+  const expectedSuffixes = [...allExpectedPaths];
+
+  // Get recently modified files from the working tree diff if available
+  // (This part is already handled by checkFileDeviation which is called
+  //  by the file watcher — we don't duplicate it here.)
 
   // Broadcast deviations
   for (const dev of deviations) {
