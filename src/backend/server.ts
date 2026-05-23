@@ -42,6 +42,7 @@ import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './se
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
 import { getDeviations, resolveDeviation } from './services/deviation-service';
+import * as presenceService from './services/presence-service';
 import { applyTemplate } from './services/plan-templates-service';
 import { listTemplates } from './services/plan-templates';
 import { publishPlanAsTemplate } from './services/plan-template-publish-service';
@@ -324,6 +325,59 @@ app.post('/api/screenshot-response', (req, res) => {
     resolver(nonce, data || '');
   }
   res.json({ ok: true });
+});
+
+// --- Presence Pane endpoints ---
+
+// Get all presence cards (for initial hydration)
+app.get('/api/presence/cards', (_req, res) => {
+  res.json(presenceService.getCards());
+});
+
+// Ack a presence card — resolves the pending await_ack promise
+app.post('/api/presence/ack', (req, res) => {
+  const { cardId, via } = req.body || {};
+  if (!cardId || !via) {
+    res.status(400).json({ error: 'cardId and via are required' });
+    return;
+  }
+  const card = presenceService.ackCard(cardId, via);
+  if (!card) { res.status(404).json({ error: 'Card not found' }); return; }
+
+  // Resolve the pending await_ack promise
+  const nonce = `ack-${cardId}`;
+  const resolver = (globalThis as any).__presenceResolve as
+    ((nonce: string, data: string) => void) | undefined;
+  if (resolver) {
+    resolver(nonce, JSON.stringify({ acked: true, via, card_id: cardId }));
+  }
+
+  broadcast('presence-acked', { cardId, via });
+  res.json({ ok: true });
+});
+
+// User reply — resolves the pending await_user_input promise
+app.post('/api/presence/reply', (req, res) => {
+  const { text } = req.body || {};
+  if (!text) {
+    res.status(400).json({ error: 'text is required' });
+    return;
+  }
+  const reply = presenceService.postReply(text);
+
+  // Resolve the pending await_user_input promise if one exists
+  const nonce = (globalThis as any).__presenceReplyNonce as string | undefined;
+  if (nonce) {
+    const resolver = (globalThis as any).__presenceResolve as
+      ((nonce: string, data: string) => void) | undefined;
+    if (resolver) {
+      resolver(nonce, JSON.stringify({ text: reply.text, at: reply.createdAt }));
+    }
+    (globalThis as any).__presenceReplyNonce = undefined;
+  }
+
+  broadcast('presence-reply', { reply });
+  res.json({ ok: true, reply });
 });
 
 // --- API Routes ---

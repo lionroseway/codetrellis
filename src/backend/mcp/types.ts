@@ -45,6 +45,7 @@ export interface ToolDeps {
   externalRefsService: typeof import('../services/external-refs-service');
   terminalService: typeof import('../services/terminal-service');
   planImportService: typeof import('../services/plan-import-service');
+  presenceService: typeof import('../services/presence-service');
 
   // Specific function imports (not full modules)
   applyTemplate: typeof import('../services/plan-templates-service').applyTemplate;

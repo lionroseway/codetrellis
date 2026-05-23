@@ -26,6 +26,7 @@ import * as planFileService from '../services/plan-file-service';
 import * as externalRefsService from '../services/external-refs-service';
 import * as terminalService from '../services/terminal-service';
 import * as planImportService from '../services/plan-import-service';
+import * as presenceService from '../services/presence-service';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
@@ -49,6 +50,7 @@ import { register as registerUITools } from './tools/ui-tools';
 import { register as registerSessionTools } from './tools/session-tools';
 import { register as registerPlanTools } from './tools/plan-tools';
 import { register as registerPlanItemTools } from './tools/plan-item-tools';
+import { register as registerPresenceTools } from './tools/presence-tools';
 import { register as registerResources } from './resources';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -78,6 +80,16 @@ const pendingResponses: PendingResponses = new Map();
 // Expose resolver so server.ts (the Express app) can wire the
 // POST /api/screenshot-response route.
 (globalThis as any).__screenshotResolve = (nonce: string, data: string) => {
+  const pending = pendingResponses.get(nonce);
+  if (pending) {
+    clearTimeout(pending.timer);
+    pendingResponses.delete(nonce);
+    pending.resolve(data);
+  }
+};
+
+// Presence ack / reply resolver — same pattern as screenshot.
+(globalThis as any).__presenceResolve = (nonce: string, data: string) => {
   const pending = pendingResponses.get(nonce);
   if (pending) {
     clearTimeout(pending.timer);
@@ -158,6 +170,7 @@ function buildToolDeps(): ToolDeps {
     externalRefsService,
     terminalService,
     planImportService,
+    presenceService,
 
     // Specific functions
     applyTemplate,
@@ -263,6 +276,7 @@ function setupMcpServerInstance(): McpServer {
   registerSessionTools(mcpServer, deps);
   registerPlanTools(mcpServer, deps);
   registerPlanItemTools(mcpServer, deps);
+  registerPresenceTools(mcpServer, deps);
   registerResources(mcpServer, deps);
 
   return mcpServer;

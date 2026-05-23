@@ -17,6 +17,7 @@ import { McpGuideModal } from './components/McpGuideModal';
 import { GettingStarted } from './components/GettingStarted';
 import { LearnTrellis, LEARN_TRELLIS_SEEN_KEY } from './components/LearnTrellis';
 import { ToastContainer } from './components/Toast';
+import { PresencePane } from './components/presence/PresencePane';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { AgentPulse } from './components/layout/AgentPulse';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -208,6 +209,7 @@ export function App() {
       <McpGuideModal />
       <GettingStarted />
       <LearnTrellis />
+      <PresencePane />
       <ToastContainer />
     </div>
   );

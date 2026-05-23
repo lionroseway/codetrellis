@@ -277,6 +277,25 @@ export function useWebSocket() {
             })();
           }
 
+          // --- Agent Presence Pane ---
+          if (type === 'presence-card' || type === 'presence-acked' || type === 'presence-dismissed' || type === 'presence-input-prompt' || type === 'presence-reply') {
+            (async () => {
+              const { usePresenceStore } = await import('../stores/presence-store');
+              if (type === 'presence-card') {
+                usePresenceStore.getState().pushCard(payload.card);
+              } else if (type === 'presence-acked') {
+                usePresenceStore.getState().ackCard(payload.cardId, payload.via);
+              } else if (type === 'presence-dismissed') {
+                usePresenceStore.getState().clearCards();
+                usePresenceStore.getState().setVisible(false);
+              } else if (type === 'presence-input-prompt') {
+                usePresenceStore.getState().setInputPrompt(payload.prompt ?? null);
+              } else if (type === 'presence-reply') {
+                if (payload.reply) usePresenceStore.getState().pushReply(payload.reply);
+              }
+            })();
+          }
+
           // --- Terminal session lifecycle ---
           if (type === 'terminal-created') {
             const session = payload?.session;
