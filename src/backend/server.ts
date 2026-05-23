@@ -312,14 +312,16 @@ app.delete('/api/terminals/:id', (req, res) => {
 // the frontend captures the viewport and POSTs the base64 PNG here.
 app.post('/api/screenshot-response', (req, res) => {
   const { nonce, data } = req.body || {};
-  if (!nonce || !data) {
-    res.status(400).json({ error: 'nonce and data are required' });
+  if (!nonce) {
+    res.status(400).json({ error: 'nonce is required' });
     return;
   }
   const resolver = (globalThis as any).__screenshotResolve as
     ((nonce: string, data: string) => void) | undefined;
   if (resolver) {
-    resolver(nonce, data);
+    // If data is empty the capture failed — still resolve with empty
+    // string so the MCP tool can return an error instead of timing out.
+    resolver(nonce, data || '');
   }
   res.json({ ok: true });
 });

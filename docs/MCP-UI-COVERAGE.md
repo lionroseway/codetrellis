@@ -190,7 +190,7 @@ exact parity | **No** = no MCP coverage
 | UI Action | MCP Tool | Coverage | Notes |
 |---|---|---|---|
 | Create new terminal session | `terminal_create` | **Yes** | With agent preset (claude/codex/aider/shell) |
-| Switch active terminal tab | — | **Partial** | Agents target sessions by ID directly |
+| Switch active terminal tab | `terminal_focus` | **Yes** | Focus a specific terminal tab + open panel |
 | Kill terminal session | `terminal_kill` | **Yes** | |
 | Toggle terminal panel | `toggle_panel` | **Yes** | Can show/hide |
 | Type in terminal | `terminal_write` | **Yes** | Send keystrokes / commands |
@@ -219,6 +219,7 @@ exact parity | **No** = no MCP coverage
 | Read application logs | `get_logs` | **Yes** | Tail with optional grep filter |
 | Get log file path | `get_log_path` | **Yes** | Current log file + directory |
 | Get usage guide | `get_app_guide` | **Yes** | summary / quickstart / power-user flavors |
+| Setup agent permissions | `setup_agent_permissions` | **Yes** | Auto-approve all CodeTrellis MCP tools |
 
 ## Welcome Screen
 

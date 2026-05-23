@@ -24,6 +24,28 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ panel }) => {
+      // ── Electron fast path ──────────────────────────────────────
+      // In the Electron app, capture directly via webContents.capturePage()
+      // which avoids the html-to-image broadcast round-trip entirely and
+      // doesn't suffer from canvas-tainting issues on file:// origins.
+      if (deps.captureElectronScreenshot) {
+        try {
+          const base64 = await deps.captureElectronScreenshot();
+          return {
+            content: [{
+              type: 'image' as const,
+              data: base64,
+              mimeType: 'image/png',
+            }],
+          };
+        } catch (err) {
+          return { content: [{ type: 'text' as const, text: `Electron screenshot failed: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+        }
+      }
+
+      // ── Browser path ────────────────────────────────────────────
+      // Broadcast a request to the frontend, which captures via
+      // html-to-image and POSTs the result back.
       const nonce = `ss-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const target = panel ?? 'full';
 
@@ -39,6 +61,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
 
       try {
         const base64 = await p;
+        if (!base64) {
+          return { content: [{ type: 'text' as const, text: 'Screenshot capture failed — the frontend returned empty data (html-to-image may have hit a canvas-tainting error).' }], isError: true };
+        }
         return {
           content: [{
             type: 'image' as const,

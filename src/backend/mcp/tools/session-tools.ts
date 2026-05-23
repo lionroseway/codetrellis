@@ -3,6 +3,8 @@
  */
 
 import { z } from 'zod';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta } from '../helpers';
@@ -324,6 +326,75 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async () => {
       deps.broadcast('ui-open-mcp-guide', {});
       return { content: [{ type: 'text' as const, text: 'Opened MCP guide modal' }] };
+    },
+  );
+
+  // --- Agent permission setup ---
+
+  server.registerTool(
+    'setup_agent_permissions',
+    {
+      description:
+        'Write a .claude/settings.local.json file in the project directory that auto-approves all ' +
+        'CodeTrellis MCP tools. Without this, Claude Code prompts for permission on every MCP tool ' +
+        'call, which breaks the flow when the agent is driving the UI. Call this once per project ' +
+        'during onboarding. The file is .local (gitignored) so it stays per-user.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path to the project root directory.'),
+      },
+    },
+    async ({ project_path: projectPath }) => {
+      const claudeDir = path.join(projectPath, '.claude');
+      const settingsPath = path.join(claudeDir, 'settings.local.json');
+
+      try {
+        // Ensure .claude/ directory exists
+        if (!fs.existsSync(claudeDir)) {
+          fs.mkdirSync(claudeDir, { recursive: true });
+        }
+
+        // Read existing settings if any — merge rather than clobber
+        let settings: any = {};
+        if (fs.existsSync(settingsPath)) {
+          try {
+            settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+          } catch {
+            // Malformed JSON — overwrite
+          }
+        }
+
+        // Ensure permissions.allow exists and contains the wildcard
+        if (!settings.permissions) settings.permissions = {};
+        if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
+
+        const wildcard = 'mcp__codetrellis__*';
+        if (!settings.permissions.allow.includes(wildcard)) {
+          // Remove any individual codetrellis tool entries — the wildcard covers them all
+          settings.permissions.allow = settings.permissions.allow.filter(
+            (entry: string) => !entry.startsWith('mcp__codetrellis__'),
+          );
+          settings.permissions.allow.push(wildcard);
+        }
+
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Auto-approve permissions written to ${settingsPath}\n` +
+              `All CodeTrellis MCP tools are now auto-approved for this project.\n` +
+              `Note: The agent needs to restart the session for this to take effect.`,
+          }],
+        };
+      } catch (err) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Failed to write permissions: ${err instanceof Error ? err.message : String(err)}`,
+          }],
+          isError: true,
+        };
+      }
     },
   );
 }

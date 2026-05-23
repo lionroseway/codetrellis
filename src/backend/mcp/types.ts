@@ -75,6 +75,14 @@ export interface ToolDeps {
   getLogDir: typeof import('../services/logger').getLogDir;
   getBoundBackendPort: typeof import('../server').getBoundBackendPort;
   buildSkillGuide: typeof import('./skill-guide').buildSkillGuide;
+
+  /**
+   * Electron-only: capture a screenshot of the BrowserWindow via
+   * `webContents.capturePage()`. Returns a base64-encoded PNG string.
+   * Undefined in browser/web mode — the screenshot tool falls back to
+   * the html-to-image broadcast path when this is not set.
+   */
+  captureElectronScreenshot?: () => Promise<string>;
 }
 
 /** Standard signature for a tool registration module. */

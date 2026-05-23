@@ -267,11 +267,27 @@ export function useWebSocket() {
           // --- Terminal session lifecycle ---
           if (type === 'terminal-created') {
             const session = payload?.session;
-            if (session) useTerminalStore.getState().onTerminalCreated(session);
+            if (session) {
+              const store = useTerminalStore.getState();
+              store.onTerminalCreated(session);
+              // Focus the new terminal unless the creator opted out
+              if (payload?.focus !== false) {
+                store.setActiveSession(session.id);
+                store.setOpen(true);
+              }
+            }
           }
           if (type === 'terminal-killed') {
             const id = payload?.id as string | undefined;
             if (id) useTerminalStore.getState().onTerminalKilled(id);
+          }
+          if (type === 'ui-terminal-focus') {
+            const sessionId = payload?.sessionId as string | undefined;
+            if (sessionId) {
+              const store = useTerminalStore.getState();
+              store.setActiveSession(sessionId);
+              store.setOpen(true);
+            }
           }
 
           // --- Screenshot capture (MCP screenshot tool) ---

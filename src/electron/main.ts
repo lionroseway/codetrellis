@@ -5,6 +5,7 @@ import {
   app as expressApp,
   addBroadcastTarget,
 } from '../backend/server';
+import { setElectronScreenshotCapture } from '../backend/mcp/server';
 import { dispatch, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
@@ -102,6 +103,16 @@ function createWindow(backendOk: boolean): void {
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
+
+  // Provide the MCP screenshot tool with a native Electron capture path.
+  // webContents.capturePage() grabs the rendered viewport as a NativeImage —
+  // no html-to-image dependency, no canvas-tainting issues on file:// origins.
+  const win = mainWindow;
+  setElectronScreenshotCapture(async () => {
+    if (win.isDestroyed()) throw new Error('BrowserWindow is destroyed');
+    const image = await win.webContents.capturePage();
+    return image.toPNG().toString('base64');
+  });
 
   // Forward backend broadcasts to the renderer via IPC. Also
   // re-attach if the renderer reloads (e.g. dev HMR).

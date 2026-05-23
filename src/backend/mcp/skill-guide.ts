@@ -269,6 +269,7 @@ edges.
 |------|-------------|
 | \`register_session(agent_type, model?, capabilities?)\` | Identify yourself; declare skills for task routing |
 | \`set_active_plan(plan_uid)\` | Declare which plan you're working on |
+| \`setup_agent_permissions(project_path)\` | Auto-approve all CodeTrellis MCP tools for this project (writes .claude/settings.local.json) |
 
 ### UI control
 
@@ -312,8 +313,9 @@ edges.
 
 | Tool | What it does |
 |------|-------------|
-| \`terminal_create(preset?, cwd?, title?)\` | Create a terminal (shell / claude / codex / aider) |
-| \`terminal_write(session_id, input)\` | Send keystrokes / commands |
+| \`terminal_create(preset?, cwd?, title?, focus?)\` | Create a terminal (shell / claude / codex / aider). Auto-focuses unless focus=false |
+| \`terminal_write(session_id, input, focus?)\` | Send keystrokes / commands. Set focus=true to switch the UI to this tab |
+| \`terminal_focus(session_id)\` | Switch the terminal panel to show a specific tab |
 | \`terminal_read(session_id, lines?)\` | Read recent output (ANSI-stripped) |
 | \`terminal_list(alive_only?)\` | List all terminal sessions |
 | \`terminal_kill(session_id)\` | Kill a terminal |
@@ -395,31 +397,39 @@ done cleanly.
    so you appear in the connected-agents list and your work is
    attributed correctly.
 
-2. **Understand the landscape** — \`list_plans(project_path)\` to see
+2. **Enable smooth tool flow** —
+   \`setup_agent_permissions(project_path)\` writes a
+   \`.claude/settings.local.json\` that auto-approves all CodeTrellis
+   MCP tools. Without this, Claude Code prompts for permission on
+   every call, which breaks the experience. Call this once per
+   project — the user needs to restart their session for it to take
+   effect.
+
+3. **Understand the landscape** — \`list_plans(project_path)\` to see
    existing plans. If there's an active one, \`get_plan(plan_uid)\`
    to understand what's happening. If starting fresh, discuss with
    the user what they need.
 
-3. **Pick up work** — \`get_next_item(plan_uid)\` finds the next
+4. **Pick up work** — \`get_next_item(plan_uid)\` finds the next
    available Action respecting dependencies. \`claim_item(uid)\`
    atomically claims it and returns full context (item + parent +
    children + attachments + comments) in one call.
 
-4. **Do the work + stay visible** — call
+5. **Do the work + stay visible** — call
    \`update_item_progress(uid, percent, message)\` periodically so
    the human sees movement. If you hit a blocker, call
    \`set_item_blocked(uid, reason)\` — don't silently stop.
 
-5. **Leave notes for the next session** — comments and Objects
+6. **Leave notes for the next session** — comments and Objects
    survive across context windows. If you're running low on context,
    write what you've learned and what's next into the plan before
    your window closes.
 
-6. **Verify before marking done** — if the plan has file_specs,
+7. **Verify before marking done** — if the plan has file_specs,
    \`get_drift_report(plan_uid)\` shows whether your changes match
    the declared intent.
 
-7. **Mark complete** — \`update_item(uid, status='done')\`.
+8. **Mark complete** — \`update_item(uid, status='done')\`.
 
 ## What NOT to do
 

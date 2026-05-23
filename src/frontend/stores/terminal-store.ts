@@ -77,11 +77,18 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       });
       if (!res.ok) return null;
       const session: TerminalSessionInfo = await res.json();
-      set((s) => ({
-        sessions: [...s.sessions, session],
-        activeSessionId: session.id,
-        isOpen: true,
-      }));
+      set((s) => {
+        // Deduplicate — the WS `terminal-created` broadcast may have
+        // already added this session before the fetch response arrived.
+        if (s.sessions.some((ss) => ss.id === session.id)) {
+          return { activeSessionId: session.id, isOpen: true };
+        }
+        return {
+          sessions: [...s.sessions, session],
+          activeSessionId: session.id,
+          isOpen: true,
+        };
+      });
       return session;
     } catch {
       return null;

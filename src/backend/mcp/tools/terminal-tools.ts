@@ -1,5 +1,5 @@
 /**
- * Terminal control tools — create, write, read, list, kill, resize.
+ * Terminal control tools — create, write, read, list, kill, resize, focus.
  */
 
 import { z } from 'zod';
@@ -15,21 +15,23 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Create a new terminal session in CodeTrellis. Returns the session ID for use with terminal_write / terminal_read. ' +
         'Preset "shell" opens a plain shell; "claude", "codex", "aider" open a shell and launch that agent after 500ms. ' +
-        'Multiple terminals can run concurrently (up to 20). The terminal is visible in the CodeTrellis UI.',
+        'Multiple terminals can run concurrently (up to 20). By default the new terminal is focused in the UI — ' +
+        'set focus: false for background terminals that shouldn\'t steal the user\'s view.',
       inputSchema: {
         preset: agentPresetEnum.optional().describe('Agent preset or plain shell. Default: "shell".'),
         cwd: z.string().optional().describe('Working directory. Defaults to the active project root.'),
         title: z.string().optional().describe('Tab title. Auto-generated if omitted.'),
+        focus: z.boolean().optional().describe('Focus the new terminal tab in the UI. Default true. Set false for background terminals.'),
       },
     },
-    async ({ preset, cwd, title }) => {
+    async ({ preset, cwd, title, focus }) => {
       try {
         const session = deps.terminalService.createTerminal({
           preset: preset ?? 'shell',
           cwd,
           title,
         });
-        deps.broadcast('terminal-created', { session });
+        deps.broadcast('terminal-created', { session, focus: focus !== false });
         return { content: [{ type: 'text' as const, text: JSON.stringify(session, null, 2) }] };
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
@@ -42,18 +44,34 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Send input to a terminal session (keystrokes, commands). The text is written as-is — include "\\n" to press Enter. ' +
-        'Use terminal_list to find active session IDs. Each terminal is independent — target the right one.',
+        'Use terminal_list to find active session IDs. Each terminal is independent — target the right one. ' +
+        'Set focus: true to switch the UI to this terminal tab so the user sees the output live.',
       inputSchema: {
         session_id: z.string().describe('Terminal session ID (from terminal_create or terminal_list).'),
         input: z.string().describe('Text to write. Include "\\n" to execute a command.'),
+        focus: z.boolean().optional().describe('Focus this terminal tab in the UI before writing. Default false.'),
       },
     },
-    async ({ session_id, input }) => {
-      const ok = deps.terminalService.writeTerminal(session_id, input);
+    async ({ session_id, input, focus }) => {
+      // Unescape common terminal escape sequences. MCP clients (including
+      // Claude Code) may send literal two-char sequences like \n \r \t
+      // instead of the actual control bytes, because the JSON layer
+      // double-escapes them. We normalise here so `terminal_write` "just
+      // works" regardless of how the client encodes newlines.
+      const unescaped = input
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t');
+
+      if (focus) {
+        deps.broadcast('ui-terminal-focus', { sessionId: session_id });
+      }
+
+      const ok = deps.terminalService.writeTerminal(session_id, unescaped);
       if (!ok) {
         return { content: [{ type: 'text' as const, text: `Terminal ${session_id} not found or not alive.` }], isError: true };
       }
-      return { content: [{ type: 'text' as const, text: `Wrote ${input.length} chars to ${session_id}` }] };
+      return { content: [{ type: 'text' as const, text: `Wrote ${unescaped.length} chars to ${session_id}` }] };
     },
   );
 
@@ -131,6 +149,29 @@ export function register(server: McpServer, deps: ToolDeps): void {
         return { content: [{ type: 'text' as const, text: `Terminal ${session_id} not found or not alive.` }], isError: true };
       }
       return { content: [{ type: 'text' as const, text: `Resized ${session_id} to ${cols}x${rows}` }] };
+    },
+  );
+
+  server.registerTool(
+    'terminal_focus',
+    {
+      description:
+        'Switch the terminal panel to show a specific terminal tab. Use this when you want the user to see ' +
+        'a particular terminal\'s output — e.g. before writing commands the user should watch, or after a ' +
+        'background terminal produces interesting results. Also opens the terminal panel if it\'s hidden.',
+      inputSchema: {
+        session_id: z.string().describe('Terminal session ID to focus.'),
+      },
+    },
+    async ({ session_id }) => {
+      // Verify the terminal exists
+      const sessions = deps.terminalService.listTerminals();
+      const exists = sessions.some((s) => s.id === session_id);
+      if (!exists) {
+        return { content: [{ type: 'text' as const, text: `Terminal ${session_id} not found.` }], isError: true };
+      }
+      deps.broadcast('ui-terminal-focus', { sessionId: session_id });
+      return { content: [{ type: 'text' as const, text: `Focused terminal ${session_id}` }] };
     },
   );
 }

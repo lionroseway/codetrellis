@@ -86,6 +86,18 @@ const pendingResponses: PendingResponses = new Map();
   }
 };
 
+/**
+ * Electron screenshot capture function. Set by the Electron main process
+ * via `setElectronScreenshotCapture()` after the BrowserWindow is created.
+ * When set, the screenshot MCP tool uses this instead of the html-to-image
+ * broadcast round-trip, avoiding canvas-tainting issues on file:// origins.
+ */
+let electronScreenshotCapture: (() => Promise<string>) | undefined;
+
+export function setElectronScreenshotCapture(captureFn: () => Promise<string>): void {
+  electronScreenshotCapture = captureFn;
+}
+
 // ── Tool event broadcast ────────────────────────────────────────────
 
 interface ToolEventPayload {
@@ -176,6 +188,7 @@ function buildToolDeps(): ToolDeps {
     getLogDir,
     getBoundBackendPort,
     buildSkillGuide,
+    captureElectronScreenshot: electronScreenshotCapture,
   };
 }
 
