@@ -224,6 +224,11 @@ export function useWebSocket() {
             // SettingsModal yet. Future: dispatch a window event.
           }
 
+          // --- Agent pulse — visual cue that an agent drove a UI change ---
+          if (typeof type === 'string' && type.startsWith('ui-')) {
+            window.dispatchEvent(new CustomEvent('agent-ui-action'));
+          }
+
           // --- UI navigation (driven by MCP agent) ---
           if (type === 'ui-navigate') {
             const target = payload?.target as string | undefined;

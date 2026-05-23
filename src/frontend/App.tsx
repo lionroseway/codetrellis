@@ -18,6 +18,7 @@ import { GettingStarted } from './components/GettingStarted';
 import { LearnTrellis, LEARN_TRELLIS_SEEN_KEY } from './components/LearnTrellis';
 import { ToastContainer } from './components/Toast';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
+import { AgentPulse } from './components/layout/AgentPulse';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
@@ -149,6 +150,7 @@ export function App() {
 
   return (
     <div className="flex flex-col h-screen text-foreground bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]">
+      <AgentPulse />
       <TopBar />
       {/* Graph layout is always rendered behind. The plan workspace
           overlays the entire body area when active, so this stays
