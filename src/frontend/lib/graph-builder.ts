@@ -801,6 +801,7 @@ export function buildFromSnapshot(
   diffData?: DiffData | null,
   frozen = false,
   projectionData?: ProjectionData | null,
+  scopePath?: string | null,
 ): GraphData {
   const depEdges: DependencyEdge[] = snapshotEdges.map((e) => ({
     source: e.source, target: e.target,
@@ -811,7 +812,7 @@ export function buildFromSnapshot(
   // Reuse the main builder but with empty expanded set (overview mode)
   const graph = buildDependencyGraph(
     depEdges, viewDepth, new Set(), new Map(), () => {},
-    diffData, undefined, projectionData, layoutMode, frozen ? 'current' : projectionData ? 'planned' : 'live',
+    diffData, undefined, projectionData, layoutMode, frozen ? 'current' : projectionData ? 'planned' : 'live', scopePath,
   );
 
   if (!frozen) return graph;

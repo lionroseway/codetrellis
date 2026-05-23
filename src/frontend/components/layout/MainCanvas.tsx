@@ -568,6 +568,7 @@ export function MainCanvas() {
           : null,
         trellisMode === 'current', // frozen = true for current
         trellisMode === 'planned' ? projectionData : null,
+        scopePath,
       );
     }
 
@@ -1388,31 +1389,36 @@ function DiffSummary({
   const hasDiff = Boolean(diff && (diff.addedFiles.length || diff.removedFiles.length || diff.modifiedFiles.length));
   const hasGitStatus = Boolean(gitStatus && (gitStatus.staged.length || gitStatus.unstaged.length || gitStatus.untracked.length));
   const totalChangedFiles = countUniqueChangedFiles(diff, gitStatus);
-  if (!hasDiff && !hasGitStatus && trellisMode !== 'diff') return null;
+  const isPlanned = trellisMode === 'planned';
+  const isDiff = trellisMode === 'diff';
+
+  if (!hasDiff && !hasGitStatus && !isDiff && !(isPlanned && planSummary)) return null;
 
   return (
     <div className="min-w-[220px] rounded-xl border border-white/[0.08] bg-[#0b1020]/80 px-3 py-2.5 backdrop-blur-md shadow-[0_0_18px_rgba(0,0,0,0.35)]">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-            {trellisMode === 'diff'
+            {isDiff
               ? planSummary ? 'Plan vs Live' : 'Baseline vs Live'
-              : trellisMode === 'planned'
+              : isPlanned
                 ? 'Planned Target'
                 : trellisMode === 'current'
                   ? 'Baseline Reference'
                   : 'Working Tree Changes'}
           </div>
           <div className="mt-1 text-[12px] font-medium text-zinc-100">
-            {trellisMode === 'diff'
+            {isDiff
               ? planSummary
                 ? 'Monitoring live work against the plan'
                 : 'Comparing live workspace to the baseline'
-              : totalChangedFiles > 0
-                ? `${totalChangedFiles} changes detected`
-                : 'No tracked changes yet'}
+              : isPlanned && planSummary
+                ? `${planSummary.planned} planned changes`
+                : totalChangedFiles > 0
+                  ? `${totalChangedFiles} changes detected`
+                  : 'No tracked changes yet'}
           </div>
-          {snapshotName && (trellisMode === 'current' || trellisMode === 'diff') && (
+          {snapshotName && (trellisMode === 'current' || isDiff) && (
             <div className="mt-1 text-[10px] text-zinc-400/80">
               source: {snapshotName}
             </div>
@@ -1425,7 +1431,8 @@ function DiffSummary({
         )}
       </div>
 
-      {trellisMode === 'diff' && planSummary && (
+      {/* Plan alignment stats — shown in both planned and diff modes */}
+      {(isDiff || isPlanned) && planSummary && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
           <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
             on track {planSummary.onTrack}
@@ -1436,13 +1443,16 @@ function DiffSummary({
           <span className="rounded-full border border-amber-300/18 bg-amber-500/10 px-2 py-1 text-amber-100">
             pending {planSummary.pending}
           </span>
-          <span className="rounded-full border border-fuchsia-300/18 bg-fuchsia-500/10 px-2 py-1 text-fuchsia-100">
-            unexpected {planSummary.unexpected}
-          </span>
+          {planSummary.unexpected > 0 && (
+            <span className="rounded-full border border-fuchsia-300/18 bg-fuchsia-500/10 px-2 py-1 text-fuchsia-100">
+              unexpected {planSummary.unexpected}
+            </span>
+          )}
         </div>
       )}
 
-      {diff && (
+      {/* File-level diff stats — hide in planned mode (plan alignment takes priority) */}
+      {diff && !isPlanned && (
         <div className="mt-3 flex items-center gap-2 text-[11px]">
           <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
             + {diff.addedFiles.length} added
@@ -1456,7 +1466,8 @@ function DiffSummary({
         </div>
       )}
 
-      {gitStatus && (
+      {/* Git status — only in live and diff modes, not planned/current */}
+      {gitStatus && !isPlanned && trellisMode !== 'current' && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
           <span className="rounded-full border border-sky-300/18 bg-sky-500/10 px-2 py-1 text-sky-100">
             staged {gitStatus.staged.length}
