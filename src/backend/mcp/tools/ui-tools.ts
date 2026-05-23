@@ -290,14 +290,17 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Get instructions on how to use CodeTrellis. Returns a comprehensive markdown guide ' +
-        'covering available MCP tools, workflows, and best practices. Four flavors: ' +
+        'covering available MCP tools, workflows, and best practices. Six flavors: ' +
         '"summary" = project-state-tailored overview with active plans and agents, ' +
         '"quickstart" = minimum viable agent workflow (register → find plan → claim → work → verify → done), ' +
         '"power-user" = deep features (phased plans, multi-agent, spec docs, drift, snapshots), ' +
-        '"ui-nav" = focused UI navigation skill for sub-agents that drive the interface while the primary agent works.',
+        '"ui-nav" = focused UI navigation skill for sub-agents that drive the interface while the primary agent works, ' +
+        '"diagnostics" = logs, settings, baseline, drift detection, architecture conformity, ' +
+        '"multi-agent" = terminals, claiming, handoff patterns, session registration, approval gates.',
       inputSchema: {
-        flavor: z.enum(['summary', 'quickstart', 'power-user', 'ui-nav']).optional().describe(
-          'Which guide to return. Default "summary". Use "quickstart" for first-time setup, "power-user" for advanced features, "ui-nav" for a sub-agent that drives the UI.',
+        flavor: z.enum(['summary', 'quickstart', 'power-user', 'ui-nav', 'diagnostics', 'multi-agent']).optional().describe(
+          'Which guide to return. Default "summary". Use "quickstart" for first-time setup, "power-user" for advanced features, ' +
+          '"ui-nav" for a sub-agent driving the UI, "diagnostics" for logs/settings/drift, "multi-agent" for terminal/claim/handoff workflows.',
         ),
       },
     },

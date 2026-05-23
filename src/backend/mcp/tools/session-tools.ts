@@ -256,7 +256,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'navigate_item_back',
     {
-      description: 'Navigate backward in the item selection history (like Cmd+[). The human sees the selected item change.',
+      description:
+        'Navigate backward in the item selection history (like Cmd+[). The history stack records every ' +
+        'select_item call and every user click on a plan item. Switching plans (open_plan / set_active_plan) ' +
+        'resets the stack. Back pops the last entry; the current item is pushed onto the forward stack. ' +
+        'Deterministic: three back calls after select A → B → C → D will land on C, B, A in that order.',
       inputSchema: {},
     },
     async () => {
@@ -268,7 +272,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'navigate_item_forward',
     {
-      description: 'Navigate forward in the item selection history (like Cmd+]). The human sees the selected item change.',
+      description:
+        'Navigate forward in the item selection history (like Cmd+]). Pops the forward stack ' +
+        '(populated by navigate_item_back) and pushes the current item onto the back stack. ' +
+        'Any new select_item call clears the forward stack (same as browser navigation).',
       inputSchema: {},
     },
     async () => {

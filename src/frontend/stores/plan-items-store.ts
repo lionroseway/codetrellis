@@ -122,7 +122,14 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
   hydratePlan: async (planUid) => {
     const cur = get().activePlanUid;
     if (cur === planUid && Object.keys(get().itemsByUid).length > 0) return;
-    set({ hydrating: true, activePlanUid: planUid });
+    // Switching plans — reset navigation history so back/forward
+    // don't land on items from a different plan.
+    const planChanged = cur !== planUid;
+    set({
+      hydrating: true,
+      activePlanUid: planUid,
+      ...(planChanged ? { history: { back: [], forward: [] }, selectedItemUid: null } : {}),
+    });
     try {
       const [itemsRes, eventsRes] = await Promise.all([
         fetch(`/api/plans/${planUid}/items`),

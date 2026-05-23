@@ -467,12 +467,29 @@ export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem 
       sets.push('symbol_specs = ?'); params.push(JSON.stringify(updates.symbolSpecs));
       contentChanged = true;
     }
-    if (updates.newConnections !== undefined) {
-      sets.push('new_connections = ?'); params.push(JSON.stringify(updates.newConnections));
-      contentChanged = true;
-    }
-    if (updates.removedConnections !== undefined) {
-      sets.push('removed_conns = ?'); params.push(JSON.stringify(updates.removedConnections));
+    // --- Connections: reconcile newConnections vs removedConnections ---
+    // If the same edge appears in both arrays, removal wins — the
+    // "add" is cancelled and the removal is consumed. This prevents
+    // contradictory state where an edge is simultaneously planned
+    // for addition and removal.
+    if (updates.newConnections !== undefined || updates.removedConnections !== undefined) {
+      let effectiveNew = updates.newConnections ?? before.newConnections ?? [];
+      let effectiveRemoved = updates.removedConnections ?? before.removedConnections ?? [];
+
+      if (effectiveNew.length > 0 && effectiveRemoved.length > 0) {
+        const edgeKey = (e: PlanItemEdge) => `${e.from}\0${e.to}`;
+        const newKeys = new Set(effectiveNew.map(edgeKey));
+        const removedKeys = new Set(effectiveRemoved.map(edgeKey));
+        const dupes = new Set([...newKeys].filter(k => removedKeys.has(k)));
+
+        if (dupes.size > 0) {
+          effectiveNew = effectiveNew.filter(e => !dupes.has(edgeKey(e)));
+          effectiveRemoved = effectiveRemoved.filter(e => !dupes.has(edgeKey(e)));
+        }
+      }
+
+      sets.push('new_connections = ?'); params.push(JSON.stringify(effectiveNew));
+      sets.push('removed_conns = ?'); params.push(JSON.stringify(effectiveRemoved));
       contentChanged = true;
     }
     if (updates.dependencies !== undefined) {
@@ -554,6 +571,12 @@ export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem 
 
   const after = getItem(uid);
   if (!after) return null;
+
+  // Defensive: ensure updatedAt reflects the timestamp we just wrote.
+  // In rare rapid-fire parallel updates the re-read from sql.js has
+  // occasionally returned a stale value; forcing it here guarantees
+  // the response and version row are consistent.
+  after.updatedAt = now;
 
   // Per-item version row — written iff content changed. Pure
   // re-parent / reorder skips the version log (those are tracked

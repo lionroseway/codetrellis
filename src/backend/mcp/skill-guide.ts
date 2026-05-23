@@ -14,12 +14,14 @@ import * as planService from '../services/plan-service';
 import * as planItemService from '../services/plan-item-service';
 import * as sessionService from '../services/session-service';
 
-export type SkillFlavor = 'summary' | 'quickstart' | 'power-user' | 'ui-nav';
+export type SkillFlavor = 'summary' | 'quickstart' | 'power-user' | 'ui-nav' | 'diagnostics' | 'multi-agent';
 
 export function buildSkillGuide(flavor: SkillFlavor): string {
   if (flavor === 'quickstart') return QUICKSTART;
   if (flavor === 'power-user') return POWER_USER;
   if (flavor === 'ui-nav') return UI_NAV;
+  if (flavor === 'diagnostics') return DIAGNOSTICS;
+  if (flavor === 'multi-agent') return MULTI_AGENT;
   return projectStateSummary() + '\n\n' + PHILOSOPHY + '\n\n' + TOOL_REFERENCE;
 }
 
@@ -337,7 +339,7 @@ edges.
 | \`update_settings(identity?, mcp?, plans?)\` | Update settings (deep-merged) |
 | \`get_logs(lines?, filter?)\` | Tail the application log |
 | \`get_log_path()\` | Get log file and directory paths |
-| \`get_app_guide(flavor?)\` | This guide (summary / quickstart / power-user) |
+| \`get_app_guide(flavor?)\` | This guide (summary / quickstart / power-user / ui-nav / diagnostics / multi-agent) |
 
 ### Plan file sync & templates
 
@@ -730,4 +732,168 @@ follow along.
 - **Stay in your lane.** You drive the UI. You don't create plans,
   claim Actions, or write code. If the primary agent asks you to
   do something outside UI control, say so.
+`;
+
+// ── Diagnostics skill — logs, settings, baseline, drift ───────────
+
+const DIAGNOSTICS = `# CodeTrellis Diagnostics Guide
+
+Focused reference for investigating issues, checking system state,
+and using the drift / baseline tools.
+
+## Logs and debugging
+
+| Tool | What it does |
+|------|-------------|
+| \`get_logs(lines?, filter?)\` | Tail the application log, optionally filtered by keyword. Default 100 lines. |
+| \`get_log_path()\` | Returns the current log file path + directory on disk. |
+| \`screenshot(panel?)\` | Capture what the user sees: "full" / "graph" / "plan" / "terminal". |
+
+### Common diagnostic patterns
+
+- **"Something looks wrong in the UI"** — \`screenshot('full')\` +
+  \`get_logs(50, 'error')\` to see what happened.
+- **"MCP tool isn't working"** — \`get_logs(30, 'tool_error')\` to
+  see if the tool errored server-side.
+- **"Graph looks stale"** — \`rescan_project(path)\` to re-parse,
+  then \`refresh_ui()\` to force the frontend to re-fetch.
+
+## Settings
+
+| Tool | What it does |
+|------|-------------|
+| \`get_settings()\` | Returns the full settings JSON (identity, MCP port, plan defaults). |
+| \`update_settings(path, value)\` | Change a setting. Path is dot-notation: \`identity.displayName\`, \`mcp.port\`, \`plans.defaultVisibility\`, \`plans.attachmentLocation\`. |
+| \`setup_agent_permissions(project_path?)\` | Auto-approve all CodeTrellis MCP tools in Claude Code settings. |
+
+## Baseline and drift
+
+These tools compare the codebase's current state against a reference
+point to detect unplanned changes.
+
+| Tool | What it does |
+|------|-------------|
+| \`set_baseline(commit_hash)\` | Pin a git commit as the "before" snapshot for diff overlays. |
+| \`capture_checkpoint(plan_uid, label, project_path?)\` | Named snapshot — freeze the current codebase state for later comparison. |
+| \`get_drift_report(plan_uid)\` | Compare declared file_specs / symbol_specs against what actually changed. Shows on-track, missing, and unexpected changes. |
+| \`detect_deviations(plan_uid)\` | Run the deviation detector — finds files that changed outside of any plan item's declared scope. |
+| \`get_deviations(plan_uid)\` | Fetch the list of detected deviations. |
+| \`reconcile(deviation_uid, action)\` | Resolve a deviation: "accept" (add to plan), "revert" (undo), "ignore" (mark as noise). |
+
+### Drift workflow
+
+1. Create a plan with explicit file_specs and symbol_specs
+2. Do the work (or let an agent do it)
+3. \`get_drift_report(plan_uid)\` — see what matched and what didn't
+4. \`detect_deviations(plan_uid)\` — find files touched outside the plan
+5. \`reconcile(...)\` — handle each deviation
+
+## Architecture conformity
+
+| Tool | What it does |
+|------|-------------|
+| \`check_conformity(project_path?)\` | Check for circular dependencies and other architectural issues. |
+| \`check_architecture(from_path?, to_path?)\` | Query dependency edges between files. |
+| \`list_cross_system_edges()\` | Find HTTP, SQL, subprocess, and env coupling between modules. |
+`;
+
+// ── Multi-agent skill — terminals, claim, handoff ─────────────────
+
+const MULTI_AGENT = `# CodeTrellis Multi-Agent Guide
+
+Focused reference for orchestrating multiple AI agents through
+CodeTrellis — launching terminals, claiming work, handing off
+context, and coordinating.
+
+## Terminal management
+
+Each agent gets its own terminal session. Use presets to launch
+the right tool for the job.
+
+| Tool | What it does |
+|------|-------------|
+| \`terminal_create(preset, cwd?, plan_uid?)\` | Create a new terminal. Presets: "claude" (Claude Code), "codex" (OpenAI Codex CLI), "aider" (Aider), "shell" (plain bash). |
+| \`terminal_write(session_id, input, focus?)\` | Send keystrokes to a terminal. Supports \\\\n for newlines. Set focus=true (default) to also switch the UI to that tab. |
+| \`terminal_read(session_id, lines?)\` | Read the last N lines of output (ANSI-stripped). Default 50 lines. |
+| \`terminal_focus(session_id)\` | Switch the terminal panel to show a specific tab. |
+| \`terminal_list()\` | List all active terminal sessions with PID, preset, and status. |
+| \`terminal_kill(session_id)\` | Kill a terminal session. |
+| \`terminal_resize(session_id, cols, rows)\` | Resize a terminal. |
+
+### Launching a sub-agent
+
+\`\`\`
+# 1. Create a Claude Code terminal for the auth refactor
+terminal_create(preset='claude', cwd='/path/to/project',
+  plan_uid='<plan-uid>')
+
+# 2. Send the initial prompt
+terminal_write(session_id, 'Please claim and work on the auth
+  extraction task in the CodeTrellis plan.\\n')
+
+# 3. Monitor progress
+terminal_read(session_id, 20)
+\`\`\`
+
+## Claiming and delegating work
+
+The claim system prevents two agents from grabbing the same Action.
+
+| Tool | What it does |
+|------|-------------|
+| \`claim_item(item_uid)\` | Atomically claim an Action. Fails if already claimed by another agent. Returns the item with your name as assignee. |
+| \`get_next_item(plan_uid, filter?)\` | Get the next available Action. Respects dependencies (DAG ordering) and approval gates. Optional filter: \`kind\`, \`status\`, \`parent_uid\`. |
+| \`update_item_progress(item_uid, percent, note?)\` | Report progress (0-100) with an optional note. Other agents and the user can see this. |
+| \`set_item_blocked(item_uid, reason)\` | Mark an item as blocked with a reason. Surfaces in the plan tree as a red indicator. |
+| \`add_item_comment(item_uid, body, kind?)\` | Leave a comment. Kind: "note" (default), "blocker", "progress", "question". |
+
+### Typical multi-agent flow
+
+1. **Primary agent** creates the plan, structures Objects and Actions
+2. **Primary agent** launches sub-agents via \`terminal_create\`
+3. Each sub-agent calls \`get_next_item\` to find available work
+4. Sub-agent calls \`claim_item\` to lock the Action
+5. Sub-agent works, reports \`update_item_progress\`
+6. Sub-agent marks the Action as \`done\` via \`update_item(uid, status='done')\`
+7. If there's a gate: human calls \`approve_gate(uid)\`
+8. Next sub-agent picks up the next available Action
+
+## Handoff between agents
+
+When handing off to a different agent (context window filling up,
+different specialization needed):
+
+1. **Leave breadcrumbs** — \`add_item_comment(uid, 'Completed X, Y
+   is pending. Watch out for Z.', kind='progress')\`
+2. **Set progress** — \`update_item_progress(uid, 60)\`
+3. **Create an Object** as a handoff note if needed — durable context
+   that survives the agent's session
+4. **Use \`copy_plan_as_prompt(plan_uid)\`** — generates a markdown
+   summary another agent can ingest quickly
+
+## Session registration
+
+| Tool | What it does |
+|------|-------------|
+| \`register_session(agent_type, model?, capabilities?)\` | Register your agent identity. Shows in the Connected Agents widget. |
+| \`set_active_plan(plan_uid)\` | Link your session to a plan. The UI navigates to show it. |
+
+## Approval gates and dependencies
+
+- **Dependencies**: Actions can list other Action UIDs they depend on.
+  \`get_next_item\` only returns Actions whose dependencies are all done.
+- **Approval gates**: \`requiresApproval: true\` on an Action means
+  a human must call \`approve_gate(uid)\` before the next sibling
+  can be claimed. Use this for critical checkpoints.
+
+## Tips
+
+- **Don't hoard work.** Claim one Action at a time. If you claim 5
+  and stall, the other agents sit idle.
+- **Be a good citizen.** Leave progress comments and update status.
+  The user is watching the plan tree — silent agents are scary agents.
+- **Use focused terminals.** \`terminal_create(preset='shell')\` for
+  quick commands, \`preset='claude'\` for complex sub-tasks.
+- **Monitor your sub-agents.** \`terminal_read(session_id, 20)\`
+  periodically to check if they're stuck.
 `;

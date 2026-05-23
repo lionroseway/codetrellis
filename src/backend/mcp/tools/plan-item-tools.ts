@@ -32,6 +32,16 @@ const itemFileSpecSchema = z.object({
   edits: z.array(fileEditSchema).optional().describe('M2 per-file granular edits (line/symbol-pinned).'),
 });
 
+const symbolSpecSchema = z.object({
+  name: z.string().describe('Symbol name (function, class, etc.)'),
+  kind: z.enum(['function', 'class', 'interface', 'type', 'method', 'enum']),
+  action: z.enum(['add', 'modify', 'remove', 'move']),
+  filePath: z.string().optional().describe('Project-relative path of the file the symbol lives in.'),
+  description: z.string().optional(),
+  signature: z.string().optional().describe('e.g. "signToken(payload: JwtPayload, secret: string): string"'),
+  moveTo: z.string().optional().describe('Target file if action is "move".'),
+});
+
 const planItemEdgeSchema = z.object({
   from: z.string(),
   to: z.string(),
@@ -118,6 +128,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           status: taskStatusEnum.optional(),
           scope_path: z.string().optional(),
           file_specs: z.array(itemFileSpecSchema).optional(),
+          symbol_specs: z.array(symbolSpecSchema).optional().describe('Symbol-level targets for this item.'),
           new_connections: z.array(planItemEdgeSchema).optional(),
           removed_connections: z.array(planItemEdgeSchema).optional(),
           dependencies: z.array(z.string()).optional(),
@@ -145,6 +156,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           status: raw.status,
           scopePath: raw.scope_path ?? null,
           fileSpecs: raw.file_specs,
+          symbolSpecs: raw.symbol_specs,
           newConnections: raw.new_connections,
           removedConnections: raw.removed_connections,
           dependencies: raw.dependencies,
@@ -223,6 +235,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
         blocked_reason: z.string().optional(),
         scope_path: z.string().optional(),
         file_specs: z.array(itemFileSpecSchema).optional(),
+        symbol_specs: z.array(symbolSpecSchema).optional().describe(
+          'Top-level symbol-level targets. Declare which symbols (functions, classes, etc.) this action touches. ' +
+          'Complementary to file_specs — use file_specs for file-level intent and symbol_specs for symbol-level precision.',
+        ),
         new_connections: z.array(planItemEdgeSchema).optional(),
         removed_connections: z.array(planItemEdgeSchema).optional(),
         dependencies: z.array(z.string()).optional(),
@@ -243,6 +259,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         blockedReason: args.blocked_reason === '' ? null : args.blocked_reason,
         scopePath: args.scope_path === '' ? null : args.scope_path,
         fileSpecs: args.file_specs,
+        symbolSpecs: args.symbol_specs,
         newConnections: args.new_connections,
         removedConnections: args.removed_connections,
         dependencies: args.dependencies,

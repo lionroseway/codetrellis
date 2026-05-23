@@ -8,10 +8,13 @@ import type { ToolDeps } from './types';
 export function register(server: McpServer, deps: ToolDeps): void {
   // Agent skill / "how to use this product" guides. Agents can fetch
   // these on connect so they don't need out-of-band briefing on what
-  // CodeTrellis is or how to operate it. Three flavors:
+  // CodeTrellis is or how to operate it. Six flavors:
   //   - codetrellis://skill              → project-state-tailored summary
   //   - codetrellis://skill/quickstart   → first-time agent flow
   //   - codetrellis://skill/power-user   → deep usage (phases, drift, multi-agent)
+  //   - codetrellis://skill/ui-nav       → UI navigator for sub-agents
+  //   - codetrellis://skill/diagnostics  → logs, settings, baseline, drift
+  //   - codetrellis://skill/multi-agent  → terminals, claiming, handoff
 
   server.registerResource(
     'codetrellis://skill',
@@ -73,6 +76,38 @@ export function register(server: McpServer, deps: ToolDeps): void {
         uri: 'codetrellis://skill/ui-nav',
         mimeType: 'text/markdown',
         text: deps.buildSkillGuide('ui-nav'),
+      }],
+    }),
+  );
+
+  server.registerResource(
+    'codetrellis://skill/diagnostics',
+    'codetrellis://skill/diagnostics',
+    {
+      description: 'CodeTrellis diagnostics skill — logs, settings, baseline, drift detection, architecture conformity. Focused reference for investigating issues and checking system state.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://skill/diagnostics',
+        mimeType: 'text/markdown',
+        text: deps.buildSkillGuide('diagnostics'),
+      }],
+    }),
+  );
+
+  server.registerResource(
+    'codetrellis://skill/multi-agent',
+    'codetrellis://skill/multi-agent',
+    {
+      description: 'CodeTrellis multi-agent skill — terminals, claiming, handoff patterns, session registration, approval gates. Focused reference for orchestrating multiple AI agents.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://skill/multi-agent',
+        mimeType: 'text/markdown',
+        text: deps.buildSkillGuide('multi-agent'),
       }],
     }),
   );
