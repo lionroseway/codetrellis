@@ -603,6 +603,110 @@ export function unlinkPlan(planUid: string, projectRoot: string): { removed: boo
   return { removed: true, planDir: dir };
 }
 
+// --- DB ↔ disk reconciliation ---
+
+export interface OrphanedPlanDir {
+  /** Absolute path to the plan directory on disk. */
+  dirPath: string;
+  /** Slug-derived directory name (e.g. "my-plan-a1b2c3d4"). */
+  dirName: string;
+  /** UID prefix extracted from the slug, if parseable. */
+  uidPrefix: string | null;
+  /** Title from plan.yaml, if readable. */
+  title: string | null;
+}
+
+/**
+ * Compare DB plans against disk plans. Returns:
+ *   - `orphanedOnDisk` — directories in `.codetrellis/plans/` that have
+ *     no matching active plan in the DB (archived or never imported).
+ *   - `orphanedInDb` — DB plans that have no corresponding directory
+ *     on disk (exported was deleted or never exported).
+ *
+ * This lets the UI show a reconciliation surface: "N orphaned plan
+ * directories on disk — prune?" plus "M plans in DB with no disk copy."
+ */
+export function reconcilePlanState(projectRoot: string): {
+  orphanedOnDisk: OrphanedPlanDir[];
+  orphanedInDb: Array<{ uid: string; title: string; status: string }>;
+  totalDisk: number;
+  totalDb: number;
+} {
+  // 1. Gather all plan dirs on disk
+  const diskDirs = discoverPlanDirs(projectRoot);
+  const totalDisk = diskDirs.length;
+
+  // 2. Gather all non-archived plans in DB for this project
+  const dbPlans = planService.listPlans(projectRoot);
+  const totalDb = dbPlans.length;
+
+  // 3. Build a set of UID prefixes (first 8 chars) for active DB plans
+  const dbUidPrefixes = new Set<string>();
+  const dbUidFull = new Set<string>();
+  for (const p of dbPlans) {
+    dbUidFull.add(p.uid);
+    dbUidPrefixes.add(p.uid.split('-')[0]);
+  }
+
+  // 4. Find orphaned disk dirs — on disk but no active DB plan
+  const orphanedOnDisk: OrphanedPlanDir[] = [];
+  for (const dirPath of diskDirs) {
+    const dirName = path.basename(dirPath);
+    const parts = dirName.split('-');
+    const uidPrefix = parts.length > 0 ? parts[parts.length - 1] : null;
+
+    if (uidPrefix && dbUidPrefixes.has(uidPrefix)) continue; // matched
+
+    // Try to read title from plan.yaml
+    let title: string | null = null;
+    try {
+      const yaml = fs.readFileSync(path.join(dirPath, 'plan.yaml'), 'utf-8');
+      const parsed = parseYaml(yaml);
+      title = parsed?.title ?? null;
+    } catch { /* skip */ }
+
+    orphanedOnDisk.push({ dirPath, dirName, uidPrefix, title });
+  }
+
+  // 5. Find orphaned DB plans — in DB but no disk directory
+  const diskUidPrefixes = new Set<string>();
+  for (const dirPath of diskDirs) {
+    const dirName = path.basename(dirPath);
+    const parts = dirName.split('-');
+    if (parts.length > 0) diskUidPrefixes.add(parts[parts.length - 1]);
+  }
+
+  const orphanedInDb: Array<{ uid: string; title: string; status: string }> = [];
+  for (const p of dbPlans) {
+    const prefix = p.uid.split('-')[0];
+    if (!diskUidPrefixes.has(prefix)) {
+      orphanedInDb.push({ uid: p.uid, title: p.title, status: p.status });
+    }
+  }
+
+  return { orphanedOnDisk, orphanedInDb, totalDisk, totalDb };
+}
+
+/**
+ * Prune orphaned plan directories from disk. Accepts an array of
+ * absolute directory paths (from `reconcilePlanState().orphanedOnDisk`).
+ * Returns the count actually removed.
+ */
+export function pruneOrphanedDirs(dirPaths: string[]): number {
+  let removed = 0;
+  for (const dir of dirPaths) {
+    try {
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true });
+        removed++;
+      }
+    } catch {
+      // best-effort — skip dirs that can't be removed
+    }
+  }
+  return removed;
+}
+
 // --- Auto-sync (Phase 13 §B) ---
 
 /**

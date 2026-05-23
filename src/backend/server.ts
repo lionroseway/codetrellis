@@ -36,7 +36,7 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir } from './services/plan-file-service';
+import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
@@ -1221,6 +1221,27 @@ app.get('/api/plans/discover', (req, res) => {
     return;
   }
   res.json(discoverPlanDirs(projectRoot));
+});
+
+// DB ↔ disk reconciliation
+app.get('/api/plans/reconcile', (req, res) => {
+  const projectRoot = req.query.project as string | undefined;
+  if (!projectRoot) {
+    res.status(400).json({ error: 'project query param required' });
+    return;
+  }
+  res.json(reconcilePlanState(projectRoot));
+});
+
+// Prune orphaned plan directories from disk
+app.post('/api/plans/prune-orphans', (req, res) => {
+  const { dirPaths } = req.body || {};
+  if (!Array.isArray(dirPaths) || dirPaths.length === 0) {
+    res.status(400).json({ error: 'dirPaths must be a non-empty array of absolute paths' });
+    return;
+  }
+  const removed = pruneOrphanedDirs(dirPaths);
+  res.json({ ok: true, removed });
 });
 
 // Get plan

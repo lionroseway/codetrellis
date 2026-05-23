@@ -17,6 +17,7 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
+  globalSetup: './tests/global-setup.ts',
   testDir: './tests/e2e',
   testMatch: /.*\.test\.ts$/,
   // Generous default — harness tests boot a real backend per test.

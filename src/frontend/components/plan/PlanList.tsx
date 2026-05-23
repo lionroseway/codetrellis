@@ -1,9 +1,23 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square } from 'lucide-react';
+import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square, AlertTriangle, RefreshCw } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
+
+interface OrphanedPlanDir {
+  dirPath: string;
+  dirName: string;
+  uidPrefix: string | null;
+  title: string | null;
+}
+
+interface ReconcileState {
+  orphanedOnDisk: OrphanedPlanDir[];
+  orphanedInDb: Array<{ uid: string; title: string; status: string }>;
+  totalDisk: number;
+  totalDb: number;
+}
 
 export function PlanList() {
   const plans = usePlanStore((s) => s.plans);
@@ -21,6 +35,10 @@ export function PlanList() {
   const [selectedUids, setSelectedUids] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<{ uid: string; title: string } | null>(null);
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [reconcile, setReconcile] = useState<ReconcileState | null>(null);
+  const [showReconcile, setShowReconcile] = useState(false);
+  const [pruning, setPruning] = useState(false);
+  const [confirmPrune, setConfirmPrune] = useState(false);
 
   useEffect(() => {
     fetchPlans(root || undefined);
@@ -65,6 +83,47 @@ export function PlanList() {
     if (!uidPrefix) return true;
     return !plans.some((p) => p.uid.startsWith(uidPrefix));
   });
+
+  // Fetch reconciliation status (DB vs disk)
+  const fetchReconcile = useCallback(async () => {
+    if (!root) return;
+    try {
+      const res = await fetch(`/api/plans/reconcile?project=${encodeURIComponent(root)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setReconcile(data);
+      }
+    } catch { /* silent */ }
+  }, [root]);
+
+  useEffect(() => {
+    fetchReconcile();
+  }, [fetchReconcile, plans.length]);
+
+  const handlePruneOrphans = useCallback(async () => {
+    if (!reconcile || reconcile.orphanedOnDisk.length === 0) return;
+    setPruning(true);
+    try {
+      const dirPaths = reconcile.orphanedOnDisk.map((o) => o.dirPath);
+      const res = await fetch('/api/plans/prune-orphans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dirPaths }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        addToast({ type: 'success', title: `Pruned ${data.removed} orphaned directories`, message: 'Disk is clean.' });
+        await fetchReconcile();
+      } else {
+        addToast({ type: 'error', title: 'Prune failed', message: 'Could not remove orphaned directories.' });
+      }
+    } catch {
+      addToast({ type: 'error', title: 'Prune failed', message: 'Network error.' });
+    } finally {
+      setPruning(false);
+      setConfirmPrune(false);
+    }
+  }, [reconcile, addToast, fetchReconcile]);
 
   const handleQuickCreate = async () => {
     if (!root) {
@@ -172,6 +231,54 @@ export function PlanList() {
           </button>
         </div>
       </div>
+
+      {/* DB ↔ disk reconciliation status */}
+      {reconcile && reconcile.orphanedOnDisk.length > 0 && (
+        <div className="mx-1.5 mb-2">
+          <button
+            onClick={() => setShowReconcile(!showReconcile)}
+            className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-lg bg-amber-500/[0.06] border border-amber-300/15 hover:bg-amber-500/[0.1] transition-colors"
+          >
+            <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+            <span className="text-[12px] text-amber-200 flex-1">
+              {reconcile.orphanedOnDisk.length} orphaned dir{reconcile.orphanedOnDisk.length === 1 ? '' : 's'} on disk
+            </span>
+            <span className="text-[11px] text-amber-300/60">
+              {showReconcile ? 'Hide' : 'Details'}
+            </span>
+          </button>
+          {showReconcile && (
+            <div className="mt-1.5 rounded-lg border border-amber-300/10 bg-amber-500/[0.03] px-3 py-2.5 space-y-2">
+              <div className="flex items-center gap-3 text-[11px] text-foreground-muted">
+                <span>{reconcile.totalDb} in DB</span>
+                <span className="text-foreground-muted/30">|</span>
+                <span>{reconcile.totalDisk} on disk</span>
+                <button onClick={fetchReconcile} className="ml-auto text-foreground-muted hover:text-foreground transition-colors" title="Refresh">
+                  <RefreshCw size={11} />
+                </button>
+              </div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {reconcile.orphanedOnDisk.map((o) => (
+                  <div key={o.dirPath} className="flex items-center gap-2 text-[11.5px]">
+                    <span className="text-amber-300/70 font-mono truncate flex-1" title={o.dirPath}>
+                      {o.title || o.dirName}
+                    </span>
+                    <span className="text-foreground-muted/50 shrink-0 text-[10px]">disk only</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setConfirmPrune(true)}
+                disabled={pruning}
+                className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11.5px] rounded-md bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 disabled:opacity-50 transition-colors"
+              >
+                <Trash2 size={11} />
+                {pruning ? 'Pruning...' : `Prune ${reconcile.orphanedOnDisk.length} orphaned directories`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search bar */}
       {showSearch && (
@@ -384,6 +491,36 @@ export function PlanList() {
                 className="px-3 py-1.5 text-[12.5px] rounded-md bg-red-500/20 text-red-200 hover:bg-red-500/30 border border-red-300/15 transition-colors"
               >
                 Delete {selectedUids.size} plans
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prune orphans confirm dialog */}
+      {confirmPrune && reconcile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setConfirmPrune(false)}>
+          <div className="bg-[#0d1117] border border-white/[0.1] rounded-xl p-5 max-w-sm w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[15px] font-semibold text-foreground mb-2">Prune orphaned directories?</h3>
+            <p className="text-[12px] text-foreground-muted mb-2 leading-relaxed">
+              This removes {reconcile.orphanedOnDisk.length} plan director{reconcile.orphanedOnDisk.length === 1 ? 'y' : 'ies'} from <code className="font-mono bg-white/[0.05] px-1 rounded">.codetrellis/plans/</code> that have no matching plan in the database.
+            </p>
+            <p className="text-[11px] text-amber-300/70 mb-4">
+              These directories can be re-created by exporting their plans. If a plan was deleted from the DB, this cleans up its leftover files.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setConfirmPrune(false)}
+                className="px-3 py-1.5 text-[12.5px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePruneOrphans}
+                disabled={pruning}
+                className="px-3 py-1.5 text-[12.5px] rounded-md bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-300/15 disabled:opacity-50 transition-colors"
+              >
+                {pruning ? 'Pruning...' : `Prune ${reconcile.orphanedOnDisk.length} directories`}
               </button>
             </div>
           </div>
