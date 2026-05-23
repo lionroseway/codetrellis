@@ -41,14 +41,19 @@ function collectExpectations(planUid: string): { files: Map<string, FileExpectat
  *
  * Detection runs across ALL statuses so files that appear before work starts
  * are still caught. Severity/message adjusts based on task status.
+ *
+ * @param changedFiles — optional list of files that changed since the baseline
+ *   snapshot. When provided, any changed file NOT in the plan's fileSpecs is
+ *   recorded as an `unexpected_file` deviation. Without this, only spec-vs-
+ *   reality checks run (missing/wrong-state files).
  */
-export function detectDeviations(planUid: string): Deviation[] {
+export function detectDeviations(planUid: string, changedFiles?: string[]): Deviation[] {
   const db = getDb();
   const { files: fileExpectations, items } = collectExpectations(planUid);
   const deviations: Deviation[] = [];
   const now = Date.now();
 
-  // Check each expected file against the live DB
+  // ── Spec-vs-reality: check each expected file against the live DB ──
   for (const [file, exp] of fileExpectations) {
     const result = db.exec(
       `SELECT id FROM files WHERE relative_path = ? OR path LIKE ?`,
@@ -75,7 +80,21 @@ export function detectDeviations(planUid: string): Deviation[] {
     }
   }
 
-  // Check for expected connections (only for done items)
+  // ── Unexpected files: changed since baseline but not in any fileSpec ──
+  if (changedFiles && changedFiles.length > 0) {
+    const expectedPaths = [...fileExpectations.keys()];
+    for (const file of changedFiles) {
+      const isExpected = expectedPaths.some(
+        (p) => file === p || file.endsWith('/' + p) || p.endsWith('/' + file),
+      );
+      if (!isExpected) {
+        deviations.push(createDeviation(db, planUid, 'unexpected_file', 'info',
+          `File "${file}" changed since baseline but is not in any plan item`, now));
+      }
+    }
+  }
+
+  // ── Expected connections (only for done items) ──
   let edges: Array<{ sourceRelative: string; targetRelative: string }> = [];
   try {
     edges = getDependencyEdges();
