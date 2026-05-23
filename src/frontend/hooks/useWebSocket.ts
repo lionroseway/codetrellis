@@ -148,7 +148,6 @@ export function useWebSocket() {
             // An external import (MCP, another window, future
             // auto-sync) loaded a plan. Refresh the list so the
             // user sees it.
-            const { useProjectStore } = require('../stores/project-store');
             const root = useProjectStore.getState().root;
             usePlanStore.getState().fetchPlans(root || undefined).catch(() => {});
             // Phase 13 §B: file-watcher-driven auto-syncs are common
@@ -340,13 +339,17 @@ export function useWebSocket() {
             const planUid = payload?.planUid as string | undefined;
             const itemUid = payload?.itemUid as string | undefined;
             if (planUid && itemUid) {
-              // Make sure the plan is active and hydrated, then select
-              usePlanStore.getState().setActivePlan(planUid);
-              const { usePlanItemsStore } = require('../stores/plan-items-store');
-              // Give hydration a moment to land, then select
-              setTimeout(() => {
-                usePlanItemsStore.getState().selectItem(itemUid);
-              }, 300);
+              // Ensure the plan is active and fully hydrated before selecting.
+              // setActivePlan is async (fetches plan data) — we must await it
+              // so the items store has the plan's tree before selectItem runs.
+              (async () => {
+                try {
+                  await usePlanStore.getState().setActivePlan(planUid);
+                  usePlanItemsStore.getState().selectItem(itemUid);
+                } catch (err) {
+                  console.error('[WS] select_item failed:', err);
+                }
+              })();
             }
           }
 
