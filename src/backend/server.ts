@@ -637,88 +637,65 @@ let scanInFlight = false;
  *  scan; when they rescan the *same* project we can skip unchanged files. */
 let lastScannedProject: string | null = null;
 
-app.post('/api/project/scan', async (req, res) => {
-  const { projectPath } = req.body;
+/**
+ * Core scan logic — callable both from the REST endpoint and MCP tool.
+ * Throws on validation errors; callers should catch and surface appropriately.
+ */
+export async function scanProject(projectPath: string): Promise<{ fileCount: number; symbolCount: number; importCount: number; resolvedImports: number }> {
   if (!projectPath || typeof projectPath !== 'string') {
-    res.status(400).json({ error: 'projectPath is required' });
-    return;
+    throw new Error('projectPath is required');
   }
-
   if (!fs.existsSync(projectPath)) {
-    res.status(400).json({ error: `Path does not exist: ${projectPath}` });
-    return;
+    throw new Error(`Path does not exist: ${projectPath}`);
   }
-
-  // Prevent concurrent scans — the second request would call clearAstData()
-  // mid-parse, corrupting the DB.  A boolean flag is sufficient because
-  // Node.js is single-threaded: the check-and-set is synchronous, and
-  // concurrency only arises when we hit the `await parseFiles()` below.
   if (scanInFlight) {
-    res.status(409).json({ error: 'A scan is already in progress' });
-    return;
+    throw new Error('A scan is already in progress');
   }
   scanInFlight = true;
 
   try {
     const isSameProject = lastScannedProject === projectPath;
-    console.log(`[API] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
+    console.log(`[Scan] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
 
-    // Record this project as recently opened (best-effort — don't fail scan if it errors)
     try {
       const branchInfo = getGitBranchName(projectPath);
       recordProjectOpen(projectPath, branchInfo);
     } catch (err) {
-      console.warn('[API] Failed to record recent project:', err);
+      console.warn('[Scan] Failed to record recent project:', err);
     }
 
     const monorepoConfig = detectMonorepo(projectPath);
     const fileTree = scanDirectory(projectPath);
-    const fileCount = countFiles(fileTree);
     const filePaths = collectFilePaths(fileTree);
 
-    // ── Incremental scan ──────────────────────────────────────
-    // If rescanning the same project, compare on-disk content hashes
-    // with stored hashes. Only reparse files that changed, appeared,
-    // or disappeared. This typically cuts tree-sitter parse calls by
-    // 90-99% on a rescan, extending the WASM parser's lifetime by
-    // orders of magnitude.
     let parsedFiles: Awaited<ReturnType<typeof parseFiles>>;
 
     if (isSameProject) {
       const storedHashes = getAllFileHashes();
       const diskFileSet = new Set(filePaths);
-
-      // Files that are in the DB but no longer on disk → remove
       const stalePaths = [...storedHashes.keys()].filter((p) => !diskFileSet.has(p));
       if (stalePaths.length > 0) {
         removeStaleFiles(stalePaths);
-        console.log(`[API] Removed ${stalePaths.length} stale file(s) from DB`);
+        console.log(`[Scan] Removed ${stalePaths.length} stale file(s) from DB`);
       }
-
-      // Files that are new or whose content changed → reparse
       const toParse: string[] = [];
       for (const fp of filePaths) {
         const storedHash = storedHashes.get(fp);
         if (!storedHash) {
-          // New file — always parse
           toParse.push(fp);
         } else {
-          // Existing file — compare hash
           const diskHash = computeFileHash(fp);
           if (diskHash && diskHash !== storedHash) {
             toParse.push(fp);
           }
         }
       }
-
-      console.log(`[API] Incremental: ${toParse.length} changed / ${filePaths.length} total files (${stalePaths.length} removed)`);
+      console.log(`[Scan] Incremental: ${toParse.length} changed / ${filePaths.length} total files (${stalePaths.length} removed)`);
       parsedFiles = await parseFiles(toParse);
-
       for (const parsed of parsedFiles) {
         storeParsedFile(parsed, projectPath);
       }
     } else {
-      // Different project (or first scan) — full wipe + reparse.
       clearAstData();
       parsedFiles = await parseFiles(filePaths);
       for (const parsed of parsedFiles) {
@@ -728,65 +705,54 @@ app.post('/api/project/scan', async (req, res) => {
 
     lastScannedProject = projectPath;
 
-    // Discover systems (npm packages, Python projects, Rust crates, ...)
-    // and use them to build the workspace-alias map. Without this, only
-    // relative imports resolve — workspace-aliased imports like `@swf/ui`
-    // get dropped, leaving apps disconnected from their package layer.
     const systems = discoverSystems(projectPath);
     const aliasMap = buildAliasMap(systems);
-    console.log(`[API] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
-    for (const sys of systems) {
-      console.log(`[API]   · ${sys.relativeRoot || '(root)'} · ${sys.manifestKind} · ${sys.language} · ${sys.packageName ?? sys.name}`);
-    }
+    console.log(`[Scan] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
 
-    // Resolve import paths to actual files. Per-language dispatch: each
-    // file's language picks the right resolver (TS / Python / Rust /
-    // PHP / Java / ...). Systems list is needed by Python / Rust / PHP /
-    // Java to anchor absolute imports at the importer's project root.
     resolveImports(projectPath, aliasMap, systems);
 
-    // Cross-system pass — match HTTP callsites (and later SQL / etc.)
-    // across languages so PHP+Python+SQL stops looking like 3 islands.
     try {
       recomputeCrossSystemEdges();
     } catch (err) {
-      console.warn('[API] Cross-system pass failed:', err);
+      console.warn('[Scan] Cross-system pass failed:', err);
     }
 
     const stats = getDbStats();
-    console.log(`[API] Parsed ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports, ${stats.resolvedImports} resolved`);
+    console.log(`[Scan] Parsed ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports, ${stats.resolvedImports} resolved`);
 
-    // Capture baseline snapshot for diffing — use all files in DB,
-    // not just the ones we just parsed (incremental scan only parses
-    // changed files, but the baseline needs the full picture).
     const depEdges = getDependencyEdges();
     const allHashes = getAllFileHashes();
     const fileData = [...allHashes.entries()].map(([absPath, hash]) => ({
       path: absPath.startsWith('/') ? path.relative(projectPath, absPath) : absPath,
       hash,
-      symbolCount: 0, // approximate — symbol count is only for display
+      symbolCount: 0,
     }));
     setBaseline(captureSnapshot(fileData, depEdges), getGitHeadCommit(projectPath) || undefined);
 
-    // Start watching for file changes
     startWatching(projectPath);
-
-    // Start watching for Claude Code sessions
     startClaudeCodeWatcher(projectPath);
 
-    // Phase 13 §B: watch <project>/.codetrellis/plans/ so external
-    // edits (post `git pull`, hand-edits, another tool) flow into the
-    // DB without requiring an explicit Import click.
     try {
       startPlanFileWatcher(projectPath);
     } catch (err) {
-      console.warn('[API] Plan file watcher failed to start:', err);
+      console.warn('[Scan] Plan file watcher failed to start:', err);
     }
 
-    // Convert Map to plain object for JSON serialization
+    return stats;
+  } finally {
+    scanInFlight = false;
+  }
+}
+
+app.post('/api/project/scan', async (req, res) => {
+  const { projectPath } = req.body;
+  try {
+    const stats = await scanProject(projectPath);
+    const monorepoConfig = detectMonorepo(projectPath);
+    const fileTree = scanDirectory(projectPath);
+    const fileCount = countFiles(fileTree);
     const depGraph: Record<string, string[]> = {};
     monorepoConfig.dependencyGraph.forEach((v, k) => { depGraph[k] = v; });
-
     res.json({
       monorepoConfig: { ...monorepoConfig, dependencyGraph: depGraph },
       fileTree,
@@ -794,12 +760,11 @@ app.post('/api/project/scan', async (req, res) => {
       astStats: stats,
     });
   } catch (err) {
-    console.error('[API] Scan failed:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    const status = msg.includes('already in progress') ? 409 : msg.includes('required') || msg.includes('does not exist') ? 400 : 500;
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Scan failed' });
+      res.status(status).json({ error: msg });
     }
-  } finally {
-    scanInFlight = false;
   }
 });
 

@@ -150,17 +150,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async ({ project_path }) => {
       try {
-        const port = deps.getBoundBackendPort();
-        const res = await fetch(`http://localhost:${port}/api/project/scan`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectPath: project_path }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          return { content: [{ type: 'text' as const, text: `Rescan failed: ${(body as any).error || res.statusText}` }], isError: true };
-        }
-        return { content: [{ type: 'text' as const, text: `Rescan complete${project_path ? ` for ${project_path}` : ''}` }] };
+        const stats = await deps.scanProject(project_path ?? process.cwd());
+        return { content: [{ type: 'text' as const, text: `Rescan complete${project_path ? ` for ${project_path}` : ''} — ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports (${stats.resolvedImports} resolved)` }] };
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Rescan failed: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }

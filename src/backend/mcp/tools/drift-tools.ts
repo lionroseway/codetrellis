@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod';
+import fs from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 
@@ -103,67 +104,73 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, since_ms }) => {
+      const plan = deps.planService.getPlan(plan_uid);
+      const projectPath = plan?.projectPath ?? process.cwd();
+
+      // ── Plan-aware classification (primary source of truth) ────
+      // plan-changes-service reads the live DB + does suffix matching,
+      // giving us granular per-change drift status.
+      const changesSummary = deps.planChangesService.summarizeChanges(plan_uid);
+      const proposedChanges = deps.planChangesService.listProposedChanges(plan_uid);
+
+      // Build on-track / unexpected / missing from proposed changes
+      const onTrack = proposedChanges
+        .filter((c) => c.driftStatus === 'satisfied')
+        .map((c) => c.target);
+      const inProgress = proposedChanges
+        .filter((c) => c.driftStatus === 'in_progress')
+        .map((c) => c.target);
+      const missingChanges = proposedChanges
+        .filter((c) => c.driftStatus === 'missing')
+        .map((c) => c.target);
+      const planned = proposedChanges
+        .filter((c) => c.driftStatus === 'planned')
+        .map((c) => c.target);
+
+      // ── Snapshot diff (supplementary — what changed since baseline)
       const snapshots = deps.listSnapshots(plan_uid);
-      if (snapshots.length === 0) {
-        return { content: [{ type: 'text' as const, text: 'No baseline snapshot found for this plan. Approve the plan first to capture a baseline.' }] };
-      }
-      const diff = deps.computeTrellisDiff(snapshots[0].id);
-      if (!diff) {
-        return { content: [{ type: 'text' as const, text: 'Could not compute diff.' }] };
+      let snapshotDiff: { addedFiles: string[]; modifiedFiles: string[]; removedFiles: string[]; addedEdges: number; removedEdges: number } | null = null;
+      if (snapshots.length > 0) {
+        const rawDiff = deps.computeTrellisDiff(snapshots[0].id);
+        if (rawDiff) {
+          // Filter out phantom entries — files the DB thinks exist but
+          // the filesystem says are gone (stale watcher state).
+          const freshAdded = rawDiff.addedFiles.filter((f) => {
+            const abs = f.startsWith('/') ? f : `${projectPath}/${f}`;
+            return fs.existsSync(abs);
+          });
+          const freshModified = rawDiff.modifiedFiles.filter((f) => {
+            const abs = f.startsWith('/') ? f : `${projectPath}/${f}`;
+            return fs.existsSync(abs);
+          });
+          snapshotDiff = {
+            addedFiles: freshAdded,
+            modifiedFiles: freshModified,
+            removedFiles: rawDiff.removedFiles,
+            addedEdges: rawDiff.addedEdges.length,
+            removedEdges: rawDiff.removedEdges.length,
+          };
+        }
       }
 
-      const plan = deps.planService.getPlan(plan_uid);
+      // Unexpected files: in the snapshot diff but not in any plan item
+      const plannedPaths = new Set(proposedChanges.filter((c) => c.kind === 'file').map((c) => c.target));
+      const unexpectedFiles: string[] = [];
+      if (snapshotDiff) {
+        for (const file of [...snapshotDiff.addedFiles, ...snapshotDiff.modifiedFiles]) {
+          const isPlanned = [...plannedPaths].some(
+            (p) => file === p || file.endsWith('/' + p) || p.endsWith('/' + file),
+          );
+          if (!isPlanned) unexpectedFiles.push(file);
+        }
+      }
+
       const items = deps.planItemService.listItemSummaries(plan_uid);
       const actions = items.filter((i: any) => i.kind === 'action');
       const completedTasks = actions.filter((i: any) => i.status === 'done').length;
       const totalTasks = actions.length;
 
-      // ── Plan-aware classification ──────────────────────────────
-      // Cross-reference the raw file diff against the plan's declared
-      // fileSpecs so the agent sees "on track" vs "unexpected" vs "missing".
-      const changesSummary = deps.planChangesService.summarizeChanges(plan_uid);
-
-      // Build the set of planned file paths from V2 items' fileSpecs
-      const allItems = deps.planItemService.listAllItems(plan_uid);
-      const plannedPaths = new Set<string>();
-      for (const item of allItems) {
-        if ((item as any).kind !== 'action') continue;
-        for (const fs of (item as any).fileSpecs ?? []) {
-          plannedPaths.add(fs.path);
-        }
-      }
-
-      const allChangedFiles = new Set([
-        ...diff.addedFiles,
-        ...diff.modifiedFiles,
-        ...diff.removedFiles,
-      ]);
-
-      const onTrack: string[] = [];
-      const unexpected: string[] = [];
-      const missing: string[] = [];
-
-      for (const file of allChangedFiles) {
-        // Check if any planned path matches (suffix match for relative paths)
-        const isPlanned = [...plannedPaths].some(
-          (p) => file === p || file.endsWith('/' + p) || p.endsWith('/' + file),
-        );
-        if (isPlanned) {
-          onTrack.push(file);
-        } else {
-          unexpected.push(file);
-        }
-      }
-
-      // Files that are planned but not yet changed
-      for (const planned of plannedPaths) {
-        const wasChanged = [...allChangedFiles].some(
-          (f) => f === planned || f.endsWith('/' + planned) || planned.endsWith('/' + f),
-        );
-        if (!wasChanged) missing.push(planned);
-      }
-
-      const since = since_ms ?? snapshots[0].createdAt;
+      const since = since_ms ?? (snapshots.length > 0 ? snapshots[0].createdAt : Date.now() - 3600000);
       const recentComments = deps.commentService.listCommentsForPlanSince(plan_uid, since);
       const blockers = recentComments.filter((c: any) => c.kind === 'blocker');
       const questions = recentComments.filter((c: any) => c.kind === 'question');
@@ -172,24 +179,21 @@ export function register(server: McpServer, deps: ToolDeps): void {
       return { content: [{ type: 'text' as const, text: JSON.stringify({
         planTitle: plan?.title,
         taskProgress: `${completedTasks}/${totalTasks}`,
-        // Plan-aware classification
+        // Plan-aware classification (from plan-changes-service — always fresh)
         planAlignment: {
-          onTrack: onTrack.length,
-          unexpected: unexpected.length,
-          missing: missing.length,
-          onTrackFiles: onTrack,
-          unexpectedFiles: unexpected,
-          missingFiles: missing,
+          satisfied: onTrack.length,
+          inProgress: inProgress.length,
+          missing: missingChanges.length,
+          planned: planned.length,
+          unexpected: unexpectedFiles.length,
+          satisfiedTargets: onTrack,
+          missingTargets: missingChanges,
+          unexpectedFiles,
         },
-        // Granular proposed-changes summary (from plan-changes-service)
         changesSummary,
-        // Raw diff (still useful for full picture)
-        filesChanged: diff.addedFiles.length + diff.modifiedFiles.length,
-        addedFiles: diff.addedFiles,
-        modifiedFiles: diff.modifiedFiles,
-        removedFiles: diff.removedFiles,
-        addedEdges: diff.addedEdges.length,
-        removedEdges: diff.removedEdges.length,
+        // Snapshot diff (filesystem-verified, no phantoms)
+        snapshotDiff,
+        hasBaseline: snapshots.length > 0,
         commentActivitySince: since,
         commentSummary: {
           total: recentComments.length,
