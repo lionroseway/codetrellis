@@ -381,6 +381,8 @@ export interface Deviation {
   resolution: DeviationResolution;
   detectedAt: number;
   resolvedAt: number | null;
+  /** The file path this deviation refers to (for unexpected_file / missing_file). */
+  filePath: string | null;
 }
 
 /**
