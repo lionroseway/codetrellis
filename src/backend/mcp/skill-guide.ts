@@ -323,6 +323,15 @@ edges.
 | \`terminal_kill(session_id)\` | Kill a terminal |
 | \`terminal_resize(session_id, cols, rows)\` | Resize a terminal |
 
+### Agent Presence Pane
+
+| Tool | What it does |
+|------|-------------|
+| \`present(text, speak?, require_ack?, tone?, link_to?)\` | Post a narration card to the floating Presence Pane. Supports **bold**, \`code\`, [links]. Set speak=true for TTS, require_ack=true for pacing |
+| \`await_ack(card_id, timeout_ms?)\` | Block until the user acks a card ("Got it" click or speech end). Returns { acked, via } |
+| \`await_user_input(prompt?, timeout_ms?)\` | Block until the user types a reply in the pane. Returns { text, at } |
+| \`dismiss_presence()\` | Clear all cards and close the pane |
+
 ### Screenshot & clipboard
 
 | Tool | What it does |
@@ -464,6 +473,11 @@ plans at all:
   part of the architecture visually
 - \`list_cross_system_edges()\` — how does the frontend talk to the
   backend?
+- \`present("Here's what I found...", { speak: true })\` — narrate
+  your findings in the app (the user sees a floating pane with your
+  message, optionally read aloud)
+- \`await_user_input("What do you think?")\` — ask the user a
+  question and wait for their reply, right inside the app
 
 Use as much or as little as the task requires.`;
 
@@ -609,6 +623,39 @@ control:
 - \`unlink_plan_from_files(plan_uid, project_root)\` — stop syncing
   to disk (Shared → Local toggle)
 
+## Agent Presence Pane — narration + dialogue
+
+The Presence Pane is a floating overlay in the app where you can
+narrate your work, ask questions, and receive real-time human input.
+It uses the browser's built-in Web Speech API for TTS — fully offline,
+no API keys, no audio leaves the machine.
+
+### Key patterns
+
+**Phase narration** — post a card at each milestone so the human
+follows along without reading your chain-of-thought:
+\`\`\`
+present("Phase 1: scanning auth modules", speak: true)
+… work + update_item_progress …
+present("Found 4 files to migrate. Proceeding.", tone: 'success')
+… more work …
+present("Phase 1 complete. Ready for Phase 2?", tone: 'question', require_ack: true)
+await_ack(card_id)  // human clicks "Got it" to green-light next phase
+\`\`\`
+
+**Decision gate** — when you need human input before continuing:
+\`\`\`
+present("Two options for the schema — normalised (slower migration) or denormalised (faster, more debt). Which?", tone: 'question')
+await_user_input("normalised or denormalised?")
+// read the reply text and branch accordingly
+\`\`\`
+
+**Discipline**: one card per major milestone, not per function edit.
+Use \`require_ack: true\` only for genuine decision points. Use
+\`tone: 'warning'\` for things needing action, \`'success'\` for
+confirmations, \`'question'\` when you need a response. Call
+\`dismiss_presence()\` when you're done narrating.
+
 ## Diagnostics
 
 When something isn't working as expected:
@@ -680,6 +727,15 @@ follow along.
 | \`open_settings()\` | Settings modal pops up |
 | \`open_mcp_guide()\` | MCP connection guide pops up |
 
+### Narration (Agent Presence Pane)
+
+| Tool | Effect on screen |
+|------|-----------------|
+| \`present(text, speak?, require_ack?, tone?)\` | A floating card appears in the pane — optionally read aloud via TTS |
+| \`await_ack(card_id, timeout_ms?)\` | Waits for the user to click "Got it" or speech to finish |
+| \`await_user_input(prompt?, timeout_ms?)\` | Waits for the user to type a reply in the pane |
+| \`dismiss_presence()\` | Closes the pane and clears cards |
+
 ### Capture
 
 | Tool | Effect on screen |
@@ -721,13 +777,33 @@ follow along.
 3. \`graph_set_mode('live')\` — switch to current state
 4. \`screenshot('graph')\` — capture "after"
 
+### "Narrated walkthrough" (using the Presence Pane)
+1. \`present("Let me walk you through the auth module.", { speak: true, require_ack: true })\` — introduce
+2. \`graph_focus('src/backend/services/auth-service.ts')\` — show the file
+3. \`await_ack(card_id)\` — wait for the human to read / hear
+4. \`present("Notice it depends on session-service and user-service.", { speak: true, require_ack: true, link_to: 'auth-service.ts' })\` — explain
+5. \`graph_select(['auth-service.ts', 'session-service.ts', 'user-service.ts'])\` — highlight the cluster
+6. \`await_ack(card_id)\` — wait
+7. \`present("Any questions before I continue?", { tone: 'question' })\` — invite dialogue
+8. \`await_user_input()\` — listen for a reply, then respond or continue
+9. \`dismiss_presence()\` — clean up when done
+
+### "Ask the user a question mid-work"
+1. \`present("I found two approaches for this refactor. Which do you prefer?\\n\\n**A)** Extract a shared base class\\n**B)** Use composition with a mixin", { require_ack: false, tone: 'question' })\`
+2. \`await_user_input("Type A or B...")\` — wait for their choice
+3. Proceed based on the reply
+
 ## Guidelines
 
 - **Pace yourself.** The human needs time to look. Don't fire 10
   commands in a burst — step through, pause, then continue.
-- **Narrate.** When the primary agent sends you instructions like
-  "show the auth module", tell the human what you're about to show
-  before you show it.
+- **Narrate via the Presence Pane.** Use \`present()\` to explain
+  what you're showing. Pair \`present(require_ack: true)\` with
+  \`await_ack()\` so you wait for the human before advancing.
+  Use \`speak: true\` for hands-free walkthroughs.
+- **Don't over-narrate.** Not every action needs a card. Use
+  presence for key insights, decisions, and questions — not
+  "now I'm clicking this button" play-by-play.
 - **Combine graph + plan.** Split view is powerful — highlight a
   file in the graph, then select the Action that modifies it.
 - **Use screenshots** when the primary agent needs to see what's
