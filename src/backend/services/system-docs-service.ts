@@ -511,7 +511,22 @@ function writeDocFile(doc: SystemDoc): void {
 function importDocFile(filePath: string, projectPath: string): boolean {
   if (!fs.existsSync(filePath)) return false;
   const raw = fs.readFileSync(filePath, 'utf-8');
-  const { meta, body } = parseFrontMatter(raw);
+  const { meta, body, hasFrontmatter, parseError } = parseFrontMatter(raw);
+
+  // CDev Phase 3 tester finding #2 — a file with frontmatter
+  // delimiters but a malformed YAML block (broken syntax, unclosed
+  // brackets, etc.) used to be silently treated as "no frontmatter"
+  // and auto-stamped. That destroyed the user's intended title /
+  // tags / references on the next watcher write-back. Skip the file
+  // with a warning instead; the user fixes the YAML and the watcher
+  // imports cleanly on the next change.
+  if (hasFrontmatter && parseError) {
+    console.warn(
+      `[SystemDocs] Skipping ${filePath} — malformed YAML frontmatter (${parseError}). ` +
+      'Fix the syntax and save again; no changes were applied to the index.',
+    );
+    return false;
+  }
 
   // Frontmatter MUST carry a uid + title — without those, we can't
   // safely upsert (renames + edits would lose the row's identity).
@@ -577,15 +592,36 @@ function importDocFile(filePath: string, projectPath: string): boolean {
   return true;
 }
 
-function parseFrontMatter(source: string): { meta: any; body: string } {
-  if (!source.startsWith('---')) return { meta: {}, body: source };
+function parseFrontMatter(source: string): {
+  meta: any;
+  body: string;
+  /** True iff the file starts with a `---` frontmatter delimiter. */
+  hasFrontmatter: boolean;
+  /** Set to the YAML error message when the frontmatter block is
+   *  present but its YAML doesn't parse. Callers should treat this
+   *  as "skip + warn" rather than silently coercing to no-frontmatter. */
+  parseError: string | null;
+} {
+  if (!source.startsWith('---')) {
+    return { meta: {}, body: source, hasFrontmatter: false, parseError: null };
+  }
   const end = source.indexOf('\n---', 3);
-  if (end < 0) return { meta: {}, body: source };
+  if (end < 0) {
+    // Frontmatter opened but never closed — treat as a parse error so
+    // we don't accidentally interpret the entire file body as YAML.
+    return { meta: {}, body: source, hasFrontmatter: true, parseError: 'missing closing ---' };
+  }
   const yamlBlock = source.slice(3, end).replace(/^\n/, '');
   const body = source.slice(end + 4).replace(/^\n+/, '');
   let meta: any = {};
-  try { meta = parseYaml(yamlBlock) ?? {}; } catch { meta = {}; }
-  return { meta, body };
+  let parseError: string | null = null;
+  try {
+    meta = parseYaml(yamlBlock) ?? {};
+  } catch (err) {
+    parseError = err instanceof Error ? err.message : String(err);
+    meta = {};
+  }
+  return { meta, body, hasFrontmatter: true, parseError };
 }
 
 function isReferencesObject(v: unknown): v is Record<string, unknown> {

@@ -185,14 +185,67 @@ function exportPlanV2(plan: Plan, planDir: string, _allItems: PlanItem[], projec
     list.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
   }
 
-  // Write the item tree recursively
+  // Write the item tree recursively.
+  //
+  // Snapshot every existing yaml under `items/` BEFORE writing so we
+  // can prune stale files after — without this, re-exporting a plan
+  // whose shape changed (re-parent, title→slug rename, sortOrder
+  // change, or a parent's visibility flipping to local) leaves
+  // orphan files on disk. On a teammate pull the same uid appears
+  // twice and imports non-deterministically. (CDev Phase 3 tester
+  // finding #1.)
   const itemsDir = path.join(planDir, 'items');
+  const preExisting = new Set<string>();
+  if (fs.existsSync(itemsDir)) {
+    collectYamlFiles(itemsDir, preExisting);
+  }
+
   ensureDir(itemsDir);
   const roots = childrenOf.get(null) ?? [];
   writeItemChildren(roots, itemsDir, childrenOf, files);
 
+  // Prune any pre-existing yaml file that wasn't re-written this pass.
+  // Stamp self-write on each unlink so the watcher doesn't ping-pong.
+  const writtenSet = new Set(files);
+  for (const stale of preExisting) {
+    if (writtenSet.has(stale)) continue;
+    stampSelfWrite(stale);
+    try { fs.unlinkSync(stale); } catch { /* best-effort */ }
+  }
+  // And prune empty directories so re-parents don't leave dangling
+  // `<sort>-<slug>/` shells.
+  pruneEmptyDirs(itemsDir);
+
   ensureCodetrellisGitignore(path.join(projectRoot, '.codetrellis'));
   return { planDir, files };
+}
+
+function collectYamlFiles(dir: string, out: Set<string>): void {
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    let stat: fs.Stats;
+    try { stat = fs.statSync(full); } catch { continue; }
+    if (stat.isDirectory()) {
+      collectYamlFiles(full, out);
+    } else if (entry.endsWith('.yaml') || entry.endsWith('.yml')) {
+      out.add(full);
+    }
+  }
+}
+
+function pruneEmptyDirs(dir: string): void {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    let stat: fs.Stats;
+    try { stat = fs.statSync(full); } catch { continue; }
+    if (stat.isDirectory()) {
+      pruneEmptyDirs(full);
+      try {
+        if (fs.readdirSync(full).length === 0) fs.rmdirSync(full);
+      } catch { /* best-effort */ }
+    }
+  }
 }
 
 /**

@@ -98,13 +98,20 @@ export function setRecentProjectPinned(projectPath: string, pinned: boolean): vo
   markDirty();
 }
 
+/** Hard cap on alias length — anything past this overflows the TopBar
+ *  tab and serves no UX purpose. Tester finding #5. */
+const ALIAS_MAX_CHARS = 200;
+
 /**
  * Per-device alias for the repo at `projectPath`. Local-only — never
  * travels in the manifest. Pass an empty string to reset the alias
- * back to the path's basename default.
+ * back to the path's basename default. Trims whitespace; clamps to
+ * `ALIAS_MAX_CHARS` to keep the TopBar tab readable.
  */
 export function setProjectAlias(projectPath: string, alias: string): RecentProject | null {
-  const next = alias.trim() || (path.basename(projectPath) || projectPath);
+  const trimmed = alias.trim();
+  const fallback = path.basename(projectPath) || projectPath;
+  const next = (trimmed || fallback).slice(0, ALIAS_MAX_CHARS);
   getDb().run(
     `UPDATE recent_projects SET display_name = ? WHERE path = ?`,
     [next, projectPath],
@@ -133,6 +140,12 @@ export function refreshProjectOriginUrl(projectPath: string): RecentProject | nu
  * one. Used by cross-repo plan resolution to map a pointer file's
  * `homeRepo` URL to a locally-open project. Both sides are
  * re-normalised before comparison so callers don't have to.
+ *
+ * When the user has multiple clones of the same repo on disk (CDev
+ * Phase 3 tester finding #4), prefer the most-recently-opened one —
+ * that's the clone they're most likely to want when they click "Open"
+ * in the stitched view. The earlier behaviour (arbitrary row order)
+ * could resolve to a stale, rarely-used clone.
  */
 export function findRecentProjectByOriginUrl(rawUrl: string): RecentProject | null {
   if (!rawUrl) return null;
@@ -140,7 +153,8 @@ export function findRecentProjectByOriginUrl(rawUrl: string): RecentProject | nu
   if (!target) return null;
   const result = getDb().exec(
     `SELECT path, display_name, branch, pinned, last_opened_at, first_opened_at, origin_url
-     FROM recent_projects WHERE origin_url = ? LIMIT 1`,
+     FROM recent_projects WHERE origin_url = ?
+     ORDER BY last_opened_at DESC LIMIT 1`,
     [target],
   );
   if (!result[0] || result[0].values.length === 0) return null;

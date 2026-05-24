@@ -109,7 +109,10 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   if (next.channels && Object.keys(next.channels).length === 0) {
     delete next.channels;
   }
-  if (next.repoRole === undefined) {
+  // Tester finding #6: `mixed` is the default — no point persisting
+  // it as an explicit no-op value in committed config. Treat
+  // `undefined` and `mixed` identically and strip both from disk.
+  if (next.repoRole === undefined || next.repoRole === 'mixed') {
     delete next.repoRole;
   }
 

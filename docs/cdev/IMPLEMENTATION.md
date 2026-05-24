@@ -186,7 +186,7 @@ Decisions locked with the user before build:
 3. Editing a plan from a sibling repo writes back to the home repo's data.
 4. System docs are an **in-app rich experience** (navigation tree, search, embedded graph refs, slick layout). Stored on disk as YAML + markdown in `.codetrellis/docs/` so they still travel via git and read on GitHub.
 5. Doc staleness has **three levels**: current / behind HEAD / files-actually-changed. v1 surfaces the indicator; agent-proposed rewrites land in Phase 4.
-6. Per-item sharing: a child item inherits its parent's visibility by default. A child can **override** ("I'm shared even though my parent is local") for the legitimate exceptions; the doc explains the trade-off (overrides become top-level on disk because their parent isn't there to anchor them).
+6. Per-item sharing: a child item inherits its parent's visibility by default. A child can **override** ("I'm shared even though my parent is local") for the legitimate exceptions; on export the overridden child is re-anchored to its **nearest exported ancestor** (the closest ancestor whose effective visibility is `shared`), falling back to top-level when no such ancestor exists. This keeps related content close on disk instead of randomly hoisting overrides to root.
 7. Items default to shared inside a shared plan. Users opt individual items into local.
 
 ### 3.1 Repo identifiers + per-device aliases
@@ -258,12 +258,12 @@ Status: ✅ Done. The Phase 3 suite is now eight green E2E tests, all running vi
 | `cdev-system-docs.test.ts` (3.4) | Docs create/verify/freshness/external-import/delete |
 | `cdev-stitched-view.test.ts` (3.5) | Stitched API: pointer resolves when home repo cloned; flips unresolved on removal |
 | `cdev-central-oversight.test.ts` (3.6) | Planning + code repos, repoRole round-trip, stitched view from code side |
-| `cdev-phase3-demo.test.ts` (3.7) | Per-item sharing: local items excluded from export AND teammate import; override re-anchors shared child to top-level |
+| `cdev-phase3-demo.test.ts` (3.7) | Per-item sharing: local items excluded from export AND teammate import; override re-anchors shared child to its nearest exported ancestor (top-level when none exists) |
 | `cdev-channels.test.ts` (1.x) | Phase 1 channels flow (still green) |
 | `cdev-routing.test.ts` (2.x) | Phase 2 routing dispatcher (still green) |
 | (smoke + unrelated suites) | Confirmed no regressions in adjacent code paths |
 
-What this proves end-to-end: a plan authored in repo A (homeRepo captured), scoped to repo B (pointer landing in B's `.codetrellis/external/`), with a mix of shared and local items + a `local` parent shielding inheriting children + an override child re-anchored to top-level, exporting cleanly, with the stitched view in B resolving back to A when A is locally available, and with the system-docs surface sitting alongside as a freshness-aware knowledge layer. The central-oversight shape composes from the same primitives plus the `repoRole` hint.
+What this proves end-to-end: a plan authored in repo A (homeRepo captured), scoped to repo B (pointer landing in B's `.codetrellis/external/`), with a mix of shared and local items + a `local` parent shielding inheriting children + an override child re-anchored to its nearest exported ancestor, exporting cleanly, with the stitched view in B resolving back to A when A is locally available, and with the system-docs surface sitting alongside as a freshness-aware knowledge layer. The central-oversight shape composes from the same primitives plus the `repoRole` hint.
 
 The remaining 3.7 spec item — "edits from B land in A's data" — isn't a behaviour of the shipped architecture: pointers are read-only stubs and the canonical plan stays in its home repo. Edits to a cross-repo plan are made by opening the home project; the stitched view's "Open" affordance makes that one click. The test for this behaviour is implicit in the cross-repo test (the pointer doesn't carry editable state).
 
