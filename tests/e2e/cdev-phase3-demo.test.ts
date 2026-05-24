@@ -1,16 +1,24 @@
 /**
  * CDev Phase 3.7 — comprehensive end-to-end demo.
  *
- * This test covers the spec items the individual Phase-3 tests didn't
- * fully exercise:
+ * This file covers the spec items the per-feature Phase-3 tests don't
+ * exercise, plus regression guards for the bugs the tester pass
+ * surfaced:
  *
  *   1. Per-item sharing — shared plan with one local item; export
  *      excludes the local item; a "teammate" who imports the exported
  *      directory doesn't see the local row.
- *   2. Per-item sharing override — local parent with a shared child
- *      that has `overrideParentVisibility: true`. The shared child
- *      surfaces top-level on disk because the parent isn't there to
- *      anchor it.
+ *   2. Per-item sharing override — `overrideParentVisibility: true` on
+ *      a shared child re-anchors it to the **nearest exported ancestor**
+ *      on disk, falling back to top-level only when no shared ancestor
+ *      exists. Both branches are asserted.
+ *   3. Re-export prune (regression for tester finding #1) — re-exporting
+ *      a plan after a shape change (re-parent, visibility flip,
+ *      title→slug rename, sortOrder change) wipes the stale yaml files
+ *      so each uid lives in exactly one location on disk.
+ *   4. Malformed YAML frontmatter on a system doc (regression for tester
+ *      finding #2) is skipped + warned, not silently rewritten with the
+ *      user's metadata destroyed.
  *
  * The cross-repo + system-docs + central-oversight stories already
  * have dedicated tests; this file fills the remaining 3.7 gap so the
