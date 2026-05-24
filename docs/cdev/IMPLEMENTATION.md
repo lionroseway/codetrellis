@@ -175,16 +175,74 @@ End-to-end test:
 
 **Cross-machine peer-to-peer** (events broadcast directly between teammates' CodeTrellis instances on the same network) moves to Phase 5 alongside the mobile companion. Both share transport (WebRTC) and discovery (mDNS) infrastructure; building them once together is cheaper than twice apart. Git remains the primary sync path for channel events in Phase 2.
 
-## Phase 3 — Cross-repo and system documentation
+## Phase 3 — Cross-repo, system documentation, per-item sharing
 
-Goal: support multi-repo team work and repo-wide system documentation.
+Goal: make CodeTrellis useful for work that spans multiple repos, give teams a real in-app home for documentation that outlives any single plan, and let users keep big plans lean by sharing item-by-item.
 
-- Plan `scope` field + stable cross-repo identifiers.
-- `.codetrellis/external/<plan-id>.json` pointer files.
-- Stitched cross-repo view when multiple repos cloned locally.
-- Central-oversight deployment shape (dedicated planning repo).
-- `.codetrellis/docs/` layer for repo-wide system documentation.
-- Per-item sharing UX (override `defaultVisibility` per artefact).
+Decisions locked with the user before build:
+
+1. Repos identified by **git origin URL** (everyone's clone shares it). Per-device **alias** stored in the local DB only — never in the repo (would conflict between teammates).
+2. Pointer files carry enough context for a stranger browsing the repo to understand what the plan is about: title, status, one-line summary, this repo's contribution, home repo, cached-against timestamp.
+3. Editing a plan from a sibling repo writes back to the home repo's data.
+4. System docs are an **in-app rich experience** (navigation tree, search, embedded graph refs, slick layout). Stored on disk as YAML + markdown in `.codetrellis/docs/` so they still travel via git and read on GitHub.
+5. Doc staleness has **three levels**: current / behind HEAD / files-actually-changed. v1 surfaces the indicator; agent-proposed rewrites land in Phase 4.
+6. Per-item sharing: a child item inherits its parent's visibility by default. A child can **override** ("I'm shared even though my parent is local") for the legitimate exceptions; the doc explains the trade-off (overrides become top-level on disk because their parent isn't there to anchor them).
+7. Items default to shared inside a shared plan. Users opt individual items into local.
+
+### 3.1 Repo identifiers + per-device aliases
+
+Status: ⬜ Not started.
+
+Capture the project's git origin URL at scan time. Store it normalised (strip `.git`, lowercase host, prefer `https://`). Persist a per-device alias the user can edit — local only, never in the manifest. New MCP tools: `set_repo_alias`, `get_repo_identity`.
+
+### 3.2 Per-item sharing
+
+Status: ⬜ Not started.
+
+Add a `visibility` column to plan items (`shared` | `local`, default `shared`). Add an `overrideParentVisibility` flag for the exception case. Export pipeline filters out local items. UI toggle on each item. Document the parent-dominance rule + the override exception. Goal: keep commits lean as plans scale up.
+
+### 3.3 Plan scope + pointer files
+
+Status: ⬜ Not started.
+
+Plans gain `homeRepo` (set at creation from current origin URL) and `scope` (list of other repo URLs the plan touches). MCP tools: `add_plan_scope`, `remove_plan_scope`, `set_plan_home_repo`. Pointer files at `.codetrellis/external/<plan-uid>.yaml` carry the rich context decided above. File watcher integration so pulled pointers appear without a re-scan.
+
+### 3.4 System documentation (in-app area)
+
+Status: ⬜ Not started.
+
+New "Docs" surface in the workspace. Storage: YAML frontmatter + markdown body at `.codetrellis/docs/<topic>.md`. Frontmatter records title, owner, references (files/symbols/items), capturedAgainstCommit (git SHA), lastVerifiedAt. Backend service: list / read / write / delete / verify. MCP tools: `list_system_docs`, `read_system_doc`, `write_system_doc`, `verify_system_doc` (re-stamps to current HEAD).
+
+Front-end UI:
+- Left rail: navigation tree (flat for v1, with the option to add folders later if anyone asks).
+- Right pane: rendered markdown with TOC, internal links between docs, embedded graph-node references.
+- Search across all docs.
+- Per-doc freshness badge: green (current), yellow (HEAD has moved), red (referenced files actually changed since the stamp).
+
+### 3.5 Cross-repo stitched view UI
+
+Status: ⬜ Not started.
+
+When a project loads, scan its `.codetrellis/external/` for pointers. For each pointer, check whether any open recent project has a matching origin URL. Resolved: open the real plan from the home project. Unresolved: render a rich pointer card (title, status, summary, home repo, "clone <url>" hint). The plans list shows local + pointer plans with a clear marker for cross-repo entries.
+
+### 3.6 Central-oversight deployment shape
+
+Status: ⬜ Not started.
+
+Mostly a docs note in [03-deployment-shapes.md](03-deployment-shapes.md) with a worked example: a planning repo holds the manifest; code repos carry pointers back. Confirm the mechanism works with no special-case code. Maybe add a single `repoRole` hint in `.codetrellis/config.json` to suppress "no plans here?" nudges for code repos that delegate planning elsewhere.
+
+### 3.7 Phase 3 demo + tests
+
+Status: ⬜ Not started.
+
+End-to-end:
+- Cross-repo: two harness projects, plan in A with scope including B, pointer auto-written in B, stitched view resolves when both open, placeholder when only B is open. Edits from B land in A's data.
+- Per-item sharing: shared plan with one local item; export excludes the local item; teammate pull doesn't see it. Override case: local parent with shared child surfaces correctly.
+- System docs: write a doc with frontmatter, file appears on disk, watcher re-imports an external edit. Freshness indicator updates correctly when HEAD moves or a referenced file changes.
+
+### Build order
+
+3.1 → 3.2 → 3.3 → 3.4 → 3.5 → 3.6 → 3.7. Per-item sharing (3.2) comes before cross-repo (3.3) on purpose — cross-repo plans tend to be larger, so we want the bloat-control mechanism in place first.
 
 ## Phase 4 — Sensors
 
