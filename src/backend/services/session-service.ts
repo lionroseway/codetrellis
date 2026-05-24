@@ -78,3 +78,38 @@ export function cleanStaleSessions(timeoutMs = 60000): void {
   const cutoff = Date.now() - timeoutMs;
   getDb().run(`UPDATE agent_sessions SET status = 'inactive' WHERE status = 'active' AND last_seen < ?`, [cutoff]);
 }
+
+// --- Periodic sweep ---------------------------------------------------------
+
+let sweepTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Start a server-side periodic sweep that marks stale active sessions
+ * inactive independent of any frontend poll. Without this,
+ * `cleanStaleSessions` only runs when the frontend hits
+ * `/api/onboarding-state`; with a backgrounded tab, ghost agents pile
+ * up in the ConnectedAgents widget.
+ *
+ * Idempotent — calling twice keeps a single timer.
+ */
+export function startSessionSweep(intervalMs = 30_000, timeoutMs = 60_000): void {
+  if (sweepTimer) return;
+  sweepTimer = setInterval(() => {
+    try {
+      cleanStaleSessions(timeoutMs);
+    } catch (err) {
+      console.warn('[Session] periodic sweep failed:', err);
+    }
+  }, intervalMs);
+  // Allow the process to exit without waiting on this timer (matters
+  // for tests and CLI scripts).
+  if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
+}
+
+/** Stop the sweep. Used in test teardown. */
+export function stopSessionSweep(): void {
+  if (sweepTimer) {
+    clearInterval(sweepTimer);
+    sweepTimer = null;
+  }
+}

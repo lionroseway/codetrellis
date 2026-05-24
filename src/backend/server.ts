@@ -2645,6 +2645,16 @@ export async function initializeBackend(): Promise<void> {
   // Start persistent auto-save for plan data
   startAutoSave(() => exportDatabase(), 30000);
 
+  // Periodic session sweep — keeps ConnectedAgents accurate even when
+  // the frontend isn't polling (backgrounded tab, no onboarding-state
+  // hits). Without this, ghost sessions accumulate across SSE
+  // reconnect churn and the widget over-counts.
+  try {
+    sessionService.startSessionSweep();
+  } catch (err) {
+    console.warn('[Backend] Session sweep failed to start:', err);
+  }
+
   // Start MCP server for agent integration. The MCP server keeps
   // its own TCP port (default 19432) because external agents need
   // a stable URL to put in their MCP config — that's the only
