@@ -52,6 +52,7 @@ export interface ToolDeps {
   planFileService: typeof import('../services/plan-file-service');
   planChangesService: typeof import('../services/plan-changes-service');
   externalRefsService: typeof import('../services/external-refs-service');
+  externalPointerService: typeof import('../services/external-pointer-service');
   terminalService: typeof import('../services/terminal-service');
   planImportService: typeof import('../services/plan-import-service');
   presenceService: typeof import('../services/presence-service');

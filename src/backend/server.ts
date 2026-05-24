@@ -816,6 +816,14 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
       console.warn('[Scan] Project config watcher failed to start:', err);
     }
 
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { startPointerWatcher } = require('./services/external-pointer-service');
+      startPointerWatcher(projectPath);
+    } catch (err) {
+      console.warn('[Scan] External pointer watcher failed to start:', err);
+    }
+
     return stats;
   } finally {
     scanInFlight = false;
@@ -2772,6 +2780,8 @@ function rearmProjectWatchers(): void {
   const { listRecentProjects } = require('./services/recent-projects-service');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { startProjectConfigWatcher } = require('./services/project-config-service');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { startPointerWatcher } = require('./services/external-pointer-service');
 
   const recents = listRecentProjects() as Array<{ path: string; pinned: boolean }>;
   const pinned = recents.filter((p) => p.pinned);
@@ -2789,6 +2799,11 @@ function rearmProjectWatchers(): void {
       } catch {
         // plan-file watcher may need a project scan to be useful;
         // best-effort.
+      }
+      try {
+        startPointerWatcher(proj.path);
+      } catch {
+        // best-effort — pointers are only useful for cross-repo plans
       }
       armed++;
     } catch (err) {

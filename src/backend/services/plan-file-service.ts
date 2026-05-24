@@ -943,7 +943,7 @@ function hasGitConflictMarkers(content: string): boolean {
 // --- Serialization ---
 
 function serializePlan(plan: Plan & { tasks?: Task[] }, version?: 1 | 2) {
-  return {
+  const obj: Record<string, unknown> = {
     ...(version === 2 ? { version: 2 } : {}),
     uid: plan.uid,
     title: plan.title,
@@ -955,6 +955,15 @@ function serializePlan(plan: Plan & { tasks?: Task[] }, version?: 1 | 2) {
     createdAt: new Date(plan.createdAt).toISOString(),
     updatedAt: new Date(plan.updatedAt).toISOString(),
   };
+
+  // Phase 3.3 — cross-repo identity. Omit when both are default so
+  // older single-repo plans keep their cleaner shape. `scope` is a
+  // sorted array (for stable diffs across machines).
+  if (plan.homeRepo) obj.homeRepo = plan.homeRepo;
+  if (plan.scope && plan.scope.length > 0) {
+    obj.scope = [...plan.scope].sort();
+  }
+  return obj;
 }
 
 /**
@@ -1146,23 +1155,50 @@ function upsertPlan(planUid: string, raw: any, projectPath: string): void {
   const db = getDb();
   const exists = db.exec(`SELECT uid FROM plans WHERE uid = ?`, [planUid]);
   const now = Date.now();
+
+  // Phase 3.3 — round-trip homeRepo + scope from plan.yaml when
+  // present. Importantly, **absent fields preserve the DB value** on
+  // update so an older plan.yaml without these keys doesn't wipe out
+  // metadata captured at create time. New rows get sensible defaults.
+  const hasHomeRepo = Object.prototype.hasOwnProperty.call(raw, 'homeRepo');
+  const hasScope = Object.prototype.hasOwnProperty.call(raw, 'scope');
+  const homeRepoVal = hasHomeRepo
+    ? (typeof raw.homeRepo === 'string' && raw.homeRepo ? String(raw.homeRepo) : null)
+    : null;
+  const scopeArray = hasScope && Array.isArray(raw.scope)
+    ? raw.scope.filter((s: unknown): s is string => typeof s === 'string')
+    : [];
+  const scopeJson = JSON.stringify(scopeArray);
+
   if (exists[0]?.values[0]) {
-    db.run(
-      `UPDATE plans SET title = ?, description = ?, status = ?, author = ?, author_type = ?, project_path = ?, updated_at = ? WHERE uid = ?`,
-      [
-        String(raw.title),
-        String(raw.description ?? ''),
-        String(raw.status ?? 'draft'),
-        String(raw.author ?? 'human'),
-        String(raw.authorType ?? 'human'),
-        projectPath,
-        toEpoch(raw.updatedAt) ?? now,
-        planUid,
-      ],
-    );
+    // Build the UPDATE column list conditionally so missing fields
+    // preserve their existing DB value rather than overwriting to null.
+    const sets: string[] = [
+      'title = ?', 'description = ?', 'status = ?', 'author = ?',
+      'author_type = ?', 'project_path = ?', 'updated_at = ?',
+    ];
+    const params: any[] = [
+      String(raw.title),
+      String(raw.description ?? ''),
+      String(raw.status ?? 'draft'),
+      String(raw.author ?? 'human'),
+      String(raw.authorType ?? 'human'),
+      projectPath,
+      toEpoch(raw.updatedAt) ?? now,
+    ];
+    if (hasHomeRepo) {
+      sets.push('home_repo = ?');
+      params.push(homeRepoVal);
+    }
+    if (hasScope) {
+      sets.push('scope = ?');
+      params.push(scopeJson);
+    }
+    params.push(planUid);
+    db.run(`UPDATE plans SET ${sets.join(', ')} WHERE uid = ?`, params);
   } else {
     db.run(
-      `INSERT INTO plans (uid, title, description, status, author, author_type, project_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO plans (uid, title, description, status, author, author_type, project_path, created_at, updated_at, home_repo, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         planUid,
         String(raw.title),
@@ -1173,6 +1209,8 @@ function upsertPlan(planUid: string, raw: any, projectPath: string): void {
         projectPath,
         toEpoch(raw.createdAt) ?? now,
         toEpoch(raw.updatedAt) ?? now,
+        homeRepoVal,
+        scopeJson,
       ],
     );
   }

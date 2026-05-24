@@ -24,6 +24,7 @@ import * as planEventService from '../services/plan-event-service';
 import * as planChangesService from '../services/plan-changes-service';
 import * as planFileService from '../services/plan-file-service';
 import * as externalRefsService from '../services/external-refs-service';
+import * as externalPointerService from '../services/external-pointer-service';
 import * as terminalService from '../services/terminal-service';
 import * as planImportService from '../services/plan-import-service';
 import * as presenceService from '../services/presence-service';
@@ -183,6 +184,7 @@ function buildToolDeps(sessionId: string): ToolDeps {
     planFileService,
     planChangesService,
     externalRefsService,
+    externalPointerService,
     terminalService,
     planImportService,
     presenceService,

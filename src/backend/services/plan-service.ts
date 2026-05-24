@@ -60,10 +60,18 @@ export function createPlan(
   const now = Date.now();
   const normalizedPath = normalizePath(projectPath);
 
+  // Phase 3.3 — capture the origin URL of the current project as the
+  // plan's home repo. Stable across clones (same URL means same repo
+  // regardless of local path). Falls back to null when the project
+  // isn't a git repo or has no origin.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getNormalisedOriginUrl } = require('./git-identity');
+  const homeRepo: string | null = normalizedPath ? (getNormalisedOriginUrl(normalizedPath) ?? null) : null;
+
   db.run(
-    `INSERT INTO plans (uid, title, description, status, author, author_type, project_path, created_at, updated_at)
-     VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?)`,
-    [uid, input.title, input.description || '', author, authorType, normalizedPath, now, now]
+    `INSERT INTO plans (uid, title, description, status, author, author_type, project_path, created_at, updated_at, home_repo, scope)
+     VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '[]')`,
+    [uid, input.title, input.description || '', author, authorType, normalizedPath, now, now, homeRepo]
   );
 
   const tasks: Task[] = [];
@@ -106,6 +114,8 @@ export function createPlan(
     uid, title: input.title, description: input.description || '', status: 'draft',
     author, authorType, projectPath, createdAt: now, updatedAt: now,
     taskCount: tasks.length, completedTaskCount: 0,
+    homeRepo,
+    scope: [],
   };
 
   // Version 1
@@ -127,9 +137,15 @@ export function createPlan(
  * snapshots all stay in lockstep.
  */
 const PLAN_COLUMNS = `uid, title, description, status, author, author_type, project_path, created_at, updated_at,
-        base_ref, target_branch, target_worktree, auto_create_branch`;
+        base_ref, target_branch, target_worktree, auto_create_branch,
+        home_repo, scope`;
 
 function rowToPlanCore(r: any[]): Plan {
+  let scope: string[] = [];
+  try {
+    const parsed = JSON.parse((r[14] as string | null) ?? '[]');
+    if (Array.isArray(parsed)) scope = parsed.filter((s): s is string => typeof s === 'string');
+  } catch { /* malformed — empty */ }
   return {
     uid: r[0] as string,
     title: r[1] as string,
@@ -144,6 +160,9 @@ function rowToPlanCore(r: any[]): Plan {
     targetBranch: (r[10] as string | null) ?? null,
     targetWorktree: (r[11] as string | null) ?? null,
     autoCreateBranch: !!(r[12] as number | null),
+    // Phase 3.3 — cross-repo scope
+    homeRepo: (r[13] as string | null) ?? null,
+    scope,
   };
 }
 
@@ -237,6 +256,139 @@ export function deletePlan(planUid: string): void {
   getDb().run(`UPDATE plans SET status = 'archived', updated_at = ? WHERE uid = ?`, [Date.now(), planUid]);
   markDirty();
   notifyMutation(planUid);
+}
+
+// ---------- Phase 3.3: cross-repo plan scope ----------
+//
+// `homeRepo` is the canonical owner of the plan (origin URL of the
+// repo where the plan was created — set on createPlan). `scope` is the
+// list of *other* repo origin URLs that participate in the plan; each
+// scoped repo will receive a thin pointer file (see
+// external-pointer-service) so the plan is discoverable across the
+// repos that need to coordinate on it.
+//
+// Both fields normalise their inputs (lowercase host, no .git suffix)
+// via `normaliseRepoUrl` so cross-machine cloning of the same repo
+// resolves to the same identity regardless of which URL form a
+// developer used.
+
+/**
+ * Replace the plan's `homeRepo`. Pass `null` to clear it (rare —
+ * mostly useful when a plan is created outside any git repo and then
+ * later imported into one). Stores the normalised form.
+ */
+export function setPlanHomeRepo(planUid: string, homeRepoUrl: string | null): void {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { normaliseRepoUrl } = require('./git-identity');
+  const normalised = homeRepoUrl ? normaliseRepoUrl(homeRepoUrl) : null;
+  const now = Date.now();
+  getDb().run(
+    `UPDATE plans SET home_repo = ?, updated_at = ? WHERE uid = ?`,
+    [normalised, now, planUid],
+  );
+  markDirty();
+  notifyMutation(planUid);
+}
+
+/**
+ * Add a repo (by origin URL) to the plan's scope. No-op if it's
+ * already in scope or matches the plan's own homeRepo (the home is
+ * implicitly scoped — no point listing it twice). Returns the updated
+ * scope array.
+ */
+export function addPlanScope(planUid: string, repoUrl: string): string[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { normaliseRepoUrl } = require('./git-identity');
+  const normalised: string = normaliseRepoUrl(repoUrl);
+  if (!normalised) throw new Error('addPlanScope: repoUrl must be a non-empty URL');
+
+  const plan = getPlan(planUid);
+  if (!plan) throw new Error(`Plan ${planUid} not found`);
+  if (plan.homeRepo && normalised === plan.homeRepo) {
+    return plan.scope ?? [];
+  }
+
+  const current = plan.scope ?? [];
+  if (current.includes(normalised)) return current;
+
+  const next = [...current, normalised];
+  const now = Date.now();
+  getDb().run(
+    `UPDATE plans SET scope = ?, updated_at = ? WHERE uid = ?`,
+    [JSON.stringify(next), now, planUid],
+  );
+  markDirty();
+  notifyMutation(planUid);
+  return next;
+}
+
+/**
+ * Remove a repo from the plan's scope. No-op when the repo is not in
+ * scope. Returns the updated scope array.
+ */
+export function removePlanScope(planUid: string, repoUrl: string): string[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { normaliseRepoUrl } = require('./git-identity');
+  const normalised: string = normaliseRepoUrl(repoUrl);
+  if (!normalised) throw new Error('removePlanScope: repoUrl must be a non-empty URL');
+
+  const plan = getPlan(planUid);
+  if (!plan) throw new Error(`Plan ${planUid} not found`);
+
+  const current = plan.scope ?? [];
+  if (!current.includes(normalised)) return current;
+
+  const next = current.filter((r) => r !== normalised);
+  const now = Date.now();
+  getDb().run(
+    `UPDATE plans SET scope = ?, updated_at = ? WHERE uid = ?`,
+    [JSON.stringify(next), now, planUid],
+  );
+  markDirty();
+  notifyMutation(planUid);
+  return next;
+}
+
+/**
+ * Return all plans whose `homeRepo` or `scope` contains the given
+ * (normalised) origin URL. Used to discover which plans "belong" to a
+ * given repo when stitching across multi-repo workspaces.
+ *
+ * Pure read; doesn't materialise full task lists for performance.
+ */
+export function listPlansByRepoUrl(repoUrl: string): Plan[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { normaliseRepoUrl } = require('./git-identity');
+  const normalised: string = normaliseRepoUrl(repoUrl);
+  if (!normalised) return [];
+
+  const db = getDb();
+  // Match on home_repo exactly OR scope JSON containing the URL as a
+  // standalone string. sql.js doesn't have JSON1 reliably, so we
+  // string-match on the serialised form. Strings are bracketed by
+  // double-quotes, eliminating false positives like a URL that's a
+  // prefix of another.
+  const result = db.exec(
+    `SELECT ${PLAN_COLUMNS} FROM plans
+     WHERE status != 'archived'
+       AND (home_repo = ? OR scope LIKE ?)
+     ORDER BY updated_at DESC`,
+    [normalised, `%"${normalised}"%`],
+  );
+  if (!result[0]) return [];
+
+  return result[0].values.map((r: any[]) => {
+    const core = rowToPlanCore(r);
+    const counts = db.exec(
+      `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
+      [r[0]],
+    );
+    return {
+      ...core,
+      taskCount: (counts[0]?.values[0]?.[0] as number) || 0,
+      completedTaskCount: (counts[0]?.values[0]?.[1] as number) || 0,
+    };
+  });
 }
 
 /**

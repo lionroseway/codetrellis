@@ -482,4 +482,154 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+  // ───────────────────────────────────────────────────────────────────
+  // Phase 3.3 — Cross-repo plan scope + pointer files
+  //
+  // A plan can be "in scope" for multiple repos. The plan's home repo
+  // is captured automatically at create_plan time (its origin URL).
+  // Other participating repos can be added via add_plan_scope; each
+  // scoped repo gets a thin pointer file written to
+  //   <repoRoot>/.codetrellis/external/<plan-uid>.yaml
+  // so a developer cloning just that repo sees the plan exists.
+  // ───────────────────────────────────────────────────────────────────
+
+  server.registerTool(
+    'set_plan_home_repo',
+    {
+      description:
+        'Set the home repo of a plan to a normalised git origin URL. ' +
+        'The home repo is captured automatically at create_plan from the project\'s git origin — call this only when ' +
+        'you need to override it (e.g. moving a plan between repos, or attaching a previously-orphaned plan). ' +
+        'Pass an empty string to clear.',
+      inputSchema: {
+        plan_uid: z.string().describe('UID of the plan to update'),
+        home_repo_url: z.string().describe('Git origin URL — will be normalised. Empty string clears.'),
+      },
+    },
+    async ({ plan_uid, home_repo_url }) => {
+      const trimmed = home_repo_url.trim();
+      deps.planService.setPlanHomeRepo(plan_uid, trimmed === '' ? null : trimmed);
+      const plan = deps.planService.getPlan(plan_uid);
+      const n = deps.broadcast('plan-updated', { planUid: plan_uid });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({ ok: true, planUid: plan_uid, homeRepo: plan?.homeRepo ?? null }, n);
+    },
+  );
+
+  server.registerTool(
+    'add_plan_scope',
+    {
+      description:
+        'Add a repository (by git origin URL) to a plan\'s cross-repo scope. ' +
+        'When `pointer_project_root` is supplied AND it\'s a clone of the scoped repo on this machine, ' +
+        'a pointer file is written to <pointer_project_root>/.codetrellis/external/<plan-uid>.yaml so ' +
+        'developers cloning that repo discover the plan. The pointer caches a snapshot of title/status/summary; ' +
+        'it round-trips through git. Returns the updated scope list.',
+      inputSchema: {
+        plan_uid: z.string(),
+        repo_url: z.string().describe('Git origin URL of the participating repo — will be normalised'),
+        pointer_project_root: z.string().optional().describe('Absolute path on this machine where the pointer file should be written. Skip when not locally available.'),
+        contribution: z.string().optional().describe('Short note describing this repo\'s contribution to the plan (e.g. "ships the migration").'),
+        summary: z.string().optional().describe('Short prose summary cached into the pointer; defaults to the plan\'s description.'),
+      },
+    },
+    async ({ plan_uid, repo_url, pointer_project_root, contribution, summary }) => {
+      const plan = deps.planService.getPlan(plan_uid);
+      if (!plan) {
+        return { content: [{ type: 'text' as const, text: `Plan ${plan_uid} not found` }], isError: true };
+      }
+      const scope = deps.planService.addPlanScope(plan_uid, repo_url);
+
+      let pointerPath: string | null = null;
+      if (pointer_project_root) {
+        try {
+          pointerPath = deps.externalPointerService.writePointer({
+            planUid: plan_uid,
+            projectRoot: pointer_project_root,
+            homeRepo: plan.homeRepo ?? '',
+            title: plan.title,
+            status: plan.status,
+            summary: summary ?? plan.description ?? undefined,
+            contribution,
+          });
+        } catch (err) {
+          console.warn('[add_plan_scope] pointer write failed:', err);
+        }
+      }
+
+      const n = deps.broadcast('plan-scope-changed', { planUid: plan_uid, scope, added: repo_url, pointerPath });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({ ok: true, planUid: plan_uid, scope, pointerPath }, n);
+    },
+  );
+
+  server.registerTool(
+    'remove_plan_scope',
+    {
+      description:
+        'Remove a repo from a plan\'s scope. When `pointer_project_root` is supplied, also delete the pointer file ' +
+        'at <pointer_project_root>/.codetrellis/external/<plan-uid>.yaml so the scoped repo stops advertising the plan.',
+      inputSchema: {
+        plan_uid: z.string(),
+        repo_url: z.string(),
+        pointer_project_root: z.string().optional().describe('Absolute path of the scoped repo on this machine — pointer is removed when supplied.'),
+      },
+    },
+    async ({ plan_uid, repo_url, pointer_project_root }) => {
+      const scope = deps.planService.removePlanScope(plan_uid, repo_url);
+      let pointerRemoved = false;
+      if (pointer_project_root) {
+        pointerRemoved = deps.externalPointerService.removePointer(plan_uid, pointer_project_root);
+      }
+      const n = deps.broadcast('plan-scope-changed', { planUid: plan_uid, scope, removed: repo_url, pointerRemoved });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({ ok: true, planUid: plan_uid, scope, pointerRemoved }, n);
+    },
+  );
+
+  server.registerTool(
+    'list_plan_pointers',
+    {
+      description:
+        'List every external plan pointer found under <project_path>/.codetrellis/external/. ' +
+        'Each entry is a thin reference to a plan whose home is another repo — title/status/summary/contribution ' +
+        'are cached at the last refresh. Use this to surface "plans from other repos that touch this one" in the UI.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path to the project root'),
+      },
+    },
+    async ({ project_path }) => {
+      const pointers = deps.externalPointerService.discoverPointers(project_path);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({
+        projectPath: project_path,
+        count: pointers.length,
+        pointers: pointers.map((p) => ({ filePath: p.filePath, ...p.pointer })),
+      }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'list_plans_by_repo',
+    {
+      description:
+        'Return every active plan whose home_repo OR scope contains the given git origin URL. ' +
+        'Cross-machine safe — URLs are normalised before matching. Useful for "show me every plan that touches this repo" in cross-repo views.',
+      inputSchema: {
+        repo_url: z.string().describe('Git origin URL — will be normalised before matching'),
+      },
+    },
+    async ({ repo_url }) => {
+      const plans = deps.planService.listPlansByRepoUrl(repo_url);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({
+        repoUrl: repo_url,
+        count: plans.length,
+        plans: plans.map((p) => ({
+          uid: p.uid, title: p.title, status: p.status, homeRepo: p.homeRepo,
+          scope: p.scope, taskCount: p.taskCount, completedTaskCount: p.completedTaskCount,
+          projectPath: p.projectPath,
+        })),
+      }, null, 2) }] };
+    },
+  );
+
 }

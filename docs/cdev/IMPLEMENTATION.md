@@ -203,9 +203,15 @@ Add a `visibility` column to plan items (`shared` | `local`, default `shared`). 
 
 ### 3.3 Plan scope + pointer files
 
-Status: ⬜ Not started.
+Status: ✅ Done. What shipped:
 
-Plans gain `homeRepo` (set at creation from current origin URL) and `scope` (list of other repo URLs the plan touches). MCP tools: `add_plan_scope`, `remove_plan_scope`, `set_plan_home_repo`. Pointer files at `.codetrellis/external/<plan-uid>.yaml` carry the rich context decided above. File watcher integration so pulled pointers appear without a re-scan.
+- Plans gain `homeRepo` (auto-set at `create_plan` from the project's normalised origin URL) and `scope: string[]` (other repo URLs the plan touches). Both round-trip through `plan.yaml`.
+- `home_repo` + `scope` migrations on the `plans` table with `idx_plans_home_repo` for fast cross-repo lookups.
+- `setPlanHomeRepo`, `addPlanScope`, `removePlanScope`, `listPlansByRepoUrl` on the plan service — all normalise their inputs via `normaliseRepoUrl` so ssh / https / `.git`-suffixed variants collapse to the same identity.
+- New service `external-pointer-service.ts` for pointer-file CRUD: `writePointer`, `removePointer`, `readPointer`, `discoverPointers`, `isPointerFile`, `startPointerWatcher` / `stopPointerWatcher`. Pointers live at `<projectRoot>/.codetrellis/external/<plan-uid>.yaml` and cache `{ planUid, homeRepo, title, status, summary, contribution, cachedAt }`. Self-write stamping is shared with the rest of the file-emitting services.
+- File-watcher integration: a per-project chokidar watcher on `.codetrellis/external/` (depth 0) broadcasts `external-pointers-changed` on add / change / unlink. Wired into both `scanProject` and the boot-time `rearmProjectWatchers` pass.
+- MCP tools: `set_plan_home_repo`, `add_plan_scope`, `remove_plan_scope`, `list_plan_pointers`, `list_plans_by_repo`. `add_plan_scope` optionally writes the pointer file into a local clone of the scoped repo when `pointer_project_root` is supplied.
+- E2E coverage in `tests/e2e/cdev-cross-repo.test.ts` — full round-trip through real MCP wire format: configure origin, create plan, add scope (writes pointer YAML), list pointers from scoped side, query by both home and scoped URL, export plan and confirm `plan.yaml` carries `homeRepo` + sorted `scope`, remove scope (deletes pointer).
 
 ### 3.4 System documentation (in-app area)
 

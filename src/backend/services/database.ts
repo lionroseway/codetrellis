@@ -524,6 +524,16 @@ export async function initDatabase(): Promise<void> {
   try { db.run(`ALTER TABLE plan_items ADD COLUMN visibility TEXT NOT NULL DEFAULT 'shared'`); } catch { /* exists */ }
   try { db.run(`ALTER TABLE plan_items ADD COLUMN visibility_override INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
 
+  // CDev Phase 3.3 — cross-repo plan scope. `home_repo` is the
+  // normalised git origin URL of the repo that canonically owns this
+  // plan; `scope` is a JSON array of other repo URLs that contribute
+  // to the same work. Both are stable across clones (URLs, not local
+  // paths). home_repo is captured at plan creation from the current
+  // project's origin URL.
+  try { db.run(`ALTER TABLE plans ADD COLUMN home_repo TEXT DEFAULT NULL`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plans ADD COLUMN scope TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_plans_home_repo ON plans(home_repo)`); } catch { /* exists */ }
+
   // Phase 17.R — external references table
   db.run(`
     CREATE TABLE IF NOT EXISTS external_refs (

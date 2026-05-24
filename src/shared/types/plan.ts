@@ -45,6 +45,21 @@ export interface Plan {
   targetBranch?: string | null;
   targetWorktree?: string | null;
   autoCreateBranch?: boolean;
+  /**
+   * Phase 3.3 — Cross-repo plan scope.
+   *
+   *   - `homeRepo`  — normalised git origin URL of the repo that
+   *                   canonically owns this plan. Captured at plan
+   *                   creation from the project's origin URL.
+   *                   Stable across clones. Null when the project
+   *                   isn't a git repo (single-repo, local-only).
+   *   - `scope`     — additional normalised origin URLs the plan
+   *                   touches (sibling repos). Pointer files in
+   *                   those repos let teammates browsing them see
+   *                   that this plan exists.
+   */
+  homeRepo?: string | null;
+  scope?: string[];
 }
 
 export interface SymbolSpec {
