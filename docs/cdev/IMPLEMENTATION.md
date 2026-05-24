@@ -267,6 +267,8 @@ What this proves end-to-end: a plan authored in repo A (homeRepo captured), scop
 
 The remaining 3.7 spec item — "edits from B land in A's data" — isn't a behaviour of the shipped architecture: pointers are read-only stubs and the canonical plan stays in its home repo. Edits to a cross-repo plan are made by opening the home project; the stitched view's "Open" affordance makes that one click. The test for this behaviour is implicit in the cross-repo test (the pointer doesn't carry editable state).
 
+UX / visual checks the harness can't reach are tracked in [PENDING-VALIDATION.md](PENDING-VALIDATION.md). Tick them off as a human validates each.
+
 ### Build order
 
 3.1 → 3.2 → 3.3 → 3.4 → 3.5 → 3.6 → 3.7. Per-item sharing (3.2) comes before cross-repo (3.3) on purpose — cross-repo plans tend to be larger, so we want the bloat-control mechanism in place first.
