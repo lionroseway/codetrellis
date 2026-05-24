@@ -271,8 +271,51 @@ Use \`weigh-in\` for "here's my thinking — what do others see?" architectural 
 | Tool | What it does |
 |------|-------------|
 | \`get_project_config(project_root)\` | Read \`.codetrellis/config.json\` + effective settings (project > user precedence) |
-| \`update_project_config(project_root, ...)\` | Persist project-level overrides (sharing defaults, attachment location) |
+| \`update_project_config(project_root, ...)\` | Persist project-level overrides — \`plans\` (sharing defaults, attachment location), \`channels.routing\`, and (CDev 3.6) \`repoRole: "planning" | "code" | "mixed"\` for multi-repo central-oversight setups |
 | \`commit_manifest_changes(project_root, subject, paths, ...)\` | Stage paths and create a \`[cdev]\` commit. Optionally agent-attributed via Co-Authored-By trailer. |
+
+### Repo identity (CDev 3.1)
+
+Cross-machine repo identity uses the normalised git origin URL — ssh / https / \`.git\`-suffixed variants all collapse to one stable id. Per-device aliases (the label you see in the UI) are local-only and never travel in the manifest.
+
+| Tool | What it does |
+|------|-------------|
+| \`get_repo_identity(project_path)\` | Return origin URL + normalised form + per-device alias |
+| \`set_repo_alias(project_path, alias)\` | Rename the project on this machine without touching the manifest |
+| \`refresh_repo_origin(project_path)\` | Re-read \`git remote get-url origin\` after the user changes it |
+
+### Per-item sharing (CDev 3.2)
+
+Every plan item carries a \`visibility\` flag (\`shared\` default, \`local\` keeps it off git) and an \`overrideParentVisibility\` escape hatch. \`add_item\` and \`update_item\` both accept \`visibility\` and \`override_parent_visibility\`. Effective visibility walks ancestors — \`local\` wins; setting the override breaks the inheritance chain. On export, local items are filtered out; children whose effective visibility differs from their parent are re-anchored to the nearest shared ancestor (or top-level when none).
+
+### Cross-repo plans (CDev 3.3 + 3.5)
+
+A plan's \`homeRepo\` is captured automatically from the project's git origin at \`create_plan\`. \`scope[]\` lists other repos that participate; each scoped repo gets a thin pointer file at \`.codetrellis/external/<plan-uid>.yaml\` advertising the plan.
+
+| Tool | What it does |
+|------|-------------|
+| \`set_plan_home_repo(plan_uid, home_repo_url)\` | Override the auto-captured home repo (rare — moving a plan between repos) |
+| \`add_plan_scope(plan_uid, repo_url, pointer_project_root?, contribution?, summary?)\` | Add a repo to scope. With \`pointer_project_root\`, write a pointer file into the local clone. |
+| \`remove_plan_scope(plan_uid, repo_url, pointer_project_root?)\` | Remove from scope; delete the pointer file when supplied |
+| \`list_plan_pointers(project_path)\` | List \`.codetrellis/external/\` entries — plans whose home is elsewhere |
+| \`list_plans_by_repo(repo_url)\` | Every active plan whose homeRepo OR scope contains this URL (normaliser-safe) |
+
+The frontend stitched view at \`/api/plans/stitched\` is the UI side of these tools — resolved pointers (home repo is locally cloned) get an "Open" affordance; unresolved ones get a clone hint.
+
+### System documentation (CDev 3.4)
+
+Repo-wide knowledge layer at \`<project>/.codetrellis/docs/<slug>.md\` with YAML frontmatter. The on-disk file is the source of truth; the DB is an index. Docs describe **how the system currently works** (architecture overviews, conventions, runbooks) — distinct from plan-scoped specs which describe **upcoming work**.
+
+| Tool | What it does |
+|------|-------------|
+| \`list_system_docs(project_path, search?)\` | Browse / search docs by title + body |
+| \`read_system_doc(uid)\` | Read one doc — full body + metadata |
+| \`write_system_doc(project_path, title, body, references?, owner?, tags?, uid?)\` | Create or update by uid. Editing a body does NOT touch the freshness stamp — call \`verify_system_doc\` after meaningful edits. |
+| \`delete_system_doc(uid)\` | Remove a doc and its on-disk file |
+| \`verify_system_doc(uid)\` | Re-stamp \`capturedAgainstCommit\` to current HEAD (the freshness sensor compares this to live HEAD) |
+| \`check_doc_freshness(uid)\` | Pure read: \`current\` / \`moved\` (HEAD past stamp, no referenced file changed) / \`stale\` (HEAD past stamp AND referenced file changed) |
+
+Drop \`references.files: [...]\` to tie a doc to specific code paths — that's what drives the \`stale\` verdict when one of those files actually diffs since the last verification.
 
 ### Drift & verification
 
