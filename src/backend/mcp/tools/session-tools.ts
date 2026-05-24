@@ -33,10 +33,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ),
       },
     },
-    async ({ agent_type, model, capabilities, host_terminal_id }, extra: any) => {
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? `mcp-${Date.now()}`;
+    async ({ agent_type, model, capabilities, host_terminal_id }) => {
+      // Use the McpServer-instance-bound session id (Bugfix A). This
+      // is stable per SSE connection, so re-registration is idempotent
+      // (INSERT OR REPLACE updates the existing row).
+      const sessionId = deps.sessionId;
       deps.sessionService.registerSession(sessionId, agent_type, model, capabilities, host_terminal_id);
       deps.broadcast('session-registered', { sessionId, agentType: agent_type, model, capabilities });
       deps.broadcast('mcp-session-changed', { reason: 'register', sessionId });
@@ -57,10 +58,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description: 'Associate this agent session with a plan and navigate the UI to show it. Other connected agents see your active plan in the Connected Agents widget.',
       inputSchema: { plan_uid: z.string() },
     },
-    async ({ plan_uid }, extra: any) => {
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
+    async ({ plan_uid }) => {
+      const sessionId = deps.sessionId;
       if (sessionId) {
         deps.sessionService.setActivePlan(sessionId, plan_uid);
         deps.broadcast('mcp-session-changed', { reason: 'set_active_plan', sessionId, planUid: plan_uid });

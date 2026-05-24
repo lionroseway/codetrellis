@@ -360,10 +360,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
-      const capabilities = sessionId ? deps.sessionService.getSessionCapabilities(sessionId) : undefined;
+      const capabilities = deps.sessionService.getSessionCapabilities(deps.sessionId);
       const result = deps.planItemService.claimItem(
         args.uid,
         args.agent_type ?? id.author,

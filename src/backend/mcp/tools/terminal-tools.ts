@@ -59,9 +59,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // If the caller registered with a host_terminal_id, block writes
       // to that terminal to prevent the agent from typing into its own
       // stdin (which creates a feedback loop).
-      const callerSessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
+      const callerSessionId = deps.sessionId;
       if (callerSessionId) {
         const hostTerminalId = deps.sessionService.getHostTerminalId(callerSessionId);
         if (hostTerminalId && hostTerminalId === session_id) {

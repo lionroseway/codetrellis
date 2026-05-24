@@ -67,14 +67,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
           'For need-decision: the alternatives the asker has identified.',
         ),
         responds_to: z.string().nullable().optional().describe(
-          'UID of the channel event this responds to (for threading). Required when posting a steer that resolves a stuck.',
+          'Optional. UID of the channel event this responds to (for threading). Posting a `steer` against a `stuck` does NOT auto-resolve the stuck — resolution is a separate `resolve_channel_event` call.',
         ),
       },
     },
-    async ({ plan_uid, item_uid, event_type, message, attempted, options, responds_to }, extra: any) => {
-      const sessionId =
-        extra?.sessionInfo?.sessionId ?? extra?.requestInfo?.headers?.['mcp-session-id'] ?? null;
-      const { author, authorType, agentModel } = resolveAttribution(deps, sessionId);
+    async ({ plan_uid, item_uid, event_type, message, attempted, options, responds_to }) => {
+      const { author, authorType, agentModel } = resolveAttribution(deps);
 
       const payload: PostChannelEventInput['payload'] = { message };
       if (attempted && attempted.length > 0) payload.attempted = attempted;
@@ -218,24 +216,35 @@ export function register(server: McpServer, deps: ToolDeps): void {
 
 /**
  * Resolve the author for a channel event from the calling session.
- * Falls back to the per-user identity when the session is anonymous.
+ *
+ * The human (per settings.identity) is always recorded as the author —
+ * accountability rests with the named human (Principle 5). The agent
+ * is recorded in authorType + agentModel when the calling session is
+ * a registered agent.
+ *
+ * Reads sessionId from the deps bag (bound at McpServer-instance setup)
+ * rather than the SDK's `extra` arg — the SDK doesn't reliably populate
+ * sessionInfo across all transports we support.
  */
 function resolveAttribution(
   deps: ToolDeps,
-  sessionId: string | null,
 ): { author: string; authorType: string; agentModel: string | null } {
   const settings = deps.getSettings();
   const humanAuthor = settings.identity.email || 'human';
 
-  if (!sessionId) {
-    return { author: humanAuthor, authorType: 'human', agentModel: null };
-  }
-
   const sessions = deps.sessionService.getActiveSessions();
-  const match = sessions.find((s) => s.sessionId === sessionId);
+  const match = sessions.find((s) => s.sessionId === deps.sessionId);
   if (!match) {
     return { author: humanAuthor, authorType: 'human', agentModel: null };
   }
+
+  // 'mcp-client' is the generic auto-registered type — if it hasn't
+  // been upgraded by register_session, treat as human (no agent
+  // identity to report).
+  if (match.agentType === 'mcp-client') {
+    return { author: humanAuthor, authorType: 'human', agentModel: null };
+  }
+
   return {
     author: humanAuthor,
     authorType: match.agentType || 'human',

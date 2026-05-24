@@ -718,6 +718,20 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
       console.warn('[Scan] Failed to record recent project:', err);
     }
 
+    // First-run identity seed: if settings.identity is empty, populate
+    // from the project's git config. Docs (06-agent-identity-and-attribution)
+    // promise this behaviour; this is the implementation. One-time per
+    // empty field — user-set values are preserved.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { maybeSeedIdentityFromGit } = require('./services/settings-service');
+      if (maybeSeedIdentityFromGit(projectPath)) {
+        console.log('[Scan] Seeded identity from git config for', projectPath);
+      }
+    } catch (err) {
+      console.warn('[Scan] Failed to seed identity from git:', err);
+    }
+
     const monorepoConfig = detectMonorepo(projectPath);
     const fileTree = scanDirectory(projectPath);
     const filePaths = collectFilePaths(fileTree);

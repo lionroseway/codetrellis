@@ -150,17 +150,20 @@ function summarizeArgs(args: any): string {
 function inferAgentFromSession(sessionId: string | null): { type: string | null; model: string | null } {
   if (!sessionId) return { type: 'mcp-agent', model: null };
   const sessions = sessionService.getActiveSessions();
-  if (sessions.length === 0) return { type: 'mcp-agent', model: null };
-  const latest = sessions[sessions.length - 1];
-  return { type: latest.agentType ?? 'mcp-agent', model: latest.model ?? null };
+  // Find by exact sessionId — picking "the most recent session" was
+  // wrong; it cross-attributed activity across concurrent agents.
+  const match = sessions.find((s) => s.sessionId === sessionId);
+  if (!match) return { type: 'mcp-agent', model: null };
+  return { type: match.agentType ?? 'mcp-agent', model: match.model ?? null };
 }
 
 // ── ToolDeps bag ────────────────────────────────────────────────────
 
-function buildToolDeps(): ToolDeps {
+function buildToolDeps(sessionId: string): ToolDeps {
   return {
     broadcast,
     pendingResponses,
+    sessionId,
 
     // Service modules
     planService,
@@ -220,7 +223,7 @@ function buildToolDeps(): ToolDeps {
  * support requires one server instance per session. All instances
  * share the same module-level state.
  */
-function setupMcpServerInstance(): McpServer {
+function setupMcpServerInstance(sessionId: string): McpServer {
   const mcpServer = new McpServer(
     { name: 'codetrellis', version: '0.1.0' },
     {
@@ -233,14 +236,18 @@ function setupMcpServerInstance(): McpServer {
   );
 
   // Generic per-tool-call broadcast: every MCP tool invocation flows
-  // into the agent-event channel for the Agent Timeline.
+  // into the agent-event channel for the Agent Timeline. Also bumps
+  // session last_seen so an actively-working agent doesn't go stale
+  // in the cleanStaleSessions sweep (Bugfix C).
+  //
+  // sessionId is the McpServer-instance binding (closure capture) —
+  // every tool call on this server belongs to the same SSE session.
   const originalRegisterTool = (mcpServer.registerTool as any).bind(mcpServer);
   (mcpServer as any).registerTool = (name: string, config: any, handler: any) => {
     return originalRegisterTool(name, config, async (args: any, extra: any) => {
       const start = Date.now();
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
+      // Heartbeat: any tool call counts as activity, push last_seen.
+      try { sessionService.heartbeat(sessionId); } catch { /* best-effort */ }
       const agentInfo = inferAgentFromSession(sessionId);
       try {
         const result = await handler(args, extra);
@@ -271,7 +278,7 @@ function setupMcpServerInstance(): McpServer {
   };
 
   // Register all tools and resources via domain modules
-  const deps = buildToolDeps();
+  const deps = buildToolDeps(sessionId);
 
   registerArchitectureTools(mcpServer, deps);
   registerTerminalTools(mcpServer, deps);
@@ -324,7 +331,7 @@ export async function startMcpServer(): Promise<void> {
       const sessionId = transport.sessionId;
       connectedTransports.set(sessionId, transport);
 
-      const mcpServer = setupMcpServerInstance();
+      const mcpServer = setupMcpServerInstance(sessionId);
       connectedServers.set(sessionId, mcpServer);
 
       // Auto-register session on connect

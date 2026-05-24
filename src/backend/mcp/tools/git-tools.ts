@@ -27,6 +27,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'When agent attribution is supplied, appends a Co-Authored-By trailer and an agent/model metadata line ' +
         'so the commit history shows that an agent acted on the user\'s behalf. ' +
         'The git user identity (from `git config`) is always the commit author — accountability rests with the human. ' +
+        'The Co-Authored-By possessive ("<human>\'s <agent>") reads `settings.identity.displayName ?? .email` — ' +
+        'not git config directly — so if the user has edited their CodeTrellis identity the trailer reflects that. ' +
         'Use this when you (the agent) have completed work the user has authorised you to commit, ' +
         'or when the user has explicitly asked you to commit their pending manifest changes.',
       inputSchema: {

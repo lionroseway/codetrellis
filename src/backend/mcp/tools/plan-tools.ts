@@ -14,7 +14,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'create_plan',
     {
-      description: 'Create a new plan in CodeTrellis. Returns the plan UID. Use add_item or bulk_add_items to populate it with Objects (context pages) and Actions (work items).',
+      description:
+        'Create a new plan in CodeTrellis. Returns the plan UID. ' +
+        'Use add_item or bulk_add_items to populate it with Objects (context pages) and Actions (work items). ' +
+        'The new plan is auto-exported to .codetrellis/plans/<slug>/ on disk when the effective default ' +
+        'visibility is "shared" (see get_project_config). When "local", it stays DB-only and you can later ' +
+        'export it explicitly with export_plan_to_files.',
       inputSchema: {
         title: z.string().describe('Brief title of the plan'),
         description: z.string().optional().describe('Detailed description of what this plan achieves'),
@@ -26,10 +31,25 @@ export function register(server: McpServer, deps: ToolDeps): void {
         { title, description: description || '', tasks: [] },
         'agent', 'mcp', project_path,
       );
-      const n = deps.broadcast('plan-created', { plan });
+
+      // Bugfix D: honour effective default visibility — when 'shared',
+      // export immediately so the plan rides in git from creation. When
+      // 'local', stay DB-only.
+      let exported = false;
+      try {
+        const visibility = deps.projectConfigService.getEffectiveDefaultVisibility(project_path);
+        if (visibility === 'shared') {
+          deps.planFileService.exportPlan(plan.uid, project_path);
+          exported = true;
+        }
+      } catch (err) {
+        console.warn(`[create_plan] Auto-export failed for ${plan.uid}:`, err);
+      }
+
+      const n = deps.broadcast('plan-created', { plan, exported });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta({
-        uid: plan.uid, title: plan.title, status: plan.status, projectPath: plan.projectPath,
+        uid: plan.uid, title: plan.title, status: plan.status, projectPath: plan.projectPath, exported,
       }, n);
     },
   );
@@ -325,12 +345,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         placeholder_values: z.record(z.string(), z.string()).optional().describe('Values for `{{key}}` placeholders declared by the template (Phase 13 §C). Missing keys fall back to the placeholder default.'),
       },
     },
-    async ({ template_id, project_path, title, description, placeholder_values }, extra: any) => {
+    async ({ template_id, project_path, title, description, placeholder_values }) => {
       const sessions = deps.sessionService.getActiveSessions();
-      const sessionId = extra?.sessionInfo?.sessionId
-        ?? extra?.requestInfo?.headers?.['mcp-session-id']
-        ?? null;
-      const session = sessionId ? sessions.find((s: any) => s.sessionId === sessionId) : null;
+      const session = sessions.find((s: any) => s.sessionId === deps.sessionId) ?? null;
       const author = (session as any)?.agentType ?? 'agent';
 
       try {
@@ -343,7 +360,20 @@ export function register(server: McpServer, deps: ToolDeps): void {
           authorType: 'mcp',
           placeholderValues: placeholder_values,
         });
-        deps.broadcast('plan-created', { plan: result.plan });
+
+        // Bugfix D: same auto-export rule as create_plan.
+        let exported = false;
+        try {
+          const visibility = deps.projectConfigService.getEffectiveDefaultVisibility(project_path);
+          if (visibility === 'shared') {
+            deps.planFileService.exportPlan(result.plan.uid, project_path);
+            exported = true;
+          }
+        } catch (err) {
+          console.warn(`[create_plan_from_template] Auto-export failed for ${result.plan.uid}:`, err);
+        }
+
+        deps.broadcast('plan-created', { plan: result.plan, exported });
         if (result.items) {
           for (const item of result.items) deps.broadcast('plan-item-created', { item });
         }
@@ -354,6 +384,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
             text: JSON.stringify({
               plan: result.plan,
               itemCount: result.items?.length ?? 0,
+              exported,
               hint: 'Use list_items(plan_uid) to browse the plan tree.',
             }, null, 2),
           }],

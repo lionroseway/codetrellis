@@ -118,6 +118,35 @@ export function getAuthorKey(role: 'human' | 'agent' = 'human'): string {
 }
 
 /**
+ * Auto-seed `identity` from `git config` when it's empty. Runs from
+ * the project-scan flow on first run — the docs promise identity is
+ * seeded from git, this is the implementation.
+ *
+ * Only populates fields that are currently empty; any value the user
+ * has set in the settings panel is preserved. Returns true when a
+ * seed actually occurred (caller can log / broadcast).
+ */
+export function maybeSeedIdentityFromGit(projectPath: string): boolean {
+  const current = getSettings();
+  const haveEmail = !!current.identity.email;
+  const haveDisplayName = !!current.identity.displayName;
+  if (haveEmail && haveDisplayName) return false;
+
+  const gitIdentity = readGitIdentity(projectPath);
+  const patch: { identity?: { email?: string; displayName?: string } } = {};
+  if (!haveEmail && gitIdentity.email) {
+    patch.identity = { ...(patch.identity ?? {}), email: gitIdentity.email };
+  }
+  if (!haveDisplayName && gitIdentity.name) {
+    patch.identity = { ...(patch.identity ?? {}), displayName: gitIdentity.name };
+  }
+  if (!patch.identity) return false;
+
+  updateSettings(patch);
+  return true;
+}
+
+/**
  * Reset the in-memory cache. Used when tests change the data dir
  * mid-process or when settings are imported externally.
  */

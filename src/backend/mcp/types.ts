@@ -33,6 +33,15 @@ export interface ToolDeps {
   broadcast: BroadcastFn;
   pendingResponses: PendingResponses;
 
+  /**
+   * The SSE session id this McpServer instance was bound to at connect
+   * time. Stable for the lifetime of the connection. Tool handlers can
+   * read this directly instead of fishing for it in the SDK's `extra`
+   * argument, which doesn't reliably populate sessionInfo / headers
+   * across all transports.
+   */
+  sessionId: string;
+
   // Services — imported once in server.ts and passed through
   planService: typeof import('../services/plan-service');
   planItemService: typeof import('../services/plan-item-service');

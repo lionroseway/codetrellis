@@ -50,7 +50,7 @@ Goal: land the smallest set of changes that unlocks the team-collaboration story
 
 ### 1.1 Per-project config (`.codetrellis/config.json`)
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `b1cb535`).
 
 - New file at `<projectRoot>/.codetrellis/config.json`, committed to the manifest.
 - Initial schema is small and grows as features land:
@@ -66,7 +66,7 @@ Reference: [14 — Configuration and Personal Continuity](14-configuration-and-p
 
 ### 1.2 Multi-user attribution at git commit level
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `ffa8208`). Note: the Co-Authored-By trailer composes the possessive (`<human>'s <agent>`) from `settings.identity.displayName ?? settings.identity.email`, not from `git config` directly — so they can diverge if the user has edited settings. Identity auto-seeds from git on first project scan (Bugfix B).
 
 - Compose commit messages with a `[cdev]` tag + descriptive subject.
 - Append `Co-Authored-By: <agent name> <agent@cdev.example>` trailer when the application commits manifest changes on behalf of an agent.
@@ -78,17 +78,19 @@ Reference: [06 — Agent Identity and Attribution](06-agent-identity-and-attribu
 
 ### 1.3 Channel events foundation
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `f8d4713`). What shipped:
 
-- New `channel_events` table:
-  - `uid` (PK), `plan_uid` (FK), `item_uid` (FK, nullable), `event_type`, `payload` (JSON), `author`, `authorType`, `respondsTo` (FK, nullable), `createdAt`
+- `channel_events` table (`uid` PK, `plan_uid` FK, `item_uid` nullable, `event_type`, `payload` JSON, `author`, `author_type`, `agent_model`, `responds_to` FK, `status`, `created_at`, `updated_at`).
 - MCP tools:
-  - `post_channel_event(plan_uid, item_uid?, event_type, payload, responds_to?)`
-  - `list_channel_events(plan_uid, since?, types?, status?)`
-  - `respond_to_event(event_uid, event_type, payload)` — convenience for steer/weigh-in responding to an existing event
-- Manifest export pipeline: write events to `.codetrellis/plans/<slug>/channels/<event-uid>.yaml`.
-- File-watcher import for events arriving via git pull.
-- Tests covering: post + list, response threading, manifest round-trip, idempotent re-import.
+  - `post_channel_event(plan_uid, event_type, message, item_uid?, attempted?, options?, responds_to?)` — threading via `responds_to` (no separate `respond_to_event` convenience tool; the parameter does the job).
+  - `list_channel_events(plan_uid, event_types?, status?, item_uid?, since_ms?, limit?, offset?)`.
+  - `get_channel_thread(root_event_uid)` — root + all descendant responses, chronological.
+  - `resolve_channel_event(event_uid)` and `dismiss_channel_event(event_uid)` — status changes.
+- Manifest export: per-event YAML at `.codetrellis/plans/<slug>/channels/<event-uid>.yaml`, auto-written on post/status-change when the plan is shared.
+- File-watcher import (channels files routed via plan-file-service watcher) and bulk import on `importPlan`.
+- Tests deferred to phase 1.5.
+
+Note: posting a `steer` does **not** auto-resolve the parent `stuck` — resolution is a separate `resolve_channel_event` call. Channel attribution is fixed by Bugfix A (uses the McpServer-bound sessionId, not the SDK's `extra`).
 
 Reference: [08 — Agent Collaboration: Presence and Channels](08-agent-collaboration.md), [02 — State Model](02-state-model.md).
 
@@ -163,4 +165,15 @@ Goal: meeting-aware AI presence + mobile companion.
 
 Things noticed during implementation that don't block but should be remembered.
 
-(empty)
+### Bugfixes applied after first tester pass (2026-05-24)
+
+The Phase 1.1-1.3 tester report surfaced four real bugs that landed before 1.4:
+
+- **Bugfix B** — auto-seed `settings.identity` from `git config` on first project scan. Was unimplemented despite the docs promising it. Cascading effect on commit author + Co-Authored-By trailer + channel event author. Fixed in settings-service (`maybeSeedIdentityFromGit`) called from `scanProject`.
+- **Bugfix A** — channel event attribution was always `human` because the SDK's `extra.sessionInfo.sessionId` and `extra.requestInfo.headers['mcp-session-id']` are both empty in our SSE setup. Fixed by binding the session id on the McpServer instance at connect time and threading it through `ToolDeps.sessionId`. All tools that previously fished for sessionId in `extra` now read `deps.sessionId`. The same fix corrects `inferAgentFromSession` (was picking the oldest active session, now matches by sessionId).
+- **Bugfix C** — sessions went stale in 60s because no tool call refreshed `last_seen`. Fixed by heartbeating from the generic `registerTool` wrapper on every call. `register_session` is now idempotent because `deps.sessionId` is stable per connection (no more `mcp-<timestamp>` fallback duplicates).
+- **Bugfix D** — `defaultVisibility` config setting had no effect on `create_plan` / `create_plan_from_template`. Fixed by reading `getEffectiveDefaultVisibility(project_path)` after plan creation and auto-calling `exportPlan` when the value is `shared`. Result is reflected in the tool response payload (`exported: true|false`).
+
+Tool descriptions updated to match reality: `post_channel_event`'s `responds_to` no longer claims a steer resolves a stuck (resolution is separate); `commit_manifest_changes` now notes the Co-Authored-By possessive comes from settings, not git config.
+
+`import_external` still creates plans with an empty `project_path` and so never auto-exports — acceptable for now since the tool is for "rough plan from a conversation" rather than committed manifest content. Worth revisiting if that use case grows.
