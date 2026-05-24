@@ -79,6 +79,10 @@ export interface ToolDeps {
   listRecentProjects: typeof import('../services/recent-projects-service').listRecentProjects;
   removeRecentProject: typeof import('../services/recent-projects-service').removeRecentProject;
   setRecentProjectPinned: typeof import('../services/recent-projects-service').setRecentProjectPinned;
+  setProjectAlias: typeof import('../services/recent-projects-service').setProjectAlias;
+  refreshProjectOriginUrl: typeof import('../services/recent-projects-service').refreshProjectOriginUrl;
+  getRecentProject: typeof import('../services/recent-projects-service').getRecentProject;
+  findRecentProjectByOriginUrl: typeof import('../services/recent-projects-service').findRecentProjectByOriginUrl;
   getSettings: typeof import('../services/settings-service').getSettings;
   updateSettings: typeof import('../services/settings-service').updateSettings;
   tailLog: typeof import('../services/logger').tailLog;

@@ -37,7 +37,15 @@ import { saveNow } from '../services/persistence';
 import { getSettings, updateSettings } from '../services/settings-service';
 import { tailLog, getCurrentLogPath, getLogDir } from '../services/logger';
 import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-system-service';
-import { listRecentProjects, removeRecentProject, setRecentProjectPinned } from '../services/recent-projects-service';
+import {
+  listRecentProjects,
+  removeRecentProject,
+  setRecentProjectPinned,
+  setProjectAlias,
+  refreshProjectOriginUrl,
+  getRecentProject,
+  findRecentProjectByOriginUrl,
+} from '../services/recent-projects-service';
 import { buildSkillGuide } from './skill-guide';
 
 // ── Tool & resource modules ─────────────────────────────────────────
@@ -202,6 +210,10 @@ function buildToolDeps(sessionId: string): ToolDeps {
     listRecentProjects,
     removeRecentProject,
     setRecentProjectPinned,
+    setProjectAlias,
+    refreshProjectOriginUrl,
+    getRecentProject,
+    findRecentProjectByOriginUrl,
     getSettings,
     updateSettings,
     tailLog,

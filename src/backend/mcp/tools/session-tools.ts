@@ -257,6 +257,82 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+  // --- Repo identity (CDev Phase 3.1) ---
+
+  server.registerTool(
+    'get_repo_identity',
+    {
+      description:
+        'Read CodeTrellis\' identity record for the project at the given path: the local user-facing alias ' +
+        '(display name), the normalised git origin URL (the cross-machine identifier used to match the same ' +
+        'repo across teammates and devices), the current branch, and recency / pinned flags. Returns null ' +
+        'if the project isn\'t in the recent list.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path of the project'),
+      },
+    },
+    async ({ project_path }) => {
+      const project = deps.getRecentProject(project_path);
+      if (!project) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify(null) }] };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(project, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'set_repo_alias',
+    {
+      description:
+        'Set a per-device user-facing label for the project at `project_path`. The alias is local-only — ' +
+        'it never travels in the manifest, so different teammates and even different machines of the same ' +
+        'user can show different labels for the same repository. Pass an empty string to reset to the path\'s ' +
+        'basename. The repo\'s canonical identity for cross-machine matching is its git origin URL, which is ' +
+        'unaffected.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path of the project'),
+        alias: z.string().describe('New label to show in the UI. Empty string resets to the default.'),
+      },
+    },
+    async ({ project_path, alias }) => {
+      const updated = deps.setProjectAlias(project_path, alias);
+      if (!updated) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Project not in recents: ${project_path}` }],
+        };
+      }
+      deps.broadcast('project-alias-changed', { path: project_path, alias: updated.displayName });
+      deps.saveNow(() => deps.exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'refresh_repo_origin',
+    {
+      description:
+        'Re-read the git origin URL for the project at `project_path` and update CodeTrellis\' cached value. ' +
+        'Useful when the user has just run `git remote set-url origin <new>` and wants cross-repo pointer ' +
+        'resolution to pick up the change without re-opening the project.',
+      inputSchema: {
+        project_path: z.string().describe('Absolute path of the project'),
+      },
+    },
+    async ({ project_path }) => {
+      const updated = deps.refreshProjectOriginUrl(project_path);
+      if (!updated) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Project not in recents: ${project_path}` }],
+        };
+      }
+      deps.broadcast('project-origin-changed', { path: project_path, originUrl: updated.originUrl });
+      deps.saveNow(() => deps.exportDatabase());
+      return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
+    },
+  );
+
   // --- Item Navigation ---
 
   server.registerTool(

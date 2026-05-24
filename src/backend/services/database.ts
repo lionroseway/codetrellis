@@ -508,6 +508,13 @@ export async function initDatabase(): Promise<void> {
   // Deviation file_path — stores the concrete path so accepted can amend the plan
   try { db.run(`ALTER TABLE deviations ADD COLUMN file_path TEXT DEFAULT NULL`); } catch { /* exists */ }
 
+  // CDev Phase 3.1 — normalised git origin URL as the cross-machine
+  // identifier for a recent project. Used by cross-repo pointer
+  // resolution and central-oversight setups. Local-only column;
+  // never travels in the manifest.
+  try { db.run(`ALTER TABLE recent_projects ADD COLUMN origin_url TEXT DEFAULT NULL`); } catch { /* exists */ }
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_recent_projects_origin ON recent_projects(origin_url)`); } catch { /* exists */ }
+
   // Phase 17.R — external references table
   db.run(`
     CREATE TABLE IF NOT EXISTS external_refs (
