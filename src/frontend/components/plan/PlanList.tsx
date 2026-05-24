@@ -4,6 +4,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
+import { CrossRepoSection } from './CrossRepoSection';
 
 interface OrphanedPlanDir {
   dirPath: string;
@@ -441,6 +442,9 @@ export function PlanList() {
           Showing {filteredPlans.length} of {plans.length} plans
         </div>
       )}
+
+      {/* CDev Phase 3.5 — cross-repo pointers under the local plans list. */}
+      <CrossRepoSection />
 
       {/* Single delete confirm dialog */}
       {confirmDelete && (

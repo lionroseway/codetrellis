@@ -230,9 +230,12 @@ Status: ✅ Done. What shipped:
 
 ### 3.5 Cross-repo stitched view UI
 
-Status: ⬜ Not started.
+Status: ✅ Done. What shipped:
 
-When a project loads, scan its `.codetrellis/external/` for pointers. For each pointer, check whether any open recent project has a matching origin URL. Resolved: open the real plan from the home project. Unresolved: render a rich pointer card (title, status, summary, home repo, "clone <url>" hint). The plans list shows local + pointer plans with a clear marker for cross-repo entries.
+- New REST endpoint `/api/plans/stitched?project=<path>` returns the project's local plans alongside its external pointers, with each pointer pre-resolved against the user's `recent_projects` DB (matches by normalised origin URL).
+- `CrossRepoSection` component sits beneath the local plan list; only renders when at least one pointer exists. Resolved pointers expose an "Open" button that switches to (or creates) a tab for the home repo. Unresolved pointers expose a "Not cloned" affordance that copies a `git clone <url>` command to the clipboard.
+- Live updates: the component listens for `external-pointers-changed` and `plan-scope-changed` DOM events; the WS hook broadcasts these whenever the file watcher or an MCP scope mutation fires, so a teammate-driven `git pull` populates the section without a refresh.
+- E2E coverage at `tests/e2e/cdev-stitched-view.test.ts` boots two repos (home + scoped), creates a plan in home, scopes it to the scoped repo, hits the stitched endpoint from the scoped side and confirms the pointer is resolved → then drops the home repo from recent_projects and confirms the pointer flips to unresolved. The pointer file on disk stays put through both states.
 
 ### 3.6 Central-oversight deployment shape
 

@@ -296,6 +296,14 @@ export function useWebSocket() {
               useChannelsStore.getState().onEventImported(payload?.uid, payload?.planUid);
             })();
           }
+          // --- Cross-repo pointers (CDev Phase 3.5) ---
+          if (type === 'external-pointers-changed' || type === 'plan-scope-changed') {
+            // The stitched view in PlanList re-fetches on these DOM
+            // events. Lightweight signal — the payload isn't needed
+            // because the listener calls /api/plans/stitched.
+            window.dispatchEvent(new CustomEvent(type, { detail: payload }));
+          }
+
           // --- System docs (CDev Phase 3.4) ---
           if (type === 'system-doc-created' || type === 'system-doc-updated' ||
               type === 'system-doc-verified' || type === 'system-doc-changed') {

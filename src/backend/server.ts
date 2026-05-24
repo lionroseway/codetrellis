@@ -1328,6 +1328,56 @@ app.get('/api/plans/reconcile', (req, res) => {
   res.json(reconcilePlanState(projectRoot));
 });
 
+// CDev Phase 3.5 — cross-repo stitched plan list. Returns the
+// project's local plans alongside external pointers, with each
+// pointer tagged "resolved" when its homeRepo matches a recent
+// project the user has on this machine. The frontend uses this to
+// render a "Plans from other repos" section.
+app.get('/api/plans/stitched', (req, res) => {
+  const projectRoot = req.query.project as string | undefined;
+  if (!projectRoot) {
+    res.status(400).json({ error: 'project query param required' });
+    return;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { discoverPointers } = require('./services/external-pointer-service');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { findRecentProjectByOriginUrl } = require('./services/recent-projects-service');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getNormalisedOriginUrl } = require('./services/git-identity');
+
+    const localPlans = planService.listPlans(projectRoot);
+    const ownOriginUrl: string | null = getNormalisedOriginUrl(projectRoot) ?? null;
+    const pointers = discoverPointers(projectRoot);
+
+    const stitchedPointers = pointers.map((entry: any) => {
+      const pointer = entry.pointer;
+      const resolved = pointer.homeRepo
+        ? findRecentProjectByOriginUrl(pointer.homeRepo)
+        : null;
+      return {
+        filePath: entry.filePath,
+        pointer,
+        resolved: resolved ? {
+          projectPath: resolved.path,
+          displayName: resolved.displayName,
+        } : null,
+      };
+    });
+
+    res.json({
+      projectPath: projectRoot,
+      ownOriginUrl,
+      localPlans,
+      pointers: stitchedPointers,
+    });
+  } catch (err) {
+    console.warn('[stitched] failed:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // Prune orphaned plan directories from disk
 app.post('/api/plans/prune-orphans', (req, res) => {
   const { dirPaths } = req.body || {};
