@@ -792,6 +792,13 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
       console.warn('[Scan] Plan file watcher failed to start:', err);
     }
 
+    try {
+      const { startProjectConfigWatcher } = require('./services/project-config-service');
+      startProjectConfigWatcher(projectPath);
+    } catch (err) {
+      console.warn('[Scan] Project config watcher failed to start:', err);
+    }
+
     return stats;
   } finally {
     scanInFlight = false;

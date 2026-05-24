@@ -252,6 +252,28 @@ edges.
 | \`list_external_refs(item_uid)\` | List linked references |
 | \`remove_external_ref(uid)\` | Unlink a reference |
 
+### Channels (peer-to-peer team coordination)
+
+Six event types form the channel vocabulary. Both humans and agents can post; both can respond. When the plan is shared (linked to disk), events auto-export to \`.codetrellis/plans/<slug>/channels/<uid>.yaml\` and travel via git.
+
+| Tool | What it does |
+|------|-------------|
+| \`post_channel_event(plan_uid, event_type, message, ...)\` | Post stuck / need-decision / need-context / handing-off / steer / weigh-in |
+| \`list_channel_events(plan_uid, ...)\` | Query events by type, status, item, since-timestamp |
+| \`get_channel_thread(root_event_uid)\` | Read a full back-and-forth (root + all responses, chronological) |
+| \`resolve_channel_event(event_uid)\` | Mark an event resolved (e.g., after the stuck has been steered through) |
+| \`dismiss_channel_event(event_uid)\` | Mark dismissed when the event no longer needs a response |
+
+Use \`weigh-in\` for "here's my thinking — what do others see?" architectural decisions. Use \`stuck\` when failing repeatedly. Pass \`responds_to: <event_uid>\` to post a steer or weigh-in inside an existing thread.
+
+### Project config & commits
+
+| Tool | What it does |
+|------|-------------|
+| \`get_project_config(project_root)\` | Read \`.codetrellis/config.json\` + effective settings (project > user precedence) |
+| \`update_project_config(project_root, ...)\` | Persist project-level overrides (sharing defaults, attachment location) |
+| \`commit_manifest_changes(project_root, subject, paths, ...)\` | Stage paths and create a \`[cdev]\` commit. Optionally agent-attributed via Co-Authored-By trailer. |
+
 ### Drift & verification
 
 | Tool | What it does |

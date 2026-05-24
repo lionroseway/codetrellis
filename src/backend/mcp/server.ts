@@ -54,6 +54,7 @@ import { register as registerPlanItemTools } from './tools/plan-item-tools';
 import { register as registerPresenceTools } from './tools/presence-tools';
 import { register as registerProjectConfigTools } from './tools/project-config-tools';
 import { register as registerGitTools } from './tools/git-tools';
+import { register as registerChannelTools } from './tools/channel-tools';
 import { register as registerResources } from './resources';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -283,6 +284,7 @@ function setupMcpServerInstance(): McpServer {
   registerPresenceTools(mcpServer, deps);
   registerProjectConfigTools(mcpServer, deps);
   registerGitTools(mcpServer, deps);
+  registerChannelTools(mcpServer, deps);
   registerResources(mcpServer, deps);
 
   return mcpServer;

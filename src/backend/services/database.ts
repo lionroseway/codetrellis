@@ -457,6 +457,32 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_plan_events_plan ON plan_events(plan_uid, created_at);
     CREATE INDEX IF NOT EXISTS idx_plan_events_item ON plan_events(item_uid, created_at);
     CREATE INDEX IF NOT EXISTS idx_plan_events_type ON plan_events(event_type);
+
+    -- CDev Phase 1.3 — channel events (peer-to-peer team coordination).
+    -- Distinct from plan_events: channel events are durable manifest
+    -- content (exported to .codetrellis/plans/<slug>/channels/*.yaml),
+    -- carry a fixed vocabulary of six types (stuck, need-decision,
+    -- need-context, handing-off, steer, weigh-in), and support threading
+    -- via responds_to.
+    CREATE TABLE IF NOT EXISTS channel_events (
+      uid          TEXT PRIMARY KEY,
+      plan_uid     TEXT NOT NULL REFERENCES plans(uid),
+      item_uid     TEXT,
+      event_type   TEXT NOT NULL,
+      payload      TEXT NOT NULL DEFAULT '{}',
+      author       TEXT NOT NULL,
+      author_type  TEXT NOT NULL DEFAULT 'human',
+      agent_model  TEXT,
+      responds_to  TEXT REFERENCES channel_events(uid),
+      status       TEXT NOT NULL DEFAULT 'open',
+      created_at   INTEGER NOT NULL,
+      updated_at   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_channel_events_plan ON channel_events(plan_uid, created_at);
+    CREATE INDEX IF NOT EXISTS idx_channel_events_item ON channel_events(item_uid, created_at);
+    CREATE INDEX IF NOT EXISTS idx_channel_events_type ON channel_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_channel_events_thread ON channel_events(responds_to);
+    CREATE INDEX IF NOT EXISTS idx_channel_events_status ON channel_events(status, plan_uid);
   `);
 
   // Phase 17.N-Q — add routing/execution columns to existing plan_items tables

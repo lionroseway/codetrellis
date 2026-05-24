@@ -53,27 +53,11 @@ import type {
 } from '../../shared/types';
 
 /**
- * Tracks file paths we just wrote ourselves, so the file watcher can
- * skip re-importing them as if they were external edits. Stamped with
- * a timestamp; entries older than 1 second are dropped (covers any
- * filesystem rename / fsync delay).
+ * Self-write tracking is shared with channel-event-file-service via
+ * self-write-tracker. Both write into `<projectRoot>/.codetrellis/plans/`
+ * and need their own writes ignored by the same watcher.
  */
-const recentSelfWrites = new Map<string, number>();
-const SELF_WRITE_TTL_MS = 1000;
-
-function stampSelfWrite(filePath: string): void {
-  recentSelfWrites.set(filePath, Date.now());
-}
-
-function wasJustWrittenByUs(filePath: string): boolean {
-  const t = recentSelfWrites.get(filePath);
-  if (!t) return false;
-  if (Date.now() - t > SELF_WRITE_TTL_MS) {
-    recentSelfWrites.delete(filePath);
-    return false;
-  }
-  return true;
-}
+import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
 
 // --- Public surface ---
 
@@ -281,10 +265,28 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   // 2. Detect format: version:2 in plan.yaml OR items/ directory → V2.
   const isV2 = planRaw.version === 2 || fs.existsSync(path.join(planDir, 'items'));
 
-  if (isV2) {
-    return importPlanV2(planDir, planUid, warnings);
+  const result = isV2
+    ? importPlanV2(planDir, planUid, warnings)
+    : importPlanV1(planDir, planUid, warnings);
+
+  // CDev Phase 1.3 — bulk-import any channel events under <slug>/channels/.
+  // require() at runtime to avoid an import cycle with channel-event-file-service
+  // (which imports makePlanSlug from this module).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { discoverChannelEventFiles, importChannelEvent } = require('./channel-event-file-service');
+    for (const filePath of discoverChannelEventFiles(planDir)) {
+      try {
+        importChannelEvent(filePath, planDir);
+      } catch (err) {
+        warnings.push(`Failed to import channel event ${path.basename(filePath)}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  } catch {
+    // Channel event service not available (test isolation) — skip.
   }
-  return importPlanV1(planDir, planUid, warnings);
+
+  return result;
 }
 
 /** V1 import path — reads phases/, tasks/, docs/ directories. */
@@ -833,6 +835,35 @@ export function startPlanFileWatcher(projectRoot: string): void {
       }
     }
 
+    // Channel event files (under <slug>/channels/<uid>.yaml) re-import
+    // via the channel pipeline rather than the full plan importer — they
+    // don't depend on plan/items siblings and shouldn't trigger a whole
+    // plan re-import. CDev Phase 1.3.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { isChannelEventFile, importChannelEvent } = require('./channel-event-file-service');
+      if (isChannelEventFile(filePath)) {
+        if (event === 'unlink') return; // deletion handled separately if ever needed
+        const imported = importChannelEvent(filePath, planDir);
+        if (imported) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { broadcast } = require('../server');
+            broadcast('channel-event-imported', {
+              uid: imported.uid,
+              planUid: imported.planUid,
+              eventType: imported.eventType,
+              source: 'file-watcher',
+            });
+          } catch { /* ignore */ }
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn(`[Auto-sync] Channel-event import failed for ${filePath}:`, err);
+      return;
+    }
+
     // Re-import. Idempotent — upsert by UID. We import the whole plan
     // directory rather than just the changed file because tasks /
     // phases reference each other (phaseUid) and a single file can't
@@ -1338,7 +1369,7 @@ function upsertDoc(planUid: string, meta: any, body: string): void {
 
 // --- Helpers ---
 
-function makePlanSlug(plan: Plan): string {
+export function makePlanSlug(plan: Plan): string {
   // Combine title-slug with a short uid suffix so slug clashes between
   // plans with similar titles can't overwrite each other on disk.
   const titlePart = slugify(plan.title) || 'plan';

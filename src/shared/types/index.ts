@@ -7,3 +7,4 @@ export * from './system';
 export * from './settings';
 export * from './presence';
 export * from './project-config';
+export * from './channel';
