@@ -194,6 +194,13 @@ function fireToast(rule: ChannelRoutingRule, event: ChannelEvent, projectRootHin
       itemUid: event.itemUid,
       eventType: event.eventType,
       status: event.status,
+      // Attribution must travel with the toast payload — the frontend
+      // composes the fallback title as "<eventType> · <author>" when
+      // the rule has no description. Without these the title falls
+      // back to the bland "Channel: stuck" every time.
+      author: event.author,
+      authorType: event.authorType,
+      agentModel: event.agentModel,
       payload: event.payload,
     },
   });

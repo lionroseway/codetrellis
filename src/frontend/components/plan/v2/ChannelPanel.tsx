@@ -6,7 +6,11 @@
  * respond. All six event types are composable: Ask side (stuck,
  * need-decision, need-context) and Offer side (steer, weigh-in,
  * handing-off). Type-specific fields (`attempted`, `options`) appear
- * inline. Replies under an open root let the user pick any Offer type.
+ * inline.
+ *
+ * Replies under an open root offer four type choices —
+ * steer / weigh-in / handing-off (Offer side) plus need-context
+ * (Ask side, useful when a reply needs to escalate by asking back).
  *
  * State lives in channels-store; live updates from the WS hook.
  */

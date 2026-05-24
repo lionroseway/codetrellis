@@ -2757,6 +2757,49 @@ export function getBoundBackendPort(): number {
  * (`npm run dev:backend`) goes through `startServer()` → calls this
  * + listens on TCP.
  */
+/**
+ * Re-arm per-project watchers (project-config + plan-file) for
+ * recently-opened projects that still exist on disk and already have
+ * a `.codetrellis/` directory. Called at backend boot so a restart
+ * doesn't orphan the watchers an open project relies on.
+ *
+ * Bounded to pinned projects + the 5 most recently-opened unpinned
+ * ones — a developer with a long history of opened projects
+ * shouldn't spawn watchers for all of them.
+ */
+function rearmProjectWatchers(): void {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { listRecentProjects } = require('./services/recent-projects-service');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { startProjectConfigWatcher } = require('./services/project-config-service');
+
+  const recents = listRecentProjects() as Array<{ path: string; pinned: boolean }>;
+  const pinned = recents.filter((p) => p.pinned);
+  const unpinned = recents.filter((p) => !p.pinned).slice(0, 5);
+  const candidates = [...pinned, ...unpinned];
+
+  let armed = 0;
+  for (const proj of candidates) {
+    try {
+      if (!fs.existsSync(proj.path)) continue;
+      if (!fs.existsSync(path.join(proj.path, '.codetrellis'))) continue;
+      startProjectConfigWatcher(proj.path);
+      try {
+        startPlanFileWatcher(proj.path);
+      } catch {
+        // plan-file watcher may need a project scan to be useful;
+        // best-effort.
+      }
+      armed++;
+    } catch (err) {
+      console.warn(`[Backend] Failed to re-arm watchers for ${proj.path}:`, err);
+    }
+  }
+  if (armed > 0) {
+    console.log(`[Backend] Re-armed watchers for ${armed} recent project(s).`);
+  }
+}
+
 export async function initializeBackend(): Promise<void> {
   await initDatabase();
   await initParser();
@@ -2783,6 +2826,20 @@ export async function initializeBackend(): Promise<void> {
     startChannelDispatcher(broadcast);
   } catch (err) {
     console.warn('[Backend] Channel dispatcher failed to start:', err);
+  }
+
+  // Re-arm per-project watchers for known projects. Without this, a
+  // backend restart (dev: tsx watch reload; packaged: app restart)
+  // orphans any pre-existing project-config + plan-file watchers, and
+  // external file edits silently stop triggering hot-reload until the
+  // user re-opens the project. Bounded — only walks pinned projects +
+  // the 5 most-recently-opened unpinned ones, and only those whose
+  // .codetrellis/ directory still exists (so we don't create the
+  // directory in random projects).
+  try {
+    rearmProjectWatchers();
+  } catch (err) {
+    console.warn('[Backend] Project watcher re-arm failed:', err);
   }
 
   // Start MCP server for agent integration. The MCP server keeps
