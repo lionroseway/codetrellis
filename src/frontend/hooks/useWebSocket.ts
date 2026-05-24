@@ -296,6 +296,18 @@ export function useWebSocket() {
               useChannelsStore.getState().onEventImported(payload?.uid, payload?.planUid);
             })();
           }
+          if (type === 'channel-toast-elevated') {
+            // Phase 2.3 — a routing rule with target: in-app-toast matched.
+            const tone = (payload?.tone === 'warning' || payload?.tone === 'error') ? payload.tone : 'info';
+            const sticky = !!payload?.sticky;
+            const ev = payload?.event ?? {};
+            useToastStore.getState().addToast({
+              type: tone as 'info' | 'warning' | 'error',
+              title: payload?.description || `Channel: ${ev.eventType ?? 'event'}`,
+              message: typeof ev?.payload?.message === 'string' ? ev.payload.message : undefined,
+              duration: sticky ? 0 : 8000,
+            });
+          }
 
           // --- Agent Presence Pane ---
           if (type === 'presence-card' || type === 'presence-acked' || type === 'presence-dismissed' || type === 'presence-input-prompt' || type === 'presence-reply') {

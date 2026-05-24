@@ -24,6 +24,7 @@ import {
   type ListChannelEventsOptions,
 } from '../../services/channel-event-service';
 import { exportChannelEvent } from '../../services/channel-event-file-service';
+import { dispatchChannelEvent } from '../../services/channel-dispatcher-service';
 import { getLinkedPlanDir } from '../../services/plan-file-service';
 import { getPlan } from '../../services/plan-service';
 import type { ChannelEvent, ChannelEventType, ChannelEventStatus } from '../../../shared/types';
@@ -99,6 +100,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
         eventType: created.eventType,
         respondsTo: created.respondsTo,
       });
+
+      // Phase 2.3 — fire any matching routing rules. Fire-and-forget;
+      // dispatcher logs failures itself so tool latency isn't impacted.
+      dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(created, null, 2) }] };
     },
@@ -182,6 +187,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         planUid: updated.planUid,
         status: updated.status,
       });
+      dispatchChannelEvent(updated).catch((err) => console.warn('[Channels] dispatch failed:', err));
       return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
     },
   );
@@ -207,6 +213,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         planUid: updated.planUid,
         status: updated.status,
       });
+      dispatchChannelEvent(updated).catch((err) => console.warn('[Channels] dispatch failed:', err));
       return { content: [{ type: 'text' as const, text: JSON.stringify(updated, null, 2) }] };
     },
   );

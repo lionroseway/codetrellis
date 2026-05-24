@@ -24,6 +24,7 @@ import * as planItemService from './services/plan-item-service';
 import * as planEventService from './services/plan-event-service';
 import * as channelEventService from './services/channel-event-service';
 import { exportChannelEvent } from './services/channel-event-file-service';
+import { dispatchChannelEvent } from './services/channel-dispatcher-service';
 import {
   recordProjectOpen,
   listRecentProjects,
@@ -1761,6 +1762,9 @@ app.post('/api/plans/:planUid/channels', (req, res) => {
       respondsTo: created.respondsTo,
     });
 
+    // Phase 2.3 — fire any matching routing rules.
+    dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
+
     res.json(created);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1789,6 +1793,9 @@ app.post('/api/channels/:eventUid/status', (req, res) => {
       planUid: updated.planUid,
       status: updated.status,
     });
+    // Phase 2.3 — status changes can also match rules (e.g., "page on
+    // resolved" or "alert on dismissed").
+    dispatchChannelEvent(updated).catch((err) => console.warn('[Channels] dispatch failed:', err));
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -2765,6 +2772,17 @@ export async function initializeBackend(): Promise<void> {
     sessionService.startSessionSweep();
   } catch (err) {
     console.warn('[Backend] Session sweep failed to start:', err);
+  }
+
+  // CDev Phase 2.3 — channel notification dispatcher. Runs a periodic
+  // stale-event sweep for minAgeMs rules; post-time dispatch is called
+  // directly from the MCP / REST handlers that create channel events.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { startChannelDispatcher } = require('./services/channel-dispatcher-service');
+    startChannelDispatcher(broadcast);
+  } catch (err) {
+    console.warn('[Backend] Channel dispatcher failed to start:', err);
   }
 
   // Start MCP server for agent integration. The MCP server keeps
