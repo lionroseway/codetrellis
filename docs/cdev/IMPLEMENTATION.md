@@ -128,7 +128,7 @@ Goal: channels become useful in a real team environment. Two pillars: every even
 
 ### 2.1 Composer supports all 6 event types
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `b6b12ed`).
 
 Today the composer offers only `stuck` / `steer` / `weigh-in`. Add `need-decision`, `need-context`, `handing-off`. Each surfaces the type-specific payload fields that matter:
 
@@ -140,7 +140,7 @@ Item anchoring (`item_uid`) is still nice-to-have for any type. Add an optional 
 
 ### 2.2 Per-project channel routing rules
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `916597e`). Note: rules match the event's **current** state, so a rule like `{ eventType: 'stuck' }` will re-fire on every status change. To fire only on initial post, include `status: 'open'` in the `when` clause; to fire only on resolution, use `status: 'resolved'`. Documented in the `ChannelRouteWhen` type.
 
 Extend `ProjectConfig` with a `channels.routing` section: a list of rules of the form `{ when: {eventType?, status?, planUid?, itemUid?, minAgeMs?}, notify: {target, ...} }`. Targets supported in v1:
 
@@ -151,7 +151,7 @@ Rule evaluation runs server-side whenever a channel event is posted (or when its
 
 ### 2.3 Webhook notification dispatcher
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `2083acf`).
 
 Service that:
 - Listens to `channel-event-posted` and `channel-event-status-changed`.
@@ -163,7 +163,7 @@ In-app toast elevation is part of the same dispatch path; webhook delivery is th
 
 ### 2.4 Phase 2 demo + tests
 
-Status: ⬜ Not started.
+Status: ✅ Done. E2E test at `tests/e2e/cdev-routing.test.ts` boots an in-process HTTP listener, configures a webhook routing rule, posts events through the real MCP wire format, and asserts the listener receives the right deliveries. Also covers rule filtering (disabled rules + status filters), wholesale routing replacement on update, and confirms no fire when the rule no longer matches.
 
 End-to-end test:
 1. Project with a routing rule "webhook on stuck events" pointed at a test HTTP listener.

@@ -39,6 +39,13 @@ export interface ProjectPlansConfig {
  * A `when` clause: every field is an additional filter. A rule fires
  * when **all** present fields match the event. Absent fields are
  * wildcards.
+ *
+ * Rules match the event's **current** state, so a rule with just
+ * `{ eventType: 'stuck' }` will fire on the initial post *and* on
+ * every status change (resolve, dismiss) — the eventType doesn't
+ * change. To fire only on the initial post, include
+ * `status: 'open'`; to fire only when a stuck is resolved, use
+ * `status: 'resolved'`.
  */
 export interface ChannelRouteWhen {
   /** Match only events of this type (e.g., 'stuck'). */
