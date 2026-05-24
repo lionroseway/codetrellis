@@ -124,12 +124,56 @@ This is the moment Phase 1 ships.
 
 ## Phase 2 — Channels in full
 
-Goal: complete the channel surface for team collaboration.
+Goal: channels become useful in a real team environment. Two pillars: every event type postable from the UI, and notifications that reach teammates outside their CodeTrellis window.
 
-- All 6 event types (`need-decision`, `need-context`, `handing-off` added).
-- Routing rules driven by per-project config (e.g., "page Maria if a plan is stuck >15 min").
-- External bridges (email / push / Slack via webhook) for off-app notifications.
-- Cross-machine peer-to-peer: events post locally, sync via git, but also via direct broadcast when teammates are co-present on a network.
+### 2.1 Composer supports all 6 event types
+
+Status: ⬜ Not started.
+
+Today the composer offers only `stuck` / `steer` / `weigh-in`. Add `need-decision`, `need-context`, `handing-off`. Each surfaces the type-specific payload fields that matter:
+
+- `need-decision` — options[] (the alternatives the asker has identified).
+- `need-context` — references (free-text or graph-anchor links).
+- `handing-off` — attempted[] (mirrors stuck) + a reason field.
+
+Item anchoring (`item_uid`) is still nice-to-have for any type. Add an optional plan-item picker to the composer.
+
+### 2.2 Per-project channel routing rules
+
+Status: ⬜ Not started.
+
+Extend `ProjectConfig` with a `channels.routing` section: a list of rules of the form `{ when: {eventType?, status?, planUid?, itemUid?, minAgeMs?}, notify: {target, ...} }`. Targets supported in v1:
+
+- `in-app-toast` — already broadcast as `channel-event-posted`; this just elevates urgency / changes tone.
+- `webhook` — POST a small JSON payload to a user-configured URL.
+
+Rule evaluation runs server-side whenever a channel event is posted (or when its age crosses a threshold for stale-event nudges).
+
+### 2.3 Webhook notification dispatcher
+
+Status: ⬜ Not started.
+
+Service that:
+- Listens to `channel-event-posted` and `channel-event-status-changed`.
+- Looks up routing rules from `getProjectConfig`.
+- Fires matching webhooks (POST JSON, simple retry on 5xx, log failures).
+- Also handles a stale-event timer for `minAgeMs` rules ("page if stuck >15 min").
+
+In-app toast elevation is part of the same dispatch path; webhook delivery is the v1 external bridge. Push/email/Slack come later via webhook + the user's own service of choice (Zapier / Linear / Pipedream / etc.), so we don't need to ship per-vendor integrations.
+
+### 2.4 Phase 2 demo + tests
+
+Status: ⬜ Not started.
+
+End-to-end test:
+1. Project with a routing rule "webhook on stuck events" pointed at a test HTTP listener.
+2. Agent posts a stuck event.
+3. Webhook receives the JSON payload within the test window.
+4. Compose a need-decision from the UI (or via REST) with options[]; verify rendering and that the rule fires.
+
+### Deferred from Phase 2
+
+**Cross-machine peer-to-peer** (events broadcast directly between teammates' CodeTrellis instances on the same network) moves to Phase 5 alongside the mobile companion. Both share transport (WebRTC) and discovery (mDNS) infrastructure; building them once together is cheaper than twice apart. Git remains the primary sync path for channel events in Phase 2.
 
 ## Phase 3 — Cross-repo and system documentation
 
@@ -164,6 +208,15 @@ Goal: meeting-aware AI presence + mobile companion.
 ## Visual checks (deferred to packaged macOS build)
 
 Screenshot capture in the dev server hangs (browser is not under our control); visual verification is deferred to the packaged macOS build where the in-app screenshot tool drives a known browser instance. This section accumulates items to step through once the built app is in hand. Each entry names the phase it came from so we can scan the whole list at once.
+
+### Phase 2.1 — Composer expansion (all 6 types + item anchor)
+
+- Composer shows two rows ("Ask" / "Offer") with three buttons each.
+- All six types post cleanly; agent receives the event with the correct `event_type`.
+- `stuck` and `handing-off` show an "attempted" textarea; one-per-line splits into the array.
+- `need-decision` shows an "options" textarea; one-per-line splits into the array.
+- Item anchor dropdown appears when plan items exist; choosing one sends `item_uid` and the event renders with the anchor on read-back.
+- After post, the message + extra fields clear but the selected type + anchor persist (common to post several events of the same shape).
 
 ### Phase 1.4 — Channel UI panel
 

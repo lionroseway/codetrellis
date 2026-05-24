@@ -14,11 +14,15 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   MessageCircle, AlertTriangle, ArrowRight, Lightbulb,
   HelpCircle, ArrowRightLeft, CheckCheck, X, Reply, RefreshCw,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { useChannelsStore } from '../../../stores/channels-store';
+import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { ChannelEvent, ChannelEventStatus, ChannelEventType } from '@shared/types';
 
-type ComposerType = Extract<ChannelEventType, 'stuck' | 'steer' | 'weigh-in'>;
+// All six types are now composable from the UI (Phase 2.1).
+const ASK_TYPES: ChannelEventType[] = ['stuck', 'need-decision', 'need-context'];
+const OFFER_TYPES: ChannelEventType[] = ['steer', 'weigh-in', 'handing-off'];
 
 const EVENT_META: Record<ChannelEventType, {
   Icon: typeof AlertTriangle;
@@ -170,41 +174,70 @@ function Header({ loading, onRefresh, onClose, eventCount }: {
 function Composer() {
   const post = useChannelsStore((s) => s.post);
   const posting = useChannelsStore((s) => s.posting);
-  const [type, setType] = useState<ComposerType>('weigh-in');
+  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  const [type, setType] = useState<ChannelEventType>('weigh-in');
   const [message, setMessage] = useState('');
+  const [attemptedText, setAttemptedText] = useState('');
+  const [optionsText, setOptionsText] = useState('');
+  const [anchorUid, setAnchorUid] = useState<string>('');
 
   const canSubmit = message.trim().length > 0 && !posting;
 
+  const showAttempted = type === 'stuck' || type === 'handing-off';
+  const showOptions = type === 'need-decision';
+
+  const items = useMemo(
+    () => Object.values(itemsByUid).sort((a, b) => a.sortOrder - b.sortOrder),
+    [itemsByUid],
+  );
+
   const submit = async () => {
     if (!canSubmit) return;
-    const created = await post({ eventType: type, message: message.trim() });
-    if (created) setMessage('');
+    const attempted = showAttempted
+      ? attemptedText.split('\n').map((l) => l.trim()).filter(Boolean)
+      : undefined;
+    const options = showOptions
+      ? optionsText.split('\n').map((l) => l.trim()).filter(Boolean)
+      : undefined;
+    const created = await post({
+      eventType: type,
+      message: message.trim(),
+      attempted,
+      options,
+      itemUid: anchorUid || null,
+    });
+    if (created) {
+      setMessage('');
+      setAttemptedText('');
+      setOptionsText('');
+      // Keep type + anchor — common to post several events of the same shape.
+    }
   };
 
   return (
     <div className="px-2 py-2 border-b border-white/[0.06] bg-[#0a0b14]/40">
-      <div className="flex items-center gap-1 mb-1.5">
-        {(['stuck', 'steer', 'weigh-in'] as ComposerType[]).map((t) => {
-          const meta = EVENT_META[t];
-          const Icon = meta.Icon;
-          const active = type === t;
-          return (
-            <button
-              key={t}
-              onClick={() => setType(t)}
-              title={meta.helper}
-              className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded transition-colors ${
-                active
-                  ? 'bg-white/[0.08] text-foreground font-medium'
-                  : 'text-foreground-subtle hover:text-foreground hover:bg-white/[0.04]'
-              }`}
-            >
-              <Icon size={11} className={active ? meta.tint : ''} />
-              {meta.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-1 mb-1.5">
+        <TabRow types={ASK_TYPES} active={type} onSelect={setType} label="Ask" />
+        <TabRow types={OFFER_TYPES} active={type} onSelect={setType} label="Offer" />
       </div>
+      {items.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <LinkIcon size={10} className="text-foreground-subtle" />
+          <select
+            value={anchorUid}
+            onChange={(e) => setAnchorUid(e.target.value)}
+            className="flex-1 bg-[#070810] border border-white/[0.06] rounded px-1.5 py-1 text-[11px] text-foreground focus:border-accent/40 focus:outline-none"
+            title="Optional — anchor this event to a plan item"
+          >
+            <option value="">No anchor</option>
+            {items.map((it) => (
+              <option key={it.uid} value={it.uid}>
+                {it.kind === 'action' ? '⚙' : '◆'} {it.title || '(untitled)'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
@@ -218,6 +251,24 @@ function Composer() {
         rows={3}
         className="w-full bg-[#070810] border border-white/[0.06] rounded px-2 py-1.5 text-[12px] text-foreground placeholder:text-foreground-subtle focus:border-accent/40 focus:outline-none resize-none"
       />
+      {showAttempted && (
+        <textarea
+          value={attemptedText}
+          onChange={(e) => setAttemptedText(e.target.value)}
+          placeholder={'What was tried (one per line)\nparse as utf-8\nparse as latin-1'}
+          rows={2}
+          className="mt-1 w-full bg-[#070810] border border-white/[0.06] rounded px-2 py-1.5 text-[11.5px] text-foreground placeholder:text-foreground-subtle focus:border-accent/40 focus:outline-none resize-none"
+        />
+      )}
+      {showOptions && (
+        <textarea
+          value={optionsText}
+          onChange={(e) => setOptionsText(e.target.value)}
+          placeholder={'Alternatives (one per line)\nUse FastAPI\nUse Flask\nStay with raw asgi'}
+          rows={2}
+          className="mt-1 w-full bg-[#070810] border border-white/[0.06] rounded px-2 py-1.5 text-[11.5px] text-foreground placeholder:text-foreground-subtle focus:border-accent/40 focus:outline-none resize-none"
+        />
+      )}
       <div className="flex items-center justify-between mt-1.5">
         <span className="text-[10.5px] text-foreground-subtle">⌘+Enter to post</span>
         <button
@@ -232,6 +283,41 @@ function Composer() {
           {posting ? 'Posting…' : 'Post'}
         </button>
       </div>
+    </div>
+  );
+}
+
+function TabRow({
+  types, active, onSelect, label,
+}: {
+  types: ChannelEventType[];
+  active: ChannelEventType;
+  onSelect: (t: ChannelEventType) => void;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[9px] uppercase tracking-wider text-foreground-subtle/70 w-8 shrink-0">{label}</span>
+      {types.map((t) => {
+        const meta = EVENT_META[t];
+        const Icon = meta.Icon;
+        const isActive = active === t;
+        return (
+          <button
+            key={t}
+            onClick={() => onSelect(t)}
+            title={meta.helper}
+            className={`flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded transition-colors ${
+              isActive
+                ? 'bg-white/[0.08] text-foreground font-medium'
+                : 'text-foreground-subtle hover:text-foreground hover:bg-white/[0.04]'
+            }`}
+          >
+            <Icon size={11} className={isActive ? meta.tint : ''} />
+            {meta.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
