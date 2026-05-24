@@ -161,6 +161,36 @@ Goal: meeting-aware AI presence + mobile companion.
 
 ---
 
+## Visual checks (deferred to packaged macOS build)
+
+Screenshot capture in the dev server hangs (browser is not under our control); visual verification is deferred to the packaged macOS build where the in-app screenshot tool drives a known browser instance. This section accumulates items to step through once the built app is in hand. Each entry names the phase it came from so we can scan the whole list at once.
+
+### Phase 1.4 — Channel UI panel
+
+- Header **Channel** button toggles the drawer cleanly (open / close / re-open).
+- Toggle state persists when switching between plans (or resets — confirm desired behaviour).
+- Composer:
+  - Three type tabs (stuck / steer / weigh-in) — selection state is visually clear.
+  - Placeholder text changes with the active type.
+  - ⌘+Enter posts; the button disables while posting.
+- Posted event renders immediately, attributed to the user's email (from settings.identity).
+- Agent-posted events (via MCP) appear without manual refresh; attribution shows `<human>'s <agent-type>` with model in parens.
+- Threading:
+  - Reply on an open root posts a steer indented under the root.
+  - Indentation + left border make root vs response visually distinct.
+- Status controls (✓ resolve, X dismiss) appear only on open root events.
+- Status label tint matches the design (open amber, resolved emerald, dismissed muted).
+- Drawer width is comfortable — content not overly squeezed.
+- Drift banner, Activity drawer, and Channel drawer don't fight for space (Allotment behaves).
+
+### Phase 1.1–1.3 (already validated functionally)
+
+- ConnectedAgents widget: agents persist past 60s while making MCP calls (heartbeat).
+- Activity feed surfaces `plan-created` with `exported: true|false` from create_plan.
+- New shared-by-default plans appear in `.codetrellis/plans/<slug>/` without a manual export step.
+
+---
+
 ## Notes and follow-ups
 
 Things noticed during implementation that don't block but should be remembered.
