@@ -20,6 +20,7 @@ import path from 'node:path';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { getSettings } from './settings-service';
+import { getEffectiveAttachmentLocation } from './project-config-service';
 import type { TaskAttachment, AttachmentKind, PlanDocAttachment } from '../../shared/types';
 
 /**
@@ -37,7 +38,12 @@ function resolveAttachmentDir(targetUid: string, projectRoot: string | undefined
   absDir: string;
   storedValuePrefix: string;
 } {
-  const location = getSettings().plans.attachmentLocation ?? 'project';
+  // Effective resolution: per-project override > per-user default.
+  // When projectRoot is undefined we have no per-project layer to read,
+  // so fall straight back to the per-user setting.
+  const location = projectRoot
+    ? getEffectiveAttachmentLocation(projectRoot)
+    : (getSettings().plans.attachmentLocation ?? 'project');
   if (location === 'user' || !projectRoot) {
     // User-data: lives under <userDataDir>/codetrellis/attachments/<item-uid>/
     // Stored as `userdata://attachments/<item-uid>/<file>` so the REST

@@ -6,3 +6,4 @@ export * from './plan';
 export * from './system';
 export * from './settings';
 export * from './presence';
+export * from './project-config';

@@ -27,6 +27,7 @@ import * as externalRefsService from '../services/external-refs-service';
 import * as terminalService from '../services/terminal-service';
 import * as planImportService from '../services/plan-import-service';
 import * as presenceService from '../services/presence-service';
+import * as projectConfigService from '../services/project-config-service';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
@@ -51,6 +52,7 @@ import { register as registerSessionTools } from './tools/session-tools';
 import { register as registerPlanTools } from './tools/plan-tools';
 import { register as registerPlanItemTools } from './tools/plan-item-tools';
 import { register as registerPresenceTools } from './tools/presence-tools';
+import { register as registerProjectConfigTools } from './tools/project-config-tools';
 import { register as registerResources } from './resources';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -171,6 +173,7 @@ function buildToolDeps(): ToolDeps {
     terminalService,
     planImportService,
     presenceService,
+    projectConfigService,
 
     // Specific functions
     applyTemplate,
@@ -277,6 +280,7 @@ function setupMcpServerInstance(): McpServer {
   registerPlanTools(mcpServer, deps);
   registerPlanItemTools(mcpServer, deps);
   registerPresenceTools(mcpServer, deps);
+  registerProjectConfigTools(mcpServer, deps);
   registerResources(mcpServer, deps);
 
   return mcpServer;
