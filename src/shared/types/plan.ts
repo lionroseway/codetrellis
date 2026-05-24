@@ -609,6 +609,30 @@ export interface PlanItem {
    *  after completing this item before moving to the next sibling. */
   requiresApproval?: boolean;
 
+  // --- Phase 3.2 — Per-item sharing ---
+  /**
+   * Per-item visibility. `shared` (default) means the item is included
+   * in the plan's manifest export and travels via git. `local` means
+   * the item stays in the local CodeTrellis DB only and is omitted
+   * from disk export.
+   *
+   * Default `shared` keeps existing plans backward-compatible. A
+   * child item's effective visibility is the more restrictive of its
+   * own value and its parent's (a `shared` child under a `local`
+   * parent is treated as `local`) — UNLESS `overrideParentVisibility`
+   * is true, in which case the child exports as a top-level item
+   * (its parent isn't on disk to anchor it).
+   */
+  visibility?: 'shared' | 'local';
+  /**
+   * Escape hatch for the legitimate exception case where a user
+   * keeps a parent local but wants one of its children to ride to
+   * git anyway. The overridden child loses its parent ancestry on
+   * disk — it appears as a top-level item — but the in-DB tree
+   * remains intact for the user's view.
+   */
+  overrideParentVisibility?: boolean;
+
   // Common metadata
   author: string;
   authorType: string;
@@ -755,6 +779,9 @@ export interface CreatePlanItemInput {
   constraintsMode?: CascadeMode;
   // Phase 17.K — approval gate
   requiresApproval?: boolean;
+  // Phase 3.2 — per-item sharing
+  visibility?: 'shared' | 'local';
+  overrideParentVisibility?: boolean;
   // Caller identity
   author: string;
   authorType: string;
@@ -799,6 +826,9 @@ export interface UpdatePlanItemInput {
   constraintsMode?: CascadeMode;
   // Phase 17.K — approval gate
   requiresApproval?: boolean;
+  // Phase 3.2 — per-item sharing
+  visibility?: 'shared' | 'local';
+  overrideParentVisibility?: boolean;
   parentUid?: string | null;   // re-parent — emits plan_events
   sortOrder?: number;          // reorder — emits plan_events
   /** Optional human-readable why-summary. Lands in plan_item_versions.changeSummary. */

@@ -515,6 +515,15 @@ export async function initDatabase(): Promise<void> {
   try { db.run(`ALTER TABLE recent_projects ADD COLUMN origin_url TEXT DEFAULT NULL`); } catch { /* exists */ }
   try { db.run(`CREATE INDEX IF NOT EXISTS idx_recent_projects_origin ON recent_projects(origin_url)`); } catch { /* exists */ }
 
+  // CDev Phase 3.2 — per-item sharing visibility. `visibility` is the
+  // user's intent ('shared' default, 'local' opts out of disk export);
+  // `visibility_override` is the escape hatch for the rare case where
+  // a user keeps a parent local but still wants a specific child to
+  // ride to git (the child appears top-level on disk because its
+  // parent isn't there to anchor it).
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN visibility TEXT NOT NULL DEFAULT 'shared'`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE plan_items ADD COLUMN visibility_override INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
+
   // Phase 17.R — external references table
   db.run(`
     CREATE TABLE IF NOT EXISTS external_refs (

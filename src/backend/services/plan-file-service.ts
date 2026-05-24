@@ -154,7 +154,7 @@ function exportPlanV1(plan: Plan & { tasks: Task[] }, planDir: string, planUid: 
 }
 
 /** V2 export path — unified item tree mirroring parent/child nesting. */
-function exportPlanV2(plan: Plan, planDir: string, allItems: PlanItem[], projectRoot: string): ExportPlanResult {
+function exportPlanV2(plan: Plan, planDir: string, _allItems: PlanItem[], projectRoot: string): ExportPlanResult {
   const files: string[] = [];
 
   // plan.yaml with version: 2
@@ -162,12 +162,21 @@ function exportPlanV2(plan: Plan, planDir: string, allItems: PlanItem[], project
   writeFileAtomic(planFile, stringifyYaml(serializePlan(plan, 2)));
   files.push(planFile);
 
-  // Build parent→children map
+  // Phase 3.2 — filter items by effective visibility and re-anchor
+  // overrides to their nearest exported ancestor (or top-level when
+  // none). The in-DB tree stays untouched; this is purely an
+  // export-time view of which items ride to git and where they sit.
+  const exportItems = planItemService.listItemsForExport(plan.uid);
+
+  // Build parent→children map keyed by the export-time parent.
+  // We clone each item so the on-disk parent_uid reflects the
+  // re-anchored value rather than the in-DB one.
   const childrenOf = new Map<string | null, PlanItem[]>();
-  for (const item of allItems) {
-    const key = item.parentUid;
+  for (const { item, exportParentUid } of exportItems) {
+    const onDisk: PlanItem = { ...item, parentUid: exportParentUid };
+    const key = exportParentUid;
     const list = childrenOf.get(key) ?? [];
-    list.push(item);
+    list.push(onDisk);
     childrenOf.set(key, list);
   }
 
@@ -470,6 +479,9 @@ function upsertItem(
       constraints: raw.constraints ?? undefined,
       constraintsMode: raw.constraintsMode ?? undefined,
       requiresApproval: typeof raw.requiresApproval === 'boolean' ? raw.requiresApproval : undefined,
+      // Phase 3.2 — per-item sharing
+      visibility: raw.visibility === 'local' ? 'local' : 'shared',
+      overrideParentVisibility: raw.overrideParentVisibility === true,
       parentUid,
       author: 'file-import',
       authorType: 'system',
@@ -506,6 +518,9 @@ function upsertItem(
       constraints: raw.constraints ?? null,
       constraintsMode: raw.constraintsMode ?? 'inherit',
       requiresApproval: raw.requiresApproval === true,
+      // Phase 3.2 — per-item sharing
+      visibility: raw.visibility === 'local' ? 'local' : 'shared',
+      overrideParentVisibility: raw.overrideParentVisibility === true,
       author: String(raw.author ?? 'human'),
       authorType: String(raw.authorType ?? 'human'),
       createdAt: toEpoch(raw.createdAt) ?? now,
@@ -997,6 +1012,11 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
     if (item.constraintsMode && item.constraintsMode !== 'inherit') obj.constraintsMode = item.constraintsMode;
   }
   if (item.requiresApproval) obj.requiresApproval = true;
+
+  // Phase 3.2 — Per-item sharing. Omit defaults (visibility=shared,
+  // override=false) so old plan files keep their shape.
+  if (item.visibility === 'local') obj.visibility = 'local';
+  if (item.overrideParentVisibility) obj.overrideParentVisibility = true;
 
   // Metadata
   obj.author = item.author;

@@ -250,6 +250,25 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
         </>
       )}
 
+      {/* Phase 3.2 — Per-item visibility toggle. Local items stay in
+          the DB and don't ride to git; useful for personal scratch. */}
+      <button
+        onClick={() => updateItem(item.uid, {
+          visibility: item.visibility === 'local' ? 'shared' : 'local',
+        })}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[12px] transition-colors ${
+          item.visibility === 'local'
+            ? 'border-violet-500/30 bg-violet-500/10 text-violet-300'
+            : 'border-white/[0.08] bg-white/[0.02] text-foreground-subtle hover:text-foreground-muted'
+        }`}
+        title={item.visibility === 'local'
+          ? 'Local — this item stays in your DB only, not exported to .codetrellis/. Click to share with the team.'
+          : 'Shared — this item is exported to .codetrellis/plans/ and travels via git. Click to keep local.'}
+      >
+        {item.visibility === 'local' ? '🏠' : '🌐'}
+        {item.visibility === 'local' ? 'Local' : 'Shared'}
+      </button>
+
       <div className="flex-1" />
 
       <button

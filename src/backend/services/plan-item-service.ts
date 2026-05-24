@@ -66,7 +66,8 @@ const ITEM_COLUMNS = `uid, plan_uid, parent_uid, sort_order, kind,
   scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
   skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
   constraints, constraints_mode, requires_approval,
-  author, author_type, created_at, updated_at, migrated_from`;
+  author, author_type, created_at, updated_at, migrated_from,
+  visibility, visibility_override`;
 
 function rowToItem(r: any[]): PlanItem {
   return {
@@ -107,6 +108,9 @@ function rowToItem(r: any[]): PlanItem {
     createdAt: r[31] as number,
     updatedAt: r[32] as number,
     migratedFrom: (r[33] as string | null) ?? null,
+    // Phase 3.2 — per-item sharing
+    visibility: ((r[34] as string | null) ?? 'shared') as 'shared' | 'local',
+    overrideParentVisibility: !!(r[35] as number),
   };
 }
 
@@ -164,6 +168,9 @@ function metaSnapshotOf(item: PlanItem): Record<string, unknown> {
     constraintsMode: item.constraintsMode,
     // Phase 17.K
     requiresApproval: item.requiresApproval,
+    // Phase 3.2
+    visibility: item.visibility,
+    overrideParentVisibility: item.overrideParentVisibility,
   };
 }
 
@@ -302,7 +309,8 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
         scope_path, file_specs, symbol_specs, new_connections, removed_conns, dependencies,
         skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
         constraints, constraints_mode, requires_approval,
-        author, author_type, created_at, updated_at, migrated_from)
+        author, author_type, created_at, updated_at, migrated_from,
+        visibility, visibility_override)
      VALUES (?, ?, ?, ?, ?,
              ?, ?, ?,
              ?, ?, ?, ?,
@@ -310,7 +318,8 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?,
-             ?, ?, ?, ?, ?)`,
+             ?, ?, ?, ?, ?,
+             ?, ?)`,
     [
       uid, input.planUid, input.parentUid ?? null, sortOrder, input.kind,
       input.title, input.body ?? '', input.template ?? null,
@@ -342,6 +351,9 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
       input.requiresApproval ? 1 : 0,
       input.author, input.authorType, createdAt, updatedAt,
       input.migratedFrom ?? null,
+      // Phase 3.2 — per-item sharing
+      input.visibility ?? 'shared',
+      input.overrideParentVisibility ? 1 : 0,
     ],
   );
 
@@ -535,6 +547,15 @@ export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem 
   // Phase 17.K — approval gate
   if (updates.requiresApproval !== undefined && updates.requiresApproval !== before.requiresApproval) {
     sets.push('requires_approval = ?'); params.push(updates.requiresApproval ? 1 : 0);
+    contentChanged = true;
+  }
+  // Phase 3.2 — per-item sharing
+  if (updates.visibility !== undefined && updates.visibility !== before.visibility) {
+    sets.push('visibility = ?'); params.push(updates.visibility);
+    contentChanged = true;
+  }
+  if (updates.overrideParentVisibility !== undefined && updates.overrideParentVisibility !== before.overrideParentVisibility) {
+    sets.push('visibility_override = ?'); params.push(updates.overrideParentVisibility ? 1 : 0);
     contentChanged = true;
   }
 
@@ -1203,4 +1224,102 @@ function defaultMoveSummary(item: PlanItem, isReparent: boolean, isReorder: bool
   if (isReparent && isReorder) return `${icon} moved "${item.title}"`;
   if (isReparent) return `${icon} re-parented "${item.title}"`;
   return `${icon} reordered "${item.title}"`;
+}
+
+// =============================================================================
+// Per-item sharing (Phase 3.2)
+// =============================================================================
+
+/**
+ * Resolve an item's effective visibility by walking ancestors:
+ *
+ *   - If the item itself is `local`, return `local` (own intent wins).
+ *   - If the item is `shared` AND `overrideParentVisibility` is true,
+ *     return `shared` — the escape hatch for "I want this exported
+ *     even though my parent stays local."
+ *   - Otherwise, walk up. The first `local` ancestor makes this item
+ *     effectively `local` too (children of a local parent inherit).
+ *   - If no `local` ancestor is found, the item is effectively
+ *     `shared`.
+ */
+export function getEffectiveVisibility(itemUid: string): 'shared' | 'local' {
+  const item = getItem(itemUid);
+  if (!item) return 'shared';
+  if (item.visibility === 'local') return 'local';
+  if (item.overrideParentVisibility) return 'shared';
+  let cursor = item.parentUid;
+  const seen = new Set<string>([itemUid]);
+  while (cursor) {
+    if (seen.has(cursor)) break; // cycle safety
+    seen.add(cursor);
+    const ancestor = getItem(cursor);
+    if (!ancestor) break;
+    if (ancestor.visibility === 'local') return 'local';
+    if (ancestor.overrideParentVisibility) return 'shared'; // override breaks the chain
+    cursor = ancestor.parentUid;
+  }
+  return 'shared';
+}
+
+/**
+ * Returns the items that should be exported to disk for a plan, with
+ * each item's parent UID re-anchored to the nearest exported ancestor
+ * (or `null` if no such ancestor exists). This handles the override
+ * case where a shared child has a local parent — the child appears
+ * top-level on disk because its parent isn't there to anchor it.
+ *
+ * The in-DB tree remains untouched; this is purely an export-time view.
+ */
+export function listItemsForExport(planUid: string): Array<{ item: PlanItem; exportParentUid: string | null }> {
+  const all = listAllItems(planUid);
+  const byUid = new Map<string, PlanItem>(all.map((i) => [i.uid, i]));
+
+  // Memoised effective-visibility computation. Walks ancestors once
+  // per item; subsequent lookups are O(1).
+  const visibilityCache = new Map<string, 'shared' | 'local'>();
+  function effective(uid: string): 'shared' | 'local' {
+    const cached = visibilityCache.get(uid);
+    if (cached) return cached;
+    const item = byUid.get(uid);
+    if (!item) {
+      visibilityCache.set(uid, 'shared');
+      return 'shared';
+    }
+    if (item.visibility === 'local') {
+      visibilityCache.set(uid, 'local');
+      return 'local';
+    }
+    if (item.overrideParentVisibility) {
+      visibilityCache.set(uid, 'shared');
+      return 'shared';
+    }
+    if (!item.parentUid) {
+      visibilityCache.set(uid, 'shared');
+      return 'shared';
+    }
+    const parentEff = effective(item.parentUid);
+    visibilityCache.set(uid, parentEff);
+    return parentEff;
+  }
+
+  const result: Array<{ item: PlanItem; exportParentUid: string | null }> = [];
+  for (const item of all) {
+    if (effective(item.uid) !== 'shared') continue;
+    let exportParentUid: string | null = null;
+    let cursor = item.parentUid;
+    const seen = new Set<string>([item.uid]);
+    while (cursor) {
+      if (seen.has(cursor)) break;
+      seen.add(cursor);
+      if (effective(cursor) === 'shared') {
+        exportParentUid = cursor;
+        break;
+      }
+      const ancestor = byUid.get(cursor);
+      if (!ancestor) break;
+      cursor = ancestor.parentUid;
+    }
+    result.push({ item, exportParentUid });
+  }
+  return result;
 }

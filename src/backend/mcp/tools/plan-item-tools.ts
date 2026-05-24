@@ -79,6 +79,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
         new_connections: z.array(planItemEdgeSchema).optional(),
         removed_connections: z.array(planItemEdgeSchema).optional(),
         dependencies: z.array(z.string()).optional().describe('Other Action uids that must complete first.'),
+        visibility: z.enum(['shared', 'local']).optional().describe(
+          'Per-item sharing. `shared` (default) exports this item via git. `local` keeps it in the DB only.',
+        ),
+        override_parent_visibility: z.boolean().optional().describe(
+          'Keep this item shared even if its parent is local. The item appears top-level on disk.',
+        ),
       },
     },
     async (args, extra: any) => {
@@ -97,6 +103,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         newConnections: args.new_connections,
         removedConnections: args.removed_connections,
         dependencies: args.dependencies,
+        visibility: args.visibility,
+        overrideParentVisibility: args.override_parent_visibility,
         author: id.author,
         authorType: id.authorType,
       });
@@ -245,6 +253,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
         parent_uid: z.string().optional().describe('Re-parent. Empty string detaches to top-level.'),
         sort_order: z.number().int().optional(),
         change_summary: z.string().optional(),
+        visibility: z.enum(['shared', 'local']).optional().describe(
+          'Per-item sharing. `shared` (default) exports this item to .codetrellis/plans/<slug>/items/ ' +
+            'and rides via git. `local` keeps the item in the local DB only — won\'t appear in commits or ' +
+            'reach teammates. Use when you have personal scratch / exploratory items in an otherwise-shared plan.',
+        ),
+        override_parent_visibility: z.boolean().optional().describe(
+          'Escape hatch: keep this item `shared` even when its parent is `local`. The item appears at the top ' +
+            'level on disk (its parent isn\'t there to anchor it). The in-DB tree remains nested.',
+        ),
       },
     },
     async (args, extra: any) => {
@@ -266,6 +283,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         parentUid: args.parent_uid === undefined ? undefined : (args.parent_uid === '' ? null : args.parent_uid),
         sortOrder: args.sort_order,
         changeSummary: args.change_summary,
+        visibility: args.visibility,
+        overrideParentVisibility: args.override_parent_visibility,
         author: id.author,
         authorType: id.authorType,
       });
