@@ -25,6 +25,7 @@ import * as planChangesService from '../services/plan-changes-service';
 import * as planFileService from '../services/plan-file-service';
 import * as externalRefsService from '../services/external-refs-service';
 import * as externalPointerService from '../services/external-pointer-service';
+import * as systemDocsService from '../services/system-docs-service';
 import * as terminalService from '../services/terminal-service';
 import * as planImportService from '../services/plan-import-service';
 import * as presenceService from '../services/presence-service';
@@ -64,6 +65,7 @@ import { register as registerPresenceTools } from './tools/presence-tools';
 import { register as registerProjectConfigTools } from './tools/project-config-tools';
 import { register as registerGitTools } from './tools/git-tools';
 import { register as registerChannelTools } from './tools/channel-tools';
+import { register as registerSystemDocsTools } from './tools/system-docs-tools';
 import { register as registerResources } from './resources';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -185,6 +187,7 @@ function buildToolDeps(sessionId: string): ToolDeps {
     planChangesService,
     externalRefsService,
     externalPointerService,
+    systemDocsService,
     terminalService,
     planImportService,
     presenceService,
@@ -306,6 +309,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerProjectConfigTools(mcpServer, deps);
   registerGitTools(mcpServer, deps);
   registerChannelTools(mcpServer, deps);
+  registerSystemDocsTools(mcpServer, deps);
   registerResources(mcpServer, deps);
 
   return mcpServer;

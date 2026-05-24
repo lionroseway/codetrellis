@@ -215,15 +215,18 @@ Status: ✅ Done. What shipped:
 
 ### 3.4 System documentation (in-app area)
 
-Status: ⬜ Not started.
+Status: ✅ Done. What shipped:
 
-New "Docs" surface in the workspace. Storage: YAML frontmatter + markdown body at `.codetrellis/docs/<topic>.md`. Frontmatter records title, owner, references (files/symbols/items), capturedAgainstCommit (git SHA), lastVerifiedAt. Backend service: list / read / write / delete / verify. MCP tools: `list_system_docs`, `read_system_doc`, `write_system_doc`, `verify_system_doc` (re-stamps to current HEAD).
-
-Front-end UI:
-- Left rail: navigation tree (flat for v1, with the option to add folders later if anyone asks).
-- Right pane: rendered markdown with TOC, internal links between docs, embedded graph-node references.
-- Search across all docs.
-- Per-doc freshness badge: green (current), yellow (HEAD has moved), red (referenced files actually changed since the stamp).
+- `system_docs` table (uid PK, project_path + slug unique, references as JSON, capturedAgainstCommit, lastVerifiedAt). On-disk source of truth at `<project>/.codetrellis/docs/<slug>.md` with YAML frontmatter — round-trips through git.
+- `system-docs-service.ts` with full CRUD: `listSystemDocs`, `searchSystemDocs`, `getSystemDoc`, `getSystemDocBySlug`, `createSystemDoc`, `updateSystemDoc`, `deleteSystemDoc`, `verifySystemDoc`, `getFreshness`, `indexProjectDocs`, plus the file watcher.
+- Freshness model: `current` (captured commit == HEAD or unverified), `moved` (HEAD past stamp but no referenced file diffs), `stale` (HEAD past stamp AND a referenced file diffs). Drives the badge colours.
+- File watcher (chokidar, depth 0) at `.codetrellis/docs/` — external edits import; missing UIDs are auto-stamped and the file rewritten so it round-trips stably from then on. Wired into both `scanProject` and the boot-time rearm pass alongside the other Phase 3 watchers.
+- MCP tools: `list_system_docs`, `read_system_doc`, `write_system_doc` (create or update by uid), `delete_system_doc`, `verify_system_doc`, `check_doc_freshness`.
+- REST surface at `/api/system-docs` for the frontend (list / read / create / update / delete / verify / freshness).
+- Frontend store `system-docs-store.ts` mirrors the index and caches full bodies on selection; WS handlers refresh on `system-doc-changed`, `-created`, `-updated`, `-verified`, `-removed`.
+- New workspace mode `'docs'` (in `WorkspaceMode`) renders `SystemDocsPanel` as a full takeover. Two-pane layout: left rail with search + per-doc freshness dots, right pane with `Markdown` renderer and edit / verify / refresh / delete affordances.
+- TopBar `DocsToggle` chip (BookOpen icon) toggles the surface; only visible when a project is open.
+- E2E coverage at `tests/e2e/cdev-system-docs.test.ts` — write doc via MCP, verify (stamps HEAD), drift a referenced file with a commit, confirm `check_doc_freshness` returns 'stale' with the changed file listed; hand-craft an external `.md` without a uid → watcher imports + rewrites with a uid; delete via MCP removes the file.
 
 ### 3.5 Cross-repo stitched view UI
 

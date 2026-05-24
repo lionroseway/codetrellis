@@ -534,6 +534,37 @@ export async function initDatabase(): Promise<void> {
   try { db.run(`ALTER TABLE plans ADD COLUMN scope TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
   try { db.run(`CREATE INDEX IF NOT EXISTS idx_plans_home_repo ON plans(home_repo)`); } catch { /* exists */ }
 
+  // CDev Phase 3.4 — repo-wide system documentation. Each doc is a
+  // markdown file at `.codetrellis/docs/<topic>.md` (with YAML
+  // frontmatter); the DB is an index for fast list / search / cross-
+  // reference. `references` is JSON ({ files: [...], symbols: [...],
+  // items: [...] }) — the points in the codebase + plans the doc
+  // describes. `captured_against_commit` stamps the git SHA the doc
+  // was last verified against; the freshness sensor compares it to
+  // current HEAD.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS system_docs (
+      uid TEXT PRIMARY KEY,
+      project_path TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      owner TEXT,
+      tags TEXT NOT NULL DEFAULT '[]',
+      "references" TEXT NOT NULL DEFAULT '{}',
+      captured_against_commit TEXT,
+      last_verified_at INTEGER,
+      author TEXT NOT NULL DEFAULT 'human',
+      author_type TEXT NOT NULL DEFAULT 'human',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(project_path, slug)
+    );
+    CREATE INDEX IF NOT EXISTS idx_system_docs_project ON system_docs(project_path);
+    CREATE INDEX IF NOT EXISTS idx_system_docs_slug ON system_docs(slug);
+    CREATE INDEX IF NOT EXISTS idx_system_docs_updated ON system_docs(updated_at DESC);
+  `);
+
   // Phase 17.R — external references table
   db.run(`
     CREATE TABLE IF NOT EXISTS external_refs (

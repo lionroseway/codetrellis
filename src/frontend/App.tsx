@@ -12,6 +12,7 @@ import { PlanPanel } from './components/layout/PlanPanel';
 import { StatusBar } from './components/layout/StatusBar';
 import { MinimizedPlanChip } from './components/plan/MinimizedPlanChip';
 import { PlanWorkspaceShellV2 } from './components/plan/v2/PlanWorkspaceShellV2';
+import { SystemDocsPanel } from './components/system-docs/SystemDocsPanel';
 import { FolderPickerModal } from './components/FolderPickerModal';
 import { McpGuideModal } from './components/McpGuideModal';
 import { GettingStarted } from './components/GettingStarted';
@@ -193,6 +194,13 @@ export function App() {
                 <MainCanvas />
               </Allotment.Pane>
             </Allotment>
+          </div>
+        )}
+
+        {/* System Docs surface — full takeover when workspaceMode === 'docs'. */}
+        {workspaceMode === 'docs' && (
+          <div className="absolute inset-0 z-30 bg-background">
+            <SystemDocsPanel />
           </div>
         )}
 

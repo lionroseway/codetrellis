@@ -824,6 +824,15 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
       console.warn('[Scan] External pointer watcher failed to start:', err);
     }
 
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { indexProjectDocs, startSystemDocsWatcher } = require('./services/system-docs-service');
+      indexProjectDocs(projectPath);
+      startSystemDocsWatcher(projectPath);
+    } catch (err) {
+      console.warn('[Scan] System docs watcher failed to start:', err);
+    }
+
     return stats;
   } finally {
     scanInFlight = false;
@@ -2734,6 +2743,97 @@ app.get('/api/identity/git-defaults', (req, res) => {
   res.json(readGitIdentity(projectPath));
 });
 
+// --- CDev Phase 3.4 — System documentation REST surface ---
+//
+// Frontend reads / writes system docs via these. The MCP tools cover
+// the same surface for agents; both pipe through the same service.
+
+app.get('/api/system-docs', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const svc = require('./services/system-docs-service');
+  const projectPath = req.query.project as string | undefined;
+  const search = req.query.search as string | undefined;
+  if (!projectPath) {
+    res.status(400).json({ error: 'project query param required' });
+    return;
+  }
+  res.json(search ? svc.searchSystemDocs(projectPath, search) : svc.listSystemDocs(projectPath));
+});
+
+app.get('/api/system-docs/:uid', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const svc = require('./services/system-docs-service');
+  const doc = svc.getSystemDoc(req.params.uid);
+  if (!doc) { res.status(404).json({ error: 'not found' }); return; }
+  res.json(doc);
+});
+
+app.post('/api/system-docs', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const svc = require('./services/system-docs-service');
+  const { projectPath, title, body, owner, tags, references, slug } = req.body || {};
+  if (!projectPath || !title) {
+    res.status(400).json({ error: 'projectPath and title are required' });
+    return;
+  }
+  try {
+    const identity = getSettings().identity;
+    const author = identity.email || identity.displayName || 'human';
+    const doc = svc.createSystemDoc({
+      projectPath, title, body, owner, tags, references, slug,
+      author, authorType: 'human',
+    });
+    broadcast('system-doc-created', { uid: doc.uid, projectPath: doc.projectPath });
+    saveNow(() => exportDatabase());
+    res.json(doc);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.put('/api/system-docs/:uid', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const svc = require('./services/system-docs-service');
+  try {
+    const updated = svc.updateSystemDoc(req.params.uid, req.body || {});
+    if (!updated) { res.status(404).json({ error: 'not found' }); return; }
+    broadcast('system-doc-updated', { uid: updated.uid, projectPath: updated.projectPath });
+    saveNow(() => exportDatabase());
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.delete('/api/system-docs/:uid', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const svc = require('./services/system-docs-service');
+  const ok = svc.deleteSystemDoc(req.params.uid);
+  if (ok) {
+    broadcast('system-doc-removed', { uid: req.params.uid });
+    saveNow(() => exportDatabase());
+  }
+  res.json({ ok, uid: req.params.uid });
+});
+
+app.post('/api/system-docs/:uid/verify', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const svc = require('./services/system-docs-service');
+  const updated = svc.verifySystemDoc(req.params.uid);
+  if (!updated) { res.status(404).json({ error: 'not found' }); return; }
+  broadcast('system-doc-verified', { uid: updated.uid, capturedAgainstCommit: updated.capturedAgainstCommit });
+  saveNow(() => exportDatabase());
+  res.json(updated);
+});
+
+app.get('/api/system-docs/:uid/freshness', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const svc = require('./services/system-docs-service');
+  const report = svc.getFreshness(req.params.uid);
+  if (!report) { res.status(404).json({ error: 'not found' }); return; }
+  res.json(report);
+});
+
 // --- Global error handler (must be after all routes) ---
 // The 4-argument signature tells Express this is an error handler.
 // Catches synchronous throws in route handlers that slip past local
@@ -2804,6 +2904,14 @@ function rearmProjectWatchers(): void {
         startPointerWatcher(proj.path);
       } catch {
         // best-effort — pointers are only useful for cross-repo plans
+      }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { indexProjectDocs, startSystemDocsWatcher } = require('./services/system-docs-service');
+        indexProjectDocs(proj.path);
+        startSystemDocsWatcher(proj.path);
+      } catch {
+        // best-effort — docs are only present for projects that have adopted them
       }
       armed++;
     } catch (err) {

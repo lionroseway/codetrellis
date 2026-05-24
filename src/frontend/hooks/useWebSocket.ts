@@ -296,6 +296,22 @@ export function useWebSocket() {
               useChannelsStore.getState().onEventImported(payload?.uid, payload?.planUid);
             })();
           }
+          // --- System docs (CDev Phase 3.4) ---
+          if (type === 'system-doc-created' || type === 'system-doc-updated' ||
+              type === 'system-doc-verified' || type === 'system-doc-changed') {
+            (async () => {
+              const { useSystemDocsStore } = await import('../stores/system-docs-store');
+              useSystemDocsStore.getState().onDocChanged(payload?.uid);
+            })();
+          }
+          if (type === 'system-doc-removed') {
+            (async () => {
+              if (!payload?.uid) return;
+              const { useSystemDocsStore } = await import('../stores/system-docs-store');
+              useSystemDocsStore.getState().onDocRemoved(payload.uid);
+            })();
+          }
+
           if (type === 'channel-toast-elevated') {
             // Phase 2.3 — a routing rule with target: in-app-toast matched.
             const tone = (payload?.tone === 'warning' || payload?.tone === 'error') ? payload.tone : 'info';

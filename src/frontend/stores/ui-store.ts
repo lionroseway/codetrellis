@@ -14,15 +14,19 @@ export interface SelectedNodeMeta {
 }
 
 /**
- * Phase 14 §B — top-level layout mode. `'graph'` is the historical
- * canvas + bottom plan strip layout; `'plan'` is the full-canvas
- * three-region plan workspace (Spec rail | Tasks | Activity rail).
+ * Top-level layout mode.
+ *
+ *  - `'graph'` is the historical canvas + bottom plan strip layout.
+ *  - `'plan'` (Phase 14 §B) is the full-canvas three-region plan
+ *    workspace (Spec rail | Tasks | Activity rail).
+ *  - `'docs'` (CDev Phase 3.4) is the full-canvas system documentation
+ *    surface (Doc list | Rendered markdown).
  *
  * The mode is decoupled from `activePlan` so the user can switch back
  * to the graph without losing the active plan, and we can still pop
  * the workspace open when a plan is selected from the graph.
  */
-export type WorkspaceMode = 'graph' | 'plan';
+export type WorkspaceMode = 'graph' | 'plan' | 'docs';
 
 interface UiState {
   sidebarVisible: boolean;
