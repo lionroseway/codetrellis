@@ -3,9 +3,14 @@ import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import {
   EMPTY_PROJECT_CONFIG,
+  CHANNEL_EVENT_TYPES,
+  CHANNEL_EVENT_STATUSES,
   type ProjectConfig,
   type DefaultPlanVisibility,
   type AttachmentLocation,
+  type ChannelRoutingRule,
+  type ChannelEvent,
+  type ChannelRouteWhen,
 } from '../../shared/types';
 import { getSettings } from './settings-service';
 
@@ -73,6 +78,11 @@ export function getProjectConfig(projectRoot: string): ProjectConfig {
  * merged result.
  *
  * Writing the file always creates `.codetrellis/` if missing.
+ *
+ * `channels.routing` is replaced wholesale when present in the patch
+ * — array merging is rarely what callers want for routing rules
+ * (would silently double an entry on re-save). Callers wanting to
+ * append should read, push, write.
  */
 export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): ProjectConfig {
   const key = normaliseProjectRoot(projectRoot);
@@ -80,6 +90,12 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
 
   const next: ProjectConfig = {
     plans: { ...(current.plans ?? {}), ...(patch.plans ?? {}) },
+    channels: {
+      ...(current.channels ?? {}),
+      ...(patch.channels ?? {}),
+      // Routing rules replaced wholesale when present.
+      ...(patch.channels?.routing !== undefined ? { routing: patch.channels.routing } : {}),
+    },
     updatedAt: new Date().toISOString(),
   };
 
@@ -87,6 +103,9 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   // it should just be `{}` until an override is set.
   if (next.plans && Object.keys(next.plans).length === 0) {
     delete next.plans;
+  }
+  if (next.channels && Object.keys(next.channels).length === 0) {
+    delete next.channels;
   }
 
   saveProjectConfig(key, next);
@@ -133,6 +152,39 @@ export function getEffectiveDefaultVisibility(projectRoot: string): DefaultPlanV
 export function getEffectiveAttachmentLocation(projectRoot: string): AttachmentLocation {
   const projectOverride = getProjectConfig(projectRoot).plans?.attachmentLocation;
   return projectOverride ?? getSettings().plans.attachmentLocation;
+}
+
+// --- Channel routing (Phase 2.2) -------------------------------------------
+
+/**
+ * Return the channel routing rules configured for a project. Returns
+ * an empty array when nothing is configured. Disabled rules
+ * (`enabled: false`) are filtered out — callers see only what's live.
+ */
+export function listChannelRoutingRules(projectRoot: string): ChannelRoutingRule[] {
+  const cfg = getProjectConfig(projectRoot);
+  const rules = cfg.channels?.routing ?? [];
+  return rules.filter((r) => r.enabled !== false);
+}
+
+/**
+ * Match a channel event against the project's routing rules. Returns
+ * every rule whose `when` clause matches. Rules without `minAgeMs`
+ * (immediate triggers) are returned alongside time-based rules — the
+ * dispatcher decides which to fire now vs schedule.
+ */
+export function matchChannelRoutingRules(projectRoot: string, event: ChannelEvent): ChannelRoutingRule[] {
+  const rules = listChannelRoutingRules(projectRoot);
+  return rules.filter((r) => matches(r.when, event));
+}
+
+function matches(when: ChannelRouteWhen, event: ChannelEvent): boolean {
+  if (when.eventType && when.eventType !== event.eventType) return false;
+  if (when.status && when.status !== event.status) return false;
+  if (when.planUid && when.planUid !== event.planUid) return false;
+  if (when.itemUid && when.itemUid !== event.itemUid) return false;
+  // minAgeMs is checked by the dispatcher (timer), not by post-time matching.
+  return true;
 }
 
 // --- File watcher -----------------------------------------------------------
@@ -240,9 +292,82 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
     if (Object.keys(plansOut).length > 0) result.plans = plansOut;
   }
 
+  const channelsRaw = r.channels;
+  if (channelsRaw && typeof channelsRaw === 'object') {
+    const c = channelsRaw as Record<string, unknown>;
+    const channelsOut: NonNullable<ProjectConfig['channels']> = {};
+    if (Array.isArray(c.routing)) {
+      const rules: ChannelRoutingRule[] = [];
+      for (const item of c.routing) {
+        const rule = parseRoutingRule(item);
+        if (rule) rules.push(rule);
+      }
+      if (rules.length > 0) channelsOut.routing = rules;
+    }
+    if (Object.keys(channelsOut).length > 0) result.channels = channelsOut;
+  }
+
   if (typeof r.updatedAt === 'string') {
     result.updatedAt = r.updatedAt;
   }
 
   return result;
+}
+
+function parseRoutingRule(raw: unknown): ChannelRoutingRule | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+
+  const whenRaw = r.when;
+  const when: ChannelRouteWhen = {};
+  if (whenRaw && typeof whenRaw === 'object') {
+    const w = whenRaw as Record<string, unknown>;
+    if (typeof w.eventType === 'string' && (CHANNEL_EVENT_TYPES as readonly string[]).includes(w.eventType)) {
+      when.eventType = w.eventType as ChannelRouteWhen['eventType'];
+    }
+    if (typeof w.status === 'string' && (CHANNEL_EVENT_STATUSES as readonly string[]).includes(w.status)) {
+      when.status = w.status as ChannelRouteWhen['status'];
+    }
+    if (typeof w.planUid === 'string') when.planUid = w.planUid;
+    if (typeof w.itemUid === 'string') when.itemUid = w.itemUid;
+    if (typeof w.minAgeMs === 'number' && Number.isFinite(w.minAgeMs)) when.minAgeMs = w.minAgeMs;
+  }
+
+  const notifyRaw = r.notify;
+  if (!notifyRaw || typeof notifyRaw !== 'object') return null;
+  const n = notifyRaw as Record<string, unknown>;
+  if (n.target !== 'in-app-toast' && n.target !== 'webhook') return null;
+  const notify =
+    n.target === 'webhook'
+      ? (() => {
+          if (typeof n.url !== 'string' || !n.url) return null;
+          const out: { target: 'webhook'; url: string; headers?: Record<string, string> } = {
+            target: 'webhook',
+            url: n.url,
+          };
+          if (n.headers && typeof n.headers === 'object') {
+            const hs: Record<string, string> = {};
+            for (const [k, v] of Object.entries(n.headers as Record<string, unknown>)) {
+              if (typeof v === 'string') hs[k] = v;
+            }
+            if (Object.keys(hs).length > 0) out.headers = hs;
+          }
+          return out;
+        })()
+      : (() => {
+          const out: { target: 'in-app-toast'; tone?: 'info' | 'warning' | 'error'; sticky?: boolean } = {
+            target: 'in-app-toast',
+          };
+          if (n.tone === 'info' || n.tone === 'warning' || n.tone === 'error') out.tone = n.tone;
+          if (typeof n.sticky === 'boolean') out.sticky = n.sticky;
+          return out;
+        })();
+
+  if (!notify) return null;
+
+  const rule: ChannelRoutingRule = { when, notify };
+  if (typeof r.id === 'string') rule.id = r.id;
+  if (typeof r.description === 'string') rule.description = r.description;
+  if (typeof r.enabled === 'boolean') rule.enabled = r.enabled;
+  return rule;
 }
