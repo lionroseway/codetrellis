@@ -277,6 +277,26 @@ export function useWebSocket() {
             })();
           }
 
+          // --- Channel events (CDev Phase 1.3/1.4) ---
+          if (type === 'channel-event-posted') {
+            (async () => {
+              const { useChannelsStore } = await import('../stores/channels-store');
+              useChannelsStore.getState().onEventPosted(payload);
+            })();
+          }
+          if (type === 'channel-event-status-changed') {
+            (async () => {
+              const { useChannelsStore } = await import('../stores/channels-store');
+              useChannelsStore.getState().onEventStatusChanged(payload?.uid, payload?.status);
+            })();
+          }
+          if (type === 'channel-event-imported') {
+            (async () => {
+              const { useChannelsStore } = await import('../stores/channels-store');
+              useChannelsStore.getState().onEventImported(payload?.uid, payload?.planUid);
+            })();
+          }
+
           // --- Agent Presence Pane ---
           if (type === 'presence-card' || type === 'presence-acked' || type === 'presence-dismissed' || type === 'presence-input-prompt' || type === 'presence-reply') {
             (async () => {

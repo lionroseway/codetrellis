@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Allotment } from 'allotment';
-import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen } from 'lucide-react';
+import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle } from 'lucide-react';
 import { useUiStore } from '../../../stores/ui-store';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { useChannelsStore } from '../../../stores/channels-store';
 import { StatusBadge } from '../StatusBadge';
 import { PlanItemTree } from './PlanItemTree';
 import { PlanItemCanvas } from './PlanItemCanvas';
 import { PlanActivityDrawer } from './PlanActivityDrawer';
 import { PlanItemHistoryDrawer } from './PlanItemHistoryDrawer';
+import { ChannelPanel } from './ChannelPanel';
 import { HandoffButton } from './HandoffButton';
 import { DriftBadge } from './DriftIndicator';
 import { PlanReadinessRing } from './PlanReadinessRing';
@@ -35,6 +37,9 @@ export function PlanWorkspaceShellV2() {
   const splitView = useUiStore((s) => s.splitView);
   const toggleSplitView = useUiStore((s) => s.toggleSplitView);
   const activityDrawerOpen = usePlanItemsStore((s) => s.activityDrawerOpen);
+  const channelDrawerOpen = useChannelsStore((s) => s.drawerOpen);
+  const toggleChannelDrawer = useChannelsStore((s) => s.toggleDrawer);
+  const resetChannels = useChannelsStore((s) => s.reset);
 
   // Hydrate the V2 store whenever the active plan changes.
   const hydratePlan = usePlanItemsStore((s) => s.hydratePlan);
@@ -45,9 +50,10 @@ export function PlanWorkspaceShellV2() {
     if (!plan) return;
     if (activeStorePlanUid !== plan.uid) {
       resetForPlan(plan.uid);
+      resetChannels(plan.uid);
     }
     hydratePlan(plan.uid);
-  }, [plan?.uid, activeStorePlanUid, hydratePlan, resetForPlan]);
+  }, [plan?.uid, activeStorePlanUid, hydratePlan, resetForPlan, resetChannels]);
 
   // Esc minimizes (matches V1 behaviour from Phase 14.B).
   useEffect(() => {
@@ -143,6 +149,18 @@ export function PlanWorkspaceShellV2() {
           <ActivityIcon size={12} />
           Activity
         </button>
+        <button
+          onClick={toggleChannelDrawer}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            channelDrawerOpen
+              ? 'border-accent/30 bg-accent/10 text-accent'
+              : 'border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+          }`}
+          title="Toggle channel — peer-to-peer team coordination events"
+        >
+          <MessageCircle size={12} />
+          Channel
+        </button>
       </div>
 
       {/* Three regions */}
@@ -157,6 +175,11 @@ export function PlanWorkspaceShellV2() {
           {activityDrawerOpen && (
             <Allotment.Pane preferredSize={320} minSize={240} maxSize={500}>
               <PlanActivityDrawer />
+            </Allotment.Pane>
+          )}
+          {channelDrawerOpen && (
+            <Allotment.Pane preferredSize={340} minSize={260} maxSize={520}>
+              <ChannelPanel planUid={plan.uid} />
             </Allotment.Pane>
           )}
         </Allotment>

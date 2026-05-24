@@ -22,6 +22,8 @@ import * as taskAttachmentsService from './services/task-attachments-service';
 // Phase 15 §C — unified Object/Action surface backing the V2 frontend.
 import * as planItemService from './services/plan-item-service';
 import * as planEventService from './services/plan-event-service';
+import * as channelEventService from './services/channel-event-service';
+import { exportChannelEvent } from './services/channel-event-file-service';
 import {
   recordProjectOpen,
   listRecentProjects,
@@ -1681,6 +1683,116 @@ app.get('/api/plans/:planUid/timeline', (req, res) => {
     eventTypes: kinds as any,
     limit: Number.isFinite(limit) ? limit : undefined,
   }));
+});
+
+// --- Channel events (CDev Phase 1.3 / 1.4) ---------------------------------
+//
+// HTTP surface for the frontend. Mirrors the MCP tools but with attribution
+// derived from settings.identity (frontend users are always humans here —
+// agent posts go via MCP).
+
+/** List channel events for a plan. */
+app.get('/api/plans/:planUid/channels', (req, res) => {
+  const sinceMs = typeof req.query.since_ms === 'string' ? Number(req.query.since_ms) : undefined;
+  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+  const eventTypesRaw = req.query.event_types;
+  const statusRaw = req.query.status;
+  const eventTypes = typeof eventTypesRaw === 'string' ? eventTypesRaw.split(',').filter(Boolean) : undefined;
+  const status = typeof statusRaw === 'string' ? statusRaw.split(',').filter(Boolean) : undefined;
+  const itemUid = typeof req.query.item_uid === 'string' ? req.query.item_uid : undefined;
+  try {
+    res.json(channelEventService.listChannelEvents(req.params.planUid, {
+      sinceMs: Number.isFinite(sinceMs) ? sinceMs : undefined,
+      eventTypes: eventTypes as any,
+      status: status as any,
+      itemUid,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    }));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Get a full thread (root + descendants, chronological). */
+app.get('/api/channels/:eventUid/thread', (req, res) => {
+  res.json(channelEventService.listThread(req.params.eventUid));
+});
+
+/** Post a new channel event from the frontend (human author). */
+app.post('/api/plans/:planUid/channels', (req, res) => {
+  const { event_type, message, item_uid, attempted, options, responds_to } = req.body || {};
+  if (!event_type || !message) {
+    res.status(400).json({ error: 'event_type and message are required' });
+    return;
+  }
+  try {
+    const identity = getSettings().identity;
+    const author = identity.email || 'human';
+    const payload: any = { message };
+    if (Array.isArray(attempted) && attempted.length) payload.attempted = attempted;
+    if (Array.isArray(options) && options.length) payload.options = options;
+
+    const created = channelEventService.postChannelEvent({
+      planUid: req.params.planUid,
+      itemUid: item_uid ?? null,
+      eventType: event_type,
+      payload,
+      author,
+      authorType: 'human',
+      agentModel: null,
+      respondsTo: responds_to ?? null,
+    });
+
+    // Auto-export when the plan is shared (linked to disk).
+    try {
+      const plan = planService.getPlan(created.planUid);
+      if (plan && getLinkedPlanDir(created.planUid, plan.projectPath)) {
+        exportChannelEvent(created, plan.projectPath);
+      }
+    } catch (err) {
+      console.warn('[Channels] auto-export failed:', err);
+    }
+
+    broadcast('channel-event-posted', {
+      uid: created.uid,
+      planUid: created.planUid,
+      itemUid: created.itemUid,
+      eventType: created.eventType,
+      respondsTo: created.respondsTo,
+    });
+
+    res.json(created);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Change channel event status (resolve / dismiss / reopen). */
+app.post('/api/channels/:eventUid/status', (req, res) => {
+  const { status } = req.body || {};
+  if (!status) {
+    res.status(400).json({ error: 'status is required' });
+    return;
+  }
+  try {
+    const updated = channelEventService.setChannelEventStatus(req.params.eventUid, status);
+    try {
+      const plan = planService.getPlan(updated.planUid);
+      if (plan && getLinkedPlanDir(updated.planUid, plan.projectPath)) {
+        exportChannelEvent(updated, plan.projectPath);
+      }
+    } catch (err) {
+      console.warn('[Channels] auto-export failed:', err);
+    }
+    broadcast('channel-event-status-changed', {
+      uid: updated.uid,
+      planUid: updated.planUid,
+      status: updated.status,
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 /** Create an item (Object or Action). */
