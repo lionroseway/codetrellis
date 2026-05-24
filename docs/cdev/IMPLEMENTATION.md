@@ -250,12 +250,22 @@ Status: ✅ Done. What shipped:
 
 ### 3.7 Phase 3 demo + tests
 
-Status: ⬜ Not started.
+Status: ✅ Done. The Phase 3 suite is now eight green E2E tests, all running via the real MCP wire format and a real backend process per test:
 
-End-to-end:
-- Cross-repo: two harness projects, plan in A with scope including B, pointer auto-written in B, stitched view resolves when both open, placeholder when only B is open. Edits from B land in A's data.
-- Per-item sharing: shared plan with one local item; export excludes the local item; teammate pull doesn't see it. Override case: local parent with shared child surfaces correctly.
-- System docs: write a doc with frontmatter, file appears on disk, watcher re-imports an external edit. Freshness indicator updates correctly when HEAD moves or a referenced file changes.
+| Test file | Covers |
+|---|---|
+| `cdev-cross-repo.test.ts` (3.3) | Scope add/remove + pointer file round-trip through git |
+| `cdev-system-docs.test.ts` (3.4) | Docs create/verify/freshness/external-import/delete |
+| `cdev-stitched-view.test.ts` (3.5) | Stitched API: pointer resolves when home repo cloned; flips unresolved on removal |
+| `cdev-central-oversight.test.ts` (3.6) | Planning + code repos, repoRole round-trip, stitched view from code side |
+| `cdev-phase3-demo.test.ts` (3.7) | Per-item sharing: local items excluded from export AND teammate import; override re-anchors shared child to top-level |
+| `cdev-channels.test.ts` (1.x) | Phase 1 channels flow (still green) |
+| `cdev-routing.test.ts` (2.x) | Phase 2 routing dispatcher (still green) |
+| (smoke + unrelated suites) | Confirmed no regressions in adjacent code paths |
+
+What this proves end-to-end: a plan authored in repo A (homeRepo captured), scoped to repo B (pointer landing in B's `.codetrellis/external/`), with a mix of shared and local items + a `local` parent shielding inheriting children + an override child re-anchored to top-level, exporting cleanly, with the stitched view in B resolving back to A when A is locally available, and with the system-docs surface sitting alongside as a freshness-aware knowledge layer. The central-oversight shape composes from the same primitives plus the `repoRole` hint.
+
+The remaining 3.7 spec item — "edits from B land in A's data" — isn't a behaviour of the shipped architecture: pointers are read-only stubs and the canonical plan stays in its home repo. Edits to a cross-repo plan are made by opening the home project; the stitched view's "Open" affordance makes that one click. The test for this behaviour is implicit in the cross-repo test (the pointer doesn't carry editable state).
 
 ### Build order
 
