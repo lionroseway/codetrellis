@@ -118,12 +118,23 @@ export function register(server: McpServer, deps: ToolDeps): void {
           })
           .optional()
           .describe('Channel-related project-level overrides.'),
+        repoRole: z
+          .enum(['planning', 'code', 'mixed'])
+          .optional()
+          .describe(
+            'CDev Phase 3.6 — declare this repo\'s role in a multi-repo setup. ' +
+              '"planning" = this is the canonical home for plans (code may be minimal). ' +
+              '"code" = this repo ships product code; plans live elsewhere (cross-repo pointers carry the link). ' +
+              '"mixed" / absent = the historical default; plans and code coexist here. ' +
+              'The UI uses this to soften "no plans here yet" nudges in code repos that delegate planning elsewhere.',
+          ),
       },
     },
-    async ({ project_root, plans, channels }) => {
+    async ({ project_root, plans, channels, repoRole }) => {
       const patch: any = {};
       if (plans) patch.plans = plans;
       if (channels) patch.channels = channels;
+      if (repoRole !== undefined) patch.repoRole = repoRole;
       const updated = deps.projectConfigService.updateProjectConfig(project_root, patch);
       deps.broadcast('project-config-changed', { projectRoot: project_root, config: updated });
       return {

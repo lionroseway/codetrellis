@@ -96,6 +96,8 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
       // Routing rules replaced wholesale when present.
       ...(patch.channels?.routing !== undefined ? { routing: patch.channels.routing } : {}),
     },
+    // Phase 3.6 — repoRole is a flat scalar; patch wins when present.
+    repoRole: patch.repoRole !== undefined ? patch.repoRole : current.repoRole,
     updatedAt: new Date().toISOString(),
   };
 
@@ -106,6 +108,9 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   }
   if (next.channels && Object.keys(next.channels).length === 0) {
     delete next.channels;
+  }
+  if (next.repoRole === undefined) {
+    delete next.repoRole;
   }
 
   saveProjectConfig(key, next);
@@ -305,6 +310,12 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
       if (rules.length > 0) channelsOut.routing = rules;
     }
     if (Object.keys(channelsOut).length > 0) result.channels = channelsOut;
+  }
+
+  // Phase 3.6 — repo role hint. Defaults to absent ("mixed"); the
+  // UI treats absence as "mixed" too.
+  if (r.repoRole === 'planning' || r.repoRole === 'code' || r.repoRole === 'mixed') {
+    result.repoRole = r.repoRole;
   }
 
   if (typeof r.updatedAt === 'string') {

@@ -104,9 +104,31 @@ export interface ProjectChannelsConfig {
   routing?: ChannelRoutingRule[];
 }
 
+/**
+ * Phase 3.6 — repo role hint for the central-oversight deployment
+ * shape.
+ *
+ * In a multi-repo setup, one repo can act as the *planning* hub (it
+ * holds the canonical plan manifests; its own code is minimal or
+ * non-existent) while sibling *code* repos carry pointer files back
+ * to the plans they participate in. A code repo with `repoRole:
+ * "code"` would otherwise nag the user with "no plans here yet" — the
+ * hint suppresses that nudge and points the UI at the planning repo's
+ * stitched view instead.
+ *
+ * Absent / "mixed" preserves the historical behaviour (both plans
+ * and code authored here).
+ */
+export type ProjectRepoRole = 'planning' | 'code' | 'mixed';
+
 export interface ProjectConfig {
   plans?: ProjectPlansConfig;
   channels?: ProjectChannelsConfig;
+  /**
+   * Phase 3.6 — hint about this repo's role in a multi-repo setup.
+   * UI-only signal; nothing is gated on it. See ProjectRepoRole.
+   */
+  repoRole?: ProjectRepoRole;
   /** ISO timestamp of last save. Updated automatically. */
   updatedAt?: string;
 }

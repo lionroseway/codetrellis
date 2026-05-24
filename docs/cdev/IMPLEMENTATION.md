@@ -239,9 +239,14 @@ Status: ✅ Done. What shipped:
 
 ### 3.6 Central-oversight deployment shape
 
-Status: ⬜ Not started.
+Status: ✅ Done. What shipped:
 
-Mostly a docs note in [03-deployment-shapes.md](03-deployment-shapes.md) with a worked example: a planning repo holds the manifest; code repos carry pointers back. Confirm the mechanism works with no special-case code. Maybe add a single `repoRole` hint in `.codetrellis/config.json` to suppress "no plans here?" nudges for code repos that delegate planning elsewhere.
+- Confirmed: the central-oversight shape works on the existing Phase 3.3 (scope + pointer files) + 3.5 (stitched view) machinery with no special-case backend code. The hub is a normal CodeTrellis project; the spokes are normal CodeTrellis projects with pointer files.
+- New `ProjectRepoRole` ('planning' | 'code' | 'mixed') hint in `ProjectConfig`. Parsed + round-trips through `.codetrellis/config.json`. Patchable via `updateProjectConfig` (with `delete` semantics when set to undefined). MCP tool `update_project_config` accepts the new field.
+- REST endpoint `GET /api/project-config?project=<path>` exposes the parsed config to the frontend.
+- Frontend uses the hint to soften the empty-state copy in `PlanList`: code repos that declare `repoRole: "code"` see a "plans live in another repo" message instead of the default "create your first plan" CTA. The hint is purely advisory — nothing is gated on it.
+- Worked example with real commands added to [03-deployment-shapes.md §Shape 3](03-deployment-shapes.md) covering setup (planning repo + code repos), commit/push flow, permission model, and why no special-case transport is needed.
+- E2E coverage at `tests/e2e/cdev-central-oversight.test.ts` boots a planning repo + a code repo, sets `repoRole` on both via MCP, creates a plan in the planning repo, scopes it into the code repo's `.codetrellis/external/`, and confirms the stitched view from the code-repo side resolves the pointer back to the planning repo. Also verifies both `repoRole` values round-trip through both the on-disk config file and the new REST endpoint.
 
 ### 3.7 Phase 3 demo + tests
 

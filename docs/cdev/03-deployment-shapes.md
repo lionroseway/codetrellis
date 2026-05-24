@@ -32,6 +32,52 @@ A dedicated planning repository (for example, `org/cdev-plans`) holds plans for 
 
 The central-oversight shape provides a strong security and audit posture: the boundary between "what the organisation should see" and "what stays with the team" is enforced at the storage layer, not by application logic.
 
+### Worked example
+
+A four-repo setup using the same machinery that powers Shape 2:
+
+```
+org/cdev-plans            # planning repo (Shape 3 hub)
+├── .codetrellis/
+│   ├── config.json        ──┐  { "repoRole": "planning" }
+│   └── plans/             ──┘  canonical plans, one dir per plan
+│       ├── ship-2fa-<uid>/
+│       │   ├── plan.yaml        # scope: [api-svc, web-app, mobile-app]
+│       │   └── items/...
+
+org/api-svc               # code repo
+├── .codetrellis/
+│   ├── config.json        ──┐  { "repoRole": "code" }
+│   └── external/          ──┘  pointer files only
+│       └── ship-2fa-<uid>.yaml  # planUid + homeRepo
+
+org/web-app               # code repo
+├── .codetrellis/
+│   ├── config.json        ──┐  { "repoRole": "code" }
+│   └── external/          ──┘
+│       └── ship-2fa-<uid>.yaml
+
+org/mobile-app            # code repo
+├── .codetrellis/
+│   ├── config.json        ──┐  { "repoRole": "code" }
+│   └── external/          ──┘
+│       └── ship-2fa-<uid>.yaml
+```
+
+**Setup steps (real commands):**
+
+1. **Create the planning repo.** `git init org/cdev-plans` and commit a `.codetrellis/config.json` with `{"repoRole": "planning"}`.
+2. **Open it in CodeTrellis** and author a plan — the plan picks up the planning repo's origin URL as its `homeRepo` automatically (Phase 3.3).
+3. **Scope to the participating code repos.** From the planning side, call `add_plan_scope` for each code repo's origin URL, passing the local clone path as `pointer_project_root`. This writes the pointer file into each repo's `.codetrellis/external/`.
+4. **Each code repo opts in.** In each `org/<code-repo>`, commit `.codetrellis/config.json` with `{"repoRole": "code"}`. This softens the "no plans here yet" copy in the app and signals to the team that plans live elsewhere.
+5. **Commit and push.** The pointer files travel via normal PR review. Any teammate who clones a code repo sees the cross-repo plan in the stitched view as soon as they also clone (or have already cloned) the planning repo.
+
+**Permission model:** access to the planning repo is access to the canonical plans. Access to a code repo carries only the pointer — title, status, the human-readable contribution note. A reviewer-only role can be granted to leadership by giving read access to `org/cdev-plans` without granting any code-repo access at all.
+
+**Why this works without special-case code:** the central-oversight shape is what the Phase 3.3 + 3.5 mechanisms already produce when you compose them. No new transport. No new ACL layer. The hub is a normal CodeTrellis project that happens to have a `repoRole: "planning"` hint and no source code; the spokes are normal CodeTrellis projects that happen to have a `repoRole: "code"` hint and an `.codetrellis/external/` directory. The deployment shape is a documentation pattern over the existing primitives.
+
+The `repoRole` hint is **advisory** — nothing is gated on it. Treat it as a label that helps the app and your teammates read the room. A repo with no hint behaves identically to one tagged `"mixed"`: plans and code coexist there.
+
 ## Choosing a shape
 
 | Question | Suggests |

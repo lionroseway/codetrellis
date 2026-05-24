@@ -1328,6 +1328,20 @@ app.get('/api/plans/reconcile', (req, res) => {
   res.json(reconcilePlanState(projectRoot));
 });
 
+// CDev Phase 3.6 — read the per-project config (just `repoRole` for
+// the UI today; more fields will land here as they're added).
+app.get('/api/project-config', (req, res) => {
+  const projectRoot = req.query.project as string | undefined;
+  if (!projectRoot) { res.status(400).json({ error: 'project query param required' }); return; }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getProjectConfig } = require('./services/project-config-service');
+    res.json(getProjectConfig(projectRoot));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // CDev Phase 3.5 — cross-repo stitched plan list. Returns the
 // project's local plans alongside external pointers, with each
 // pointer tagged "resolved" when its homeRepo matches a recent

@@ -40,6 +40,10 @@ export function PlanList() {
   const [showReconcile, setShowReconcile] = useState(false);
   const [pruning, setPruning] = useState(false);
   const [confirmPrune, setConfirmPrune] = useState(false);
+  // CDev Phase 3.6 — soften the "no plans" nudge when the repo
+  // declares repoRole: "code" in its project config (plans live
+  // elsewhere in this deployment).
+  const [repoRole, setRepoRole] = useState<'planning' | 'code' | 'mixed' | null>(null);
 
   useEffect(() => {
     fetchPlans(root || undefined);
@@ -54,6 +58,17 @@ export function PlanList() {
       .then((dirs) => setDiscovered(Array.isArray(dirs) ? dirs : []))
       .catch(() => setDiscovered([]));
   }, [root, plans.length]);
+
+  // CDev Phase 3.6 — fetch the project's repoRole so the empty
+  // state can shift from "create your first plan" to "plans live
+  // in the planning repo" when this is a code-only repo.
+  useEffect(() => {
+    if (!root) { setRepoRole(null); return; }
+    fetch(`/api/project-config?project=${encodeURIComponent(root)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => setRepoRole(cfg?.repoRole ?? null))
+      .catch(() => setRepoRole(null));
+  }, [root]);
 
   const handleImport = async (planDir: string) => {
     setImporting(planDir);
@@ -324,7 +339,7 @@ export function PlanList() {
         </div>
       )}
 
-      {plans.length === 0 && unimportedDirs.length === 0 && (
+      {plans.length === 0 && unimportedDirs.length === 0 && repoRole !== 'code' && (
         <div className="flex flex-col items-center gap-4 py-9 text-foreground-subtle text-[13px] rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015]">
           <ClipboardList size={26} />
           <div className="text-center space-y-1.5 px-4">
@@ -340,6 +355,24 @@ export function PlanList() {
           >
             <Plus size={13} /> Create your first plan
           </button>
+        </div>
+      )}
+
+      {/* CDev Phase 3.6 — code repos that delegate planning elsewhere
+          get the softer copy. Pointers (rendered by CrossRepoSection)
+          point at the planning repo; we don't push "create your first
+          plan" here because that's not how the team works. */}
+      {plans.length === 0 && unimportedDirs.length === 0 && repoRole === 'code' && (
+        <div className="flex flex-col items-center gap-3 py-7 text-foreground-subtle text-[13px] rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015]">
+          <ClipboardList size={22} />
+          <div className="text-center space-y-1.5 px-4">
+            <p className="text-foreground text-[13.5px] font-medium">No local plans</p>
+            <p className="text-[12px] text-foreground-muted leading-relaxed max-w-sm">
+              This repo declares <code className="font-mono bg-white/[0.06] px-1 rounded">repoRole: "code"</code> —
+              plans live in another repo and reach this one via pointer files.
+              Look for cross-repo plans below; open the planning repo to author new work.
+            </p>
+          </div>
         </div>
       )}
 
