@@ -301,9 +301,15 @@ export function useWebSocket() {
             const tone = (payload?.tone === 'warning' || payload?.tone === 'error') ? payload.tone : 'info';
             const sticky = !!payload?.sticky;
             const ev = payload?.event ?? {};
+            // Fallback title composition (when the rule has no description):
+            // "<eventType> · <author>" reads naturally — "stuck · maria@x.com"
+            // is more useful than the bland "Channel: stuck".
+            const fallbackTitle = ev.eventType
+              ? (ev.author ? `${ev.eventType} · ${ev.author}` : `Channel: ${ev.eventType}`)
+              : 'Channel event';
             useToastStore.getState().addToast({
               type: tone as 'info' | 'warning' | 'error',
-              title: payload?.description || `Channel: ${ev.eventType ?? 'event'}`,
+              title: payload?.description || fallbackTitle,
               message: typeof ev?.payload?.message === 'string' ? ev.payload.message : undefined,
               duration: sticky ? 0 : 8000,
             });

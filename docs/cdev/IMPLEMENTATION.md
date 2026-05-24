@@ -217,6 +217,14 @@ Screenshot capture in the dev server hangs (browser is not under our control); v
 - `need-decision` shows an "options" textarea; one-per-line splits into the array.
 - Item anchor dropdown appears when plan items exist; choosing one sends `item_uid` and the event renders with the anchor on read-back.
 - After post, the message + extra fields clear but the selected type + anchor persist (common to post several events of the same shape).
+- Empty-state copy mentions all six types (no longer says "MVP surfaces three").
+
+### Phase 2 polish (post-tester)
+
+- Reply affordance offers a type picker (steer / weigh-in / handing-off / need-context); placeholder text and submission honour the choice.
+- In-app-toast fallback title composes as `<eventType> · <author>` when the rule has no description (reads naturally; matches the "stuck · maria@x.com" form).
+- `get_project_config` description now states explicitly that the effective surface only includes settings with a per-user counterpart; `channels.routing` is project-only and lives under `projectConfig.channels.routing`.
+- Long-lived SSE sessions stay attributed: heartbeat now fires every 30s from the SSE connection itself (not just on tool calls). Agents that go quiet for minutes don't lose their `agent-type`/`model` attribution on the next post.
 
 ### Phase 1.4 — Channel UI panel
 

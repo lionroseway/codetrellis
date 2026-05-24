@@ -21,10 +21,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Read the per-project config at <projectRoot>/.codetrellis/config.json. ' +
-        'Returns the project-level overrides (currently: plan default visibility, attachment location) ' +
-        'and the effective values after resolving precedence per-project > per-user. ' +
-        'Use this to see what conventions the team has agreed on for the project, and how they ' +
-        'differ from your per-user defaults.',
+        'Returns the raw projectConfig and the effective values after resolving precedence per-project > per-user. ' +
+        'The effective surface only covers settings with a per-user counterpart (today: plans.{defaultVisibility,attachmentLocation}). ' +
+        'channels.routing has no per-user layer to merge against and is therefore project-only — read it from projectConfig.channels.routing directly. ' +
+        'Use this to see what conventions the team has agreed on for the project, and how they differ from your per-user defaults.',
       inputSchema: {
         project_root: z.string().describe(
           'Absolute path to the project root. The config is read from <project_root>/.codetrellis/config.json.',

@@ -1,11 +1,12 @@
 /**
- * CDev Phase 1.4 — Channel panel (MVP).
+ * CDev Phase 1.4 / 2.1 — Channel panel.
  *
  * Per-plan peer-to-peer event log. Both humans (the local user, posting
  * via this panel) and agents (via MCP) can post events; both can
- * respond. Six event types in scope long-term; this MVP surfaces the
- * three highest-value ones — `stuck`, `steer`, `weigh-in` — and renders
- * the rest read-only when they arrive from MCP.
+ * respond. All six event types are composable: Ask side (stuck,
+ * need-decision, need-context) and Offer side (steer, weigh-in,
+ * handing-off). Type-specific fields (`attempted`, `options`) appear
+ * inline. Replies under an open root let the user pick any Offer type.
  *
  * State lives in channels-store; live updates from the WS hook.
  */
@@ -128,7 +129,7 @@ export function ChannelPanel({ planUid }: { planUid: string }) {
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
         {threads.length === 0 && !loading && (
           <div className="text-[12px] text-foreground-subtle px-2 py-4">
-            Channels are empty. Post a stuck / steer / weigh-in below to start the conversation, or wait for an agent to post.
+            Channels are empty. Use the composer above to post an event — Ask side (stuck / need-decision / need-context) or Offer side (steer / weigh-in / handing-off) — or wait for an agent to post via MCP.
           </div>
         )}
         {threads.map(({ root, descendants }) => (
@@ -399,6 +400,12 @@ function ReplyShortcut({ rootUid }: { rootUid: string }) {
   const posting = useChannelsStore((s) => s.posting);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
+  // Replies are usually Offer-side responses, but the user picks the
+  // specific shape — most often `steer`, sometimes `weigh-in` when
+  // adding perspective, occasionally `handing-off` or `need-context`
+  // when escalating. Default is `steer` since stuck/need-decision is
+  // the most common root to reply to.
+  const [replyType, setReplyType] = useState<ChannelEventType>('steer');
 
   if (!open) {
     return (
@@ -415,7 +422,7 @@ function ReplyShortcut({ rootUid }: { rootUid: string }) {
   const submit = async () => {
     if (!text.trim()) return;
     const created = await post({
-      eventType: 'steer',
+      eventType: replyType,
       message: text.trim(),
       respondsTo: rootUid,
     });
@@ -425,33 +432,59 @@ function ReplyShortcut({ rootUid }: { rootUid: string }) {
     }
   };
 
+  const REPLY_TYPES: ChannelEventType[] = ['steer', 'weigh-in', 'handing-off', 'need-context'];
+
   return (
-    <div className="ml-3 mt-1 flex gap-1">
-      <input
-        type="text"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); submit(); }
-          if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
-        }}
-        placeholder="Reply with a steer…"
-        autoFocus
-        className="flex-1 bg-[#070810] border border-white/[0.06] rounded px-2 py-1 text-[11.5px] text-foreground placeholder:text-foreground-subtle focus:border-accent/40 focus:outline-none"
-      />
-      <button
-        onClick={submit}
-        disabled={!text.trim() || posting}
-        className="px-2 py-0.5 text-[10.5px] rounded bg-accent/20 text-accent border border-accent/30 disabled:opacity-40"
-      >
-        Post
-      </button>
-      <button
-        onClick={() => setOpen(false)}
-        className="px-1.5 py-0.5 text-[10.5px] rounded text-foreground-subtle hover:bg-white/[0.05]"
-      >
-        Cancel
-      </button>
+    <div className="ml-3 mt-1 flex flex-col gap-1">
+      <div className="flex items-center gap-1">
+        {REPLY_TYPES.map((t) => {
+          const meta = EVENT_META[t];
+          const Icon = meta.Icon;
+          const active = replyType === t;
+          return (
+            <button
+              key={t}
+              onClick={() => setReplyType(t)}
+              title={meta.helper}
+              className={`flex items-center gap-1 px-1.5 py-0.5 text-[10.5px] rounded transition-colors ${
+                active
+                  ? 'bg-white/[0.08] text-foreground font-medium'
+                  : 'text-foreground-subtle hover:text-foreground hover:bg-white/[0.04]'
+              }`}
+            >
+              <Icon size={10} className={active ? meta.tint : ''} />
+              {meta.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-1">
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+          }}
+          placeholder={`Reply with a ${EVENT_META[replyType].label.toLowerCase()}…`}
+          autoFocus
+          className="flex-1 bg-[#070810] border border-white/[0.06] rounded px-2 py-1 text-[11.5px] text-foreground placeholder:text-foreground-subtle focus:border-accent/40 focus:outline-none"
+        />
+        <button
+          onClick={submit}
+          disabled={!text.trim() || posting}
+          className="px-2 py-0.5 text-[10.5px] rounded bg-accent/20 text-accent border border-accent/30 disabled:opacity-40"
+        >
+          Post
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          className="px-1.5 py-0.5 text-[10.5px] rounded text-foreground-subtle hover:bg-white/[0.05]"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

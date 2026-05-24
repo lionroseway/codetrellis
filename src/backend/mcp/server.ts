@@ -340,7 +340,20 @@ export async function startMcpServer(): Promise<void> {
         : 'mcp-client';
       sessionService.registerSession(sessionId, inferredAgentType);
 
+      // SSE-driven keep-alive (Phase 2 tester finding): without this,
+      // a connected agent that doesn't call any tool for >60s gets
+      // swept by cleanStaleSessions and a subsequent reconnect lands
+      // a generic mcp-client session, losing the agent-type/model
+      // attribution. Bumping last_seen every 30s while the connection
+      // is open is sufficient — the sweep runs on the same cadence so
+      // we never miss a window. Per-connection timer cleared on close.
+      const keepAlive = setInterval(() => {
+        try { sessionService.heartbeat(sessionId); } catch { /* ignore */ }
+      }, 30_000);
+      if (typeof keepAlive.unref === 'function') keepAlive.unref();
+
       res.on('close', () => {
+        clearInterval(keepAlive);
         connectedTransports.delete(sessionId);
         const sessionServer = connectedServers.get(sessionId);
         if (sessionServer) {
