@@ -471,7 +471,7 @@ Reference: [04 — Multi-Device Continuity and Team Collaboration](04-multi-devi
 
 ### 6.1 Git-projected team activity feed
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 A "what happened this week" surface drawn entirely from git history of the `.codetrellis/` directory. Not a replacement for the DB-driven `plan_events` (which tracks in-session structural mutations) — a complement that shows team-level activity that survived into commits.
 
@@ -483,7 +483,7 @@ A "what happened this week" surface drawn entirely from git history of the `.cod
 
 ### 6.2 Per-plan history rail
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 View the plan as it stood at any historical commit, rendered as plan UI rather than raw diff. This is the "time machine" for plans.
 
@@ -493,7 +493,7 @@ View the plan as it stood at any historical commit, rendered as plan UI rather t
 
 ### 6.3 Decision archaeology
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 "Why did we choose this approach?" answered by finding the commit where a decision was recorded and showing the plan's full state at that moment.
 
@@ -503,7 +503,7 @@ Status: ⬜ Not started.
 
 ### 6.4 Conflict resolution UI
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 When two branches edit the same plan and produce a git merge conflict, the application resolves them at the field level rather than dumping the user into raw conflict markers.
 
@@ -515,7 +515,7 @@ Reference: [04 — Multi-Device Continuity and Team Collaboration § Conflict re
 
 ### 6.5 Freeze periods
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 A governance primitive: mark a project as frozen for non-critical work during a defined period (release week, incident response, etc.).
 
@@ -528,7 +528,7 @@ Reference: [13 — Use Cases § A team operates under a freeze period](13-use-ca
 
 ### 6.6 Phase 6 demo + tests
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 Demo flow:
 1. A project with several commits touching plans. The team activity feed shows recent changes attributed to teammates.

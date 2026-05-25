@@ -167,6 +167,20 @@ export const SENSOR_DEFAULTS = {
   stuck: { enabled: false, repetitionThreshold: 8, errorLoopThreshold: 5, idleMinutes: 15 },
 } as const;
 
+/** Phase 6.5 — freeze-period governance. */
+export interface FreezeConfig {
+  /** Whether the freeze is currently active. */
+  active: boolean;
+  /** Human-readable reason (e.g., "Release v2.3 freeze"). */
+  reason?: string;
+  /** ISO timestamp when the freeze started. */
+  since?: string;
+  /** ISO timestamp when the freeze ends (auto-expires). Null = indefinite. */
+  until?: string | null;
+  /** Plan UIDs exempt from the freeze (can still be worked on). */
+  allowedPlanUids?: string[];
+}
+
 export interface ProjectConfig {
   plans?: ProjectPlansConfig;
   channels?: ProjectChannelsConfig;
@@ -177,6 +191,8 @@ export interface ProjectConfig {
    * UI-only signal; nothing is gated on it. See ProjectRepoRole.
    */
   repoRole?: ProjectRepoRole;
+  /** Phase 6.5 — freeze-period governance. */
+  freeze?: FreezeConfig;
   /** ISO timestamp of last save. Updated automatically. */
   updatedAt?: string;
 }

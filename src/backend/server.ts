@@ -2862,6 +2862,114 @@ app.post('/api/sync/import', (_req, res) => {
   res.json(result);
 });
 
+// --- CDev Phase 6 — Team history, conflict resolution, freeze periods ---
+
+app.get('/api/team-activity', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getTeamActivity } = require('./services/git-activity-service');
+  const projectPath = req.query.project as string | undefined;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const since = req.query.since as string | undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+  const entries = getTeamActivity({ projectRoot: projectPath, since, limit });
+  res.json({ total: entries.length, entries });
+});
+
+app.get('/api/plan-history/:planSlug', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getPlanCommitHistory } = require('./services/git-activity-service');
+  const projectPath = req.query.project as string | undefined;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+  const since = req.query.since as string | undefined;
+  const commits = getPlanCommitHistory(projectPath, req.params.planSlug, { limit, since });
+  res.json({ total: commits.length, commits });
+});
+
+app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getPlanAtCommit } = require('./services/plan-history-service');
+  const projectPath = req.query.project as string | undefined;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const state = getPlanAtCommit(projectPath, req.params.planSlug, req.params.commitHash);
+  if (!state) { res.status(404).json({ error: 'Plan or commit not found' }); return; }
+  res.json(state);
+});
+
+app.get('/api/plan-history/:planSlug/diff', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { diffPlanBetweenCommits } = require('./services/plan-history-service');
+  const projectPath = req.query.project as string | undefined;
+  const base = req.query.base as string | undefined;
+  const head = req.query.head as string | undefined;
+  if (!projectPath || !base || !head) {
+    res.status(400).json({ error: 'project, base, and head query params required' });
+    return;
+  }
+  const diff = diffPlanBetweenCommits(projectPath, req.params.planSlug, base, head);
+  res.json(diff);
+});
+
+app.get('/api/plan-history/:planSlug/search', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { searchPlanHistory } = require('./services/git-activity-service');
+  const projectPath = req.query.project as string | undefined;
+  const query = req.query.q as string | undefined;
+  if (!projectPath || !query) {
+    res.status(400).json({ error: 'project and q query params required' });
+    return;
+  }
+  const since = req.query.since as string | undefined;
+  const until = req.query.until as string | undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+  const results = searchPlanHistory(projectPath, req.params.planSlug, query, { since, until, limit });
+  res.json({ total: results.length, results });
+});
+
+app.get('/api/conflicts', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { detectManifestConflicts } = require('./services/plan-conflict-service');
+  const projectPath = req.query.project as string | undefined;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  res.json(detectManifestConflicts(projectPath));
+});
+
+app.post('/api/conflicts/resolve', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { resolveFileConflict, resolveFileConflictBySide } = require('./services/plan-conflict-service');
+  const { projectPath, filePath, mode, side, resolutions } = req.body;
+  if (!projectPath || !filePath || !mode) {
+    res.status(400).json({ error: 'projectPath, filePath, and mode required' });
+    return;
+  }
+  if (mode === 'by_side') {
+    res.json(resolveFileConflictBySide(projectPath, filePath, side));
+  } else {
+    res.json(resolveFileConflict(projectPath, filePath, resolutions ?? []));
+  }
+});
+
+app.get('/api/freeze', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getFreezeStatus } = require('./services/freeze-service');
+  const projectPath = req.query.project as string | undefined;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  res.json(getFreezeStatus(projectPath));
+});
+
+app.put('/api/freeze', (req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { setFreeze } = require('./services/freeze-service');
+  const { projectPath, active, reason, until, allowedPlanUids } = req.body;
+  if (!projectPath || active === undefined) {
+    res.status(400).json({ error: 'projectPath and active required' });
+    return;
+  }
+  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids });
+  broadcast('freeze-changed', { projectRoot: projectPath, status });
+  res.json(status);
+});
+
 // --- CDev Phase 3.4 — System documentation REST surface ---
 //
 // Frontend reads / writes system docs via these. The MCP tools cover

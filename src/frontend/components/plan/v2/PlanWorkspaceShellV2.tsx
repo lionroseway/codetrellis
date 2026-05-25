@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Allotment } from 'allotment';
-import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle } from 'lucide-react';
+import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle, History } from 'lucide-react';
 import { useUiStore } from '../../../stores/ui-store';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
@@ -10,10 +10,12 @@ import { PlanItemTree } from './PlanItemTree';
 import { PlanItemCanvas } from './PlanItemCanvas';
 import { PlanActivityDrawer } from './PlanActivityDrawer';
 import { PlanItemHistoryDrawer } from './PlanItemHistoryDrawer';
+import { PlanHistoryRail } from './PlanHistoryRail';
 import { ChannelPanel } from './ChannelPanel';
 import { HandoffButton } from './HandoffButton';
 import { DriftBadge } from './DriftIndicator';
 import { PlanReadinessRing } from './PlanReadinessRing';
+import { FreezeBar } from './FreezeBar';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -68,6 +70,9 @@ export function PlanWorkspaceShellV2() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [setWorkspaceMode]);
+
+  // Phase 6.2 — Plan history rail toggle.
+  const [historyRailOpen, setHistoryRailOpen] = useState(false);
 
   // Entrance animation (matches V1 takeover).
   const [shown, setShown] = useState(false);
@@ -161,7 +166,22 @@ export function PlanWorkspaceShellV2() {
           <MessageCircle size={12} />
           Channel
         </button>
+        <button
+          onClick={() => setHistoryRailOpen(!historyRailOpen)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            historyRailOpen
+              ? 'border-accent/30 bg-accent/10 text-accent'
+              : 'border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+          }`}
+          title="Toggle plan history — time-travel through commits"
+        >
+          <History size={12} />
+          History
+        </button>
       </div>
+
+      {/* Phase 6.5 — Freeze bar */}
+      <FreezeBar planUid={plan.uid} />
 
       {/* Three regions */}
       <div className="flex-1 min-h-0">
@@ -182,10 +202,29 @@ export function PlanWorkspaceShellV2() {
               <ChannelPanel planUid={plan.uid} />
             </Allotment.Pane>
           )}
+          {historyRailOpen && (
+            <Allotment.Pane preferredSize={320} minSize={240} maxSize={480}>
+              <PlanHistoryRail
+                planSlug={makePlanSlugFrontend(plan.title, plan.uid)}
+                onClose={() => setHistoryRailOpen(false)}
+              />
+            </Allotment.Pane>
+          )}
         </Allotment>
       </div>
 
       <PlanItemHistoryDrawer />
     </div>
   );
+}
+
+/** Frontend-side slug generation — mirrors backend makePlanSlug(). */
+function makePlanSlugFrontend(title: string, uid: string): string {
+  const titlePart = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'plan';
+  const uidSuffix = uid.split('-')[0];
+  return `${titlePart}-${uidSuffix}`;
 }

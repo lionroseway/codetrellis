@@ -16,6 +16,7 @@ import {
   type DriftSensorConfig,
   type DocSensorConfig,
   type StuckSensorConfig,
+  type FreezeConfig,
 } from '../../shared/types';
 import { getSettings } from './settings-service';
 
@@ -105,6 +106,8 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
     sensors: mergeSensorConfig(current.sensors, patch.sensors),
     // Phase 3.6 — repoRole is a flat scalar; patch wins when present.
     repoRole: patch.repoRole !== undefined ? patch.repoRole : current.repoRole,
+    // Phase 6.5 — freeze periods: replace wholesale when present.
+    freeze: patch.freeze !== undefined ? patch.freeze : current.freeze,
     updatedAt: new Date().toISOString(),
   };
 
@@ -118,6 +121,10 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   }
   if (next.sensors && Object.keys(next.sensors).length === 0) {
     delete next.sensors;
+  }
+  // Phase 6.5: strip freeze when it's an inactive empty object.
+  if (next.freeze && !next.freeze.active && !next.freeze.reason) {
+    delete next.freeze;
   }
   // Tester finding #6: `mixed` is the default — no point persisting
   // it as an explicit no-op value in committed config. Treat
@@ -404,6 +411,23 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
   // UI treats absence as "mixed" too.
   if (r.repoRole === 'planning' || r.repoRole === 'code' || r.repoRole === 'mixed') {
     result.repoRole = r.repoRole;
+  }
+
+  // Phase 6.5 — freeze periods.
+  const freezeRaw = r.freeze;
+  if (freezeRaw && typeof freezeRaw === 'object') {
+    const f = freezeRaw as Record<string, unknown>;
+    const freeze: FreezeConfig = {
+      active: typeof f.active === 'boolean' ? f.active : false,
+    };
+    if (typeof f.reason === 'string') freeze.reason = f.reason;
+    if (typeof f.since === 'string') freeze.since = f.since;
+    if (typeof f.until === 'string') freeze.until = f.until;
+    else if (f.until === null) freeze.until = null;
+    if (Array.isArray(f.allowedPlanUids)) {
+      freeze.allowedPlanUids = f.allowedPlanUids.filter((u: unknown) => typeof u === 'string');
+    }
+    result.freeze = freeze;
   }
 
   if (typeof r.updatedAt === 'string') {
