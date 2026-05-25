@@ -5,6 +5,7 @@ import { storeParsedFile, getFileHash } from './database';
 import { broadcast } from '../server';
 import { checkFileDeviation } from './deviation-service';
 import { checkDocFreshnessForFile } from './sensor-bridge-service';
+import { recordFileActivity } from './stuck-sensor-service';
 
 let watcher: FSWatcher | null = null;
 
@@ -137,6 +138,8 @@ export async function startWatching(projectRoot: string): Promise<void> {
     } catch { /* ignore */ }
     // Phase 4.3 — check if this file is referenced by any system doc.
     try { checkDocFreshnessForFile(relativePath, projectRoot); } catch { /* ignore */ }
+    // Phase 4.4 — reset idle-stall clock for stuck sensor.
+    try { recordFileActivity(projectRoot); } catch { /* ignore */ }
 
     // Recompute cross-system edges so HTTP / SQL / etc. couplings
     // stay current with the latest callsite + route declarations.
@@ -168,6 +171,8 @@ export async function startWatching(projectRoot: string): Promise<void> {
     } catch { /* ignore */ }
     // Phase 4.3 — doc freshness check for new files too.
     try { checkDocFreshnessForFile(relPath, projectRoot); } catch { /* ignore */ }
+    // Phase 4.4 — reset idle-stall clock.
+    try { recordFileActivity(projectRoot); } catch { /* ignore */ }
 
     // A new route / fetch / SQL ref might pair with something that
     // already exists. Debounced recompute — see `change` handler.

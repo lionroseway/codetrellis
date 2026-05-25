@@ -146,6 +146,20 @@ function broadcastToolEvent(payload: ToolEventPayload): void {
     type: payload.phase === 'error' ? 'tool_error' : 'tool_call',
     payload,
   });
+
+  // Phase 4.4 — feed the stuck sensor. Fire-and-forget; the sensor
+  // handles its own error containment.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { recordToolCall } = require('../services/stuck-sensor-service');
+    recordToolCall({
+      tool: payload.tool,
+      args: payload.args,
+      phase: payload.phase,
+      sessionId: payload.sessionId,
+      error: payload.error,
+    });
+  } catch { /* best-effort */ }
 }
 
 function summarizeArgs(args: any): string {
