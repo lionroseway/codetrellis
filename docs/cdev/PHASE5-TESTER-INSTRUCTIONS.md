@@ -4,6 +4,7 @@ You are testing **CDev Phase 5: Personal Continuity & App Polish** in
 CodeTrellis. Phase 5 adds three user-facing features: a first-run
 onboarding wizard, per-item visibility controls in the plan tree, and
 personal sync (settings + project list export/import across machines).
+Your job is to verify each surface via MCP tools and REST endpoints.
 
 ## Environment
 
@@ -27,6 +28,10 @@ Run them with:
 npx playwright test --config playwright.harness.config.ts cdev-phase5
 ```
 
+This uses `playwright.harness.config.ts` (NOT the default
+`playwright.config.ts`). Each test boots its own backend — no dev
+server needed.
+
 There are 3 automated tests:
 1. First-run check and completion round-trip
 2. Per-item visibility toggle round-trips through API
@@ -37,135 +42,167 @@ cover what the automated tests can't.
 
 ---
 
-## What Phase 5 changed (surfaces to test)
+## What Phase 5 changed (tools & surfaces to test)
 
 ### 1. First-run onboarding wizard (5.1)
 
-**What changed:** When `settings.firstRunComplete` is false (fresh
-install), the app shows a blocking `FirstRunWizard` overlay before
-the main shell renders. Two steps: identity confirmation, then a
-"ready" screen with MCP config snippet.
+**What changed:** A `firstRunComplete` boolean was added to
+`AppSettings`. When false (fresh install), the frontend shows a
+blocking `FirstRunWizard` before the main shell. The backend exposes
+a lightweight check endpoint and the existing settings API persists
+the flag.
 
-**Files involved:**
-- `src/frontend/components/FirstRunWizard.tsx`
-- `src/frontend/App.tsx` (gate logic)
-- `src/shared/types/settings.ts` (`firstRunComplete` field)
-- `src/backend/services/settings-service.ts` (merge + persistence)
-- `src/backend/server.ts` (`/api/settings/first-run-check` endpoint)
+**MCP tools involved:**
+- `get_settings` (to read current settings including `firstRunComplete`)
+- `update_settings` (to set identity + `firstRunComplete`)
+
+**REST endpoints:**
+- `GET /api/settings/first-run-check` — returns `{ firstRunComplete, identity, gitDefaults }`
+- `GET /api/settings` — full settings
+- `PUT /api/settings` — patch settings
 
 **What to verify:**
 
-- [ ] Delete `~/.codetrellis/settings.json` (or start with a fresh
-  data dir). Open the app — the wizard should appear.
-- [ ] Step 1: name and email should be pre-populated from `git config`.
-  Edit them and click Next — changes should save.
-- [ ] Step 2: MCP config snippet should show the correct port. "Copy"
-  button should work.
-- [ ] Click "Get started" — the wizard should close and the main app
-  should render. The wizard should NOT appear on subsequent launches.
-- [ ] Verify `~/.codetrellis/settings.json` has `firstRunComplete: true`
-  and the identity fields you entered.
-- [ ] **Backend unreachable:** If the backend is down when the frontend
-  boots, the wizard should fail gracefully (skip to the main app
-  rather than hanging).
+- [ ] Call `get_settings` — confirm `firstRunComplete` exists in the
+  response and defaults to `false` on a fresh install (or `true` if
+  the app has been used before).
+- [ ] Call `update_settings({ identity: { displayName: "Test User", email: "test@ct.dev" } })`
+  — confirm identity updates without touching other fields.
+- [ ] Call `update_settings({ firstRunComplete: true })` — confirm the
+  flag persists.
+- [ ] Call `get_settings` again — confirm `firstRunComplete: true` and
+  identity fields are both present (deep-merge preserved both patches).
+- [ ] Check on-disk at `~/.codetrellis/settings.json` — the
+  `firstRunComplete` field should be `true`.
+- [ ] **Backward compat:** If you have an older `settings.json` that
+  lacks `firstRunComplete`, `get_settings` should return `false`
+  (the default), not error.
 
 ### 2. Per-item visibility in plan tree (5.2)
 
-**What changed:** The `PlanItemTree` sidebar now shows visibility
-indicators. Local items display a small `EyeOff` icon that's always
-visible. The context menu (⋯) on each row has a "Make shared" / "Make
-local" toggle. The tree header shows a bulk count + toggle when any
-items are local.
+**What changed:** The plan item tree sidebar (`PlanItemTree.tsx`) now
+shows visibility indicators and toggle controls. Local items get a
+violet EyeOff icon. The context menu has a shared/local toggle. The
+header shows a bulk-share badge when local items exist.
 
-**Files involved:**
-- `src/frontend/components/plan/v2/PlanItemTree.tsx`
+**MCP tools involved:**
+- `create_plan` (to set up a test plan)
+- `add_item` (to create items)
+- `update_item({ uid, visibility: 'local' | 'shared' })` (to toggle)
+- `get_item` (to read back)
+- `list_items` (to see all items with their visibility)
 
 **What to verify:**
 
-- [ ] Create a plan with several items. All should show as shared by
-  default (no EyeOff icon visible).
-- [ ] Right-click (⋯ menu) on an item → "Make local" — the item should
-  show a small violet EyeOff icon.
-- [ ] The tree header should show a count badge (e.g., "1") next to the
-  EyeOff icon. Click it — all local items should become shared again.
-- [ ] Click the EyeOff icon on a local item — it should toggle back to
-  shared.
-- [ ] Set multiple items to local — confirm the header count updates.
-  Click the header badge — all flip to shared in one action.
-- [ ] Open the item in the canvas (PlanItemCanvas) — confirm the
-  existing pill toggle ("Local" / "Shared") still works and stays in
-  sync with the tree indicator.
+- [ ] Create a plan. Add 3 items (mix of `object` and `action` kinds).
+- [ ] All items should have `visibility: 'shared'` by default.
+- [ ] Call `update_item({ uid: <item1>, visibility: 'local' })` — confirm
+  the response shows `visibility: 'local'`.
+- [ ] Call `get_item({ uid: <item1> })` — confirm `visibility: 'local'`
+  persists.
+- [ ] Call `list_items({ plan_uid })` — confirm exactly one item has
+  `visibility: 'local'`, others are `'shared'`.
+- [ ] Toggle it back: `update_item({ uid: <item1>, visibility: 'shared' })`
+  — confirm it reverts.
+- [ ] **Bulk test:** Set all 3 to local, then set all 3 back to shared
+  via separate `update_item` calls. Confirm `list_items` reflects each
+  intermediate state correctly.
 
 ### 3. Personal sync (5.3)
 
-**What changed:** New `DataSettings` fields: `personalSyncPath` and
-`personalSyncMode`. A `personal-sync-service.ts` handles export/import
-of settings + recent-project list to a user-controlled directory. The
-Settings panel has a new "Sync" section. REST endpoints:
+**What changed:** New `DataSettings` fields: `personalSyncPath`
+(string) and `personalSyncMode` (`'none' | 'selective' | 'full'`).
+A `personal-sync-service.ts` handles export/import of settings +
+recent-project list to a user-controlled directory. New REST endpoints
+surface the sync operations.
 
-- `GET /api/sync/status`
-- `GET /api/sync/peek`
-- `POST /api/sync/export`
-- `POST /api/sync/import`
+**MCP tools involved:**
+- `update_settings` (to configure sync path + mode)
+- `get_settings` (to verify config persisted)
+
+**REST endpoints:**
+- `GET /api/sync/status` — returns `{ configured, mode, syncPath, syncDirExists, lastExportAt, lastImportAvailable, remoteMachine }`
+- `GET /api/sync/peek` — returns `{ available, hasSettings, hasRecentProjects, recentProjectCount, remoteMachine, lastExportAt }`
+- `POST /api/sync/export` — returns `{ exported, syncDir, error? }`
+- `POST /api/sync/import` — returns `{ imported, settingsImported, recentProjects, error? }`
 
 **What to verify:**
 
-- [ ] Open Settings → Sync. The section should explain what sync does.
-- [ ] Enter a path to a folder (e.g., `/tmp/ct-sync-test`). Set mode to
-  "Settings + projects". Click away to save.
-- [ ] The status widget should show "Sync directory exists" (green dot)
-  or "not found" (amber dot).
-- [ ] Click "Export now" — should succeed. Check the folder: a
-  `codetrellis-sync/` subdirectory should contain `settings.json`,
-  `recent-projects.json`, and `.sync-meta.json`.
-- [ ] Open `codetrellis-sync/settings.json` — verify
-  `personalSyncPath` and `dataDirOverride` are empty strings (stripped
-  as machine-local).
-- [ ] Change your identity in Settings → Identity (e.g., to "New Name").
-- [ ] Click "Import from [hostname]" in the Sync section — identity
-  should revert to the exported values.
-- [ ] **No sync configured:** Set mode to "Off" and try Export — should
-  fail gracefully with a message.
-- [ ] **Invalid path:** Set sync path to a non-writable location — Export
-  should fail with an error message, not crash.
+- [ ] Call `update_settings({ data: { dataDirOverride: '', personalSyncPath: '/tmp/ct-sync-test', personalSyncMode: 'selective' } })`
+  — confirm settings saved.
+- [ ] Call `GET /api/sync/status` — should return `configured: true`,
+  `mode: 'selective'`.
+- [ ] Set up identity: `update_settings({ identity: { displayName: 'Sync Tester', email: 'sync@test.dev' }, firstRunComplete: true })`
+- [ ] Call `POST /api/sync/export` — should return `exported: true`.
+- [ ] Check the filesystem: `/tmp/ct-sync-test/codetrellis-sync/`
+  should contain `settings.json`, `recent-projects.json`, and
+  `.sync-meta.json`.
+- [ ] Read `/tmp/ct-sync-test/codetrellis-sync/settings.json` — verify:
+  - `identity.displayName` is `'Sync Tester'`
+  - `data.personalSyncPath` is `''` (stripped as machine-local)
+  - `data.dataDirOverride` is `''` (stripped as machine-local)
+  - `firstRunComplete` is `true`
+- [ ] Call `GET /api/sync/peek` — should return `available: true`,
+  `hasSettings: true`.
+- [ ] **Simulate new machine:** Call `update_settings({ identity: { displayName: '', email: '' } })`
+  to clear identity. Verify it's cleared with `get_settings`.
+- [ ] Call `POST /api/sync/import` — should return `imported: true`,
+  `settingsImported: true`.
+- [ ] Call `get_settings` — identity should be restored:
+  `displayName: 'Sync Tester'`, `email: 'sync@test.dev'`.
+- [ ] **Mode off:** Set `personalSyncMode: 'none'`, try export — should
+  return `exported: false` with an error about mode.
+- [ ] **Dedup:** The `GET /api/sync/status` `lastImportAvailable` field
+  should be `false` when the export came from the same machine (same
+  hostname+homedir hash). It would be `true` if you edited
+  `.sync-meta.json` to change the `machineId`.
+- [ ] **Cleanup:** Delete `/tmp/ct-sync-test` after testing.
 
 ---
 
-## Key implementation details
+## Key implementation details the tester should know
 
 1. **`firstRunComplete` is in `settings.json`**, not localStorage. It
    survives across machines if settings are synced. Older settings
-   files missing this field default to `false` (backward-compat).
+   files missing this field default to `false` (backward-compat via
+   `mergeWithDefaults` in `settings-service.ts`).
 
-2. **Visibility indicators are non-intrusive.** Shared items (the
-   default) show nothing. Only local items display the EyeOff icon,
-   keeping the tree clean for the common case.
+2. **Visibility is a per-item field.** The backend column + export
+   filtering shipped in Phase 3.2. Phase 5.2 only added the frontend
+   tree indicators. The MCP `update_item` and `get_item` tools already
+   support the `visibility` field.
 
-3. **Bulk visibility toggle** in the tree header fires parallel
-   `updateItem` calls — on large plans it may take a moment.
+3. **Personal sync strips machine-local fields.** On export,
+   `personalSyncPath` and `dataDirOverride` are replaced with empty
+   strings. On import, only `identity`, `plans`, and `firstRunComplete`
+   are merged — `mcp` and `data` settings stay local.
 
-4. **Personal sync is BYO transport.** CodeTrellis writes files; the
-   user's folder-sync mechanism (git, iCloud, Dropbox) handles
-   propagation. We never initiate network operations.
-
-5. **Machine-local fields are stripped on export:**
-   `personalSyncPath` and `dataDirOverride` are always empty in the
-   exported settings — each machine has its own paths.
-
-6. **Sync dedup by machine ID.** The `.sync-meta.json` includes a
-   hash of `hostname:homedir`. The "Import" button only appears when
+4. **Sync dedup by machine ID.** The `.sync-meta.json` includes a
+   SHA-256 hash of `hostname:homedir` (first 12 chars). The
+   `lastImportAvailable` flag in `/api/sync/status` is only true when
    the export came from a different machine.
+
+5. **Config is deep-merged.** Setting `data.personalSyncPath` doesn't
+   wipe `data.dataDirOverride` or other fields. The `updateSettings`
+   function spreads `{ ...current.data, ...(patch.data ?? {}) }`.
+
+6. **On-disk persistence.** All settings live at
+   `<settingsDir>/settings.json` with atomic write (tmp + rename).
+   Changes survive backend restarts.
 
 ---
 
-## Reference: automated test patterns
+## Reference: existing automated test patterns
 
-The file `tests/e2e/cdev-phase5.test.ts` contains 3 tests. Each:
+The file `tests/e2e/cdev-phase5.test.ts` contains 3 tests that
+exercise the Phase 5 surface via REST + MCP. Each test:
 
 1. Calls `setupHarness(testId)` — boots an isolated backend + fixture
 2. Uses `h.client.raw()` for REST calls or `agent.callTool()` for MCP
-3. Asserts with Playwright's `expect`
-4. Cleans up in `finally { await h.teardown() }`
+3. Parses results with `JSON.parse(res.text)` (MCP) or `res.json()` (REST)
+4. Asserts with Playwright's `expect`
+5. Cleans up in `finally { await h.teardown() }`
 
-The harness config is `playwright.harness.config.ts`, workers = 1
-(sequential), retries = 2.
+If modifying or adding tests, follow this pattern. The harness config
+is `playwright.harness.config.ts`, workers = 1 (sequential), retries
+= 2.
