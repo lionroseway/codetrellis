@@ -38,6 +38,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           defaultVisibility: deps.projectConfigService.getEffectiveDefaultVisibility(project_root),
           attachmentLocation: deps.projectConfigService.getEffectiveAttachmentLocation(project_root),
         },
+        sensors: deps.projectConfigService.getEffectiveSensorConfig(project_root),
       };
       return {
         content: [
@@ -118,6 +119,39 @@ export function register(server: McpServer, deps: ToolDeps): void {
           })
           .optional()
           .describe('Channel-related project-level overrides.'),
+        sensors: z
+          .object({
+            drift: z
+              .object({
+                enabled: z.boolean().optional().describe('Enable drift detection + channel bridging (default: true).'),
+                channelEvents: z.boolean().optional().describe('Auto-post need-decision channel events on new deviations (default: true).'),
+                debounceMs: z.number().optional().describe('Batch deviations arriving within this window in ms (default: 2000).'),
+              })
+              .optional()
+              .describe('Drift sensor — auto-fires when files change outside the plan.'),
+            docs: z
+              .object({
+                enabled: z.boolean().optional().describe('Enable doc-staleness detection + channel bridging (default: true).'),
+                channelEvents: z.boolean().optional().describe('Auto-post need-decision channel events when a doc goes stale (default: true).'),
+              })
+              .optional()
+              .describe('Documentation sensor — auto-fires when referenced files change.'),
+            stuck: z
+              .object({
+                enabled: z.boolean().optional().describe('Enable stuck detection (default: false — needs calibration).'),
+                repetitionThreshold: z.number().optional().describe('Same tool called N+ times consecutively with low arg variation (default: 8).'),
+                errorLoopThreshold: z.number().optional().describe('Same tool errors N+ times in last 10 calls (default: 5).'),
+                idleMinutes: z.number().optional().describe('No file change in M minutes while tools are active (default: 15).'),
+              })
+              .optional()
+              .describe('Stuck sensor — detects agents looping without progress. Default off.'),
+          })
+          .optional()
+          .describe(
+            'CDev Phase 4 — per-project sensor configuration. Controls when drift, documentation-staleness, ' +
+              'and stuck-agent sensors fire and whether they post channel events. All settings have sensible defaults; ' +
+              'override only when calibrating for this project. Pass individual sub-keys to override; absent keys preserve current values.',
+          ),
         repoRole: z
           .enum(['planning', 'code', 'mixed'])
           .optional()
@@ -130,10 +164,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
           ),
       },
     },
-    async ({ project_root, plans, channels, repoRole }) => {
+    async ({ project_root, plans, channels, sensors, repoRole }) => {
       const patch: any = {};
       if (plans) patch.plans = plans;
       if (channels) patch.channels = channels;
+      if (sensors) patch.sensors = sensors;
       if (repoRole !== undefined) patch.repoRole = repoRole;
       const updated = deps.projectConfigService.updateProjectConfig(project_root, patch);
       deps.broadcast('project-config-changed', { projectRoot: project_root, config: updated });

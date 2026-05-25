@@ -5,12 +5,17 @@ import {
   EMPTY_PROJECT_CONFIG,
   CHANNEL_EVENT_TYPES,
   CHANNEL_EVENT_STATUSES,
+  SENSOR_DEFAULTS,
   type ProjectConfig,
   type DefaultPlanVisibility,
   type AttachmentLocation,
   type ChannelRoutingRule,
   type ChannelEvent,
   type ChannelRouteWhen,
+  type SensorConfig,
+  type DriftSensorConfig,
+  type DocSensorConfig,
+  type StuckSensorConfig,
 } from '../../shared/types';
 import { getSettings } from './settings-service';
 
@@ -96,6 +101,8 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
       // Routing rules replaced wholesale when present.
       ...(patch.channels?.routing !== undefined ? { routing: patch.channels.routing } : {}),
     },
+    // Phase 4.1 — sensors: deep-merge per-sensor group.
+    sensors: mergeSensorConfig(current.sensors, patch.sensors),
     // Phase 3.6 — repoRole is a flat scalar; patch wins when present.
     repoRole: patch.repoRole !== undefined ? patch.repoRole : current.repoRole,
     updatedAt: new Date().toISOString(),
@@ -108,6 +115,9 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   }
   if (next.channels && Object.keys(next.channels).length === 0) {
     delete next.channels;
+  }
+  if (next.sensors && Object.keys(next.sensors).length === 0) {
+    delete next.sensors;
   }
   // Tester finding #6: `mixed` is the default — no point persisting
   // it as an explicit no-op value in committed config. Treat
@@ -193,6 +203,73 @@ function matches(when: ChannelRouteWhen, event: ChannelEvent): boolean {
   if (when.itemUid && when.itemUid !== event.itemUid) return false;
   // minAgeMs is checked by the dispatcher (timer), not by post-time matching.
   return true;
+}
+
+// --- Sensor config helpers (Phase 4.1) ----------------------------------------
+
+/**
+ * Merge two SensorConfig objects. Patch wins for any scalar present
+ * within a sub-group; absent sub-groups pass through from current.
+ */
+function mergeSensorConfig(
+  current: SensorConfig | undefined,
+  patch: SensorConfig | undefined,
+): SensorConfig | undefined {
+  if (!patch) return current;
+  if (!current) return patch;
+  const merged: SensorConfig = {};
+  if (current.drift || patch.drift) {
+    merged.drift = { ...(current.drift ?? {}), ...(patch.drift ?? {}) };
+  }
+  if (current.docs || patch.docs) {
+    merged.docs = { ...(current.docs ?? {}), ...(patch.docs ?? {}) };
+  }
+  if (current.stuck || patch.stuck) {
+    merged.stuck = { ...(current.stuck ?? {}), ...(patch.stuck ?? {}) };
+  }
+  // Strip empty sub-groups
+  if (merged.drift && Object.keys(merged.drift).length === 0) delete merged.drift;
+  if (merged.docs && Object.keys(merged.docs).length === 0) delete merged.docs;
+  if (merged.stuck && Object.keys(merged.stuck).length === 0) delete merged.stuck;
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+/** Resolved drift sensor config with defaults applied. */
+export type EffectiveDriftSensor = Required<DriftSensorConfig>;
+/** Resolved docs sensor config with defaults applied. */
+export type EffectiveDocSensor = Required<DocSensorConfig>;
+/** Resolved stuck sensor config with defaults applied. */
+export type EffectiveStuckSensor = Required<StuckSensorConfig>;
+
+export interface EffectiveSensorConfig {
+  drift: EffectiveDriftSensor;
+  docs: EffectiveDocSensor;
+  stuck: EffectiveStuckSensor;
+}
+
+/**
+ * Return the fully-resolved sensor config for a project. Every field
+ * is present — project overrides win, then SENSOR_DEFAULTS fill gaps.
+ */
+export function getEffectiveSensorConfig(projectRoot: string): EffectiveSensorConfig {
+  const cfg = getProjectConfig(projectRoot).sensors;
+  return {
+    drift: {
+      enabled: cfg?.drift?.enabled ?? SENSOR_DEFAULTS.drift.enabled,
+      channelEvents: cfg?.drift?.channelEvents ?? SENSOR_DEFAULTS.drift.channelEvents,
+      debounceMs: cfg?.drift?.debounceMs ?? SENSOR_DEFAULTS.drift.debounceMs,
+    },
+    docs: {
+      enabled: cfg?.docs?.enabled ?? SENSOR_DEFAULTS.docs.enabled,
+      channelEvents: cfg?.docs?.channelEvents ?? SENSOR_DEFAULTS.docs.channelEvents,
+    },
+    stuck: {
+      enabled: cfg?.stuck?.enabled ?? SENSOR_DEFAULTS.stuck.enabled,
+      repetitionThreshold: cfg?.stuck?.repetitionThreshold ?? SENSOR_DEFAULTS.stuck.repetitionThreshold,
+      errorLoopThreshold: cfg?.stuck?.errorLoopThreshold ?? SENSOR_DEFAULTS.stuck.errorLoopThreshold,
+      idleMinutes: cfg?.stuck?.idleMinutes ?? SENSOR_DEFAULTS.stuck.idleMinutes,
+    },
+  };
 }
 
 // --- File watcher -----------------------------------------------------------
@@ -315,6 +392,14 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
     if (Object.keys(channelsOut).length > 0) result.channels = channelsOut;
   }
 
+  // Phase 4.1 — sensor configuration.
+  const sensorsRaw = r.sensors;
+  if (sensorsRaw && typeof sensorsRaw === 'object') {
+    const s = sensorsRaw as Record<string, unknown>;
+    const sensors = parseSensorConfig(s);
+    if (sensors && Object.keys(sensors).length > 0) result.sensors = sensors;
+  }
+
   // Phase 3.6 — repo role hint. Defaults to absent ("mixed"); the
   // UI treats absence as "mixed" too.
   if (r.repoRole === 'planning' || r.repoRole === 'code' || r.repoRole === 'mixed') {
@@ -384,4 +469,52 @@ function parseRoutingRule(raw: unknown): ChannelRoutingRule | null {
   if (typeof r.description === 'string') rule.description = r.description;
   if (typeof r.enabled === 'boolean') rule.enabled = r.enabled;
   return rule;
+}
+
+/**
+ * Parse the `sensors` section of a project config. Validates types
+ * strictly; invalid values are silently dropped (the default fills in).
+ */
+function parseSensorConfig(raw: Record<string, unknown>): SensorConfig | undefined {
+  const result: SensorConfig = {};
+
+  const driftRaw = raw.drift;
+  if (driftRaw && typeof driftRaw === 'object') {
+    const d = driftRaw as Record<string, unknown>;
+    const drift: DriftSensorConfig = {};
+    if (typeof d.enabled === 'boolean') drift.enabled = d.enabled;
+    if (typeof d.channelEvents === 'boolean') drift.channelEvents = d.channelEvents;
+    if (typeof d.debounceMs === 'number' && Number.isFinite(d.debounceMs) && d.debounceMs >= 0) {
+      drift.debounceMs = d.debounceMs;
+    }
+    if (Object.keys(drift).length > 0) result.drift = drift;
+  }
+
+  const docsRaw = raw.docs;
+  if (docsRaw && typeof docsRaw === 'object') {
+    const d = docsRaw as Record<string, unknown>;
+    const docs: DocSensorConfig = {};
+    if (typeof d.enabled === 'boolean') docs.enabled = d.enabled;
+    if (typeof d.channelEvents === 'boolean') docs.channelEvents = d.channelEvents;
+    if (Object.keys(docs).length > 0) result.docs = docs;
+  }
+
+  const stuckRaw = raw.stuck;
+  if (stuckRaw && typeof stuckRaw === 'object') {
+    const s = stuckRaw as Record<string, unknown>;
+    const stuck: StuckSensorConfig = {};
+    if (typeof s.enabled === 'boolean') stuck.enabled = s.enabled;
+    if (typeof s.repetitionThreshold === 'number' && Number.isFinite(s.repetitionThreshold) && s.repetitionThreshold > 0) {
+      stuck.repetitionThreshold = s.repetitionThreshold;
+    }
+    if (typeof s.errorLoopThreshold === 'number' && Number.isFinite(s.errorLoopThreshold) && s.errorLoopThreshold > 0) {
+      stuck.errorLoopThreshold = s.errorLoopThreshold;
+    }
+    if (typeof s.idleMinutes === 'number' && Number.isFinite(s.idleMinutes) && s.idleMinutes > 0) {
+      stuck.idleMinutes = s.idleMinutes;
+    }
+    if (Object.keys(stuck).length > 0) result.stuck = stuck;
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }

@@ -121,9 +121,57 @@ export interface ProjectChannelsConfig {
  */
 export type ProjectRepoRole = 'planning' | 'code' | 'mixed';
 
+// --- Sensor configuration (Phase 4.1) ----------------------------------------
+
+/** Drift sensor — auto-fires when files change outside the plan. */
+export interface DriftSensorConfig {
+  /** Enable drift detection + channel bridging. Default: true. */
+  enabled?: boolean;
+  /** Auto-post need-decision channel events on new deviations. Default: true. */
+  channelEvents?: boolean;
+  /** Batch deviations arriving within this window (ms). Default: 2000. */
+  debounceMs?: number;
+}
+
+/** Documentation sensor — auto-fires when referenced files change. */
+export interface DocSensorConfig {
+  /** Enable doc-staleness detection + channel bridging. Default: true. */
+  enabled?: boolean;
+  /** Auto-post need-decision channel events when a doc goes stale. Default: true. */
+  channelEvents?: boolean;
+}
+
+/** Stuck sensor — detects agents looping without progress. */
+export interface StuckSensorConfig {
+  /** Enable stuck detection. Default: false (needs calibration). */
+  enabled?: boolean;
+  /** Same tool called N+ times consecutively with low arg variation. Default: 8. */
+  repetitionThreshold?: number;
+  /** Same tool errors N+ times in last 10 calls. Default: 5. */
+  errorLoopThreshold?: number;
+  /** No file change in M minutes while tools are active. Default: 15. */
+  idleMinutes?: number;
+}
+
+export interface SensorConfig {
+  drift?: DriftSensorConfig;
+  docs?: DocSensorConfig;
+  stuck?: StuckSensorConfig;
+}
+
+// --- Sensor defaults (used by getEffectiveSensorConfig) ----------------------
+
+export const SENSOR_DEFAULTS = {
+  drift: { enabled: true, channelEvents: true, debounceMs: 2000 },
+  docs: { enabled: true, channelEvents: true },
+  stuck: { enabled: false, repetitionThreshold: 8, errorLoopThreshold: 5, idleMinutes: 15 },
+} as const;
+
 export interface ProjectConfig {
   plans?: ProjectPlansConfig;
   channels?: ProjectChannelsConfig;
+  /** Phase 4.1 — per-project sensor configuration. */
+  sensors?: SensorConfig;
   /**
    * Phase 3.6 — hint about this repo's role in a multi-repo setup.
    * UI-only signal; nothing is gated on it. See ProjectRepoRole.
