@@ -290,7 +290,7 @@ Decisions locked before build:
 
 ### 4.1 Sensor configuration schema
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 Extend `ProjectConfig` with a `sensors` section:
 
@@ -318,7 +318,7 @@ Parse + validate in `project-config-service.ts`. Helper: `getEffectiveSensorConf
 
 ### 4.2 Drift → channel bridge
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 Today's `checkFileDeviation` (called by the file watcher on every parsed file change) already creates deviation rows and broadcasts `deviation-detected`. Phase 4.2 adds a listener that converts new deviations into channel events:
 
@@ -331,7 +331,7 @@ Today's `checkFileDeviation` (called by the file watcher on every parsed file ch
 
 ### 4.3 Documentation staleness → channel bridge
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 Today's freshness check (`check_doc_freshness` MCP tool / `getFreshness` service function) is on-demand. Phase 4.3 makes it reactive:
 
@@ -345,7 +345,7 @@ Channel event format: `need-decision` with payload listing the stale doc(s), the
 
 ### 4.4 Stuck sensor
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 New service: `stuck-sensor-service.ts`. Watches the MCP tool-call broadcast stream for patterns indicating an agent is no longer making progress.
 
@@ -368,7 +368,7 @@ Agents that self-report stuck (via the existing `post_channel_event` tool with `
 
 ### 4.5 Phase 4 demo + tests
 
-Status: ⬜ Not started.
+Status: ✅ Done. Four green E2E tests at `tests/e2e/cdev-sensors.test.ts`, all 14 CDev harness tests pass with no regressions.
 
 E2E tests:
 1. **Drift → channel**: create a plan with fileSpecs, change a file outside the plan, confirm a `need-decision` channel event appears with the deviation details.

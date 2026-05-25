@@ -330,6 +330,18 @@ Drop \`references.files: [...]\` to tie a doc to specific code paths — that's 
 | \`get_changes_summary(plan_uid)\` | Aggregate counts ("12/18 satisfied") |
 | \`get_change_status(plan_uid, change_id)\` | Fresh drift recompute for one change |
 
+### Sensors (CDev 4)
+
+Three sensors auto-detect when plans, docs, or agents need attention and post channel events (\`need-decision\` or \`stuck\`) into the plan's channel timeline. Configure per-project via \`update_project_config({ sensors: { ... } })\`.
+
+**Drift sensor** (default: on) — fires when the file watcher detects changes outside the plan. Debounces rapid-fire deviations into a single channel event. Also fires after explicit \`detect_deviations\` calls.
+
+**Doc sensor** (default: on) — fires when a file referenced by a system doc changes and the doc's freshness transitions to \`stale\`. Requires the doc to have \`references.files\` and \`references.plans\` populated. An optional post-merge git hook at \`resources/hooks/post-merge\` triggers a bulk freshness check after \`git pull\`.
+
+**Stuck sensor** (default: off) — watches the MCP tool-call stream for agent loops: same tool called repeatedly with similar args, clustered errors on one tool, or tools active but no file output. Posts a \`stuck\` channel event as a soft hint — never interrupts. Enable with \`sensors.stuck.enabled: true\` after calibrating thresholds for your workflow.
+
+All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\` field (\`drift-sensor\`, \`doc-sensor\`, \`stuck-sensor\`) so they're distinguishable from human/agent posts in the timeline.
+
 ### Session & multi-agent
 
 | Tool | What it does |
