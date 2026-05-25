@@ -33,13 +33,14 @@ import type { AppSettings } from '@shared/types';
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'logs' | 'telemetry' | 'updates' | 'about';
+type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
   { key: 'mcp', label: 'MCP Server', Icon: Plug },
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
   { key: 'data', label: 'Data', Icon: HardDrive },
+  { key: 'sync', label: 'Sync', Icon: RefreshCw },
   { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
   { key: 'updates', label: 'Updates', Icon: Download },
@@ -142,6 +143,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <PlansSection settings={settings} onChange={update} />
             )}
             {section === 'logs' && <LogsSection />}
+            {section === 'sync' && (
+              <SyncSection settings={settings} onChange={update} />
+            )}
             {section === 'data' && (
               <DataSection settings={settings} onChange={update} />
             )}
@@ -394,6 +398,155 @@ function PlansSection({
   );
 }
 
+// --- Sync (Phase 5.3) ---
+
+interface SyncStatusData {
+  configured: boolean;
+  mode: string;
+  syncPath: string;
+  syncDirExists: boolean;
+  lastExportAt: string | null;
+  lastImportAvailable: boolean;
+  remoteMachine: string | null;
+}
+
+function SyncSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
+  const [syncPath, setSyncPath] = useState(settings.data.personalSyncPath);
+  const [syncStatus, setSyncStatus] = useState<SyncStatusData | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [resultMsg, setResultMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/sync/status').then((r) => r.json()).then(setSyncStatus).catch(() => {});
+  }, [settings.data.personalSyncPath, settings.data.personalSyncMode]);
+
+  const save = () => {
+    onChange({ data: { ...settings.data, personalSyncPath: syncPath.trim() } });
+    // Refresh status after saving.
+    setTimeout(() => {
+      fetch('/api/sync/status').then((r) => r.json()).then(setSyncStatus).catch(() => {});
+    }, 300);
+  };
+
+  const doExport = async () => {
+    setExporting(true);
+    setResultMsg(null);
+    try {
+      const res = await fetch('/api/sync/export', { method: 'POST' });
+      const data = await res.json();
+      setResultMsg(data.exported ? 'Exported successfully.' : `Export failed: ${data.error || 'unknown'}`);
+    } catch {
+      setResultMsg('Export failed — network error.');
+    }
+    setExporting(false);
+    fetch('/api/sync/status').then((r) => r.json()).then(setSyncStatus).catch(() => {});
+  };
+
+  const doImport = async () => {
+    setImporting(true);
+    setResultMsg(null);
+    try {
+      const res = await fetch('/api/sync/import', { method: 'POST' });
+      const data = await res.json();
+      setResultMsg(data.imported
+        ? `Imported${data.settingsImported ? ' settings' : ''}${data.recentProjects?.length ? ` + ${data.recentProjects.length} project(s)` : ''}.`
+        : `Import failed: ${data.error || 'unknown'}`);
+    } catch {
+      setResultMsg('Import failed — network error.');
+    }
+    setImporting(false);
+  };
+
+  return (
+    <>
+      <p className="text-[11px] text-foreground-muted leading-relaxed">
+        Sync your identity, preferences, and project list across machines.
+        Point this at a personal git repo, an iCloud Drive folder, a Dropbox directory — anything that syncs.
+        CodeTrellis reads and writes files; you control the transport.
+      </p>
+
+      <Field label="Sync directory">
+        <input
+          type="text"
+          value={syncPath}
+          onChange={(e) => setSyncPath(e.target.value)}
+          onBlur={save}
+          placeholder="/path/to/your/synced-folder"
+          className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] font-mono text-foreground focus:outline-none focus:border-accent/40"
+        />
+      </Field>
+
+      <Field label="Sync mode">
+        <div className="flex gap-2">
+          {(['none', 'selective'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => onChange({ data: { ...settings.data, personalSyncMode: mode } })}
+              className={`px-3 py-1.5 text-[11.5px] rounded-md border transition-colors ${
+                settings.data.personalSyncMode === mode
+                  ? 'border-accent/40 bg-accent/10 text-accent'
+                  : 'border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+              }`}
+            >
+              {mode === 'none' ? 'Off' : 'Settings + projects'}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      {syncStatus?.configured && (
+        <div className="rounded-md border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className={`w-2 h-2 rounded-full ${syncStatus.syncDirExists ? 'bg-green-400' : 'bg-amber-400'}`} />
+            <span className="text-foreground-muted">
+              {syncStatus.syncDirExists ? 'Sync directory exists' : 'Sync directory not found'}
+            </span>
+          </div>
+          {syncStatus.lastExportAt && (
+            <div className="text-[10.5px] text-foreground-subtle">
+              Last exported: {new Date(syncStatus.lastExportAt).toLocaleString()}
+              {syncStatus.remoteMachine ? ` (from ${syncStatus.remoteMachine})` : ''}
+            </div>
+          )}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={doExport}
+              disabled={exporting || settings.data.personalSyncMode === 'none'}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {exporting ? 'Exporting…' : 'Export now'}
+            </button>
+            {syncStatus.lastImportAvailable && (
+              <button
+                onClick={doImport}
+                disabled={importing}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-md border border-accent/30 text-accent hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {importing ? 'Importing…' : `Import from ${syncStatus.remoteMachine ?? 'other machine'}`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {resultMsg && (
+        <p className="text-[10.5px] text-foreground-muted">{resultMsg}</p>
+      )}
+
+      <p className="text-[10px] text-foreground-subtle leading-relaxed">
+        Never synced: live tool-call streams, open terminal sessions, cached graph computations.
+      </p>
+    </>
+  );
+}
+
 // --- Data ---
 
 function DataSection({
@@ -417,7 +570,7 @@ function DataSection({
           type="text"
           value={dir}
           onChange={(e) => setDir(e.target.value)}
-          onBlur={() => onChange({ data: { dataDirOverride: dir.trim() } })}
+          onBlur={() => onChange({ data: { ...settings.data, dataDirOverride: dir.trim() } })}
           placeholder="/path/to/your/codetrellis-data"
           className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] font-mono text-foreground focus:outline-none focus:border-accent/40"
         />

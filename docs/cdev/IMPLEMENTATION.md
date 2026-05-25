@@ -96,29 +96,20 @@ Reference: [08 — Agent Collaboration: Presence and Channels](08-agent-collabor
 
 ### 1.4 Channel UI panel (MVP)
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `0c11907`). What shipped:
 
-- Panel on the plan workspace surfacing channel events for the current plan.
-- Initial event types supported: `stuck`, `steer`, `weigh-in` — enough to prove the peer-to-peer model.
-- Composer: select event type, write text, optionally anchor to a plan item.
-- Threading: responses shown inline under the event they respond to.
-- Live updates via the existing WebSocket broadcast.
-- Attribution surfaced per event (human or agent + model).
+- `ChannelDrawer` component toggled from the plan workspace header — full-height right-side drawer with Allotment for non-competing layout alongside the activity drawer and drift banner.
+- Composer with type selection (stuck / steer / weigh-in initially, expanded to all 6 in Phase 2.1), text input, optional item anchor picker, ⌘+Enter posting.
+- Threading: responses rendered inline under their root event with indentation + left border. `responds_to` FK links the tree.
+- Live updates via `channel-event-posted` and `channel-event-status-changed` WS broadcasts — no manual refresh needed.
+- Attribution per event: human identity from `settings.identity`, agent attribution as `<human>'s <agent-type> (<model>)`.
+- Status controls (✓ resolve, ✕ dismiss) on open root events with tinted labels (amber open, emerald resolved, muted dismissed).
 
 Reference: [08 — Agent Collaboration](08-agent-collaboration.md).
 
-### 1.5 Phase 1 demo
+### 1.5 Phase 1 demo + tests
 
-Status: ⬜ Not started.
-
-When 1.1–1.4 land, the demo flow:
-1. Two users with the same project (or one user with two terminals).
-2. User A's agent posts a `stuck` event.
-3. User B sees it (via pull or live update), posts a `steer`.
-4. Channel event log committed to git via the manifest pipeline.
-5. Attribution carries into the commit message.
-
-This is the moment Phase 1 ships.
+Status: ✅ Done (commit `8ec1dd0`). E2E test at `tests/e2e/cdev-channels.test.ts` covers the full Phase 1 flow through real MCP wire format: register session, create plan, post channel event, list events, thread a response, resolve, dismiss, verify manifest export. Also validates attribution (authorType, agentModel) and status lifecycle.
 
 ---
 
@@ -191,15 +182,24 @@ Decisions locked with the user before build:
 
 ### 3.1 Repo identifiers + per-device aliases
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `6770762`). What shipped:
 
-Capture the project's git origin URL at scan time. Store it normalised (strip `.git`, lowercase host, prefer `https://`). Persist a per-device alias the user can edit — local only, never in the manifest. New MCP tools: `set_repo_alias`, `get_repo_identity`.
+- `normaliseRepoUrl(url)` strips `.git` suffix, lowercases host, normalises ssh → https, so every clone variant resolves to the same identity.
+- `repo_origins` table with `project_path` + `origin_url` columns. Populated on `scanProject` from `git remote get-url origin`.
+- Per-device alias stored in the DB only (never in the manifest — avoids teammate conflicts). `set_repo_alias` / `get_repo_identity` MCP tools.
+- `refresh_repo_origin` MCP tool for re-reading after a remote change.
+- E2E coverage in `cdev-cross-repo.test.ts`.
 
 ### 3.2 Per-item sharing
 
-Status: ⬜ Not started.
+Status: ✅ Done (commit `9786f20`). What shipped:
 
-Add a `visibility` column to plan items (`shared` | `local`, default `shared`). Add an `overrideParentVisibility` flag for the exception case. Export pipeline filters out local items. UI toggle on each item. Document the parent-dominance rule + the override exception. Goal: keep commits lean as plans scale up.
+- `visibility` column on plan items (`shared` | `local`, default `shared`). `override_parent_visibility` boolean flag for the exception case (shared child under a local parent).
+- Export pipeline filters out local items. Override children are re-anchored to their nearest exported ancestor (closest ancestor whose effective visibility is `shared`), falling back to top-level when no such ancestor exists.
+- `update_item` accepts `visibility` and `overrideParentVisibility` params. `list_items` returns effective visibility per item.
+- Parent-dominance rule: a local parent shields all children from export unless a child explicitly overrides.
+- E2E coverage in `cdev-phase3-demo.test.ts` — tests local exclusion from export AND from teammate import, plus override re-anchoring.
+- **Note:** the per-item UI toggle in the plan workspace is not yet surfaced — the backend + MCP surface is complete but the frontend affordance is deferred to Phase 5.
 
 ### 3.3 Plan scope + pointer files
 
@@ -381,14 +381,298 @@ E2E tests:
 
 4.1 → 4.2 → 4.3 → 4.4 → 4.5. Config schema first (everything reads it); drift bridge next (simplest, wire existing detection to existing channels); doc bridge (similar pattern, different trigger); stuck sensor last (new service, most complex).
 
-## Phase 5 — AI in collaboration (Level 7)
+## Phase 5 — Personal continuity and app polish
 
-Goal: meeting-aware AI presence + mobile companion.
+Goal: make CodeTrellis feel like a product, not a backend with a frontend bolted on. Personal continuity across machines, the frontend surfaces that catch up to the backend work built in Phases 1–4, and the visual polish pass that makes the app shippable. This is the phase where the user story "I clone the repo on my laptop and everything is already there" becomes real — and where the backend-only features (per-item sharing, channel composer, system docs, cross-repo) become usable by humans who don't speak MCP.
 
-- Audio capture pipeline (mic + system audio loopback).
-- Routing audio to user's AI runtime via MCP.
-- Push-to-talk invocation.
-- Mobile companion as streamed view of desktop (P2P, QR + bidirectional pairing, AirPlay-like discovery, port tunnel, off-LAN via user's VPN).
+Reference: [04 — Multi-Device Continuity and Team Collaboration](04-multi-device-and-teams.md), [14 — Configuration and Personal Continuity](14-configuration-and-personal-continuity.md).
+
+### 5.1 New-machine onboarding flow
+
+Status: ✅ Done.
+
+When the application opens on a machine for the first time (no `~/.codetrellis/settings.json`), run a two-question onboarding:
+
+1. **Identify yourself.** Auto-detect from `git config user.name` / `user.email` (already seeded by Bugfix B on first project scan). Show the detected identity and let the user confirm or edit. This becomes `settings.identity`.
+2. **Bring personal context across?** If the user has a personal sync store configured (see 5.3), offer to restore preferences, project history, and optionally drafts. If not, skip — clean slate.
+
+After the two questions, the user points at a repository. Project state is restored from the repository's `.codetrellis/` manifest. The experience is: clone → open → everything is already here.
+
+Implementation: a `FirstRunWizard` component that gates the main app shell. Runs once; sets a `firstRunComplete` flag in settings. Subsequent launches skip it. The wizard is a modal overlay, not a separate route — the app is still loading behind it.
+
+### 5.2 Per-item sharing UI
+
+Status: ✅ Done.
+
+The backend for per-item sharing shipped in Phase 3.2 (visibility column, override flag, export filtering, re-anchoring). What's missing is the frontend affordance:
+
+- A visibility toggle on each item in the plan tree (shared / local). Uses the existing `update_item({ visibility })` API.
+- Visual distinction: local items rendered with a muted/dashed style so the user can scan which items are team-visible at a glance.
+- Inherited-vs-explicit indicator: items inheriting `local` from a parent show "inherited" label; items with an explicit override show "override" label.
+- Bulk action: select multiple items → set visibility. Useful for "make this whole branch local" or "share everything under this phase."
+
+This is a frontend-only change — no new backend or MCP work needed.
+
+### 5.3 Personal sync (pantry continuity across machines)
+
+Status: ✅ Done.
+
+Three modes, matching [14 — Configuration and Personal Continuity](14-configuration-and-personal-continuity.md):
+
+| Mode | Behaviour | Implementation |
+|------|-----------|----------------|
+| **No sync** (default) | Each machine has its own pantry. Drafts, preferences, project history are local. | Already the status quo. |
+| **Selective sync** | User marks specific drafts or preferences as "follow me." Selected items sync through a personal store. | Export selected items to a user-controlled location (personal git repo, synced folder). Import on new machine during 5.1 onboarding. |
+| **Full personal sync** | Entire pantry travels. | Export the full sql.js DB (minus machine-local exclusions) to the personal store. Import on new machine. |
+
+**Personal store** is BYO: a personal git repository the user controls, or a synced folder (iCloud Drive, Dropbox, etc.). CodeTrellis writes to a configurable path (`settings.personalSyncPath`); the sync mechanism is the user's responsibility. This keeps us out of the cloud-sync business.
+
+**Always machine-local** (never synced even in full mode): live tool-call streams, open terminal sessions, cached graph computations, anything detected as a secret (basic regex on pasted content).
+
+**MCP tools**: `configure_personal_sync({ mode, path? })`, `sync_now()` (manual trigger), `get_sync_status()`.
+
+### 5.4 Visual validation and frontend polish
+
+Status: ⏳ Deferred (requires packaged build for screenshot verification).
+
+Consolidates the accumulated visual checks from PENDING-VALIDATION.md and the "Visual checks" section below. This sub-phase is a focused sprint through every deferred UI item:
+
+- Phase 1–2 channel UI checks (composer layout, threading indentation, attribution rendering, drawer spacing).
+- Phase 3 UX checks (docs panel feel, cross-repo clipboard hint, WS-driven pointer refresh, repoRole empty state, alias truncation).
+- Sensor events in the channel timeline: muted visual treatment for `authorType: 'sensor'` events, distinguishable from human/agent posts.
+- General polish: loading states, error states, empty states across all new surfaces.
+
+Requires a packaged macOS build for screenshot-based verification, or a workaround for the dev-server screenshot hang. The Electron wrapper needs to be tested against the macOS 26 SIGKILL bug.
+
+### 5.5 Phase 5 demo + tests
+
+Status: ✅ Done (3 E2E tests: first-run, visibility toggle, sync cycle).
+
+Demo flow:
+1. Fresh machine (or fresh `~/.codetrellis/`). Open the app → onboarding wizard runs.
+2. Point at a project with existing `.codetrellis/` manifest → plans, docs, channel events all restored.
+3. Toggle per-item visibility in the plan tree → export pipeline respects the change.
+4. Configure personal sync → close app → reopen on a "new machine" (fresh data dir) → restore from personal store → preferences and project history travel.
+5. Walk through visual checks from 5.4 on a packaged build.
+
+E2E tests for 5.1 (onboarding flow), 5.2 (visibility toggle round-trips through the API), 5.3 (export/import cycle).
+
+### Build order
+
+5.1 → 5.2 → 5.3 → 5.4 → 5.5. Onboarding first (everyone hits it). Per-item sharing UI next (the most user-visible gap from Phase 3). Personal sync third (builds on the onboarding flow). Visual polish last (sweep everything at once on a real build).
+
+---
+
+## Phase 6 — Team history and governance
+
+Goal: make the git-backed state model legible to teams. Today, plan history is DB-only (`plan_events` table) and activity is ephemeral (WebSocket broadcasts). Phase 6 projects the manifest's git history into first-class team surfaces: an activity feed, a history rail, and decision archaeology. It also adds the governance primitives teams need to work safely at scale.
+
+Reference: [04 — Multi-Device Continuity and Team Collaboration](04-multi-device-and-teams.md), [02 — State Model](02-state-model.md).
+
+### 6.1 Git-projected team activity feed
+
+Status: ⬜ Not started.
+
+A "what happened this week" surface drawn entirely from git history of the `.codetrellis/` directory. Not a replacement for the DB-driven `plan_events` (which tracks in-session structural mutations) — a complement that shows team-level activity that survived into commits.
+
+- Service: `git-activity-service.ts`. Walks `git log --diff-filter=ACDMR -- .codetrellis/` to extract recent manifest changes. Parses the changed files (plan YAML, item YAML, channel event YAML, doc markdown) to produce typed activity entries.
+- Each entry: `{ timestamp, author, action, entityType, entityTitle, planSlug, commitHash }`. Actions: created, updated, resolved, dismissed, verified, deleted.
+- MCP tool: `get_team_activity({ project_path, since?, limit? })`.
+- Frontend: `TeamActivityPanel` — a feed view accessible from the sidebar. Shows recent manifest changes attributed to teammates. Live-refresh on `git pull` or file-watcher events in `.codetrellis/`.
+- Respects the existing attribution model: human author from git commit, agent from Co-Authored-By trailer.
+
+### 6.2 Per-plan history rail
+
+Status: ⬜ Not started.
+
+View the plan as it stood at any historical commit, rendered as plan UI rather than raw diff. This is the "time machine" for plans.
+
+- Service: `plan-history-service.ts`. Given a plan UID and a commit hash, checks out the plan's manifest files at that commit (`git show <hash>:<path>`) and parses them into the same typed structures the plan workspace uses.
+- Frontend: `PlanHistoryRail` — a slider or dropdown that shows commits touching this plan. Selecting one renders the plan tree at that point in time (read-only). A diff toggle highlights what changed between the selected commit and the current state.
+- MCP tool: `get_plan_at_commit({ plan_uid, commit_hash })`.
+
+### 6.3 Decision archaeology
+
+Status: ⬜ Not started.
+
+"Why did we choose this approach?" answered by finding the commit where a decision was recorded and showing the plan's full state at that moment.
+
+- Builds on 6.2. Adds a search/filter layer: search Objects by title or body text across plan history. Results link to the commit where the Object was created or last substantively edited.
+- MCP tool: `search_plan_history({ plan_uid, query, since?, until? })`.
+- Frontend: a search box in the plan history rail that filters to commits where matching content changed.
+
+### 6.4 Conflict resolution UI
+
+Status: ⬜ Not started.
+
+When two branches edit the same plan and produce a git merge conflict, the application resolves them at the field level rather than dumping the user into raw conflict markers.
+
+Reference: [04 — Multi-Device Continuity and Team Collaboration § Conflict resolution](04-multi-device-and-teams.md).
+
+- Service: `plan-conflict-service.ts`. Detects conflict markers in `.codetrellis/plans/` files after a failed merge. Parses both sides of the conflict into typed structures (plan YAML, item YAML). For structured fields (status, assignee, visibility), presents a chooser. For free-text fields (spec bodies, descriptions), falls through to git's three-way merge (markdown merges naturally most of the time).
+- Frontend: `ConflictResolver` modal. Shows conflicting fields side-by-side with "pick left / pick right / edit" affordance. On resolve, writes the merged file and stages it for commit.
+- Graceful fallback: if the conflict is too complex for field-level resolution (e.g., a plan was restructured on both branches), surface the raw conflict and let the user resolve manually. Don't be clever at the expense of correctness.
+
+### 6.5 Freeze periods
+
+Status: ⬜ Not started.
+
+A governance primitive: mark a project as frozen for non-critical work during a defined period (release week, incident response, etc.).
+
+Reference: [13 — Use Cases § A team operates under a freeze period](13-use-cases.md).
+
+- Config: `freeze` section in `.codetrellis/config.json` with `{ active: boolean, reason?: string, since?: ISO, until?: ISO, allowedPlanUids?: string[] }`.
+- MCP tools: `set_freeze({ project_root, active, reason?, until?, allowedPlanUids? })`, `get_freeze_status({ project_root })`.
+- Routing integration: freeze-aware channel routing rules (e.g., "toast a warning when an agent starts working on a non-exempt plan during a freeze"). Composes with the existing Phase 2 routing rules.
+- Frontend: a banner on the plan workspace when the project is frozen, with the reason and expiry. Non-exempt plans show an amber "frozen" badge.
+
+### 6.6 Phase 6 demo + tests
+
+Status: ⬜ Not started.
+
+Demo flow:
+1. A project with several commits touching plans. The team activity feed shows recent changes attributed to teammates.
+2. Select a plan → open the history rail → scrub back to a past commit → see the plan tree at that point.
+3. Search for a decision keyword → find the commit where it was introduced → view the plan at that moment.
+4. Simulate a branch conflict on a plan → open the conflict resolver → pick fields → clean merge.
+5. Enable freeze → agent attempts to work on a non-exempt plan → warning surfaces.
+
+E2E tests for each sub-phase via the harness.
+
+### Build order
+
+6.1 → 6.2 → 6.3 → 6.4 → 6.5 → 6.6. Activity feed first (lowest risk, highest visibility). History rail next (builds the time-travel primitive 6.3 depends on). Decision archaeology third (thin layer on top of 6.2). Conflict resolution fourth (independent but benefits from having 6.1–6.3 exercising the git-read paths). Freeze periods last (governance add-on, smallest scope).
+
+---
+
+## Phase 7 — External contributors
+
+Goal: make CodeTrellis work for teams that include people outside the core organisation — contractors, agencies, open-source collaborators. The mechanism is the same as internal collaboration (plans travel via git, edits travel via PRs), with two additions: asymmetric visibility for private team materials, and explicit promote-to-PR controls for contributor-produced artefacts.
+
+Reference: [05 — Cross-Repo Work and External Contributors](05-cross-repo-and-external-contributors.md).
+
+### 7.1 Asymmetric pantry (external placeholder state)
+
+Status: ⬜ Not started.
+
+External contributors working in forks or scoped branches don't have access to the team's private pantry content (local screenshots, internal transcripts, private notes). Today, references to those items silently break. Phase 7.1 adds a graceful placeholder state.
+
+- When a manifest references a pantry item (screenshot, transcript, attachment) that the current user can't resolve, show a styled placeholder: `"[Team-only content] — request access from <author>"`. The author is read from the item's attribution.
+- Service: `pantry-resolution-service.ts`. Checks whether a referenced pantry path exists locally. Returns `resolved` (path exists, content available) or `external` (path missing, show placeholder).
+- Frontend: placeholder cards in the item detail view, doc body, and comment threads wherever pantry references appear.
+
+### 7.2 Promote-to-PR controls
+
+Status: ⬜ Not started.
+
+When an external contributor wants to share working material (an architecture diagram, a walkthrough recording, a spec draft) back to the team, they mark it for inclusion in their pull request.
+
+- A "promote" action on local items and attachments: moves the content from the contributor's pantry into the manifest staging area (`.codetrellis/contributions/<branch>/`), ready to be committed and pushed as part of a PR.
+- On the receiving end: the team reviews the contributed content alongside code changes in the PR. Accepting the PR moves the content into the manifest proper.
+- MCP tool: `promote_to_contribution({ item_uid?, attachment_uid?, description? })`.
+
+### 7.3 Fork-from-prepared-state
+
+Status: ⬜ Not started.
+
+In situations where the team doesn't want to share the full plan history with a contractor, the contractor forks from a prepared branch rather than main.
+
+- MCP tool: `prepare_contributor_branch({ plan_uid, branch_name, include_items? })`. Creates a branch containing only the plan content the team wants to share (selected items, no private comments, no team-only attachments). The contractor clones from this branch.
+- This is a git operation with selective content — the application writes a filtered manifest snapshot to a new branch, commits it, and the team pushes it to the remote.
+
+### 7.4 Phase 7 demo + tests
+
+Status: ⬜ Not started.
+
+Demo flow:
+1. Team creates a plan with a mix of shared and local items.
+2. Contributor forks from a prepared branch → sees shared items, sees placeholders for private items.
+3. Contributor produces an architecture diagram, promotes it to contribution → content appears in their PR.
+4. Team reviews and merges → contributed content appears in the manifest.
+
+### Build order
+
+7.1 → 7.2 → 7.3 → 7.4. Placeholders first (lowest risk, improves the experience for everyone who encounters a broken reference). Promote-to-PR second (the contributor-side workflow). Fork-from-prepared third (the team-side preparation step — used less frequently, more complex).
+
+---
+
+## Phase 8 — AI in collaboration and mobile (Level 7)
+
+Goal: the experience leap. AI agents become participants in human conversation about the work — not just executors of it. The mobile companion extends the desktop to the phone. Both share transport (WebRTC) and discovery (mDNS) infrastructure.
+
+This is a fundamentally different kind of work from Phases 1–7. It requires audio capture, native platform APIs, WebRTC networking, and potentially a native mobile client. The architecture is fully described in [15 — AI in Collaboration](15-ai-in-collaboration.md) and [16 — Mobile Companion](16-mobile-companion.md).
+
+### 8.1 Audio capture pipeline
+
+Status: ⬜ Not started.
+
+Capture audio from the system microphone and from a system-audio loopback (so audio from Zoom, Meet, Teams flows in through the same pipeline). One mechanism for in-person and remote meetings.
+
+- Rolling buffer in memory: most recent N seconds of audio. The buffer never persists.
+- Prompt-on-invocation: the user invokes the AI explicitly — button or hotkey. No wake word, no always-on transcription.
+- Platform integration: macOS Core Audio for mic access + system audio loopback. The loopback mechanism varies by OS; macOS may require a virtual audio device (BlackHole, Loopback) or the ScreenCaptureKit API.
+- Output: when invoked, the recent audio chunk is packaged as a binary blob alongside the user's text prompt.
+
+### 8.2 Audio routing via MCP
+
+Status: ⬜ Not started.
+
+Route the audio chunk + prompt to the user's AI runtime via MCP. CodeTrellis never transcribes — multi-modal models handle audio directly.
+
+- New MCP resource type: `codetrellis://audio/recent` — the rolling buffer as a fetchable binary resource.
+- New MCP tool: `get_audio_context({ seconds? })` — returns the most recent N seconds of audio for the agent to process.
+- Response surfaces in the Presence Pane as a narration card with TTS. The agent can use UI navigation tools mid-response (graph focus, item selection) to walk through what it's explaining.
+
+### 8.3 Mobile companion — pairing and transport
+
+Status: ⬜ Not started.
+
+A mobile client that shows a streamed view of the desktop, not a separate application. Desktop is authoritative; mobile is a thin window.
+
+- **Pairing**: QR code (encodes pairing nonce + desktop LAN address) → mobile scans → mobile shows a numeric code → user enters code on desktop → bidirectional confirmation. Both expire after a short window.
+- **Discovery**: Bonjour / mDNS advertisements on the LAN. Previously-paired devices reconnect automatically. Manual address entry as fallback for networks where mDNS is blocked.
+- **Transport**: WebRTC data channels for low-latency state streaming. The desktop serialises the current view (plan tree, channel events, terminal output) and streams deltas to the mobile. User actions on mobile (post a steer, respond to `await_user_input`) route back through the same connection.
+
+### 8.4 Mobile companion — surfaces
+
+Status: ⬜ Not started.
+
+What the mobile shows:
+
+| Surface | Capability |
+|---------|-----------|
+| **Plans** | Browse plans, drill into items, read comments, see status — streamed from desktop |
+| **Channels** | See channel events, post `steer` / `weigh-in` responses back |
+| **Terminals** | Watch desktop terminal output, send input if needed |
+| **MCP prompts** | Respond to `await_user_input` when away from desk |
+| **Browser tunnel** | Load a local web app from the desktop through the P2P connection (test on a real phone without ngrok) |
+| **Push notifications** | Stuck events, need-decision events — native push so you can respond when not at desk |
+
+What mobile does NOT do: run its own plans or graph, maintain offline state, provide a parallel authoring surface, host any agent inference.
+
+### 8.5 Cross-machine P2P (team broadcast)
+
+Status: ⬜ Not started.
+
+Channel events broadcast directly between teammates' CodeTrellis instances on the same network, complementing the git-based sync path. Deferred from Phase 2 to share transport with the mobile companion.
+
+- Uses the same WebRTC + mDNS infrastructure as 8.3.
+- Desktop-to-desktop: when two instances are on the same LAN, channel events propagate in real-time without waiting for git push/pull.
+- Off-LAN: falls through to the existing git sync path. P2P is a latency optimisation, not a replacement for git.
+
+### 8.6 Phase 8 demo + tests
+
+Status: ⬜ Not started.
+
+Demo flow:
+1. Two teammates in a meeting. One presses the hotkey, asks the agent a question about the codebase. The agent receives the recent audio + prompt, responds in the Presence Pane with a graph walkthrough.
+2. The teammate's phone shows the same walkthrough via the mobile companion.
+3. Someone posts a `stuck` event from their agent → push notification on the other teammate's phone → they reply with a `steer` from mobile → the agent sees the steer.
+4. On the same LAN: channel event propagates via P2P before git push lands.
+
+### Build order
+
+8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 8.6. Audio capture first (self-contained, valuable even without mobile). Audio routing second (connects capture to agent). Mobile pairing/transport third (the hardest infrastructure). Mobile surfaces fourth (the payoff). P2P last (extends mobile transport to desktop-to-desktop).
 
 ---
 

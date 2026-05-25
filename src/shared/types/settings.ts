@@ -64,6 +64,8 @@ export interface PlansSettings {
   attachmentLocation: AttachmentLocation;
 }
 
+export type PersonalSyncMode = 'none' | 'selective' | 'full';
+
 export interface DataSettings {
   /**
    * Override for `~/.codetrellis/`. Empty string = use the default
@@ -71,6 +73,25 @@ export interface DataSettings {
    * Test harness sets this via env var; users set it in the panel.
    */
   dataDirOverride: string;
+  /**
+   * Phase 5.3 — path to a user-controlled personal sync directory
+   * (a personal git repo or a synced folder like iCloud Drive /
+   * Dropbox). CodeTrellis writes a `codetrellis-sync/` sub-directory
+   * containing settings, recent-project list, and (in full mode) the
+   * pantry DB. The sync mechanism is the user's responsibility — we
+   * just read/write to the path.
+   *
+   * Empty string = no sync configured (default).
+   */
+  personalSyncPath: string;
+  /**
+   * Phase 5.3 — what to sync.
+   *
+   * - `'none'` (default): each machine is independent.
+   * - `'selective'`: settings + recent-project list travel.
+   * - `'full'`: entire pantry (DB minus machine-local exclusions).
+   */
+  personalSyncMode: PersonalSyncMode;
 }
 
 export interface AppSettings {
@@ -78,6 +99,12 @@ export interface AppSettings {
   mcp: McpSettings;
   plans: PlansSettings;
   data: DataSettings;
+  /**
+   * Phase 5.1 — true once the user completes the first-run wizard.
+   * When false (or absent in older settings files), the frontend
+   * shows a blocking onboarding overlay before the main app shell.
+   */
+  firstRunComplete: boolean;
   /** ISO timestamp of last save. Updated automatically. */
   updatedAt: string;
 }
@@ -97,6 +124,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   data: {
     dataDirOverride: '',
+    personalSyncPath: '',
+    personalSyncMode: 'none',
   },
+  firstRunComplete: false,
   updatedAt: '',
 };

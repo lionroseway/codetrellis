@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Allotment, type AllotmentHandle } from 'allotment';
 import 'allotment/dist/style.css';
 import { TopBar } from './components/layout/TopBar';
@@ -17,6 +17,7 @@ import { FolderPickerModal } from './components/FolderPickerModal';
 import { McpGuideModal } from './components/McpGuideModal';
 import { GettingStarted } from './components/GettingStarted';
 import { LearnTrellis, LEARN_TRELLIS_SEEN_KEY } from './components/LearnTrellis';
+import { FirstRunWizard } from './components/FirstRunWizard';
 import { ToastContainer } from './components/Toast';
 import { PresencePane } from './components/presence/PresencePane';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
@@ -33,6 +34,36 @@ const SIDEBAR_DEFAULT = 240;
 export function App() {
   useWebSocket();
   useKeyboardShortcuts();
+
+  // Phase 5.1 — first-run onboarding gate. The wizard checks the
+  // backend on mount; if `firstRunComplete` is already true it calls
+  // onComplete immediately and the app renders normally. This state
+  // starts as 'checking' so we don't flash the wizard or the main
+  // shell while the fetch is in flight.
+  const [firstRunState, setFirstRunState] = useState<'checking' | 'wizard' | 'done'>('checking');
+
+  // Quick pre-check: fetch just the firstRunComplete flag so we can
+  // avoid mounting the wizard at all for returning users.
+  useEffect(() => {
+    fetch('/api/settings/first-run-check')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.firstRunComplete) {
+          setFirstRunState('done');
+        } else {
+          setFirstRunState('wizard');
+        }
+      })
+      .catch(() => {
+        // Backend unreachable — skip the wizard so the app isn't
+        // permanently gated. The wizard will try again next launch.
+        setFirstRunState('done');
+      });
+  }, []);
+
+  const onFirstRunComplete = useCallback(() => {
+    setFirstRunState('done');
+  }, []);
 
   const horizontalRef = useRef<AllotmentHandle>(null);
   const verticalRef = useRef<AllotmentHandle>(null);
@@ -149,6 +180,17 @@ export function App() {
     });
     return () => cancelAnimationFrame(raf);
   }, [inspectorExpanded]);
+
+  // Phase 5.1 gate — show nothing while checking, wizard if needed.
+  if (firstRunState === 'checking') {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]" />
+    );
+  }
+
+  if (firstRunState === 'wizard') {
+    return <FirstRunWizard onComplete={onFirstRunComplete} />;
+  }
 
   return (
     <div className="flex flex-col h-screen text-foreground bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]">

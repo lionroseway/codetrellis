@@ -2778,6 +2778,25 @@ app.post('/api/updates/check', async (_req, res) => {
 
 // --- Settings API (Phase 13 §D) ---
 
+/**
+ * Phase 5.1 — lightweight first-run check. Returns just the
+ * `firstRunComplete` flag + identity so the frontend can decide
+ * whether to show the onboarding wizard without fetching the full
+ * settings blob (which includes MCP / data dir details the wizard
+ * doesn't need). Also returns git-derived identity defaults so the
+ * wizard can pre-populate the name/email fields.
+ */
+app.get('/api/settings/first-run-check', (req, res) => {
+  const settings = getSettings();
+  const projectPath = (req.query.project as string | undefined) || undefined;
+  const gitDefaults = readGitIdentity(projectPath);
+  res.json({
+    firstRunComplete: settings.firstRunComplete,
+    identity: settings.identity,
+    gitDefaults,
+  });
+});
+
 app.get('/api/settings', (_req, res) => {
   res.json(getSettings());
 });
@@ -2805,6 +2824,38 @@ app.put('/api/settings', (req, res) => {
 app.get('/api/identity/git-defaults', (req, res) => {
   const projectPath = (req.query.project as string | undefined) || undefined;
   res.json(readGitIdentity(projectPath));
+});
+
+// --- CDev Phase 5.3 — Personal sync REST surface ---
+
+app.get('/api/sync/status', (_req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getSyncStatus } = require('./services/personal-sync-service');
+  res.json(getSyncStatus());
+});
+
+app.get('/api/sync/peek', (_req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { peekImport } = require('./services/personal-sync-service');
+  res.json(peekImport());
+});
+
+app.post('/api/sync/export', (_req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { exportSync } = require('./services/personal-sync-service');
+  // In v1, recent-projects are pulled from the project-store's scan
+  // history (which is in-memory). TODO: persist recent-project list.
+  res.json(exportSync([]));
+});
+
+app.post('/api/sync/import', (_req, res) => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { importSync } = require('./services/personal-sync-service');
+  const result = importSync();
+  if (result.settingsImported) {
+    broadcast('settings-changed', { settings: getSettings() });
+  }
+  res.json(result);
 });
 
 // --- CDev Phase 3.4 — System documentation REST surface ---

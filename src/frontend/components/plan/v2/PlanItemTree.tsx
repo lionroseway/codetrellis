@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, ChevronRight, FileText, Zap, Plus, MoreHorizontal,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User, History, Trash2,
-  GripVertical,
+  GripVertical, Eye, EyeOff,
 } from 'lucide-react';
 import { usePlanItemsStore, buildItemTree } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
@@ -40,6 +40,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   const selectedItemUid = usePlanItemsStore((s) => s.selectedItemUid);
   const selectItem = usePlanItemsStore((s) => s.selectItem);
   const createItem = usePlanItemsStore((s) => s.createItem);
+  const updateItem = usePlanItemsStore((s) => s.updateItem);
   const moveItem = usePlanItemsStore((s) => s.moveItem);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drag, setDrag] = useState<DragState>({ draggedUid: null, overUid: null, position: null });
@@ -48,6 +49,20 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
     () => buildItemTree(itemsByUid),
     [itemsByUid],
   );
+
+  // Phase 5.2 — count local items for the bulk-toggle affordance.
+  const localCount = useMemo(
+    () => Object.values(itemsByUid).filter((i) => i.visibility === 'local').length,
+    [itemsByUid],
+  );
+
+  const bulkSetVisibility = async (visibility: 'shared' | 'local') => {
+    const targets = Object.values(itemsByUid).filter(
+      (i) => i.visibility !== visibility,
+    );
+    // Fire updates in parallel — the store handles optimistic patching.
+    await Promise.all(targets.map((i) => updateItem(i.uid, { visibility })));
+  };
 
   const toggle = (uid: string) =>
     setExpanded((prev) => ({ ...prev, [uid]: !prev[uid] }));
@@ -148,6 +163,20 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
           ({Object.keys(itemsByUid).length})
         </span>
         <div className="flex-1" />
+
+        {/* Phase 5.2 — bulk visibility indicator / toggle. Shows when
+            any items are local so the user can batch-share them. */}
+        {localCount > 0 && (
+          <button
+            onClick={() => bulkSetVisibility('shared')}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-violet-400/80 hover:text-violet-300 hover:bg-violet-500/10 transition-colors"
+            title={`${localCount} local item${localCount > 1 ? 's' : ''} — click to share all`}
+          >
+            <EyeOff size={10} />
+            {localCount}
+          </button>
+        )}
+
         <NewButton planUid={planUid} parentUid={null} createItem={createItem} />
       </div>
 
@@ -201,11 +230,13 @@ function ItemRow({
   onDrop: (targetUid: string, position: DropPosition) => void;
 }) {
   const createItem = usePlanItemsStore((s) => s.createItem);
+  const updateItem = usePlanItemsStore((s) => s.updateItem);
   const deleteItem = usePlanItemsStore((s) => s.deleteItem);
   const openHistoryDrawer = usePlanItemsStore((s) => s.openHistoryDrawer);
   const addToast = useToastStore((s) => s.addToast);
   const [menuOpen, setMenuOpen] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
+  const isLocal = item.visibility === 'local';
 
   const KindIcon = item.kind === 'action' ? Zap : FileText;
   const statusMeta = item.kind === 'action' && item.status
@@ -311,6 +342,21 @@ function ItemRow({
         <span className="text-[10.5px] text-foreground-subtle shrink-0">{item.progressPercent}%</span>
       )}
 
+      {/* Phase 5.2 — visibility indicator. Always visible when local;
+          shows on hover when shared (shared is the default, less noisy). */}
+      {isLocal && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            updateItem(item.uid, { visibility: 'shared' });
+          }}
+          className="shrink-0 p-0.5 rounded text-violet-400/70 hover:text-violet-300 hover:bg-violet-500/10 transition-colors"
+          title="Local only — not exported to git. Click to share."
+        >
+          <EyeOff size={11} />
+        </button>
+      )}
+
       {/* Hover affordances */}
       <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
         <NewButton
@@ -333,6 +379,19 @@ function ItemRow({
           className="absolute right-3 mt-16 z-30 rounded-md border border-white/[0.08] bg-[#0c0e1a] shadow-lg p-1.5 text-[12.5px] min-w-[180px]"
           onClick={(e) => e.stopPropagation()}
         >
+          <button
+            onClick={() => {
+              updateItem(item.uid, {
+                visibility: isLocal ? 'shared' : 'local',
+              });
+              setMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded hover:bg-white/[0.04]"
+          >
+            {isLocal
+              ? <><Eye size={13} className="text-foreground-subtle" /> Make shared</>
+              : <><EyeOff size={13} className="text-violet-400/70" /> Make local</>}
+          </button>
           <button
             onClick={() => { openHistoryDrawer(item.uid); setMenuOpen(false); }}
             className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded hover:bg-white/[0.04]"
