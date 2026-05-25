@@ -2843,9 +2843,13 @@ app.get('/api/sync/peek', (_req, res) => {
 app.post('/api/sync/export', (_req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { exportSync } = require('./services/personal-sync-service');
-  // In v1, recent-projects are pulled from the project-store's scan
-  // history (which is in-memory). TODO: persist recent-project list.
-  res.json(exportSync([]));
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { listRecentProjects } = require('./services/recent-projects-service');
+  const recentProjects = listRecentProjects().map((p: { path: string; lastOpenedAt: number }) => ({
+    projectPath: p.path,
+    lastOpenedAt: new Date(p.lastOpenedAt).toISOString(),
+  }));
+  res.json(exportSync(recentProjects));
 });
 
 app.post('/api/sync/import', (_req, res) => {

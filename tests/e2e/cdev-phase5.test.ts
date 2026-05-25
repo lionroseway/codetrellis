@@ -66,6 +66,38 @@ test.describe('CDev Phase 5 — personal continuity', () => {
     }
   });
 
+  test('MCP update_settings persists firstRunComplete and data fields', async () => {
+    const h = await setupHarness('cdev-phase5-mcp-settings');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+      const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
+
+      // Set firstRunComplete via MCP (F2 regression).
+      const res1 = await agent.callTool('update_settings', {
+        firstRunComplete: true,
+      });
+      expect(res1.isError).not.toBe(true);
+      expect(res1.text).toContain('first-run complete');
+
+      // Set data fields via MCP.
+      const res2 = await agent.callTool('update_settings', {
+        data: { personalSyncPath: '/tmp/test-sync', personalSyncMode: 'selective' },
+      });
+      expect(res2.isError).not.toBe(true);
+      expect(res2.text).toContain('sync path');
+      expect(res2.text).toContain('sync mode');
+
+      // Verify via get_settings.
+      const settingsRes = await agent.callTool('get_settings', {});
+      const settings = JSON.parse(settingsRes.text);
+      expect(settings.firstRunComplete).toBe(true);
+      expect(settings.data.personalSyncPath).toBe('/tmp/test-sync');
+      expect(settings.data.personalSyncMode).toBe('selective');
+    } finally {
+      await h.teardown();
+    }
+  });
+
   test('per-item visibility toggle round-trips through API', async () => {
     const h = await setupHarness('cdev-phase5-visibility');
     try {
@@ -110,6 +142,15 @@ test.describe('CDev Phase 5 — personal continuity', () => {
         visibility: 'shared',
       });
       expect(JSON.parse(revert.text).visibility).toBe('shared');
+
+      // F1 regression: list_items must also carry visibility (this is
+      // the path PlanItemTree uses to hydrate the tree store).
+      await agent.callTool('update_item', { uid: item.uid, visibility: 'local' });
+      const listRes = await agent.callTool('list_items', { plan_uid: plan.uid });
+      const listPayload = JSON.parse(listRes.text);
+      const found = listPayload.items.find((i: any) => i.uid === item.uid);
+      expect(found).toBeTruthy();
+      expect(found.visibility).toBe('local');
     } finally {
       await h.teardown();
     }
@@ -118,6 +159,9 @@ test.describe('CDev Phase 5 — personal continuity', () => {
   test('personal sync export and import cycle', async () => {
     const h = await setupHarness('cdev-phase5-sync');
     try {
+      // Scan first so the project is recorded in recent-projects (F3).
+      await h.client.scanProject(h.fixture.projectPath);
+
       // Create a temp directory for the sync target.
       const syncDir = path.join(h.fixture.dataDir, 'sync-target');
       fs.mkdirSync(syncDir, { recursive: true });
@@ -163,6 +207,15 @@ test.describe('CDev Phase 5 — personal continuity', () => {
       expect(exportedSettings.identity.displayName).toBe('Sync User');
       expect(exportedSettings.data.personalSyncPath).toBe(''); // stripped
       expect(exportedSettings.data.dataDirOverride).toBe(''); // stripped
+
+      // F3 regression: recent-projects.json should contain the scanned
+      // project, not an empty array.
+      const recentProjects = JSON.parse(
+        fs.readFileSync(path.join(syncSubDir, 'recent-projects.json'), 'utf-8'),
+      );
+      expect(recentProjects.length).toBeGreaterThan(0);
+      expect(recentProjects[0].projectPath).toBe(h.fixture.projectPath);
+      expect(recentProjects[0].lastOpenedAt).toBeTruthy();
 
       // Peek — should report available.
       const peekRes = await (await h.client.raw('GET', '/api/sync/peek')).json() as {

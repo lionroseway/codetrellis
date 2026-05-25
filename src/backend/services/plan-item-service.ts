@@ -241,6 +241,9 @@ export interface PlanItemSummary {
   assignee: string | null;
   progressPercent: number | null;
   childCount: number;
+  /** Phase 5.2 — needed by PlanItemTree for visibility indicators. */
+  visibility: 'shared' | 'local';
+  overrideParentVisibility: boolean;
 }
 
 export function listItemSummaries(planUid: string): PlanItemSummary[] {
@@ -248,7 +251,8 @@ export function listItemSummaries(planUid: string): PlanItemSummary[] {
   const r = db.exec(
     `SELECT i.uid, i.plan_uid, i.parent_uid, i.sort_order, i.kind,
             i.title, i.template, i.status, i.assignee, i.progress_percent,
-            (SELECT COUNT(*) FROM plan_items c WHERE c.parent_uid = i.uid) AS child_count
+            (SELECT COUNT(*) FROM plan_items c WHERE c.parent_uid = i.uid) AS child_count,
+            i.visibility, i.visibility_override
      FROM plan_items i
      WHERE i.plan_uid = ?
      ORDER BY i.sort_order ASC, i.created_at ASC`,
@@ -267,6 +271,8 @@ export function listItemSummaries(planUid: string): PlanItemSummary[] {
     assignee: (row[8] as string | null) ?? null,
     progressPercent: (row[9] as number | null) ?? null,
     childCount: (row[10] as number) ?? 0,
+    visibility: (row[11] as 'shared' | 'local' | null) ?? 'shared',
+    overrideParentVisibility: row[12] === 1,
   }));
 }
 

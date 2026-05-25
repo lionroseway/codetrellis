@@ -205,13 +205,21 @@ export function register(server: McpServer, deps: ToolDeps): void {
           defaultVisibility: z.enum(['shared', 'local']).optional().describe('"shared" = export to .codetrellis/plans/, "local" = DB-only.'),
           attachmentLocation: z.enum(['project', 'user']).optional().describe('"project" = in repo, "user" = user data dir.'),
         }).optional().describe('Plan default settings.'),
+        data: z.object({
+          dataDirOverride: z.string().optional().describe('Override for ~/.codetrellis/ data directory. Empty = default.'),
+          personalSyncPath: z.string().optional().describe('Path to personal sync folder (git repo, iCloud, Dropbox). Empty = no sync.'),
+          personalSyncMode: z.enum(['none', 'selective', 'full']).optional().describe('What to sync: none, selective (settings+projects), or full (entire pantry).'),
+        }).optional().describe('Data and sync settings.'),
+        firstRunComplete: z.boolean().optional().describe('Set to true after the first-run wizard completes.'),
       },
     },
-    async ({ identity, mcp, plans }) => {
+    async ({ identity, mcp, plans, data, firstRunComplete }) => {
       const patch: any = {};
       if (identity) patch.identity = identity;
       if (mcp) patch.mcp = mcp;
       if (plans) patch.plans = plans;
+      if (data) patch.data = data;
+      if (firstRunComplete !== undefined) patch.firstRunComplete = firstRunComplete;
 
       const updated = deps.updateSettings(patch);
       deps.broadcast('settings-changed', { settings: updated });
@@ -223,6 +231,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (mcp?.autodetectOnCollision !== undefined) changes.push(`auto-detect port → ${mcp.autodetectOnCollision}`);
       if (plans?.defaultVisibility !== undefined) changes.push(`plan visibility → ${plans.defaultVisibility}`);
       if (plans?.attachmentLocation !== undefined) changes.push(`attachment location → ${plans.attachmentLocation}`);
+      if (data?.personalSyncPath !== undefined) changes.push(`sync path → "${data.personalSyncPath}"`);
+      if (data?.personalSyncMode !== undefined) changes.push(`sync mode → ${data.personalSyncMode}`);
+      if (data?.dataDirOverride !== undefined) changes.push(`data dir → "${data.dataDirOverride || '(default)'}"`);
+      if (firstRunComplete !== undefined) changes.push(`first-run complete → ${firstRunComplete}`);
 
       return { content: [{ type: 'text' as const, text: `Settings updated: ${changes.join(', ')}` }] };
     },
