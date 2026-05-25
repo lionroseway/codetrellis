@@ -11,6 +11,7 @@ dist/
 test-results/
 marketing-assets/test-results/
 playwright-report/
+.playwright-mcp/
 .codetrellis/
 
 # E2E harness — per-test working dirs (cloned fixture + tmp data dir).
