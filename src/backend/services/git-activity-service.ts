@@ -14,7 +14,7 @@
  * Entity types: plan, item, channel-event, system-doc, config.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 // --- Types -------------------------------------------------------------------
@@ -51,24 +51,24 @@ export interface GetActivityOptions {
 export function getTeamActivity(opts: GetActivityOptions): ActivityEntry[] {
   const { projectRoot, since, limit = 50 } = opts;
 
-  const sinceArg = since ? buildSinceArg(since) : '';
   const maxCount = Math.min(limit * 3, 300); // over-fetch since one commit may produce multiple entries
 
-  const format = '--format=COMMIT%x1f%H%x1f%aI%x1f%aN%x1f%s';
-  const cmd = [
+  // %b = body (for agent attribution), %x1e = record separator to
+  // delimit the header (including multi-line body) from name-status.
+  const args = [
     'log',
-    format,
+    '--format=COMMIT%x1f%H%x1f%aI%x1f%aN%x1f%s%x1f%b%x1e',
     '--diff-filter=ACDMR',
     '--name-status',
     `--max-count=${maxCount}`,
-    sinceArg,
+    ...(since ? [buildSinceArg(since)] : []),
     '--',
     '.codetrellis/',
-  ].filter(Boolean).join(' ');
+  ];
 
   let raw: string;
   try {
-    raw = runGit(cmd, projectRoot);
+    raw = runGitArgs(args, projectRoot);
   } catch {
     // Not a git repo, or no commits touching .codetrellis/ — return empty.
     return [];
@@ -96,14 +96,14 @@ export function getPlanFilesAtCommit(
   // List files in the plan directory at that commit
   let listing: string;
   try {
-    listing = runGit(`ls-tree -r --name-only ${commitHash} -- ${planDir}`, projectRoot);
+    listing = runGitArgs(['ls-tree', '-r', '--name-only', commitHash, '--', planDir], projectRoot);
   } catch {
     return files; // commit or dir doesn't exist
   }
 
   for (const filePath of listing.trim().split('\n').filter(Boolean)) {
     try {
-      const content = runGit(`show ${commitHash}:${filePath}`, projectRoot);
+      const content = runGitArgs(['show', `${commitHash}:${filePath}`], projectRoot);
       files.set(filePath, content);
     } catch {
       // File may have been deleted in this commit tree — skip
@@ -124,21 +124,19 @@ export function getPlanCommitHistory(
 ): Array<{ hash: string; timestamp: string; author: string; subject: string; agentAttribution?: { agentType: string; model?: string } | null }> {
   const planDir = `.codetrellis/plans/${planSlug}`;
   const maxCount = options?.limit ?? 30;
-  const sinceArg = options?.since ? buildSinceArg(options.since) : '';
 
-  const format = '--format=%H%x1f%aI%x1f%aN%x1f%s%x1f%b%x1e';
-  const cmd = [
+  const args = [
     'log',
-    format,
+    '--format=%H%x1f%aI%x1f%aN%x1f%s%x1f%b%x1e',
     `--max-count=${maxCount}`,
-    sinceArg,
+    ...(options?.since ? [buildSinceArg(options.since)] : []),
     '--',
     planDir,
-  ].filter(Boolean).join(' ');
+  ];
 
   let raw: string;
   try {
-    raw = runGit(cmd, projectRoot);
+    raw = runGitArgs(args, projectRoot);
   } catch {
     return [];
   }
@@ -170,26 +168,25 @@ export function searchPlanHistory(
 ): Array<{ hash: string; timestamp: string; author: string; subject: string; matchedFiles: string[] }> {
   const planDir = `.codetrellis/plans/${planSlug}`;
   const maxCount = options?.limit ?? 20;
-  const sinceArg = options?.since ? buildSinceArg(options.since) : '';
-  const untilArg = options?.until ? buildUntilArg(options.until) : '';
 
-  // Use git log -G to find commits where the query text was added or removed
-  const cmd = [
+  // Use git log -G to find commits where the query text was added or removed.
+  // execFileSync passes each arg directly — no shell, so query can't inject.
+  const args = [
     'log',
     '--format=%H%x1f%aI%x1f%aN%x1f%s%x1e',
     '--name-only',
     `-G${escapeRegex(query)}`,
-    `-i`, // case-insensitive
+    '-i', // case-insensitive
     `--max-count=${maxCount}`,
-    sinceArg,
-    untilArg,
+    ...(options?.since ? [buildSinceArg(options.since)] : []),
+    ...(options?.until ? [buildUntilArg(options.until)] : []),
     '--',
     planDir,
-  ].filter(Boolean).join(' ');
+  ];
 
   let raw: string;
   try {
-    raw = runGit(cmd, projectRoot);
+    raw = runGitArgs(args, projectRoot);
   } catch {
     return [];
   }
@@ -215,8 +212,13 @@ export function searchPlanHistory(
 
 // --- Internals ---------------------------------------------------------------
 
-function runGit(argsLine: string, cwd: string): string {
-  return execSync(`git ${argsLine}`, {
+/**
+ * Run git with an explicit args array via execFileSync — no shell,
+ * so user-supplied strings (query, planSlug, commitHash) cannot
+ * inject shell commands.
+ */
+function runGitArgs(args: string[], cwd: string): string {
+  return execFileSync('git', args, {
     cwd,
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -253,8 +255,12 @@ function parseAgentAttribution(body: string): { agentType: string; model?: strin
 
 /**
  * Parse the raw git log output into typed ActivityEntry records.
- * Format: each commit starts with "COMMIT\x1f" followed by fields
- * separated by \x1f, then name-status lines on subsequent lines.
+ *
+ * Format: COMMIT\x1f<hash>\x1f<ts>\x1f<author>\x1f<subject>\x1f<body>\x1e
+ *         <name-status lines>
+ *
+ * Split on COMMIT\x1f to isolate per-commit blocks, then split on \x1e
+ * to separate the header (including multi-line body) from name-status.
  */
 function parseGitLog(raw: string): ActivityEntry[] {
   const entries: ActivityEntry[] = [];
@@ -263,28 +269,32 @@ function parseGitLog(raw: string): ActivityEntry[] {
   const blocks = raw.split('COMMIT\x1f').filter((b) => b.trim());
 
   for (const block of blocks) {
-    const lines = block.trim().split('\n');
-    if (lines.length === 0) continue;
+    // Split on \x1e to separate header fields from name-status
+    const rsSplit = block.split('\x1e');
+    const headerStr = rsSplit[0] ?? '';
+    const nameStatusStr = rsSplit.slice(1).join('\x1e'); // remainder
 
-    // First line has the formatted fields: hash\x1ftimestamp\x1fauthor\x1fsubject
-    const headerParts = lines[0].split('\x1f');
+    const headerParts = headerStr.split('\x1f');
     if (headerParts.length < 4) continue;
 
-    const [commitHash, timestamp, author, subject] = headerParts;
+    const [commitHash, timestamp, author, subject, ...bodyParts] = headerParts;
+    const body = bodyParts.join('\x1f'); // re-join in case body contained \x1f
+    const agentAttribution = parseAgentAttribution(body);
 
-    // Remaining lines are name-status entries
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+    // Name-status lines follow the \x1e marker
+    const nameStatusLines = nameStatusStr.split('\n');
+    for (const line of nameStatusLines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
 
       // Format: A\tpath or M\tpath or D\tpath or R100\told\tnew
-      const tabParts = line.split('\t');
+      const tabParts = trimmed.split('\t');
       if (tabParts.length < 2) continue;
 
       const status = tabParts[0];
       const filePath = tabParts[tabParts.length - 1]; // for renames, take the new path
 
-      const entry = classifyChange(status, filePath, commitHash, timestamp, author, subject);
+      const entry = classifyChange(status, filePath, commitHash, timestamp, author, subject, agentAttribution);
       if (entry) entries.push(entry);
     }
   }
@@ -303,6 +313,7 @@ function classifyChange(
   timestamp: string,
   author: string,
   subject: string,
+  agentAttribution?: { agentType: string; model?: string } | null,
 ): ActivityEntry | null {
   // Strip leading .codetrellis/ for analysis
   const rel = filePath.startsWith('.codetrellis/')
@@ -317,9 +328,10 @@ function classifyChange(
     return {
       timestamp,
       author,
+      agentAttribution: agentAttribution ?? null,
       action,
       entityType: 'plan',
-      entityTitle: slugToTitle(planMatch[1]),
+      entityTitle: planSlugToTitle(planMatch[1]),
       planSlug: planMatch[1],
       commitHash,
       commitSubject: subject,
@@ -334,6 +346,7 @@ function classifyChange(
     return {
       timestamp,
       author,
+      agentAttribution: agentAttribution ?? null,
       action,
       entityType: 'item',
       entityTitle: title,
@@ -349,9 +362,10 @@ function classifyChange(
     return {
       timestamp,
       author,
+      agentAttribution: agentAttribution ?? null,
       action,
       entityType: 'channel-event',
-      entityTitle: path.basename(channelMatch[2], '.yaml'),
+      entityTitle: 'Channel event',
       planSlug: channelMatch[1],
       commitHash,
       commitSubject: subject,
@@ -364,6 +378,7 @@ function classifyChange(
     return {
       timestamp,
       author,
+      agentAttribution: agentAttribution ?? null,
       action,
       entityType: 'system-doc',
       entityTitle: slugToTitle(docMatch[1]),
@@ -378,6 +393,7 @@ function classifyChange(
     return {
       timestamp,
       author,
+      agentAttribution: agentAttribution ?? null,
       action,
       entityType: 'config',
       entityTitle: 'Project configuration',
@@ -394,6 +410,7 @@ function classifyChange(
     return {
       timestamp,
       author,
+      agentAttribution: agentAttribution ?? null,
       action,
       entityType: 'item',
       entityTitle: title,
@@ -424,4 +441,15 @@ function slugToTitle(slug: string): string {
     .replace(/[-_]/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
+}
+
+/**
+ * Convert a plan slug (e.g. "release-rollout-plan-de260d59") to a
+ * clean title by stripping the trailing uid-prefix before titleizing.
+ */
+function planSlugToTitle(planSlug: string): string {
+  // Plan slug format: <title-slug>-<uid-first-8-chars>
+  // Strip the last -<8hex> suffix if it looks like a uid prefix
+  const stripped = planSlug.replace(/-[0-9a-f]{8}$/, '');
+  return slugToTitle(stripped);
 }

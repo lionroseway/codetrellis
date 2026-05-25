@@ -13,7 +13,7 @@
  * writes the merged result and stages it for commit.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -70,7 +70,7 @@ export function detectManifestConflicts(projectRoot: string): ConflictSummary {
   // Find conflicted files under .codetrellis/
   let conflictedPaths: string[];
   try {
-    const raw = runGit('diff --name-only --diff-filter=U -- .codetrellis/', projectRoot);
+    const raw = runGitArgs(['diff', '--name-only', '--diff-filter=U', '--', '.codetrellis/'], projectRoot);
     conflictedPaths = raw.trim().split('\n').filter(Boolean);
   } catch {
     return { hasConflicts: false, files: [], totalConflicts: 0, autoResolvable: 0 };
@@ -196,7 +196,7 @@ export function resolveFileConflict(
 
   // Stage the resolved file
   try {
-    runGit(`add -- "${filePath}"`, projectRoot);
+    runGitArgs(['add', '--', filePath], projectRoot);
   } catch (err) {
     return { resolved: false, error: `Failed to stage resolved file: ${err}` };
   }
@@ -216,8 +216,8 @@ export function resolveFileConflictBySide(
 ): { resolved: boolean; error?: string } {
   try {
     const flag = side === 'ours' ? '--ours' : '--theirs';
-    runGit(`checkout ${flag} -- "${filePath}"`, projectRoot);
-    runGit(`add -- "${filePath}"`, projectRoot);
+    runGitArgs(['checkout', flag, '--', filePath], projectRoot);
+    runGitArgs(['add', '--', filePath], projectRoot);
     return { resolved: true };
   } catch (err) {
     return { resolved: false, error: `Failed to resolve by side: ${err}` };
@@ -226,8 +226,8 @@ export function resolveFileConflictBySide(
 
 // --- Internals ---------------------------------------------------------------
 
-function runGit(argsLine: string, cwd: string): string {
-  return execSync(`git ${argsLine}`, {
+function runGitArgs(args: string[], cwd: string): string {
+  return execFileSync('git', args, {
     cwd,
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],

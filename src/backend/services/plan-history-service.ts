@@ -9,7 +9,7 @@
  * Also supports diffing between two commits to highlight what changed.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
@@ -70,7 +70,7 @@ export function getPlanAtCommit(
   // Get commit timestamp
   let timestamp: string;
   try {
-    timestamp = runGit(`show -s --format=%aI ${commitHash}`, projectRoot).trim();
+    timestamp = runGitArgs(['show', '-s', '--format=%aI', commitHash], projectRoot).trim();
   } catch {
     return null;
   }
@@ -78,7 +78,7 @@ export function getPlanAtCommit(
   // Read plan.yaml
   let planMeta: HistoricalPlanMeta | null = null;
   try {
-    const planYaml = runGit(`show ${commitHash}:${planDir}/plan.yaml`, projectRoot);
+    const planYaml = runGitArgs(['show', `${commitHash}:${planDir}/plan.yaml`], projectRoot);
     const parsed = parseYaml(planYaml) as Record<string, unknown>;
     if (parsed && typeof parsed === 'object') {
       planMeta = {
@@ -161,8 +161,8 @@ export function diffPlanBetweenCommits(
 
 // --- Internals ---------------------------------------------------------------
 
-function runGit(argsLine: string, cwd: string): string {
-  return execSync(`git ${argsLine}`, {
+function runGitArgs(args: string[], cwd: string): string {
+  return execFileSync('git', args, {
     cwd,
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -184,7 +184,7 @@ function readItemsAtCommit(
   // List all files under the plan dir at this commit
   let listing: string;
   try {
-    listing = runGit(`ls-tree -r --name-only ${commitHash} -- ${planDir}`, projectRoot);
+    listing = runGitArgs(['ls-tree', '-r', '--name-only', commitHash, '--', planDir], projectRoot);
   } catch {
     return items;
   }
@@ -205,7 +205,7 @@ function readItemsAtCommit(
     if (isChannel) continue;
 
     try {
-      const content = runGit(`show ${commitHash}:${filePath}`, projectRoot);
+      const content = runGitArgs(['show', `${commitHash}:${filePath}`], projectRoot);
       const parsed = parseYaml(content) as Record<string, unknown>;
       if (!parsed || typeof parsed !== 'object') continue;
 
