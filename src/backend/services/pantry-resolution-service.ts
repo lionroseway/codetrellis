@@ -195,15 +195,38 @@ function extractReferencesFromYaml(filePath: string): string[] {
     return refs;
   }
 
-  // Match value fields in attachment blocks:
-  //   - value: ".codetrellis/attachments/..."
-  //   - value: "userdata://attachments/..."
-  //   - value: "https://..."
-  const valueRegex = /^\s+value:\s*["']?([^"'\n]+)["']?\s*$/gm;
-  let match: RegExpExecArray | null;
-  while ((match = valueRegex.exec(content)) !== null) {
-    const val = match[1].trim();
-    if (val) refs.push(val);
+  // Only extract `value:` lines that appear inside an `attachments:` block.
+  // We detect the block by looking for `attachments:` at a given indent,
+  // then collecting `value:` lines at deeper indent until we encounter a
+  // line at the same or shallower indent (end of block).
+  const lines = content.split('\n');
+  let inAttachments = false;
+  let attachmentsIndent = -1;
+
+  for (const line of lines) {
+    // Detect start of attachments block
+    const attMatch = line.match(/^(\s*)attachments:\s*$/);
+    if (attMatch) {
+      inAttachments = true;
+      attachmentsIndent = attMatch[1].length;
+      continue;
+    }
+
+    if (inAttachments) {
+      // Check if we've exited the block (line at same/shallower indent)
+      if (line.trim() && !line.startsWith(' '.repeat(attachmentsIndent + 1))) {
+        inAttachments = false;
+        attachmentsIndent = -1;
+        continue;
+      }
+
+      // Match value: field within the attachments block
+      const valMatch = line.match(/^\s+value:\s*["']?([^"'\n]+)["']?\s*$/);
+      if (valMatch) {
+        const val = valMatch[1].trim();
+        if (val) refs.push(val);
+      }
+    }
   }
 
   return refs;

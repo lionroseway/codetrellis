@@ -70,6 +70,9 @@ export function promoteItemToContribution(
   const contribDir = path.join(projectRoot, '.codetrellis', 'contributions', branch, 'items');
   fs.mkdirSync(contribDir, { recursive: true });
 
+  // If re-promoting with a changed title, remove the old file to prevent orphans.
+  removeOldPromotionFile(contribDir, itemData.uid);
+
   const slug = slugify(itemData.title);
   const fileName = `${slug}.yaml`;
   const filePath = path.join(contribDir, fileName);
@@ -403,6 +406,26 @@ function runGitArgs(args: string[], cwd: string): string {
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 15_000,
   });
+}
+
+/**
+ * Remove the old YAML file for a re-promoted item (different title → different slug).
+ * Scans existing files for the matching uid and removes it.
+ */
+function removeOldPromotionFile(contribDir: string, uid: string): void {
+  if (!fs.existsSync(contribDir)) return;
+
+  const files = fs.readdirSync(contribDir).filter((f) => f.endsWith('.yaml'));
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(path.join(contribDir, file), 'utf-8');
+      // Quick check — look for the uid in the file
+      if (content.includes(`uid: ${uid}`) || content.includes(`uid: "${uid}"`)) {
+        fs.unlinkSync(path.join(contribDir, file));
+        return;
+      }
+    } catch { /* skip */ }
+  }
 }
 
 function slugify(text: string): string {
