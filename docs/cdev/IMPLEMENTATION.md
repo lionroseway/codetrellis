@@ -275,11 +275,111 @@ UX / visual checks the harness can't reach are tracked in [PENDING-VALIDATION.md
 
 ## Phase 4 — Sensors
 
-Goal: complete the intervention surface.
+Goal: close the gap between "the tools exist" and "the tools fire at the right moment." Today's drift detection, doc-freshness checking, and channel events are all on-demand — the user or agent has to remember to call them. Phase 4 makes them automatic, and adds the stuck sensor that has no on-demand equivalent.
 
-- Stuck sensor with configurable heuristics per project.
-- Documentation sensor with verified-state assertions.
-- Sensitivity config in `.codetrellis/config.json`.
+Guiding principle (user directive): **non-obtrusive.** Agents need room to work; too many checks and balances eat into credits and derail agent execution. Every sensor defaults to the lightest possible touch — channel events that inform rather than interrupt, conservative thresholds that tolerate normal trial-and-error, and soft pause-hints rather than hard stops.
+
+Decisions locked before build:
+
+1. **Soft pause-hint** for stuck agents — the sensor posts a `stuck` channel event; it does NOT hard-pause or interrupt the agent's current tool call. The event routes through the existing channel dispatcher (webhooks, toasts) so a human or a helping agent can decide whether to intervene.
+2. **Both file-watcher AND git-hook** triggers for the doc sensor — file-watcher catches local edits immediately; an optional post-merge/post-commit hook catches teammate-driven `git pull` changes. The hook is a thin shell script that hits a local CodeTrellis endpoint.
+3. **Skip sensor framework abstraction** — each sensor is bespoke code calling directly into the channel-event and deviation services. A shared `Sensor` interface would be premature; these three sensors have genuinely different inputs (file events, tool-call streams, git diffs) and outputs (deviation rows, channel events). Unify later if a pattern emerges.
+4. **Conservative sensitivity defaults** — every threshold is set high enough that false positives are rare. If in doubt, the sensor stays quiet. A false negative (agent grinds for an extra few minutes) is far less costly than a false positive (agent derailed mid-progress, credits burned on re-orientation).
+5. **Lean on existing channel timeline** — no separate "Sensors" tab or panel. Sensor-emitted events appear in the same channel timeline as human-posted events. A `source: 'sensor'` field on the channel event payload distinguishes them in the UI (optional muted style) without fragmenting the team's attention surface.
+6. **Default on/off** — drift sensor and doc sensor default **on** (low noise, high signal); stuck sensor defaults **off** (needs per-project calibration before it's useful).
+
+### 4.1 Sensor configuration schema
+
+Status: ⬜ Not started.
+
+Extend `ProjectConfig` with a `sensors` section:
+
+```typescript
+interface SensorConfig {
+  drift?: {
+    enabled?: boolean;          // default: true
+    channelEvents?: boolean;    // auto-post need-decision on new deviations (default: true)
+    debounceMs?: number;        // batch deviations within this window (default: 2000)
+  };
+  docs?: {
+    enabled?: boolean;          // default: true
+    channelEvents?: boolean;    // auto-post need-decision when a doc goes stale (default: true)
+  };
+  stuck?: {
+    enabled?: boolean;          // default: false
+    repetitionThreshold?: number;    // same tool N times in a row (default: 8)
+    errorLoopThreshold?: number;     // same tool error N times (default: 5)
+    idleMinutes?: number;            // no file change in M minutes while tools active (default: 15)
+  };
+}
+```
+
+Parse + validate in `project-config-service.ts`. Helper: `getEffectiveSensorConfig(projectRoot)` returns the merged result (project config → defaults). MCP tool `update_project_config` accepts the new `sensors` field.
+
+### 4.2 Drift → channel bridge
+
+Status: ⬜ Not started.
+
+Today's `checkFileDeviation` (called by the file watcher on every parsed file change) already creates deviation rows and broadcasts `deviation-detected`. Phase 4.2 adds a listener that converts new deviations into channel events:
+
+- New function `bridgeDeviationToChannel(deviation, projectRoot)` in a new `sensor-bridge-service.ts`.
+- Called from `checkFileDeviation` and from `detectDeviations` (the MCP tool path) after each new deviation is created — only when `sensors.drift.channelEvents` is enabled for the project.
+- **Debounce**: deviations arriving within `debounceMs` are batched. A trailing-edge timer fires a single `need-decision` channel event listing all batched deviations, attributed as `author: 'codetrellis'`, `authorType: 'sensor'`.
+- The channel event payload includes: deviation count, per-deviation type/file/description, and a suggested action ("run `get_drift_report` to review").
+- Channel routing rules then handle notification as usual (webhook, toast, or nothing — the user controls the volume).
+- The bridge also fires for the full `detectDeviations` run (the MCP tool), so agents that explicitly check drift also get the channel event if they're working a plan with teammates.
+
+### 4.3 Documentation staleness → channel bridge
+
+Status: ⬜ Not started.
+
+Today's freshness check (`check_doc_freshness` MCP tool / `getFreshness` service function) is on-demand. Phase 4.3 makes it reactive:
+
+**File-watcher trigger**: when the main file watcher re-parses a file, cross-reference it against system docs whose `references.files[]` includes that relative path. If any doc's freshness transitions from `current` → `stale` (or `moved` → `stale`), post a `need-decision` channel event. This runs only when `sensors.docs.enabled` is true.
+
+Implementation: add a `checkDocFreshnessForFile(relativePath, projectRoot)` function in `sensor-bridge-service.ts`. Called from the file watcher alongside `checkFileDeviation`. Queries `system_docs` for rows whose `references` JSON contains the changed path, then calls `getFreshness` for each and compares against a cached prior state.
+
+**Git-hook trigger**: ship an optional `.codetrellis/hooks/post-merge` shell script that `curl`s `http://localhost:3001/api/sensors/doc-check?project=<path>`. The REST endpoint runs freshness checks on all docs for the project and posts channel events for any newly-stale docs. The hook is opt-in — the user copies it into `.git/hooks/` or sources it from their own hook manager.
+
+Channel event format: `need-decision` with payload listing the stale doc(s), their slug(s), and which referenced files changed.
+
+### 4.4 Stuck sensor
+
+Status: ⬜ Not started.
+
+New service: `stuck-sensor-service.ts`. Watches the MCP tool-call broadcast stream for patterns indicating an agent is no longer making progress.
+
+**Architecture**: the `broadcastToolEvent` hook in `mcp/server.ts` already fires on every tool call (complete or error) with tool name, args summary, duration, sessionId, and agent info. The stuck sensor subscribes to this stream (via a callback registered at boot) and maintains a per-session sliding window of recent calls.
+
+**Heuristics** (all disabled by default; enabled when `sensors.stuck.enabled = true`):
+
+| Heuristic | Default threshold | What it checks |
+|---|---|---|
+| Repetition | 8 calls | Same tool name called N+ times consecutively with <30% argument variation (Jaccard similarity on arg tokens) |
+| Error loop | 5 errors | Same tool name errors N+ times in the last 10 calls |
+| Idle stall | 15 minutes | Tool calls arriving but no `file-changed` / `file-added` broadcast in M minutes |
+
+When a heuristic fires:
+1. Post a `stuck` channel event on the plan the agent is working (inferred from recent tool args, e.g., `plan_uid` in the last N calls). Payload includes the heuristic name and a human-readable description.
+2. **Soft pause-hint**: the event is purely informational. The agent is not interrupted. A human sees it in the channel timeline and via routing (toast, webhook). The agent can also see it if it reads the channel.
+3. **Cooldown**: after firing, suppress the same heuristic for the same session for 10 minutes (avoids re-firing while the agent is working through the stuck state or while a human is formulating a steer).
+
+Agents that self-report stuck (via the existing `post_channel_event` tool with `eventType: 'stuck'`) are the preferred path. The sensor is the safety net for agents that haven't built their own loop detection. Both produce identical channel events; the sensor-emitted one has `authorType: 'sensor'`.
+
+### 4.5 Phase 4 demo + tests
+
+Status: ⬜ Not started.
+
+E2E tests:
+1. **Drift → channel**: create a plan with fileSpecs, change a file outside the plan, confirm a `need-decision` channel event appears with the deviation details.
+2. **Doc → channel**: create a system doc referencing a file, commit a change to that file, hit the doc-check endpoint, confirm a `need-decision` channel event appears.
+3. **Stuck sensor**: configure `sensors.stuck.enabled = true` with low thresholds, replay a sequence of identical tool calls, confirm a `stuck` channel event fires.
+4. **Sensor config round-trip**: set sensor config via `update_project_config`, read it back, confirm defaults merge correctly.
+5. **Debounce**: trigger multiple deviations in rapid succession, confirm they batch into a single channel event.
+
+### Build order
+
+4.1 → 4.2 → 4.3 → 4.4 → 4.5. Config schema first (everything reads it); drift bridge next (simplest, wire existing detection to existing channels); doc bridge (similar pattern, different trigger); stuck sensor last (new service, most complex).
 
 ## Phase 5 — AI in collaboration (Level 7)
 
