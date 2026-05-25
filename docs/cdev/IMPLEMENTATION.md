@@ -596,83 +596,77 @@ Demo flow:
 
 ---
 
-## Phase 8 — AI in collaboration and mobile (Level 7)
+## Phase 8 — AI in collaboration (audio context)
 
-Goal: the experience leap. AI agents become participants in human conversation about the work — not just executors of it. The mobile companion extends the desktop to the phone. Both share transport (WebRTC) and discovery (mDNS) infrastructure.
+Goal: AI agents become participants in human conversation about the work. When a user is in a meeting, they press a hotkey — the recent audio context is packaged and made available to their agent via MCP. CodeTrellis never transcribes; multi-modal models handle audio directly.
 
-This is a fundamentally different kind of work from Phases 1–7. It requires audio capture, native platform APIs, WebRTC networking, and potentially a native mobile client. The architecture is fully described in [15 — AI in Collaboration](15-ai-in-collaboration.md) and [16 — Mobile Companion](16-mobile-companion.md).
+Reference: [15 — AI in Collaboration](15-ai-in-collaboration.md).
 
 ### 8.1 Audio capture pipeline
 
-Status: ⬜ Not started.
+Status: ✅ Complete.
 
-Capture audio from the system microphone and from a system-audio loopback (so audio from Zoom, Meet, Teams flows in through the same pipeline). One mechanism for in-person and remote meetings.
+Capture audio from the system microphone via the browser MediaRecorder API. The frontend streams chunks to the backend, which maintains a rolling buffer. System audio loopback (Zoom/Meet/Teams capture) is deferred to the Electron build (requires ScreenCaptureKit or a virtual audio device).
 
-- Rolling buffer in memory: most recent N seconds of audio. The buffer never persists.
-- Prompt-on-invocation: the user invokes the AI explicitly — button or hotkey. No wake word, no always-on transcription.
-- Platform integration: macOS Core Audio for mic access + system audio loopback. The loopback mechanism varies by OS; macOS may require a virtual audio device (BlackHole, Loopback) or the ScreenCaptureKit API.
-- Output: when invoked, the recent audio chunk is packaged as a binary blob alongside the user's text prompt.
+- Rolling buffer in memory: most recent N seconds of audio (default 120s). The buffer never persists to disk.
+- Prompt-on-invocation: user presses a hotkey or button — no wake word, no always-on transcription.
+- Frontend: MediaRecorder (WebM/Opus) → chunked POST to backend every 2 seconds.
+- Backend: `audio-buffer-service.ts` — ring buffer of timestamped audio chunks.
+- REST: `POST /api/audio/chunk` (chunk upload), `GET /api/audio/status`, `POST /api/audio/start`, `POST /api/audio/stop`.
+- MCP: `start_audio_capture`, `stop_audio_capture`, `push_audio_chunk` (for harness/agent use).
 
 ### 8.2 Audio routing via MCP
 
-Status: ⬜ Not started.
+Status: ✅ Complete.
 
-Route the audio chunk + prompt to the user's AI runtime via MCP. CodeTrellis never transcribes — multi-modal models handle audio directly.
+Route the audio buffer to the user's AI runtime via MCP tools.
 
-- New MCP resource type: `codetrellis://audio/recent` — the rolling buffer as a fetchable binary resource.
-- New MCP tool: `get_audio_context({ seconds? })` — returns the most recent N seconds of audio for the agent to process.
-- Response surfaces in the Presence Pane as a narration card with TTS. The agent can use UI navigation tools mid-response (graph focus, item selection) to walk through what it's explaining.
+- MCP tool: `get_audio_context({ seconds? })` — returns the most recent N seconds of audio as base64-encoded WebM/Opus.
+- MCP tool: `get_audio_status()` — check capture state and buffer fullness.
+- Frontend: `AudioCaptureBar` component — toggle capture, show buffer status, hotkey hint (Ctrl/Cmd+Shift+M).
 
-### 8.3 Mobile companion — pairing and transport
+### 8.3 Phase 8 tests
 
-Status: ⬜ Not started.
+Status: ✅ Complete. 3 tests passing.
 
-A mobile client that shows a streamed view of the desktop, not a separate application. Desktop is authoritative; mobile is a thin window.
-
-- **Pairing**: QR code (encodes pairing nonce + desktop LAN address) → mobile scans → mobile shows a numeric code → user enters code on desktop → bidirectional confirmation. Both expire after a short window.
-- **Discovery**: Bonjour / mDNS advertisements on the LAN. Previously-paired devices reconnect automatically. Manual address entry as fallback for networks where mDNS is blocked.
-- **Transport**: WebRTC data channels for low-latency state streaming. The desktop serialises the current view (plan tree, channel events, terminal output) and streams deltas to the mobile. User actions on mobile (post a steer, respond to `await_user_input`) route back through the same connection.
-
-### 8.4 Mobile companion — surfaces
-
-Status: ⬜ Not started.
-
-What the mobile shows:
-
-| Surface | Capability |
-|---------|-----------|
-| **Plans** | Browse plans, drill into items, read comments, see status — streamed from desktop |
-| **Channels** | See channel events, post `steer` / `weigh-in` responses back |
-| **Terminals** | Watch desktop terminal output, send input if needed |
-| **MCP prompts** | Respond to `await_user_input` when away from desk |
-| **Browser tunnel** | Load a local web app from the desktop through the P2P connection (test on a real phone without ngrok) |
-| **Push notifications** | Stuck events, need-decision events — native push so you can respond when not at desk |
-
-What mobile does NOT do: run its own plans or graph, maintain offline state, provide a parallel authoring surface, host any agent inference.
-
-### 8.5 Cross-machine P2P (team broadcast)
-
-Status: ⬜ Not started.
-
-Channel events broadcast directly between teammates' CodeTrellis instances on the same network, complementing the git-based sync path. Deferred from Phase 2 to share transport with the mobile companion.
-
-- Uses the same WebRTC + mDNS infrastructure as 8.3.
-- Desktop-to-desktop: when two instances are on the same LAN, channel events propagate in real-time without waiting for git push/pull.
-- Off-LAN: falls through to the existing git sync path. P2P is a latency optimisation, not a replacement for git.
-
-### 8.6 Phase 8 demo + tests
-
-Status: ⬜ Not started.
-
-Demo flow:
-1. Two teammates in a meeting. One presses the hotkey, asks the agent a question about the codebase. The agent receives the recent audio + prompt, responds in the Presence Pane with a graph walkthrough.
-2. The teammate's phone shows the same walkthrough via the mobile companion.
-3. Someone posts a `stuck` event from their agent → push notification on the other teammate's phone → they reply with a `steer` from mobile → the agent sees the steer.
-4. On the same LAN: channel event propagates via P2P before git push lands.
+Test the audio pipeline end-to-end with synthetic audio chunks (no real mic needed):
+1. Audio buffer — add chunks, get recent audio, verify rolling eviction.
+2. MCP tool — get_audio_context returns base64 data when buffer has content.
+3. Capture state — start/stop round-trip with buffer clear on restart.
 
 ### Build order
 
-8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 8.6. Audio capture first (self-contained, valuable even without mobile). Audio routing second (connects capture to agent). Mobile pairing/transport third (the hardest infrastructure). Mobile surfaces fourth (the payoff). P2P last (extends mobile transport to desktop-to-desktop).
+8.1 → 8.2 → 8.3.
+
+---
+
+## Phase 9 — Mobile companion and P2P (deferred)
+
+Goal: extend the desktop to the phone and enable real-time channel event broadcast between teammates on the same network. This is a separate product initiative requiring WebRTC, mDNS, and potentially a PWA or native mobile client.
+
+Reference: [16 — Mobile Companion](16-mobile-companion.md).
+
+### 9.1 Mobile companion — pairing and transport
+
+Status: ⬜ Deferred.
+
+QR code pairing → WebRTC data channels → mDNS discovery. Desktop is authoritative; mobile is a thin window.
+
+### 9.2 Mobile companion — surfaces
+
+Status: ⬜ Deferred.
+
+Plans, channels, terminals, MCP prompts, push notifications — all streamed from desktop.
+
+### 9.3 Cross-machine P2P (team broadcast)
+
+Status: ⬜ Deferred.
+
+Desktop-to-desktop channel event broadcast via WebRTC + mDNS, complementing git sync.
+
+### 9.4 Phase 9 demo + tests
+
+Status: ⬜ Deferred.
 
 ---
 

@@ -2970,6 +2970,58 @@ app.put('/api/freeze', (req, res) => {
   res.json(status);
 });
 
+// --- CDev Phase 8 — Audio capture REST surface ---
+
+app.post('/api/audio/start', (_req, res) => {
+  const { audioBuffer } = require('./services/audio-buffer-service');
+  const maxSeconds = (_req.body as any)?.maxBufferSeconds;
+  audioBuffer.startCapture(maxSeconds);
+  res.json(audioBuffer.getStatus());
+});
+
+app.post('/api/audio/stop', (_req, res) => {
+  const { audioBuffer } = require('./services/audio-buffer-service');
+  audioBuffer.stopCapture();
+  res.json(audioBuffer.getStatus());
+});
+
+app.get('/api/audio/status', (_req, res) => {
+  const { audioBuffer } = require('./services/audio-buffer-service');
+  res.json(audioBuffer.getStatus());
+});
+
+app.post('/api/audio/chunk', (req, res) => {
+  const { audioBuffer } = require('./services/audio-buffer-service');
+  const { audioBase64, durationMs } = req.body as { audioBase64?: string; durationMs?: number };
+
+  if (!audioBase64 || !durationMs) {
+    res.status(400).json({ error: 'audioBase64 and durationMs required' });
+    return;
+  }
+
+  if (!audioBuffer.isCapturing()) {
+    res.status(409).json({ error: 'Audio capture is not active' });
+    return;
+  }
+
+  const data = Buffer.from(audioBase64, 'base64');
+  audioBuffer.addChunk(data, durationMs);
+  res.json({ accepted: true, bufferedSeconds: audioBuffer.getStatus().bufferedSeconds });
+});
+
+app.get('/api/audio/recent', (req, res) => {
+  const { audioBuffer } = require('./services/audio-buffer-service');
+  const seconds = req.query.seconds ? Number(req.query.seconds) : undefined;
+  const snapshot = audioBuffer.getRecentAudio(seconds);
+
+  if (!snapshot) {
+    res.status(404).json({ error: 'No audio available' });
+    return;
+  }
+
+  res.json(snapshot);
+});
+
 // --- CDev Phase 7 — External contributors REST surface ---
 
 app.get('/api/pantry/resolve', (req, res) => {
