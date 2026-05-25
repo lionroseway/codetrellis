@@ -181,48 +181,131 @@ function flushDriftBatch(planUid: string): void {
 
 // --- Doc staleness → channel bridge (Phase 4.3) ------------------------------
 
+// Track which (docUid, planUid) staleness events we've already posted
+// so we don't re-fire on every file-watcher event for the same stale doc.
+const firedDocStale = new Set<string>();
+
 /**
- * Called when a system doc's freshness transitions to 'stale'. Posts
- * a `need-decision` channel event suggesting the doc be updated or
- * the code change reviewed.
+ * Called from the file watcher when a source file changes. Cross-
+ * references the path against system docs that list it in
+ * `references.files`, checks freshness, and posts a `need-decision`
+ * channel event for any that have gone stale.
  *
- * `planUid` is optional — if the doc isn't anchored to a specific
- * plan, the event isn't posted (channels are per-plan; a planless
- * doc staleness alert has nowhere to go in the current model).
+ * Safe to call from the hot file-watcher path — failures are caught
+ * and logged, never thrown.
  */
-export function onDocStale(opts: {
+export function checkDocFreshnessForFile(relativePath: string, projectRoot: string): void {
+  try {
+    const cfg = getEffectiveSensorConfig(projectRoot);
+    if (!cfg.docs.enabled || !cfg.docs.channelEvents) return;
+
+    // Lazy-require to avoid circular dep at load time.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { findDocsByReferencedFile, getFreshness } = require('./system-docs-service');
+
+    const matchingDocs: Array<{ uid: string; slug: string; title: string; plans: string[] }> =
+      findDocsByReferencedFile(projectRoot, relativePath);
+    if (matchingDocs.length === 0) return;
+
+    for (const doc of matchingDocs) {
+      const report = getFreshness(doc.uid);
+      if (!report || report.status !== 'stale') continue;
+
+      // Channel events are per-plan. Use the first referenced plan,
+      // or skip if the doc has no plan anchor.
+      const planUid = doc.plans[0];
+      if (!planUid) continue;
+
+      const key = `${doc.uid}:${planUid}`;
+      if (firedDocStale.has(key)) continue;
+      firedDocStale.add(key);
+
+      postDocStaleEvent({
+        docUid: doc.uid,
+        slug: doc.slug,
+        title: doc.title,
+        changedFiles: report.changedReferencedFiles,
+        planUid,
+        projectRoot,
+      });
+    }
+  } catch (err) {
+    console.warn('[SensorBridge] checkDocFreshnessForFile error:', err);
+  }
+}
+
+/**
+ * Check all system docs for a project and post channel events for
+ * any that have gone stale. Called from the REST endpoint
+ * `/api/sensors/doc-check` (git-hook trigger).
+ */
+export function checkAllDocsAndBridge(projectRoot: string): { staleCount: number; eventsPosted: number } {
+  try {
+    const cfg = getEffectiveSensorConfig(projectRoot);
+    if (!cfg.docs.enabled || !cfg.docs.channelEvents) return { staleCount: 0, eventsPosted: 0 };
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { checkAllDocsFreshness, getSystemDoc } = require('./system-docs-service');
+    const staleReports = checkAllDocsFreshness(projectRoot);
+    let eventsPosted = 0;
+
+    for (const report of staleReports) {
+      const doc = getSystemDoc(report.uid);
+      if (!doc) continue;
+      const planUid = doc.references?.plans?.[0];
+      if (!planUid) continue;
+
+      const key = `${doc.uid}:${planUid}`;
+      if (firedDocStale.has(key)) continue;
+      firedDocStale.add(key);
+
+      const posted = postDocStaleEvent({
+        docUid: doc.uid,
+        slug: doc.slug,
+        title: doc.title,
+        changedFiles: report.changedReferencedFiles,
+        planUid,
+        projectRoot,
+      });
+      if (posted) eventsPosted++;
+    }
+
+    return { staleCount: staleReports.length, eventsPosted };
+  } catch (err) {
+    console.warn('[SensorBridge] checkAllDocsAndBridge error:', err);
+    return { staleCount: 0, eventsPosted: 0 };
+  }
+}
+
+/**
+ * Internal helper: post a doc-stale channel event.
+ */
+function postDocStaleEvent(opts: {
   docUid: string;
   slug: string;
   title: string;
   changedFiles: string[];
   planUid: string;
   projectRoot: string;
-}): void {
-  try {
-    const cfg = getEffectiveSensorConfig(opts.projectRoot);
-    if (!cfg.docs.enabled || !cfg.docs.channelEvents) return;
+}): boolean {
+  const fileList = opts.changedFiles.slice(0, 5);
+  const message = [
+    `Doc "${opts.title}" (${opts.slug}) is stale — referenced files changed since last verification.`,
+    `Changed: ${fileList.join(', ')}${opts.changedFiles.length > 5 ? ` (+${opts.changedFiles.length - 5} more)` : ''}.`,
+    'Verify the doc is still accurate, then run `verify_system_doc` to re-stamp it, or update the doc body to match current code.',
+  ].join(' ');
 
-    const fileList = opts.changedFiles.slice(0, 5);
-    const message = [
-      `Doc "${opts.title}" (${opts.slug}) is stale — referenced files changed since last verification.`,
-      `Changed: ${fileList.join(', ')}${opts.changedFiles.length > 5 ? ` (+${opts.changedFiles.length - 5} more)` : ''}.`,
-      'Verify the doc is still accurate, then run `verify_system_doc` to re-stamp it, or update the doc body to match current code.',
-    ].join(' ');
-
-    postSensorEvent({
-      planUid: opts.planUid,
-      eventType: 'need-decision',
-      payload: {
-        message,
-        source: 'doc-sensor',
-        docUid: opts.docUid,
-        docSlug: opts.slug,
-        changedFiles: opts.changedFiles,
-      },
-    });
-  } catch (err) {
-    console.warn('[SensorBridge] onDocStale error:', err);
-  }
+  return !!postSensorEvent({
+    planUid: opts.planUid,
+    eventType: 'need-decision',
+    payload: {
+      message,
+      source: 'doc-sensor',
+      docUid: opts.docUid,
+      docSlug: opts.slug,
+      changedFiles: opts.changedFiles,
+    },
+  });
 }
 
 // --- Stuck sensor → channel (Phase 4.4) --------------------------------------
@@ -259,11 +342,12 @@ export function onStuckDetected(opts: {
 
 // --- Teardown ----------------------------------------------------------------
 
-/** Clear all pending debounce timers. Test teardown. */
+/** Clear all pending debounce timers and caches. Test teardown. */
 export function resetSensorBridge(): void {
   for (const batch of driftBatches.values()) {
     clearTimeout(batch.timer);
   }
   driftBatches.clear();
+  firedDocStale.clear();
   broadcastFn = null;
 }

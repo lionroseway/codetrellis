@@ -367,6 +367,57 @@ export function getFreshness(uid: string): SystemDocFreshnessReport | null {
 }
 
 /**
+ * Find system docs for a project whose `references.files` array
+ * contains a given relative path. Used by the doc sensor (Phase 4.3)
+ * to check freshness when a referenced file changes.
+ *
+ * Uses a JSON string LIKE match — not 100% precise (a path that's a
+ * substring of another could false-match), but fast and sufficient for
+ * the sensor's needs.
+ */
+export function findDocsByReferencedFile(projectPath: string, relativePath: string): Array<{ uid: string; slug: string; title: string; plans: string[] }> {
+  const db = getDb();
+  const normalised = normalisePath(projectPath);
+  // JSON-encode the path so we match the escaped form inside the array.
+  const jsonPath = JSON.stringify(relativePath);
+  // Strip the outer quotes for the LIKE pattern: we want to match
+  // "references" JSON containing the path string.
+  const likePattern = `%${jsonPath}%`;
+  const result = db.exec(
+    `SELECT uid, slug, title, "references"
+       FROM system_docs
+       WHERE project_path = ? AND "references" LIKE ?`,
+    [normalised, likePattern],
+  );
+  if (!result[0]) return [];
+  return result[0].values.map((r: any[]) => {
+    const refs = safeParseJsonObject(r[3] as string | null) as SystemDocReferences;
+    return {
+      uid: r[0] as string,
+      slug: r[1] as string,
+      title: r[2] as string,
+      plans: refs.plans ?? [],
+    };
+  });
+}
+
+/**
+ * Check freshness for all docs in a project. Returns reports for docs
+ * that are 'stale'. Used by the git-hook REST endpoint (Phase 4.3).
+ */
+export function checkAllDocsFreshness(projectPath: string): SystemDocFreshnessReport[] {
+  const docs = listSystemDocs(projectPath);
+  const stale: SystemDocFreshnessReport[] = [];
+  for (const doc of docs) {
+    const report = getFreshness(doc.uid);
+    if (report && report.status === 'stale') {
+      stale.push(report);
+    }
+  }
+  return stale;
+}
+
+/**
  * Boot-time: scan `.codetrellis/docs/` for any .md files and
  * upsert them into the index. Lets the user `git pull` new docs
  * and have them appear without manual import.

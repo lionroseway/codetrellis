@@ -1,0 +1,37 @@
+#!/bin/sh
+# CodeTrellis doc-staleness sensor hook (optional).
+#
+# Install:
+#   cp .codetrellis/hooks/post-merge .git/hooks/post-merge
+#   chmod +x .git/hooks/post-merge
+#
+# Or source it from your own hook manager (husky, lefthook, etc.).
+#
+# What it does:
+#   After `git pull` (merge), pings the local CodeTrellis backend to
+#   re-check all system docs for staleness. If any doc's referenced
+#   files changed in the merge, a need-decision channel event is
+#   posted so the team knows the doc needs review.
+#
+# Requirements:
+#   - CodeTrellis running locally (default: http://localhost:3001)
+#   - curl available on PATH
+#
+# The hook is fire-and-forget: if CodeTrellis isn't running or the
+# request fails, the hook exits silently (exit 0) so it never blocks
+# git operations.
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+CODETRELLIS_PORT="${CODETRELLIS_PORT:-3001}"
+
+if [ -z "$PROJECT_ROOT" ]; then
+  exit 0
+fi
+
+# URL-encode the project path (basic: spaces → %20).
+ENCODED_PATH=$(printf '%s' "$PROJECT_ROOT" | sed 's/ /%20/g')
+
+curl -s -o /dev/null \
+  "http://localhost:${CODETRELLIS_PORT}/api/sensors/doc-check?project=${ENCODED_PATH}" \
+  --max-time 5 \
+  2>/dev/null || true

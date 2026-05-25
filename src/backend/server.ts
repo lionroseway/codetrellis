@@ -2898,6 +2898,29 @@ app.get('/api/system-docs/:uid/freshness', (req, res) => {
   res.json(report);
 });
 
+// --- Sensor endpoints (Phase 4.3) ---
+
+/**
+ * Git-hook trigger: check all system docs for staleness and post
+ * channel events for any that have gone stale. Called from an optional
+ * post-merge / post-commit hook via `curl`.
+ *
+ * Query: `?project=<absolute-path>`.
+ */
+app.get('/api/sensors/doc-check', (req, res) => {
+  try {
+    const project = req.query.project as string | undefined;
+    if (!project) return res.status(400).json({ error: 'project query parameter is required' });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { checkAllDocsAndBridge } = require('./services/sensor-bridge-service');
+    const result = checkAllDocsAndBridge(project);
+    return res.json(result);
+  } catch (err) {
+    console.error('[Backend] /api/sensors/doc-check error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // --- Global error handler (must be after all routes) ---
 // The 4-argument signature tells Express this is an error handler.
 // Catches synchronous throws in route handlers that slip past local
