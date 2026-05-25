@@ -640,163 +640,356 @@ Test the audio pipeline end-to-end with synthetic audio chunks (no real mic need
 
 ---
 
-## Phase 9 — Mobile companion and P2P
+## Phase 9 — Peer networking and pairing
 
-Goal: extend the desktop to the phone and enable real-time channel event broadcast between teammates on the same network. The mobile companion is a **streamed view of the desktop** — not a second application. Desktop is authoritative; mobile is a thin window onto it. Cross-machine P2P reuses the same WebRTC transport for desktop-to-desktop channel broadcast.
+Goal: build the shared transport layer that everything else (multi-device, mobile) composes on top of. WebRTC for peer-to-peer data channels, mDNS for discovery, and a pairing handshake that always requires explicit trust.
 
 Reference: [16 — Mobile Companion](16-mobile-companion.md).
 
-### 9.1 Networking infrastructure (WebRTC + mDNS)
+### 9.1 WebRTC signalling
 
 Status: ⬜ Not started.
 
-The transport layer that both mobile pairing and desktop P2P share. Build this first — everything else composes on top.
+A lightweight signalling layer that runs inside the existing Express process. Two CodeTrellis instances exchange WebRTC offers/answers/ICE candidates through this before establishing a direct peer connection.
 
-**WebRTC signalling server** (lightweight, runs inside the Express process):
-
-- `src/backend/services/signalling-service.ts` — in-memory room-based signalling via the existing WebSocket connection. No external STUN/TURN servers needed on LAN; optional STUN config for VPN traversal.
-- REST: `POST /api/peer/offer`, `POST /api/peer/answer`, `POST /api/peer/ice-candidate`.
+- `src/backend/services/signalling-service.ts` — room-based signalling over the existing WebSocket. Each pairing session creates a room; once the peer connection is established the signalling room is torn down.
+- REST (for out-of-band initiation): `POST /api/peer/offer`, `POST /api/peer/answer`, `POST /api/peer/ice-candidate`.
 - WebSocket events: `peer:offer`, `peer:answer`, `peer:ice-candidate`, `peer:connected`, `peer:disconnected`.
+- No external STUN/TURN servers for LAN. Optional STUN config (`~/.codetrellis/network.json`) for VPN traversal (Tailscale, corporate VPN).
+- The signalling server is **not a relay** — data never flows through it after the peer connection is up.
 
-**mDNS advertisement and discovery**:
-
-- `src/backend/services/mdns-service.ts` — advertise this CodeTrellis instance via Bonjour/mDNS (`_codetrellis._tcp`). Discover other instances on the same LAN.
-- Service record includes: instance name, version, device fingerprint (from repo-identity), port.
-- Fallback: manual address entry when mDNS is blocked (corporate VPNs, hotel WiFi).
-
-**Peer connection manager**:
-
-- `src/backend/services/peer-connection-service.ts` — manages WebRTC `RTCPeerConnection` lifecycle. Handles offer/answer exchange, ICE gathering, reconnection on network change.
-- Data channels: `control` (JSON messages), `state` (plan/channel state sync), `terminal` (terminal output stream).
-- Connection states exposed via `GET /api/peers` (list connected peers with type: mobile | desktop).
-
-**Security**:
-
-- Connections only accepted after pairing handshake completes.
-- All data channels encrypted by WebRTC's built-in DTLS.
-- No relay servers — CodeTrellis never becomes a network operator. User's existing VPN handles off-LAN (Tailscale, corporate VPN, etc.).
-
-### 9.2 Mobile pairing
+### 9.2 mDNS discovery
 
 Status: ⬜ Not started.
 
-QR code pairing with bidirectional confirmation. Both ends actively verify — a leaked QR photo alone is not sufficient.
+Every running CodeTrellis instance advertises itself on the local network via Bonjour/mDNS. Other instances discover it automatically.
 
-**Pairing flow**:
+- `src/backend/services/mdns-service.ts` — advertise as `_codetrellis._tcp` on startup; browse for other instances continuously.
+- Service record: `{ name: <device-alias>, version, fingerprint, port, instanceId }`.
+- Discovery events: `peer:discovered`, `peer:lost` — surface in a "Nearby devices" UI.
+- Fallback: manual address entry when mDNS is blocked (corporate VPNs, hotel WiFi, some Docker setups).
+- Uses `bonjour-service` npm package (pure JS, cross-platform — no Bonjour SDK dependency).
 
-1. Desktop generates a pairing nonce + displays QR code encoding: `{ nonce, address, port, version }`.
-2. Mobile scans QR → initiates WebRTC connection to desktop.
-3. Mobile displays a 6-digit numeric code.
-4. User enters the code on the desktop → desktop confirms.
-5. Both sides store a shared secret derived from the handshake. Future reconnections are automatic.
+### 9.3 Pairing handshake
+
+Status: �� Not started.
+
+Every connection between CodeTrellis instances requires explicit pairing — same LAN or not. A leaked QR or discovered mDNS address alone is never sufficient to establish a connection.
+
+**Flow**:
+
+1. Initiator (device A) selects a discovered peer (or enters address manually) → generates a pairing nonce.
+2. Device A displays a QR code encoding `{ nonce, address, port, version, fingerprint }`.
+3. Device B scans the QR (or receives the nonce via manual entry).
+4. Device B displays a 6-digit numeric confirmation code.
+5. User enters the code on Device A → both sides derive a shared secret via ECDH.
+6. Shared secret stored; future reconnections authenticate automatically via the stored credential.
 
 **Implementation**:
 
-- `src/backend/services/pairing-service.ts` — generates nonce, validates codes, stores paired device records.
-- REST: `POST /api/pairing/start` (generates QR payload), `POST /api/pairing/confirm` (validates numeric code).
-- Paired devices stored in `~/.codetrellis/paired-devices.json` — survives app restarts.
+- `src/backend/services/pairing-service.ts` — nonce generation, code validation, ECDH key derivation, paired device CRUD.
+- Paired devices stored in `~/.codetrellis/paired-devices.json` — survives restarts, stores: fingerprint, alias, paired-at timestamp, last-seen, shared secret (encrypted at rest with device-local key).
 - QR and code expire after 60 seconds.
-- Multiple desktops can pair to one phone; multiple phones to one desktop.
+- Multiple devices can pair to one instance; one device can be paired to multiple instances.
+- REST: `POST /api/pairing/initiate`, `GET /api/pairing/qr`, `POST /api/pairing/confirm`, `DELETE /api/pairing/:fingerprint`.
+- MCP: `list_paired_devices`, `unpair_device`.
 
-**Frontend (desktop)**:
+**Frontend**:
 
-- `src/frontend/components/pairing/PairingModal.tsx` — QR display + code entry field.
-- Accessible from Settings → Devices or a top-bar button.
+- `src/frontend/components/pairing/PairingModal.tsx` — QR display (when initiating) + code entry (when confirming).
+- `src/frontend/components/pairing/DeviceList.tsx` — list paired devices, connection status, unpair action.
+- Accessible from Settings → Devices, or a top-bar "devices" icon that shows count of connected peers.
 
-### 9.3 Mobile surfaces (PWA)
-
-Status: ⬜ Not started.
-
-The mobile companion is a **Progressive Web App** served by the desktop when a paired device connects. No app store submission; the user opens a URL on their phone and the PWA installs to the home screen.
-
-**Architecture**: desktop serves the PWA bundle at `/mobile/`. State streams over the WebRTC data channel. The PWA renders whatever the desktop sends — no local plan state, no sync layer, no offline mode (by design).
-
-**Surfaces for v1**:
-
-| Surface | What it does | Data channel |
-|---|---|---|
-| Plan browser | Browse plans, drill into items, read comments, see status | `state` |
-| Channel responder | See stuck/need-decision/weigh-in events; post steer/weigh-in replies | `state` + `control` |
-| Terminal viewer | Watch what's running in a desktop terminal (read-only v1) | `terminal` |
-| MCP prompt responder | When agent calls `await_user_input`, prompt routes to paired mobile | `control` |
-| Push notifications | Stuck events, need-decision, channel mentions → native push | Service Worker |
-
-**Implementation**:
-
-- `src/mobile/` — separate Vite build target, outputs to `dist/mobile/`.
-- `src/mobile/App.tsx` — root component, handles WebRTC connection lifecycle.
-- `src/mobile/stores/remote-state-store.ts` — receives state snapshots from desktop, no local persistence.
-- `src/mobile/components/` — PlanList, PlanItem, ChannelFeed, TerminalViewer, PromptCard.
-- Desktop serves the bundle: `app.use('/mobile', express.static('dist/mobile'))`.
-- Push notifications via Web Push API (VAPID keys generated locally on first run, stored in `~/.codetrellis/push-keys.json`). No push relay server — notifications only work while WebRTC connection is active (acceptable for v1; push relay is a future option).
-
-**Deferred from v1**:
-
-- Terminal input (bandwidth + UX non-trivial on mobile).
-- Authoring (creating items, writing specs — better at a keyboard).
-- Multi-stream views (one connection at a time in v1).
-- Offline mode (by design — desktop is authoritative).
-- Browser tunnel (tap "tunnel port 3000" → load desktop's local web app on the phone).
-
-### 9.4 Cross-machine P2P (desktop-to-desktop)
+### 9.4 Peer connection manager
 
 Status: ⬜ Not started.
 
-Real-time channel event broadcast between teammates' desktops on the same LAN. Complements git sync (which is eventual) with instant delivery of channel events, presence, and status changes.
+Manages the lifecycle of active WebRTC connections to paired devices. Handles reconnection, heartbeat, and multiplexed data channels.
 
-**What it broadcasts**:
+- `src/backend/services/peer-connection-service.ts` — wraps `RTCPeerConnection`. One instance per active peer.
+- Automatic reconnection: when a paired device is discovered via mDNS (or was recently connected), attempt reconnection using stored credentials. Exponential backoff on failure.
+- Data channels (created on connection):
+  - `control` — JSON-RPC messages (commands, responses, pairing lifecycle).
+  - `state` — plan/channel/presence state sync (JSON patches or full snapshots).
+  - `terminal` — terminal output stream (binary, multiplexed by terminal ID).
+  - `audio` — audio buffer forwarding (binary, WebM/Opus chunks).
+- Connection states exposed via `GET /api/peers` — list connected peers with: fingerprint, alias, type (desktop | mobile), connected-since, latency.
+- All data channels encrypted by WebRTC's built-in DTLS.
+- No relay servers. User's existing VPN handles off-LAN.
 
-- Channel events (stuck, steer, weigh-in, etc.) — instant delivery to peers.
-- Presence (who's online, what plan they're viewing, what their agent is doing).
-- Plan status changes (item completed, phase advanced) — optimistic update before git commit.
-
-**What it does NOT do**:
-
-- Replace git as the source of truth. P2P is a delivery optimisation; git remains authoritative.
-- Sync plan content. Plans sync through git. P2P just notifies peers that something changed so they can pull.
-- Work off-LAN without a VPN. Same constraint as mobile.
-
-**Implementation**:
-
-- Reuses the 9.1 networking infrastructure (WebRTC + mDNS).
-- `src/backend/services/p2p-broadcast-service.ts` — when a channel event is posted locally, broadcast it to all connected desktop peers.
-- `src/backend/services/p2p-presence-service.ts` — periodic heartbeat with current state (active plan, viewing item, agent status).
-- Desktop peers discover each other via mDNS. No pairing handshake needed for desktop-to-desktop on the same LAN (trust model: same network = same team). Optional PIN confirmation for untrusted networks.
-- Incoming broadcasts surface in the existing Channel panel and Presence Pane — no new UI needed.
-
-**Conflict handling**:
-
-- If a P2P-delivered event arrives for a plan that's already been committed via git, the event is deduplicated by UID.
-- If the git state is ahead (teammate committed before broadcast arrived), the broadcast is a no-op.
-- If the broadcast arrives first, the event displays immediately and the git commit catches up later.
-
-### 9.5 Phase 9 demo + tests
+### 9.5 Phase 9 tests
 
 Status: ⬜ Not started.
 
-Test the full pipeline with synthetic peers (no real phones needed):
-
-1. **Networking** — two in-process WebRTC peers connect via signalling, exchange messages on data channels.
-2. **Pairing** — simulate QR scan + code confirmation, verify paired device record persists.
-3. **Mobile state sync** — paired peer receives plan state, channel events stream in real time.
-4. **P2P broadcast** — two desktop instances discover each other, channel events propagate bidirectionally.
-5. **Reconnection** — simulate network drop, verify automatic reconnection from stored pairing.
+1. **Signalling** — two in-process peers exchange offer/answer/ICE, establish data channel, send a message each way.
+2. **mDNS** — instance advertises, second instance discovers it, service record matches.
+3. **Pairing** — simulate full handshake (nonce → QR payload → code → confirmation), verify paired device record persists and reconnection authenticates.
+4. **Connection manager** — paired peers auto-reconnect after simulated disconnect. Data channels deliver messages reliably.
+5. **Security** — unpaired peer attempts connection → rejected. Expired pairing nonce → rejected.
 
 ### Build order
 
-9.1 (networking) → 9.2 (pairing) → 9.3 (mobile surfaces) → 9.4 (P2P broadcast) → 9.5 (tests).
-
-9.1 and 9.4 can start in parallel since P2P builds on the same transport as mobile. The critical path is 9.1 → 9.2 → 9.3 (mobile needs pairing which needs networking).
+9.1 → 9.2 → 9.3 → 9.4 → 9.5. Strictly sequential — each layer depends on the one below.
 
 ### Dependencies and risks
 
 | Risk | Mitigation |
 |---|---|
-| WebRTC in Node.js requires `wrtc` or similar native module | Evaluate `node-datachannel` (lightweight, C++ bindings) vs `werift` (pure TS, no native deps) |
-| mDNS on Windows requires Bonjour SDK or equivalent | Use `bonjour-service` npm package (pure JS, works cross-platform) |
-| PWA on iOS has limited WebRTC support in standalone mode | Detect and fall back to regular browser tab; full PWA only on Android/Chrome |
-| Electron + WebRTC conflicts with existing node-pty native deps | Isolate WebRTC in a worker thread if needed |
-| Corporate firewalls blocking WebRTC | Fall back to WebSocket relay through the existing Express server (same-LAN only) |
+| WebRTC in Node.js requires native module | Evaluate `werift` (pure TS, no native deps, smaller surface) vs `node-datachannel` (C++ bindings, faster) |
+| mDNS on Windows | `bonjour-service` is pure JS, works cross-platform without Bonjour SDK |
+| Electron + WebRTC + node-pty native dep conflicts | Test early; isolate in worker thread if needed |
+| Corporate firewalls blocking UDP (WebRTC) | WebSocket relay fallback through Express (same-LAN only, no off-LAN relay) |
+| Pairing UX on headless / SSH-only machines | Support text-mode pairing via CLI (`codetrellis pair --code <code>`) alongside QR |
+
+---
+
+## Phase 10 — Multi-device (desktop-to-desktop)
+
+Goal: a developer with multiple machines (desktop + laptop) can **window into** any paired CodeTrellis instance from another. Both are full peers — you can read, respond, steer agents, and act from either machine. Git remains the source of truth for plan content; WebRTC provides instant delivery of state changes and real-time surfaces (terminals, audio, presence).
+
+This is not team collaboration (that's handled by git + channels). This is **one developer, multiple devices** — the same person working from wherever they happen to be sitting.
+
+### 10.1 State synchronisation protocol
+
+Status: ⬜ Not started.
+
+Define how two CodeTrellis instances keep each other informed in real time.
+
+**What syncs over WebRTC (instant)**:
+
+- Channel events — delivered immediately to the peer before git commit.
+- Plan item status changes — optimistic update (item completed, blocked, progress changed).
+- Presence — which plan is open, which item is selected, what the agent is doing.
+- Agent session state — connected agents, their tool calls, their status.
+- Audio buffer availability — peer knows when audio is capturing on the remote.
+
+**What does NOT sync over WebRTC**:
+
+- Plan content (item bodies, spec docs, attachments) — syncs through git. P2P notifies that something changed so you can pull.
+- System docs, settings, project config — git-backed, eventual consistency is fine.
+- The dependency graph itself — each instance scans its own repo.
+
+**Protocol**:
+
+- `src/backend/services/state-sync-service.ts` — on the `state` data channel.
+- Initial connection: full state snapshot (active plans, open channels, agent sessions, presence).
+- Ongoing: JSON patches (RFC 6902) for incremental updates. Debounced at 100ms to avoid flooding.
+- Each message includes a vector clock for ordering. Conflicts resolved by "most recent write wins" (acceptable for ephemeral state).
+- Deduplication by UID — if a channel event arrives via P2P and later via git, it's the same event.
+
+### 10.2 Remote terminal viewing
+
+Status: ⬜ Not started.
+
+View terminals running on a paired device. Full bidirectional — you can watch AND type from either machine.
+
+- `terminal` data channel carries PTY output (binary, multiplexed by terminal ID).
+- Remote terminals appear in the terminal panel with a "remote" badge and the device alias.
+- Input from the viewer streams back to the remote PTY via the same channel.
+- Latency indicator shown in the terminal tab header.
+- `src/backend/services/remote-terminal-service.ts` — bridges between `peer-connection-service` and the existing `terminal-service`.
+
+### 10.3 Remote audio forwarding
+
+Status: ⬜ Not started.
+
+When audio capture is active on one device, the other device can access it via `get_audio_context` as if it were local.
+
+- `audio` data channel streams WebM/Opus chunks from the capturing device to the peer.
+- The peer's `audio-buffer-service` receives forwarded chunks and stores them in its own buffer.
+- An agent on the laptop calling `get_audio_context` gets audio captured by the desktop's microphone — transparent to the agent.
+- Only forwards when explicitly enabled (privacy control: "Share audio capture with paired devices" toggle in Settings → Devices).
+
+### 10.4 Remote agent control
+
+Status: ⬜ Not started.
+
+Steer or unblock an agent running on a paired device from another machine.
+
+- Channel events posted on the laptop are delivered instantly to the desktop via P2P (before git commit).
+- `await_user_input` prompts from an agent on the desktop route to both the desktop UI and any connected peer.
+- The first response wins — if you answer from the laptop, the desktop sees the response.
+- Agent presence (connected agents, their current tool call, their status) streams to peers in real time via the `state` channel.
+
+### 10.5 UI: connected peers panel
+
+Status: ⬜ Not started.
+
+Frontend surfaces for multi-device awareness.
+
+- `src/frontend/components/peers/PeersPanel.tsx` — list of connected peers with: alias, connection quality, what they're viewing, their agent status.
+- Top-bar indicator: number of connected peers (click to expand panel).
+- Remote terminals integrated into existing terminal panel (separate tab group, "remote" badge).
+- Remote channel events render in the existing channel panel — no new UI, just a "from <device>" attribution.
+- Settings → Devices: manage paired devices, toggle audio sharing, see connection history.
+
+### 10.6 Phase 10 tests
+
+Status: ⬜ Not started.
+
+1. **State sync** — two instances pair, one posts a channel event, the other receives it instantly via P2P.
+2. **Terminal forwarding** — instance A creates a terminal, instance B sees it in the remote list, sends input, receives output.
+3. **Audio forwarding** — instance A captures audio, instance B's agent calls `get_audio_context` and receives the remote audio.
+4. **Bidirectional** — both instances post channel events simultaneously, both receive the other's event.
+5. **Reconnection** — disconnect, reconnect, verify state re-syncs and no events are lost.
+6. **Deduplication** — same event delivered via P2P and later via git → only one copy in the channel panel.
+
+### Build order
+
+10.1 (state sync) → 10.2 (terminals) + 10.3 (audio) in parallel → 10.4 (agent control) → 10.5 (UI) → 10.6 (tests).
+
+---
+
+## Phase 11 — Mobile companion
+
+Goal: a standalone mobile app (React Native / Expo) that connects to a paired CodeTrellis desktop and lets you **respond to your agent from your pocket**. The primary use case: your agent posts a `stuck` or `need-decision` event, your phone pings you, you unblock it without walking back to your desk.
+
+The app is designed with an **abstract connection layer** — today it connects to a local desktop over WebRTC; in the future it could connect to a cloud-hosted CodeTrellis instance over HTTPS/WebSocket without changing the UI layer.
+
+Reference: [16 — Mobile Companion](16-mobile-companion.md).
+
+### 11.1 React Native / Expo project setup
+
+Status: ⬜ Not started.
+
+- `mobile/` — new top-level directory (separate from `src/`). Expo managed workflow.
+- `mobile/app/` — Expo Router file-based routing.
+- `mobile/lib/connection/` — abstract `ConnectionProvider` interface:
+  - `WebRTCConnection` — connects to paired desktop via WebRTC (reuses Phase 9 pairing).
+  - `HTTPConnection` — connects to a remote endpoint via HTTPS/WebSocket (future, stubbed).
+- `mobile/lib/state/` — remote state store. Receives state from the connected instance, no local persistence.
+- `mobile/lib/push/` — Expo Notifications for push (FCM on Android, APNs on iOS).
+- Design system: matches desktop dark theme, optimised for touch and small screens.
+
+### 11.2 Pairing flow (mobile side)
+
+Status: ⬜ Not started.
+
+The mobile app initiates pairing by scanning a QR code displayed on the desktop (Phase 9.3 handshake, mobile side).
+
+- Camera permission → QR scanner.
+- Parses QR payload → establishes WebRTC connection to desktop's signalling endpoint.
+- Displays 6-digit code for desktop confirmation.
+- On success: stores pairing credentials in secure storage (Expo SecureStore).
+- Paired desktops listed on the app's home screen — tap to connect.
+- Auto-reconnect when both devices are on the same network (mDNS discovery runs on mobile too).
+
+### 11.3 Channel responder
+
+Status: ⬜ Not started.
+
+The primary surface. Shows channel events that need your attention and lets you respond.
+
+- Feed of `stuck`, `need-decision`, `weigh-in`, `need-context` events from the connected desktop.
+- Tap an event → reply composer (steer, weigh-in response, context provision).
+- Reply posts back through the WebRTC `control` channel → desktop processes it as if posted locally.
+- Badge count on the app icon for unresponded events.
+- Pull-to-refresh (re-requests full state snapshot from desktop).
+
+### 11.4 Plan browser (read-only)
+
+Status: ⬜ Not started.
+
+Browse plans and drill into items — read-only from mobile.
+
+- Plan list → tap to open → item tree → tap item for detail.
+- Shows: title, status, assignee, progress, comments, attachments (metadata only — no file download).
+- Status changes visible in real time (items completing, phases advancing) via state sync.
+- No authoring from mobile (creating items, editing specs — those stay at the keyboard).
+
+### 11.5 Agent prompt relay
+
+Status: ⬜ Not started.
+
+When an agent on the desktop calls `await_user_input`, the prompt routes to the mobile app.
+
+- Push notification: "Your agent needs input: <prompt preview>".
+- Tap → opens prompt card with the full question and a text input.
+- Submit → response flows back to desktop via `control` channel → agent continues.
+- If answered on desktop first, the mobile prompt dismisses automatically.
+- Timeout handling: if neither device responds within the agent's timeout, the prompt expires gracefully.
+
+### 11.6 Push notifications
+
+Status: ⬜ Not started.
+
+Native push notifications that work even when the WebRTC connection is not active.
+
+- **Problem**: WebRTC data channels only work while both devices are connected. If the phone is locked / app is backgrounded, no messages arrive.
+- **Solution**: Desktop sends push notifications via Expo Push Service (free tier, no server needed beyond Expo's hosted infrastructure).
+- `src/backend/services/push-notification-service.ts` — on the desktop side. When a channel event fires and a paired mobile device has a push token registered, send a push via Expo's API.
+- Mobile registers its Expo push token with the desktop during pairing.
+- Push payload includes: event type, preview text, plan/item context. Tapping the notification opens the app to the relevant event.
+- Privacy: push payloads are minimal (type + IDs). Full content loads over WebRTC when the app opens.
+
+### 11.7 Phase 11 tests
+
+Status: ⬜ Not started.
+
+1. **Pairing** — simulate mobile scanning QR, completing handshake, storing credentials.
+2. **Channel sync** — desktop posts channel event, mobile receives it via state sync.
+3. **Reply** — mobile posts a steer reply, desktop receives it and it appears in the channel panel.
+4. **Prompt relay** — desktop agent calls `await_user_input`, mobile receives prompt, submits response, agent continues.
+5. **Push** — channel event fires on desktop, push notification sent to registered token (mock Expo Push API).
+6. **Reconnection** — mobile disconnects, reconnects, receives events posted during the gap.
+
+### Build order
+
+11.1 (project setup) → 11.2 (pairing) → 11.3 (channel responder) → 11.4 (plan browser) → 11.5 (prompt relay) → 11.6 (push) → 11.7 (tests).
+
+The channel responder (11.3) is the MVP. If we ship nothing else, a mobile app that shows channel events and lets you reply is the core value.
+
+### Dependencies and risks
+
+| Risk | Mitigation |
+|---|---|
+| WebRTC in React Native | `react-native-webrtc` is mature (10k+ stars) but has quirks on iOS. Test early. |
+| Expo managed workflow vs bare | Start managed; eject to bare only if `react-native-webrtc` requires it |
+| Push notification reliability (Expo Push) | Expo's free tier has no SLA; acceptable for v1. FCM/APNs direct if scale demands it later. |
+| iOS background execution limits | WebRTC connections drop when backgrounded. Push notifications cover the gap. |
+| App store review (Apple) | No WebRTC-to-localhost concerns since it's LAN/VPN peer. Apple approves WebRTC apps routinely. |
+| Two codebases to maintain | Share types via `src/shared/` (already exists). Connection protocol is the contract — mobile and desktop evolve independently. |
+
+---
+
+## Cross-cutting: connection protocol spec
+
+Phases 9, 10, and 11 all speak the same protocol over WebRTC data channels. This section defines it once.
+
+### Channel: `control` (JSON-RPC 2.0)
+
+| Method | Direction | Purpose |
+|---|---|---|
+| `ping` | bidirectional | Heartbeat (every 10s) |
+| `state.snapshot` | provider → consumer | Full state dump on connection |
+| `state.patch` | provider → consumer | Incremental JSON Patch (RFC 6902) |
+| `channel.post` | either → either | Post a channel event |
+| `channel.reply` | either → either | Reply to a channel event |
+| `prompt.request` | desktop → peer | `await_user_input` prompt |
+| `prompt.response` | peer → desktop | User's response to prompt |
+| `prompt.cancel` | desktop → peer | Prompt answered elsewhere |
+| `terminal.list` | consumer → provider | Request terminal list |
+| `terminal.subscribe` | consumer → provider | Start receiving output for a terminal |
+| `terminal.input` | consumer → provider | Send input to a remote terminal |
+| `audio.status` | either → either | Audio capture state query/update |
+
+### Channel: `state` (binary, length-prefixed)
+
+- Message format: `[4-byte length][JSON payload]`.
+- Payload: `{ type: 'snapshot' | 'patch', clock: number[], data: object }`.
+- Debounced at 100ms on the sender side.
+
+### Channel: `terminal` (binary, multiplexed)
+
+- Message format: `[1-byte terminal-index][payload]`.
+- Terminal index 0-255 maps to terminal IDs exchanged via `terminal.list`.
+- Payload is raw PTY output (UTF-8 text + ANSI escapes).
+
+### Channel: `audio` (binary)
+
+- Message format: `[4-byte duration-ms][audio-data]`.
+- Audio data is WebM/Opus chunks, same format as `push_audio_chunk`.
+- Only flows when audio sharing is enabled and capture is active on the sender.
 
 ---
 
