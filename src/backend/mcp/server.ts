@@ -67,6 +67,7 @@ import { register as registerGitTools } from './tools/git-tools';
 import { register as registerChannelTools } from './tools/channel-tools';
 import { register as registerSystemDocsTools } from './tools/system-docs-tools';
 import { register as registerGovernanceTools } from './tools/governance-tools';
+import { registerContributionTools } from './tools/contribution-tools';
 import { register as registerResources } from './resources';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -326,6 +327,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerChannelTools(mcpServer, deps);
   registerSystemDocsTools(mcpServer, deps);
   registerGovernanceTools(mcpServer, deps);
+  registerContributionTools(mcpServer);
   registerResources(mcpServer, deps);
 
   return mcpServer;

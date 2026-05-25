@@ -2970,6 +2970,79 @@ app.put('/api/freeze', (req, res) => {
   res.json(status);
 });
 
+// --- CDev Phase 7 — External contributors REST surface ---
+
+app.get('/api/pantry/resolve', (req, res) => {
+  const { resolveReferences, scanPlanReferences } = require('./services/pantry-resolution-service');
+  const projectPath = req.query.project as string | undefined;
+  const refs = req.query.refs as string | string[] | undefined;
+  const planSlug = req.query.plan_slug as string | undefined;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+
+  if (refs) {
+    const refArray = Array.isArray(refs) ? refs : [refs];
+    const results = resolveReferences(refArray, projectPath);
+    res.json({ total: results.length, results });
+  } else if (planSlug) {
+    res.json(scanPlanReferences(projectPath, planSlug));
+  } else {
+    res.status(400).json({ error: 'Provide refs[] or plan_slug query param' });
+  }
+});
+
+app.get('/api/contributions', (req, res) => {
+  const { listContributions, listContributionsForBranch } = require('./services/contribution-service');
+  const projectPath = req.query.project as string | undefined;
+  const branch = req.query.branch as string | undefined;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  res.json(branch ? listContributionsForBranch(projectPath, branch) : listContributions(projectPath));
+});
+
+app.post('/api/contributions/promote', (req, res) => {
+  const { promoteItemToContribution } = require('./services/contribution-service');
+  const { projectPath, itemUid, title, kind, status, body, description, attachments } = req.body;
+  if (!projectPath || !itemUid || !title || !kind) {
+    res.status(400).json({ error: 'projectPath, itemUid, title, kind required' });
+    return;
+  }
+  try {
+    const result = promoteItemToContribution(projectPath, { uid: itemUid, title, kind, status, body, description, attachments });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/contributions/accept', (req, res) => {
+  const { acceptContributions } = require('./services/contribution-service');
+  const { projectPath, branch, planSlug } = req.body;
+  if (!projectPath || !branch || !planSlug) {
+    res.status(400).json({ error: 'projectPath, branch, planSlug required' });
+    return;
+  }
+  try {
+    const result = acceptContributions(projectPath, branch, planSlug);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/contributor-branch', (req, res) => {
+  const { prepareContributorBranch } = require('./services/contribution-service');
+  const { projectPath, planSlug, branchName, includeItems } = req.body;
+  if (!projectPath || !planSlug || !branchName) {
+    res.status(400).json({ error: 'projectPath, planSlug, branchName required' });
+    return;
+  }
+  try {
+    const result = prepareContributorBranch(projectPath, planSlug, branchName, { includeItems });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // --- CDev Phase 3.4 — System documentation REST surface ---
 //
 // Frontend reads / writes system docs via these. The MCP tools cover

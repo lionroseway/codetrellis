@@ -553,7 +553,7 @@ Reference: [05 — Cross-Repo Work and External Contributors](05-cross-repo-and-
 
 ### 7.1 Asymmetric pantry (external placeholder state)
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 External contributors working in forks or scoped branches don't have access to the team's private pantry content (local screenshots, internal transcripts, private notes). Today, references to those items silently break. Phase 7.1 adds a graceful placeholder state.
 
@@ -563,7 +563,7 @@ External contributors working in forks or scoped branches don't have access to t
 
 ### 7.2 Promote-to-PR controls
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 When an external contributor wants to share working material (an architecture diagram, a walkthrough recording, a spec draft) back to the team, they mark it for inclusion in their pull request.
 
@@ -573,7 +573,7 @@ When an external contributor wants to share working material (an architecture di
 
 ### 7.3 Fork-from-prepared-state
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 In situations where the team doesn't want to share the full plan history with a contractor, the contractor forks from a prepared branch rather than main.
 
@@ -582,7 +582,7 @@ In situations where the team doesn't want to share the full plan history with a 
 
 ### 7.4 Phase 7 demo + tests
 
-Status: ⬜ Not started.
+Status: ✅ Done.
 
 Demo flow:
 1. Team creates a plan with a mix of shared and local items.
