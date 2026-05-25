@@ -3,6 +3,7 @@ import { listAllItems, updateItem, createItem } from './plan-item-service';
 import { getDependencyEdges } from './database';
 import { markDirty } from './persistence';
 import { broadcast } from '../server';
+import { onDeviationDetected } from './sensor-bridge-service';
 import type { Deviation, PlanItem } from '../../shared/types';
 
 /**
@@ -240,7 +241,21 @@ function createDeviation(
   const id = (idResult[0]?.values[0]?.[0] as number) || 0;
   markDirty();
 
-  return { id, planUid, deviationType, severity: severity as Deviation['severity'], description, resolution: 'pending', detectedAt: now, resolvedAt: null, filePath: filePath ?? null };
+  const deviation: Deviation = { id, planUid, deviationType, severity: severity as Deviation['severity'], description, resolution: 'pending', detectedAt: now, resolvedAt: null, filePath: filePath ?? null };
+
+  // Phase 4.2 — bridge new deviations to the channel system.
+  // Lazy-require getPlan to resolve project root; the bridge
+  // handles config checks and debouncing.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getPlan: getPlanLazy } = require('./plan-service');
+    const plan = getPlanLazy(planUid);
+    if (plan?.projectPath) {
+      onDeviationDetected(deviation, plan.projectPath);
+    }
+  } catch { /* best-effort — sensor bridge must never crash deviation detection */ }
+
+  return deviation;
 }
 
 export function getDeviations(planUid: string): Deviation[] {

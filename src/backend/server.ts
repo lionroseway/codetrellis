@@ -3015,6 +3015,16 @@ export async function initializeBackend(): Promise<void> {
     console.warn('[Backend] Channel dispatcher failed to start:', err);
   }
 
+  // Phase 4.2 — sensor bridge: converts detection events (deviations,
+  // doc staleness, stuck) into channel events. Needs the broadcast fn.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { initSensorBridge } = require('./services/sensor-bridge-service');
+    initSensorBridge(broadcast);
+  } catch (err) {
+    console.warn('[Backend] Sensor bridge failed to init:', err);
+  }
+
   // Re-arm per-project watchers for known projects. Without this, a
   // backend restart (dev: tsx watch reload; packaged: app restart)
   // orphans any pre-existing project-config + plan-file watchers, and
