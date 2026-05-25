@@ -179,9 +179,9 @@ test.describe('CDev Phase 4 — sensors', () => {
       const baseUrl = `http://localhost:${h.backend.backendPort}`;
       const checkUrl = `${baseUrl}/api/sensors/doc-check?project=${encodeURIComponent(h.fixture.projectPath)}`;
       const checkRes = await fetch(checkUrl);
-      const checkJson = (await checkRes.json()) as { staleCount: number; eventsPosted: number };
+      const checkJson = (await checkRes.json()) as { staleCount: number; eventsSurfaced: number };
       expect(checkJson.staleCount).toBeGreaterThan(0);
-      expect(checkJson.eventsPosted).toBeGreaterThan(0);
+      expect(checkJson.eventsSurfaced).toBeGreaterThan(0);
 
       // Confirm the channel event landed.
       const eventsRes = await agent.callTool('list_channel_events', {

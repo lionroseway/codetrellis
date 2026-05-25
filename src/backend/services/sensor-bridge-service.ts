@@ -238,16 +238,21 @@ export function checkDocFreshnessForFile(relativePath: string, projectRoot: stri
  * Check all system docs for a project and post channel events for
  * any that have gone stale. Called from the REST endpoint
  * `/api/sensors/doc-check` (git-hook trigger).
+ *
+ * `eventsSurfaced` counts stale docs whose staleness has been
+ * surfaced to the channel — either by this call or already by the
+ * file-watcher path. A git-hook consumer can trust
+ * `eventsSurfaced > 0` to mean "the team has been notified."
  */
-export function checkAllDocsAndBridge(projectRoot: string): { staleCount: number; eventsPosted: number } {
+export function checkAllDocsAndBridge(projectRoot: string): { staleCount: number; eventsSurfaced: number } {
   try {
     const cfg = getEffectiveSensorConfig(projectRoot);
-    if (!cfg.docs.enabled || !cfg.docs.channelEvents) return { staleCount: 0, eventsPosted: 0 };
+    if (!cfg.docs.enabled || !cfg.docs.channelEvents) return { staleCount: 0, eventsSurfaced: 0 };
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { checkAllDocsFreshness, getSystemDoc } = require('./system-docs-service');
     const staleReports = checkAllDocsFreshness(projectRoot);
-    let eventsPosted = 0;
+    let eventsSurfaced = 0;
 
     for (const report of staleReports) {
       const doc = getSystemDoc(report.uid);
@@ -256,7 +261,12 @@ export function checkAllDocsAndBridge(projectRoot: string): { staleCount: number
       if (!planUid) continue;
 
       const key = `${doc.uid}:${planUid}`;
-      if (firedDocStale.has(key)) continue;
+      if (firedDocStale.has(key)) {
+        // Already surfaced by the file-watcher path — still counts
+        // as "team has been notified" for the caller.
+        eventsSurfaced++;
+        continue;
+      }
       firedDocStale.add(key);
 
       const posted = postDocStaleEvent({
@@ -267,13 +277,13 @@ export function checkAllDocsAndBridge(projectRoot: string): { staleCount: number
         planUid,
         projectRoot,
       });
-      if (posted) eventsPosted++;
+      if (posted) eventsSurfaced++;
     }
 
-    return { staleCount: staleReports.length, eventsPosted };
+    return { staleCount: staleReports.length, eventsSurfaced };
   } catch (err) {
     console.warn('[SensorBridge] checkAllDocsAndBridge error:', err);
-    return { staleCount: 0, eventsPosted: 0 };
+    return { staleCount: 0, eventsSurfaced: 0 };
   }
 }
 
