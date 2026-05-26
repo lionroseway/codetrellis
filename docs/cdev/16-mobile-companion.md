@@ -34,28 +34,28 @@ What the mobile companion does *not* do, by design:
 
 ## Pairing
 
-Pairing a mobile device to a desktop is a bidirectional confirmation:
+Pairing a mobile device to a desktop is a bidirectional confirmation that also establishes the WebRTC connection — the QR code carries the signalling payload, so no listening port is needed:
 
-1. The desktop displays a **QR code** that encodes a pairing nonce and the desktop's address on the LAN.
-2. The mobile **scans the QR**. This proves the mobile has line-of-sight to the desktop's screen.
-3. The mobile then **displays a numeric code** that the user enters on the desktop.
-4. The desktop accepts the code, completing the handshake.
+1. The desktop generates a **WebRTC offer** (SDP + ICE candidates via STUN) and displays it as a **QR code**.
+2. The mobile **scans the QR**. This proves the mobile has line-of-sight to the desktop's screen and gives it the offer.
+3. The mobile creates a WebRTC answer, then **displays a 6-digit confirmation code** derived from the answer's fingerprint. The user enters this code on the desktop.
+4. The desktop receives the answer payload (via an ephemeral UDP exchange lasting <5 seconds), completes the WebRTC handshake, and the **data channel opens**.
 
-Both ends actively confirm. A leaked photo of the QR is not sufficient — without the numeric back-confirmation, the pairing doesn't complete. Both QR and code **expire** after a short window to prevent stale captures from working later.
+Both ends actively confirm. A leaked photo of the QR is not sufficient — without the numeric back-confirmation and WebRTC answer delivery, the pairing doesn't complete. Both QR and code **expire** after 60 seconds.
 
-Once paired, the mobile device is remembered. Multiple desktops can be paired to one phone (a developer with several machines), and multiple phones to one desktop (rare but supported).
+Once paired, the mobile device is remembered (shared secret from the DTLS handshake stored in secure storage). Multiple desktops can be paired to one phone (a developer with several machines), and multiple phones to one desktop (rare but supported).
 
 ## Discovery
 
-Discovery is AirPlay-shaped. On the same LAN, the mobile sees a list of CodeTrellis desktops available for pairing via **Bonjour / mDNS** advertisements. The user taps one to start pairing; previously-paired devices reconnect automatically when both are on the same network.
+Discovery is AirPlay-shaped. On the same LAN, the mobile sees a list of CodeTrellis desktops via **Bonjour / mDNS** advertisements (`_codetrellis._tcp`). mDNS is informational only — it says "I'm here" but does not establish a connection. The user taps a discovered desktop to see its pairing QR, or the QR is already visible on the desktop screen. Previously-paired devices reconnect automatically over WebRTC when both are on the same network.
 
-On networks where mDNS is blocked (some corporate VPNs, hotel WiFi, restrictive guest networks), **manual address entry** is the universal fallback. The mobile asks for the desktop's address and proceeds with pairing from there. Most users never see this — it's a 5% safety net.
+On networks where mDNS is blocked (some corporate VPNs, hotel WiFi, restrictive guest networks), the user simply **initiates pairing from the desktop** — the QR appears regardless of whether mDNS works. Most users never need to think about this.
 
 The user experience the discovery model targets:
 
-- Open the mobile app at home → desktop appears in the list → tap to reconnect
+- Open the mobile app at home → desktop appears in the list → tap to reconnect (WebRTC auto-reconnect)
 - Open at the office → office desktop appears alongside home desktop → tap to switch
-- Open at a customer site over a guest WiFi where mDNS is blocked → enter the desktop's address manually → connect
+- Open at a customer site over a guest WiFi where mDNS is blocked → pair via QR code on the desktop screen → connect
 
 ## Off-LAN: bring your own VPN
 
@@ -69,9 +69,13 @@ For users without a VPN, off-LAN access isn't supported, and that's the right an
 
 ## Transport
 
-The streamed view uses **WebRTC** for the peer-to-peer channel between mobile and desktop. WebRTC is well-supported in modern mobile browsers and webviews, handles NAT traversal through STUN, and provides the data + media channels needed for streaming UI state and (in the browser tunnel case) port forwarding.
+The streamed view uses **WebRTC** for the peer-to-peer channel between mobile and desktop. WebRTC punches through NAT without opening any listening ports — CodeTrellis never binds to 0.0.0.0, keeping all existing ports (:3001, :5173, :19432) bound to localhost. The QR-based pairing carries the WebRTC signalling payload directly, eliminating the need for a separate signalling server.
+
+Data flows over multiplexed **WebRTC data channels**: `control` (JSON-RPC commands), `ui` (state snapshots/patches for the mobile WebView), `terminal` (binary PTY I/O), and `audio` (WebM/Opus chunks). The mobile app ships a **bundled copy** of the mobile UI — state arrives over WebRTC and is injected into a local WebView via `postMessage`, so no HTTP connection to the desktop is needed.
 
 On the same LAN or on a Tailscale-style VPN, no TURN relay is needed. For more exotic networks, the user's choice of VPN determines whether peers can reach each other at all — and if their VPN can do it, WebRTC will work.
+
+The connection layer is abstracted: `{ type: 'webrtc' }` for local desktop peers today, with a stubbed `{ type: 'hosted' }` for future cloud-hosted CodeTrellis.
 
 ## What ships in v1
 
