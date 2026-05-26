@@ -151,11 +151,7 @@
         ]
       }
     ],
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/@shinyoshiaki/**",
-      "node_modules/werift/**"
-    ],
+    "asar": false,
     "mac": {
       "target": [
         {
