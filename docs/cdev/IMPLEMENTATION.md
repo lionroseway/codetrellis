@@ -691,7 +691,7 @@ The pairing handshake happens entirely through the QR code and a confirmation co
 | **Ephemeral UDP** | Mobile sends answer to desktop's IP (from QR) via a single UDP packet; desktop listens on an ephemeral port for <5 seconds during pairing only | Works everywhere | Technically opens a port, but only for seconds and only during explicit pairing action |
 | **Manual paste** | Desktop shows a text field; user copies the answer from mobile and pastes it | Universal fallback | Poor UX, last resort |
 
-**Recommended approach**: ephemeral UDP for the answer delivery. The desktop opens a random high port, listens for exactly one UDP packet (the answer), then closes it. Port is open for <5 seconds, only during explicit user-initiated pairing, and only accepts packets matching the nonce. This is not "exposing a port" in any meaningful sense — it's more like accepting a phone call.
+**Recommended approach**: ephemeral UDP for the answer delivery. The desktop opens a random high port on 0.0.0.0 (LAN-reachable), listens for exactly one UDP packet (the answer), then closes it. Port is open for up to 30 seconds (or until the answer arrives), only during explicit user-initiated pairing, and only accepts packets matching the nonce. This is the sole exception to the "zero ports exposed" model — brief, user-initiated, and closed immediately after use.
 
 **Implementation**:
 

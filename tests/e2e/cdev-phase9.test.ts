@@ -45,7 +45,7 @@ test.describe('CDev Phase 9 — discovery and pairing', () => {
     }
   });
 
-  test('list_discovered_peers returns empty when no peers on network', async () => {
+  test('list_discovered_peers returns valid structure (may find real peers)', async () => {
     const h = await setupHarness('cdev-phase9-discovery');
     try {
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
@@ -53,8 +53,20 @@ test.describe('CDev Phase 9 — discovery and pairing', () => {
       const res = await agent.callTool('list_discovered_peers', {});
       expect(res.isError).not.toBe(true);
       const data = JSON.parse(res.text);
-      expect(data.count).toBe(0);
+      // count may be > 0 if another CodeTrellis instance is running
+      // (e.g. `npm run dev`). Validate structure, not emptiness.
+      expect(typeof data.count).toBe('number');
+      expect(data.count).toBeGreaterThanOrEqual(0);
       expect(Array.isArray(data.peers)).toBe(true);
+      expect(data.peers.length).toBe(data.count);
+
+      // If peers were found, validate their shape
+      for (const peer of data.peers) {
+        expect(peer.instanceId).toBeTruthy();
+        expect(peer.name).toBeTruthy();
+        expect(typeof peer.version).toBe('string');
+        expect(typeof peer.address).toBe('string');
+      }
     } finally {
       await h.teardown();
     }

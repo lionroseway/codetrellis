@@ -9,9 +9,10 @@
  *   4. Desktop receives answer → completes WebRTC handshake → data channel opens.
  *   5. Shared secret stored for auto-reconnect.
  *
- * The ephemeral UDP listener is open for <5 seconds during explicit
- * pairing only, on a random high port. This is the ONLY time a port
- * is briefly exposed on the network — not a persistent listener.
+ * The ephemeral UDP listener is open for up to 30 seconds during
+ * explicit pairing only, on a random high port bound to 0.0.0.0
+ * (LAN-reachable so the pairing peer can send its answer). This is
+ * the ONLY time a port is briefly exposed — not a persistent listener.
  *
  * Security: QR + confirmation code expire after 60 seconds. Nonce is
  * single-use. Replay rejected.

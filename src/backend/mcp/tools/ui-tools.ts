@@ -210,18 +210,38 @@ export function register(server: McpServer, deps: ToolDeps): void {
           personalSyncPath: z.string().optional().describe('Path to personal sync folder (git repo, iCloud, Dropbox). Empty = no sync.'),
           personalSyncMode: z.enum(['none', 'selective', 'full']).optional().describe('What to sync: none, selective (settings+projects), or full (entire pantry).'),
         }).optional().describe('Data and sync settings.'),
+        device: z.object({
+          deviceName: z.string().optional().describe('Human-readable name for this machine (shown to peers). Empty = hostname.'),
+          advertise: z.boolean().optional().describe('Whether to advertise via mDNS on the local network.'),
+          shareAudio: z.boolean().optional().describe('Whether to share audio capture with paired devices.'),
+        }).optional().describe('Device discovery and pairing settings. Changes to advertise/deviceName take effect immediately (live mDNS restart).'),
         firstRunComplete: z.boolean().optional().describe('Set to true after the first-run wizard completes.'),
       },
     },
-    async ({ identity, mcp, plans, data, firstRunComplete }) => {
+    async ({ identity, mcp, plans, data, device, firstRunComplete }) => {
+      const before = deps.getSettings();
       const patch: any = {};
       if (identity) patch.identity = identity;
       if (mcp) patch.mcp = mcp;
       if (plans) patch.plans = plans;
       if (data) patch.data = data;
+      if (device) patch.device = device;
       if (firstRunComplete !== undefined) patch.firstRunComplete = firstRunComplete;
 
       const updated = deps.updateSettings(patch);
+
+      // Phase 9 — live-restart mDNS when device settings change.
+      if (device?.advertise !== undefined || device?.deviceName !== undefined) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const mdns = require('../../services/mdns-service');
+          if (updated.device.advertise) {
+            mdns.startMdns(updated.device.deviceName || undefined);
+          } else {
+            mdns.stopMdns();
+          }
+        } catch { /* mDNS not available */ }
+      }
       deps.broadcast('settings-changed', { settings: updated });
 
       const changes: string[] = [];
@@ -234,6 +254,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (data?.personalSyncPath !== undefined) changes.push(`sync path → "${data.personalSyncPath}"`);
       if (data?.personalSyncMode !== undefined) changes.push(`sync mode → ${data.personalSyncMode}`);
       if (data?.dataDirOverride !== undefined) changes.push(`data dir → "${data.dataDirOverride || '(default)'}"`);
+      if (device?.deviceName !== undefined) changes.push(`device name → "${device.deviceName || '(hostname)'}"`);
+      if (device?.advertise !== undefined) changes.push(`mDNS advertise → ${device.advertise}`);
+      if (device?.shareAudio !== undefined) changes.push(`share audio with peers → ${device.shareAudio}`);
       if (firstRunComplete !== undefined) changes.push(`first-run complete → ${firstRunComplete}`);
 
       return { content: [{ type: 'text' as const, text: `Settings updated: ${changes.join(', ')}` }] };

@@ -2812,6 +2812,21 @@ app.put('/api/settings', (req, res) => {
   if (before.mcp.port !== next.mcp.port) {
     broadcast('mcp-port-config-changed', { configuredPort: next.mcp.port });
   }
+  // Phase 9 — live-restart mDNS when device settings change.
+  if (before.device.advertise !== next.device.advertise ||
+      before.device.deviceName !== next.device.deviceName) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mdns = require('./services/mdns-service');
+      if (next.device.advertise) {
+        mdns.startMdns(next.device.deviceName || undefined);
+      } else {
+        mdns.stopMdns();
+      }
+    } catch (err) {
+      console.warn('[Backend] mDNS reconfigure failed:', err);
+    }
+  }
   res.json(next);
 });
 
