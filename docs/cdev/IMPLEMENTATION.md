@@ -640,297 +640,323 @@ Test the audio pipeline end-to-end with synthetic audio chunks (no real mic need
 
 ---
 
-## Phase 9 — Discovery, pairing, and remote access
+## Phase 9 — Discovery and pairing
 
-Goal: a paired device (another desktop, laptop, or phone) can connect to a running CodeTrellis instance and access a mobile-optimized view of the workspace. The desktop renders the mobile view and serves it — the remote device is a thin client. Always requires explicit pairing.
+Goal: two devices (desktop + phone, desktop + laptop, any combination) can find each other on the LAN, pair via QR code, and establish a WebRTC data channel — **without opening any network ports**. All existing ports (:3001, :5173, :19432) stay bound to localhost. The WebRTC connection punches through NAT; the QR code carries the signalling payload so no rendezvous server is needed.
 
 Reference: [16 — Mobile Companion](16-mobile-companion.md).
 
-### Design principle: desktop renders, mobile displays
+### Design principles
 
-The mobile app does not have its own UI codebase. The desktop serves a **mobile-optimized layout** of the existing React app (same components, responsive/touch-friendly layout, served at `/m/`). The mobile app is a **native shell** (Expo) wrapping a WebView that loads this route from the paired desktop.
+**Zero ports exposed.** CodeTrellis never binds to 0.0.0.0. Developer machines run web servers, databases, and test services on well-known ports — we don't compete for them and we don't expose attack surface. WebRTC's NAT traversal gives us peer-to-peer connectivity without opening a listening socket.
 
-This means:
-- One UI codebase. Features land on mobile for free.
-- Always in sync — the mobile is literally viewing the desktop's live app.
-- Graph, terminals, channels, plans — all work because they're the same React code.
-- Independent navigation — the `/m/` route maintains its own viewport state.
-- The native shell adds only what a WebView can't: camera (QR), push notifications, secure storage.
+**QR code IS the signalling.** Traditional WebRTC needs a signalling server to exchange offers and answers between peers. We skip that: the QR code encodes the WebRTC offer + ICE candidates. The pairing device scans it and sends the answer back via a one-shot local channel (Bluetooth LE advertisement, or a brief HTTP POST to an ephemeral endpoint that lives only for the pairing seconds). After the WebRTC connection is up, the ephemeral channel is torn down.
 
-For multi-device (laptop → desktop), the story is even simpler: open the desktop's web UI from another browser on the LAN/VPN. The pairing handshake generates an auth token that grants access.
+**Desktop renders, mobile displays.** The desktop serves the UI — same React codebase, mobile-optimized layout. But instead of serving it over HTTP (which would need an open port), the rendered state streams over the WebRTC data channel. The mobile app has a local WebView that receives state updates and renders them.
 
 ### 9.1 mDNS discovery
 
 Status: ⬜ Not started.
 
-Every running CodeTrellis instance advertises itself on the local network. Other devices discover it automatically.
+Every running CodeTrellis instance advertises itself on the local network so other devices know it exists. mDNS does NOT establish a connection — it just says "I'm here."
 
-- `src/backend/services/mdns-service.ts` — advertise as `_codetrellis._tcp` on startup; browse for other instances continuously.
-- Service record: `{ name: <device-alias>, version, fingerprint, port, instanceId }`.
-- Discovery events: `peer:discovered`, `peer:lost` — surface in a "Nearby devices" UI and reported to the mobile app.
-- Fallback: manual address entry when mDNS is blocked (corporate VPNs, hotel WiFi).
+- `src/backend/services/mdns-service.ts` — advertise as `_codetrellis._tcp` on startup; browse for other instances.
+- Service record: `{ name: <device-alias>, version, fingerprint }`. No port in the record — we're not accepting connections.
+- Discovery is informational: the mobile app shows "Desktop 'Saif's iMac' is nearby" so the user knows to look for the QR code on that machine.
+- Fallback: if mDNS is blocked, the user manually initiates pairing from the desktop (the QR appears regardless).
 - Uses `bonjour-service` npm package (pure JS, cross-platform).
 
-### 9.2 Pairing handshake
+### 9.2 QR-based signalling (zero-port handshake)
 
 Status: ⬜ Not started.
 
-Every remote connection requires explicit pairing. A discovered mDNS address alone is never sufficient. Pairing generates a long-lived auth token for subsequent HTTP/WebSocket access.
+The pairing handshake happens entirely through the QR code and a confirmation code — no listening port required.
 
 **Flow**:
 
-1. Initiator selects a discovered peer (or enters address manually).
-2. Desktop displays a QR code encoding `{ nonce, address, port, version, fingerprint }`.
-3. Remote device scans QR (mobile camera) or enters the nonce manually (laptop/CLI).
-4. Remote device displays a 6-digit numeric confirmation code.
-5. User enters the code on the desktop → both sides confirm.
-6. Desktop issues a **bearer token** tied to the paired device's fingerprint. Token stored on both sides.
-7. Future connections authenticate via the bearer token over HTTPS — no repeated handshake.
+1. User clicks "Pair device" on the desktop → desktop generates a WebRTC offer (SDP + ICE candidates gathered via STUN).
+2. Desktop encodes the offer into a QR code: `{ offer, iceCandidates, fingerprint, nonce }`. QR is displayed on screen.
+3. Mobile app scans the QR → extracts the offer → creates a WebRTC answer.
+4. Mobile displays a 6-digit confirmation code derived from the answer's fingerprint.
+5. User enters the code on the desktop → desktop now has the answer payload (the code maps to the answer via a key derivation, or the mobile sends the full answer via a brief BLE advertisement / NFC tap / manual paste).
+6. Both sides complete the WebRTC handshake → data channel opens.
+7. Shared secret derived from the DTLS handshake. Stored for auto-reconnect.
+
+**The answer delivery problem**: The mobile has the desktop's offer (from QR), but the desktop needs the mobile's answer. Options (implement the simplest that works):
+
+| Method | How | Pros | Cons |
+|---|---|---|---|
+| **BLE advertisement** | Mobile broadcasts the answer as a BLE service; desktop listens briefly | Zero network, works offline | Requires BLE on both; not available in all browsers |
+| **Answer-in-code** | The 6-digit code IS a compressed form of the answer (ECDH, shared secret from offer nonce) | Truly zero infrastructure | Limited bandwidth in 6 digits — may need a longer code or multi-step |
+| **Ephemeral UDP** | Mobile sends answer to desktop's IP (from QR) via a single UDP packet; desktop listens on an ephemeral port for <5 seconds during pairing only | Works everywhere | Technically opens a port, but only for seconds and only during explicit pairing action |
+| **Manual paste** | Desktop shows a text field; user copies the answer from mobile and pastes it | Universal fallback | Poor UX, last resort |
+
+**Recommended approach**: ephemeral UDP for the answer delivery. The desktop opens a random high port, listens for exactly one UDP packet (the answer), then closes it. Port is open for <5 seconds, only during explicit user-initiated pairing, and only accepts packets matching the nonce. This is not "exposing a port" in any meaningful sense — it's more like accepting a phone call.
 
 **Implementation**:
 
-- `src/backend/services/pairing-service.ts` — nonce generation, code validation, token issuance, paired device CRUD.
-- Paired devices stored in `~/.codetrellis/paired-devices.json` — fingerprint, alias, token (encrypted at rest), paired-at, last-seen.
-- QR and code expire after 60 seconds.
-- REST: `POST /api/pairing/initiate`, `GET /api/pairing/qr`, `POST /api/pairing/confirm`, `DELETE /api/pairing/:fingerprint`, `GET /api/pairing/devices`.
+- `src/backend/services/pairing-service.ts` — generates offer, encodes QR, listens for answer, completes handshake, stores paired device.
+- `src/backend/services/webrtc-service.ts` — WebRTC peer connection lifecycle (offer/answer, ICE, data channels).
+- Paired devices stored in `~/.codetrellis/paired-devices.json` — fingerprint, alias, shared secret (encrypted at rest), paired-at, last-seen.
+- QR and pairing window expire after 60 seconds.
+- REST (localhost only): `POST /api/pairing/initiate`, `GET /api/pairing/qr`, `POST /api/pairing/confirm`, `DELETE /api/pairing/:fingerprint`.
 - MCP: `list_paired_devices`, `unpair_device`.
-- Auth middleware: requests to `/m/` and `/api/` from non-localhost require a valid bearer token (from pairing) or an active local session.
 
-### 9.3 Mobile layout (`/m/` route)
-
-Status: ⬜ Not started.
-
-A mobile-optimized layout of the existing web UI, served by the desktop at `/m/`. Same React codebase, responsive components, touch-friendly interactions.
-
-**Surfaces**:
-
-| Surface | What it shows | Notes |
-|---|---|---|
-| **Dashboard** | Connected agents, plan status summary, recent channel events | Home screen after connecting |
-| **Channel feed** | All channel events, reply composer, resolve/dismiss | Primary mobile use case — respond to stuck/need-decision |
-| **Plan browser** | Plan list → item tree → item detail | Read + status updates (mark done, change status) |
-| **Graph viewer** | ReactFlow in mobile viewport, independent pan/zoom/navigation | Read-only but navigable |
-| **Terminal viewer** | xterm.js in mobile viewport, full input support | Can type commands on mobile too |
-| **Agent status** | Connected agents, current tool call, session history | Awareness of what's running |
-| **Audio controls** | Start/stop capture on the desktop remotely | Toggle from mobile |
-
-**Implementation**:
-
-- `src/frontend/mobile/` — mobile layout components (wrappers around existing components with mobile-specific layout/nav).
-- `src/frontend/mobile/MobileApp.tsx` — root layout with bottom tab navigation (Dashboard, Channels, Plans, Terminal, More).
-- `src/frontend/mobile/MobileRouter.tsx` — routes under `/m/`.
-- Reuses existing stores (Zustand) and hooks — same state, different presentation.
-- Responsive breakpoints: components detect mobile viewport and adjust (collapsible panels → full-screen views, hover → tap, etc.).
-- Desktop serves: `app.use('/m', express.static('dist/mobile'))` (separate Vite build entry point, same source tree).
-
-### 9.4 Auth-gated remote access
+### 9.3 WebRTC connection manager
 
 Status: ⬜ Not started.
 
-Secure the `/m/` route and remote API access behind the pairing token.
+Manages active WebRTC connections to paired devices. Handles reconnection, heartbeat, and multiplexed data channels.
 
-- Middleware on all `/m/` and `/api/` routes: if request comes from non-localhost, require `Authorization: Bearer <token>` header.
-- Token validated against `paired-devices.json` — must match an active, non-revoked device.
-- WebSocket upgrade for the mobile route also requires the bearer token (sent as a query param or first message).
-- Token rotation: optional, configurable expiry (default: never expires, revoke explicitly via unpair).
-- Rate limiting: 100 req/s per token (prevents abuse if a token leaks before revocation).
+- `src/backend/services/peer-connection-service.ts` — one `RTCPeerConnection` per active peer.
+- Auto-reconnect: when a paired device is discovered via mDNS, both sides attempt to re-establish the WebRTC connection using stored credentials. The device that was most recently the "initiator" generates a fresh offer; the other answers. Exponential backoff on failure.
+- Data channels:
+  - `control` — JSON-RPC messages (commands, state updates, pairing lifecycle).
+  - `ui` — UI state stream (rendered component tree / state snapshots for the mobile WebView).
+  - `terminal` — terminal I/O (binary, multiplexed by terminal ID).
+  - `audio` — audio buffer forwarding (WebM/Opus chunks).
+- Heartbeat: ping every 10 seconds on `control`. If 3 pings missed → connection presumed dead → reconnect.
+- Connection states exposed via localhost-only `GET /api/peers`.
 
-### 9.5 Desktop UI: device management
+**WebRTC library choice**:
+
+- Evaluate `werift` (pure TypeScript, no native deps, no build issues) vs `node-datachannel` (C++ bindings, faster, but adds native dep complexity alongside node-pty).
+- `werift` preferred to avoid the cross-compile issues we already have with node-pty.
+
+### 9.4 Desktop UI: device management
 
 Status: ⬜ Not started.
 
-- `src/frontend/components/pairing/PairingModal.tsx` — QR display + code entry field.
-- `src/frontend/components/pairing/DeviceList.tsx` — list paired devices: alias, type (desktop/mobile), last seen, connected now, unpair button.
-- Top-bar icon showing count of connected remote devices (click → device list).
-- Settings → Devices: full management surface.
+- `src/frontend/components/pairing/PairingModal.tsx` — shows QR code + code entry field during pairing.
+- `src/frontend/components/pairing/DeviceList.tsx` — paired devices: alias, type, last seen, connected now, unpair.
+- Top-bar icon: count of connected peers (click → device list).
+- Settings → Devices: full management.
 
-### 9.6 Phase 9 tests
+### 9.5 Phase 9 tests
 
 Status: ⬜ Not started.
 
-1. **mDNS** — instance advertises, second instance discovers it, service record matches.
-2. **Pairing** — full handshake → token issued → stored → subsequent request authenticates.
-3. **Auth** — unauthenticated request to `/m/` → 401. Valid token → 200. Revoked token → 401.
-4. **Mobile route** — `/m/` serves the mobile layout, loads in a viewport, renders plan/channel data.
-5. **Security** — expired nonce rejected, replay rejected, brute-force code entry rate-limited.
+1. **mDNS** — instance advertises, second process discovers it.
+2. **Pairing** — simulate full QR → answer → code → confirmation flow with two in-process WebRTC peers.
+3. **Data channel** — paired peers send messages on `control` channel, receive them.
+4. **Reconnection** — disconnect, re-discover via mDNS, auto-reconnect using stored credentials.
+5. **Security** — expired pairing nonce rejected. Unpaired peer's answer rejected. Replay rejected.
 
 ### Build order
 
-9.1 (mDNS) → 9.2 (pairing) → 9.3 (mobile layout) → 9.4 (auth) → 9.5 (device UI) → 9.6 (tests).
-
-9.1 and 9.3 can start in parallel (discovery is independent of the UI layout work).
+9.1 (mDNS) + 9.3 (WebRTC lib eval) in parallel → 9.2 (pairing) → 9.3 continued (connection manager) → 9.4 (UI) → 9.5 (tests).
 
 ### Dependencies and risks
 
 | Risk | Mitigation |
 |---|---|
-| mDNS on Windows | `bonjour-service` is pure JS, works cross-platform without Bonjour SDK |
-| Mobile WebView performance (graph) | ReactFlow in WebView is fine for moderate graphs; degrade gracefully for 500+ node graphs |
-| Auth token security | Encrypted at rest, transmitted over HTTPS (LAN is HTTP — accept or add self-signed cert option) |
-| LAN is HTTP not HTTPS | WebView on iOS requires HTTPS for some APIs. Options: self-signed cert, or Expo's WebView allows HTTP for local IPs |
-| Pairing UX on headless machines | Support CLI mode: `codetrellis pair --code <code>` alongside QR |
+| `werift` maturity / edge cases | It's used in production by several projects; fallback to `node-datachannel` if critical bugs |
+| QR code size limit (offer + ICE can be large) | Use ICE-lite or Trickle ICE to reduce candidate list; compress payload; or use chunked QR |
+| Answer delivery (ephemeral UDP) on restrictive OS firewalls | macOS/Windows may prompt for firewall permission on first use. BLE fallback. Manual paste as last resort. |
+| mDNS on Windows | `bonjour-service` pure JS works; may need Bonjour Print Services installed for full compat |
+| Auto-reconnect reliability | STUN server needed for ICE when devices are on different subnets (common in VPN). Ship a default public STUN (Google's) with option to configure custom. |
 
 ---
 
 ## Phase 10 — Multi-device (desktop-to-desktop)
 
-Goal: a developer with multiple machines (desktop + laptop) can access a running CodeTrellis instance from another machine on the LAN/VPN. Both are full desktops — you can read, respond, steer agents, control terminals, and act from either. The remote machine simply opens the first machine's web UI in a browser (authenticated via the Phase 9 pairing token).
+Goal: a developer with multiple machines (desktop + laptop) can window into any paired CodeTrellis instance. Both are full CodeTrellis installs — you can read, respond, steer agents, control terminals, and act from either. The remote machine's CodeTrellis connects as a WebRTC peer and receives real-time state.
 
-This is **one developer, multiple devices**. Not team collaboration (that's git + channels). The use case: your agent is running on your desktop, you're on your laptop, you want to see what it's doing and steer it.
+This is **one developer, multiple devices**. The use case: your agent is running on your desktop, you're on your laptop, you want to see what it's doing and steer it.
 
-### 10.1 Remote WebSocket state streaming
+No ports opened. Everything flows over the Phase 9 WebRTC connection.
+
+### 10.1 State sync over WebRTC
 
 Status: ⬜ Not started.
 
-The existing WebSocket (`/ws`) already pushes real-time updates (plan changes, agent events, channel events) to the local frontend. Extend it to work for authenticated remote clients.
+The `ui` data channel streams workspace state from one CodeTrellis to another.
 
-- Remote clients connect to `ws://<desktop>:3001/ws?token=<pairing-token>`.
-- Same events, same format — the remote browser's React app receives the same WebSocket messages as a local browser.
-- No additional state sync protocol needed — the frontend stores handle it.
-- New: agent `await_user_input` prompts broadcast to all connected WebSocket clients (local + remote). First response wins.
+**What syncs (instant, over WebRTC)**:
+
+- Plan list, item statuses, phase progress — the full plan state as the local instance sees it.
+- Channel events — delivered immediately (before git commit).
+- Agent sessions — connected agents, current tool call, status.
+- Presence — which plan is open, which item is selected.
+- Audio capture status — peer knows if audio is active on the remote.
+
+**What does NOT sync**:
+
+- Plan content authoring (item bodies, spec docs) — syncs through git. WebRTC notifies that something changed so the other instance can `git pull`.
+- The dependency graph data — each instance scans its own local repo.
+- Settings, project config — git-backed.
+
+**Protocol**:
+
+- On connection: full state snapshot on the `ui` channel.
+- Ongoing: JSON patches (RFC 6902) debounced at 100ms.
+- Deduplication by UID — if an event arrives via WebRTC and later via git, it's the same event.
 
 ### 10.2 Remote terminal access
 
 Status: ⬜ Not started.
 
-Terminals already work via the web UI (xterm.js + WebSocket to PTY). A remote browser accessing the desktop's web UI gets terminal access for free — same WebSocket, same xterm.js.
+View and control terminals running on the paired desktop, streamed over the `terminal` data channel.
 
-- Verify: remote WebSocket connection to terminal channels works through the auth middleware.
-- Terminal list endpoint (`GET /api/terminals`) already exists — remote client fetches it on load.
-- Input from remote xterm.js streams back to the desktop's PTY — full bidirectional.
-- Add: "remote" indicator in terminal tab when input is coming from a non-local client.
+- Remote terminals appear in the local terminal panel with a "remote" badge and device alias.
+- Full bidirectional: watch output AND type commands from either machine.
+- `terminal` channel: `[1-byte terminal-index][payload]` — raw PTY output (UTF-8 + ANSI).
+- Terminal list exchanged via `control` channel on connection.
 
-### 10.3 Remote audio context
-
-Status: ⬜ Not started.
-
-When audio capture is active on the desktop, a remote client can see the status and an agent on the remote machine can call `get_audio_context` via the remote MCP connection.
-
-- `GET /api/audio/status` and `GET /api/audio/recent` already work over HTTP — remote client with valid token can access them.
-- MCP connection from a remote agent: the desktop's MCP server (SSE on :19432) needs to accept authenticated remote connections.
-- Privacy control: "Allow remote audio access" toggle in Settings → Devices (default: off).
-
-### 10.4 Phase 10 tests
+### 10.3 Remote audio forwarding
 
 Status: ⬜ Not started.
 
-1. **Remote UI** — paired client opens desktop's web UI in a browser, sees plans, channels, agents.
-2. **Remote terminal** — paired client opens a terminal, types a command, sees output.
-3. **Remote channel interaction** — paired client posts a channel reply, desktop sees it immediately.
-4. **Remote audio** — paired client's agent calls `get_audio_context`, receives desktop's audio buffer.
-5. **Prompt relay** — agent on desktop calls `await_user_input`, remote client sees the prompt, responds, agent continues.
+When audio capture is active on one device, the peer can access it via `get_audio_context`.
+
+- `audio` data channel streams WebM/Opus chunks from the capturing device.
+- Peer's `audio-buffer-service` receives forwarded chunks and stores them locally.
+- An agent on the laptop calling `get_audio_context` gets audio from the desktop's mic — transparent.
+- Privacy: "Share audio with paired devices" toggle in Settings → Devices (default: off).
+
+### 10.4 Remote agent interaction
+
+Status: ⬜ Not started.
+
+Steer or unblock an agent running on the paired desktop.
+
+- Channel events posted on the laptop flow instantly to the desktop via `control` channel.
+- `await_user_input` prompts from the desktop route to both local UI and connected peers.
+- First response wins — answer from either machine.
+- Agent presence streams in real time.
+
+### 10.5 Phase 10 tests
+
+Status: ⬜ Not started.
+
+1. **State sync** — peer A posts a channel event, peer B receives it via WebRTC.
+2. **Terminal** — peer A creates a terminal, peer B sees it, sends input, gets output.
+3. **Audio** — peer A captures audio, peer B's agent gets it via `get_audio_context`.
+4. **Bidirectional** — both peers post events simultaneously, both receive.
+5. **Reconnection** — disconnect, reconnect, state re-syncs.
 
 ### Build order
 
-10.1 (WebSocket auth) → 10.2 (terminal verification) → 10.3 (audio access) → 10.4 (tests).
-
-This phase is lightweight because the web UI already works remotely — the main work is authentication and verification that all existing features work through the auth layer.
+10.1 (state sync) → 10.2 (terminals) + 10.3 (audio) in parallel → 10.4 (agent interaction) → 10.5 (tests).
 
 ---
 
 ## Phase 11 — Mobile companion app (Expo)
 
-Goal: a standalone mobile app (React Native / Expo) that wraps the desktop-served mobile UI in a native shell. The shell provides: QR scanning for pairing, push notifications for when you're away, secure credential storage, and app-store presence.
+Goal: a standalone mobile app (Expo) that pairs with a desktop CodeTrellis via QR code and gives you a mobile view of your workspace. Respond to agent events from your pocket. The desktop renders a mobile-optimized UI; the state streams over WebRTC; the app displays it in a local WebView.
 
-The **UI itself is the desktop's `/m/` route loaded in a WebView**. The native shell adds only what a WebView can't do alone.
+**No ports opened. No HTTP to the desktop.** Everything flows over the Phase 9 WebRTC data channel.
+
+The connection layer is abstracted: today it connects to a local desktop over WebRTC; in the future it could connect to a cloud-hosted CodeTrellis over HTTPS/WebSocket.
 
 ### 11.1 Expo project setup
 
 Status: ⬜ Not started.
 
 - `mobile/` — new top-level directory. Expo managed workflow (SDK 52+).
-- `mobile/app/` — minimal Expo Router structure: pairing screen, main WebView screen, settings.
-- `mobile/lib/connection.ts` — abstract `ConnectionTarget` interface:
-  - `{ type: 'local', address, port, token }` — paired desktop on LAN/VPN.
-  - `{ type: 'hosted', url, apiKey }` — future cloud-hosted instance (stubbed, not built).
-- `mobile/lib/storage.ts` — Expo SecureStore wrapper for pairing credentials.
-- `mobile/lib/push.ts` — Expo Notifications registration and handling.
-- Dark theme matching desktop. Expo splash screen + app icon.
+- `mobile/app/` — Expo Router: pairing screen → device list → main workspace.
+- `mobile/lib/connection.ts` — abstract `ConnectionTarget`:
+  - `{ type: 'webrtc', fingerprint, sharedSecret }` — paired desktop (Phase 9).
+  - `{ type: 'hosted', url, apiKey }` — future cloud (stubbed).
+- `mobile/lib/webrtc.ts` — `react-native-webrtc` wrapper for data channel management.
+- `mobile/lib/storage.ts` — Expo SecureStore for pairing credentials.
+- `mobile/lib/push.ts` — Expo Notifications for push.
+- Dark theme matching desktop.
 
 ### 11.2 QR pairing (mobile side)
 
 Status: ⬜ Not started.
 
-- Camera permission → QR scanner using `expo-camera`.
-- Parses QR payload from desktop (Phase 9.2 format).
-- Sends confirmation request to desktop → displays 6-digit code.
-- On success: stores `{ address, port, token, alias, fingerprint }` in SecureStore.
-- Home screen lists paired desktops — tap to connect (loads WebView pointing at that desktop's `/m/`).
-- Manual entry fallback: type the desktop's address if QR isn't practical.
+- `expo-camera` → QR scanner.
+- Parses QR payload (WebRTC offer + ICE candidates + nonce).
+- Creates WebRTC answer → displays 6-digit code.
+- Sends answer back to desktop (ephemeral UDP / BLE / manual paste).
+- On success: WebRTC data channel opens. Stores pairing in SecureStore.
+- Home screen lists paired desktops — tap to connect (re-establishes WebRTC).
 
-### 11.3 WebView shell
+### 11.3 Mobile WebView with WebRTC state bridge
 
 Status: ⬜ Not started.
 
-The core of the app. A full-screen WebView loading the paired desktop's `/m/` route.
+The core of the app. A local WebView renders the mobile UI. State arrives over WebRTC and is injected into the WebView.
 
-- `react-native-webview` with: `source={{ uri: 'http://<address>:<port>/m/?token=<token>' }}`.
-- Injects the auth token as a cookie or URL param (desktop's auth middleware validates it).
-- Handles: navigation within `/m/`, back button, pull-to-refresh, connection error states.
-- Native ↔ WebView bridge for:
-  - Push notification deep links (tap notification → WebView navigates to specific channel event).
-  - Network state (tells WebView when connectivity changes).
-  - Audio capture toggle (if we expose native mic access later).
-- Loading state: native splash while WebView loads the desktop's UI.
-- Error state: "Cannot reach desktop" with retry button + device list to switch.
+**Architecture**:
+
+- The mobile app ships a **bundled copy** of the `/m/` web UI (built from `src/frontend/mobile/`, included in the Expo app binary via `expo-asset`).
+- WebView loads this local bundle — no HTTP request to the desktop.
+- State flows: Desktop → WebRTC `ui` channel → React Native → `postMessage` into WebView → Zustand stores update → UI re-renders.
+- User interactions flow back: WebView `postMessage` → React Native → WebRTC `control` channel → Desktop processes the action.
+- This is the same pattern as React Native WebView bridges in banking apps, Figma mobile, etc.
+
+**Surfaces** (same as desktop `/m/` layout):
+
+| Surface | What | Interaction |
+|---|---|---|
+| Dashboard | Agent status, plan summary, recent events | Read |
+| Channel feed | All channel events, reply composer | Read + respond |
+| Plan browser | Plan list → items → detail | Read + status updates |
+| Graph viewer | ReactFlow, independent pan/zoom | Read + navigate |
+| Terminal | xterm.js, full I/O | Read + write |
+| Audio controls | Start/stop capture on desktop | Toggle |
 
 ### 11.4 Push notifications (Expo Push relay)
 
 Status: ⬜ Not started.
 
-Native push notifications when the app is backgrounded or the phone is locked.
+Native push when the app is backgrounded — the WebRTC connection drops when the phone sleeps.
 
 **Desktop side**:
 
-- `src/backend/services/push-notification-service.ts` — when a channel event fires (stuck, need-decision, await_user_input) and a paired mobile device has a registered push token, send a notification via Expo Push API.
-- Mobile registers its Expo Push Token with the desktop during pairing: `POST /api/pairing/:fingerprint/push-token`.
+- `src/backend/services/push-notification-service.ts` — when a channel event fires (stuck, need-decision, await_user_input) and a paired mobile has a push token, send via Expo Push API.
+- Mobile registers its push token with the desktop over the `control` channel after pairing.
 - Push payload: `{ type, title, body, data: { eventId, planSlug } }`.
-- Rate limiting: max 1 push per event type per minute (avoid notification spam).
+- Rate limit: max 1 push per event type per minute.
 
 **Mobile side**:
 
-- Expo Notifications listener: on tap → open WebView to the relevant event.
-- Badge count: unresponded channel events.
-- Notification categories: "Reply" action button for quick-reply without opening the full app (iOS/Android notification actions).
+- Tap notification → app opens → WebRTC reconnects → WebView navigates to the event.
+- Badge count: unresponded events.
+- Quick-reply action buttons on the notification (iOS/Android).
 
-**Privacy**: push payloads are minimal (event type + IDs). Full content loads in the WebView when the app opens. The Expo Push Service sees only the token and a short message — no plan content, no code, no audio.
+**Privacy**: push payloads are minimal (event type + IDs). Full content loads over WebRTC when the app wakes. Expo Push sees only the token and a short message.
 
 ### 11.5 App store distribution
 
 Status: ⬜ Not started.
 
-- Apple App Store: requires developer account ($99/yr). WebView-based apps are accepted if they provide native value (push + camera pairing qualifies).
-- Google Play: requires developer account ($25 one-time). Standard review.
-- `mobile/app.json` — Expo build config, bundle IDs, version management.
-- `eas build` for cloud builds (or local with `expo prebuild`).
-- TestFlight / internal testing track for early access.
+- Apple App Store ($99/yr developer account). Native camera + push = sufficient native value for review.
+- Google Play ($25 one-time).
+- `eas build` for cloud builds.
+- TestFlight / internal testing track first.
 
 ### 11.6 Phase 11 tests
 
 Status: ⬜ Not started.
 
-1. **Pairing** — simulate QR scan, confirm handshake, verify token stored in SecureStore.
-2. **WebView loads** — paired device connects, WebView renders the `/m/` route, shows plan data.
-3. **Push registration** — app registers push token with desktop, desktop stores it.
-4. **Push delivery** — channel event fires on desktop, push notification sent to Expo Push API (mocked).
-5. **Deep link** — tap notification → app opens → WebView navigates to the correct event.
-6. **Offline resilience** — desktop unreachable → error state renders → desktop comes back → auto-reconnect.
+1. **Pairing** — simulate QR scan → answer → code → WebRTC connected.
+2. **State bridge** — desktop pushes state over WebRTC, mobile WebView renders it.
+3. **Interaction** — mobile posts a channel reply, desktop receives it.
+4. **Push** — event fires on desktop, push sent to mocked Expo Push API.
+5. **Deep link** — notification tap → app opens → navigates to event.
+6. **Reconnect** — app backgrounded → foregrounded → WebRTC re-establishes → state re-syncs.
 
 ### Build order
 
-11.1 (project setup) → 11.2 (QR pairing) → 11.3 (WebView shell) → 11.4 (push) → 11.5 (app store) → 11.6 (tests).
+11.1 (setup) → 11.2 (pairing) → 11.3 (WebView bridge) → 11.4 (push) → 11.5 (app store) → 11.6 (tests).
 
-The WebView shell (11.3) is the MVP. Once that works, the app is usable — everything else is polish and reliability.
+11.3 is the MVP. Once state flows through WebRTC into the WebView, the app is usable.
 
 ### Dependencies and risks
 
 | Risk | Mitigation |
 |---|---|
-| iOS WebView + HTTP (not HTTPS) | iOS allows HTTP for local network IPs via NSAppTransportSecurity exception in Info.plist. Expo supports this. |
-| Expo Push free tier reliability | Acceptable for v1. If unreliable, switch to direct FCM/APNs later. |
-| Apple rejects WebView-only apps | We have native camera (QR) + push notifications — this qualifies as providing native value beyond a website wrapper. |
-| WebView performance for graph | Same mitigation as Phase 9 — ReactFlow works in WebView for reasonable graph sizes. |
-| react-native-webview cookie/auth handling | Test: token-as-URL-param is simpler than cookie injection. Fall back to cookie if URL param causes issues. |
+| `react-native-webrtc` quirks on iOS | Mature library (10k+ stars). Test early on physical device. |
+| Expo managed vs bare workflow | Start managed; eject only if `react-native-webrtc` requires it (it usually does — plan for bare) |
+| Bundled WebView UI size | The `/m/` build is ~3MB gzipped (same as desktop). Acceptable for app binary. |
+| Expo Push free tier reliability | Fine for v1. Direct FCM/APNs later if needed. |
+| Apple review for WebView + WebRTC | Camera + push + WebRTC = clearly native. Not a website wrapper. |
+| State bridge latency (WebRTC → postMessage → WebView) | Sub-100ms on modern phones. JSON patches keep payload small. |
+| Bundled UI versioning | App bundles a specific version of the `/m/` UI. If desktop is newer, the `control` channel negotiates compat or prompts app update. |
 
 ---
 
