@@ -17,7 +17,9 @@
       "bundleIdentifier": "dev.codetrellis.mobile",
       "infoPlist": {
         "NSCameraUsageDescription": "CodeTrellis uses the camera to scan QR codes for pairing with your desktop.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -26,20 +28,22 @@
         "backgroundColor": "#09090b"
       },
       "package": "dev.codetrellis.mobile",
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "plugins": [
       "expo-router",
-      "expo-camera",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "CodeTrellis uses the camera to scan QR codes for pairing with your desktop."
+        }
+      ],
       "expo-secure-store",
       "expo-notifications",
-      [
-        "react-native-webrtc",
-        {
-          "cameraPermission": false,
-          "microphonePermission": false
-        }
-      ]
+      "expo-asset",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

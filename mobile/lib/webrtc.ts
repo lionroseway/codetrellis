@@ -12,14 +12,29 @@
  *   - `audio`   — WebM/Opus chunks
  */
 
-import {
-  RTCPeerConnection,
-  RTCSessionDescription,
-  RTCIceCandidate,
-  MediaStream,
-} from 'react-native-webrtc';
 import type { ConnectionState, PairingQrPayload, PairingAnswer } from './types';
 import { createHash } from './crypto';
+
+// Lazy-load react-native-webrtc to avoid crashing Expo Go (which
+// doesn't have native WebRTC linked). The import only fires when
+// the user actually initiates pairing or connection.
+let _webrtcModule: typeof import('react-native-webrtc') | null = null;
+function getWebRTC() {
+  if (!_webrtcModule) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      _webrtcModule = require('react-native-webrtc');
+    } catch (err) {
+      throw new Error(
+        'react-native-webrtc is not available. ' +
+        'WebRTC requires a development build (not Expo Go). ' +
+        'Run `npx expo run:ios` or `npx expo run:android` instead.\n' +
+        String(err),
+      );
+    }
+  }
+  return _webrtcModule;
+}
 
 // --- Constants ---------------------------------------------------------------
 
@@ -45,8 +60,8 @@ type StateHandler = (state: ConnectionState) => void;
 // --- WebRTC Manager ----------------------------------------------------------
 
 export class WebRTCManager {
-  private pc: RTCPeerConnection | null = null;
-  private channels = new Map<string, RTCDataChannel>();
+  private pc: any = null; // RTCPeerConnection (typed as any for lazy-load compat)
+  private channels = new Map<string, any>(); // RTCDataChannel
   private messageHandlers = new Set<MessageHandler>();
   private stateHandlers = new Set<StateHandler>();
   private _state: ConnectionState = 'disconnected';
@@ -65,6 +80,7 @@ export class WebRTCManager {
   async createAnswerFromOffer(payload: PairingQrPayload): Promise<PairingAnswer> {
     this.cleanup();
 
+    const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = getWebRTC();
     const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
     this.pc = pc;
 
@@ -115,7 +131,7 @@ export class WebRTCManager {
     this.setState('connecting');
 
     // Listen for data channels created by the desktop (initiator)
-    this.pc.ondatachannel = (event: { channel: RTCDataChannel }) => {
+    this.pc.ondatachannel = (event: { channel: any }) => {
       const channel = event.channel;
       this.setupChannel(channel);
     };
@@ -153,6 +169,7 @@ export class WebRTCManager {
   async reconnect(offerSdp: string, iceCandidates: string[]): Promise<string> {
     this.cleanup();
 
+    const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = getWebRTC();
     const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
     this.pc = pc;
     this.setState('reconnecting');
@@ -224,7 +241,7 @@ export class WebRTCManager {
 
   // --- Internals -------------------------------------------------------------
 
-  private setupChannel(channel: RTCDataChannel): void {
+  private setupChannel(channel: any): void {
     const name = channel.label as DataChannelName;
     this.channels.set(name, channel);
 
@@ -268,13 +285,13 @@ export class WebRTCManager {
     }
   }
 
-  private async gatherIceCandidates(pc: RTCPeerConnection): Promise<string[]> {
+  private async gatherIceCandidates(pc: any): Promise<string[]> {
     const candidates: string[] = [];
 
     return new Promise<string[]>((resolve) => {
       const timeout = setTimeout(() => resolve(candidates), 10_000);
 
-      pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
+      pc.onicecandidate = (event: { candidate: any | null }) => {
         if (event.candidate) {
           candidates.push(JSON.stringify(event.candidate));
         } else {
