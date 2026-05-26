@@ -62,6 +62,7 @@ import { startStateSync, stopStateSync, isStateSyncRunning } from './state-sync-
 import { startRemoteTerminals, stopRemoteTerminals, isRemoteTerminalRunning } from './remote-terminal-service';
 import { startRemoteAudio, stopRemoteAudio, isRemoteAudioRunning } from './remote-audio-service';
 import { startRemoteInteraction, stopRemoteInteraction, isRemoteInteractionRunning } from './remote-interaction-service';
+import { startPushNotifications, stopPushNotifications, isPushNotificationsRunning } from './push-notification-service';
 
 // --- State -------------------------------------------------------------------
 
@@ -115,8 +116,9 @@ export function startPeerManager(): void {
   startRemoteTerminals();
   startRemoteAudio();
   startRemoteInteraction(myInstanceId);
+  startPushNotifications();
 
-  console.log('[PeerManager] Started (with Phase 10 multi-device services)');
+  console.log('[PeerManager] Started (with Phase 10 + Phase 11 services)');
 }
 
 /**
@@ -127,7 +129,8 @@ export async function stopPeerManager(): Promise<void> {
   if (!started) return;
   started = false;
 
-  // Phase 10 — stop multi-device services
+  // Phase 10/11 — stop multi-device + push services
+  stopPushNotifications();
   stopRemoteInteraction();
   stopRemoteAudio();
   stopRemoteTerminals();
@@ -352,6 +355,16 @@ export {
   isRemoteInteractionRunning,
 } from './remote-interaction-service';
 
+// Push notifications (Phase 11)
+export {
+  registerPushToken,
+  unregisterPushToken,
+  listPushTokens,
+  pushForChannelEvent,
+  pushForInputRequest,
+  isPushNotificationsRunning,
+} from './push-notification-service';
+
 // --- Summary -----------------------------------------------------------------
 
 /**
@@ -369,6 +382,7 @@ export function getPeerManagerStatus(): {
   remoteTerminals: boolean;
   remoteAudio: boolean;
   remoteInteraction: boolean;
+  pushNotifications: boolean;
 } {
   return {
     running: started,
@@ -382,5 +396,6 @@ export function getPeerManagerStatus(): {
     remoteTerminals: isRemoteTerminalRunning(),
     remoteAudio: isRemoteAudioRunning(),
     remoteInteraction: isRemoteInteractionRunning(),
+    pushNotifications: isPushNotificationsRunning(),
   };
 }

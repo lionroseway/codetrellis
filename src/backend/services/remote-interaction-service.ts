@@ -337,6 +337,17 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
         break;
       }
 
+      case 'register-push-token': {
+        // Mobile device sending its Expo Push Token
+        const { token } = msg.params as { token: string };
+        if (token) {
+          // Lazy import to avoid circular dependency
+          const { registerPushToken } = require('./push-notification-service');
+          registerPushToken(fingerprint, token);
+        }
+        break;
+      }
+
       default:
         // Unknown method — ignore
         break;

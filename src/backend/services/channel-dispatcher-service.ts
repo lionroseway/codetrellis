@@ -23,6 +23,7 @@
 import { listChannelEvents } from './channel-event-service';
 import { matchChannelRoutingRules, listChannelRoutingRules } from './project-config-service';
 import { getPlan } from './plan-service';
+import { pushForChannelEvent } from './push-notification-service';
 import type { BroadcastFn } from '../mcp/types';
 import type { ChannelEvent, ChannelRoutingRule } from '../../shared/types';
 
@@ -64,6 +65,11 @@ export function stopChannelDispatcher(): void {
  * doesn't require `minAgeMs` (those are handled by the sweep).
  */
 export async function dispatchChannelEvent(event: ChannelEvent): Promise<void> {
+  // Push notification to mobile devices (Phase 11)
+  pushForChannelEvent(event).catch((err) =>
+    console.warn('[ChannelDispatcher] push notification failed:', err),
+  );
+
   const projectRoot = projectRootForEvent(event);
   if (!projectRoot) return;
   const rules = matchChannelRoutingRules(projectRoot, event);

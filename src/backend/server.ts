@@ -3217,6 +3217,46 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
   }
 });
 
+// --- CDev Phase 11 — Push notifications REST surface ---
+
+app.get('/api/peers/push-tokens', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const tokens = peerService.listPushTokens();
+    res.json({ count: tokens.length, tokens });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/peers/push-tokens', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const { fingerprint, token } = req.body as { fingerprint?: string; token?: string };
+    if (!fingerprint || !token) {
+      res.status(400).json({ error: 'fingerprint and token required' });
+      return;
+    }
+    peerService.registerPushToken(fingerprint, token);
+    res.json({ registered: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.delete('/api/peers/push-tokens/:fingerprint', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    peerService.unregisterPushToken(req.params.fingerprint);
+    res.json({ unregistered: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // --- CDev Phase 7 — External contributors REST surface ---
 
 app.get('/api/pantry/resolve', (req, res) => {

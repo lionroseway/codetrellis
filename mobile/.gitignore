@@ -1,0 +1,38 @@
+# Expo
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Native build artifacts
+ios/
+android/
+
+# Metro bundler
+.metro-health-check*
+
+# Environment
+.env
+.env.local
+.env.production
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# EAS
+eas.json
+
+# TypeScript
+*.tsbuildinfo
+
+# NPM
+npm-debug.*
+yarn-debug.*
+yarn-error.*
