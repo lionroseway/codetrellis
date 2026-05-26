@@ -7,6 +7,7 @@ import { useUiStore } from '../../stores/ui-store';
 import { getAPI } from '../../bridge';
 import type { ViewDepth } from '../../../shared/types';
 import { ConnectedAgents } from './ConnectedAgents';
+import { DeviceIndicator } from '../pairing/DeviceIndicator';
 import { SettingsModal } from '../settings/SettingsModal';
 
 async function captureBaselineFromBranch(projectPath: string, branch: string): Promise<boolean> {
@@ -402,6 +403,7 @@ export function TopBar() {
       </button>
 
       <ConnectedAgents />
+      <DeviceIndicator />
 
       <button
         onClick={() => useUiStore.getState().setLearnTrellisOpen(true)}

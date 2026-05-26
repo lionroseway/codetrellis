@@ -9,3 +9,4 @@ export * from './presence';
 export * from './project-config';
 export * from './channel';
 export * from './system-doc';
+export * from './peer';

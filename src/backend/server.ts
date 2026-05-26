@@ -3022,6 +3022,95 @@ app.get('/api/audio/recent', (req, res) => {
   res.json(snapshot);
 });
 
+// --- CDev Phase 9 — Peer discovery and pairing REST surface ---
+// All endpoints localhost-only (Express binds 127.0.0.1).
+
+app.get('/api/peers/status', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    res.json(peerService.getPeerManagerStatus());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/peers/discovered', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    res.json(peerService.getDiscoveredDevices());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/peers/devices', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    res.json(peerService.getDevices());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/peers/connections', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    res.json(peerService.getConnections());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/pairing/initiate', async (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const { qrPayload } = await peerService.startPairing();
+    res.json({ qrPayload });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/pairing/cancel', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    peerService.cancelPairing();
+    res.json({ cancelled: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const removed = await peerService.unpairDevice(req.params.fingerprint);
+    res.json({ removed });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.patch('/api/peers/devices/:fingerprint', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const { alias } = req.body as { alias?: string };
+    if (!alias) { res.status(400).json({ error: 'alias required' }); return; }
+    const renamed = peerService.renameDevice(req.params.fingerprint, alias);
+    res.json({ renamed });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // --- CDev Phase 7 — External contributors REST surface ---
 
 app.get('/api/pantry/resolve', (req, res) => {
@@ -3371,6 +3460,17 @@ export async function initializeBackend(): Promise<void> {
     startUpdatePolling();
   } catch (err) {
     console.warn('[Backend] Update polling failed to start:', err);
+  }
+
+  // CDev Phase 9 — peer connection manager. Starts mDNS discovery
+  // and prepares for QR-based WebRTC pairing. Best-effort: if mDNS
+  // fails (e.g. port 5353 in use), the rest of the app is unaffected.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { startPeerManager } = require('./services/peer-connection-service');
+    startPeerManager();
+  } catch (err) {
+    console.warn('[Backend] Peer connection manager failed to start:', err);
   }
 }
 

@@ -15,6 +15,7 @@ import {
   Info,
   Download,
   AlertCircle,
+  Smartphone,
 } from 'lucide-react';
 import type { AppSettings } from '@shared/types';
 
@@ -33,13 +34,14 @@ import type { AppSettings } from '@shared/types';
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'devices' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
   { key: 'mcp', label: 'MCP Server', Icon: Plug },
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
   { key: 'data', label: 'Data', Icon: HardDrive },
+  { key: 'devices', label: 'Devices', Icon: Smartphone },
   { key: 'sync', label: 'Sync', Icon: RefreshCw },
   { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
@@ -148,6 +150,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             )}
             {section === 'data' && (
               <DataSection settings={settings} onChange={update} />
+            )}
+            {section === 'devices' && (
+              <DevicesSection settings={settings} onChange={update} />
             )}
             {section === 'telemetry' && <TelemetrySection />}
             {section === 'updates' && <UpdatesSection />}
@@ -579,6 +584,69 @@ function DataSection({
       <p className="text-[10px] text-amber-200/80">
         ⚠️ Changes take effect on next server restart. The current session keeps using the previous path.
       </p>
+    </>
+  );
+}
+
+// --- Devices ---
+
+function DevicesSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
+  const [name, setName] = useState(settings.device.deviceName);
+
+  return (
+    <>
+      <p className="text-[11px] text-foreground-muted leading-relaxed">
+        Control how this CodeTrellis instance appears to other devices on your network.
+        Paired devices can view your workspace remotely via WebRTC.
+      </p>
+
+      <Field label="Device name (empty = hostname)">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => onChange({ device: { ...settings.device, deviceName: name.trim() } })}
+          placeholder="e.g. Saif's iMac"
+          className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+        />
+      </Field>
+
+      <Field label="">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={settings.device.advertise}
+            onChange={(e) => onChange({ device: { ...settings.device, advertise: e.target.checked } })}
+            className="accent-accent"
+          />
+          <span className="text-[12px]">Advertise on local network (mDNS)</span>
+        </label>
+        <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
+          When enabled, nearby devices can discover this instance for pairing.
+          Disable if you don&apos;t want to appear in discovery lists.
+        </p>
+      </Field>
+
+      <Field label="">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={settings.device.shareAudio}
+            onChange={(e) => onChange({ device: { ...settings.device, shareAudio: e.target.checked } })}
+            className="accent-accent"
+          />
+          <span className="text-[12px]">Share audio capture with paired devices</span>
+        </label>
+        <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
+          When enabled, agents on paired devices can access audio captured on this machine.
+        </p>
+      </Field>
     </>
   );
 }

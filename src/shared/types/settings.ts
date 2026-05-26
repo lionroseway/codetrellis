@@ -11,6 +11,8 @@
  * remove.
  */
 
+import type { DeviceSettings } from './peer';
+
 export interface IdentitySettings {
   /** Display name shown in attributions. */
   displayName: string;
@@ -100,6 +102,11 @@ export interface AppSettings {
   plans: PlansSettings;
   data: DataSettings;
   /**
+   * Phase 9 — device discovery and pairing settings.
+   * Controls mDNS advertisement, device name, audio sharing with peers.
+   */
+  device: DeviceSettings;
+  /**
    * Phase 5.1 — true once the user completes the first-run wizard.
    * When false (or absent in older settings files), the frontend
    * shows a blocking onboarding overlay before the main app shell.
@@ -126,6 +133,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     dataDirOverride: '',
     personalSyncPath: '',
     personalSyncMode: 'none',
+  },
+  device: {
+    deviceName: '',  // '' = auto-detect from os.hostname()
+    advertise: true,
+    shareAudio: false,
   },
   firstRunComplete: false,
   updatedAt: '',

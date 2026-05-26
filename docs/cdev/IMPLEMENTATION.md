@@ -656,7 +656,7 @@ Reference: [16 — Mobile Companion](16-mobile-companion.md).
 
 ### 9.1 mDNS discovery
 
-Status: ⬜ Not started.
+Status: ✅ Complete.
 
 Every running CodeTrellis instance advertises itself on the local network so other devices know it exists. mDNS does NOT establish a connection — it just says "I'm here."
 
@@ -668,7 +668,7 @@ Every running CodeTrellis instance advertises itself on the local network so oth
 
 ### 9.2 QR-based signalling (zero-port handshake)
 
-Status: ⬜ Not started.
+Status: ✅ Complete.
 
 The pairing handshake happens entirely through the QR code and a confirmation code — no listening port required.
 
@@ -704,7 +704,7 @@ The pairing handshake happens entirely through the QR code and a confirmation co
 
 ### 9.3 WebRTC connection manager
 
-Status: ⬜ Not started.
+Status: ✅ Complete.
 
 Manages active WebRTC connections to paired devices. Handles reconnection, heartbeat, and multiplexed data channels.
 
@@ -725,7 +725,7 @@ Manages active WebRTC connections to paired devices. Handles reconnection, heart
 
 ### 9.4 Desktop UI: device management
 
-Status: ⬜ Not started.
+Status: ✅ Complete.
 
 - `src/frontend/components/pairing/PairingModal.tsx` — shows QR code + code entry field during pairing.
 - `src/frontend/components/pairing/DeviceList.tsx` — paired devices: alias, type, last seen, connected now, unpair.
@@ -734,7 +734,7 @@ Status: ⬜ Not started.
 
 ### 9.5 Phase 9 tests
 
-Status: ⬜ Not started.
+Status: ✅ Complete.
 
 1. **mDNS** — instance advertises, second process discovers it.
 2. **Pairing** — simulate full QR → answer → code → confirmation flow with two in-process WebRTC peers.

@@ -10,6 +10,7 @@ import { saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import { stopAutoSave } from './services/persistence';
 import { stopClaudeCodeWatcher } from './agent/claude-code-watcher';
+import { stopPeerManager } from './services/peer-connection-service';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
@@ -79,7 +80,15 @@ async function gracefulShutdown(signal: string): Promise<void> {
       console.error('[Backend] File watcher cleanup failed:', err);
     }
 
-    // 4. Stop MCP server
+    // 4. Stop peer connections and mDNS
+    try {
+      await stopPeerManager();
+      console.log('[Backend] Peer manager stopped');
+    } catch (err) {
+      console.error('[Backend] Peer manager cleanup failed:', err);
+    }
+
+    // 5. Stop MCP server
     try {
       await stopMcpServer();
       console.log('[Backend] MCP server stopped');
@@ -87,7 +96,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
       console.error('[Backend] MCP cleanup failed:', err);
     }
 
-    // 5. Close HTTP server
+    // 6. Close HTTP server
     httpServer.close();
     console.log('[Backend] HTTP server closed');
   } catch (err) {

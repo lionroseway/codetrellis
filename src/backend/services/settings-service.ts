@@ -65,6 +65,7 @@ export function updateSettings(patch: DeepPartial<AppSettings>): AppSettings {
     mcp: { ...current.mcp, ...(patch.mcp ?? {}) },
     plans: { ...current.plans, ...(patch.plans ?? {}) },
     data: { ...current.data, ...(patch.data ?? {}) },
+    device: { ...current.device, ...(patch.device ?? {}) },
     firstRunComplete: patch.firstRunComplete ?? current.firstRunComplete,
     updatedAt: new Date().toISOString(),
   };
@@ -191,6 +192,11 @@ function mergeWithDefaults(raw: any): AppSettings {
       dataDirOverride: typeof raw?.data?.dataDirOverride === 'string' ? raw.data.dataDirOverride : DEFAULT_SETTINGS.data.dataDirOverride,
       personalSyncPath: typeof raw?.data?.personalSyncPath === 'string' ? raw.data.personalSyncPath : DEFAULT_SETTINGS.data.personalSyncPath,
       personalSyncMode: ['none', 'selective', 'full'].includes(raw?.data?.personalSyncMode) ? raw.data.personalSyncMode : DEFAULT_SETTINGS.data.personalSyncMode,
+    },
+    device: {
+      deviceName: typeof raw?.device?.deviceName === 'string' ? raw.device.deviceName : DEFAULT_SETTINGS.device.deviceName,
+      advertise: typeof raw?.device?.advertise === 'boolean' ? raw.device.advertise : DEFAULT_SETTINGS.device.advertise,
+      shareAudio: typeof raw?.device?.shareAudio === 'boolean' ? raw.device.shareAudio : DEFAULT_SETTINGS.device.shareAudio,
     },
     firstRunComplete: typeof raw?.firstRunComplete === 'boolean' ? raw.firstRunComplete : DEFAULT_SETTINGS.firstRunComplete,
     updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : '',
