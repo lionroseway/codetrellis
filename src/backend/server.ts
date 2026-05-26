@@ -68,6 +68,7 @@ import {
   startUpdatePolling,
 } from './services/update-service';
 import { BUILD_INFO } from '../shared/build-info';
+import * as peerService from './services/peer-connection-service';
 
 const app = express();
 app.use(express.json());
@@ -3042,8 +3043,7 @@ app.get('/api/audio/recent', (req, res) => {
 
 app.get('/api/peers/status', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     res.json(peerService.getPeerManagerStatus());
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -3052,8 +3052,7 @@ app.get('/api/peers/status', (_req, res) => {
 
 app.get('/api/peers/discovered', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     res.json(peerService.getDiscoveredDevices());
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -3062,8 +3061,7 @@ app.get('/api/peers/discovered', (_req, res) => {
 
 app.get('/api/peers/devices', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     res.json(peerService.getDevices());
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -3072,8 +3070,7 @@ app.get('/api/peers/devices', (_req, res) => {
 
 app.get('/api/peers/connections', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     res.json(peerService.getConnections());
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -3082,8 +3079,7 @@ app.get('/api/peers/connections', (_req, res) => {
 
 app.post('/api/pairing/initiate', async (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const { qrPayload } = await peerService.startPairing();
     res.json({ qrPayload });
   } catch (err) {
@@ -3093,8 +3089,7 @@ app.post('/api/pairing/initiate', async (_req, res) => {
 
 app.post('/api/pairing/cancel', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     peerService.cancelPairing();
     res.json({ cancelled: true });
   } catch (err) {
@@ -3104,8 +3099,7 @@ app.post('/api/pairing/cancel', (_req, res) => {
 
 app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const removed = await peerService.unpairDevice(req.params.fingerprint);
     res.json({ removed });
   } catch (err) {
@@ -3115,8 +3109,7 @@ app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
 
 app.patch('/api/peers/devices/:fingerprint', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const { alias } = req.body as { alias?: string };
     if (!alias) { res.status(400).json({ error: 'alias required' }); return; }
     const renamed = peerService.renameDevice(req.params.fingerprint, alias);
@@ -3130,8 +3123,7 @@ app.patch('/api/peers/devices/:fingerprint', (req, res) => {
 
 app.get('/api/peers/remote-state', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const allStates = peerService.getAllRemoteStates();
     const result: Record<string, unknown> = {};
     for (const [fp, state] of allStates) {
@@ -3145,8 +3137,7 @@ app.get('/api/peers/remote-state', (_req, res) => {
 
 app.get('/api/peers/remote-state/:fingerprint', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const state = peerService.getRemoteState(req.params.fingerprint);
     if (!state) { res.status(404).json({ error: 'No state from this peer' }); return; }
     res.json(state);
@@ -3157,8 +3148,7 @@ app.get('/api/peers/remote-state/:fingerprint', (req, res) => {
 
 app.get('/api/peers/remote-terminals', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const fingerprint = req.query.fingerprint as string | undefined;
     const terminals = fingerprint
       ? peerService.getRemoteTerminalsForPeer(fingerprint)
@@ -3171,8 +3161,7 @@ app.get('/api/peers/remote-terminals', (req, res) => {
 
 app.post('/api/peers/remote-terminals/:fingerprint/:terminalId/write', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const { data } = req.body as { data?: string };
     if (!data) { res.status(400).json({ error: 'data required' }); return; }
     const sent = peerService.writeRemoteTerminal(req.params.fingerprint, req.params.terminalId, data);
@@ -3184,8 +3173,7 @@ app.post('/api/peers/remote-terminals/:fingerprint/:terminalId/write', (req, res
 
 app.get('/api/peers/remote-audio', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const statuses = peerService.getRemoteAudioStatuses();
     res.json({ count: statuses.length, peers: statuses });
   } catch (err) {
@@ -3195,8 +3183,7 @@ app.get('/api/peers/remote-audio', (_req, res) => {
 
 app.get('/api/peers/remote-input-requests', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const requests = peerService.getPendingInputRequests();
     res.json({ count: requests.length, requests });
   } catch (err) {
@@ -3206,8 +3193,7 @@ app.get('/api/peers/remote-input-requests', (_req, res) => {
 
 app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
     const sent = peerService.respondToInputRequest(req.params.requestId, response);
@@ -3221,8 +3207,7 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
 
 app.get('/api/peers/push-tokens', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const tokens = peerService.listPushTokens();
     res.json({ count: tokens.length, tokens });
   } catch (err) {
@@ -3232,8 +3217,7 @@ app.get('/api/peers/push-tokens', (_req, res) => {
 
 app.post('/api/peers/push-tokens', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     const { fingerprint, token } = req.body as { fingerprint?: string; token?: string };
     if (!fingerprint || !token) {
       res.status(400).json({ error: 'fingerprint and token required' });
@@ -3248,8 +3232,7 @@ app.post('/api/peers/push-tokens', (req, res) => {
 
 app.delete('/api/peers/push-tokens/:fingerprint', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const peerService = require('./services/peer-connection-service');
+    // peer-connection-service is statically imported as `peerService` at top of file
     peerService.unregisterPushToken(req.params.fingerprint);
     res.json({ unregistered: true });
   } catch (err) {
@@ -3612,9 +3595,7 @@ export async function initializeBackend(): Promise<void> {
   // and prepares for QR-based WebRTC pairing. Best-effort: if mDNS
   // fails (e.g. port 5353 in use), the rest of the app is unaffected.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { startPeerManager } = require('./services/peer-connection-service');
-    startPeerManager();
+    peerService.startPeerManager();
   } catch (err) {
     console.warn('[Backend] Peer connection manager failed to start:', err);
   }
