@@ -140,6 +140,60 @@ export type DataChannelName = (typeof DATA_CHANNELS)[keyof typeof DATA_CHANNELS]
 
 // --- Settings extension ------------------------------------------------------
 
+// --- Phase 10: Multi-device sync ---------------------------------------------
+
+/** Remote terminal info (received from a connected peer). */
+export interface RemoteTerminalInfo {
+  /** Terminal ID on the remote machine. */
+  id: string;
+  /** Agent preset (claude, codex, aider, shell). */
+  preset: string;
+  /** Terminal title. */
+  title: string;
+  /** Working directory on the remote machine. */
+  cwd: string;
+  /** Whether the terminal is still alive. */
+  alive: boolean;
+  /** Fingerprint of the peer that owns this terminal. */
+  peerFingerprint: string;
+  /** Alias of the peer device. */
+  peerAlias: string;
+  /** Index in the terminal list (for wire protocol addressing). */
+  index: number;
+}
+
+/** Remote audio status from a connected peer. */
+export interface RemoteAudioStatus {
+  /** Fingerprint of the peer streaming audio. */
+  peerFingerprint: string;
+  /** Whether the peer is currently capturing audio. */
+  capturing: boolean;
+  /** Seconds of audio buffered on the peer. */
+  bufferedSeconds: number;
+}
+
+/** A pending user-input request from a remote agent. */
+export interface RemoteInputRequest {
+  /** Unique ID for this request. */
+  requestId: string;
+  /** Fingerprint of the peer where the agent is running. */
+  peerFingerprint: string;
+  /** The prompt/question the agent is asking. */
+  prompt: string;
+  /** Options, if the agent provided them. */
+  options?: string[];
+  /** Plan UID context. */
+  planUid?: string;
+  /** Item UID context. */
+  itemUid?: string;
+  /** When the request was received. */
+  receivedAt: number;
+  /** Whether this request has been answered. */
+  answered: boolean;
+}
+
+// --- Settings extension ------------------------------------------------------
+
 /** Device-related settings added to AppSettings. */
 export interface DeviceSettings {
   /**

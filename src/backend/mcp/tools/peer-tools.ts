@@ -1,12 +1,21 @@
 /**
- * MCP tools for Phase 9 — peer discovery and device management.
+ * MCP tools for Phase 9 + 10 — peer discovery, device management,
+ * and multi-device collaboration.
  *
- * Tools:
+ * Phase 9 tools:
  *   - get_peer_status — overview of discovery, pairing, connections
  *   - list_discovered_peers — mDNS-discovered instances on the LAN
  *   - list_paired_devices — devices that have completed QR pairing
  *   - list_peer_connections — active WebRTC connections
  *   - unpair_device — remove a paired device
+ *
+ * Phase 10 tools:
+ *   - get_remote_state — workspace state from a connected peer
+ *   - list_remote_terminals — terminals on connected peers
+ *   - write_remote_terminal — type into a remote terminal
+ *   - get_remote_audio — audio status from connected peers
+ *   - list_remote_input_requests — pending user-input prompts from remote agents
+ *   - respond_remote_input — answer a remote agent's input request
  */
 
 import { z } from 'zod';
@@ -148,6 +157,192 @@ export function registerPeerTools(server: McpServer): void {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
           isError: true,
         };
+      }
+    },
+  );
+
+  // =========================================================================
+  // Phase 10 — Multi-device collaboration tools
+  // =========================================================================
+
+  server.tool(
+    'get_remote_state',
+    'Get the workspace state snapshot from a connected peer. Shows their plans, agent sessions, channel events, and audio status. ' +
+    'If no fingerprint is given, returns state from all connected peers.',
+    {
+      fingerprint: z.string().optional().describe('DTLS fingerprint of a specific peer. Omit for all peers.'),
+    },
+    async ({ fingerprint }) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const peerService = require('../../services/peer-connection-service');
+
+        if (fingerprint) {
+          const state = peerService.getRemoteState(fingerprint);
+          if (!state) {
+            return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No state from this peer — not connected or no snapshot received yet.' }) }] };
+          }
+          return { content: [{ type: 'text' as const, text: JSON.stringify(state) }] };
+        }
+
+        const allStates = peerService.getAllRemoteStates();
+        const result: Record<string, unknown> = {};
+        for (const [fp, state] of allStates) {
+          result[fp] = state;
+        }
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ peerCount: allStates.size, states: result }),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'list_remote_terminals',
+    'List terminals running on connected peers. Remote terminals can be viewed and controlled from this machine. ' +
+    'Each terminal shows the peer it belongs to, the agent preset, title, and whether it is alive.',
+    {
+      fingerprint: z.string().optional().describe('Filter to a specific peer. Omit for all peers.'),
+    },
+    async ({ fingerprint }) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const peerService = require('../../services/peer-connection-service');
+
+        const terminals = fingerprint
+          ? peerService.getRemoteTerminalsForPeer(fingerprint)
+          : peerService.getRemoteTerminals();
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              count: terminals.length,
+              terminals: terminals.map((t: { id: string; preset: string; title: string; cwd: string; alive: boolean; peerFingerprint: string }) => ({
+                id: t.id,
+                preset: t.preset,
+                title: t.title,
+                cwd: t.cwd,
+                alive: t.alive,
+                peerFingerprint: t.peerFingerprint,
+              })),
+            }),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'write_remote_terminal',
+    'Send input to a terminal running on a connected peer. Use this to type commands into remote terminals. ' +
+    'Append \\n to execute the command.',
+    {
+      fingerprint: z.string().describe('DTLS fingerprint of the peer that owns the terminal.'),
+      terminal_id: z.string().describe('ID of the remote terminal.'),
+      data: z.string().describe('The text to send to the terminal. Include \\n to press Enter.'),
+    },
+    async ({ fingerprint, terminal_id, data }) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const peerService = require('../../services/peer-connection-service');
+        const sent = peerService.writeRemoteTerminal(fingerprint, terminal_id, data);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              sent,
+              message: sent ? `Sent ${data.length} chars to remote terminal ${terminal_id}` : 'Failed — terminal not found or peer not connected',
+            }),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'get_remote_audio',
+    'Get audio capture status from connected peers. Shows which peers are capturing audio and how much is buffered. ' +
+    'When a peer is capturing with shareAudio enabled, their audio is automatically fed into this instance\'s audio buffer.',
+    {},
+    async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const peerService = require('../../services/peer-connection-service');
+        const statuses = peerService.getRemoteAudioStatuses();
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              count: statuses.length,
+              peers: statuses,
+            }),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'list_remote_input_requests',
+    'List pending user-input requests from agents running on connected peers. These are prompts that remote agents ' +
+    'have sent via await_user_input — you can respond from this machine to unblock them.',
+    {},
+    async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const peerService = require('../../services/peer-connection-service');
+        const requests = peerService.getPendingInputRequests();
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              count: requests.length,
+              requests,
+            }),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'respond_remote_input',
+    'Respond to a pending user-input request from a remote agent. The response is sent to the peer where the agent is running, ' +
+    'unblocking the agent. First response wins — if the local user already answered, this is a no-op.',
+    {
+      request_id: z.string().describe('ID of the input request to respond to.'),
+      response: z.string().describe('The response text to send back to the remote agent.'),
+    },
+    async ({ request_id, response }) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const peerService = require('../../services/peer-connection-service');
+        const sent = peerService.respondToInputRequest(request_id, response);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              sent,
+              message: sent ? 'Response sent to remote agent' : 'Request not found or already answered',
+            }),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );

@@ -3126,6 +3126,97 @@ app.patch('/api/peers/devices/:fingerprint', (req, res) => {
   }
 });
 
+// --- CDev Phase 10 — Multi-device REST surface ---
+
+app.get('/api/peers/remote-state', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const allStates = peerService.getAllRemoteStates();
+    const result: Record<string, unknown> = {};
+    for (const [fp, state] of allStates) {
+      result[fp] = state;
+    }
+    res.json({ peerCount: allStates.size, states: result });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/peers/remote-state/:fingerprint', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const state = peerService.getRemoteState(req.params.fingerprint);
+    if (!state) { res.status(404).json({ error: 'No state from this peer' }); return; }
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/peers/remote-terminals', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const fingerprint = req.query.fingerprint as string | undefined;
+    const terminals = fingerprint
+      ? peerService.getRemoteTerminalsForPeer(fingerprint)
+      : peerService.getRemoteTerminals();
+    res.json({ count: terminals.length, terminals });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/peers/remote-terminals/:fingerprint/:terminalId/write', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const { data } = req.body as { data?: string };
+    if (!data) { res.status(400).json({ error: 'data required' }); return; }
+    const sent = peerService.writeRemoteTerminal(req.params.fingerprint, req.params.terminalId, data);
+    res.json({ sent });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/peers/remote-audio', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const statuses = peerService.getRemoteAudioStatuses();
+    res.json({ count: statuses.length, peers: statuses });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/peers/remote-input-requests', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const requests = peerService.getPendingInputRequests();
+    res.json({ count: requests.length, requests });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const peerService = require('./services/peer-connection-service');
+    const { response } = req.body as { response?: string };
+    if (!response) { res.status(400).json({ error: 'response required' }); return; }
+    const sent = peerService.respondToInputRequest(req.params.requestId, response);
+    res.json({ sent });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // --- CDev Phase 7 — External contributors REST surface ---
 
 app.get('/api/pantry/resolve', (req, res) => {

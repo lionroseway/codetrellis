@@ -57,6 +57,11 @@ import {
   connectedPeerCount,
 } from './webrtc-service';
 import { getSettings } from './settings-service';
+// Phase 10 — multi-device services
+import { startStateSync, stopStateSync, isStateSyncRunning } from './state-sync-service';
+import { startRemoteTerminals, stopRemoteTerminals, isRemoteTerminalRunning } from './remote-terminal-service';
+import { startRemoteAudio, stopRemoteAudio, isRemoteAudioRunning } from './remote-audio-service';
+import { startRemoteInteraction, stopRemoteInteraction, isRemoteInteractionRunning } from './remote-interaction-service';
 
 // --- State -------------------------------------------------------------------
 
@@ -104,7 +109,14 @@ export function startPeerManager(): void {
     console.log(`[PeerManager] Peer ${fingerprint.slice(0, 12)}… → ${state}`);
   });
 
-  console.log('[PeerManager] Started');
+  // Phase 10 — start multi-device services
+  const myInstanceId = getInstanceId();
+  startStateSync(myInstanceId);
+  startRemoteTerminals();
+  startRemoteAudio();
+  startRemoteInteraction(myInstanceId);
+
+  console.log('[PeerManager] Started (with Phase 10 multi-device services)');
 }
 
 /**
@@ -114,6 +126,12 @@ export function startPeerManager(): void {
 export async function stopPeerManager(): Promise<void> {
   if (!started) return;
   started = false;
+
+  // Phase 10 — stop multi-device services
+  stopRemoteInteraction();
+  stopRemoteAudio();
+  stopRemoteTerminals();
+  stopStateSync();
 
   cancelPairing();
   await disconnectAllPeers();
@@ -288,6 +306,52 @@ export function getConnectedCount(): number {
 
 export { sendToPeer, broadcastToAllPeers, onChannelMessage, onConnectionStateChange };
 
+// --- Phase 10: Re-exports for multi-device services -------------------------
+
+// State sync
+export {
+  getRemoteState,
+  getAllRemoteStates,
+  onRemoteStateChange,
+  collectSnapshot,
+  isStateSyncRunning,
+} from './state-sync-service';
+
+// Remote terminals
+export {
+  getRemoteTerminals,
+  getRemoteTerminalsForPeer,
+  writeRemoteTerminal,
+  resizeRemoteTerminal,
+  onRemoteTerminalEvent,
+  isRemoteTerminalRunning,
+} from './remote-terminal-service';
+
+// Remote audio
+export {
+  forwardAudioChunk,
+  broadcastAudioStatus,
+  broadcastAudioStopped,
+  getRemoteAudioStatuses,
+  getRemoteAudioStatus,
+  onRemoteAudioEvent,
+  isRemoteAudioRunning,
+} from './remote-audio-service';
+
+// Remote agent interaction
+export {
+  broadcastChannelEvent,
+  broadcastChannelResolved,
+  broadcastInputRequest,
+  respondToInputRequest,
+  broadcastAgentSessions,
+  getPendingInputRequests,
+  getPendingInputRequest,
+  onRemoteChannelEvent,
+  onRemoteInteractionEvent,
+  isRemoteInteractionRunning,
+} from './remote-interaction-service';
+
 // --- Summary -----------------------------------------------------------------
 
 /**
@@ -301,6 +365,10 @@ export function getPeerManagerStatus(): {
   pairedDevices: number;
   connectedPeers: number;
   pairingActive: boolean;
+  stateSync: boolean;
+  remoteTerminals: boolean;
+  remoteAudio: boolean;
+  remoteInteraction: boolean;
 } {
   return {
     running: started,
@@ -310,5 +378,9 @@ export function getPeerManagerStatus(): {
     pairedDevices: listPairedDevices().length,
     connectedPeers: connectedPeerCount(),
     pairingActive: isPairingActive(),
+    stateSync: isStateSyncRunning(),
+    remoteTerminals: isRemoteTerminalRunning(),
+    remoteAudio: isRemoteAudioRunning(),
+    remoteInteraction: isRemoteInteractionRunning(),
   };
 }
