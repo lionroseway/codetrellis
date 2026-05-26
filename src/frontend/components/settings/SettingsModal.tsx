@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -16,7 +16,10 @@ import {
   Download,
   AlertCircle,
   Smartphone,
+  QrCode,
+  Loader2,
 } from 'lucide-react';
+import { generateQrSvg } from '../../lib/qr-svg';
 import type { AppSettings } from '@shared/types';
 
 /**
@@ -598,6 +601,75 @@ function DevicesSection({
   onChange: (patch: Partial<AppSettings>) => void;
 }) {
   const [name, setName] = useState(settings.device.deviceName);
+  const [pairingState, setPairingState] = useState<'idle' | 'generating' | 'showing' | 'error'>('idle');
+  const [qrSvg, setQrSvg] = useState<string | null>(null);
+  const [pairingError, setPairingError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(60);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [pairedDevices, setPairedDevices] = useState<Array<{
+    fingerprint: string; alias: string; deviceType: string;
+    pairedAt: string; lastConnected: string | null;
+  }>>([]);
+
+  // Fetch paired devices on mount
+  useEffect(() => {
+    fetch('/api/peers/devices')
+      .then(r => r.ok ? r.json() : { devices: [] })
+      .then(data => setPairedDevices(data.devices ?? []))
+      .catch(() => {});
+  }, [pairingState]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (pairingState === 'showing') {
+      setCountdown(60);
+      timerRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            handleCancelPairing();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pairingState]);
+
+  const handleStartPairing = useCallback(async () => {
+    setPairingState('generating');
+    setPairingError(null);
+    try {
+      const res = await fetch('/api/pairing/initiate', { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const { qrPayload } = await res.json();
+      const payloadJson = JSON.stringify(qrPayload);
+      const svg = generateQrSvg(payloadJson, 4, 2);
+      setQrSvg(svg);
+      setPairingState('showing');
+    } catch (err) {
+      setPairingError(err instanceof Error ? err.message : String(err));
+      setPairingState('error');
+    }
+  }, []);
+
+  const handleCancelPairing = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    fetch('/api/pairing/cancel', { method: 'POST' }).catch(() => {});
+    setQrSvg(null);
+    setPairingState('idle');
+  }, []);
+
+  const handleUnpair = useCallback(async (fingerprint: string) => {
+    await fetch(`/api/peers/devices/${encodeURIComponent(fingerprint)}`, { method: 'DELETE' });
+    setPairedDevices(prev => prev.filter(d => d.fingerprint !== fingerprint));
+  }, []);
 
   return (
     <>
@@ -647,6 +719,100 @@ function DevicesSection({
           When enabled, agents on paired devices can access audio captured on this machine.
         </p>
       </Field>
+
+      {/* --- Pair Mobile Device --- */}
+      <div className="mt-3 pt-3 border-t border-white/[0.06]">
+        <Field label="Pair mobile device">
+          {pairingState === 'idle' && (
+            <button
+              onClick={handleStartPairing}
+              className="flex items-center gap-2 px-3 py-2 bg-accent/20 hover:bg-accent/30 text-accent rounded-md text-[12px] font-medium transition-colors"
+            >
+              <QrCode size={14} />
+              Generate QR Code
+            </button>
+          )}
+
+          {pairingState === 'generating' && (
+            <div className="flex items-center gap-2 text-[12px] text-foreground-muted py-2">
+              <Loader2 size={14} className="animate-spin" />
+              Generating pairing code...
+            </div>
+          )}
+
+          {pairingState === 'showing' && qrSvg && (
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="bg-white rounded-lg p-2 inline-block"
+                dangerouslySetInnerHTML={{ __html: qrSvg }}
+              />
+              <div className="text-center">
+                <p className="text-[11px] text-foreground-muted">
+                  Scan with the CodeTrellis mobile app
+                </p>
+                <p className="text-[10px] text-foreground-subtle mt-1">
+                  Expires in <span className="text-accent font-medium">{countdown}s</span>
+                </p>
+              </div>
+              <button
+                onClick={handleCancelPairing}
+                className="px-3 py-1.5 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {pairingState === 'error' && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-red-400">{pairingError}</p>
+              <button
+                onClick={handleStartPairing}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-foreground-muted rounded-md text-[11px] transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          <p className="text-[10px] text-foreground-subtle mt-2">
+            Open the CodeTrellis app on your phone and tap &quot;Pair New Device&quot;, then scan the QR code.
+          </p>
+        </Field>
+      </div>
+
+      {/* --- Paired Devices List --- */}
+      {pairedDevices.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-white/[0.06]">
+          <Field label="Paired devices">
+            <div className="space-y-2">
+              {pairedDevices.map(d => (
+                <div
+                  key={d.fingerprint}
+                  className="flex items-center justify-between bg-white/[0.02] border border-white/[0.06] rounded-md px-3 py-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Smartphone size={13} className="text-foreground-subtle shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[12px] text-foreground truncate">{d.alias || 'Unknown'}</p>
+                      <p className="text-[10px] text-foreground-subtle">
+                        {d.deviceType === 'mobile' ? 'Mobile' : d.deviceType === 'desktop' ? 'Desktop' : 'Device'}
+                        {d.lastConnected ? ` · Last seen ${formatRelativeTime(new Date(d.lastConnected))}` : ' · Never connected'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleUnpair(d.fingerprint)}
+                    className="text-[10px] text-red-400/70 hover:text-red-400 shrink-0 ml-2 transition-colors"
+                  >
+                    Unpair
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Field>
+        </div>
+      )}
     </>
   );
 }
