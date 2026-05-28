@@ -209,7 +209,10 @@ export function cancelPairing(): void {
 
 /**
  * Whether a pairing session is currently active.
+ * Returns true if we have an active pairing state — even after the
+ * temp server closes (it closes once the answer is received, but the
+ * user still needs to confirm the code on the desktop).
  */
 export function isPairingActive(): boolean {
-  return activePairing !== null || isPairingServerActive();
+  return activePairing !== null;
 }

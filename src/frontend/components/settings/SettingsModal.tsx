@@ -606,6 +606,8 @@ function DevicesSection({
   >('idle');
   const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingHost, setPairingHost] = useState<string | null>(null);
+  const [pairingPort, setPairingPort] = useState<number | null>(null);
   const [confirmCode, setConfirmCode] = useState<string | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(60);
@@ -649,16 +651,22 @@ function DevicesSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairingState]);
 
-  // Poll for confirmation code when waiting for the phone
+  // Poll for phone connection — when the phone posts its answer,
+  // the server derives a confirmation code. We don't show it to the
+  // user — instead they must TYPE the code from their phone's screen.
+  // Poll from BOTH showing-qr and waiting-phone states.
   useEffect(() => {
-    if (pairingState === 'waiting-phone') {
+    if (pairingState === 'showing-qr' || pairingState === 'waiting-phone') {
       pollRef.current = setInterval(async () => {
         try {
           const res = await fetch('/api/pairing/status');
           if (!res.ok) return;
           const { active, confirmCode: code } = await res.json();
           if (code) {
-            setConfirmCode(code);
+            // Phone connected — transition to code entry
+            // (don't store the code client-side; verification is server-side)
+            setConfirmCode(''); // Clear for user input
+            setPairingError(null);
             setPairingState('confirming');
           } else if (!active) {
             // Pairing timed out or was cancelled externally
@@ -692,10 +700,10 @@ function DevicesSection({
       const svg = generateQrSvg(payloadJson, 5, 2);
       setQrSvg(svg);
       setPairingCode(qrPayload.c);
+      setPairingHost(qrPayload.h);
+      setPairingPort(qrPayload.p);
       setPairingState('showing-qr');
-
-      // Auto-transition to waiting after a brief moment so user sees the QR
-      // (they can also click "I scanned it" to transition faster)
+      // Polling starts immediately from showing-qr state
     } catch (err) {
       setPairingError(err instanceof Error ? err.message : String(err));
       setPairingState('error');
@@ -707,9 +715,12 @@ function DevicesSection({
     setPairingState('waiting-phone');
   }, []);
 
-  // --- Step 2: User confirms pairing (Bluetooth-style) ---
+  // --- Step 2: User enters the code from their phone to confirm ---
   const handleConfirmPairing = useCallback(async () => {
-    if (!confirmCode) return;
+    if (!confirmCode || confirmCode.length !== 6) {
+      setPairingError('Enter the 6-digit code shown on your phone.');
+      return;
+    }
 
     const alias = deviceAlias.trim() || 'Mobile Device';
     setPairingState('completing');
@@ -730,7 +741,11 @@ function DevicesSection({
       }
 
       setPairingState('success');
-      setTimeout(() => setPairingState('idle'), 3000);
+      setTimeout(() => {
+        setPairingState('idle');
+        // Refresh paired devices list
+        fetch('/api/peers/devices').then(r => r.ok ? r.json() : []).then(setPairedDevices).catch(() => {});
+      }, 2000);
     } catch (err) {
       setPairingError(err instanceof Error ? err.message : String(err));
       setPairingState('error');
@@ -791,8 +806,8 @@ function DevicesSection({
             {/* Typed code fallback */}
             {pairingCode && (
               <div className="text-center">
-                <p className="text-[10px] text-foreground-subtle mb-1">Or enter this code manually:</p>
-                <div className="flex items-center justify-center gap-1">
+                <p className="text-[10px] text-foreground-subtle mb-1.5">Or enter these details manually on your phone:</p>
+                <div className="flex items-center justify-center gap-1 mb-2">
                   {pairingCode.split('').map((d, i) => (
                     <span
                       key={i}
@@ -802,6 +817,19 @@ function DevicesSection({
                     </span>
                   ))}
                 </div>
+                {pairingHost && pairingPort && (
+                  <div className="flex items-center justify-center gap-3 text-[11px]">
+                    <div className="text-center">
+                      <p className="text-foreground-subtle/50 text-[9px] mb-0.5">ADDRESS</p>
+                      <p className="font-mono text-foreground-muted select-all">{pairingHost}</p>
+                    </div>
+                    <div className="text-foreground-subtle/30">|</div>
+                    <div className="text-center">
+                      <p className="text-foreground-subtle/50 text-[9px] mb-0.5">PORT</p>
+                      <p className="font-mono text-foreground-muted select-all">{pairingPort}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -809,38 +837,18 @@ function DevicesSection({
               Expires in <span className="text-accent font-medium">{countdown}s</span>
             </p>
 
-            {pairingState === 'showing-qr' && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleQrShown}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/20 hover:bg-accent/30 text-accent rounded-md text-[11px] font-medium transition-colors"
-                >
-                  <Loader2 size={12} className="animate-spin" />
-                  Waiting for phone...
-                </button>
-                <button
-                  onClick={handleCancelPairing}
-                  className="px-3 py-1.5 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
-                >
-                  Cancel
-                </button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/20 text-accent rounded-md text-[11px] font-medium">
+                <Loader2 size={12} className="animate-spin" />
+                Waiting for phone...
               </div>
-            )}
-
-            {pairingState === 'waiting-phone' && (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-foreground-muted">
-                  <Loader2 size={12} className="animate-spin" />
-                  Waiting for phone to connect...
-                </div>
-                <button
-                  onClick={handleCancelPairing}
-                  className="px-3 py-1.5 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+              <button
+                onClick={handleCancelPairing}
+                className="px-3 py-1.5 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
 
             <p className="text-[10px] text-foreground-subtle text-center max-w-[280px]">
               Open CodeTrellis on your phone &rarr; Pair New Device &rarr; scan this QR or enter the code above.
@@ -848,27 +856,29 @@ function DevicesSection({
           </div>
         )}
 
-        {/* Step: Confirming — Bluetooth-style code match */}
-        {pairingState === 'confirming' && confirmCode && (
+        {/* Step: Confirming — enter the code shown on phone */}
+        {pairingState === 'confirming' && (
           <div className="flex flex-col items-center gap-3">
             <div className="flex items-center gap-2 text-[11px] text-foreground-muted mb-1">
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent/20 text-accent text-[10px] font-bold">2</span>
-              Verify codes match
+              Phone connected — enter the code shown on it
             </div>
 
-            {/* Bluetooth-style confirmation code */}
+            {/* Code entry — user types the 6-digit code from their phone */}
             <div className="text-center">
-              <p className="text-[10px] text-foreground-subtle mb-1">Does this code match your phone?</p>
-              <div className="flex items-center justify-center gap-1.5">
-                {confirmCode.split('').map((d, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center justify-center w-8 h-10 bg-white/[0.04] border border-accent/30 rounded-md text-[18px] font-bold font-mono text-foreground"
-                  >
-                    {d}
-                  </span>
-                ))}
-              </div>
+              <p className="text-[10px] text-foreground-subtle mb-2">
+                Type the 6-digit code displayed on your phone
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={confirmCode ?? ''}
+                onChange={(e) => setConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                className="w-[200px] text-center bg-white/[0.04] border border-accent/30 rounded-lg px-4 py-3 text-[24px] font-bold font-mono text-foreground tracking-[0.3em] focus:outline-none focus:border-accent/60 placeholder:text-white/10"
+                autoFocus
+              />
             </div>
 
             {/* Device alias */}
@@ -880,17 +890,21 @@ function DevicesSection({
                 onChange={(e) => setDeviceAlias(e.target.value)}
                 placeholder="e.g. My iPhone"
                 className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
-                autoFocus
               />
             </div>
+
+            {pairingError && (
+              <p className="text-[11px] text-red-400">{pairingError}</p>
+            )}
 
             <div className="flex items-center gap-2">
               <button
                 onClick={handleConfirmPairing}
-                className="flex items-center gap-1.5 px-4 py-2 bg-green-600/80 hover:bg-green-600 text-white rounded-md text-[12px] font-medium transition-colors"
+                disabled={!confirmCode || confirmCode.length !== 6}
+                className="flex items-center gap-1.5 px-4 py-2 bg-green-600/80 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-md text-[12px] font-medium transition-colors"
               >
                 <CheckCircle2 size={14} />
-                Codes Match — Pair
+                Confirm Pairing
               </button>
               <button
                 onClick={handleCancelPairing}

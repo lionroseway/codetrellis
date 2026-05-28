@@ -35,9 +35,9 @@ import type { PairingQrPayload } from '../lib/types';
 
 type PairingState =
   | 'scanning'       // Camera scanning desktop's QR
+  | 'manual'         // Manual code entry (no camera / simulator)
   | 'connecting'     // Exchanging SDPs with temp server
-  | 'confirming'     // Showing Bluetooth-style confirmation code
-  | 'connected'      // WebRTC connected — ready to save
+  | 'connected'      // Exchange done — showing code for desktop entry
   | 'error';         // Something went wrong
 
 // --- Pairing Timeout ---------------------------------------------------------
@@ -53,6 +53,9 @@ export default function PairScreen() {
   const [pairingResult, setPairingResult] = useState<PairingResult | null>(null);
   const [alias, setAlias] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [manualHost, setManualHost] = useState('');
+  const [manualPort, setManualPort] = useState('');
+  const [manualCode, setManualCode] = useState('');
   const scannedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,20 +66,12 @@ export default function PairScreen() {
     }
   }, [permission, requestPermission]);
 
-  // Monitor WebRTC connection state
+  // Monitor WebRTC connection state (informational — pairing doesn't
+  // wait for WebRTC to connect, since the HTTP exchange + confirmation
+  // code is sufficient to verify the pairing)
   useEffect(() => {
     const unsubscribe = webrtc.onStateChange((connectionState) => {
       console.log(`[Pair] WebRTC state: ${connectionState}`);
-      if (connectionState === 'connected') {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-        setState('connected');
-      } else if (connectionState === 'failed') {
-        setState('error');
-        setError('WebRTC connection failed. Ensure both devices are on the same network.');
-      }
     });
     return unsubscribe;
   }, []);
@@ -132,7 +127,17 @@ export default function PairScreen() {
       // Phase 2: WebRTC answer creation + POST (needs dev build)
       const result2 = await webrtc.pairWithDesktop(payload);
       setPairingResult(result2);
-      setState('confirming');
+
+      // Clear timeout — exchange succeeded
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      // Go straight to connected — the confirmation code is shown
+      // for the user to enter on the desktop. WebRTC connects in
+      // the background; pairing is saved based on the HTTP exchange.
+      setState('connected');
 
     } catch (err) {
       console.error('[Pair] Error:', err);
@@ -167,6 +172,48 @@ export default function PairScreen() {
     }
   };
 
+  const handleManualConnect = async () => {
+    const host = manualHost.trim();
+    const port = parseInt(manualPort.trim(), 10);
+    const code = manualCode.trim();
+
+    if (!host || !port || !code || code.length !== 6) {
+      setError('Enter the host, port, and 6-digit code from your desktop.');
+      setState('error');
+      return;
+    }
+
+    const payload: PairingQrPayload = { v: 4, h: host, p: port, c: code };
+    console.log(`[Pair] Manual connect — ${host}:${port} code=${code}`);
+
+    // Reuse the same flow as QR scanning
+    scannedRef.current = true;
+    setState('connecting');
+
+    try {
+      timeoutRef.current = setTimeout(() => {
+        setState('error');
+        setError('Pairing timed out. Please try again.');
+        webrtc.disconnect();
+      }, PAIRING_TIMEOUT_MS);
+
+      const result2 = await webrtc.pairWithDesktop(payload);
+      setPairingResult(result2);
+
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      setState('connected');
+    } catch (err) {
+      console.error('[Pair] Manual connect error:', err);
+      setState('error');
+      setError(err instanceof Error ? err.message : 'Failed to connect');
+      scannedRef.current = false;
+    }
+  };
+
   const handleRetry = () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -178,6 +225,9 @@ export default function PairScreen() {
     setPairingResult(null);
     setError(null);
     setAlias('');
+    setManualHost('');
+    setManualPort('');
+    setManualCode('');
   };
 
   // Camera permission not yet determined
@@ -189,8 +239,8 @@ export default function PairScreen() {
     );
   }
 
-  // Camera permission denied
-  if (!permission.granted) {
+  // Camera permission denied — offer manual entry as alternative
+  if (!permission.granted && state !== 'manual' && state !== 'connecting' && state !== 'confirming' && state !== 'connected' && state !== 'error') {
     return (
       <View style={styles.center}>
         <Text style={styles.permissionTitle}>Camera Access Required</Text>
@@ -199,6 +249,12 @@ export default function PairScreen() {
         </Text>
         <TouchableOpacity style={styles.retryButton} onPress={requestPermission}>
           <Text style={styles.retryButtonText}>Grant Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.manualEntryButton, { marginTop: 16 }]}
+          onPress={() => setState('manual')}
+        >
+          <Text style={styles.manualEntryButtonText}>Enter code manually</Text>
         </TouchableOpacity>
       </View>
     );
@@ -223,8 +279,82 @@ export default function PairScreen() {
             <Text style={styles.scanHint}>
               Scan the QR code from CodeTrellis{'\n'}Settings → Devices → Pair
             </Text>
+            <TouchableOpacity
+              style={styles.manualEntryButton}
+              onPress={() => setState('manual')}
+            >
+              <Text style={styles.manualEntryButtonText}>Enter code manually</Text>
+            </TouchableOpacity>
           </View>
         </View>
+      )}
+
+      {/* State: Manual Entry */}
+      {state === 'manual' && (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.manualContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.confirmTitle}>Enter Connection Details</Text>
+          <Text style={styles.confirmSubtitle}>
+            Enter the code and address shown{'\n'}on your desktop
+          </Text>
+
+          {/* 6-digit code */}
+          <Text style={styles.aliasLabel}>Pairing Code</Text>
+          <TextInput
+            style={styles.aliasInput}
+            value={manualCode}
+            onChangeText={setManualCode}
+            placeholder="e.g. 640428"
+            placeholderTextColor="#52525b"
+            keyboardType="number-pad"
+            maxLength={6}
+            autoFocus
+          />
+
+          {/* Host address */}
+          <Text style={styles.aliasLabel}>Desktop Address</Text>
+          <TextInput
+            style={styles.aliasInput}
+            value={manualHost}
+            onChangeText={setManualHost}
+            placeholder="e.g. 192.168.0.47"
+            placeholderTextColor="#52525b"
+            keyboardType="numbers-and-punctuation"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          {/* Port */}
+          <Text style={styles.aliasLabel}>Port</Text>
+          <TextInput
+            style={styles.aliasInput}
+            value={manualPort}
+            onChangeText={setManualPort}
+            placeholder="e.g. 54321"
+            placeholderTextColor="#52525b"
+            keyboardType="number-pad"
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              { backgroundColor: '#3b82f6', marginTop: 16 },
+            ]}
+            onPress={handleManualConnect}
+          >
+            <Text style={styles.confirmButtonText}>Connect</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.manualBackButton}
+            onPress={() => setState('scanning')}
+          >
+            <Text style={styles.manualBackButtonText}>Back to scanner</Text>
+          </TouchableOpacity>
+        </ScrollView>
       )}
 
       {/* State: Connecting */}
@@ -238,27 +368,28 @@ export default function PairScreen() {
         </View>
       )}
 
-      {/* State: Confirming — Bluetooth-style code */}
-      {state === 'confirming' && pairingResult && (
+      {/* State: Connected — show code for desktop entry */}
+      {state === 'connected' && (
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.confirmContainer}
         >
-          <Text style={styles.confirmTitle}>Verify Connection</Text>
+          <Text style={styles.confirmTitle}>Enter This Code on Desktop</Text>
           <Text style={styles.confirmSubtitle}>
-            Does this code match the one{'\n'}shown on your desktop?
+            Type this code into CodeTrellis{'\n'}on your desktop to complete pairing
           </Text>
 
-          {/* Bluetooth-style confirmation code */}
-          <View style={styles.codeContainer}>
-            {pairingResult.confirmCode.split('').map((digit, i) => (
-              <View key={i} style={styles.codeDigit}>
-                <Text style={styles.codeDigitText}>{digit}</Text>
-              </View>
-            ))}
-          </View>
+          {/* Confirmation code — user reads this and types on desktop */}
+          {pairingResult && (
+            <View style={[styles.codeContainer, { marginBottom: 24 }]}>
+              {pairingResult.confirmCode.split('').map((digit, i) => (
+                <View key={i} style={[styles.codeDigit, { borderColor: '#22c55e' }]}>
+                  <Text style={styles.codeDigitText}>{digit}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
-          {/* Device name input */}
           <Text style={styles.aliasLabel}>Name this desktop</Text>
           <TextInput
             style={styles.aliasInput}
@@ -268,54 +399,13 @@ export default function PairScreen() {
             placeholderTextColor="#52525b"
           />
 
-          {/* Waiting for WebRTC to fully connect */}
-          <View style={styles.waitingRow}>
-            <ActivityIndicator size="small" color="#3b82f6" />
-            <Text style={styles.waitingText}>
-              Establishing encrypted connection...
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={handleSavePairing}
+          >
+            <Text style={styles.confirmButtonText}>Save Pairing</Text>
+          </TouchableOpacity>
         </ScrollView>
-      )}
-
-      {/* State: Connected */}
-      {state === 'connected' && (
-        <View style={styles.center}>
-          <Text style={styles.successIcon}>{'✅'}</Text>
-          <Text style={styles.successText}>Connected!</Text>
-          <Text style={styles.successHint}>
-            Secure connection established
-          </Text>
-
-          {/* Confirm code still visible for reference */}
-          {pairingResult && (
-            <View style={[styles.codeContainer, { marginTop: 16, marginBottom: 8 }]}>
-              {pairingResult.confirmCode.split('').map((digit, i) => (
-                <View key={i} style={[styles.codeDigit, { borderColor: '#22c55e' }]}>
-                  <Text style={styles.codeDigitText}>{digit}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          <View style={styles.connectedForm}>
-            <Text style={styles.aliasLabel}>Device Name</Text>
-            <TextInput
-              style={styles.aliasInput}
-              value={alias}
-              onChangeText={setAlias}
-              placeholder="e.g. Work iMac"
-              placeholderTextColor="#52525b"
-              autoFocus
-            />
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleSavePairing}
-            >
-              <Text style={styles.confirmButtonText}>Save Pairing</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       )}
 
       {/* State: Error */}
@@ -372,6 +462,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 24,
     lineHeight: 20,
+  },
+
+  // Manual entry button (on scanner overlay)
+  manualEntryButton: {
+    marginTop: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  manualEntryButtonText: {
+    color: '#e4e4e7',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // Manual entry screen
+  manualContainer: {
+    alignItems: 'stretch',
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 40,
+  },
+  manualBackButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  manualBackButtonText: {
+    color: '#71717a',
+    fontSize: 13,
   },
 
   // Processing / connecting

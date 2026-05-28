@@ -180,6 +180,12 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
               confirmCode,
             }));
 
+            // Cancel the timeout — answer arrived, no longer waiting
+            if (activeTimeout) {
+              clearTimeout(activeTimeout);
+              activeTimeout = null;
+            }
+
             // Resolve the answer promise
             const answer: PairingAnswer = {
               answerSdp: data.answer,
@@ -190,7 +196,8 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
 
             answerResolve?.(answer);
 
-            // Auto-close the server after successful exchange
+            // Auto-close the HTTP server after successful exchange
+            // (pairing state is preserved in pairing-service)
             setTimeout(() => stopPairingServer(), 500);
           } catch {
             res.writeHead(400, { 'Content-Type': 'application/json' });
