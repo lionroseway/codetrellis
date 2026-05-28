@@ -17,7 +17,6 @@ import type {
   PairedDevice,
   PeerConnectionInfo,
   PairingQrPayload,
-  PairingAnswer,
 } from '../../shared/types';
 import {
   startMdns,
@@ -39,13 +38,14 @@ import {
   initiatePairing,
   cancelPairing,
   confirmPairing,
-  deriveConfirmationCode,
   isPairingActive,
-  submitAnswerManually,
+  getStoredOfferSdp,
+  getConfirmationCode,
 } from './pairing-service';
 import {
   createOffer,
   connectWithAnswer,
+  discardPendingOffer,
   disconnectPeer,
   disconnectAllPeers,
   getPeerConnections,
@@ -67,7 +67,7 @@ import { startPushNotifications, stopPushNotifications, isPushNotificationsRunni
 // --- State -------------------------------------------------------------------
 
 let started = false;
-let pendingAnswer: PairingAnswer | null = null;
+// (v4: answer is managed by pairing-service, no local state needed)
 
 // --- Public API: Lifecycle ---------------------------------------------------
 
@@ -137,6 +137,7 @@ export async function stopPeerManager(): Promise<void> {
   stopStateSync();
 
   cancelPairing();
+  await discardPendingOffer();
   await disconnectAllPeers();
   stopMdns();
 
@@ -169,80 +170,92 @@ export function isDiscoveryActive(): boolean {
 // --- Public API: Pairing -----------------------------------------------------
 
 /**
- * Start a pairing session. Returns the QR payload and a promise
- * that resolves when the peer sends its answer.
+ * Start a v4 pairing session. Opens a temp HTTP server, creates a
+ * WebRTC offer, and returns the QR payload `{v:4, h, p, c}`.
+ *
+ * The phone scans the QR, fetches the full SDP from the temp server,
+ * creates its answer, and posts it back. After the answer arrives,
+ * call `completePairing()` to establish WebRTC and confirm.
  */
 export async function startPairing(): Promise<{
   qrPayload: PairingQrPayload;
-  waitForAnswer: () => Promise<PairingAnswer>;
+  waitForAnswer: () => Promise<void>;
 }> {
-  // Create WebRTC offer
+  // Create WebRTC offer (keeps PC alive for DTLS cert reuse)
   const { offer, iceCandidates, fingerprint } = await createOffer();
 
-  // Initiate pairing (generates QR + opens ephemeral UDP)
-  return initiatePairing(offer, iceCandidates, fingerprint);
+  // Open temp server + get QR payload
+  const { qrPayload, waitForAnswer: waitRaw } = await initiatePairing(
+    offer,
+    iceCandidates,
+    fingerprint,
+  );
+
+  // Wrap: when the answer arrives, connect WebRTC automatically
+  const waitForAnswer = async (): Promise<void> => {
+    const answer = await waitRaw();
+
+    // Establish WebRTC connection using the full SDPs
+    const offerSdp = getStoredOfferSdp();
+    if (!offerSdp) throw new Error('Offer SDP lost');
+
+    await connectWithAnswer(
+      offerSdp,
+      answer.answerSdp,
+      answer.iceCandidates,
+      answer.fingerprint,
+      'Pending…', // alias set on confirm
+      'mobile',
+    );
+  };
+
+  return { qrPayload, waitForAnswer };
 }
 
 /**
- * Complete pairing after the answer arrives and the user enters the code.
+ * Get the Bluetooth-style confirmation code for the current pairing.
+ * Available after the phone's answer has been received and WebRTC
+ * is connecting.
  */
-export async function completePairing(
-  answer: PairingAnswer,
+export function getPairingConfirmCode(): string | null {
+  return getConfirmationCode();
+}
+
+/**
+ * Complete pairing after the user verifies the confirmation code.
+ * Stores the paired device record.
+ *
+ * @param userEnteredCode  The 6-digit code the user saw on their phone.
+ * @param deviceAlias      Human-readable name for the device.
+ * @param deviceType       Desktop, mobile, or unknown.
+ */
+export function completePairing(
   userEnteredCode: string,
   deviceAlias: string,
-  deviceType: 'desktop' | 'mobile' | 'unknown' = 'unknown',
-): Promise<{ success: boolean; device?: PairedDevice; error?: string }> {
-  // Verify the confirmation code
-  const expectedCode = deriveConfirmationCode(answer.fp, answer.nonce);
-  if (userEnteredCode !== expectedCode && userEnteredCode !== answer.code) {
-    return { success: false, error: 'Confirmation code mismatch' };
+  deviceType: 'desktop' | 'mobile' | 'unknown' = 'mobile',
+): { success: boolean; device?: PairedDevice; error?: string } {
+  const device = confirmPairing(userEnteredCode, deviceAlias, deviceType);
+
+  if (!device) {
+    return { success: false, error: 'Confirmation code mismatch or no active session' };
   }
 
-  try {
-    // Complete the WebRTC connection
-    const entry = await connectWithAnswer(
-      '', // offer SDP (from the original offer — TODO: pass through)
-      answer.answer,
-      answer.ice,
-      answer.fp,
-      deviceAlias,
-      deviceType,
-    );
-
-    // Store the paired device
-    const sharedSecret = ''; // TODO: extract from DTLS handshake
-    const device = confirmPairing(
-      answer,
-      userEnteredCode,
-      deviceAlias,
-      deviceType,
-      sharedSecret,
-    );
-
-    if (!device) {
-      return { success: false, error: 'Failed to confirm pairing' };
-    }
-
-    return { success: true, device };
-  } catch (err) {
-    return { success: false, error: `WebRTC connection failed: ${err}` };
-  }
+  return { success: true, device };
 }
 
 /**
- * Cancel the active pairing session.
+ * Cancel the active pairing session. Also discards the pending
+ * offer PC (whose DTLS certificate would never be used).
  */
-export { cancelPairing } from './pairing-service';
+export function cancelActivePairing(): void {
+  cancelPairing();
+  discardPendingOffer().catch(() => {});
+}
 
 /**
  * Whether a pairing session is currently in progress.
  */
 export { isPairingActive } from './pairing-service';
-
-/**
- * Submit an answer manually (fallback for when UDP doesn't work).
- */
-export { submitAnswerManually } from './pairing-service';
 
 // --- Public API: Paired Devices ----------------------------------------------
 

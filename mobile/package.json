@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@config-plugins/react-native-webrtc": "^14.0.0",
     "expo": "~54.0.0",
     "expo-asset": "~12.0.13",
     "expo-camera": "~17.0.10",
@@ -25,13 +26,16 @@
     "expo-router": "~6.0.23",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
+    "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-webrtc": "^124.0.7",
     "react-native-webview": "13.15.0"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.5",
     "@types/react": "~19.1.0",
     "typescript": "~5.9.0"
   }

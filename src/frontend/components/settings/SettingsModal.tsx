@@ -601,37 +601,47 @@ function DevicesSection({
   onChange: (patch: Partial<AppSettings>) => void;
 }) {
   const [name, setName] = useState(settings.device.deviceName);
-  const [pairingState, setPairingState] = useState<'idle' | 'generating' | 'showing' | 'error'>('idle');
+  const [pairingState, setPairingState] = useState<
+    'idle' | 'generating' | 'showing-qr' | 'waiting-phone' | 'confirming' | 'completing' | 'success' | 'error'
+  >('idle');
   const [qrSvg, setQrSvg] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [confirmCode, setConfirmCode] = useState<string | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(60);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [deviceAlias, setDeviceAlias] = useState('');
   const [pairedDevices, setPairedDevices] = useState<Array<{
     fingerprint: string; alias: string; deviceType: string;
     pairedAt: string; lastConnected: string | null;
   }>>([]);
 
-  // Fetch paired devices on mount
+  // Fetch paired devices on mount and after pairing changes
   useEffect(() => {
     fetch('/api/peers/devices')
-      .then(r => r.ok ? r.json() : { devices: [] })
-      .then(data => setPairedDevices(data.devices ?? []))
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setPairedDevices(Array.isArray(data) ? data : (data.devices ?? data)))
       .catch(() => {});
   }, [pairingState]);
 
-  // Countdown timer
+  // Countdown timer (active during QR display and waiting)
   useEffect(() => {
-    if (pairingState === 'showing') {
-      setCountdown(60);
-      timerRef.current = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            handleCancelPairing();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (pairingState === 'showing-qr' || pairingState === 'waiting-phone') {
+      if (!timerRef.current) {
+        setCountdown(60);
+        timerRef.current = setInterval(() => {
+          setCountdown(prev => {
+            if (prev <= 1) {
+              handleCancelPairing();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }
     return () => {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -639,9 +649,38 @@ function DevicesSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairingState]);
 
+  // Poll for confirmation code when waiting for the phone
+  useEffect(() => {
+    if (pairingState === 'waiting-phone') {
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await fetch('/api/pairing/status');
+          if (!res.ok) return;
+          const { active, confirmCode: code } = await res.json();
+          if (code) {
+            setConfirmCode(code);
+            setPairingState('confirming');
+          } else if (!active) {
+            // Pairing timed out or was cancelled externally
+            handleCancelPairing();
+          }
+        } catch { /* ignore poll errors */ }
+      }, 1000);
+    } else {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    }
+    return () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pairingState]);
+
+  // --- Step 1: Start pairing — get QR + code ---
   const handleStartPairing = useCallback(async () => {
     setPairingState('generating');
     setPairingError(null);
+    setConfirmCode(null);
+    setDeviceAlias('');
     try {
       const res = await fetch('/api/pairing/initiate', { method: 'POST' });
       if (!res.ok) {
@@ -650,19 +689,62 @@ function DevicesSection({
       }
       const { qrPayload } = await res.json();
       const payloadJson = JSON.stringify(qrPayload);
-      const svg = generateQrSvg(payloadJson, 4, 2);
+      const svg = generateQrSvg(payloadJson, 5, 2);
       setQrSvg(svg);
-      setPairingState('showing');
+      setPairingCode(qrPayload.c);
+      setPairingState('showing-qr');
+
+      // Auto-transition to waiting after a brief moment so user sees the QR
+      // (they can also click "I scanned it" to transition faster)
     } catch (err) {
       setPairingError(err instanceof Error ? err.message : String(err));
       setPairingState('error');
     }
   }, []);
 
+  // Transition from showing QR to waiting
+  const handleQrShown = useCallback(() => {
+    setPairingState('waiting-phone');
+  }, []);
+
+  // --- Step 2: User confirms pairing (Bluetooth-style) ---
+  const handleConfirmPairing = useCallback(async () => {
+    if (!confirmCode) return;
+
+    const alias = deviceAlias.trim() || 'Mobile Device';
+    setPairingState('completing');
+
+    try {
+      const res = await fetch('/api/pairing/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: confirmCode,
+          alias,
+          deviceType: 'mobile',
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+
+      setPairingState('success');
+      setTimeout(() => setPairingState('idle'), 3000);
+    } catch (err) {
+      setPairingError(err instanceof Error ? err.message : String(err));
+      setPairingState('error');
+    }
+  }, [confirmCode, deviceAlias]);
+
+  // --- Cancel ---
   const handleCancelPairing = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     fetch('/api/pairing/cancel', { method: 'POST' }).catch(() => {});
     setQrSvg(null);
+    setConfirmCode(null);
+    setPairingCode(null);
     setPairingState('idle');
   }, []);
 
@@ -673,110 +755,237 @@ function DevicesSection({
 
   return (
     <>
-      <p className="text-[11px] text-foreground-muted leading-relaxed">
-        Control how this CodeTrellis instance appears to other devices on your network.
-        Paired devices can view your workspace remotely via WebRTC.
-      </p>
-
-      <Field label="Device name (empty = hostname)">
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => onChange({ device: { ...settings.device, deviceName: name.trim() } })}
-          placeholder="e.g. Saif's iMac"
-          className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
-        />
-      </Field>
-
-      <Field label="">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={settings.device.advertise}
-            onChange={(e) => onChange({ device: { ...settings.device, advertise: e.target.checked } })}
-            className="accent-accent"
-          />
-          <span className="text-[12px]">Advertise on local network (mDNS)</span>
-        </label>
-        <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
-          When enabled, nearby devices can discover this instance for pairing.
-          Disable if you don&apos;t want to appear in discovery lists.
-        </p>
-      </Field>
-
-      <Field label="">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={settings.device.shareAudio}
-            onChange={(e) => onChange({ device: { ...settings.device, shareAudio: e.target.checked } })}
-            className="accent-accent"
-          />
-          <span className="text-[12px]">Share audio capture with paired devices</span>
-        </label>
-        <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
-          When enabled, agents on paired devices can access audio captured on this machine.
-        </p>
-      </Field>
-
       {/* --- Pair Mobile Device --- */}
-      <div className="mt-3 pt-3 border-t border-white/[0.06]">
-        <Field label="Pair mobile device">
-          {pairingState === 'idle' && (
-            <button
-              onClick={handleStartPairing}
-              className="flex items-center gap-2 px-3 py-2 bg-accent/20 hover:bg-accent/30 text-accent rounded-md text-[12px] font-medium transition-colors"
-            >
-              <QrCode size={14} />
-              Generate QR Code
-            </button>
-          )}
+      <Field label="Pair mobile device">
+        {/* Step: Idle — show Pair button */}
+        {pairingState === 'idle' && (
+          <button
+            onClick={handleStartPairing}
+            className="flex items-center gap-2 px-3 py-2 bg-accent/20 hover:bg-accent/30 text-accent rounded-md text-[12px] font-medium transition-colors"
+          >
+            <QrCode size={14} />
+            Pair Mobile Device
+          </button>
+        )}
 
-          {pairingState === 'generating' && (
-            <div className="flex items-center gap-2 text-[12px] text-foreground-muted py-2">
-              <Loader2 size={14} className="animate-spin" />
-              Generating pairing code...
+        {/* Step: Generating */}
+        {pairingState === 'generating' && (
+          <div className="flex items-center gap-2 text-[12px] text-foreground-muted py-2">
+            <Loader2 size={14} className="animate-spin" />
+            Setting up pairing...
+          </div>
+        )}
+
+        {/* Step: Showing QR + typed code — phone scans or types */}
+        {(pairingState === 'showing-qr' || pairingState === 'waiting-phone') && qrSvg && (
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex items-center gap-2 text-[11px] text-foreground-muted mb-1">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent/20 text-accent text-[10px] font-bold">1</span>
+              Scan QR or enter code on your phone
             </div>
-          )}
+            <div
+              className="bg-white rounded-lg p-3 inline-block"
+              dangerouslySetInnerHTML={{ __html: qrSvg }}
+            />
 
-          {pairingState === 'showing' && qrSvg && (
-            <div className="flex flex-col items-center gap-3">
-              <div
-                className="bg-white rounded-lg p-2 inline-block"
-                dangerouslySetInnerHTML={{ __html: qrSvg }}
-              />
+            {/* Typed code fallback */}
+            {pairingCode && (
               <div className="text-center">
-                <p className="text-[11px] text-foreground-muted">
-                  Scan with the CodeTrellis mobile app
-                </p>
-                <p className="text-[10px] text-foreground-subtle mt-1">
-                  Expires in <span className="text-accent font-medium">{countdown}s</span>
-                </p>
+                <p className="text-[10px] text-foreground-subtle mb-1">Or enter this code manually:</p>
+                <div className="flex items-center justify-center gap-1">
+                  {pairingCode.split('').map((d, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center justify-center w-7 h-9 bg-white/[0.06] border border-white/[0.12] rounded text-[16px] font-bold font-mono text-accent"
+                    >
+                      {d}
+                    </span>
+                  ))}
+                </div>
               </div>
+            )}
+
+            <p className="text-[10px] text-foreground-subtle">
+              Expires in <span className="text-accent font-medium">{countdown}s</span>
+            </p>
+
+            {pairingState === 'showing-qr' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleQrShown}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/20 hover:bg-accent/30 text-accent rounded-md text-[11px] font-medium transition-colors"
+                >
+                  <Loader2 size={12} className="animate-spin" />
+                  Waiting for phone...
+                </button>
+                <button
+                  onClick={handleCancelPairing}
+                  className="px-3 py-1.5 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {pairingState === 'waiting-phone' && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-foreground-muted">
+                  <Loader2 size={12} className="animate-spin" />
+                  Waiting for phone to connect...
+                </div>
+                <button
+                  onClick={handleCancelPairing}
+                  className="px-3 py-1.5 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            <p className="text-[10px] text-foreground-subtle text-center max-w-[280px]">
+              Open CodeTrellis on your phone &rarr; Pair New Device &rarr; scan this QR or enter the code above.
+            </p>
+          </div>
+        )}
+
+        {/* Step: Confirming — Bluetooth-style code match */}
+        {pairingState === 'confirming' && confirmCode && (
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex items-center gap-2 text-[11px] text-foreground-muted mb-1">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent/20 text-accent text-[10px] font-bold">2</span>
+              Verify codes match
+            </div>
+
+            {/* Bluetooth-style confirmation code */}
+            <div className="text-center">
+              <p className="text-[10px] text-foreground-subtle mb-1">Does this code match your phone?</p>
+              <div className="flex items-center justify-center gap-1.5">
+                {confirmCode.split('').map((d, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center justify-center w-8 h-10 bg-white/[0.04] border border-accent/30 rounded-md text-[18px] font-bold font-mono text-foreground"
+                  >
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Device alias */}
+            <div className="w-full max-w-[280px]">
+              <label className="text-[11px] text-foreground-muted block mb-1">Device name</label>
+              <input
+                type="text"
+                value={deviceAlias}
+                onChange={(e) => setDeviceAlias(e.target.value)}
+                placeholder="e.g. My iPhone"
+                className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleConfirmPairing}
+                className="flex items-center gap-1.5 px-4 py-2 bg-green-600/80 hover:bg-green-600 text-white rounded-md text-[12px] font-medium transition-colors"
+              >
+                <CheckCircle2 size={14} />
+                Codes Match — Pair
+              </button>
               <button
                 onClick={handleCancelPairing}
-                className="px-3 py-1.5 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
+                className="px-3 py-2 text-[11px] text-foreground-subtle hover:text-foreground bg-white/[0.04] hover:bg-white/[0.08] rounded-md transition-colors"
               >
                 Cancel
               </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {pairingState === 'error' && (
-            <div className="space-y-2">
-              <p className="text-[11px] text-red-400">{pairingError}</p>
-              <button
-                onClick={handleStartPairing}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-foreground-muted rounded-md text-[11px] transition-colors"
-              >
-                Try Again
-              </button>
-            </div>
-          )}
+        {/* Step: Completing */}
+        {pairingState === 'completing' && (
+          <div className="flex items-center gap-2 text-[12px] text-foreground-muted py-4">
+            <Loader2 size={14} className="animate-spin" />
+            Completing pairing...
+          </div>
+        )}
 
+        {/* Step: Success */}
+        {pairingState === 'success' && (
+          <div className="flex flex-col items-center gap-2 py-4">
+            <CheckCircle2 size={24} className="text-green-400" />
+            <p className="text-[13px] text-green-400 font-medium">Paired Successfully!</p>
+            <p className="text-[10px] text-foreground-subtle">
+              Your mobile device is now connected.
+            </p>
+          </div>
+        )}
+
+        {/* Step: Error */}
+        {pairingState === 'error' && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-red-400">{pairingError}</p>
+            <button
+              onClick={handleStartPairing}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-foreground-muted rounded-md text-[11px] transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {pairingState === 'idle' && (
           <p className="text-[10px] text-foreground-subtle mt-2">
-            Open the CodeTrellis app on your phone and tap &quot;Pair New Device&quot;, then scan the QR code.
+            Pair your phone to monitor agents, view plans, and interact remotely — no ports exposed.
+          </p>
+        )}
+      </Field>
+
+      {/* --- Device settings --- */}
+      <div className="mt-3 pt-3 border-t border-white/[0.06]">
+        <p className="text-[11px] text-foreground-muted leading-relaxed mb-3">
+          Control how this CodeTrellis instance appears to other devices on your network.
+        </p>
+
+        <Field label="Device name (empty = hostname)">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => onChange({ device: { ...settings.device, deviceName: name.trim() } })}
+            placeholder="e.g. Saif's iMac"
+            className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+          />
+        </Field>
+
+        <Field label="">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.device.advertise}
+              onChange={(e) => onChange({ device: { ...settings.device, advertise: e.target.checked } })}
+              className="accent-accent"
+            />
+            <span className="text-[12px]">Advertise on local network (mDNS)</span>
+          </label>
+          <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
+            When enabled, nearby devices can discover this instance for pairing.
+            Disable if you don&apos;t want to appear in discovery lists.
+          </p>
+        </Field>
+
+        <Field label="">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.device.shareAudio}
+              onChange={(e) => onChange({ device: { ...settings.device, shareAudio: e.target.checked } })}
+              className="accent-accent"
+            />
+            <span className="text-[12px]">Share audio capture with paired devices</span>
+          </label>
+          <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
+            When enabled, agents on paired devices can access audio captured on this machine.
           </p>
         </Field>
       </div>

@@ -17,6 +17,10 @@
       "bundleIdentifier": "dev.codetrellis.mobile",
       "infoPlist": {
         "NSCameraUsageDescription": "CodeTrellis uses the camera to scan QR codes for pairing with your desktop.",
+        "NSLocalNetworkUsageDescription": "CodeTrellis needs local network access to pair with your desktop and sync workspace data.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
         "UIBackgroundModes": [
           "remote-notification"
         ]
@@ -43,7 +47,8 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "@config-plugins/react-native-webrtc"
     ],
     "experiments": {
       "typedRoutes": true

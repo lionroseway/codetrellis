@@ -3077,11 +3077,62 @@ app.get('/api/peers/connections', (_req, res) => {
   }
 });
 
+// v4 pairing: desktop opens a temp HTTP server, QR points phone to it.
+// The SDP exchange happens on the temp server — these routes just
+// coordinate the frontend UI.
+
+// Step 1: Initiate pairing — opens temp server, returns QR payload.
+// The frontend shows the QR and polls /api/pairing/status for updates.
 app.post('/api/pairing/initiate', async (_req, res) => {
   try {
-    // peer-connection-service is statically imported as `peerService` at top of file
-    const { qrPayload } = await peerService.startPairing();
+    const { qrPayload, waitForAnswer } = await peerService.startPairing();
+
+    // Fire-and-forget: wait for the phone's answer in the background.
+    // The frontend polls /api/pairing/status to know when the answer
+    // arrives and the confirmation code is ready.
+    waitForAnswer().catch((err) => {
+      console.warn('[Pairing] Answer wait failed:', err);
+    });
+
     res.json({ qrPayload });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Poll: check pairing progress. Returns current state + confirm code
+// when the phone's answer has been received.
+app.get('/api/pairing/status', (_req, res) => {
+  try {
+    const active = peerService.isPairingActive();
+    const confirmCode = peerService.getPairingConfirmCode();
+    res.json({
+      active,
+      confirmCode, // null until phone answers
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Step 2: User confirms the codes match — stores paired device.
+app.post('/api/pairing/confirm', (req, res) => {
+  try {
+    const { code, alias, deviceType } = req.body;
+    if (!code || !alias) {
+      res.status(400).json({ error: 'Missing code or alias' });
+      return;
+    }
+    const result = peerService.completePairing(
+      code,
+      alias,
+      deviceType ?? 'mobile',
+    );
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ success: true, device: result.device });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -3089,8 +3140,7 @@ app.post('/api/pairing/initiate', async (_req, res) => {
 
 app.post('/api/pairing/cancel', (_req, res) => {
   try {
-    // peer-connection-service is statically imported as `peerService` at top of file
-    peerService.cancelPairing();
+    peerService.cancelActivePairing();
     res.json({ cancelled: true });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -3608,13 +3658,16 @@ export async function initializeBackend(): Promise<void> {
  * forward on `EADDRINUSE` (up to 10 slots). The actually-bound
  * port is returned via `getBoundBackendPort()`.
  *
- * Electron does NOT call this — see `initializeBackend()` instead.
+ * Electron also calls this (after `initializeBackend()`) to expose
+ * pairing and peer endpoints over LAN for the mobile companion.
+ * Pass `host='0.0.0.0'` from Electron to bind to all interfaces.
  */
-export async function startServer(port?: number): Promise<http.Server> {
-  await initializeBackend();
+export async function startServer(port?: number, host?: string, skipInit = false): Promise<http.Server> {
+  if (!skipInit) await initializeBackend();
 
   const envPort = process.env.CODETRELLIS_BACKEND_PORT;
   const requestedPort = envPort ? Number(envPort) : (port ?? DEFAULT_PORT);
+  const bindHost = host ?? '127.0.0.1';
 
   return new Promise<http.Server>((resolve, reject) => {
     const tryPort = (candidate: number, attemptsLeft: number) => {
@@ -3636,7 +3689,7 @@ export async function startServer(port?: number): Promise<http.Server> {
             : candidate !== requestedPort
               ? ` (requested ${requestedPort}, autodetected)`
               : '';
-        console.log(`[Backend] Server running on http://localhost:${boundBackendPort}${note}`);
+        console.log(`[Backend] Server running on http://${bindHost === '0.0.0.0' ? '0.0.0.0' : 'localhost'}:${boundBackendPort}${note}`);
         resolve(server);
       };
       const onError = (err: NodeJS.ErrnoException) => {
@@ -3650,10 +3703,9 @@ export async function startServer(port?: number): Promise<http.Server> {
       };
       server.once('listening', onListening);
       server.once('error', onError);
-      // Bind to loopback only — never accept connections from other
-      // machines on the network. The renderer (file:// in packaged
-      // mode) reaches us via http://localhost:<port> which resolves
-      // to 127.0.0.1; agents also connect via 127.0.0.1.
+      // Default: bind to loopback only so the server is not exposed
+      // to the LAN. Electron passes host='0.0.0.0' to also serve
+      // mobile companion pairing over the local network.
       //
       // Wrap in try/catch: some Node versions (observed on 25.x)
       // throw synchronously from inside `listen()` for EADDRINUSE
@@ -3661,7 +3713,7 @@ export async function startServer(port?: number): Promise<http.Server> {
       // our once-listener as an uncaughtException. Funnel the
       // sync throw through the same retry path.
       try {
-        server.listen(candidate, '127.0.0.1');
+        server.listen(candidate, bindHost);
       } catch (err) {
         server.removeListener('listening', onListening);
         server.removeListener('error', onError);

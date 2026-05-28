@@ -1,14 +1,16 @@
 /**
- * Pair screen — QR code scanner for pairing with a desktop.
+ * Pair screen — v4 Bluetooth-style pairing.
  *
  * Flow:
- *   1. Camera opens → scan QR code from desktop's Settings → Devices.
- *   2. Parse QR payload (WebRTC offer + ICE candidates + nonce).
- *   3. Create WebRTC answer.
- *   4. Send answer back to desktop (ephemeral UDP).
- *   5. Display 6-digit confirmation code.
- *   6. User verifies code matches desktop → tap "Confirm".
- *   7. WebRTC handshake completes → paired device stored.
+ *   1. Camera opens → scan QR from desktop Settings → Devices.
+ *   2. Parse v4 QR payload `{v:4, h, p, c}` (~50 bytes).
+ *   3. Fetch full SDP offer from desktop's temp HTTP server.
+ *   4. Create WebRTC answer → post back to temp server.
+ *   5. Receive Bluetooth-style confirmation code.
+ *   6. Display confirmation code → user verifies it matches desktop.
+ *   7. WebRTC connects automatically → user names device → done.
+ *
+ * No second QR code. No webcam needed on desktop. One scan, done.
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -17,35 +19,42 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { webrtc } from '../lib/webrtc';
+import { webrtc, type PairingResult } from '../lib/webrtc';
 import { upsertPairedDesktop } from '../lib/storage';
-import type { PairingQrPayload, PairingAnswer } from '../lib/types';
+import type { PairingQrPayload } from '../lib/types';
+
+// --- Pairing States ----------------------------------------------------------
 
 type PairingState =
-  | 'scanning'
-  | 'processing'
-  | 'confirming'
-  | 'sending'
-  | 'success'
-  | 'error';
+  | 'scanning'       // Camera scanning desktop's QR
+  | 'connecting'     // Exchanging SDPs with temp server
+  | 'confirming'     // Showing Bluetooth-style confirmation code
+  | 'connected'      // WebRTC connected — ready to save
+  | 'error';         // Something went wrong
+
+// --- Pairing Timeout ---------------------------------------------------------
+
+const PAIRING_TIMEOUT_MS = 55_000; // Slightly less than desktop's 60s
+
+// --- Main Component ----------------------------------------------------------
 
 export default function PairScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<PairingState>('scanning');
-  const [answer, setAnswer] = useState<PairingAnswer | null>(null);
+  const [pairingResult, setPairingResult] = useState<PairingResult | null>(null);
   const [alias, setAlias] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [qrPayload, setQrPayload] = useState<PairingQrPayload | null>(null);
   const scannedRef = useRef(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Request camera permission on mount
   useEffect(() => {
@@ -54,81 +63,121 @@ export default function PairScreen() {
     }
   }, [permission, requestPermission]);
 
-  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+  // Monitor WebRTC connection state
+  useEffect(() => {
+    const unsubscribe = webrtc.onStateChange((connectionState) => {
+      console.log(`[Pair] WebRTC state: ${connectionState}`);
+      if (connectionState === 'connected') {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        setState('connected');
+      } else if (connectionState === 'failed') {
+        setState('error');
+        setError('WebRTC connection failed. Ensure both devices are on the same network.');
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const handleBarCodeScanned = async (result: { type: string; data: string }) => {
+    console.log('[Pair] Barcode scanned:', result.type, result.data?.slice(0, 80));
     if (scannedRef.current) return;
     scannedRef.current = true;
 
     try {
-      setState('processing');
-
       // Parse the QR payload
-      const payload: PairingQrPayload = JSON.parse(data);
-
-      // Validate structure
-      if (payload.v !== 1 || !payload.nonce || !payload.offer || !payload.fp) {
-        throw new Error('Invalid QR code — not a CodeTrellis pairing code');
+      let payload: PairingQrPayload;
+      try {
+        payload = JSON.parse(result.data);
+      } catch {
+        throw new Error('QR code is not valid JSON — not a CodeTrellis pairing code');
       }
 
-      setQrPayload(payload);
+      // Validate v4 structure
+      if (
+        payload.v !== 4 ||
+        !payload.h ||
+        !payload.p ||
+        !payload.c
+      ) {
+        throw new Error(
+          'Invalid QR code — not a CodeTrellis v4 pairing code. ' +
+          'Make sure your desktop is running the latest version.',
+        );
+      }
 
-      // Create WebRTC answer
-      const pairingAnswer = await webrtc.createAnswerFromOffer(payload);
-      setAnswer(pairingAnswer);
+      console.log(
+        `[Pair] Valid v4 QR — server=${payload.h}:${payload.p} code=${payload.c}`,
+      );
 
+      setState('connecting');
+
+      // Start timeout
+      timeoutRef.current = setTimeout(() => {
+        setState('error');
+        setError('Pairing timed out. Please try again.');
+        webrtc.disconnect();
+      }, PAIRING_TIMEOUT_MS);
+
+      // Phase 1: HTTP exchange (works in Expo Go)
+      // Phase 2: WebRTC answer creation + POST (needs dev build)
+      const result2 = await webrtc.pairWithDesktop(payload);
+      setPairingResult(result2);
       setState('confirming');
+
     } catch (err) {
+      console.error('[Pair] Error:', err);
       setState('error');
-      setError(err instanceof Error ? err.message : 'Failed to process QR code');
+      setError(err instanceof Error ? err.message : 'Failed to connect');
       scannedRef.current = false;
     }
   };
 
-  const handleConfirm = async () => {
-    if (!answer || !qrPayload) return;
+  const handleSavePairing = async () => {
+    if (!pairingResult) return;
 
     const deviceAlias = alias.trim() || 'Desktop';
 
     try {
-      setState('sending');
-
-      // Send the answer back to the desktop via ephemeral UDP
-      // In React Native, we can't do raw UDP easily, so we use
-      // a manual-paste fallback flow. The answer is encoded and
-      // the user can also enter it manually on the desktop.
-      //
-      // For now, we attempt to complete the WebRTC connection
-      // directly (which works if ICE candidates resolve).
-      await webrtc.connect();
-
-      // Store the paired device
       await upsertPairedDesktop({
-        fingerprint: qrPayload.fp,
+        fingerprint: pairingResult.desktopFingerprint,
         alias: deviceAlias,
-        sharedSecret: '', // TODO: extract from DTLS handshake
+        sharedSecret: '',
         pairedAt: new Date().toISOString(),
         lastConnected: new Date().toISOString(),
-        lastKnownAddress: qrPayload.addr,
+        lastKnownAddress: pairingResult.desktopAddress,
         pushToken: null,
       });
 
-      setState('success');
-
-      // Navigate back after a brief pause
       setTimeout(() => {
         router.back();
-      }, 1500);
+      }, 800);
     } catch (err) {
-      setState('error');
-      setError(err instanceof Error ? err.message : 'Pairing failed');
+      console.error('[Pair] Failed to save pairing:', err);
+      setError('Failed to save pairing. Please try again.');
     }
   };
 
   const handleRetry = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    webrtc.disconnect();
     scannedRef.current = false;
     setState('scanning');
-    setAnswer(null);
+    setPairingResult(null);
     setError(null);
-    setQrPayload(null);
+    setAlias('');
   };
 
   // Camera permission not yet determined
@@ -165,6 +214,7 @@ export default function PairScreen() {
         <View style={styles.scannerContainer}>
           <CameraView
             style={styles.camera}
+            facing="back"
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={handleBarCodeScanned}
           />
@@ -177,61 +227,94 @@ export default function PairScreen() {
         </View>
       )}
 
-      {/* State: Processing */}
-      {state === 'processing' && (
+      {/* State: Connecting */}
+      {state === 'connecting' && (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.processingText}>Creating secure connection...</Text>
+          <Text style={styles.processingText}>Connecting to desktop...</Text>
+          <Text style={styles.processingSubtext}>
+            Exchanging encryption keys over your network
+          </Text>
         </View>
       )}
 
-      {/* State: Confirming — show code and alias input */}
-      {state === 'confirming' && answer && (
-        <View style={styles.confirmContainer}>
+      {/* State: Confirming — Bluetooth-style code */}
+      {state === 'confirming' && pairingResult && (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.confirmContainer}
+        >
           <Text style={styles.confirmTitle}>Verify Connection</Text>
+          <Text style={styles.confirmSubtitle}>
+            Does this code match the one{'\n'}shown on your desktop?
+          </Text>
 
-          <Text style={styles.codeLabel}>Confirmation Code</Text>
+          {/* Bluetooth-style confirmation code */}
           <View style={styles.codeContainer}>
-            {answer.code.split('').map((digit, i) => (
+            {pairingResult.confirmCode.split('').map((digit, i) => (
               <View key={i} style={styles.codeDigit}>
                 <Text style={styles.codeDigitText}>{digit}</Text>
               </View>
             ))}
           </View>
-          <Text style={styles.codeHint}>
-            This code should match the one shown on your desktop
-          </Text>
 
-          <Text style={styles.aliasLabel}>Device Name</Text>
+          {/* Device name input */}
+          <Text style={styles.aliasLabel}>Name this desktop</Text>
           <TextInput
             style={styles.aliasInput}
             value={alias}
             onChangeText={setAlias}
             placeholder="e.g. Work iMac"
             placeholderTextColor="#52525b"
-            autoFocus
           />
 
-          <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-            <Text style={styles.confirmButtonText}>Confirm Pairing</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Waiting for WebRTC to fully connect */}
+          <View style={styles.waitingRow}>
+            <ActivityIndicator size="small" color="#3b82f6" />
+            <Text style={styles.waitingText}>
+              Establishing encrypted connection...
+            </Text>
+          </View>
+        </ScrollView>
       )}
 
-      {/* State: Sending */}
-      {state === 'sending' && (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.processingText}>Completing pairing...</Text>
-        </View>
-      )}
-
-      {/* State: Success */}
-      {state === 'success' && (
+      {/* State: Connected */}
+      {state === 'connected' && (
         <View style={styles.center}>
           <Text style={styles.successIcon}>{'✅'}</Text>
-          <Text style={styles.successText}>Paired Successfully!</Text>
-          <Text style={styles.successHint}>Returning to device list...</Text>
+          <Text style={styles.successText}>Connected!</Text>
+          <Text style={styles.successHint}>
+            Secure connection established
+          </Text>
+
+          {/* Confirm code still visible for reference */}
+          {pairingResult && (
+            <View style={[styles.codeContainer, { marginTop: 16, marginBottom: 8 }]}>
+              {pairingResult.confirmCode.split('').map((digit, i) => (
+                <View key={i} style={[styles.codeDigit, { borderColor: '#22c55e' }]}>
+                  <Text style={styles.codeDigitText}>{digit}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.connectedForm}>
+            <Text style={styles.aliasLabel}>Device Name</Text>
+            <TextInput
+              style={styles.aliasInput}
+              value={alias}
+              onChangeText={setAlias}
+              placeholder="e.g. Work iMac"
+              placeholderTextColor="#52525b"
+              autoFocus
+            />
+            <TouchableOpacity
+              style={styles.confirmButton}
+              onPress={handleSavePairing}
+            >
+              <Text style={styles.confirmButtonText}>Save Pairing</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -249,6 +332,8 @@ export default function PairScreen() {
   );
 }
 
+// --- Styles ------------------------------------------------------------------
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -260,6 +345,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
+
+  // Scanner
   scannerContainer: {
     flex: 1,
   },
@@ -286,41 +373,54 @@ const styles = StyleSheet.create({
     marginTop: 24,
     lineHeight: 20,
   },
+
+  // Processing / connecting
   processingText: {
     color: '#a1a1aa',
     fontSize: 16,
     marginTop: 16,
   },
+  processingSubtext: {
+    color: '#52525b',
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  // Confirm screen
   confirmContainer: {
-    flex: 1,
-    padding: 32,
+    alignItems: 'center',
+    paddingHorizontal: 24,
     paddingTop: 48,
+    paddingBottom: 40,
   },
   confirmTitle: {
     color: '#e4e4e7',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 32,
-    textAlign: 'center',
-  },
-  codeLabel: {
-    color: '#a1a1aa',
-    fontSize: 13,
     marginBottom: 8,
     textAlign: 'center',
   },
+  confirmSubtitle: {
+    color: '#71717a',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 32,
+  },
+
+  // Confirmation code (Bluetooth-style)
   codeContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 32,
   },
   codeDigit: {
-    width: 44,
-    height: 56,
-    borderRadius: 8,
+    width: 48,
+    height: 60,
+    borderRadius: 10,
     backgroundColor: '#18181b',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#3b82f6',
     alignItems: 'center',
     justifyContent: 'center',
@@ -329,18 +429,15 @@ const styles = StyleSheet.create({
     color: '#e4e4e7',
     fontSize: 28,
     fontWeight: '700',
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  codeHint: {
-    color: '#71717a',
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
+
+  // Device alias
   aliasLabel: {
     color: '#a1a1aa',
     fontSize: 13,
     marginBottom: 8,
+    alignSelf: 'stretch',
   },
   aliasInput: {
     backgroundColor: '#18181b',
@@ -351,18 +448,26 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: '#e4e4e7',
     fontSize: 16,
-    marginBottom: 24,
+    alignSelf: 'stretch',
+    marginBottom: 16,
   },
-  confirmButton: {
-    backgroundColor: '#22c55e',
-    paddingVertical: 16,
-    borderRadius: 12,
+
+  // Waiting indicator
+  waitingRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
   },
-  confirmButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+  waitingText: {
+    color: '#71717a',
+    fontSize: 13,
+  },
+
+  // Connected / success
+  connectedForm: {
+    width: '100%',
+    marginTop: 16,
   },
   successIcon: {
     fontSize: 48,
@@ -376,8 +481,22 @@ const styles = StyleSheet.create({
   successHint: {
     color: '#71717a',
     fontSize: 14,
+    marginTop: 4,
+  },
+  confirmButton: {
+    backgroundColor: '#22c55e',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
     marginTop: 8,
   },
+  confirmButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // Error
   errorIcon: {
     fontSize: 48,
     marginBottom: 16,
@@ -387,6 +506,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 22,
   },
   retryButton: {
     backgroundColor: '#3b82f6',
@@ -399,6 +519,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+
+  // Permission
   permissionTitle: {
     color: '#e4e4e7',
     fontSize: 18,

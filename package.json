@@ -50,6 +50,7 @@
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/express": "^5.0.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.5.0",
@@ -58,6 +59,7 @@
     "electron": "^33.4.11",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
+    "jsqr": "^1.4.0",
     "png2icons": "^2.0.1",
     "tailwindcss": "^4.0.0",
     "tree-sitter-java": "^0.23.5",
@@ -97,6 +99,7 @@
     "lucide-react": "^0.460.0",
     "node-pty": "^1.2.0-beta.13",
     "prism-react-renderer": "^2.4.1",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
@@ -151,7 +154,7 @@
         ]
       }
     ],
-    "asar": false,
+    "asar": true,
     "mac": {
       "target": [
         {

@@ -54,41 +54,26 @@ export interface PairedDevice {
 }
 
 /**
- * QR code payload — encoded by the desktop, scanned by the mobile.
- * Contains the WebRTC offer so the mobile can create an answer.
+ * Pairing QR payload v4 — single QR, Bluetooth-style flow.
+ *
+ * The QR just points the phone to a temporary pairing micro-server
+ * that the desktop opens for ~60 seconds. Full WebRTC SDP exchange
+ * happens over HTTP on the temp server, not embedded in QR codes.
+ *
+ * After the WebRTC connection establishes, both devices derive
+ * and show a matching confirmation code (like Bluetooth SSP).
+ *
+ * ~50 bytes → tiny QR, very fast to scan.
  */
 export interface PairingQrPayload {
-  /** Version of the QR payload format. */
-  v: 1;
-  /** Pairing nonce (random, expires after 60s). */
-  nonce: string;
-  /** Compressed SDP offer. */
-  offer: string;
-  /** ICE candidates gathered via STUN. */
-  ice: string[];
-  /** Desktop's DTLS fingerprint. */
-  fp: string;
-  /** Desktop's LAN address (for ephemeral UDP answer delivery). */
-  addr: string;
-  /** Ephemeral UDP port the desktop listens on for the answer (open <5s). */
-  port: number;
-}
-
-/**
- * Answer payload — sent from mobile to desktop during pairing.
- * Delivered via ephemeral UDP (or manual paste as fallback).
- */
-export interface PairingAnswer {
-  /** Must match the nonce from the QR payload. */
-  nonce: string;
-  /** Compressed SDP answer. */
-  answer: string;
-  /** Mobile's ICE candidates. */
-  ice: string[];
-  /** Mobile's DTLS fingerprint. */
-  fp: string;
-  /** 6-digit confirmation code derived from the answer. */
-  code: string;
+  /** Version of the QR payload format (4 = temp-server). */
+  v: 4;
+  /** Temporary pairing server LAN address (IPv4). */
+  h: string;
+  /** Temporary pairing server port. */
+  p: number;
+  /** 6-digit pairing code (authenticates requests to the temp server). */
+  c: string;
 }
 
 // --- Connection --------------------------------------------------------------

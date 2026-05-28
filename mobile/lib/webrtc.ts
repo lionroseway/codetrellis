@@ -12,8 +12,15 @@
  *   - `audio`   — WebM/Opus chunks
  */
 
-import type { ConnectionState, PairingQrPayload, PairingAnswer } from './types';
-import { createHash } from './crypto';
+import type {
+  ConnectionState,
+  PairingQrPayload,
+  PairingOfferResponse,
+  PairingAnswerResponse,
+} from './types';
+import {
+  ensureColonFingerprint,
+} from './sdp-minimal';
 
 // Lazy-load react-native-webrtc to avoid crashing Expo Go (which
 // doesn't have native WebRTC linked). The import only fires when
@@ -57,6 +64,16 @@ type DataChannelName = (typeof DATA_CHANNELS)[keyof typeof DATA_CHANNELS];
 type MessageHandler = (channel: DataChannelName, data: string | ArrayBuffer) => void;
 type StateHandler = (state: ConnectionState) => void;
 
+/** Result of the v4 pairing handshake. */
+export interface PairingResult {
+  /** Bluetooth-style confirmation code (same on both devices). */
+  confirmCode: string;
+  /** Desktop's DTLS fingerprint. */
+  desktopFingerprint: string;
+  /** Desktop's LAN address. */
+  desktopAddress: string;
+}
+
 // --- WebRTC Manager ----------------------------------------------------------
 
 export class WebRTCManager {
@@ -71,126 +88,140 @@ export class WebRTCManager {
   }
 
   /**
-   * Create a WebRTC answer from a desktop's QR payload.
-   * This is the mobile side of the pairing handshake.
+   * v4 pairing — fetch the full SDP offer from the desktop's temp server,
+   * create a WebRTC answer, and post it back. Much simpler than v3 since
+   * no SDP reconstruction is needed.
    *
-   * @returns The answer payload to send back to the desktop,
-   *          plus the 6-digit confirmation code to display.
+   * Flow:
+   *   1. `GET /offer?c=<code>` from temp server → full SDP + ICE + nonce.
+   *   2. Create RTCPeerConnection, set remote description (full SDP).
+   *   3. Create answer, set local description.
+   *   4. Gather ICE candidates.
+   *   5. `POST /answer` with our answer SDP + ICE + fingerprint + nonce.
+   *   6. Receive Bluetooth-style confirmation code from server.
+   *   7. Set up connection monitoring.
+   *   8. Return the confirmation code for display.
    */
-  async createAnswerFromOffer(payload: PairingQrPayload): Promise<PairingAnswer> {
+  /**
+   * Fetch the desktop's offer from the temp pairing server.
+   * This is a pure HTTP call — works in Expo Go, no native modules needed.
+   * Useful for verifying the QR → HTTP pipeline independently of WebRTC.
+   */
+  async fetchOffer(qrPayload: PairingQrPayload): Promise<{
+    offerData: PairingOfferResponse;
+    baseUrl: string;
+  }> {
+    const baseUrl = `http://${qrPayload.h}:${qrPayload.p}`;
+
+    console.log(`[WebRTC] Fetching offer from ${baseUrl}/offer`);
+    const offerRes = await fetch(`${baseUrl}/offer?c=${encodeURIComponent(qrPayload.c)}`);
+    if (!offerRes.ok) {
+      const body = await offerRes.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(`Failed to fetch offer: ${body.error || offerRes.status}`);
+    }
+    const offerData: PairingOfferResponse = await offerRes.json();
+
+    console.log(
+      `[WebRTC] Got offer — fp=${offerData.fingerprint.slice(0, 16)}… ` +
+      `nonce=${offerData.nonce.slice(0, 8)}…`,
+    );
+
+    return { offerData, baseUrl };
+  }
+
+  /**
+   * Check whether the WebRTC native module is available.
+   * Returns false in Expo Go (no native module), true in dev builds.
+   */
+  isWebRTCAvailable(): boolean {
+    try {
+      getWebRTC();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async pairWithDesktop(qrPayload: PairingQrPayload): Promise<PairingResult> {
     this.cleanup();
 
-    const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = getWebRTC();
+    // Phase 1: HTTP exchange — works everywhere (including Expo Go)
+    const { offerData, baseUrl } = await this.fetchOffer(qrPayload);
+
+    // Phase 2: WebRTC — requires native module (dev build only)
+    let webrtcMod: ReturnType<typeof getWebRTC>;
+    try {
+      webrtcMod = getWebRTC();
+    } catch {
+      throw new Error(
+        'Offer fetched successfully from desktop, but WebRTC is not available.\n\n' +
+        'WebRTC requires a development build (not Expo Go).\n' +
+        'Run: npx expo run:ios  or  npx expo run:android',
+      );
+    }
+
+    const { RTCPeerConnection, RTCSessionDescription } = webrtcMod;
+
+    // 2. Create peer connection and set remote description
     const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
     this.pc = pc;
 
-    // Set the desktop's offer as remote description
     await pc.setRemoteDescription(
-      new RTCSessionDescription({ type: 'offer', sdp: payload.offer }),
+      new RTCSessionDescription({ type: 'offer', sdp: offerData.offer }),
     );
 
-    // Add the desktop's ICE candidates
-    for (const candidateStr of payload.ice) {
-      try {
-        const candidate = JSON.parse(candidateStr);
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch {
-        // Skip malformed candidates
-      }
-    }
-
-    // Create our answer
+    // 3. Create answer
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    // Gather our ICE candidates
+    console.log('[WebRTC] Answer created, gathering ICE candidates…');
+
+    // 4. Gather ICE candidates
     const iceCandidates = await this.gatherIceCandidates(pc);
+    console.log(`[WebRTC] Gathered ${iceCandidates.length} ICE candidates`);
 
-    // Extract our fingerprint from the SDP
-    const fingerprint = this.extractFingerprint(answer.sdp ?? '');
+    // 5. Extract our fingerprint from answer SDP
+    const answerSdp = answer.sdp ?? '';
+    const fpMatch = answerSdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/);
+    const ourFingerprint = fpMatch?.[1] ?? '';
 
-    // Derive the 6-digit confirmation code
-    const code = await deriveConfirmationCode(fingerprint, payload.nonce);
+    if (!ourFingerprint) {
+      throw new Error('Failed to extract our fingerprint from answer SDP');
+    }
+
+    // 6. Post our answer back to the temp server
+    console.log(`[WebRTC] Posting answer to ${baseUrl}/answer`);
+    const answerRes = await fetch(`${baseUrl}/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        c: qrPayload.c,
+        answer: answerSdp,
+        ice: iceCandidates,
+        fingerprint: ourFingerprint,
+        nonce: offerData.nonce,
+      }),
+    });
+
+    if (!answerRes.ok) {
+      const body = await answerRes.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(`Failed to submit answer: ${body.error || answerRes.status}`);
+    }
+
+    const answerResult: PairingAnswerResponse = await answerRes.json();
+
+    console.log(
+      `[WebRTC] Answer accepted — confirmCode=${answerResult.confirmCode}`,
+    );
+
+    // 7. Set up connection monitoring
+    this.setupConnectionMonitoring(pc);
 
     return {
-      nonce: payload.nonce,
-      answer: answer.sdp ?? '',
-      ice: iceCandidates,
-      fp: fingerprint,
-      code,
+      confirmCode: answerResult.confirmCode,
+      desktopFingerprint: ensureColonFingerprint(offerData.fingerprint),
+      desktopAddress: qrPayload.h,
     };
-  }
-
-  /**
-   * Complete the connection after pairing is confirmed.
-   * Sets up data channel listeners and starts heartbeat.
-   */
-  async connect(): Promise<void> {
-    if (!this.pc) throw new Error('No peer connection — call createAnswerFromOffer first');
-
-    this.setState('connecting');
-
-    // Listen for data channels created by the desktop (initiator)
-    this.pc.ondatachannel = (event: { channel: any }) => {
-      const channel = event.channel;
-      this.setupChannel(channel);
-    };
-
-    // Monitor connection state
-    this.pc.onconnectionstatechange = () => {
-      const state = this.pc?.connectionState;
-      switch (state) {
-        case 'connected':
-          this.setState('connected');
-          break;
-        case 'disconnected':
-        case 'closed':
-          this.setState('disconnected');
-          break;
-        case 'failed':
-          this.setState('failed');
-          break;
-      }
-    };
-
-    // Also create our own data channels (in case we're the initiator)
-    for (const name of Object.values(DATA_CHANNELS)) {
-      if (!this.channels.has(name)) {
-        const channel = this.pc.createDataChannel(name, { ordered: true });
-        this.setupChannel(channel);
-      }
-    }
-  }
-
-  /**
-   * Reconnect to a previously paired desktop using the stored
-   * offer/answer negotiation. (Simplified: re-creates the connection.)
-   */
-  async reconnect(offerSdp: string, iceCandidates: string[]): Promise<string> {
-    this.cleanup();
-
-    const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = getWebRTC();
-    const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
-    this.pc = pc;
-    this.setState('reconnecting');
-
-    await pc.setRemoteDescription(
-      new RTCSessionDescription({ type: 'offer', sdp: offerSdp }),
-    );
-
-    for (const candidateStr of iceCandidates) {
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidateStr)));
-      } catch { /* skip */ }
-    }
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    // Set up channels and monitoring
-    await this.connect();
-
-    return answer.sdp ?? '';
   }
 
   /**
@@ -240,6 +271,48 @@ export class WebRTCManager {
   }
 
   // --- Internals -------------------------------------------------------------
+
+  /**
+   * Set up connection monitoring — data channel listeners and
+   * connection state tracking.
+   *
+   * As the answerer, we do NOT create data channels — we only
+   * listen for the ones the desktop (offerer) creates.
+   */
+  private setupConnectionMonitoring(pc: any): void {
+    this.setState('connecting');
+
+    pc.ondatachannel = (event: { channel: any }) => {
+      this.setupChannel(event.channel);
+    };
+
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      switch (state) {
+        case 'connected':
+          this.setState('connected');
+          break;
+        case 'disconnected':
+        case 'closed':
+          this.setState('disconnected');
+          break;
+        case 'failed':
+          this.setState('failed');
+          break;
+      }
+    };
+
+    // Also monitor ICE connection state (fires earlier than connectionState)
+    pc.oniceconnectionstatechange = () => {
+      const iceState = pc.iceConnectionState;
+      console.log(`[WebRTC] ICE state: ${iceState}`);
+      if (iceState === 'connected' || iceState === 'completed') {
+        this.setState('connected');
+      } else if (iceState === 'failed') {
+        this.setState('failed');
+      }
+    };
+  }
 
   private setupChannel(channel: any): void {
     const name = channel.label as DataChannelName;
@@ -302,27 +375,6 @@ export class WebRTCManager {
       };
     });
   }
-
-  private extractFingerprint(sdp: string): string {
-    const match = sdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/);
-    if (match) return match[1];
-    // Fallback: generate a random fingerprint
-    return Array.from({ length: 32 }, () =>
-      Math.floor(Math.random() * 256).toString(16).padStart(2, '0'),
-    ).join(':').toUpperCase();
-  }
-}
-
-// --- Helpers -----------------------------------------------------------------
-
-/**
- * Derive a 6-digit confirmation code from fingerprint + nonce.
- * Must match the desktop's `deriveConfirmationCode()`.
- */
-async function deriveConfirmationCode(fingerprint: string, nonce: string): Promise<string> {
-  const hash = await createHash(`${fingerprint}:${nonce}`);
-  const num = parseInt(hash.slice(0, 8), 16) % 1_000_000;
-  return num.toString().padStart(6, '0');
 }
 
 /** Singleton instance. */

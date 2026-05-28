@@ -1,199 +1,195 @@
 /**
- * Pairing service — Phase 9.2 of the CDev target architecture.
+ * Pairing service — Phase 11 v4 of the CDev target architecture.
  *
- * Orchestrates the QR-based WebRTC signalling handshake:
+ * Bluetooth-style pairing flow:
  *
- *   1. Desktop generates a WebRTC offer (SDP + ICE candidates via STUN).
- *   2. Offer + nonce + address + ephemeral UDP port → encoded as QR payload.
- *   3. Mobile/peer scans QR → creates answer → sends it via ephemeral UDP.
- *   4. Desktop receives answer → completes WebRTC handshake → data channel opens.
- *   5. Shared secret stored for auto-reconnect.
+ *   1. Desktop calls `initiatePairing()` → starts a temp HTTP server,
+ *      returns QR payload `{v:4, h, p, c}` (~50 bytes).
+ *   2. Phone scans QR → fetches full SDP offer from temp server →
+ *      creates WebRTC answer → posts answer back to temp server.
+ *   3. Desktop receives answer → establishes WebRTC connection.
+ *   4. Both sides derive a 6-digit confirmation code from
+ *      `hash(nonce + sorted_fingerprints)` and display it.
+ *   5. User confirms the codes match → pairing is saved.
  *
- * The ephemeral UDP listener is open for up to 30 seconds during
- * explicit pairing only, on a random high port bound to 0.0.0.0
- * (LAN-reachable so the pairing peer can send its answer). This is
- * the ONLY time a port is briefly exposed — not a persistent listener.
- *
- * Security: QR + confirmation code expire after 60 seconds. Nonce is
- * single-use. Replay rejected.
+ * No SDP in the QR. No webcam scanning of a second QR. No ports
+ * exposed beyond the 60-second temp server window.
  */
 
-import { randomBytes, createHash } from 'node:crypto';
-import dgram from 'node:dgram';
-import os from 'node:os';
-import type { PairingQrPayload, PairingAnswer, PairedDevice } from '../../shared/types';
+import type { PairingQrPayload, PairedDevice } from '../../shared/types';
+import {
+  startPairingServer,
+  stopPairingServer,
+  isPairingServerActive,
+  deriveConfirmationCode,
+  type PairingAnswer,
+  type PairingServerResult,
+} from './pairing-server';
 import { upsertPairedDevice } from './paired-device-service';
-
-// --- Constants ---------------------------------------------------------------
-
-const PAIRING_TIMEOUT_MS = 60_000; // QR + code expire after 60s
-const UDP_LISTEN_MS = 30_000;       // UDP listener stays open max 30s
-const NONCE_BYTES = 16;
-const CODE_LENGTH = 6;
 
 // --- Active pairing state ----------------------------------------------------
 
 interface ActivePairing {
-  nonce: string;
-  createdAt: number;
-  /** Ephemeral UDP socket waiting for the answer. */
-  udpSocket: dgram.Socket | null;
-  /** Port the UDP socket is bound to. */
-  udpPort: number;
-  /** Timer that closes the pairing window. */
-  timeoutHandle: ReturnType<typeof setTimeout>;
-  /** Resolves when the answer is received. */
-  resolve: (answer: PairingAnswer) => void;
-  /** Rejects on timeout or cancel. */
-  reject: (err: Error) => void;
-  /** Set to true once the answer is received (prevents double-resolve). */
-  completed: boolean;
+  /** Server result (code, address, port, nonce). */
+  server: PairingServerResult;
+  /** Desktop's DTLS fingerprint. */
+  desktopFingerprint: string;
+  /** Full offer SDP (for WebRTC completion). */
+  offerSdp: string;
+  /** Received answer (set when phone posts back). */
+  answer: PairingAnswer | null;
+  /** Confirmation code (set after answer received). */
+  confirmCode: string | null;
 }
 
 let activePairing: ActivePairing | null = null;
 
-// Track used nonces to prevent replay (kept for 5 minutes).
-const usedNonces = new Set<string>();
-const NONCE_EXPIRY_MS = 300_000;
-
 // --- Public API --------------------------------------------------------------
 
 /**
- * Initiate a pairing session. Returns the QR payload that should be
- * displayed as a QR code on the desktop.
+ * Initiate a v4 pairing session. Opens a temp HTTP server and
+ * returns the QR payload + a promise for the phone's answer.
  *
- * Only one pairing session can be active at a time. Starting a new one
- * cancels the previous.
+ * Only one pairing session can be active at a time.
  *
- * @param offerSdp  The WebRTC SDP offer (from the WebRTC service).
- * @param iceCandidates  ICE candidates gathered during offer creation.
- * @param fingerprint  The desktop's DTLS certificate fingerprint.
- * @returns The QR payload to encode.
+ * @param offerSdp       Full WebRTC SDP offer.
+ * @param iceCandidates  ICE candidates from offer creation.
+ * @param fingerprint    Desktop's DTLS certificate fingerprint.
  */
 export async function initiatePairing(
   offerSdp: string,
   iceCandidates: string[],
   fingerprint: string,
-): Promise<{ qrPayload: PairingQrPayload; waitForAnswer: () => Promise<PairingAnswer> }> {
+): Promise<{
+  qrPayload: PairingQrPayload;
+  offerSdp: string;
+  waitForAnswer: () => Promise<PairingAnswer>;
+}> {
   // Cancel any existing pairing
   cancelPairing();
 
-  const nonce = randomBytes(NONCE_BYTES).toString('hex');
-  const address = getLocalAddress();
+  const server = await startPairingServer({
+    offerSdp,
+    iceCandidates,
+    fingerprint,
+  });
 
-  // Open ephemeral UDP socket for answer delivery
-  const udpSocket = dgram.createSocket('udp4');
-  const udpPort = await bindUdpSocket(udpSocket);
-
-  console.log(`[Pairing] Initiated — nonce=${nonce.slice(0, 8)}… UDP port=${udpPort} addr=${address}`);
+  console.log(
+    `[Pairing] v4 initiated — code=${server.code} ` +
+    `addr=${server.address}:${server.port}`,
+  );
 
   const qrPayload: PairingQrPayload = {
-    v: 1,
-    nonce,
-    offer: offerSdp,
-    ice: iceCandidates,
-    fp: fingerprint,
-    addr: address,
-    port: udpPort,
+    v: 4,
+    h: server.address,
+    p: server.port,
+    c: server.code,
   };
 
-  // Create promise that resolves when the answer arrives
-  const answerPromise = new Promise<PairingAnswer>((resolve, reject) => {
-    const timeoutHandle = setTimeout(() => {
-      if (activePairing && !activePairing.completed) {
-        activePairing.completed = true;
-        cleanup();
-        reject(new Error('Pairing timed out'));
-      }
-    }, PAIRING_TIMEOUT_MS);
+  activePairing = {
+    server,
+    desktopFingerprint: fingerprint,
+    offerSdp,
+    answer: null,
+    confirmCode: null,
+  };
 
-    activePairing = {
-      nonce,
-      createdAt: Date.now(),
-      udpSocket,
-      udpPort,
-      timeoutHandle,
-      resolve,
-      reject,
-      completed: false,
-    };
-
-    // Listen for the answer on UDP
-    udpSocket.on('message', (msg: Buffer) => {
-      if (!activePairing || activePairing.completed) return;
-
-      try {
-        const answer: PairingAnswer = JSON.parse(msg.toString('utf-8'));
-
-        // Validate nonce
-        if (answer.nonce !== nonce) {
-          console.warn('[Pairing] Answer nonce mismatch — ignoring');
-          return;
-        }
-
-        // Prevent replay
-        if (usedNonces.has(nonce)) {
-          console.warn('[Pairing] Nonce already used — replay rejected');
-          return;
-        }
-
-        activePairing.completed = true;
-        usedNonces.add(nonce);
-        setTimeout(() => usedNonces.delete(nonce), NONCE_EXPIRY_MS);
-
-        cleanup();
-        resolve(answer);
-      } catch (err) {
-        console.warn('[Pairing] Invalid UDP message:', err);
-      }
-    });
-
-    udpSocket.on('error', (err: Error) => {
-      console.warn('[Pairing] UDP socket error:', err);
-    });
-  });
+  // Wrap the answer promise to store the answer + derive confirm code
+  const wrappedWait = async (): Promise<PairingAnswer> => {
+    const answer = await server.waitForAnswer();
+    if (activePairing) {
+      activePairing.answer = answer;
+      activePairing.confirmCode = deriveConfirmationCode(
+        server.nonce,
+        fingerprint,
+        answer.fingerprint,
+      );
+    }
+    return answer;
+  };
 
   return {
     qrPayload,
-    waitForAnswer: () => answerPromise,
+    offerSdp,
+    waitForAnswer: wrappedWait,
   };
 }
 
 /**
- * Confirm the pairing by verifying the 6-digit code and storing the device.
+ * Get the confirmation code for the active pairing session.
+ * Available after the phone's answer has been received.
+ */
+export function getConfirmationCode(): string | null {
+  return activePairing?.confirmCode ?? null;
+}
+
+/**
+ * Get the stored offer SDP for the active pairing session.
+ */
+export function getStoredOfferSdp(): string | null {
+  return activePairing?.offerSdp ?? null;
+}
+
+/**
+ * Get the received answer for the active pairing session.
+ */
+export function getStoredAnswer(): PairingAnswer | null {
+  return activePairing?.answer ?? null;
+}
+
+/**
+ * Get the desktop fingerprint for the active pairing session.
+ */
+export function getDesktopFingerprint(): string | null {
+  return activePairing?.desktopFingerprint ?? null;
+}
+
+/**
+ * Get the nonce for the active pairing session.
+ */
+export function getPairingNonce(): string | null {
+  return activePairing?.server.nonce ?? null;
+}
+
+/**
+ * Confirm the pairing. Verifies the user-entered confirmation code
+ * matches the derived code, then stores the paired device.
  *
- * @param answer  The answer received via UDP.
- * @param expectedCode  The 6-digit code the user entered on the desktop.
- * @param deviceAlias  Human-readable name for the paired device.
- * @param deviceType  Desktop or mobile.
- * @param sharedSecret  Hex-encoded shared secret from DTLS.
- * @returns The stored PairedDevice if confirmed, or null if code mismatch.
+ * @param userCode     Code the user read from their phone and entered.
+ * @param deviceAlias  Human-readable name for the device.
+ * @param deviceType   Desktop, mobile, or unknown.
  */
 export function confirmPairing(
-  answer: PairingAnswer,
-  expectedCode: string,
+  userCode: string,
   deviceAlias: string,
   deviceType: 'desktop' | 'mobile' | 'unknown',
-  sharedSecret: string,
 ): PairedDevice | null {
+  if (!activePairing?.answer || !activePairing.confirmCode) {
+    console.warn('[Pairing] No answer received yet — cannot confirm');
+    return null;
+  }
+
   // Verify confirmation code
-  if (answer.code !== expectedCode) {
+  if (userCode !== activePairing.confirmCode) {
     console.warn('[Pairing] Confirmation code mismatch');
     return null;
   }
 
   const device: PairedDevice = {
-    fingerprint: answer.fp,
+    fingerprint: activePairing.answer.fingerprint,
     alias: deviceAlias,
     deviceType,
     pairedAt: new Date().toISOString(),
     lastConnected: null,
-    sharedSecret,
+    sharedSecret: '', // TODO: extract from DTLS handshake
     instanceId: null,
   };
 
   upsertPairedDevice(device);
-  console.log(`[Pairing] Confirmed — device "${deviceAlias}" (${answer.fp.slice(0, 12)}…)`);
+  console.log(`[Pairing] Confirmed — device "${deviceAlias}" (${device.fingerprint.slice(0, 12)}…)`);
+
+  // Clean up
+  activePairing = null;
 
   return device;
 }
@@ -203,13 +199,11 @@ export function confirmPairing(
  */
 export function cancelPairing(): void {
   if (activePairing) {
-    if (!activePairing.completed) {
-      activePairing.completed = true;
-      activePairing.reject(new Error('Pairing cancelled'));
-    }
-    cleanup();
+    activePairing.server.stop();
     activePairing = null;
     console.log('[Pairing] Cancelled');
+  } else {
+    stopPairingServer(); // Safety: stop orphaned server
   }
 }
 
@@ -217,98 +211,5 @@ export function cancelPairing(): void {
  * Whether a pairing session is currently active.
  */
 export function isPairingActive(): boolean {
-  return activePairing !== null && !activePairing.completed;
-}
-
-/**
- * Derive a 6-digit confirmation code from a fingerprint and nonce.
- * Used by both desktop (to verify) and mobile (to display).
- */
-export function deriveConfirmationCode(fingerprint: string, nonce: string): string {
-  const hash = createHash('sha256')
-    .update(`${fingerprint}:${nonce}`)
-    .digest('hex');
-  // Take first 6 digits from the hex hash
-  const num = parseInt(hash.slice(0, 8), 16) % 1_000_000;
-  return num.toString().padStart(CODE_LENGTH, '0');
-}
-
-/**
- * Submit an answer manually (fallback when UDP doesn't work).
- * The answer JSON is pasted by the user into a text field.
- */
-export function submitAnswerManually(answerJson: string): boolean {
-  if (!activePairing || activePairing.completed) return false;
-
-  try {
-    const answer: PairingAnswer = JSON.parse(answerJson);
-    if (answer.nonce !== activePairing.nonce) {
-      console.warn('[Pairing] Manual answer nonce mismatch');
-      return false;
-    }
-
-    if (usedNonces.has(activePairing.nonce)) {
-      console.warn('[Pairing] Nonce already used');
-      return false;
-    }
-
-    activePairing.completed = true;
-    usedNonces.add(activePairing.nonce);
-    setTimeout(() => usedNonces.delete(activePairing!.nonce), NONCE_EXPIRY_MS);
-
-    cleanup();
-    activePairing.resolve(answer);
-    return true;
-  } catch {
-    console.warn('[Pairing] Invalid manual answer JSON');
-    return false;
-  }
-}
-
-// --- Internals ---------------------------------------------------------------
-
-function cleanup(): void {
-  if (activePairing) {
-    clearTimeout(activePairing.timeoutHandle);
-    if (activePairing.udpSocket) {
-      try { activePairing.udpSocket.close(); } catch { /* ignore */ }
-      activePairing.udpSocket = null;
-    }
-  }
-}
-
-/**
- * Bind the UDP socket to a random high port on 0.0.0.0.
- * Returns the bound port.
- */
-function bindUdpSocket(socket: dgram.Socket): Promise<number> {
-  return new Promise((resolve, reject) => {
-    // Bind to 0.0.0.0:0 — OS picks a random high port
-    socket.bind(0, '0.0.0.0', () => {
-      const addr = socket.address();
-      resolve(addr.port);
-    });
-    socket.on('error', reject);
-
-    // Safety: close the socket after the max listen window
-    setTimeout(() => {
-      try { socket.close(); } catch { /* already closed */ }
-    }, UDP_LISTEN_MS);
-  });
-}
-
-/**
- * Get the best local IPv4 address for the QR payload.
- * Prefers non-internal addresses (LAN IP over 127.0.0.1).
- */
-function getLocalAddress(): string {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name] ?? []) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return '127.0.0.1';
+  return activePairing !== null || isPairingServerActive();
 }

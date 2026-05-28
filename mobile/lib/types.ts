@@ -8,36 +8,63 @@
 
 // --- Pairing -----------------------------------------------------------------
 
-/** QR code payload — encoded by the desktop, scanned by the mobile. */
+/**
+ * QR payload v4 — single QR, Bluetooth-style flow.
+ *
+ * The QR points the phone to a temporary pairing micro-server
+ * on the desktop. Full WebRTC SDP exchange happens over HTTP on
+ * that temp server, not embedded in QR codes.
+ *
+ * ~50 bytes → tiny QR, very fast to scan.
+ */
 export interface PairingQrPayload {
-  /** Version of the QR payload format. */
-  v: 1;
-  /** Pairing nonce (random, expires after 60s). */
-  nonce: string;
-  /** Compressed SDP offer. */
-  offer: string;
-  /** ICE candidates gathered via STUN. */
-  ice: string[];
-  /** Desktop's DTLS fingerprint. */
-  fp: string;
-  /** Desktop's LAN address (for ephemeral UDP answer delivery). */
-  addr: string;
-  /** Ephemeral UDP port the desktop listens on for the answer. */
-  port: number;
+  /** Version of the QR payload format (4 = temp-server). */
+  v: 4;
+  /** Temporary pairing server LAN address (IPv4). */
+  h: string;
+  /** Temporary pairing server port. */
+  p: number;
+  /** 6-digit pairing code (authenticates requests to the temp server). */
+  c: string;
 }
 
-/** Answer payload — sent from mobile to desktop during pairing. */
-export interface PairingAnswer {
-  /** Must match the nonce from the QR payload. */
-  nonce: string;
-  /** Compressed SDP answer. */
-  answer: string;
-  /** Mobile's ICE candidates. */
+/**
+ * Response from `GET /offer?c=<code>` on the temp pairing server.
+ */
+export interface PairingOfferResponse {
+  /** Full WebRTC SDP offer. */
+  offer: string;
+  /** ICE candidates from the desktop. */
   ice: string[];
-  /** Mobile's DTLS fingerprint. */
-  fp: string;
-  /** 6-digit confirmation code. */
-  code: string;
+  /** Desktop's DTLS fingerprint. */
+  fingerprint: string;
+  /** Random nonce for this pairing session. */
+  nonce: string;
+}
+
+/**
+ * Body posted to `POST /answer` on the temp pairing server.
+ */
+export interface PairingAnswerRequest {
+  /** 6-digit pairing code. */
+  c: string;
+  /** Full WebRTC SDP answer. */
+  answer: string;
+  /** ICE candidates from the phone. */
+  ice: string[];
+  /** Phone's DTLS fingerprint. */
+  fingerprint: string;
+  /** Nonce echoed back (must match). */
+  nonce: string;
+}
+
+/**
+ * Response from `POST /answer` on the temp pairing server.
+ */
+export interface PairingAnswerResponse {
+  accepted: boolean;
+  /** Bluetooth-style 6-digit confirmation code (same on both sides). */
+  confirmCode: string;
 }
 
 // --- Connection --------------------------------------------------------------

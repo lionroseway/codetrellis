@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, type WebContents } from 'el
 import path from 'node:path';
 import {
   initializeBackend,
+  startServer,
   app as expressApp,
   addBroadcastTarget,
 } from '../backend/server';
@@ -50,10 +51,14 @@ let backendStartError: Error | null = null;
 let unregisterBroadcastTarget: (() => void) | null = null;
 
 /**
- * Boot the embedded backend in-process — no TCP listen on the
- * backend port. Only the MCP server (port 19432) ends up exposed,
- * because external agents need a stable URL for it. The renderer
- * reaches the Express app via the IPC handler registered below.
+ * Boot the embedded backend in-process. The renderer reaches the
+ * Express app via the IPC handler registered below (faster, no
+ * network overhead).
+ *
+ * We ALSO start the HTTP server on the default port so that:
+ *   - Mobile companion devices can reach pairing/peer endpoints
+ *     over LAN (the QR code encodes the HTTP address + port).
+ *   - The MCP server (port 19432) is exposed for agents.
  *
  * On failure we capture the error so `createWindow()` can still
  * open the window and surface something useful instead of leaving
@@ -62,7 +67,18 @@ let unregisterBroadcastTarget: (() => void) | null = null;
 async function bootstrap(): Promise<boolean> {
   try {
     await initializeBackend();
-    console.log('[Electron] Backend initialised in-process (no TCP backend port)');
+    console.log('[Electron] Backend initialised in-process');
+
+    // Start the HTTP server on localhost only (for MCP agent connections).
+    // Mobile pairing uses bidirectional QR codes — no LAN HTTP needed.
+    try {
+      await startServer(undefined, undefined, true);
+      console.log('[Electron] HTTP server started on localhost (MCP only)');
+    } catch (httpErr) {
+      // Non-fatal — the app works via IPC even without the HTTP server.
+      console.warn('[Electron] HTTP server failed to start:', httpErr);
+    }
+
     return true;
   } catch (err) {
     backendStartError = err instanceof Error ? err : new Error(String(err));

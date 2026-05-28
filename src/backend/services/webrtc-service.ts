@@ -66,11 +66,33 @@ const peers = new Map<string, PeerEntry>();
 const connectionListeners = new Set<(fingerprint: string, state: PeerConnectionState) => void>();
 const messageListeners = new Map<string, Set<(fingerprint: string, data: Buffer | string) => void>>();
 
+/**
+ * Pending offer PC — kept alive between `createOffer()` and
+ * `connectWithAnswer()` so the DTLS certificate (and therefore
+ * fingerprint) remains the same. If we closed and re-created the PC,
+ * the new certificate wouldn't match the fingerprint encoded in the
+ * QR code, and the DTLS handshake would fail.
+ */
+let pendingOfferPc: RTCPeerConnection | null = null;
+
+/** Clean up the pending offer PC. */
+export async function discardPendingOffer(): Promise<void> {
+  if (pendingOfferPc) {
+    try { await pendingOfferPc.close(); } catch { /* */ }
+    pendingOfferPc = null;
+  }
+}
+
 // --- Public API: Offer/Answer ------------------------------------------------
 
 /**
  * Create a WebRTC offer for a new pairing. Gathers ICE candidates
  * via STUN and returns the SDP + candidates.
+ *
+ * The RTCPeerConnection is kept alive (not closed) so that
+ * `connectWithAnswer()` can reuse it with the same DTLS certificate.
+ * The fingerprint in the QR code must match the certificate
+ * presented during the DTLS handshake.
  *
  * @returns The SDP offer string and ICE candidate strings, plus the
  *          DTLS fingerprint for identity.
@@ -80,6 +102,9 @@ export async function createOffer(): Promise<{
   iceCandidates: string[];
   fingerprint: string;
 }> {
+  // Clean up any previous pending offer
+  await discardPendingOffer();
+
   const pc = new RTCPeerConnection({
     iceServers: DEFAULT_STUN_SERVERS.map((url) => ({ urls: url })),
   });
@@ -95,9 +120,9 @@ export async function createOffer(): Promise<{
 
   const fingerprint = extractFingerprint(pc);
 
-  // Close this temporary connection — the real one will be created
-  // when the answer arrives.
-  await pc.close();
+  // Keep the PC alive — connectWithAnswer() will reuse it so the
+  // DTLS certificate matches the fingerprint in the QR code.
+  pendingOfferPc = pc;
 
   return {
     offer: offer.sdp,
@@ -119,15 +144,29 @@ export async function createOffer(): Promise<{
 export async function connectWithAnswer(
   offerSdp: string,
   answerSdp: string,
-  peerIceCandidates: string[],
+  _peerIceCandidates: string[],
   peerFingerprint: string,
   alias: string,
   deviceType: 'desktop' | 'mobile' | 'unknown',
 ): Promise<PeerEntry> {
-  // Create a fresh connection
-  const pc = new RTCPeerConnection({
-    iceServers: DEFAULT_STUN_SERVERS.map((url) => ({ urls: url })),
-  });
+  // Reuse the pending offer PC to preserve the DTLS certificate
+  // whose fingerprint was encoded in the QR code. If the PC were
+  // re-created, the new certificate would have a different fingerprint
+  // and the DTLS handshake would fail.
+  let pc: RTCPeerConnection;
+  let reusingPending = false;
+
+  if (pendingOfferPc) {
+    pc = pendingOfferPc;
+    pendingOfferPc = null;
+    reusingPending = true;
+    console.log('[WebRTC] Reusing pending offer PC (same DTLS certificate)');
+  } else {
+    console.warn('[WebRTC] No pending offer PC — creating fresh connection (fingerprint may differ)');
+    pc = new RTCPeerConnection({
+      iceServers: DEFAULT_STUN_SERVERS.map((url) => ({ urls: url })),
+    });
+  }
 
   const entry: PeerEntry = {
     fingerprint: peerFingerprint,
@@ -145,15 +184,20 @@ export async function connectWithAnswer(
   peers.set(peerFingerprint, entry);
   emitConnectionState(peerFingerprint, 'connecting');
 
-  // Create data channels
+  // Create data channels (the _init channel from createOffer is harmless)
   for (const channelName of Object.values(DATA_CHANNELS)) {
     createChannel(entry, channelName);
   }
 
-  // Set the local offer and remote answer
-  await pc.setLocalDescription(
-    new RTCSessionDescription(offerSdp, 'offer'),
-  );
+  // If reusing the pending PC, the local description (offer) is already
+  // set — we only need to set the remote description (answer).
+  // The answer SDP includes the peer's ICE candidate inline (added by
+  // reconstructAnswerSdp), so no explicit addIceCandidate needed.
+  if (!reusingPending) {
+    await pc.setLocalDescription(
+      new RTCSessionDescription(offerSdp, 'offer'),
+    );
+  }
   await pc.setRemoteDescription(
     new RTCSessionDescription(answerSdp, 'answer'),
   );
