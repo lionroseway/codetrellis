@@ -93,7 +93,7 @@ export default function HomeScreen() {
         sendPushTokenToDesktop(token);
       }
 
-      router.push('/workspace');
+      router.push('/(tabs)');
     } catch (err) {
       Alert.alert('Connection Failed', String(err));
     }
@@ -131,7 +131,7 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={styles.deviceCard}
-        onPress={() => isConnected ? router.push('/workspace') : handleConnect(item)}
+        onPress={() => isConnected ? router.push('/(tabs)') : handleConnect(item)}
         onLongPress={() => handleUnpair(item)}
         activeOpacity={0.7}
       >
@@ -180,7 +180,7 @@ export default function HomeScreen() {
             <>
               <TouchableOpacity
                 style={styles.actionButtonPrimary}
-                onPress={() => router.push('/workspace')}
+                onPress={() => router.push('/(tabs)')}
               >
                 <Text style={styles.actionButtonPrimaryText}>Open Workspace</Text>
               </TouchableOpacity>

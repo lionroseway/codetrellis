@@ -695,6 +695,11 @@ let scanInFlight = false;
  *  scan; when they rescan the *same* project we can skip unchanged files. */
 let lastScannedProject: string | null = null;
 
+/** Return the path of the project currently open in the scanner. */
+export function getActiveProjectPath(): string | null {
+  return lastScannedProject;
+}
+
 /**
  * Core scan logic — callable both from the REST endpoint and MCP tool.
  * Throws on validation errors; callers should catch and surface appropriately.

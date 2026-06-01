@@ -122,6 +122,7 @@ export interface PlanSummary {
   itemCount: number;
   doneCount: number;
   inProgressCount: number;
+  updatedAt: number | null;
 }
 
 /** Agent summary received from the desktop. */
@@ -130,6 +131,7 @@ export interface AgentSummary {
   agentType: string;
   model: string;
   activePlanUid: string | null;
+  lastSeen: number;
 }
 
 /** Channel event summary. */
@@ -144,15 +146,75 @@ export interface ChannelEventSummary {
   createdAt: number;
 }
 
-/** Full workspace state snapshot from the desktop. */
+/** Presence card summary. */
+export interface PresenceSummary {
+  id: string;
+  text: string;
+  tone: string;
+  createdAt: number;
+}
+
+// --- v2 types (M1 enrichment) ------------------------------------------------
+
+/** Currently open project on the desktop. */
+export interface ActiveProjectSummary {
+  path: string;
+  displayName: string;
+  branch: string | null;
+}
+
+/** A recent project from the desktop's history. */
+export interface RecentProjectSummary {
+  path: string;
+  displayName: string;
+  branch: string | null;
+  pinned: boolean;
+  lastOpenedAt: number;
+}
+
+/** Terminal session running on the desktop. */
+export interface TerminalSummary {
+  id: string;
+  title: string;
+  cwd: string;
+  alive: boolean;
+  createdAt: number;
+}
+
+/** Pending agent input request awaiting a human response. */
+export interface InputRequestSummary {
+  requestId: string;
+  prompt: string;
+  options?: string[];
+  planUid?: string;
+  receivedAt: number;
+}
+
+/** Deviation counts for attention badges. */
+export interface DeviationCountsSummary {
+  pending: number;
+  byPlan: Array<{ planUid: string; planName: string; count: number }>;
+}
+
+/** Full workspace state snapshot from the desktop (v2). */
 export interface WorkspaceSnapshot {
-  v: 1;
+  v: 2;
   ts: number;
+
+  // v1 fields
   plans: PlanSummary[];
   channelEvents: ChannelEventSummary[];
   agents: AgentSummary[];
-  presence: Array<{ id: string; text: string; tone: string; createdAt: number }>;
+  presence: PresenceSummary[];
   audio: { capturing: boolean; bufferedSeconds: number };
+
+  // v2 fields (M1 enrichment)
+  activeProject: ActiveProjectSummary | null;
+  recentProjects: RecentProjectSummary[];
+  terminals: TerminalSummary[];
+  pendingInputRequests: InputRequestSummary[];
+  walkthroughActive: boolean;
+  deviationCounts: DeviationCountsSummary;
 }
 
 // --- WebView bridge ----------------------------------------------------------

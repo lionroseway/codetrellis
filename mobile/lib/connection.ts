@@ -13,6 +13,8 @@
 
 import { webrtc } from './webrtc';
 import { touchPairedDesktop } from './storage';
+import { useWorkspaceStore } from './store';
+import { handleRpcResponse, cancelAllPendingRpc } from './rpc';
 import type {
   ConnectionTarget,
   ConnectionState,
@@ -63,6 +65,7 @@ class ConnectionManager {
     if (this.unsubMessage) { this.unsubMessage(); this.unsubMessage = null; }
     if (this.unsubState) { this.unsubState(); this.unsubState = null; }
 
+    cancelAllPendingRpc();
     webrtc.disconnect();
     this.target = null;
   }
@@ -209,10 +212,16 @@ class ConnectionManager {
 
       if (msg.type === 'snapshot' && msg.snapshot) {
         this.currentSnapshot = msg.snapshot;
+        // Push into Zustand store for reactive UI
+        useWorkspaceStore.getState().applySnapshot(msg.snapshot);
         for (const handler of this.snapshotHandlers) {
           try { handler(msg.snapshot); } catch { /* */ }
         }
       } else if (msg.type === 'patch' && msg.patch) {
+        // Apply patch in Zustand store
+        useWorkspaceStore.getState().applyPatch(msg.patch);
+        // Update local reference from store
+        this.currentSnapshot = useWorkspaceStore.getState().snapshot;
         for (const handler of this.patchHandlers) {
           try { handler(msg.patch); } catch { /* */ }
         }
@@ -242,8 +251,10 @@ class ConnectionManager {
   }
 
   private handleControlMessage(data: string | ArrayBuffer): void {
-    // Control messages are handled by the WebView bridge
-    // (forwarded via the snapshot/patch mechanism)
+    // Check if this is an RPC response (correlated by request ID)
+    if (handleRpcResponse(data)) return;
+
+    // Other control messages (future: agent events, etc.)
   }
 
   private scheduleReconnect(): void {
@@ -268,6 +279,8 @@ class ConnectionManager {
   }
 
   private emitStateChange(state: ConnectionState, fingerprint: string): void {
+    // Push into Zustand store for reactive UI
+    useWorkspaceStore.getState().setConnectionState(state, fingerprint);
     for (const handler of this.stateHandlers) {
       try { handler(state, fingerprint); } catch { /* */ }
     }

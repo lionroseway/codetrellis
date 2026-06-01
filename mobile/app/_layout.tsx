@@ -39,6 +39,32 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="(tabs)"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="plan-detail"
+          options={{
+            title: 'Plan',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
+          name="terminal-detail"
+          options={{
+            title: 'Terminal',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
+          name="connection-switcher"
+          options={{
+            title: 'Connections',
+            presentation: 'modal',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
           name="workspace"
           options={{ headerShown: false }}
         />

@@ -63,6 +63,7 @@ import { startRemoteTerminals, stopRemoteTerminals, isRemoteTerminalRunning } fr
 import { startRemoteAudio, stopRemoteAudio, isRemoteAudioRunning } from './remote-audio-service';
 import { startRemoteInteraction, stopRemoteInteraction, isRemoteInteractionRunning } from './remote-interaction-service';
 import { startPushNotifications, stopPushNotifications, isPushNotificationsRunning } from './push-notification-service';
+import { startMobileRpc, stopMobileRpc } from './mobile-rpc-service';
 import { startMobileApiServer, stopMobileApiServer, getMobileApiPort, isMobileApiRunning } from './mobile-api-server';
 
 // --- State -------------------------------------------------------------------
@@ -126,6 +127,7 @@ export async function startPeerManager(): Promise<void> {
   startRemoteAudio();
   startRemoteInteraction(myInstanceId);
   startPushNotifications();
+  startMobileRpc();
 
   console.log(`[PeerManager] Started (mobileApiPort=${mobilePort || 'none'})`);
 }
@@ -139,6 +141,7 @@ export async function stopPeerManager(): Promise<void> {
   started = false;
 
   // Phase 10/11 — stop multi-device + push services
+  stopMobileRpc();
   stopPushNotifications();
   stopRemoteInteraction();
   stopRemoteAudio();

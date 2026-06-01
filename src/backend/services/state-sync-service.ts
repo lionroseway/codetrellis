@@ -41,15 +41,22 @@ import * as planItemService from './plan-item-service';
 import * as planService from './plan-service';
 import * as channelEventService from './channel-event-service';
 import * as presenceService from './presence-service';
+import * as recentProjectsService from './recent-projects-service';
+import * as terminalService from './terminal-service';
+import * as deviationService from './deviation-service';
+import * as remoteInteractionService from './remote-interaction-service';
+import { getActiveProjectPath } from '../server';
 
 // --- Types -------------------------------------------------------------------
 
 /** The shape of the state snapshot sent over WebRTC. */
 export interface SyncStateSnapshot {
   /** Schema version so the receiver can detect incompatibility. */
-  v: 1;
+  v: 2;
   /** Timestamp of the snapshot (ms since epoch). */
   ts: number;
+
+  // --- v1 fields (unchanged) ---
   /** Active plans — summaries, not full item bodies. */
   plans: PlanSummary[];
   /** Channel events — recent, sorted by recency. */
@@ -60,6 +67,20 @@ export interface SyncStateSnapshot {
   presence: PresenceSummary[];
   /** Audio capture status. */
   audio: AudioStatusSummary;
+
+  // --- v2 fields (M1 enrichment) ---
+  /** Currently open project, or null if nothing scanned yet. */
+  activeProject: ActiveProjectSummary | null;
+  /** Recent projects list (pinned first, then by recency). */
+  recentProjects: RecentProjectSummary[];
+  /** Active terminal sessions on the desktop. */
+  terminals: TerminalSummary[];
+  /** Pending agent input requests awaiting a human response. */
+  pendingInputRequests: InputRequestSummary[];
+  /** Whether an AI walkthrough is currently active. */
+  walkthroughActive: boolean;
+  /** Deviation counts for attention badges. */
+  deviationCounts: DeviationCountsSummary;
 }
 
 interface PlanSummary {
@@ -101,6 +122,45 @@ interface PresenceSummary {
 interface AudioStatusSummary {
   capturing: boolean;
   bufferedSeconds: number;
+}
+
+// --- v2 summary types (M1) --------------------------------------------------
+
+interface ActiveProjectSummary {
+  path: string;
+  displayName: string;
+  branch: string | null;
+}
+
+interface RecentProjectSummary {
+  path: string;
+  displayName: string;
+  branch: string | null;
+  pinned: boolean;
+  lastOpenedAt: number;
+}
+
+interface TerminalSummary {
+  id: string;
+  title: string;
+  cwd: string;
+  alive: boolean;
+  createdAt: number;
+}
+
+interface InputRequestSummary {
+  requestId: string;
+  prompt: string;
+  options?: string[];
+  planUid?: string;
+  receivedAt: number;
+}
+
+interface DeviationCountsSummary {
+  /** Total pending deviations across all plans. */
+  pending: number;
+  /** Per-plan breakdown. */
+  byPlan: Array<{ planUid: string; planName: string; count: number }>;
 }
 
 /** Message envelope sent on the `ui` data channel. */
@@ -280,14 +340,89 @@ export function collectSnapshot(): SyncStateSnapshot {
     }
   } catch { /* audio service not available */ }
 
+  // --- v2: active project ---
+  let activeProject: ActiveProjectSummary | null = null;
+  try {
+    const activePath = getActiveProjectPath();
+    if (activePath) {
+      const proj = recentProjectsService.getRecentProject(activePath);
+      activeProject = {
+        path: activePath,
+        displayName: proj?.displayName ?? activePath.split('/').pop() ?? activePath,
+        branch: proj?.branch ?? null,
+      };
+    }
+  } catch { /* server may not have scanned yet */ }
+
+  // --- v2: recent projects ---
+  let recentProjects: RecentProjectSummary[] = [];
+  try {
+    recentProjects = recentProjectsService.listRecentProjects().map((p) => ({
+      path: p.path,
+      displayName: p.displayName,
+      branch: p.branch,
+      pinned: p.pinned,
+      lastOpenedAt: p.lastOpenedAt,
+    }));
+  } catch { /* db may not be ready */ }
+
+  // --- v2: terminals ---
+  let terminals: TerminalSummary[] = [];
+  try {
+    terminals = terminalService.listTerminals().map((t) => ({
+      id: t.id,
+      title: t.title,
+      cwd: t.cwd,
+      alive: t.alive,
+      createdAt: t.createdAt,
+    }));
+  } catch { /* terminal service may not be started */ }
+
+  // --- v2: pending input requests ---
+  let pendingInputRequests: InputRequestSummary[] = [];
+  try {
+    pendingInputRequests = remoteInteractionService.getPendingInputRequests().map((r) => ({
+      requestId: r.requestId,
+      prompt: r.prompt,
+      options: r.options,
+      planUid: r.planUid,
+      receivedAt: r.receivedAt,
+    }));
+  } catch { /* remote interaction may not be started */ }
+
+  // --- v2: walkthrough active ---
+  const walkthroughActive = presence.length > 0;
+
+  // --- v2: deviation counts ---
+  let deviationCounts: DeviationCountsSummary = { pending: 0, byPlan: [] };
+  try {
+    let totalPending = 0;
+    const byPlan: Array<{ planUid: string; planName: string; count: number }> = [];
+    for (const plan of planService.listPlans()) {
+      const devs = deviationService.getDeviations(plan.uid);
+      const pendingCount = devs.filter((d) => d.resolution === 'pending').length;
+      if (pendingCount > 0) {
+        byPlan.push({ planUid: plan.uid, planName: plan.title, count: pendingCount });
+        totalPending += pendingCount;
+      }
+    }
+    deviationCounts = { pending: totalPending, byPlan };
+  } catch { /* deviation service may not be ready */ }
+
   return {
-    v: 1,
+    v: 2,
     ts: Date.now(),
     plans,
     channelEvents,
     agents,
     presence,
     audio,
+    activeProject,
+    recentProjects,
+    terminals,
+    pendingInputRequests,
+    walkthroughActive,
+    deviationCounts,
   };
 }
 
