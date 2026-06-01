@@ -152,6 +152,13 @@ export function getPairingNonce(): string | null {
 }
 
 /**
+ * Get the pairingId for the active pairing session.
+ */
+export function getPairingId(): string | null {
+  return activePairing?.server.pairingId ?? null;
+}
+
+/**
  * Confirm the pairing. Verifies the user-entered confirmation code
  * matches the derived code, then stores the paired device.
  *
@@ -177,6 +184,7 @@ export function confirmPairing(
 
   const device: PairedDevice = {
     fingerprint: activePairing.answer.fingerprint,
+    pairingId: activePairing.server.pairingId,
     alias: deviceAlias,
     deviceType,
     pairedAt: new Date().toISOString(),

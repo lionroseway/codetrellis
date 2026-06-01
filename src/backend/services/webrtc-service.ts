@@ -118,6 +118,9 @@ export async function createOffer(): Promise<{
   // Wait for ICE gathering to complete (or timeout).
   const candidates = await gatherIceCandidates(pc);
 
+  // Use the final local description which includes gathered ICE
+  // candidates inlined in the SDP (more reliable than sending separately).
+  const finalOfferSdp = pc.localDescription?.sdp ?? offer.sdp;
   const fingerprint = extractFingerprint(pc);
 
   // Keep the PC alive — connectWithAnswer() will reuse it so the
@@ -125,7 +128,7 @@ export async function createOffer(): Promise<{
   pendingOfferPc = pc;
 
   return {
-    offer: offer.sdp,
+    offer: finalOfferSdp,
     iceCandidates: candidates,
     fingerprint,
   };
@@ -144,7 +147,7 @@ export async function createOffer(): Promise<{
 export async function connectWithAnswer(
   offerSdp: string,
   answerSdp: string,
-  _peerIceCandidates: string[],
+  peerIceCandidates: string[],
   peerFingerprint: string,
   alias: string,
   deviceType: 'desktop' | 'mobile' | 'unknown',
@@ -202,6 +205,24 @@ export async function connectWithAnswer(
     new RTCSessionDescription(answerSdp, 'answer'),
   );
 
+  // Add remote ICE candidates that weren't inlined in the answer SDP.
+  // The mobile sends these as a separate JSON array for reliability.
+  if (peerIceCandidates.length > 0) {
+    console.log(`[WebRTC] Adding ${peerIceCandidates.length} remote ICE candidates`);
+    for (const candidateJson of peerIceCandidates) {
+      try {
+        const candidate = typeof candidateJson === 'string'
+          ? JSON.parse(candidateJson)
+          : candidateJson;
+        if (candidate.candidate) {
+          await pc.addIceCandidate(candidate);
+        }
+      } catch (err) {
+        console.warn('[WebRTC] Failed to add remote ICE candidate:', err);
+      }
+    }
+  }
+
   // Monitor connection state
   pc.connectionStateChange.subscribe((state: string) => {
     handleConnectionStateChange(entry, state);
@@ -258,10 +279,26 @@ export function sendToPeer(
   data: string | Buffer,
 ): boolean {
   const entry = peers.get(fingerprint);
-  if (!entry || entry.state !== 'connected') return false;
+  if (!entry || entry.state !== 'connected') {
+    if (channelName === 'ui') {
+      console.warn(`[WebRTC] sendToPeer(ui): peer ${fingerprint.slice(0, 12)}… not found or not connected (entry=${!!entry}, state=${entry?.state})`);
+    }
+    return false;
+  }
 
   const wrapper = entry.channels.get(channelName);
-  if (!wrapper) return false;
+  if (!wrapper) {
+    if (channelName === 'ui') {
+      console.warn(`[WebRTC] sendToPeer(ui): no channel wrapper for ${channelName}`);
+    }
+    return false;
+  }
+
+  // Check that the data channel is actually open before sending
+  if (wrapper.channel.readyState !== 'open') {
+    console.warn(`[WebRTC] Channel ${channelName} not open (state=${wrapper.channel.readyState}) for ${fingerprint.slice(0, 12)}…`);
+    return false;
+  }
 
   try {
     if (typeof data === 'string') {
@@ -321,16 +358,23 @@ export function onConnectionStateChange(
 /**
  * Get info about all active/recent peer connections.
  */
-export function getPeerConnections(): PeerConnectionInfo[] {
-  return Array.from(peers.values()).map((entry) => ({
-    fingerprint: entry.fingerprint,
-    alias: entry.alias,
-    state: entry.state,
-    deviceType: entry.deviceType,
-    connectedAt: entry.connectedAt?.toISOString() ?? null,
-    latencyMs: null, // TODO: measure round-trip on heartbeat
-    openChannels: Array.from(entry.channels.keys()),
-  }));
+export function getPeerConnections(): (PeerConnectionInfo & { channelStates?: Record<string, string> })[] {
+  return Array.from(peers.values()).map((entry) => {
+    const channelStates: Record<string, string> = {};
+    for (const [name, wrapper] of entry.channels) {
+      channelStates[name] = wrapper.channel.readyState;
+    }
+    return {
+      fingerprint: entry.fingerprint,
+      alias: entry.alias,
+      state: entry.state,
+      deviceType: entry.deviceType,
+      connectedAt: entry.connectedAt?.toISOString() ?? null,
+      latencyMs: null,
+      openChannels: Array.from(entry.channels.keys()),
+      channelStates,
+    };
+  });
 }
 
 /**
@@ -415,6 +459,17 @@ function createChannel(entry: PeerEntry, name: DataChannelName): void {
     // Dispatch to wrapper-level listeners
     for (const cb of wrapper.onMessage) {
       try { cb(data); } catch { /* listener error */ }
+    }
+  });
+
+  // When a data channel opens, emit a connection state change so services
+  // like state-sync can retry sending the initial snapshot.
+  channel.stateChanged.subscribe((state: string) => {
+    if (state === 'open') {
+      console.log(`[WebRTC] Channel ${name} opened for ${entry.alias}`);
+      // Re-emit connected state so state-sync resends the snapshot
+      // (the initial send may have failed because channels weren't open yet)
+      emitConnectionState(entry.fingerprint, 'connected');
     }
   });
 

@@ -33,10 +33,17 @@ export async function savePairedDesktops(devices: PairedDesktop[]): Promise<void
 
 /**
  * Add or update a paired desktop.
+ * Matches on pairingId first (stable), falls back to fingerprint (ephemeral).
  */
 export async function upsertPairedDesktop(device: PairedDesktop): Promise<void> {
   const devices = await loadPairedDesktops();
-  const idx = devices.findIndex((d) => d.fingerprint === device.fingerprint);
+  // Match by stable pairingId first, then fall back to fingerprint
+  let idx = device.pairingId
+    ? devices.findIndex((d) => d.pairingId === device.pairingId)
+    : -1;
+  if (idx < 0) {
+    idx = devices.findIndex((d) => d.fingerprint === device.fingerprint);
+  }
   if (idx >= 0) {
     devices[idx] = { ...devices[idx], ...device };
   } else {

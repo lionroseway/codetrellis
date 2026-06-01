@@ -1,12 +1,19 @@
 /**
- * Root layout — dark theme, status bar, navigation stack.
+ * Root layout — dark theme, splash screen, navigation stack.
+ *
+ * Shows an animated CodeTrellis splash on first launch, then
+ * reveals the navigation stack with a dark theme.
  */
 
+import { useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
+import SplashScreen from '../components/SplashScreen';
 
 export default function RootLayout() {
+  const [showSplash, setShowSplash] = useState(true);
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -21,17 +28,25 @@ export default function RootLayout() {
       >
         <Stack.Screen
           name="index"
-          options={{ title: 'CodeTrellis' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="pair"
-          options={{ title: 'Pair Device', presentation: 'modal' }}
+          options={{
+            title: 'Pair Device',
+            presentation: 'modal',
+            headerStyle: { backgroundColor: '#111113' },
+          }}
         />
         <Stack.Screen
           name="workspace"
           options={{ headerShown: false }}
         />
       </Stack>
+
+      {showSplash && (
+        <SplashScreen onFinish={() => setShowSplash(false)} />
+      )}
     </View>
   );
 }

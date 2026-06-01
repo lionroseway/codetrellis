@@ -63,6 +63,7 @@ import { startRemoteTerminals, stopRemoteTerminals, isRemoteTerminalRunning } fr
 import { startRemoteAudio, stopRemoteAudio, isRemoteAudioRunning } from './remote-audio-service';
 import { startRemoteInteraction, stopRemoteInteraction, isRemoteInteractionRunning } from './remote-interaction-service';
 import { startPushNotifications, stopPushNotifications, isPushNotificationsRunning } from './push-notification-service';
+import { startMobileApiServer, stopMobileApiServer, getMobileApiPort, isMobileApiRunning } from './mobile-api-server';
 
 // --- State -------------------------------------------------------------------
 
@@ -77,16 +78,24 @@ let started = false;
  *
  * Called from `initializeBackend()` during server startup.
  */
-export function startPeerManager(): void {
+export async function startPeerManager(): Promise<void> {
   if (started) return;
   started = true;
 
   const settings = getSettings();
   const deviceName = settings.device.deviceName || undefined;
 
-  // Start mDNS if advertising is enabled
+  // Start the mobile API server (0.0.0.0, LAN-accessible)
+  let mobilePort = 0;
+  try {
+    mobilePort = await startMobileApiServer();
+  } catch (err) {
+    console.warn('[PeerManager] Mobile API server failed to start:', err);
+  }
+
+  // Start mDNS if advertising is enabled, passing the mobile API port
   if (settings.device.advertise) {
-    startMdns(deviceName);
+    startMdns(deviceName, undefined, mobilePort);
   }
 
   // When a peer is discovered, check if it matches a paired device
@@ -118,7 +127,7 @@ export function startPeerManager(): void {
   startRemoteInteraction(myInstanceId);
   startPushNotifications();
 
-  console.log('[PeerManager] Started (with Phase 10 + Phase 11 services)');
+  console.log(`[PeerManager] Started (mobileApiPort=${mobilePort || 'none'})`);
 }
 
 /**
@@ -136,6 +145,8 @@ export async function stopPeerManager(): Promise<void> {
   stopRemoteTerminals();
   stopStateSync();
 
+  // Stop mobile API server + mDNS
+  stopMobileApiServer();
   cancelPairing();
   await discardPendingOffer();
   await disconnectAllPeers();
@@ -378,6 +389,135 @@ export {
   isPushNotificationsRunning,
 } from './push-notification-service';
 
+// --- Public API: Mobile Reconnection -----------------------------------------
+
+/**
+ * State for an active reconnection offer.
+ * One per fingerprint — if a second request comes in, the first is discarded.
+ */
+const reconnectOffers = new Map<string, {
+  offerSdp: string;
+  iceCandidates: string[];
+  desktopFingerprint: string;
+  createdAt: number;
+}>();
+
+// Clean up stale reconnect offers older than 60s, checked lazily
+function purgeStaleOffers(): void {
+  const now = Date.now();
+  for (const [fp, entry] of reconnectOffers) {
+    if (now - entry.createdAt > 60_000) {
+      reconnectOffers.delete(fp);
+    }
+  }
+}
+
+/**
+ * Find a paired device by its stable pairingId (not the ephemeral fingerprint).
+ */
+function findByPairingId(pairingId: string): PairedDevice | undefined {
+  return listPairedDevices().find((d) => d.pairingId === pairingId);
+}
+
+/**
+ * Find a paired device by its ephemeral DTLS fingerprint.
+ * Used as a fallback for pre-pairingId mobile clients during upgrade.
+ */
+function findByFingerprint(fingerprint: string): PairedDevice | undefined {
+  return listPairedDevices().find((d) => d.fingerprint === fingerprint);
+}
+
+/**
+ * Create a reconnection offer for a previously paired mobile device.
+ *
+ * Auth priority:
+ *   1. `pairingId` — stable UUID agreed during pairing (preferred).
+ *   2. `fingerprint` — ephemeral DTLS fingerprint (fallback for
+ *      pre-pairingId mobile clients; enables silent upgrade).
+ *
+ * Returns the SDP offer, ICE candidates, desktop fingerprint, and
+ * the device's pairingId (so the mobile can store it on upgrade).
+ */
+export async function startReconnection(pairingId?: string, fingerprint?: string): Promise<{
+  offer: string;
+  iceCandidates: string[];
+  fingerprint: string;
+  pairingId: string;
+} | null> {
+  purgeStaleOffers();
+
+  // Look up by stable pairingId first, then fall back to fingerprint
+  let paired: PairedDevice | undefined;
+  if (pairingId) {
+    paired = findByPairingId(pairingId);
+  }
+  if (!paired && fingerprint) {
+    paired = findByFingerprint(fingerprint);
+    if (paired) {
+      console.log(`[PeerManager] Fingerprint fallback matched "${paired.alias}" — silent pairingId upgrade`);
+    }
+  }
+
+  if (!paired) {
+    console.warn(`[PeerManager] Reconnect rejected — no match for pairingId=${pairingId?.slice(0, 8) ?? 'none'} fp=${fingerprint?.slice(0, 12) ?? 'none'}`);
+    return null;
+  }
+
+  const devicePairingId = paired.pairingId;
+  console.log(`[PeerManager] Creating reconnect offer for "${paired.alias}" (pairingId=${devicePairingId.slice(0, 8)}…)`);
+
+  // Create a fresh WebRTC offer
+  const { offer, iceCandidates, fingerprint: desktopFp } = await createOffer();
+
+  // Store keyed by pairingId so completeReconnection() can find it
+  reconnectOffers.set(devicePairingId, {
+    offerSdp: offer,
+    iceCandidates,
+    desktopFingerprint: desktopFp,
+    createdAt: Date.now(),
+  });
+
+  return { offer, iceCandidates, fingerprint: desktopFp, pairingId: devicePairingId };
+}
+
+/**
+ * Complete the reconnection after the mobile posts its answer SDP.
+ * Sets up data channels and heartbeat — same as initial pairing.
+ */
+export async function completeReconnection(
+  pairingId: string,
+  answerSdp: string,
+  answerIceCandidates: string[],
+  mobileFingerprint: string,
+): Promise<boolean> {
+  const stored = reconnectOffers.get(pairingId);
+  if (!stored) {
+    console.warn(`[PeerManager] No pending reconnect offer for pairingId=${pairingId.slice(0, 8)}…`);
+    return false;
+  }
+
+  reconnectOffers.delete(pairingId);
+
+  const paired = findByPairingId(pairingId);
+  if (!paired) return false;
+
+  try {
+    await connectWithAnswer(
+      stored.offerSdp,
+      answerSdp,
+      answerIceCandidates,
+      mobileFingerprint,
+      paired.alias,
+      paired.deviceType,
+    );
+    console.log(`[PeerManager] Reconnection established with "${paired.alias}"`);
+    return true;
+  } catch (err) {
+    console.error(`[PeerManager] Reconnection failed:`, err);
+    return false;
+  }
+}
+
 // --- Summary -----------------------------------------------------------------
 
 /**
@@ -391,6 +531,8 @@ export function getPeerManagerStatus(): {
   pairedDevices: number;
   connectedPeers: number;
   pairingActive: boolean;
+  mobileApi: boolean;
+  mobileApiPort: number;
   stateSync: boolean;
   remoteTerminals: boolean;
   remoteAudio: boolean;
@@ -405,6 +547,8 @@ export function getPeerManagerStatus(): {
     pairedDevices: listPairedDevices().length,
     connectedPeers: connectedPeerCount(),
     pairingActive: isPairingActive(),
+    mobileApi: isMobileApiRunning(),
+    mobileApiPort: getMobileApiPort(),
     stateSync: isStateSyncRunning(),
     remoteTerminals: isRemoteTerminalRunning(),
     remoteAudio: isRemoteAudioRunning(),

@@ -151,10 +151,45 @@ class ConnectionManager {
       if (state === 'connected') {
         touchPairedDesktop(target.fingerprint);
         this.cancelReconnect();
+        // Silent pairingId upgrade: if the desktop returned a pairingId
+        // during reconnect, store it so future connects use it.
+        const upgradedPairingId = webrtc.lastReconnectPairingId;
+        if (upgradedPairingId && upgradedPairingId !== target.pairingId) {
+          console.log(`[Connection] Upgrading pairingId: ${upgradedPairingId.slice(0, 8)}…`);
+          import('./storage').then(({ upsertPairedDesktop }) => {
+            upsertPairedDesktop({
+              fingerprint: target.fingerprint,
+              pairingId: upgradedPairingId,
+              alias: '', // won't overwrite — upsert merges
+              sharedSecret: target.sharedSecret,
+              pairedAt: '',
+              lastConnected: new Date().toISOString(),
+              lastKnownAddress: target.desktopAddress,
+              lastKnownPort: target.mobileApiPort,
+              pushToken: null,
+            });
+          });
+        }
       } else if (state === 'disconnected' || state === 'failed') {
         this.scheduleReconnect();
       }
     });
+
+    // Actually initiate the WebRTC reconnection.
+    // The desktop's mobile API server is on a dedicated port (default 19480),
+    // separate from the desktop UI server.
+    // Auth: pairingId (preferred) or fingerprint (fallback for pre-upgrade clients).
+    if (target.desktopAddress) {
+      await webrtc.reconnectToDesktop(
+        target.desktopAddress,
+        target.pairingId,
+        target.mobileApiPort,
+        target.fingerprint, // fallback for silent pairingId upgrade
+      );
+    } else {
+      console.warn('[Connection] No desktop address stored — cannot reconnect');
+      this.emitStateChange('failed', target.fingerprint);
+    }
   }
 
   private handleMessage(channel: string, data: string | ArrayBuffer): void {

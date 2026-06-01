@@ -22,7 +22,7 @@
 
 import http from 'node:http';
 import os from 'node:os';
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, randomUUID } from 'node:crypto';
 
 // --- Constants ---------------------------------------------------------------
 
@@ -50,6 +50,8 @@ export interface PairingServerResult {
   port: number;
   /** Random nonce for this pairing session. */
   nonce: string;
+  /** Stable pairing identity — survives app restarts. */
+  pairingId: string;
   /** Promise that resolves when the phone posts a valid answer. */
   waitForAnswer: () => Promise<PairingAnswer>;
   /** Stop the server early (cancel). */
@@ -65,6 +67,8 @@ export interface PairingAnswer {
   fingerprint: string;
   /** Nonce echoed back (must match). */
   nonce: string;
+  /** Stable pairing identity echoed back from the offer. */
+  pairingId: string;
 }
 
 // --- State -------------------------------------------------------------------
@@ -86,6 +90,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
 
   const code = generateCode();
   const nonce = randomBytes(NONCE_BYTES).toString('hex');
+  const pairingId = randomUUID();
 
   return new Promise<PairingServerResult>((resolveStart, rejectStart) => {
     let answerResolve: ((answer: PairingAnswer) => void) | null = null;
@@ -127,6 +132,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
           ice: opts.iceCandidates,
           fingerprint: opts.fingerprint,
           nonce,
+          pairingId,
         }));
         return;
       }
@@ -173,11 +179,12 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
               data.fingerprint,
             );
 
-            // Reply to the phone with the confirmation code
+            // Reply to the phone with the confirmation code + pairingId
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               accepted: true,
               confirmCode,
+              pairingId,
             }));
 
             // Cancel the timeout — answer arrived, no longer waiting
@@ -192,6 +199,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
               iceCandidates: data.ice ?? [],
               fingerprint: data.fingerprint,
               nonce: data.nonce,
+              pairingId,
             };
 
             answerResolve?.(answer);
@@ -245,6 +253,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
         address: lanAddress,
         port,
         nonce,
+        pairingId,
         waitForAnswer: () => answerPromise,
         stop: () => stopPairingServer(),
       });

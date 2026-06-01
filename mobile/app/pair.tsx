@@ -155,11 +155,13 @@ export default function PairScreen() {
     try {
       await upsertPairedDesktop({
         fingerprint: pairingResult.desktopFingerprint,
+        pairingId: pairingResult.pairingId,
         alias: deviceAlias,
         sharedSecret: '',
         pairedAt: new Date().toISOString(),
         lastConnected: new Date().toISOString(),
         lastKnownAddress: pairingResult.desktopAddress,
+        lastKnownPort: 19480, // Default — will be updated on reconnection via mDNS
         pushToken: null,
       });
 
@@ -240,7 +242,7 @@ export default function PairScreen() {
   }
 
   // Camera permission denied — offer manual entry as alternative
-  if (!permission.granted && state !== 'manual' && state !== 'connecting' && state !== 'confirming' && state !== 'connected' && state !== 'error') {
+  if (!permission.granted && state !== 'manual' && state !== 'connecting' && state !== 'connected' && state !== 'error') {
     return (
       <View style={styles.center}>
         <Text style={styles.permissionTitle}>Camera Access Required</Text>
@@ -373,7 +375,13 @@ export default function PairScreen() {
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.confirmContainer}
+          keyboardShouldPersistTaps="handled"
         >
+          {/* Success indicator */}
+          <View style={styles.successBadge}>
+            <Text style={styles.successBadgeText}>Paired</Text>
+          </View>
+
           <Text style={styles.confirmTitle}>Enter This Code on Desktop</Text>
           <Text style={styles.confirmSubtitle}>
             Type this code into CodeTrellis{'\n'}on your desktop to complete pairing
@@ -381,7 +389,7 @@ export default function PairScreen() {
 
           {/* Confirmation code — user reads this and types on desktop */}
           {pairingResult && (
-            <View style={[styles.codeContainer, { marginBottom: 24 }]}>
+            <View style={styles.codeContainer}>
               {pairingResult.confirmCode.split('').map((digit, i) => (
                 <View key={i} style={[styles.codeDigit, { borderColor: '#22c55e' }]}>
                   <Text style={styles.codeDigitText}>{digit}</Text>
@@ -389,6 +397,8 @@ export default function PairScreen() {
               ))}
             </View>
           )}
+
+          <View style={styles.divider} />
 
           <Text style={styles.aliasLabel}>Name this desktop</Text>
           <TextInput
@@ -507,6 +517,28 @@ const styles = StyleSheet.create({
     color: '#52525b',
     fontSize: 13,
     marginTop: 4,
+  },
+
+  // Success badge
+  successBadge: {
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 100,
+    marginBottom: 20,
+  },
+  successBadgeText: {
+    color: '#22c55e',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Divider
+  divider: {
+    width: '100%',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#27272a',
+    marginVertical: 24,
   },
 
   // Confirm screen

@@ -30,8 +30,14 @@ export interface DiscoveredPeer {
  * Stored in `~/.codetrellis/paired-devices.json`.
  */
 export interface PairedDevice {
-  /** DTLS fingerprint — primary key for the device. */
+  /** DTLS fingerprint — ephemeral, changes on app restart. */
   fingerprint: string;
+  /**
+   * Stable pairing identity — random UUID generated during pairing.
+   * Survives app restarts, updates, and reinstalls. Both sides store
+   * the same value. Used for reconnection auth instead of fingerprint.
+   */
+  pairingId: string;
   /** User-chosen alias ("Saif's iPhone", "Work Laptop"). */
   alias: string;
   /** Device type hint. */
@@ -190,4 +196,10 @@ export interface DeviceSettings {
   advertise: boolean;
   /** Whether to share audio capture with paired devices. Default false. */
   shareAudio: boolean;
+  /**
+   * Port for the mobile API server (bound to 0.0.0.0, LAN-accessible).
+   * Default 19480. If the port is in use, auto-increments until a free
+   * one is found. mDNS advertises the actual port.
+   */
+  mobileApiPort: number;
 }

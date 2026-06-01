@@ -3169,6 +3169,12 @@ app.patch('/api/peers/devices/:fingerprint', (req, res) => {
   }
 });
 
+// --- CDev Phase 11 — Mobile reconnection REST surface ---
+// Mobile reconnect endpoints have moved to the dedicated mobile API
+// server (`mobile-api-server.ts`), which binds to 0.0.0.0 on a
+// configurable port (default 19480). This keeps the main Express
+// server on localhost and avoids dev port conflicts.
+
 // --- CDev Phase 10 — Multi-device REST surface ---
 
 app.get('/api/peers/remote-state', (_req, res) => {

@@ -148,6 +148,13 @@ export default function WorkspaceScreen() {
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(connection.snapshot);
 
   useEffect(() => {
+    // If we land here without an active connection (e.g. persisted
+    // navigation state after app restart), redirect to home immediately
+    if (connection.state === 'disconnected' || connection.state === 'failed') {
+      router.replace('/');
+      return;
+    }
+
     // Create and start the bridge
     const bridge = new WebViewBridge(webViewRef);
     bridgeRef.current = bridge;
@@ -186,7 +193,7 @@ export default function WorkspaceScreen() {
           </Text>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.replace('/')}
           >
             <Text style={styles.backButtonText}>Back to Devices</Text>
           </TouchableOpacity>

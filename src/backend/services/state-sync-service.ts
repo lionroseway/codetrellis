@@ -105,7 +105,7 @@ interface AudioStatusSummary {
 
 /** Message envelope sent on the `ui` data channel. */
 interface SyncMessage {
-  type: 'snapshot' | 'patch';
+  type: 'snapshot' | 'patch' | 'resync-request';
   /** Snapshot when type === 'snapshot'. */
   snapshot?: SyncStateSnapshot;
   /** RFC 6902 patch when type === 'patch'. */
@@ -327,7 +327,10 @@ function sendFullSnapshot(fingerprint: string): void {
     ts: Date.now(),
     sourceInstanceId: instanceId,
   };
-  sendToPeer(fingerprint, DATA_CHANNELS.UI, JSON.stringify(msg));
+  const payload = JSON.stringify(msg);
+  console.log(`[StateSync] Sending full snapshot to ${fingerprint.slice(0, 12)}… (${payload.length} bytes, plans=${snapshot.plans?.length ?? 0})`);
+  const sent = sendToPeer(fingerprint, DATA_CHANNELS.UI, payload);
+  console.log(`[StateSync] sendToPeer returned ${sent}`);
   lastSnapshot = snapshot;
 }
 
@@ -340,6 +343,13 @@ function handleUiMessage(fingerprint: string, data: Buffer | string): void {
 
     // Ignore our own messages (echo prevention)
     if (msg.sourceInstanceId === instanceId) return;
+
+    if (msg.type === 'resync-request') {
+      // Mobile (or any peer) is asking for a full snapshot
+      console.log(`[StateSync] Resync requested by ${fingerprint.slice(0, 12)}…`);
+      sendFullSnapshot(fingerprint);
+      return;
+    }
 
     if (msg.type === 'snapshot' && msg.snapshot) {
       remoteStates.set(fingerprint, msg.snapshot);
@@ -371,9 +381,13 @@ function handleUiMessage(fingerprint: string, data: Buffer | string): void {
 }
 
 function handleConnectionChange(fingerprint: string, state: PeerConnectionState): void {
+  console.log(`[StateSync] handleConnectionChange: ${fingerprint.slice(0, 12)}… → ${state} (running=${running})`);
   if (state === 'connected') {
-    // Send full snapshot to the newly connected peer
+    // Send full snapshot — try immediately, and retry after 1s in case
+    // data channels aren't open yet (SCTP negotiation lags behind DTLS).
     sendFullSnapshot(fingerprint);
+    setTimeout(() => sendFullSnapshot(fingerprint), 1000);
+    setTimeout(() => sendFullSnapshot(fingerprint), 3000);
   } else if (state === 'disconnected' || state === 'failed') {
     remoteStates.delete(fingerprint);
   }

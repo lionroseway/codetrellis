@@ -197,6 +197,9 @@ function mergeWithDefaults(raw: any): AppSettings {
       deviceName: typeof raw?.device?.deviceName === 'string' ? raw.device.deviceName : DEFAULT_SETTINGS.device.deviceName,
       advertise: typeof raw?.device?.advertise === 'boolean' ? raw.device.advertise : DEFAULT_SETTINGS.device.advertise,
       shareAudio: typeof raw?.device?.shareAudio === 'boolean' ? raw.device.shareAudio : DEFAULT_SETTINGS.device.shareAudio,
+      mobileApiPort: typeof raw?.device?.mobileApiPort === 'number' && raw.device.mobileApiPort > 0
+        ? raw.device.mobileApiPort
+        : DEFAULT_SETTINGS.device.mobileApiPort,
     },
     firstRunComplete: typeof raw?.firstRunComplete === 'boolean' ? raw.firstRunComplete : DEFAULT_SETTINGS.firstRunComplete,
     updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : '',

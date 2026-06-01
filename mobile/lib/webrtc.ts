@@ -72,6 +72,8 @@ export interface PairingResult {
   desktopFingerprint: string;
   /** Desktop's LAN address. */
   desktopAddress: string;
+  /** Stable pairing identity — survives restarts on both sides. */
+  pairingId: string;
 }
 
 // --- WebRTC Manager ----------------------------------------------------------
@@ -160,15 +162,36 @@ export class WebRTCManager {
       );
     }
 
-    const { RTCPeerConnection, RTCSessionDescription } = webrtcMod;
+    const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = webrtcMod!;
 
-    // 2. Create peer connection and set remote description
+    // 2. Create peer connection
     const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
     this.pc = pc;
+
+    // Set up connection monitoring BEFORE setting remote description,
+    // so ondatachannel events from the desktop aren't missed.
+    this.setupConnectionMonitoring(pc);
 
     await pc.setRemoteDescription(
       new RTCSessionDescription({ type: 'offer', sdp: offerData.offer }),
     );
+
+    // Add remote ICE candidates from the offer (if not already inlined in SDP)
+    if (offerData.ice && Array.isArray(offerData.ice)) {
+      console.log(`[WebRTC] Adding ${offerData.ice.length} remote ICE candidates from offer`);
+      for (const candidateJson of offerData.ice) {
+        try {
+          const candidate = typeof candidateJson === 'string'
+            ? JSON.parse(candidateJson)
+            : candidateJson;
+          if (candidate.candidate && RTCIceCandidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+        } catch (err) {
+          console.warn('[WebRTC] Failed to add remote ICE candidate:', err);
+        }
+      }
+    }
 
     // 3. Create answer
     const answer = await pc.createAnswer();
@@ -180,9 +203,10 @@ export class WebRTCManager {
     const iceCandidates = await this.gatherIceCandidates(pc);
     console.log(`[WebRTC] Gathered ${iceCandidates.length} ICE candidates`);
 
-    // 5. Extract our fingerprint from answer SDP
-    const answerSdp = answer.sdp ?? '';
-    const fpMatch = answerSdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/);
+    // 5. Extract our fingerprint from the final local description SDP
+    // (includes gathered ICE candidates inlined)
+    const finalSdp = pc.localDescription?.sdp ?? answer.sdp ?? '';
+    const fpMatch = finalSdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/);
     const ourFingerprint = fpMatch?.[1] ?? '';
 
     if (!ourFingerprint) {
@@ -190,13 +214,13 @@ export class WebRTCManager {
     }
 
     // 6. Post our answer back to the temp server
-    console.log(`[WebRTC] Posting answer to ${baseUrl}/answer`);
+    console.log(`[WebRTC] Posting answer to ${baseUrl}/answer (SDP length=${finalSdp.length})`);
     const answerRes = await fetch(`${baseUrl}/answer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         c: qrPayload.c,
-        answer: answerSdp,
+        answer: finalSdp,
         ice: iceCandidates,
         fingerprint: ourFingerprint,
         nonce: offerData.nonce,
@@ -211,17 +235,149 @@ export class WebRTCManager {
     const answerResult: PairingAnswerResponse = await answerRes.json();
 
     console.log(
-      `[WebRTC] Answer accepted — confirmCode=${answerResult.confirmCode}`,
+      `[WebRTC] Answer accepted — confirmCode=${answerResult.confirmCode} pairingId=${answerResult.pairingId?.slice(0, 8)}…`,
     );
-
-    // 7. Set up connection monitoring
-    this.setupConnectionMonitoring(pc);
 
     return {
       confirmCode: answerResult.confirmCode,
       desktopFingerprint: ensureColonFingerprint(offerData.fingerprint),
       desktopAddress: qrPayload.h,
+      pairingId: answerResult.pairingId,
     };
+  }
+
+  /**
+   * Reconnect to a previously paired desktop using its known address.
+   * The desktop's Express server (port 3001) has a reconnection
+   * endpoint that creates a fresh WebRTC offer for paired devices.
+   *
+   * Auth is via `pairingId` — a stable UUID agreed during initial pairing
+   * that survives app restarts and fingerprint changes.
+   *
+   * Flow:
+   *   1. POST /api/mobile/reconnect with pairingId → get offer SDP.
+   *   2. Create RTCPeerConnection, set remote description (offer).
+   *   3. Create answer, gather ICE candidates.
+   *   4. POST /api/mobile/reconnect/answer with pairingId + answer SDP.
+   *   5. Desktop sets up data channels + heartbeat.
+   *   6. WebRTC connects → state changes to 'connected'.
+   */
+  /**
+   * Result from a reconnection attempt. Includes pairingId so
+   * pre-upgrade clients can store it for future use.
+   */
+  lastReconnectPairingId: string | null = null;
+
+  async reconnectToDesktop(
+    desktopAddress: string,
+    pairingId: string,
+    mobileApiPort: number = 19480,
+    fingerprint?: string,
+  ): Promise<void> {
+    this.cleanup();
+    this.lastReconnectPairingId = null;
+
+    const baseUrl = `http://${desktopAddress}:${mobileApiPort}`;
+
+    console.log(`[WebRTC] Requesting reconnect offer from ${baseUrl} (pairingId=${pairingId?.slice(0, 8) ?? 'none'}, fp=${fingerprint?.slice(0, 12) ?? 'none'})`);
+    this.setState('connecting');
+
+    // 1. Request a reconnection offer — send pairingId (preferred) + fingerprint (fallback)
+    const offerRes = await fetch(`${baseUrl}/api/mobile/reconnect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pairingId: pairingId || undefined, fingerprint: fingerprint || undefined }),
+    });
+
+    if (!offerRes.ok) {
+      const body = await offerRes.json().catch(() => ({ error: 'Request failed' }));
+      this.setState('failed');
+      throw new Error(`Reconnect failed: ${body.error || offerRes.status}`);
+    }
+
+    const offerData = await offerRes.json();
+    console.log(`[WebRTC] Got reconnect offer — desktop fp=${offerData.fingerprint?.slice(0, 16)}… pairingId=${offerData.pairingId?.slice(0, 8) ?? 'none'}`);
+
+    // Store the pairingId returned by the desktop (enables silent upgrade
+    // for pre-pairingId clients — the connection manager reads this after connect)
+    if (offerData.pairingId) {
+      this.lastReconnectPairingId = offerData.pairingId;
+    }
+
+    // 2. Create peer connection and set remote description
+    let webrtcMod: ReturnType<typeof getWebRTC>;
+    try {
+      webrtcMod = getWebRTC();
+    } catch {
+      this.setState('failed');
+      throw new Error('WebRTC native module not available');
+    }
+
+    const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = webrtcMod!;
+
+    const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+    this.pc = pc;
+
+    // Set up connection monitoring BEFORE setting remote description,
+    // so ondatachannel events from the desktop aren't missed.
+    this.setupConnectionMonitoring(pc);
+
+    await pc.setRemoteDescription(
+      new RTCSessionDescription({ type: 'offer', sdp: offerData.offer }),
+    );
+
+    // Add remote ICE candidates from the offer response (if not inlined in SDP)
+    if (offerData.ice && Array.isArray(offerData.ice)) {
+      console.log(`[WebRTC] Adding ${offerData.ice.length} remote ICE candidates from offer`);
+      for (const candidateJson of offerData.ice) {
+        try {
+          const candidate = typeof candidateJson === 'string'
+            ? JSON.parse(candidateJson)
+            : candidateJson;
+          if (candidate.candidate && RTCIceCandidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+        } catch (err) {
+          console.warn('[WebRTC] Failed to add remote ICE candidate:', err);
+        }
+      }
+    }
+
+    // 3. Create answer + gather ICE
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    console.log('[WebRTC] Reconnect answer created, gathering ICE…');
+    const iceCandidates = await this.gatherIceCandidates(pc);
+
+    // Use the final local description SDP (includes gathered ICE candidates
+    // inlined) rather than the original answer.sdp (which has none).
+    const finalSdp = pc.localDescription?.sdp ?? answer.sdp ?? '';
+    const fpMatch = finalSdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/);
+    const actualFingerprint = fpMatch?.[1] ?? '';
+
+    console.log(`[WebRTC] Reconnect answer: ${iceCandidates.length} ICE candidates gathered, SDP length=${finalSdp.length}`);
+
+    // 4. Post answer back to desktop with pairingId for lookup
+    console.log(`[WebRTC] Posting reconnect answer to ${baseUrl}`);
+    const answerRes = await fetch(`${baseUrl}/api/mobile/reconnect/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pairingId,
+        fingerprint: actualFingerprint,
+        answer: finalSdp,
+        ice: iceCandidates,
+      }),
+    });
+
+    if (!answerRes.ok) {
+      const body = await answerRes.json().catch(() => ({ error: 'Answer rejected' }));
+      this.setState('failed');
+      throw new Error(`Reconnect answer failed: ${body.error || answerRes.status}`);
+    }
+
+    console.log('[WebRTC] Reconnect answer accepted — waiting for WebRTC connection');
   }
 
   /**
@@ -320,6 +476,21 @@ export class WebRTCManager {
 
     channel.onopen = () => {
       console.log(`[WebRTC] Channel ${name} opened`);
+      // When the ui channel opens, request a full state snapshot from desktop.
+      // This is more reliable than depending on the desktop's automatic send
+      // (which may fire before channels are open due to WebRTC timing).
+      if (name === 'ui') {
+        console.log('[WebRTC] Requesting resync from desktop…');
+        try {
+          channel.send(JSON.stringify({
+            type: 'resync-request',
+            ts: Date.now(),
+            sourceInstanceId: 'mobile',
+          }));
+        } catch (err) {
+          console.warn('[WebRTC] Failed to send resync-request:', err);
+        }
+      }
     };
 
     channel.onmessage = (event: { data: string | ArrayBuffer }) => {

@@ -138,6 +138,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     deviceName: '',  // '' = auto-detect from os.hostname()
     advertise: true,
     shareAudio: false,
+    mobileApiPort: 19480,
   },
   firstRunComplete: false,
   updatedAt: '',

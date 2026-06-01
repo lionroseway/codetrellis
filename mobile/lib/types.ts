@@ -40,6 +40,8 @@ export interface PairingOfferResponse {
   fingerprint: string;
   /** Random nonce for this pairing session. */
   nonce: string;
+  /** Stable pairing identity — survives app restarts. */
+  pairingId: string;
 }
 
 /**
@@ -65,14 +67,22 @@ export interface PairingAnswerResponse {
   accepted: boolean;
   /** Bluetooth-style 6-digit confirmation code (same on both sides). */
   confirmCode: string;
+  /** Stable pairing identity — same on both sides, survives restarts. */
+  pairingId: string;
 }
 
 // --- Connection --------------------------------------------------------------
 
 /** A paired desktop stored in SecureStore. */
 export interface PairedDesktop {
-  /** DTLS fingerprint — primary key. */
+  /** DTLS fingerprint — primary key (ephemeral, changes on restart). */
   fingerprint: string;
+  /**
+   * Stable pairing identity — random UUID generated during pairing.
+   * Survives app restarts, updates, and reinstalls. Used for
+   * reconnection auth instead of the ephemeral fingerprint.
+   */
+  pairingId: string;
   /** User-chosen alias ("Work iMac", "Laptop"). */
   alias: string;
   /** Shared secret for auto-reconnect (hex-encoded). */
@@ -83,13 +93,15 @@ export interface PairedDesktop {
   lastConnected: string | null;
   /** LAN address from the last QR scan (may have changed). */
   lastKnownAddress: string;
+  /** Mobile API port from the last connection (default 19480). */
+  lastKnownPort: number;
   /** Push notification token registered with this desktop. */
   pushToken: string | null;
 }
 
 /** Abstract connection target — WebRTC today, cloud later. */
 export type ConnectionTarget =
-  | { type: 'webrtc'; fingerprint: string; sharedSecret: string }
+  | { type: 'webrtc'; pairingId: string; fingerprint: string; sharedSecret: string; desktopAddress: string; mobileApiPort: number }
   | { type: 'hosted'; url: string; apiKey: string };
 
 /** Connection states. */

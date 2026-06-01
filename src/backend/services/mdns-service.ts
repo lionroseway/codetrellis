@@ -66,10 +66,11 @@ export function getInstanceId(): string {
  * Start advertising this CodeTrellis instance and browsing for others.
  * Safe to call multiple times — restarts cleanly.
  *
- * @param deviceName  Human-readable name (from settings or os.hostname()).
- * @param fingerprint DTLS fingerprint for identity (from WebRTC cert).
+ * @param deviceName     Human-readable name (from settings or os.hostname()).
+ * @param fingerprint    DTLS fingerprint for identity (from WebRTC cert).
+ * @param mobileApiPort  Port the mobile API server is listening on (advertised via TXT).
  */
-export function startMdns(deviceName?: string, fingerprint?: string): void {
+export function startMdns(deviceName?: string, fingerprint?: string, mobileApiPort?: number): void {
   // Stop any previous instance
   stopMdns();
 
@@ -90,22 +91,24 @@ export function startMdns(deviceName?: string, fingerprint?: string): void {
   const fp = fingerprint || 'pending'; // Real fingerprint set once WebRTC cert is generated
 
   // Publish our service.
-  // Port is 1 (placeholder) because we don't accept TCP connections —
-  // mDNS is informational only. Peers connect via WebRTC, not TCP.
-  // bonjour-service requires port > 0; the value is meaningless here.
+  // The port is the mobile API server port (for reconnection).
+  // If no mobile API port is provided, use 1 as a placeholder.
+  // bonjour-service requires port > 0.
+  const advertisePort = mobileApiPort && mobileApiPort > 0 ? mobileApiPort : 1;
   try {
     publishedService = bonjourInstance.publish({
       name: `${name} (${instanceId})`,
       type: SERVICE_TYPE,
-      port: 1,
+      port: advertisePort,
       txt: {
         instanceId,
         version,
         fingerprint: fp,
         deviceName: name,
+        mobileApiPort: String(advertisePort),
       },
     });
-    console.log(`[mDNS] Advertising as "${name}" (${instanceId})`);
+    console.log(`[mDNS] Advertising as "${name}" (${instanceId}) mobileApiPort=${advertisePort}`);
   } catch (err) {
     console.warn('[mDNS] Failed to publish service:', err);
   }
@@ -205,10 +208,10 @@ export function stopMdns(): void {
 /**
  * Update the advertised device name (e.g. after settings change).
  */
-export function updateAdvertisedName(name: string, fingerprint?: string): void {
+export function updateAdvertisedName(name: string, fingerprint?: string, mobileApiPort?: number): void {
   if (!bonjourInstance) return;
   // Simplest approach: restart with the new name.
-  startMdns(name, fingerprint);
+  startMdns(name, fingerprint, mobileApiPort);
 }
 
 /**

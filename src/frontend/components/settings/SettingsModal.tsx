@@ -1002,6 +1002,25 @@ function DevicesSection({
             When enabled, agents on paired devices can access audio captured on this machine.
           </p>
         </Field>
+
+        <Field label="Mobile API port">
+          <input
+            type="number"
+            value={settings.device.mobileApiPort || 19480}
+            onChange={(e) => {
+              const port = parseInt(e.target.value, 10);
+              if (port > 0 && port < 65536) {
+                onChange({ device: { ...settings.device, mobileApiPort: port } });
+              }
+            }}
+            min={1024}
+            max={65535}
+            className="w-32 bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+          />
+          <p className="text-[10px] text-foreground-subtle mt-1">
+            LAN port for mobile device reconnection. Auto-increments if in use. Restart required to take effect.
+          </p>
+        </Field>
       </div>
 
       {/* --- Paired Devices List --- */}
