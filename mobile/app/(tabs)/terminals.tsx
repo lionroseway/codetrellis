@@ -6,15 +6,19 @@
  * (detail view comes in M3).
  */
 
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTerminals, usePendingInputRequests } from '../../lib/store';
+import { rpc } from '../../lib/rpc';
 
 function formatAge(ts: number): string {
   const seconds = Math.floor((Date.now() - ts) / 1000);
@@ -30,6 +34,22 @@ export default function TerminalsTab() {
   const router = useRouter();
   const terminals = useTerminals();
   const pendingInputs = usePendingInputRequests();
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleRespond = useCallback(async (requestId: string, response: string) => {
+    setSending(true);
+    try {
+      await rpc('input.respond', { requestId, response });
+      setRespondingTo(null);
+      setResponseText('');
+    } catch (err: unknown) {
+      Alert.alert('Failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setSending(false);
+    }
+  }, []);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -41,14 +61,57 @@ export default function TerminalsTab() {
             <View key={req.requestId} style={styles.inputCard}>
               <View style={styles.inputDot} />
               <View style={styles.inputBody}>
-                <Text style={styles.inputPrompt} numberOfLines={2}>
+                <Text style={styles.inputPrompt} numberOfLines={4}>
                   {req.prompt}
                 </Text>
+
+                {/* Option buttons */}
                 {req.options && req.options.length > 0 && (
-                  <Text style={styles.inputOptions} numberOfLines={1}>
-                    Options: {req.options.join(' / ')}
-                  </Text>
+                  <View style={styles.optionRow}>
+                    {req.options.map((opt) => (
+                      <TouchableOpacity
+                        key={opt}
+                        style={styles.optionBtn}
+                        onPress={() => handleRespond(req.requestId, opt)}
+                        disabled={sending}
+                      >
+                        <Text style={styles.optionBtnText}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 )}
+
+                {/* Free-text response */}
+                {respondingTo === req.requestId ? (
+                  <View style={styles.respondRow}>
+                    <TextInput
+                      style={styles.respondInput}
+                      value={responseText}
+                      onChangeText={setResponseText}
+                      placeholder="Type response..."
+                      placeholderTextColor="#52525b"
+                      autoFocus
+                    />
+                    <TouchableOpacity
+                      style={[styles.respondSend, (!responseText.trim() || sending) && styles.respondSendDisabled]}
+                      onPress={() => handleRespond(req.requestId, responseText.trim())}
+                      disabled={!responseText.trim() || sending}
+                    >
+                      <Text style={styles.respondSendText}>{sending ? '...' : 'Send'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.respondBtn}
+                    onPress={() => {
+                      setRespondingTo(req.requestId);
+                      setResponseText('');
+                    }}
+                  >
+                    <Text style={styles.respondBtnText}>Respond</Text>
+                  </TouchableOpacity>
+                )}
+
                 <Text style={styles.inputMeta}>
                   {formatAge(req.receivedAt)}
                 </Text>
@@ -170,6 +233,70 @@ const styles = StyleSheet.create({
     color: '#4338ca',
     fontSize: 11,
     marginTop: 4,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  optionBtn: {
+    backgroundColor: '#312e81',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#4338ca',
+  },
+  optionBtnText: {
+    color: '#c7d2fe',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  respondBtn: {
+    marginTop: 8,
+    backgroundColor: '#312e81',
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4338ca',
+  },
+  respondBtnText: {
+    color: '#818cf8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  respondRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  respondInput: {
+    flex: 1,
+    backgroundColor: '#1e1b4b',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#4338ca',
+    color: '#c7d2fe',
+    fontSize: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  respondSend: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  respondSendDisabled: {
+    opacity: 0.4,
+  },
+  respondSendText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   // Terminal cards

@@ -275,7 +275,13 @@ export default function PlanDetailScreen() {
           const children = childrenOf(item.uid);
           return (
             <View key={item.uid}>
-              <View style={styles.itemCard}>
+              <TouchableOpacity
+                style={styles.itemCard}
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push(`/item-detail?uid=${item.uid}&planUid=${plan.uid}`)
+                }
+              >
                 <View
                   style={[
                     styles.itemDot,
@@ -298,11 +304,19 @@ export default function PlanDetailScreen() {
                     {item.assignee ? ` · ${item.assignee}` : ''}
                   </Text>
                 </View>
-              </View>
+                <Text style={styles.itemChevron}>&gt;</Text>
+              </TouchableOpacity>
 
               {/* Subtasks */}
               {children.map((child) => (
-                <View key={child.uid} style={styles.subItemCard}>
+                <TouchableOpacity
+                  key={child.uid}
+                  style={styles.subItemCard}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    router.push(`/item-detail?uid=${child.uid}&planUid=${plan.uid}`)
+                  }
+                >
                   <View
                     style={[
                       styles.itemDot,
@@ -324,7 +338,8 @@ export default function PlanDetailScreen() {
                     </Text>
                     <Text style={styles.itemMeta}>{child.status}</Text>
                   </View>
-                </View>
+                  <Text style={styles.itemChevron}>&gt;</Text>
+                </TouchableOpacity>
               ))}
             </View>
           );
@@ -558,6 +573,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
     textTransform: 'capitalize',
+  },
+  itemChevron: {
+    color: '#52525b',
+    fontSize: 14,
+    marginLeft: 8,
+    alignSelf: 'center',
   },
 
   // Empty

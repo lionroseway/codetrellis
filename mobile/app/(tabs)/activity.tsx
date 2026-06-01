@@ -10,7 +10,9 @@ import {
   Text,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useChannelEvents, usePresence, useAgents } from '../../lib/store';
 
 const EVENT_COLORS: Record<string, { bg: string; fg: string }> = {
@@ -43,6 +45,7 @@ function formatRelative(ts: number): string {
 }
 
 export default function ActivityTab() {
+  const router = useRouter();
   const events = useChannelEvents();
   const presence = usePresence();
   const agents = useAgents();
@@ -91,7 +94,12 @@ export default function ActivityTab() {
           events.map((event) => {
             const color = getEventStyle(event.eventType);
             return (
-              <View key={event.uid} style={styles.eventCard}>
+              <TouchableOpacity
+                key={event.uid}
+                style={styles.eventCard}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/event-detail?uid=${event.uid}`)}
+              >
                 <View style={styles.eventHeader}>
                   <View
                     style={[
@@ -122,13 +130,16 @@ export default function ActivityTab() {
                   </Text>
                 ) : null}
 
-                <Text style={styles.eventMeta}>
-                  {event.author}
-                  {event.authorType ? ` (${event.authorType})` : ''}
-                  {' · '}
-                  {event.status}
-                </Text>
-              </View>
+                <View style={styles.eventFooter}>
+                  <Text style={styles.eventMeta}>
+                    {event.author}
+                    {event.authorType ? ` (${event.authorType})` : ''}
+                    {' · '}
+                    {event.status}
+                  </Text>
+                  <Text style={styles.eventChevron}>&gt;</Text>
+                </View>
+              </TouchableOpacity>
             );
           })
         ) : (
@@ -261,9 +272,20 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginBottom: 6,
   },
+  eventFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   eventMeta: {
     color: '#52525b',
     fontSize: 11,
+    flex: 1,
+  },
+  eventChevron: {
+    color: '#52525b',
+    fontSize: 14,
+    marginLeft: 8,
   },
 
   // Empty

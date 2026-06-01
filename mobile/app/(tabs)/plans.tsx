@@ -111,6 +111,7 @@ export default function PlansTab() {
                   >
                     <Text style={styles.statusText}>{plan.status}</Text>
                   </View>
+                  <Text style={styles.planChevron}>&gt;</Text>
                 </View>
 
                 <Text style={styles.planMeta}>
@@ -213,6 +214,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     marginRight: 8,
+  },
+  planChevron: {
+    color: '#52525b',
+    fontSize: 14,
+    marginLeft: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,

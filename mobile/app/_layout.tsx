@@ -57,6 +57,20 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="item-detail"
+          options={{
+            title: 'Item',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
+          name="event-detail"
+          options={{
+            title: 'Event',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
           name="connection-switcher"
           options={{
             title: 'Connections',

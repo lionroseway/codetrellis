@@ -32,6 +32,7 @@ import * as channelEventService from './channel-event-service';
 import * as deviationService from './deviation-service';
 import * as terminalService from './terminal-service';
 import * as recentProjectsService from './recent-projects-service';
+import * as remoteInteractionService from './remote-interaction-service';
 import { scanProject, getActiveProjectPath } from '../server';
 
 // --- Types -------------------------------------------------------------------
@@ -144,6 +145,36 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return planItemService.listAllItems(planUid);
     }
 
+    case 'plan.update': {
+      const uid = requireString(params, 'uid');
+      const plan = planService.getPlan(uid);
+      if (!plan) throw new Error(`Plan not found: ${uid}`);
+      const updates: Record<string, unknown> = {};
+      if (params.title !== undefined) updates.title = params.title;
+      if (params.status !== undefined) updates.status = params.status;
+      planService.updatePlan(uid, updates as any, 'mobile-user');
+      return { ok: true };
+    }
+
+    case 'plan.item.get': {
+      const uid = requireString(params, 'uid');
+      const item = planItemService.getItem(uid);
+      if (!item) throw new Error(`Item not found: ${uid}`);
+      return item;
+    }
+
+    case 'plan.item.update': {
+      const uid = requireString(params, 'uid');
+      const updates: Record<string, unknown> = {};
+      if (params.status !== undefined) updates.status = params.status;
+      if (params.title !== undefined) updates.title = params.title;
+      if (params.assignee !== undefined) updates.assignee = params.assignee;
+      if (params.body !== undefined) updates.body = params.body;
+      const updated = planItemService.updateItem(uid, updates as any);
+      if (!updated) throw new Error(`Item not found: ${uid}`);
+      return updated;
+    }
+
     // --- Deviations ----------------------------------------------------------
     case 'deviation.list': {
       const planUid = requireString(params, 'planUid');
@@ -206,14 +237,43 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       const eventType = requireString(params, 'eventType');
       const message = (params.message as string) ?? '';
       const author = (params.author as string) ?? 'mobile-user';
+      const respondsTo = (params.parentUid as string) || undefined;
       const event = channelEventService.postChannelEvent({
         planUid,
         eventType: eventType as any,
         payload: { message },
         author,
         authorType: 'human',
+        respondsTo,
       });
       return event;
+    }
+
+    case 'channel.resolve': {
+      const uid = requireString(params, 'uid');
+      const status = (params.status as string) ?? 'resolved';
+      const event = channelEventService.setChannelEventStatus(uid, status as any);
+      return event;
+    }
+
+    case 'channel.thread': {
+      const rootUid = requireString(params, 'rootUid');
+      return channelEventService.listThread(rootUid);
+    }
+
+    case 'channel.get': {
+      const uid = requireString(params, 'uid');
+      const event = channelEventService.getChannelEvent(uid);
+      if (!event) throw new Error(`Channel event not found: ${uid}`);
+      return event;
+    }
+
+    // --- Input requests ------------------------------------------------------
+    case 'input.respond': {
+      const requestId = requireString(params, 'requestId');
+      const response = requireString(params, 'response');
+      remoteInteractionService.respondToInputRequest(requestId, response);
+      return { ok: true };
     }
 
     default:

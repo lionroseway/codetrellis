@@ -1,0 +1,611 @@
+/**
+ * Plan item detail screen — view and edit a single plan item.
+ *
+ * Shows item title, description/body, status with quick-change picker,
+ * assignee, and subtasks. Editable fields save via RPC.
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  TextInput,
+  Alert,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { rpc } from '../lib/rpc';
+
+// --- Types -------------------------------------------------------------------
+
+interface PlanItem {
+  uid: string;
+  planUid: string;
+  title: string;
+  body: string;
+  kind: string;
+  status: string | null;
+  parentUid: string | null;
+  sortOrder: number;
+  assignee: string | null;
+  assigneeType: string | null;
+  template: string | null;
+  scopePath: string | null;
+  dependencies: string[];
+  progressPercent: number | null;
+  blockedReason: string | null;
+}
+
+const STATUSES = [
+  { key: 'pending', label: 'Pending', color: '#52525b' },
+  { key: 'in_progress', label: 'In Progress', color: '#22c55e' },
+  { key: 'assigned', label: 'Assigned', color: '#3b82f6' },
+  { key: 'blocked', label: 'Blocked', color: '#ef4444' },
+  { key: 'done', label: 'Done', color: '#3b82f6' },
+];
+
+function statusColor(status: string | null): string {
+  const found = STATUSES.find((s) => s.key === status);
+  return found?.color ?? '#52525b';
+}
+
+// --- Component ---------------------------------------------------------------
+
+export default function ItemDetailScreen() {
+  const { uid, planUid } = useLocalSearchParams<{ uid: string; planUid: string }>();
+  const router = useRouter();
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [item, setItem] = useState<PlanItem | null>(null);
+  const [children, setChildren] = useState<PlanItem[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+
+  const fetchItem = useCallback(async () => {
+    if (!uid) return;
+    try {
+      setError(null);
+      const result = await rpc<PlanItem>('plan.item.get', { uid });
+      setItem(result);
+
+      // Fetch children (subtasks)
+      if (planUid) {
+        const allItems = await rpc<PlanItem[]>('plan.items', { planUid });
+        setChildren(
+          allItems
+            .filter((i) => i.parentUid === uid)
+            .sort((a, b) => a.sortOrder - b.sortOrder),
+        );
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [uid, planUid]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchItem().finally(() => setLoading(false));
+  }, [fetchItem]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchItem();
+    setRefreshing(false);
+  }, [fetchItem]);
+
+  const updateStatus = useCallback(
+    async (newStatus: string) => {
+      if (!uid || !item) return;
+      setSaving(true);
+      setShowStatusPicker(false);
+      try {
+        const updated = await rpc<PlanItem>('plan.item.update', {
+          uid,
+          status: newStatus,
+        });
+        setItem(updated);
+      } catch (err: unknown) {
+        Alert.alert('Update failed', err instanceof Error ? err.message : String(err));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [uid, item],
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color="#3b82f6" size="large" />
+        <Text style={styles.loadingText}>Loading item...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorIcon}>!</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={fetchItem}>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!item) return null;
+
+  const currentStatus = item.status ?? 'pending';
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3b82f6" />
+      }
+    >
+      {/* Kind badge */}
+      <View style={styles.kindRow}>
+        <View style={styles.kindBadge}>
+          <Text style={styles.kindText}>{item.kind}</Text>
+        </View>
+        {item.template && (
+          <Text style={styles.templateText}>{item.template}</Text>
+        )}
+      </View>
+
+      {/* Title */}
+      <Text style={styles.title}>{item.title}</Text>
+
+      {/* Status picker */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>STATUS</Text>
+        <TouchableOpacity
+          style={styles.statusButton}
+          onPress={() => setShowStatusPicker(!showStatusPicker)}
+          disabled={saving}
+        >
+          <View style={[styles.statusDot, { backgroundColor: statusColor(currentStatus) }]} />
+          <Text style={styles.statusValue}>
+            {saving ? 'Saving...' : currentStatus.replace(/_/g, ' ')}
+          </Text>
+          <Text style={styles.statusChevron}>{showStatusPicker ? '^' : 'v'}</Text>
+        </TouchableOpacity>
+
+        {showStatusPicker && (
+          <View style={styles.statusPicker}>
+            {STATUSES.map((s) => (
+              <TouchableOpacity
+                key={s.key}
+                style={[
+                  styles.statusOption,
+                  s.key === currentStatus && styles.statusOptionActive,
+                ]}
+                onPress={() => updateStatus(s.key)}
+              >
+                <View style={[styles.statusDot, { backgroundColor: s.color }]} />
+                <Text
+                  style={[
+                    styles.statusOptionText,
+                    s.key === currentStatus && styles.statusOptionTextActive,
+                  ]}
+                >
+                  {s.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* Assignee */}
+      {item.assignee && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>ASSIGNEE</Text>
+          <View style={styles.assigneeRow}>
+            <Text style={styles.assigneeText}>{item.assignee}</Text>
+            {item.assigneeType && (
+              <Text style={styles.assigneeType}>{item.assigneeType}</Text>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Progress */}
+      {item.progressPercent != null && item.progressPercent > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>PROGRESS</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${item.progressPercent}%` }]} />
+          </View>
+          <Text style={styles.progressText}>{item.progressPercent}%</Text>
+        </View>
+      )}
+
+      {/* Blocked reason */}
+      {item.blockedReason && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>BLOCKED</Text>
+          <View style={styles.blockedCard}>
+            <Text style={styles.blockedText}>{item.blockedReason}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Description / Body */}
+      {item.body && item.body.trim().length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>DESCRIPTION</Text>
+          <View style={styles.bodyCard}>
+            <Text style={styles.bodyText}>{item.body}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Scope path */}
+      {item.scopePath && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>SCOPE</Text>
+          <Text style={styles.scopeText}>{item.scopePath}</Text>
+        </View>
+      )}
+
+      {/* Dependencies */}
+      {item.dependencies && item.dependencies.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>
+            DEPENDENCIES ({item.dependencies.length})
+          </Text>
+          {item.dependencies.map((depUid) => (
+            <TouchableOpacity
+              key={depUid}
+              style={styles.depCard}
+              onPress={() =>
+                router.push(`/item-detail?uid=${depUid}&planUid=${planUid}`)
+              }
+            >
+              <Text style={styles.depText} numberOfLines={1}>
+                {depUid}
+              </Text>
+              <Text style={styles.depAction}>View</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Subtasks / children */}
+      {children.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>SUBTASKS ({children.length})</Text>
+          {children.map((child) => (
+            <TouchableOpacity
+              key={child.uid}
+              style={styles.childCard}
+              activeOpacity={0.7}
+              onPress={() =>
+                router.push(`/item-detail?uid=${child.uid}&planUid=${planUid}`)
+              }
+            >
+              <View
+                style={[
+                  styles.childDot,
+                  { backgroundColor: statusColor(child.status) },
+                ]}
+              />
+              <View style={styles.childBody}>
+                <Text
+                  style={[
+                    styles.childTitle,
+                    (child.status === 'done' || child.status === 'completed') &&
+                      styles.childTitleDone,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {child.title}
+                </Text>
+                <Text style={styles.childMeta}>
+                  {(child.status ?? 'pending').replace(/_/g, ' ')}
+                  {child.assignee ? ` · ${child.assignee}` : ''}
+                </Text>
+              </View>
+              <Text style={styles.childChevron}>&gt;</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+// --- Styles ------------------------------------------------------------------
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#09090b',
+  },
+  content: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  center: {
+    flex: 1,
+    backgroundColor: '#09090b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  loadingText: {
+    color: '#71717a',
+    fontSize: 14,
+    marginTop: 12,
+  },
+  errorIcon: {
+    fontSize: 36,
+    color: '#ef4444',
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  errorText: {
+    color: '#a1a1aa',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryBtn: {
+    backgroundColor: '#3b82f620',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  retryText: {
+    color: '#3b82f6',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
+  // Kind badge
+  kindRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  kindBadge: {
+    backgroundColor: '#27272a',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  kindText: {
+    color: '#a1a1aa',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  templateText: {
+    color: '#52525b',
+    fontSize: 11,
+  },
+
+  // Title
+  title: {
+    color: '#e4e4e7',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 28,
+    marginBottom: 16,
+  },
+
+  // Sections
+  section: {
+    marginBottom: 20,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    color: '#71717a',
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+
+  // Status
+  statusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  statusValue: {
+    color: '#e4e4e7',
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+    textTransform: 'capitalize',
+  },
+  statusChevron: {
+    color: '#52525b',
+    fontSize: 14,
+  },
+  statusPicker: {
+    marginTop: 6,
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#27272a',
+    overflow: 'hidden',
+  },
+  statusOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#27272a',
+  },
+  statusOptionActive: {
+    backgroundColor: '#3b82f610',
+  },
+  statusOptionText: {
+    color: '#a1a1aa',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  statusOptionTextActive: {
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+
+  // Assignee
+  assigneeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  assigneeText: {
+    color: '#e4e4e7',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  assigneeType: {
+    color: '#52525b',
+    fontSize: 12,
+  },
+
+  // Progress
+  progressBar: {
+    height: 6,
+    backgroundColor: '#27272a',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#3b82f6',
+    borderRadius: 3,
+  },
+  progressText: {
+    color: '#71717a',
+    fontSize: 12,
+  },
+
+  // Blocked
+  blockedCard: {
+    backgroundColor: '#1c1017',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ef444430',
+  },
+  blockedText: {
+    color: '#ef4444',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  // Body / description
+  bodyCard: {
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  bodyText: {
+    color: '#d4d4d8',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+
+  // Scope
+  scopeText: {
+    color: '#71717a',
+    fontSize: 13,
+    fontFamily: 'Menlo',
+  },
+
+  // Dependencies
+  depCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  depText: {
+    color: '#a1a1aa',
+    fontSize: 12,
+    fontFamily: 'Menlo',
+    flex: 1,
+  },
+  depAction: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+
+  // Children / subtasks
+  childCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  childDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  childBody: {
+    flex: 1,
+  },
+  childTitle: {
+    color: '#e4e4e7',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  childTitleDone: {
+    color: '#52525b',
+    textDecorationLine: 'line-through',
+  },
+  childMeta: {
+    color: '#52525b',
+    fontSize: 11,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  childChevron: {
+    color: '#52525b',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+});
