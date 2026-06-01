@@ -155,6 +155,7 @@
       }
     ],
     "asar": true,
+    "afterPack": "./scripts/adhoc-sign.js",
     "mac": {
       "target": [
         {
