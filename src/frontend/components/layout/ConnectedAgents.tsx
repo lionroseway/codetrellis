@@ -77,7 +77,7 @@ export function ConnectedAgents() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const active = sessions.filter((s) => s.status === 'active');
+  const active = (Array.isArray(sessions) ? sessions : []).filter((s) => s.status === 'active');
   const count = active.length;
 
   return (

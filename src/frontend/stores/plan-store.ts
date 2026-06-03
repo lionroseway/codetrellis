@@ -237,9 +237,16 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   },
 
   fetchSessions: async () => {
-    const res = await fetch('/api/sessions');
-    const sessions = await res.json();
-    set({ sessions });
+    // Guard: /api/sessions can return an error body (e.g. during project
+    // teardown). A non-array here would poison state and crash every
+    // `sessions.filter(...)` render via the error boundary.
+    try {
+      const res = await fetch('/api/sessions');
+      const data = await res.json();
+      set({ sessions: Array.isArray(data) ? data : [] });
+    } catch {
+      set({ sessions: [] });
+    }
   },
 
   fetchPlanDocs: async (planUid) => {

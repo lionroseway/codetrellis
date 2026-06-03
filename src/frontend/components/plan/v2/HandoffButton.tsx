@@ -149,7 +149,7 @@ export function HandoffButton() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const activeSessions = sessions.filter((s) => s.status === 'active');
+  const activeSessions = (Array.isArray(sessions) ? sessions : []).filter((s) => s.status === 'active');
   const items = Object.values(itemsByUid);
   const pendingActions = items.filter((i) => i.kind === 'action' && i.status === 'pending');
   const selectedItem = selectedItemUid ? itemsByUid[selectedItemUid] : null;

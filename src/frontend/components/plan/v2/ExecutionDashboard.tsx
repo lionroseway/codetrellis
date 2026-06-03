@@ -106,7 +106,7 @@ function ActiveTaskRow({ item }: { item: PlanItem }) {
  * Connected agents sidebar.
  */
 function ConnectedAgents({ sessions }: { sessions: AgentSessionInfo[] }) {
-  const active = sessions.filter((s) => s.status === 'active');
+  const active = (Array.isArray(sessions) ? sessions : []).filter((s) => s.status === 'active');
 
   if (active.length === 0) {
     return (
@@ -220,7 +220,7 @@ export function ExecutionDashboard() {
       <Section
         title="Agents"
         icon={<Cpu size={11} className="text-green-400" />}
-        count={sessions.filter((s) => s.status === 'active').length}
+        count={(Array.isArray(sessions) ? sessions : []).filter((s) => s.status === 'active').length}
         expanded={expandedSections.has('agents')}
         onToggle={() => toggleSection('agents')}
       >
