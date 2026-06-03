@@ -50,16 +50,42 @@ let counter = 0;
  */
 const RING_BUFFER_MAX_BYTES = 64 * 1024; // 64 KB per session
 const outputBuffers = new Map<string, string>();
+/** Monotonic total bytes ever written per session (for delta streaming). */
+const bufferTotals = new Map<string, number>();
 
 function appendToBuffer(id: string, data: string): void {
   const existing = outputBuffers.get(id) ?? '';
   const combined = existing + data;
+  bufferTotals.set(id, (bufferTotals.get(id) ?? 0) + data.length);
   // Trim from the front if over budget
   if (combined.length > RING_BUFFER_MAX_BYTES) {
     outputBuffers.set(id, combined.slice(combined.length - RING_BUFFER_MAX_BYTES));
   } else {
     outputBuffers.set(id, combined);
   }
+}
+
+/**
+ * Read incremental raw output since a byte offset, for streaming into a
+ * terminal emulator (xterm). Returns the raw bytes (ANSI intact) appended
+ * since `since`, the new monotonic total, and whether the caller must
+ * reset first (gap — `since` predates the ring buffer, or first read).
+ */
+export function readTerminalDelta(
+  id: string,
+  since?: number,
+): { data: string; total: number; reset: boolean } | null {
+  const buf = outputBuffers.get(id);
+  if (buf === undefined) return null;
+  const total = bufferTotals.get(id) ?? buf.length;
+  const bufStart = total - buf.length; // total-offset of buf[0]
+  if (since == null || since < bufStart) {
+    return { data: buf, total, reset: true };
+  }
+  if (since >= total) {
+    return { data: '', total, reset: false };
+  }
+  return { data: buf.slice(since - bufStart), total, reset: false };
 }
 
 /**

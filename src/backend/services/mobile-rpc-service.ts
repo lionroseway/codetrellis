@@ -275,6 +275,23 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return { output };
     }
 
+    case 'terminal.stream': {
+      // Incremental raw output since a byte offset, for feeding xterm.js.
+      const id = requireString(params, 'id');
+      const since = typeof params.since === 'number' ? (params.since as number) : undefined;
+      const delta = terminalService.readTerminalDelta(id, since);
+      if (delta === null) throw new Error(`Terminal not found: ${id}`);
+      return delta; // { data, total, reset }
+    }
+
+    case 'terminal.resize': {
+      const id = requireString(params, 'id');
+      const cols = (params.cols as number) ?? 80;
+      const rows = (params.rows as number) ?? 24;
+      const ok = terminalService.resizeTerminal(id, cols, rows);
+      return { ok };
+    }
+
     // --- Channel events ------------------------------------------------------
     case 'channel.events': {
       const planUid = requireString(params, 'planUid');
