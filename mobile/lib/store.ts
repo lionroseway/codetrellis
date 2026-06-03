@@ -62,6 +62,41 @@ const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   deviationCounts: { pending: 0, byPlan: [] },
 };
 
+// --- Dedupe helper -----------------------------------------------------------
+
+/**
+ * Defensively dedupe the identity-keyed arrays in a snapshot. RFC-6902
+ * array patches applied during a reconnect race can occasionally insert
+ * a duplicate entry, which then collides on the React key (and shows a
+ * redbox in dev). Deduping by the stable identity field keeps the UI
+ * consistent regardless of patch ordering.
+ */
+function dedupeSnapshot(s: WorkspaceSnapshot): WorkspaceSnapshot {
+  const uniq = <T>(arr: T[] | undefined, keyOf: (item: T) => string): T[] => {
+    if (!arr) return arr as unknown as T[];
+    const seen = new Set<string>();
+    const out: T[] = [];
+    for (const item of arr) {
+      const k = keyOf(item);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(item);
+    }
+    return out.length === arr.length ? arr : out;
+  };
+
+  return {
+    ...s,
+    plans: uniq(s.plans, (p) => p.uid),
+    channelEvents: uniq(s.channelEvents, (e) => e.uid),
+    agents: uniq(s.agents, (a) => a.sessionId),
+    presence: uniq(s.presence, (c) => c.id),
+    terminals: uniq(s.terminals, (t) => t.id),
+    recentProjects: uniq(s.recentProjects, (p) => p.path),
+    pendingInputRequests: uniq(s.pendingInputRequests, (r) => r.requestId),
+  };
+}
+
 // --- Store -------------------------------------------------------------------
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -76,7 +111,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ connectionState, connectedFingerprint }),
 
   applySnapshot: (snapshot) =>
-    set({ snapshot, lastSnapshotAt: Date.now() }),
+    set({ snapshot: dedupeSnapshot(snapshot), lastSnapshotAt: Date.now() }),
 
   applyPatch: (patch) => {
     const current = get().snapshot;
@@ -85,7 +120,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     try {
       const cloned = JSON.parse(JSON.stringify(current));
       const result = applyPatch(cloned, patch);
-      set({ snapshot: result.newDocument as WorkspaceSnapshot, lastSnapshotAt: Date.now() });
+      set({ snapshot: dedupeSnapshot(result.newDocument as WorkspaceSnapshot), lastSnapshotAt: Date.now() });
     } catch (err) {
       console.warn('[Store] Patch application failed — requesting resync:', err);
       // The connection manager should handle resync; we just drop the patch

@@ -119,6 +119,7 @@ export interface PlanSummary {
   uid: string;
   name: string;
   status: string;
+  projectPath: string;
   itemCount: number;
   doneCount: number;
   inProgressCount: number;
@@ -215,6 +216,116 @@ export interface WorkspaceSnapshot {
   pendingInputRequests: InputRequestSummary[];
   walkthroughActive: boolean;
   deviationCounts: DeviationCountsSummary;
+}
+
+// --- Graph (M4) --------------------------------------------------------------
+
+/** Architecture overview returned by graph.overview RPC. */
+export interface GraphOverview {
+  fileCount: number;
+  symbolCount: number;
+  importCount: number;
+  topDirectories: Array<{ dir: string; fileCount: number }>;
+  languageBreakdown: Array<{ language: string; count: number }>;
+  symbolsByKind: Array<{ kind: string; count: number }>;
+  mostImported: Array<{ path: string; importerCount: number }>;
+}
+
+/** File entry returned by graph.directory RPC. */
+export interface GraphFileEntry {
+  path: string;
+  relativePath: string;
+  language: string;
+  symbolCount: number;
+  importCount: number;
+  importedByCount: number;
+}
+
+/** Directory listing returned by graph.directory RPC. */
+export interface GraphDirectoryListing {
+  dir: string;
+  files: GraphFileEntry[];
+  subdirectories: Array<{ name: string; fileCount: number }>;
+}
+
+/** Symbol in a file returned by graph.file RPC. */
+export interface GraphSymbol {
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+  modifiers: string[];
+}
+
+/** A cross-system coupling edge (HTTP / SQL / subprocess) touching a file. */
+export interface CrossSystemRef {
+  path: string;
+  relativePath: string;
+  protocol: string;
+  label: string;
+}
+
+/** File detail returned by graph.file RPC. */
+export interface GraphFileDetail {
+  filePath: string;
+  language: string;
+  symbols: GraphSymbol[];
+  imports: Array<{ path: string; relativePath: string; specifiers: string[] }>;
+  importedBy: Array<{ path: string; relativePath: string; specifiers: string[] }>;
+  /** Outgoing cross-system calls (this file → another service/route). */
+  crossSystemOut: CrossSystemRef[];
+  /** Incoming cross-system calls (another file → a route/query here). */
+  crossSystemIn: CrossSystemRef[];
+}
+
+/** Search result returned by graph.search RPC. */
+export interface GraphSearchResult {
+  name: string;
+  kind: string;
+  filePath: string;
+  relativePath: string;
+  startLine: number;
+  endLine: number;
+}
+
+// --- Changes / diff (M6) -----------------------------------------------------
+
+/** Git working-tree status (from `git status --porcelain`). */
+export interface GitWorkingTreeStatus {
+  staged: string[];
+  unstaged: string[];
+  untracked: string[];
+  stagedAdded: string[];
+  stagedModified: string[];
+  stagedDeleted: string[];
+  unstagedModified: string[];
+  unstagedDeleted: string[];
+  commitHash: string | null;
+  shortCommitHash: string | null;
+}
+
+/** Architectural diff vs the captured baseline. */
+export interface ArchDiff {
+  addedFiles: string[];
+  removedFiles: string[];
+  modifiedFiles: string[];
+  blastRadius: string[];
+  summary: {
+    added: number;
+    removed: number;
+    modified: number;
+    edgesAdded: number;
+    edgesRemoved: number;
+  };
+}
+
+/** Changes summary returned by changes.summary RPC. */
+export interface ChangesSummary {
+  hasBaseline: boolean;
+  git: GitWorkingTreeStatus | null;
+  arch: ArchDiff | null;
+  /** Deduped union of changed relative paths (for badging the graph). */
+  changedFiles: string[];
 }
 
 // --- WebView bridge ----------------------------------------------------------

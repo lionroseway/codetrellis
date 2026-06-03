@@ -45,65 +45,73 @@ export function startDiscovery(): void {
   if (browsing) return;
 
   try {
-    // Lazy-load to avoid crash if native module missing
+    // Lazy-load to avoid crash if native module missing.
+    // In Expo Go the JS package loads fine but the native bridge
+    // is absent, so *any* call into the native module throws.
+    // Wrap the entire setup in one big try/catch.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Zeroconf = require('react-native-zeroconf').default;
-    zeroconfInstance = new Zeroconf();
-  } catch (err) {
-    console.warn('[Discovery] react-native-zeroconf not available:', err);
-    return;
-  }
-
-  zeroconfInstance.on('resolved', (service: any) => {
-    const txt = service.txt ?? {};
-    const instanceId = txt.instanceId || service.name || '';
-    const deviceName = txt.deviceName || service.name || 'Unknown';
-    const fingerprint = txt.fingerprint || '';
-    const mobileApiPort = parseInt(txt.mobileApiPort || String(service.port), 10) || 19480;
-
-    // Pick the first IPv4 address
-    const addresses: string[] = service.addresses ?? [];
-    const address = addresses.find((a: string) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? addresses[0] ?? '';
-
-    if (!address) return;
-
-    const desktop: DiscoveredDesktop = {
-      instanceId,
-      deviceName,
-      address,
-      mobileApiPort,
-      fingerprint,
-      lastSeen: new Date(),
-    };
-
-    console.log(`[Discovery] Found: "${deviceName}" at ${address}:${mobileApiPort}`);
-    discovered.set(instanceId, desktop);
-    notifyListeners();
-
-    // Auto-update stored paired desktops with fresh address + port
-    updatePairedDesktops(desktop);
-  });
-
-  zeroconfInstance.on('removed', (name: string) => {
-    // Try to find by name suffix match
-    for (const [id, d] of discovered) {
-      if (name.includes(id) || name.includes(d.deviceName)) {
-        console.log(`[Discovery] Lost: "${d.deviceName}"`);
-        discovered.delete(id);
-        notifyListeners();
-        break;
-      }
+    if (!Zeroconf) {
+      console.warn('[Discovery] react-native-zeroconf default export is null');
+      return;
     }
-  });
+    zeroconfInstance = new Zeroconf();
 
-  zeroconfInstance.on('error', (err: any) => {
-    console.warn('[Discovery] Error:', err);
-  });
+    if (!zeroconfInstance) {
+      console.warn('[Discovery] Zeroconf instance is null');
+      return;
+    }
 
-  // Browse for _codetrellis._tcp services
-  zeroconfInstance.scan('codetrellis', 'tcp', 'local.');
-  browsing = true;
-  console.log('[Discovery] Browsing for _codetrellis._tcp');
+    zeroconfInstance.on('resolved', (service: any) => {
+      const txt = service.txt ?? {};
+      const instanceId = txt.instanceId || service.name || '';
+      const deviceName = txt.deviceName || service.name || 'Unknown';
+      const fingerprint = txt.fingerprint || '';
+      const mobileApiPort = parseInt(txt.mobileApiPort || String(service.port), 10) || 19480;
+
+      const addresses: string[] = service.addresses ?? [];
+      const address = addresses.find((a: string) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? addresses[0] ?? '';
+      if (!address) return;
+
+      const desktop: DiscoveredDesktop = {
+        instanceId,
+        deviceName,
+        address,
+        mobileApiPort,
+        fingerprint,
+        lastSeen: new Date(),
+      };
+
+      console.log(`[Discovery] Found: "${deviceName}" at ${address}:${mobileApiPort}`);
+      discovered.set(instanceId, desktop);
+      notifyListeners();
+      updatePairedDesktops(desktop);
+    });
+
+    zeroconfInstance.on('removed', (name: string) => {
+      for (const [id, d] of discovered) {
+        if (name.includes(id) || name.includes(d.deviceName)) {
+          console.log(`[Discovery] Lost: "${d.deviceName}"`);
+          discovered.delete(id);
+          notifyListeners();
+          break;
+        }
+      }
+    });
+
+    zeroconfInstance.on('error', (err: any) => {
+      console.warn('[Discovery] Error:', err);
+    });
+
+    zeroconfInstance.scan('codetrellis', 'tcp', 'local.');
+    browsing = true;
+    console.log('[Discovery] Browsing for _codetrellis._tcp');
+  } catch (err) {
+    // In Expo Go or when native module is missing, any of the above
+    // can throw. Silently degrade — discovery is not essential.
+    console.warn('[Discovery] Not available (native module missing):', err);
+    zeroconfInstance = null;
+  }
 }
 
 /**

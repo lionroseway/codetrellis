@@ -182,7 +182,13 @@ export default function HomeTab() {
           {pendingInputs.length > 0 && (
             <TouchableOpacity
               style={[styles.attentionCard, styles.attentionInput]}
-              onPress={() => router.push('/(tabs)/terminals')}
+              onPress={() => {
+                if (pendingInputs.length === 1) {
+                  router.push(`/input-request?requestId=${pendingInputs[0].requestId}`);
+                } else {
+                  router.push('/(tabs)/activity');
+                }
+              }}
             >
               <Text style={styles.attentionIcon}>&gt;</Text>
               <View style={styles.attentionBody}>

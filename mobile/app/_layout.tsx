@@ -71,6 +71,28 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="graph-file-detail"
+          options={{
+            title: 'File',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
+          name="input-request"
+          options={{
+            title: 'Input Request',
+            presentation: 'modal',
+            headerStyle: { backgroundColor: '#111113' },
+          }}
+        />
+        <Stack.Screen
+          name="changes"
+          options={{
+            title: 'Changes',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
           name="connection-switcher"
           options={{
             title: 'Connections',

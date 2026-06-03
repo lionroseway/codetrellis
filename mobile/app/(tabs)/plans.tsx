@@ -1,9 +1,13 @@
 /**
- * Plans tab — plan list with progress bars and status filters.
+ * Plans tab — plan list with progress bars, status filters, and
+ * project scope filter.
  *
  * Shows all plans from the workspace snapshot. Each plan card
  * displays name, status, item counts, and a progress bar.
- * Filter chips at the top: All / Active / Draft / Completed.
+ *
+ * Project scope chips: All / per-project (derived from unique
+ * project paths in the plans list + active project).
+ * Status filter chips: All / Active / Draft / Completed.
  */
 
 import { useState, useMemo } from 'react';
@@ -15,11 +19,11 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { usePlans, useDeviationCounts } from '../../lib/store';
+import { usePlans, useDeviationCounts, useActiveProject } from '../../lib/store';
 
 type StatusFilter = 'all' | 'active' | 'draft' | 'completed';
 
-const FILTERS: { key: StatusFilter; label: string }[] = [
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'active', label: 'Active' },
   { key: 'draft', label: 'Draft' },
@@ -34,15 +38,43 @@ function matchesFilter(status: string, filter: StatusFilter): boolean {
   return true;
 }
 
+/** Extract the last path component as a short project name. */
+function shortName(path: string): string {
+  return path.split('/').pop() || path;
+}
+
 export default function PlansTab() {
   const router = useRouter();
   const plans = usePlans();
   const deviationCounts = useDeviationCounts();
-  const [filter, setFilter] = useState<StatusFilter>('all');
+  const activeProject = useActiveProject();
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // Project scope: 'all' or a projectPath string.
+  // Default to active project if there is one.
+  const [projectScope, setProjectScope] = useState<'all' | string>(
+    activeProject?.path ?? 'all',
+  );
+
+  // Derive unique projects from the plans list for scope chips
+  const projectChips = useMemo(() => {
+    const paths = new Set<string>();
+    for (const p of plans) {
+      if (p.projectPath) paths.add(p.projectPath);
+    }
+    return [...paths].sort().map((path) => ({
+      path,
+      name: shortName(path),
+    }));
+  }, [plans]);
 
   const filteredPlans = useMemo(
-    () => plans.filter((p) => matchesFilter(p.status, filter)),
-    [plans, filter],
+    () =>
+      plans
+        .filter((p) => matchesFilter(p.status, statusFilter))
+        .filter((p) =>
+          projectScope === 'all' ? true : p.projectPath === projectScope,
+        ),
+    [plans, statusFilter, projectScope],
   );
 
   // Build a quick lookup for deviation counts per plan
@@ -56,21 +88,68 @@ export default function PlansTab() {
 
   return (
     <View style={styles.container}>
-      {/* Filter chips */}
+      {/* Project scope chips */}
+      {projectChips.length > 1 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+          style={styles.projectScroll}
+        >
+          <TouchableOpacity
+            style={[styles.chip, projectScope === 'all' && styles.chipActive]}
+            onPress={() => setProjectScope('all')}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                projectScope === 'all' && styles.chipTextActive,
+              ]}
+            >
+              All projects
+            </Text>
+          </TouchableOpacity>
+          {projectChips.map((pc) => (
+            <TouchableOpacity
+              key={pc.path}
+              style={[
+                styles.chip,
+                projectScope === pc.path && styles.chipActive,
+              ]}
+              onPress={() => setProjectScope(pc.path)}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  projectScope === pc.path && styles.chipTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {pc.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Status filter chips */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterRow}
         style={styles.filterScroll}
       >
-        {FILTERS.map((f) => (
+        {STATUS_FILTERS.map((f) => (
           <TouchableOpacity
             key={f.key}
-            style={[styles.chip, filter === f.key && styles.chipActive]}
-            onPress={() => setFilter(f.key)}
+            style={[styles.chip, statusFilter === f.key && styles.chipActive]}
+            onPress={() => setStatusFilter(f.key)}
           >
             <Text
-              style={[styles.chipText, filter === f.key && styles.chipTextActive]}
+              style={[
+                styles.chipText,
+                statusFilter === f.key && styles.chipTextActive,
+              ]}
             >
               {f.label}
             </Text>
@@ -114,6 +193,13 @@ export default function PlansTab() {
                   <Text style={styles.planChevron}>&gt;</Text>
                 </View>
 
+                {/* Show project name when viewing all projects */}
+                {projectScope === 'all' && plan.projectPath && (
+                  <Text style={styles.planProject} numberOfLines={1}>
+                    {shortName(plan.projectPath)}
+                  </Text>
+                )}
+
                 <Text style={styles.planMeta}>
                   {plan.doneCount}/{plan.itemCount} items done
                   {plan.inProgressCount > 0 &&
@@ -137,7 +223,7 @@ export default function PlansTab() {
             <Text style={styles.emptyText}>
               {plans.length === 0
                 ? 'No plans on the desktop yet'
-                : `No ${filter} plans`}
+                : `No matching plans`}
             </Text>
           </View>
         )}
@@ -152,7 +238,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#09090b',
   },
 
-  // Filters
+  // Project scope chips
+  projectScroll: {
+    flexGrow: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#27272a',
+  },
+
+  // Status filters
   filterScroll: {
     flexGrow: 0,
     borderBottomWidth: 1,
@@ -171,6 +264,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#18181b',
     borderWidth: 1,
     borderColor: '#27272a',
+    maxWidth: 160,
   },
   chipActive: {
     backgroundColor: '#3b82f620',
@@ -219,6 +313,11 @@ const styles = StyleSheet.create({
     color: '#52525b',
     fontSize: 14,
     marginLeft: 8,
+  },
+  planProject: {
+    color: '#52525b',
+    fontSize: 11,
+    marginBottom: 4,
   },
   statusBadge: {
     paddingHorizontal: 8,

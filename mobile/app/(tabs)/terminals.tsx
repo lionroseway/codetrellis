@@ -6,7 +6,7 @@
  * (detail view comes in M3).
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,11 +32,39 @@ function formatAge(ts: number): string {
 
 export default function TerminalsTab() {
   const router = useRouter();
-  const terminals = useTerminals();
+  const rawTerminals = useTerminals();
   const pendingInputs = usePendingInputRequests();
+
+  // Dedupe by id — state-sync patches can occasionally duplicate an array
+  // entry, which would otherwise collide on the React key.
+  const terminals = useMemo(() => {
+    const seen = new Set<string>();
+    return rawTerminals.filter((t) => {
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+  }, [rawTerminals]);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const [responseText, setResponseText] = useState('');
   const [sending, setSending] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = useCallback(async () => {
+    setCreating(true);
+    try {
+      const term = await rpc<{ id: string; title?: string }>('terminal.create', {
+        preset: 'shell',
+      });
+      router.push(
+        `/terminal-detail?id=${encodeURIComponent(term.id)}&title=${encodeURIComponent(term.title || 'Terminal')}`,
+      );
+    } catch (err: unknown) {
+      Alert.alert('Could not create terminal', err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
+  }, [router]);
 
   const handleRespond = useCallback(async (requestId: string, response: string) => {
     setSending(true);
@@ -123,9 +151,18 @@ export default function TerminalsTab() {
 
       {/* Terminal list */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          TERMINALS ({terminals.length})
-        </Text>
+        <View style={styles.termHeaderRow}>
+          <Text style={styles.sectionTitle}>
+            TERMINALS ({terminals.length})
+          </Text>
+          <TouchableOpacity
+            style={[styles.newTermBtn, creating && styles.newTermBtnDisabled]}
+            onPress={handleCreate}
+            disabled={creating}
+          >
+            <Text style={styles.newTermBtnText}>{creating ? 'Starting…' : '+ New'}</Text>
+          </TouchableOpacity>
+        </View>
 
         {terminals.length > 0 ? (
           terminals.map((term) => (
@@ -166,8 +203,17 @@ export default function TerminalsTab() {
             <Text style={styles.emptyIcon}>&gt;_</Text>
             <Text style={styles.emptyText}>No terminals running</Text>
             <Text style={styles.emptySubtext}>
-              Start a terminal on the desktop to see it here
+              Start one here, or launch a terminal on the desktop.
             </Text>
+            <TouchableOpacity
+              style={[styles.emptyCreateBtn, creating && styles.newTermBtnDisabled]}
+              onPress={handleCreate}
+              disabled={creating}
+            >
+              <Text style={styles.emptyCreateText}>
+                {creating ? 'Starting…' : '+ New Terminal'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -194,6 +240,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 10,
+  },
+  termHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  newTermBtn: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  newTermBtnDisabled: {
+    opacity: 0.5,
+  },
+  newTermBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyCreateBtn: {
+    marginTop: 16,
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 10,
+  },
+  emptyCreateText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   // Input request cards

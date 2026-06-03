@@ -34,11 +34,51 @@ export default function HomeScreen() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [connectedFingerprint, setConnectedFingerprint] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Reachability: is CodeTrellis actually running/reachable on each desktop?
+  // fingerprint → true (available) / false (offline). Probed via the desktop's
+  // mobile-API health endpoint so "Offline" means the app isn't running, vs
+  // "Available" when it's up but we just haven't connected over WebRTC yet.
+  const [reachable, setReachable] = useState<Record<string, boolean>>({});
 
   const loadDevices = useCallback(async () => {
     const loaded = await loadPairedDesktops();
     setDevices(loaded);
   }, []);
+
+  // Probe each paired desktop's mobile-API /status endpoint (short timeout).
+  const probeDevices = useCallback(async (devs: PairedDesktop[]) => {
+    const results = await Promise.all(
+      devs.map(async (d) => {
+        const addr = d.lastKnownAddress;
+        const port = d.lastKnownPort || 19480;
+        if (!addr) return [d.fingerprint, false] as const;
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 2500);
+          const res = await fetch(`http://${addr}:${port}/api/mobile/status`, {
+            signal: ctrl.signal,
+          });
+          clearTimeout(timer);
+          return [d.fingerprint, res.ok] as const;
+        } catch {
+          return [d.fingerprint, false] as const;
+        }
+      }),
+    );
+    setReachable((prev) => {
+      const next = { ...prev };
+      for (const [fp, ok] of results) next[fp] = ok;
+      return next;
+    });
+  }, []);
+
+  // Probe on device-list change + every 6s while on this screen.
+  useEffect(() => {
+    if (devices.length === 0) return;
+    probeDevices(devices);
+    const iv = setInterval(() => probeDevices(devices), 6000);
+    return () => clearInterval(iv);
+  }, [devices, probeDevices]);
 
   // Reload devices every time the screen gains focus
   useFocusEffect(
@@ -127,6 +167,15 @@ export default function HomeScreen() {
   const renderDevice = ({ item }: { item: PairedDesktop }) => {
     const isConnected = connectedFingerprint === item.fingerprint;
     const isConnecting = connectionState === 'connecting' && !isConnected;
+    // 3-state: Live (WebRTC connected) → Available (reachable, not connected)
+    // → Offline (CodeTrellis not running / unreachable).
+    const isAvailable = !isConnected && reachable[item.fingerprint] === true;
+    const statusKind: 'live' | 'available' | 'offline' = isConnected
+      ? 'live'
+      : isAvailable
+        ? 'available'
+        : 'offline';
+    const statusLabel = isConnected ? 'Live' : isAvailable ? 'Available' : 'Offline';
 
     return (
       <TouchableOpacity
@@ -152,24 +201,32 @@ export default function HomeScreen() {
             <Text style={styles.deviceMeta}>
               {isConnected
                 ? 'Connected now'
-                : item.lastConnected
-                  ? `Last seen ${formatRelative(item.lastConnected)}`
-                  : 'Never connected'}
+                : isAvailable
+                  ? 'Running — tap Connect'
+                  : item.lastConnected
+                    ? `Last seen ${formatRelative(item.lastConnected)}`
+                    : 'Never connected'}
             </Text>
           </View>
           <View style={[
             styles.statusIndicator,
-            isConnected ? styles.statusConnected : styles.statusOffline,
+            statusKind === 'live' && styles.statusConnected,
+            statusKind === 'available' && styles.statusAvailable,
+            statusKind === 'offline' && styles.statusOffline,
           ]}>
             <View style={[
               styles.statusDot,
-              isConnected ? styles.statusDotConnected : styles.statusDotOffline,
+              statusKind === 'live' && styles.statusDotConnected,
+              statusKind === 'available' && styles.statusDotAvailable,
+              statusKind === 'offline' && styles.statusDotOffline,
             ]} />
             <Text style={[
               styles.statusText,
-              isConnected ? styles.statusTextConnected : styles.statusTextOffline,
+              statusKind === 'live' && styles.statusTextConnected,
+              statusKind === 'available' && styles.statusTextAvailable,
+              statusKind === 'offline' && styles.statusTextOffline,
             ]}>
-              {isConnected ? 'Live' : 'Offline'}
+              {statusLabel}
             </Text>
           </View>
         </View>
@@ -424,6 +481,9 @@ const styles = StyleSheet.create({
   statusConnected: {
     backgroundColor: 'rgba(34, 197, 94, 0.12)',
   },
+  statusAvailable: {
+    backgroundColor: 'rgba(59, 130, 246, 0.14)',
+  },
   statusOffline: {
     backgroundColor: 'rgba(113, 113, 122, 0.12)',
   },
@@ -435,6 +495,9 @@ const styles = StyleSheet.create({
   statusDotConnected: {
     backgroundColor: '#22c55e',
   },
+  statusDotAvailable: {
+    backgroundColor: '#3b82f6',
+  },
   statusDotOffline: {
     backgroundColor: '#52525b',
   },
@@ -444,6 +507,9 @@ const styles = StyleSheet.create({
   },
   statusTextConnected: {
     color: '#22c55e',
+  },
+  statusTextAvailable: {
+    color: '#3b82f6',
   },
   statusTextOffline: {
     color: '#71717a',
