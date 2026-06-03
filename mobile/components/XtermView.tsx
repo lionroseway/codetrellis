@@ -16,6 +16,7 @@
 import { forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { StyleSheet } from 'react-native';
+import { TERMINAL_HTML } from './xterm-bundle';
 
 export interface XtermHandle {
   write: (data: string) => void;
@@ -29,71 +30,6 @@ interface XtermViewProps {
   onResize?: (cols: number, rows: number) => void;
 }
 
-const XTERM_VERSION = '5.5.0';
-const FIT_VERSION = '0.10.0';
-
-const HTML = `<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@${XTERM_VERSION}/css/xterm.css">
-<style>
-  html, body { height: 100%; margin: 0; background: #0a0a0c; overflow: hidden; }
-  #t { height: 100%; width: 100%; padding: 6px; box-sizing: border-box; }
-  .xterm-viewport::-webkit-scrollbar { width: 0; height: 0; }
-  #err { color:#ef4444; font:12px Menlo,monospace; padding:12px; }
-</style>
-</head>
-<body>
-  <div id="t"></div>
-  <div id="err"></div>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@${XTERM_VERSION}/lib/xterm.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@${FIT_VERSION}/lib/addon-fit.js"></script>
-  <script>
-    function post(m){ try { window.ReactNativeWebView.postMessage(JSON.stringify(m)); } catch(e){} }
-    function boot() {
-      if (typeof Terminal === 'undefined') {
-        document.getElementById('err').textContent = 'Could not load terminal renderer (offline?).';
-        post({ type: 'error', message: 'xterm failed to load' });
-        return;
-      }
-      var term = new Terminal({
-        fontSize: 12,
-        fontFamily: 'Menlo, Monaco, monospace',
-        cursorBlink: true,
-        scrollback: 4000,
-        theme: {
-          background: '#0a0a0c', foreground: '#d4d4d8', cursor: '#3b82f6',
-          black: '#3f3f46', red: '#ef4444', green: '#22c55e', yellow: '#eab308',
-          blue: '#3b82f6', magenta: '#a855f7', cyan: '#06b6d4', white: '#d4d4d8',
-          brightBlack: '#71717a', brightRed: '#f87171', brightGreen: '#4ade80',
-          brightYellow: '#facc15', brightBlue: '#60a5fa', brightMagenta: '#c084fc',
-          brightCyan: '#22d3ee', brightWhite: '#fafafa',
-        },
-      });
-      var fit = new FitAddon.FitAddon();
-      term.loadAddon(fit);
-      term.open(document.getElementById('t'));
-      function doFit(){
-        try { fit.fit(); post({ type: 'resize', cols: term.cols, rows: term.rows }); } catch(e){}
-      }
-      term.onData(function(d){ post({ type: 'data', data: d }); });
-      window.addEventListener('resize', doFit);
-      window.__recv = function(json){
-        try {
-          var m = JSON.parse(json);
-          if (m.type === 'write') term.write(m.data);
-          else if (m.type === 'reset') term.reset();
-          else if (m.type === 'fit') doFit();
-        } catch(e){}
-      };
-      setTimeout(doFit, 60);
-      post({ type: 'ready' });
-    }
-    boot();
-  </script>
-</body>
-</html>`;
 
 const XtermView = forwardRef<XtermHandle, XtermViewProps>(function XtermView(
   { onReady, onData, onResize },
@@ -126,7 +62,7 @@ const XtermView = forwardRef<XtermHandle, XtermViewProps>(function XtermView(
   return (
     <WebView
       ref={webRef}
-      source={{ html: HTML }}
+      source={{ html: TERMINAL_HTML }}
       style={styles.web}
       originWhitelist={['*']}
       onMessage={handleMessage}
@@ -139,8 +75,8 @@ const XtermView = forwardRef<XtermHandle, XtermViewProps>(function XtermView(
       hideKeyboardAccessoryView
       setBuiltInZoomControls={false}
       automaticallyAdjustContentInsets={false}
-      // Block accidental navigations away from the terminal
-      onShouldStartLoadWithRequest={(req) => req.url.startsWith('about:') || req.url.startsWith('data:') || req.url.includes('jsdelivr')}
+      // Fully offline — only the inlined document loads; block any navigation.
+      onShouldStartLoadWithRequest={(req) => req.url.startsWith('about:') || req.url.startsWith('data:')}
     />
   );
 });
