@@ -3647,6 +3647,27 @@ export async function initializeBackend(): Promise<void> {
     console.warn('[Backend] Project watcher re-arm failed:', err);
   }
 
+  // Restore the active project on boot. The frontend restores the project
+  // VIEW from the persisted DB but never re-scans, so the backend's
+  // `lastScannedProject` stayed null after a restart — making
+  // getActiveProjectPath() (and thus the mobile snapshot / RPC) report
+  // "No project scanned" even though a project is clearly open. Point it at
+  // the most-recently-opened project that still exists on disk.
+  try {
+    if (!lastScannedProject) {
+      const recent = [...listRecentProjects()].sort(
+        (a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0),
+      );
+      const restore = recent.find((p) => p.path && fs.existsSync(p.path));
+      if (restore) {
+        lastScannedProject = restore.path;
+        console.log(`[Backend] Restored active project: ${restore.path}`);
+      }
+    }
+  } catch (err) {
+    console.warn('[Backend] Active-project restore failed:', err);
+  }
+
   // Start MCP server for agent integration. The MCP server keeps
   // its own TCP port (default 19432) because external agents need
   // a stable URL to put in their MCP config — that's the only

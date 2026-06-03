@@ -35,8 +35,40 @@ function loadSqlJs(): typeof import('sql.js').default {
 const initSqlJs = loadSqlJs();
 
 let db: Database | null = null;
+let reinitInFlight = false;
+let oobRecoveryInstalled = false;
+
+/**
+ * Re-initialise sql.js after a WASM fault ("memory access out of bounds").
+ * Spins up a FRESH Emscripten module and reloads from the persisted DB
+ * (which holds the full schema + data) — reusing initDatabase so recovery
+ * goes through the same tested path. Without this, one WASM fault wedges
+ * every DB endpoint until a full app restart.
+ */
+export async function reinitDatabase(): Promise<void> {
+  db = null;
+  await initDatabase();
+}
+
+/** Catch sql.js WASM faults process-wide and self-heal the database. */
+function installOobRecovery(): void {
+  if (oobRecoveryInstalled) return;
+  oobRecoveryInstalled = true;
+  process.on('uncaughtException', (err: unknown) => {
+    const msg = String((err as { message?: string })?.message ?? err);
+    if (msg.includes('memory access out of bounds') && !reinitInFlight) {
+      reinitInFlight = true;
+      console.error('[DB] sql.js WASM fault — re-initialising database…');
+      reinitDatabase()
+        .then(() => console.log('[DB] Recovered from WASM fault'))
+        .catch((e) => console.error('[DB] reinit failed:', e))
+        .finally(() => { reinitInFlight = false; });
+    }
+  });
+}
 
 export async function initDatabase(): Promise<void> {
+  installOobRecovery();
   if (db) return;
 
   // sql.js's `locateFile` callback tells the Emscripten loader where
