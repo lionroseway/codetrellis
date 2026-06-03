@@ -15,7 +15,12 @@ const path = require('path');
 const fs = require('fs');
 
 exports.default = async function afterPack(context) {
-  if (process.platform !== 'darwin') return;
+  // Bail unless we're building a macOS target. Was previously
+  // `process.platform !== 'darwin'`, which checks the HOST, not the
+  // TARGET — so cross-arch Win/Linux builds from a Mac host tried to
+  // xattr a .app that doesn't exist.
+  const target = context.electronPlatformName;
+  if (target !== 'darwin' && target !== 'mas') return;
 
   const appPath = path.join(
     context.appOutDir,
