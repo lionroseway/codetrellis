@@ -72,7 +72,7 @@ export default defineConfig({
         formats: ['cjs'],
       },
       rollupOptions: {
-        external: ['electron', 'sql.js', 'web-tree-sitter'],
+        external: ['electron', 'sql.js', 'web-tree-sitter', 'better-sqlite3'],
       },
       minify: false,
       commonjsOptions: {

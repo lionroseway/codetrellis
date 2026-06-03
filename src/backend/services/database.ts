@@ -2,99 +2,74 @@ import type { Database } from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
-import { loadFromDisk } from './persistence';
+import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
 
 /**
- * Dynamically load sql.js. Two paths:
- *   - **Dev / web mode**: `require('sql.js')` walks `node_modules`
- *     normally. The string is computed (`'sql' + '.js'`) so Vite's
- *     bundler doesn't statically resolve and try to bundle it — the
- *     Emscripten UMD wrapper breaks when bundled (see
- *     vite.main.config.ts).
- *   - **Packaged Electron**: Forge's `extraResource` copies
- *     `node_modules/sql.js/` to `<app>/Contents/Resources/sql.js/`;
- *     we resolve that absolute path and require it directly.
+ * Native SQLite via better-sqlite3, exposed through a thin
+ * sql.js-compatible shim (`run` / `exec` / `export` / `close`) so the
+ * ~290 existing call sites stay unchanged.
+ *
+ * Replaces sql.js (SQLite-in-WASM), which held the entire database in a
+ * fixed Emscripten heap and re-exported the whole DB to disk after every
+ * mutation — faulting with "memory access out of bounds" once the DB grew
+ * past tens of MB. better-sqlite3 is disk-backed (WAL): no memory ceiling,
+ * persists in place (no export churn), and far faster.
+ *
+ * Loaded via require (computed-free) + marked external in
+ * electron.vite.config so the native .node binary isn't bundled.
  */
-function loadSqlJs(): typeof import('sql.js').default {
-  const resourcesPath = (process as any).resourcesPath as string | undefined;
-  if (resourcesPath) {
-    const packagedPath = path.join(resourcesPath, 'sql.js', 'dist', 'sql-wasm.js');
-    if (fs.existsSync(packagedPath)) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return require(packagedPath);
-    }
-  }
-  // Computed string keeps Vite from bundling it during the main
-  // build (it gets externalized regardless, but belt and braces).
-  const sqlJsName = 'sql' + '.js';
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require(sqlJsName);
-}
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const BetterSqlite3: any = require('better-sqlite3');
 
-const initSqlJs = loadSqlJs();
-
+let bdb: any = null;
 let db: Database | null = null;
-let reinitInFlight = false;
-let oobRecoveryInstalled = false;
 
-/**
- * Re-initialise sql.js after a WASM fault ("memory access out of bounds").
- * Spins up a FRESH Emscripten module and reloads from the persisted DB
- * (which holds the full schema + data) — reusing initDatabase so recovery
- * goes through the same tested path. Without this, one WASM fault wedges
- * every DB endpoint until a full app restart.
- */
-export async function reinitDatabase(): Promise<void> {
-  db = null;
-  await initDatabase();
-}
-
-/** Catch sql.js WASM faults process-wide and self-heal the database. */
-function installOobRecovery(): void {
-  if (oobRecoveryInstalled) return;
-  oobRecoveryInstalled = true;
-  process.on('uncaughtException', (err: unknown) => {
-    const msg = String((err as { message?: string })?.message ?? err);
-    if (msg.includes('memory access out of bounds') && !reinitInFlight) {
-      reinitInFlight = true;
-      console.error('[DB] sql.js WASM fault — re-initialising database…');
-      reinitDatabase()
-        .then(() => console.log('[DB] Recovered from WASM fault'))
-        .catch((e) => console.error('[DB] reinit failed:', e))
-        .finally(() => { reinitInFlight = false; });
-    }
-  });
+/** A sql.js-shaped facade over a better-sqlite3 connection. */
+function makeShim(conn: any): Database {
+  return {
+    run(sql: string, params?: unknown[]): void {
+      if (params && params.length) {
+        conn.prepare(sql).run(...(params as any[]));
+      } else {
+        // No params → may be multi-statement DDL; exec() handles both.
+        conn.exec(sql);
+      }
+    },
+    exec(sql: string, params?: unknown[]): Array<{ columns: string[]; values: any[][] }> {
+      const stmt = conn.prepare(sql);
+      if (!stmt.reader) {
+        // Non-SELECT issued through exec() — run it, return no rows.
+        stmt.run(...((params as any[]) ?? []));
+        return [];
+      }
+      stmt.raw(true); // rows as arrays → matches sql.js `values: any[][]`
+      const values = stmt.all(...((params as any[]) ?? [])) as any[][];
+      if (values.length === 0) return [];
+      const columns = stmt.columns().map((c: { name: string }) => c.name);
+      return [{ columns, values }];
+    },
+    export(): Uint8Array {
+      return conn.serialize();
+    },
+    close(): void {
+      conn.close();
+    },
+  };
 }
 
 export async function initDatabase(): Promise<void> {
-  installOobRecovery();
   if (db) return;
 
-  // sql.js's `locateFile` callback tells the Emscripten loader where
-  // to find `sql-wasm.wasm`. In dev it lives next to sql-wasm.js
-  // inside node_modules; in production we point at the packaged
-  // resources path.
-  const resourcesPath = (process as any).resourcesPath as string | undefined;
-  const SQL = await initSqlJs({
-    locateFile: (file: string) => {
-      if (resourcesPath) {
-        const packaged = path.join(resourcesPath, 'sql.js', 'dist', file);
-        if (fs.existsSync(packaged)) return packaged;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return require.resolve(`sql.js/dist/${file}`);
-    },
-  });
-
-  // Try loading persisted database
-  const savedData = loadFromDisk();
-  if (savedData) {
-    db = new SQL.Database(savedData);
-    console.log('[DB] Loaded persisted database');
-  } else {
-    db = new SQL.Database();
-  }
+  ensureDataDir();
+  const dbPath = path.join(getDataDir(), 'data.db');
+  bdb = new BetterSqlite3(dbPath);
+  // WAL = concurrent reads + in-place durable writes (no full-DB export).
+  bdb.pragma('journal_mode = WAL');
+  bdb.pragma('synchronous = NORMAL');
+  bdb.pragma('busy_timeout = 5000');
+  db = makeShim(bdb);
+  console.log(`[DB] Opened native SQLite (better-sqlite3) at ${dbPath}`);
 
   // AST tables (ephemeral — rebuilt on scan)
   db.run(`

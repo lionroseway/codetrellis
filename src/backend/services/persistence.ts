@@ -89,17 +89,12 @@ export function loadFromDisk(): Uint8Array | null {
 }
 
 /**
- * Save database binary to disk atomically (write to .tmp, then rename).
+ * No-op since the migration to better-sqlite3: the database is disk-backed
+ * (WAL) and persists writes in place, so there's nothing to export+write.
+ * Kept for API compatibility with existing callers.
  */
-export function saveToDisk(data: Uint8Array): void {
-  ensureDataDir();
-  try {
-    fs.writeFileSync(getDbTmpPath(), data);
-    fs.renameSync(getDbTmpPath(), getDbPath());
-    dirty = false;
-  } catch (err) {
-    console.error('[Persistence] Failed to save database:', err);
-  }
+export function saveToDisk(_data?: Uint8Array): void {
+  dirty = false;
 }
 
 /**
@@ -114,25 +109,18 @@ export function markDirty(): void {
  * Start auto-saving the database at the given interval.
  * Only writes if dirty flag is set.
  */
-export function startAutoSave(exportFn: () => Uint8Array, intervalMs = 30000): void {
-  if (autoSaveInterval) clearInterval(autoSaveInterval);
-
-  autoSaveInterval = setInterval(() => {
-    if (dirty) {
-      saveToDisk(exportFn());
-      console.log('[Persistence] Auto-saved database');
-    }
-  }, intervalMs);
-
-  console.log(`[Persistence] Auto-save enabled (every ${intervalMs / 1000}s)`);
+export function startAutoSave(_exportFn: () => Uint8Array, _intervalMs = 30000): void {
+  // No-op since better-sqlite3: the DB is disk-backed (WAL) and
+  // auto-checkpoints, so there's no periodic full-DB export to schedule.
 }
 
 /**
- * Force save now (called on shutdown or after critical mutations).
+ * Force save now — no-op under better-sqlite3 (writes persist in place).
+ * Kept so the ~80 existing callers (saveNow(exportDatabase)) don't break
+ * and, crucially, no longer serialize the whole DB on every mutation.
  */
-export function saveNow(exportFn: () => Uint8Array): void {
-  saveToDisk(exportFn());
-  console.log('[Persistence] Saved database');
+export function saveNow(_exportFn: () => Uint8Array): void {
+  dirty = false;
 }
 
 export function stopAutoSave(): void {
