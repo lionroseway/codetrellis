@@ -24,6 +24,9 @@
  *   created. Importing the same directory twice is idempotent.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___channel_event_file_service from './channel-event-file-service';
+import * as _lazy____server from '../server';
 import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
@@ -336,7 +339,7 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   // (which imports makePlanSlug from this module).
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { discoverChannelEventFiles, importChannelEvent } = require('./channel-event-file-service');
+    const { discoverChannelEventFiles, importChannelEvent } = _lazy___channel_event_file_service;
     for (const filePath of discoverChannelEventFiles(planDir)) {
       try {
         importChannelEvent(filePath, planDir);
@@ -821,7 +824,7 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
       // in tests).
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { broadcast } = require('../server');
+        const { broadcast } = _lazy____server;
         broadcast('plan-exported', { planUid, planDir: result.planDir, source: 'auto-sync', files: result.files.length });
       } catch { /* ignore */ }
     } catch (err) {
@@ -892,7 +895,7 @@ export function startPlanFileWatcher(projectRoot: string): void {
         if (hasGitConflictMarkers(content)) {
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { broadcast } = require('../server');
+            const { broadcast } = _lazy____server;
             broadcast('plan-file-conflict', { filePath, planDir });
           } catch { /* ignore */ }
           return; // don't try to import a half-merged file
@@ -909,14 +912,14 @@ export function startPlanFileWatcher(projectRoot: string): void {
     // plan re-import. CDev Phase 1.3.
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { isChannelEventFile, importChannelEvent } = require('./channel-event-file-service');
+      const { isChannelEventFile, importChannelEvent } = _lazy___channel_event_file_service;
       if (isChannelEventFile(filePath)) {
         if (event === 'unlink') return; // deletion handled separately if ever needed
         const imported = importChannelEvent(filePath, planDir);
         if (imported) {
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { broadcast } = require('../server');
+            const { broadcast } = _lazy____server;
             broadcast('channel-event-imported', {
               uid: imported.uid,
               planUid: imported.planUid,
@@ -940,7 +943,7 @@ export function startPlanFileWatcher(projectRoot: string): void {
       const result = importPlan(planDir);
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { broadcast } = require('../server');
+        const { broadcast } = _lazy____server;
         broadcast('plan-imported', {
           planUid: result.plan.uid,
           source: 'file-watcher',

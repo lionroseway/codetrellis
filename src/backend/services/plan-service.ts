@@ -1,3 +1,6 @@
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___plan_file_service from './plan-file-service';
+import * as _lazy___git_identity from './git-identity';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
@@ -39,7 +42,7 @@ function deriveAffectedFiles(fileSpecs: FileSpec[] | undefined, existing: string
 function notifyMutation(planUid: string): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { scheduleWriteThrough } = require('./plan-file-service');
+    const { scheduleWriteThrough } = _lazy___plan_file_service;
     scheduleWriteThrough(planUid);
   } catch { /* auto-sync not available — fine, manual export still works */ }
 }
@@ -65,7 +68,7 @@ export function createPlan(
   // regardless of local path). Falls back to null when the project
   // isn't a git repo or has no origin.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getNormalisedOriginUrl } = require('./git-identity');
+  const { getNormalisedOriginUrl } = _lazy___git_identity;
   const homeRepo: string | null = normalizedPath ? (getNormalisedOriginUrl(normalizedPath) ?? null) : null;
 
   db.run(
@@ -279,7 +282,7 @@ export function deletePlan(planUid: string): void {
  */
 export function setPlanHomeRepo(planUid: string, homeRepoUrl: string | null): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { normaliseRepoUrl } = require('./git-identity');
+  const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised = homeRepoUrl ? normaliseRepoUrl(homeRepoUrl) : null;
   const now = Date.now();
   getDb().run(
@@ -298,7 +301,7 @@ export function setPlanHomeRepo(planUid: string, homeRepoUrl: string | null): vo
  */
 export function addPlanScope(planUid: string, repoUrl: string): string[] {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { normaliseRepoUrl } = require('./git-identity');
+  const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) throw new Error('addPlanScope: repoUrl must be a non-empty URL');
 
@@ -328,7 +331,7 @@ export function addPlanScope(planUid: string, repoUrl: string): string[] {
  */
 export function removePlanScope(planUid: string, repoUrl: string): string[] {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { normaliseRepoUrl } = require('./git-identity');
+  const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) throw new Error('removePlanScope: repoUrl must be a non-empty URL');
 
@@ -358,7 +361,7 @@ export function removePlanScope(planUid: string, repoUrl: string): string[] {
  */
 export function listPlansByRepoUrl(repoUrl: string): Plan[] {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { normaliseRepoUrl } = require('./git-identity');
+  const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) return [];
 

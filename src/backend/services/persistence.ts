@@ -1,3 +1,5 @@
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___settings_service from './settings-service';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -36,7 +38,7 @@ function resolveDataDir(): string {
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getSettings } = require('./settings-service');
+    const { getSettings } = _lazy___settings_service;
     const override = getSettings().data.dataDirOverride;
     if (override && typeof override === 'string' && override.trim()) return override;
   } catch {

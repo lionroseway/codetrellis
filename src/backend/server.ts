@@ -1,3 +1,21 @@
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___services_settings_service from './services/settings-service';
+import * as _lazy___services_project_config_service from './services/project-config-service';
+import * as _lazy___services_external_pointer_service from './services/external-pointer-service';
+import * as _lazy___services_system_docs_service from './services/system-docs-service';
+import * as _lazy___services_recent_projects_service from './services/recent-projects-service';
+import * as _lazy___services_git_identity from './services/git-identity';
+import * as _lazy___services_mdns_service from './services/mdns-service';
+import * as _lazy___services_personal_sync_service from './services/personal-sync-service';
+import * as _lazy___services_git_activity_service from './services/git-activity-service';
+import * as _lazy___services_plan_history_service from './services/plan-history-service';
+import * as _lazy___services_plan_conflict_service from './services/plan-conflict-service';
+import * as _lazy___services_freeze_service from './services/freeze-service';
+import * as _lazy___services_audio_buffer_service from './services/audio-buffer-service';
+import * as _lazy___services_pantry_resolution_service from './services/pantry-resolution-service';
+import * as _lazy___services_contribution_service from './services/contribution-service';
+import * as _lazy___services_sensor_bridge_service from './services/sensor-bridge-service';
+import * as _lazy___services_channel_dispatcher_service from './services/channel-dispatcher-service';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,7 +52,7 @@ import {
 import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // Top-of-file imports for everything that used to be lazy-required.
 // Vite's Electron main bundle doesn't statically resolve runtime
-// `require('./services/...')` paths, so they fail at runtime
+// `_lazy___services____` paths, so they fail at runtime
 // (MODULE_NOT_FOUND from inside `.vite/build/main.js`). Static
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
@@ -733,7 +751,7 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     // empty field — user-set values are preserved.
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { maybeSeedIdentityFromGit } = require('./services/settings-service');
+      const { maybeSeedIdentityFromGit } = _lazy___services_settings_service;
       if (maybeSeedIdentityFromGit(projectPath)) {
         console.log('[Scan] Seeded identity from git config for', projectPath);
       }
@@ -816,7 +834,7 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     }
 
     try {
-      const { startProjectConfigWatcher } = require('./services/project-config-service');
+      const { startProjectConfigWatcher } = _lazy___services_project_config_service;
       startProjectConfigWatcher(projectPath);
     } catch (err) {
       console.warn('[Scan] Project config watcher failed to start:', err);
@@ -824,7 +842,7 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { startPointerWatcher } = require('./services/external-pointer-service');
+      const { startPointerWatcher } = _lazy___services_external_pointer_service;
       startPointerWatcher(projectPath);
     } catch (err) {
       console.warn('[Scan] External pointer watcher failed to start:', err);
@@ -832,7 +850,7 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { indexProjectDocs, startSystemDocsWatcher } = require('./services/system-docs-service');
+      const { indexProjectDocs, startSystemDocsWatcher } = _lazy___services_system_docs_service;
       indexProjectDocs(projectPath);
       startSystemDocsWatcher(projectPath);
     } catch (err) {
@@ -1186,7 +1204,7 @@ app.get('/api/diff', async (req, res) => {
 });
 
 /** Read current files (path + hash + symbol count) from the DB. */
-function readFilesSnapshot(projectPath: string): Array<{ path: string; hash: string; symbolCount: number }> {
+export function readFilesSnapshot(projectPath: string): Array<{ path: string; hash: string; symbolCount: number }> {
   const d = getDb();
   const result = d.exec(`
     SELECT f.path, f.content_hash, COUNT(s.id) as symbol_count
@@ -1341,7 +1359,7 @@ app.get('/api/project-config', (req, res) => {
   if (!projectRoot) { res.status(400).json({ error: 'project query param required' }); return; }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getProjectConfig } = require('./services/project-config-service');
+    const { getProjectConfig } = _lazy___services_project_config_service;
     res.json(getProjectConfig(projectRoot));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1361,11 +1379,11 @@ app.get('/api/plans/stitched', (req, res) => {
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { discoverPointers } = require('./services/external-pointer-service');
+    const { discoverPointers } = _lazy___services_external_pointer_service;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { findRecentProjectByOriginUrl } = require('./services/recent-projects-service');
+    const { findRecentProjectByOriginUrl } = _lazy___services_recent_projects_service;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getNormalisedOriginUrl } = require('./services/git-identity');
+    const { getNormalisedOriginUrl } = _lazy___services_git_identity;
 
     const localPlans = planService.listPlans(projectRoot);
     const ownOriginUrl: string | null = getNormalisedOriginUrl(projectRoot) ?? null;
@@ -2823,7 +2841,7 @@ app.put('/api/settings', (req, res) => {
       before.device.deviceName !== next.device.deviceName) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mdns = require('./services/mdns-service');
+      const mdns = _lazy___services_mdns_service;
       if (next.device.advertise) {
         mdns.startMdns(next.device.deviceName || undefined);
       } else {
@@ -2851,21 +2869,21 @@ app.get('/api/identity/git-defaults', (req, res) => {
 
 app.get('/api/sync/status', (_req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getSyncStatus } = require('./services/personal-sync-service');
+  const { getSyncStatus } = _lazy___services_personal_sync_service;
   res.json(getSyncStatus());
 });
 
 app.get('/api/sync/peek', (_req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { peekImport } = require('./services/personal-sync-service');
+  const { peekImport } = _lazy___services_personal_sync_service;
   res.json(peekImport());
 });
 
 app.post('/api/sync/export', (_req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { exportSync } = require('./services/personal-sync-service');
+  const { exportSync } = _lazy___services_personal_sync_service;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { listRecentProjects } = require('./services/recent-projects-service');
+  const { listRecentProjects } = _lazy___services_recent_projects_service;
   const recentProjects = listRecentProjects().map((p: { path: string; lastOpenedAt: number }) => ({
     projectPath: p.path,
     lastOpenedAt: new Date(p.lastOpenedAt).toISOString(),
@@ -2875,7 +2893,7 @@ app.post('/api/sync/export', (_req, res) => {
 
 app.post('/api/sync/import', (_req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { importSync } = require('./services/personal-sync-service');
+  const { importSync } = _lazy___services_personal_sync_service;
   const result = importSync();
   if (result.settingsImported) {
     broadcast('settings-changed', { settings: getSettings() });
@@ -2887,7 +2905,7 @@ app.post('/api/sync/import', (_req, res) => {
 
 app.get('/api/team-activity', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getTeamActivity } = require('./services/git-activity-service');
+  const { getTeamActivity } = _lazy___services_git_activity_service;
   const projectPath = req.query.project as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
   const since = req.query.since as string | undefined;
@@ -2898,7 +2916,7 @@ app.get('/api/team-activity', (req, res) => {
 
 app.get('/api/plan-history/:planSlug', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getPlanCommitHistory } = require('./services/git-activity-service');
+  const { getPlanCommitHistory } = _lazy___services_git_activity_service;
   const projectPath = req.query.project as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
@@ -2909,7 +2927,7 @@ app.get('/api/plan-history/:planSlug', (req, res) => {
 
 app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getPlanAtCommit } = require('./services/plan-history-service');
+  const { getPlanAtCommit } = _lazy___services_plan_history_service;
   const projectPath = req.query.project as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
   const state = getPlanAtCommit(projectPath, req.params.planSlug, req.params.commitHash);
@@ -2919,7 +2937,7 @@ app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
 
 app.get('/api/plan-history/:planSlug/diff', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { diffPlanBetweenCommits } = require('./services/plan-history-service');
+  const { diffPlanBetweenCommits } = _lazy___services_plan_history_service;
   const projectPath = req.query.project as string | undefined;
   const base = req.query.base as string | undefined;
   const head = req.query.head as string | undefined;
@@ -2933,7 +2951,7 @@ app.get('/api/plan-history/:planSlug/diff', (req, res) => {
 
 app.get('/api/plan-history/:planSlug/search', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { searchPlanHistory } = require('./services/git-activity-service');
+  const { searchPlanHistory } = _lazy___services_git_activity_service;
   const projectPath = req.query.project as string | undefined;
   const query = req.query.q as string | undefined;
   if (!projectPath || !query) {
@@ -2949,7 +2967,7 @@ app.get('/api/plan-history/:planSlug/search', (req, res) => {
 
 app.get('/api/conflicts', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { detectManifestConflicts } = require('./services/plan-conflict-service');
+  const { detectManifestConflicts } = _lazy___services_plan_conflict_service;
   const projectPath = req.query.project as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
   res.json(detectManifestConflicts(projectPath));
@@ -2957,7 +2975,7 @@ app.get('/api/conflicts', (req, res) => {
 
 app.post('/api/conflicts/resolve', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { resolveFileConflict, resolveFileConflictBySide } = require('./services/plan-conflict-service');
+  const { resolveFileConflict, resolveFileConflictBySide } = _lazy___services_plan_conflict_service;
   const { projectPath, filePath, mode, side, resolutions } = req.body;
   if (!projectPath || !filePath || !mode) {
     res.status(400).json({ error: 'projectPath, filePath, and mode required' });
@@ -2972,7 +2990,7 @@ app.post('/api/conflicts/resolve', (req, res) => {
 
 app.get('/api/freeze', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getFreezeStatus } = require('./services/freeze-service');
+  const { getFreezeStatus } = _lazy___services_freeze_service;
   const projectPath = req.query.project as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
   res.json(getFreezeStatus(projectPath));
@@ -2980,7 +2998,7 @@ app.get('/api/freeze', (req, res) => {
 
 app.put('/api/freeze', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { setFreeze } = require('./services/freeze-service');
+  const { setFreeze } = _lazy___services_freeze_service;
   const { projectPath, active, reason, until, allowedPlanUids } = req.body;
   if (!projectPath || active === undefined) {
     res.status(400).json({ error: 'projectPath and active required' });
@@ -2994,25 +3012,25 @@ app.put('/api/freeze', (req, res) => {
 // --- CDev Phase 8 — Audio capture REST surface ---
 
 app.post('/api/audio/start', (_req, res) => {
-  const { audioBuffer } = require('./services/audio-buffer-service');
+  const { audioBuffer } = _lazy___services_audio_buffer_service;
   const maxSeconds = (_req.body as any)?.maxBufferSeconds;
   audioBuffer.startCapture(maxSeconds);
   res.json(audioBuffer.getStatus());
 });
 
 app.post('/api/audio/stop', (_req, res) => {
-  const { audioBuffer } = require('./services/audio-buffer-service');
+  const { audioBuffer } = _lazy___services_audio_buffer_service;
   audioBuffer.stopCapture();
   res.json(audioBuffer.getStatus());
 });
 
 app.get('/api/audio/status', (_req, res) => {
-  const { audioBuffer } = require('./services/audio-buffer-service');
+  const { audioBuffer } = _lazy___services_audio_buffer_service;
   res.json(audioBuffer.getStatus());
 });
 
 app.post('/api/audio/chunk', (req, res) => {
-  const { audioBuffer } = require('./services/audio-buffer-service');
+  const { audioBuffer } = _lazy___services_audio_buffer_service;
   const { audioBase64, durationMs } = req.body as { audioBase64?: string; durationMs?: number };
 
   if (!audioBase64 || !durationMs) {
@@ -3031,7 +3049,7 @@ app.post('/api/audio/chunk', (req, res) => {
 });
 
 app.get('/api/audio/recent', (req, res) => {
-  const { audioBuffer } = require('./services/audio-buffer-service');
+  const { audioBuffer } = _lazy___services_audio_buffer_service;
   const seconds = req.query.seconds ? Number(req.query.seconds) : undefined;
   const snapshot = audioBuffer.getRecentAudio(seconds);
 
@@ -3304,7 +3322,7 @@ app.delete('/api/peers/push-tokens/:fingerprint', (req, res) => {
 // --- CDev Phase 7 — External contributors REST surface ---
 
 app.get('/api/pantry/resolve', (req, res) => {
-  const { resolveReferences, scanPlanReferences } = require('./services/pantry-resolution-service');
+  const { resolveReferences, scanPlanReferences } = _lazy___services_pantry_resolution_service;
   const projectPath = req.query.project as string | undefined;
   const refs = req.query.refs as string | string[] | undefined;
   const planSlug = req.query.plan_slug as string | undefined;
@@ -3322,7 +3340,7 @@ app.get('/api/pantry/resolve', (req, res) => {
 });
 
 app.get('/api/contributions', (req, res) => {
-  const { listContributions, listContributionsForBranch } = require('./services/contribution-service');
+  const { listContributions, listContributionsForBranch } = _lazy___services_contribution_service;
   const projectPath = req.query.project as string | undefined;
   const branch = req.query.branch as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
@@ -3330,7 +3348,7 @@ app.get('/api/contributions', (req, res) => {
 });
 
 app.post('/api/contributions/promote', (req, res) => {
-  const { promoteItemToContribution } = require('./services/contribution-service');
+  const { promoteItemToContribution } = _lazy___services_contribution_service;
   const { projectPath, itemUid, title, kind, status, body, description, attachments } = req.body;
   if (!projectPath || !itemUid || !title || !kind) {
     res.status(400).json({ error: 'projectPath, itemUid, title, kind required' });
@@ -3345,7 +3363,7 @@ app.post('/api/contributions/promote', (req, res) => {
 });
 
 app.post('/api/contributions/accept', (req, res) => {
-  const { acceptContributions } = require('./services/contribution-service');
+  const { acceptContributions } = _lazy___services_contribution_service;
   const { projectPath, branch, planSlug } = req.body;
   if (!projectPath || !branch || !planSlug) {
     res.status(400).json({ error: 'projectPath, branch, planSlug required' });
@@ -3360,7 +3378,7 @@ app.post('/api/contributions/accept', (req, res) => {
 });
 
 app.post('/api/contributor-branch', (req, res) => {
-  const { prepareContributorBranch } = require('./services/contribution-service');
+  const { prepareContributorBranch } = _lazy___services_contribution_service;
   const { projectPath, planSlug, branchName, includeItems } = req.body;
   if (!projectPath || !planSlug || !branchName) {
     res.status(400).json({ error: 'projectPath, planSlug, branchName required' });
@@ -3381,7 +3399,7 @@ app.post('/api/contributor-branch', (req, res) => {
 
 app.get('/api/system-docs', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const svc = require('./services/system-docs-service');
+  const svc = _lazy___services_system_docs_service;
   const projectPath = req.query.project as string | undefined;
   const search = req.query.search as string | undefined;
   if (!projectPath) {
@@ -3393,7 +3411,7 @@ app.get('/api/system-docs', (req, res) => {
 
 app.get('/api/system-docs/:uid', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const svc = require('./services/system-docs-service');
+  const svc = _lazy___services_system_docs_service;
   const doc = svc.getSystemDoc(req.params.uid);
   if (!doc) { res.status(404).json({ error: 'not found' }); return; }
   res.json(doc);
@@ -3401,7 +3419,7 @@ app.get('/api/system-docs/:uid', (req, res) => {
 
 app.post('/api/system-docs', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const svc = require('./services/system-docs-service');
+  const svc = _lazy___services_system_docs_service;
   const { projectPath, title, body, owner, tags, references, slug } = req.body || {};
   if (!projectPath || !title) {
     res.status(400).json({ error: 'projectPath and title are required' });
@@ -3424,7 +3442,7 @@ app.post('/api/system-docs', (req, res) => {
 
 app.put('/api/system-docs/:uid', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const svc = require('./services/system-docs-service');
+  const svc = _lazy___services_system_docs_service;
   try {
     const updated = svc.updateSystemDoc(req.params.uid, req.body || {});
     if (!updated) { res.status(404).json({ error: 'not found' }); return; }
@@ -3438,7 +3456,7 @@ app.put('/api/system-docs/:uid', (req, res) => {
 
 app.delete('/api/system-docs/:uid', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const svc = require('./services/system-docs-service');
+  const svc = _lazy___services_system_docs_service;
   const ok = svc.deleteSystemDoc(req.params.uid);
   if (ok) {
     broadcast('system-doc-removed', { uid: req.params.uid });
@@ -3449,7 +3467,7 @@ app.delete('/api/system-docs/:uid', (req, res) => {
 
 app.post('/api/system-docs/:uid/verify', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const svc = require('./services/system-docs-service');
+  const svc = _lazy___services_system_docs_service;
   const updated = svc.verifySystemDoc(req.params.uid);
   if (!updated) { res.status(404).json({ error: 'not found' }); return; }
   broadcast('system-doc-verified', { uid: updated.uid, capturedAgainstCommit: updated.capturedAgainstCommit });
@@ -3459,7 +3477,7 @@ app.post('/api/system-docs/:uid/verify', (req, res) => {
 
 app.get('/api/system-docs/:uid/freshness', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const svc = require('./services/system-docs-service');
+  const svc = _lazy___services_system_docs_service;
   const report = svc.getFreshness(req.params.uid);
   if (!report) { res.status(404).json({ error: 'not found' }); return; }
   res.json(report);
@@ -3479,7 +3497,7 @@ app.get('/api/sensors/doc-check', (req, res) => {
     const project = req.query.project as string | undefined;
     if (!project) return res.status(400).json({ error: 'project query parameter is required' });
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { checkAllDocsAndBridge } = require('./services/sensor-bridge-service');
+    const { checkAllDocsAndBridge } = _lazy___services_sensor_bridge_service;
     const result = checkAllDocsAndBridge(project);
     return res.json(result);
   } catch (err) {
@@ -3531,11 +3549,11 @@ export function getBoundBackendPort(): number {
  */
 function rearmProjectWatchers(): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { listRecentProjects } = require('./services/recent-projects-service');
+  const { listRecentProjects } = _lazy___services_recent_projects_service;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { startProjectConfigWatcher } = require('./services/project-config-service');
+  const { startProjectConfigWatcher } = _lazy___services_project_config_service;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { startPointerWatcher } = require('./services/external-pointer-service');
+  const { startPointerWatcher } = _lazy___services_external_pointer_service;
 
   const recents = listRecentProjects() as Array<{ path: string; pinned: boolean }>;
   const pinned = recents.filter((p) => p.pinned);
@@ -3561,7 +3579,7 @@ function rearmProjectWatchers(): void {
       }
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { indexProjectDocs, startSystemDocsWatcher } = require('./services/system-docs-service');
+        const { indexProjectDocs, startSystemDocsWatcher } = _lazy___services_system_docs_service;
         indexProjectDocs(proj.path);
         startSystemDocsWatcher(proj.path);
       } catch {
@@ -3599,7 +3617,7 @@ export async function initializeBackend(): Promise<void> {
   // directly from the MCP / REST handlers that create channel events.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { startChannelDispatcher } = require('./services/channel-dispatcher-service');
+    const { startChannelDispatcher } = _lazy___services_channel_dispatcher_service;
     startChannelDispatcher(broadcast);
   } catch (err) {
     console.warn('[Backend] Channel dispatcher failed to start:', err);
@@ -3609,7 +3627,7 @@ export async function initializeBackend(): Promise<void> {
   // doc staleness, stuck) into channel events. Needs the broadcast fn.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { initSensorBridge } = require('./services/sensor-bridge-service');
+    const { initSensorBridge } = _lazy___services_sensor_bridge_service;
     initSensorBridge(broadcast);
   } catch (err) {
     console.warn('[Backend] Sensor bridge failed to init:', err);
@@ -3889,7 +3907,7 @@ function resolveImportInSnapshot(
   return null;
 }
 
-function getGitWorkingTreeStatus(projectPath: string): {
+export function getGitWorkingTreeStatus(projectPath: string): {
   staged: string[];
   unstaged: string[];
   untracked: string[];

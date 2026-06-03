@@ -1,3 +1,6 @@
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___cross_system_service from './cross-system-service';
+import * as _lazy___plan_progress_service from './plan-progress-service';
 import { watch, type FSWatcher } from 'chokidar';
 import path from 'node:path';
 import { parseFile, initParser } from './ast-parser';
@@ -33,7 +36,7 @@ function scheduleCrossSystemRecompute(): void {
       // → database → server → file-watcher → cross-system-service
       // would otherwise be a load-time loop.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { recomputeCrossSystemEdges } = require('./cross-system-service');
+      const { recomputeCrossSystemEdges } = _lazy___cross_system_service;
       recomputeCrossSystemEdges();
       try {
         broadcast('cross-system-changed', { reason: 'file-change' });
@@ -133,7 +136,7 @@ export async function startWatching(projectRoot: string): Promise<void> {
     try {
       // Lazy-require to avoid an import cycle (plan-progress-service →
       // plan-service → database → broadcast → server → file-watcher).
-      const { recordFileChange } = require('./plan-progress-service');
+      const { recordFileChange } = _lazy___plan_progress_service;
       recordFileChange(relativePath);
     } catch { /* ignore */ }
     // Phase 4.3 — check if this file is referenced by any system doc.
@@ -166,7 +169,7 @@ export async function startWatching(projectRoot: string): Promise<void> {
     const relPath = path.relative(projectRoot, filePath);
     try { checkFileDeviation(relPath); } catch { /* ignore */ }
     try {
-      const { recordFileChange } = require('./plan-progress-service');
+      const { recordFileChange } = _lazy___plan_progress_service;
       recordFileChange(relPath);
     } catch { /* ignore */ }
     // Phase 4.3 — doc freshness check for new files too.

@@ -20,6 +20,8 @@
  * true on the sender. The receiver's agent sees the audio as local.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___audio_buffer_service from './audio-buffer-service';
 import { DATA_CHANNELS } from '../../shared/types';
 import {
   onChannelMessage,
@@ -184,9 +186,7 @@ function sendAudioStatus(fingerprint: string): void {
   let bufferedSeconds = 0;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const audioService = require('./audio-buffer-service');
-    const instance = audioService.audioBufferService ?? audioService.default;
+    const instance = _lazy___audio_buffer_service.audioBuffer;
     if (instance) {
       capturing = instance.isCapturing?.() ?? false;
       const status = instance.getStatus?.();
@@ -228,9 +228,7 @@ function handleAudioMessage(fingerprint: string, data: Buffer | string): void {
         const chunkData = buf.slice(1);
         if (chunkData.length > 0) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const audioService = require('./audio-buffer-service');
-            const instance = audioService.audioBufferService ?? audioService.default;
+            const instance = _lazy___audio_buffer_service.audioBuffer;
             if (instance && typeof instance.addChunk === 'function') {
               // Estimate duration from chunk size (~32kbps Opus)
               const estimatedDurationMs = Math.round((chunkData.length / 4000) * 1000);

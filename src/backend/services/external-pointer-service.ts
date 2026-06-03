@@ -25,6 +25,8 @@
  * repo when it's known and reachable from disk).
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy____server from '../server';
 import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
@@ -231,7 +233,7 @@ export function startPointerWatcher(
         onChange(key, event, filePath);
       } else {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { broadcast } = require('../server');
+        const { broadcast } = _lazy____server;
         broadcast('external-pointers-changed', {
           projectRoot: key,
           event,

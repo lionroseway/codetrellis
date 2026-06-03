@@ -19,6 +19,8 @@
  *   - `ping` / `pong`    — heartbeat (handled by webrtc-service)
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___push_notification_service from './push-notification-service';
 import { DATA_CHANNELS } from '../../shared/types';
 import {
   onChannelMessage,
@@ -342,7 +344,7 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
         const { token } = msg.params as { token: string };
         if (token) {
           // Lazy import to avoid circular dependency
-          const { registerPushToken } = require('./push-notification-service');
+          const { registerPushToken } = _lazy___push_notification_service;
           registerPushToken(fingerprint, token);
         }
         break;

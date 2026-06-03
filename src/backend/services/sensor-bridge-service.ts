@@ -17,6 +17,8 @@
  * only, avoiding circular deps.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___system_docs_service from './system-docs-service';
 import { postChannelEvent, type PostChannelEventInput } from './channel-event-service';
 import { exportChannelEvent } from './channel-event-file-service';
 import { getPlan } from './plan-service';
@@ -201,7 +203,7 @@ export function checkDocFreshnessForFile(relativePath: string, projectRoot: stri
 
     // Lazy-require to avoid circular dep at load time.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { findDocsByReferencedFile, getFreshness } = require('./system-docs-service');
+    const { findDocsByReferencedFile, getFreshness } = _lazy___system_docs_service;
 
     const matchingDocs: Array<{ uid: string; slug: string; title: string; plans: string[] }> =
       findDocsByReferencedFile(projectRoot, relativePath);
@@ -250,7 +252,7 @@ export function checkAllDocsAndBridge(projectRoot: string): { staleCount: number
     if (!cfg.docs.enabled || !cfg.docs.channelEvents) return { staleCount: 0, eventsSurfaced: 0 };
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { checkAllDocsFreshness, getSystemDoc } = require('./system-docs-service');
+    const { checkAllDocsFreshness, getSystemDoc } = _lazy___system_docs_service;
     const staleReports = checkAllDocsFreshness(projectRoot);
     let eventsSurfaced = 0;
 

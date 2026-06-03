@@ -20,6 +20,8 @@
  * concern.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___plan_service from './plan-service';
 import { listChannelEvents } from './channel-event-service';
 import { matchChannelRoutingRules, listChannelRoutingRules } from './project-config-service';
 import { getPlan } from './plan-service';
@@ -241,7 +243,7 @@ function notificationKey(rule: ChannelRoutingRule, event: ChannelEvent): string 
 function listEligiblePlansForSweep(): Array<{ planUid: string; projectRoot: string; rules: ChannelRoutingRule[] }> {
   // Lazy require to avoid circular import at load time.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { listPlans } = require('./plan-service');
+  const { listPlans } = _lazy___plan_service;
   const plans: Array<{ uid: string; projectPath: string }> = listPlans();
   const result: Array<{ planUid: string; projectRoot: string; rules: ChannelRoutingRule[] }> = [];
   const cache = new Map<string, ChannelRoutingRule[]>();

@@ -6,6 +6,9 @@
  * instances, and manages the HTTP server lifecycle.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy____services_stuck_sensor_service from '../services/stuck-sensor-service';
+import * as _lazy____server from '../server';
 import http from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -155,7 +158,7 @@ function broadcastToolEvent(payload: ToolEventPayload): void {
   // handles its own error containment.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { recordToolCall } = require('../services/stuck-sensor-service');
+    const { recordToolCall } = _lazy____services_stuck_sensor_service;
     recordToolCall({
       tool: payload.tool,
       args: payload.args,
@@ -468,7 +471,7 @@ export async function startMcpServer(): Promise<void> {
         console.log(`[MCP] Server running on http://127.0.0.1:${boundPort}${candidate !== requestedPort ? ` (requested ${requestedPort}, autodetected)` : ''}`);
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { broadcast: bc } = require('../server');
+          const { broadcast: bc } = _lazy____server;
           bc('mcp-port-changed', { port: boundPort, requested: requestedPort });
         } catch { /* server module may not yet be registered for broadcast in tests */ }
         resolve();

@@ -1,3 +1,5 @@
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___plan_file_service from './plan-file-service';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
@@ -7,7 +9,7 @@ import type { PlanPhase, PhaseStatus } from '../../shared/types';
 function notifyMutation(planUid: string): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { scheduleWriteThrough } = require('./plan-file-service');
+    const { scheduleWriteThrough } = _lazy___plan_file_service;
     scheduleWriteThrough(planUid);
   } catch { /* fine */ }
 }

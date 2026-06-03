@@ -306,15 +306,24 @@ export function killAllTerminals(): void {
  * Returns the last `lines` lines (default 50). ANSI escape codes are
  * stripped so the output is readable as plain text.
  */
-export function readTerminalOutput(id: string, lines?: number): string | null {
+export function readTerminalOutput(id: string, lines?: number, raw = false): string | null {
   const buf = outputBuffers.get(id);
   if (buf === undefined) return null;
-  // Strip ANSI escape sequences for clean text output
-  const clean = buf.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
-    .replace(/\x1b\].*?\x07/g, '')     // OSC sequences
-    .replace(/\x1b[()][A-Z0-9]/g, '')  // character set selects
-    .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, ''); // control chars (keep \n \r)
-  const allLines = clean.split('\n');
+  // `raw` keeps ANSI so the client (e.g. the mobile app) can colour it
+  // itself. Otherwise strip escape sequences for clean plain text (used
+  // by agents via the MCP tool). The CSI class now includes `?` so
+  // private sequences like \x1b[?2004h (bracketed paste) are fully
+  // removed instead of leaving a literal "[?2004h".
+  let text: string;
+  if (raw) {
+    text = buf;
+  } else {
+    text = buf.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+      .replace(/\x1b\].*?\x07/g, '')     // OSC sequences
+      .replace(/\x1b[()][A-Z0-9]/g, '')  // character set selects
+      .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, ''); // control chars (keep \n \r)
+  }
+  const allLines = text.split('\n');
   const maxLines = lines ?? 50;
   const tail = allLines.slice(-maxLines);
   return tail.join('\n');

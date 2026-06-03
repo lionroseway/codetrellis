@@ -18,6 +18,8 @@
  *   - respond_remote_input — answer a remote agent's input request
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy_______services_peer_connection_service from '../../services/peer-connection-service';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -29,7 +31,7 @@ export function registerPeerTools(server: McpServer): void {
     async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const status = peerService.getPeerManagerStatus();
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(status) }],
@@ -50,7 +52,7 @@ export function registerPeerTools(server: McpServer): void {
     async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const peers = peerService.getDiscoveredDevices();
         return {
           content: [{
@@ -77,7 +79,7 @@ export function registerPeerTools(server: McpServer): void {
     async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const devices = peerService.getDevices();
         return {
           content: [{
@@ -110,7 +112,7 @@ export function registerPeerTools(server: McpServer): void {
     async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const connections = peerService.getConnections();
         return {
           content: [{
@@ -139,7 +141,7 @@ export function registerPeerTools(server: McpServer): void {
     async ({ fingerprint }) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const removed = await peerService.unpairDevice(fingerprint);
         return {
           content: [{
@@ -175,7 +177,7 @@ export function registerPeerTools(server: McpServer): void {
     async ({ fingerprint }) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
 
         if (fingerprint) {
           const state = peerService.getRemoteState(fingerprint);
@@ -212,7 +214,7 @@ export function registerPeerTools(server: McpServer): void {
     async ({ fingerprint }) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
 
         const terminals = fingerprint
           ? peerService.getRemoteTerminalsForPeer(fingerprint)
@@ -252,7 +254,7 @@ export function registerPeerTools(server: McpServer): void {
     async ({ fingerprint, terminal_id, data }) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const sent = peerService.writeRemoteTerminal(fingerprint, terminal_id, data);
         return {
           content: [{
@@ -277,7 +279,7 @@ export function registerPeerTools(server: McpServer): void {
     async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const statuses = peerService.getRemoteAudioStatuses();
         return {
           content: [{
@@ -302,7 +304,7 @@ export function registerPeerTools(server: McpServer): void {
     async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const requests = peerService.getPendingInputRequests();
         return {
           content: [{
@@ -330,7 +332,7 @@ export function registerPeerTools(server: McpServer): void {
     async ({ request_id, response }) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const peerService = require('../../services/peer-connection-service');
+        const peerService = _lazy_______services_peer_connection_service;
         const sent = peerService.respondToInputRequest(request_id, response);
         return {
           content: [{

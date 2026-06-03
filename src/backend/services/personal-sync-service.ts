@@ -22,6 +22,8 @@
  * cached graph computations) and the DB can be large.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___settings_service from './settings-service';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -227,7 +229,7 @@ export function importSync(): {
     if (fs.existsSync(settingsPath)) {
       const imported: Partial<AppSettings> = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
       // Merge: import identity + plans prefs, preserve local data/mcp.
-      const { updateSettings } = require('./settings-service') as typeof import('./settings-service');
+      const { updateSettings } = _lazy___settings_service as typeof import('./settings-service');
       updateSettings({
         identity: imported.identity,
         plans: imported.plans,

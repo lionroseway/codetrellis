@@ -20,6 +20,8 @@
  *     state with a separate "unverified" affordance.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy____server from '../server';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -760,7 +762,7 @@ function gitChangedFiles(projectPath: string, fromSha: string, toSha: string): s
 function tryBroadcast(type: string, payload: Record<string, unknown>): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { broadcast } = require('../server');
+    const { broadcast } = _lazy____server;
     broadcast(type, payload);
   } catch { /* server not yet imported (test isolation) */ }
 }

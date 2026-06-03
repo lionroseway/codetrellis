@@ -2,6 +2,8 @@
  * UI control tools — screenshot, select_item, open_project, clipboard, settings, logs, app guide.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy_______services_mdns_service from '../../services/mdns-service';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
@@ -234,7 +236,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (device?.advertise !== undefined || device?.deviceName !== undefined) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const mdns = require('../../services/mdns-service');
+          const mdns = _lazy_______services_mdns_service;
           if (updated.device.advertise) {
             mdns.startMdns(updated.device.deviceName || undefined);
           } else {

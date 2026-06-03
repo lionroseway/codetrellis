@@ -1,3 +1,5 @@
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___plan_service from './plan-service';
 import { getDb } from './database';
 import { listAllItems, updateItem, createItem } from './plan-item-service';
 import { getDependencyEdges } from './database';
@@ -248,7 +250,7 @@ function createDeviation(
   // handles config checks and debouncing.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getPlan: getPlanLazy } = require('./plan-service');
+    const { getPlan: getPlanLazy } = _lazy___plan_service;
     const plan = getPlanLazy(planUid);
     if (plan?.projectPath) {
       onDeviationDetected(deviation, plan.projectPath);

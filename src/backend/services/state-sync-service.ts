@@ -24,6 +24,8 @@
  * matched by UID — the second arrival is a no-op.
  */
 
+// [codemod] hoisted lazy requires → static namespace imports for bundling
+import * as _lazy___audio_buffer_service from './audio-buffer-service';
 import { compare as jsonPatchCompare, applyPatch } from 'fast-json-patch';
 import type {
   DataChannelName,
@@ -87,6 +89,7 @@ interface PlanSummary {
   uid: string;
   name: string;
   status: string;
+  projectPath: string;
   itemCount: number;
   doneCount: number;
   inProgressCount: number;
@@ -280,6 +283,7 @@ export function collectSnapshot(): SyncStateSnapshot {
       uid: p.uid,
       name: p.title,
       status: p.status,
+      projectPath: p.projectPath,
       itemCount: items.length,
       doneCount: items.filter((i) => i.status === 'done').length,
       inProgressCount: items.filter((i) => i.status === 'in_progress' || i.status === 'assigned').length,
@@ -328,9 +332,7 @@ export function collectSnapshot(): SyncStateSnapshot {
   // Audio status
   let audio: AudioStatusSummary = { capturing: false, bufferedSeconds: 0 };
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const audioService = require('./audio-buffer-service');
-    const instance = audioService.audioBufferService ?? audioService.default;
+    const instance = _lazy___audio_buffer_service.audioBuffer;
     if (instance && typeof instance.getStatus === 'function') {
       const status = instance.getStatus();
       audio = {
