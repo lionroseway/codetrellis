@@ -40,6 +40,51 @@ interface PlanItem {
   blockedReason: string | null;
 }
 
+interface ItemComment {
+  uid: string;
+  body: string;
+  author?: string | null;
+  authorType?: string | null;
+  commentType?: string | null;
+  createdAt: number;
+  replies?: ItemComment[];
+}
+
+interface ItemExternalRef {
+  uid: string;
+  url: string;
+  title?: string | null;
+  kind?: string | null;
+}
+
+interface ItemAttachment {
+  uid: string;
+  kind: string;
+  value: string;
+  label?: string | null;
+  createdAt: number;
+}
+
+interface ItemGetResult {
+  item: PlanItem;
+  comments?: ItemComment[];
+  externalRefs?: ItemExternalRef[];
+  attachments?: ItemAttachment[];
+}
+
+function relTime(ts?: number | null): string {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'just now';
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
 const STATUSES = [
   { key: 'pending', label: 'Pending', color: '#52525b' },
   { key: 'in_progress', label: 'In Progress', color: '#22c55e' },
@@ -64,6 +109,9 @@ export default function ItemDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [item, setItem] = useState<PlanItem | null>(null);
   const [children, setChildren] = useState<PlanItem[]>([]);
+  const [comments, setComments] = useState<ItemComment[]>([]);
+  const [externalRefs, setExternalRefs] = useState<ItemExternalRef[]>([]);
+  const [attachments, setAttachments] = useState<ItemAttachment[]>([]);
   const [saving, setSaving] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
 
@@ -71,14 +119,22 @@ export default function ItemDetailScreen() {
     if (!uid) return;
     try {
       setError(null);
-      const result = await rpc<PlanItem>('plan.item.get', { uid });
-      setItem(result);
+      // plan.item.get now returns { item, comments, externalRefs, attachments }.
+      // Tolerate the legacy bare-item shape too (older desktop builds).
+      const result = await rpc<ItemGetResult | PlanItem>('plan.item.get', { uid });
+      const wrapped = result as ItemGetResult;
+      const bareItem = result as PlanItem;
+      const resolved = wrapped.item ?? bareItem;
+      setItem(resolved);
+      setComments(Array.isArray(wrapped.comments) ? wrapped.comments : []);
+      setExternalRefs(Array.isArray(wrapped.externalRefs) ? wrapped.externalRefs : []);
+      setAttachments(Array.isArray(wrapped.attachments) ? wrapped.attachments : []);
 
       // Fetch children (subtasks)
       if (planUid) {
         const allItems = await rpc<PlanItem[]>('plan.items', { planUid });
         setChildren(
-          allItems
+          (Array.isArray(allItems) ? allItems : [])
             .filter((i) => i.parentUid === uid)
             .sort((a, b) => a.sortOrder - b.sortOrder),
         );
@@ -321,7 +377,96 @@ export default function ItemDetailScreen() {
           ))}
         </View>
       )}
+
+      {/* External references / links */}
+      {externalRefs.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>LINKS ({externalRefs.length})</Text>
+          {externalRefs.map((ref) => (
+            <View key={ref.uid} style={styles.refCard}>
+              <Text style={styles.refKind}>
+                {(ref.kind ?? 'link').toUpperCase()}
+              </Text>
+              <View style={styles.refBody}>
+                <Text style={styles.refTitle} numberOfLines={1}>
+                  {ref.title || ref.url}
+                </Text>
+                <Text style={styles.refUrl} numberOfLines={1}>
+                  {ref.url}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Attachments */}
+      {attachments.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>ATTACHMENTS ({attachments.length})</Text>
+          {attachments.map((att) => (
+            <View key={att.uid} style={styles.refCard}>
+              <Text style={styles.refKind}>{att.kind.toUpperCase()}</Text>
+              <View style={styles.refBody}>
+                <Text style={styles.refTitle} numberOfLines={1}>
+                  {att.label || att.value}
+                </Text>
+                {!!att.label && (
+                  <Text style={styles.refUrl} numberOfLines={1}>
+                    {att.value}
+                  </Text>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Discussion / comments */}
+      {comments.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>DISCUSSION ({comments.length})</Text>
+          {comments.map((c) => (
+            <ItemCommentThread key={c.uid} comment={c} depth={0} />
+          ))}
+        </View>
+      )}
     </ScrollView>
+  );
+}
+
+// --- Comment thread (recursive) ----------------------------------------------
+
+function ItemCommentThread({
+  comment,
+  depth,
+}: {
+  comment: ItemComment;
+  depth: number;
+}) {
+  const isAgent = comment.authorType && comment.authorType !== 'human';
+  return (
+    <View style={[styles.commentCard, depth > 0 && styles.commentReply]}>
+      <View style={styles.commentHeader}>
+        <View
+          style={[
+            styles.commentDot,
+            { backgroundColor: isAgent ? '#8b5cf6' : '#3b82f6' },
+          ]}
+        />
+        <Text style={styles.commentAuthor}>
+          {comment.author || (isAgent ? 'agent' : 'you')}
+        </Text>
+        {!!comment.commentType && comment.commentType !== 'comment' && (
+          <Text style={styles.commentType}>{comment.commentType}</Text>
+        )}
+        <Text style={styles.commentTime}>{relTime(comment.createdAt)}</Text>
+      </View>
+      <Text style={styles.commentBody}>{comment.body}</Text>
+      {comment.replies?.map((r) => (
+        <ItemCommentThread key={r.uid} comment={r} depth={depth + 1} />
+      ))}
+    </View>
   );
 }
 
@@ -607,5 +752,86 @@ const styles = StyleSheet.create({
     color: '#52525b',
     fontSize: 14,
     marginLeft: 8,
+  },
+
+  // External ref / attachment cards
+  refCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  refKind: {
+    color: '#8b5cf6',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginRight: 10,
+    minWidth: 48,
+  },
+  refBody: {
+    flex: 1,
+  },
+  refTitle: {
+    color: '#e4e4e7',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  refUrl: {
+    color: '#52525b',
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  // Comment cards
+  commentCard: {
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  commentReply: {
+    marginLeft: 20,
+    backgroundColor: '#141416',
+    borderColor: '#1f1f23',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  commentDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  commentAuthor: {
+    color: '#a1a1aa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  commentType: {
+    color: '#8b5cf6',
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  commentTime: {
+    color: '#52525b',
+    fontSize: 11,
+    marginLeft: 'auto',
+  },
+  commentBody: {
+    color: '#d4d4d8',
+    fontSize: 13,
+    lineHeight: 19,
   },
 });

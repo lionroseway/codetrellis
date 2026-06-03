@@ -37,6 +37,11 @@ import * as deviationService from './deviation-service';
 import * as terminalService from './terminal-service';
 import * as recentProjectsService from './recent-projects-service';
 import * as remoteInteractionService from './remote-interaction-service';
+import * as planPhasesService from './plan-phases-service';
+import * as planDocumentsService from './plan-documents-service';
+import * as commentService from './comment-service';
+import * as externalRefsService from './external-refs-service';
+import * as taskAttachmentsService from './task-attachments-service';
 import {
   getArchitectureSummary,
   getFileSymbols,
@@ -157,7 +162,19 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       if (!plan) throw new Error(`Plan not found: ${uid}`);
       const items = planItemService.listAllItems(uid);
       const deviations = deviationService.getDeviations(uid);
-      return { plan, items, deviations };
+      // Surface everything the desktop has about the plan.
+      const phases = safe(() => planPhasesService.listPhases(uid), []);
+      const documents = safe(() => planDocumentsService.listPlanDocumentSummaries(uid), []);
+      const externalRefs = safe(() => externalRefsService.getExternalRefsByPlan(uid), []);
+      const comments = safe(() => commentService.getComments(uid), []);
+      return { plan, items, deviations, phases, documents, externalRefs, comments };
+    }
+
+    case 'plan.document': {
+      const docUid = requireString(params, 'docUid');
+      const doc = planDocumentsService.getPlanDocument(docUid);
+      if (!doc) throw new Error(`Document not found: ${docUid}`);
+      return doc;
     }
 
     case 'plan.items': {
@@ -180,7 +197,10 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       const uid = requireString(params, 'uid');
       const item = planItemService.getItem(uid);
       if (!item) throw new Error(`Item not found: ${uid}`);
-      return item;
+      const comments = safe(() => commentService.listItemComments(uid), []);
+      const externalRefs = safe(() => externalRefsService.getExternalRefs(uid), []);
+      const attachments = safe(() => taskAttachmentsService.listItemAttachments(uid), []);
+      return { item, comments, externalRefs, attachments };
     }
 
     case 'plan.item.update': {
@@ -466,6 +486,11 @@ function requireString(params: Record<string, unknown>, key: string): string {
     throw new Error(`Missing required string parameter: ${key}`);
   }
   return val;
+}
+
+/** Run a getter, returning a fallback if it throws (service not ready / no rows). */
+function safe<T>(fn: () => T, fallback: T): T {
+  try { return fn(); } catch { return fallback; }
 }
 
 // --- Graph helpers -----------------------------------------------------------

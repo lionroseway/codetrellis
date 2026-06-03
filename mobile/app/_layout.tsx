@@ -93,6 +93,20 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="doc-viewer"
+          options={{
+            title: 'Document',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
+          name="plan-channel"
+          options={{
+            title: 'Discussion',
+            headerStyle: { backgroundColor: '#09090b' },
+          }}
+        />
+        <Stack.Screen
           name="connection-switcher"
           options={{
             title: 'Connections',
