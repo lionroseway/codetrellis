@@ -3,7 +3,7 @@ import { FileEdit, Search, Circle, XCircle, X, ClipboardList, Maximize2, Minimiz
 import { useUiStore } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
-import { PlanList } from '../plan/PlanList';
+import { PlanList } from '../plan/PlanListView';
 import { CommentThread } from '../plan/CommentThread';
 import { ProposedChanges } from '../plan/ProposedChanges';
 

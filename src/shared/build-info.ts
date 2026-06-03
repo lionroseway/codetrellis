@@ -22,10 +22,10 @@ export interface BuildInfo {
 
 export const BUILD_INFO: BuildInfo = {
   "version": "0.1.9",
-  "buildTime": "2026-05-31T15:43:43.018Z",
-  "buildNumber": 237,
-  "commit": "0d4ef8c63f7ea42c81fb8939283b0fcc293a2617",
-  "commitShort": "0d4ef8c",
+  "buildTime": "2026-06-01T17:13:15.511Z",
+  "buildNumber": 241,
+  "commit": "eb905ce652dff74dc1c0fbc2c62c0319b133fc55",
+  "commitShort": "eb905ce",
   "branch": "main",
   "dirty": true
 };

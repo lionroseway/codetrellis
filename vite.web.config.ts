@@ -19,6 +19,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    headers: {
+      // Bust stale Chrome disk cache from the old project name
+      'Cache-Control': 'no-store',
+    },
     proxy: {
       '/api': 'http://localhost:3001',
       '/terminal-ws': {

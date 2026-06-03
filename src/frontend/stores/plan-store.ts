@@ -35,6 +35,20 @@ interface PlanState {
     payload: Record<string, unknown>;
   }>;
 
+  /**
+   * Plan scope filter — 'all' shows plans from every project,
+   * otherwise a project path restricts to that project.
+   * WS handlers (onPlanCreated/Updated) respect this so real-time
+   * updates don't flash plans from other projects.
+   */
+  planScope: 'all' | string;
+  setPlanScope: (scope: 'all' | string) => void;
+
+  /**
+   * Fetch all plans (unfiltered). The `projectPath` parameter is
+   * accepted for backward compatibility but ignored — scope
+   * filtering now happens client-side via `planScope`.
+   */
   fetchPlans: (projectPath?: string) => Promise<void>;
   fetchPlan: (uid: string) => Promise<void>;
   setActivePlan: (uid: string | null) => void;
@@ -120,12 +134,27 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   selectedDocUid: null,
   taskContexts: {},
   activityEvents: [],
+  planScope: 'all',
 
-  fetchPlans: async (projectPath) => {
-    const url = projectPath ? `/api/plans?project=${encodeURIComponent(projectPath)}` : '/api/plans';
-    const res = await fetch(url);
-    const plans = await res.json();
-    set({ plans });
+  setPlanScope: (scope) => {
+    set({ planScope: scope });
+    // Always fetch all plans — client-side filtering by scope.
+    // This way the scope chip bar always knows about all projects.
+    get().fetchPlans();
+  },
+
+  fetchPlans: async (_projectPath?: string) => {
+    // Always fetch the full unfiltered list; scoped filtering
+    // happens in the component via planScope. The _projectPath
+    // parameter is kept for backward compat but ignored.
+    try {
+      const res = await fetch('/api/plans');
+      const data = await res.json();
+      // Guard: only set if we got an array (backend may return {error:…})
+      if (Array.isArray(data)) {
+        set({ plans: data });
+      }
+    } catch { /* network error — leave existing plans in place */ }
   },
 
   fetchPlan: async (uid) => {
@@ -364,14 +393,9 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       if (s.plans.some((p) => p.uid === plan.uid)) return s;
       return { plans: [plan, ...s.plans] };
     });
-    // Also do a full server re-fetch so the project filter is applied
-    // correctly (in case the agent's project_path doesn't exactly match
-    // the UI's current root, or the optimistic append gets stale).
-    (async () => {
-      const { useProjectStore } = await import('./project-store');
-      const root = useProjectStore.getState().root;
-      get().fetchPlans(root || undefined);
-    })();
+    // Full server re-fetch respecting the current plan scope filter.
+    const scope = get().planScope;
+    get().fetchPlans(scope === 'all' ? undefined : scope);
   },
 
   onPlanDeleted: (planUid) => {
@@ -387,15 +411,11 @@ export const usePlanStore = create<PlanState>((set, get) => ({
 
   onPlanUpdated: (planUid) => {
     // Refresh the plan if it's the active one.
-    // Use the current project filter so we don't briefly flash
-    // plans from other projects (which causes duplicate-key
-    // warnings when fetchPlans(root) replaces the list).
+    // Use the current plan scope filter so we don't briefly flash
+    // plans from other projects.
     const state = get();
-    (async () => {
-      const { useProjectStore } = await import('./project-store');
-      const root = useProjectStore.getState().root;
-      state.fetchPlans(root || undefined);
-    })();
+    const scope = state.planScope;
+    state.fetchPlans(scope === 'all' ? undefined : scope);
     if (state.activePlanUid === planUid) {
       state.fetchPlan(planUid);
     }

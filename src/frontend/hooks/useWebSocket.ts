@@ -147,9 +147,9 @@ export function useWebSocket() {
           if (type === 'plan-imported') {
             // An external import (MCP, another window, future
             // auto-sync) loaded a plan. Refresh the list so the
-            // user sees it.
-            const root = useProjectStore.getState().root;
-            usePlanStore.getState().fetchPlans(root || undefined).catch(() => {});
+            // user sees it, respecting the current plan scope.
+            const scope = usePlanStore.getState().planScope;
+            usePlanStore.getState().fetchPlans(scope === 'all' ? undefined : scope).catch(() => {});
             // Phase 13 §B: file-watcher-driven auto-syncs are common
             // (every git pull, every external edit). Distinguish them
             // so the toast text matches what just happened.
@@ -267,11 +267,10 @@ export function useWebSocket() {
             if (panel === 'split') useUiStore.getState().toggleSplitView();
           }
           if (type === 'ui-refresh') {
-            // Force a full plan list refresh
+            // Force a full plan list refresh, respecting the current scope
             (async () => {
-              const { useProjectStore } = await import('../stores/project-store');
-              const root = useProjectStore.getState().root;
-              usePlanStore.getState().fetchPlans(root || undefined);
+              const scope = usePlanStore.getState().planScope;
+              usePlanStore.getState().fetchPlans(scope === 'all' ? undefined : scope);
               const activePlan = usePlanStore.getState().activePlanUid;
               if (activePlan) usePlanStore.getState().fetchPlan(activePlan);
             })();

@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
-import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square, AlertTriangle, RefreshCw, FolderOpen } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
@@ -27,7 +27,10 @@ export function PlanList() {
   const fetchPlans = usePlanStore((s) => s.fetchPlans);
   const deletePlan = usePlanStore((s) => s.deletePlan);
   const bulkDeletePlans = usePlanStore((s) => s.bulkDeletePlans);
+  const planScope = usePlanStore((s) => s.planScope);
+  const setPlanScope = usePlanStore((s) => s.setPlanScope);
   const root = useProjectStore((s) => s.root);
+  const tabs = useProjectStore((s) => s.tabs);
   const addToast = useToastStore((s) => s.addToast);
   const [discovered, setDiscovered] = useState<string[] | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
@@ -45,9 +48,54 @@ export function PlanList() {
   // elsewhere in this deployment).
   const [repoRole, setRepoRole] = useState<'planning' | 'code' | 'mixed' | null>(null);
 
+  // Track the previous root so we can auto-switch scope when the user
+  // changes project tabs (only if scope was tracking the old project).
+  const prevRootRef = useRef<string | null>(null);
   useEffect(() => {
-    fetchPlans(root || undefined);
-  }, [root, fetchPlans]);
+    const prev = prevRootRef.current;
+    prevRootRef.current = root;
+    if (root && root !== prev) {
+      // User switched tabs or first project opened.
+      if (planScope === 'all') {
+        // Default to the active project (first open, or user
+        // was on "all" and a new project appeared)
+        setPlanScope(root);
+      } else if (prev && planScope === prev) {
+        // Was tracking the old project — follow the tab switch
+        setPlanScope(root);
+      }
+      // else: user manually chose a different project, leave it
+    } else if (!root && prev) {
+      // All tabs closed — fall back to all
+      setPlanScope('all');
+    }
+  }, [root]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch all plans on mount (client-side filtering by planScope)
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
+
+  // Derive a short project name from a path for display
+  const projectName = useCallback((path: string) => {
+    return path.split('/').pop() || path;
+  }, []);
+
+  // Derive unique project paths from the plans list + open tabs
+  // for the scope filter chips.
+  const projectChips = useMemo(() => {
+    const paths = new Set<string>();
+    for (const p of plans) {
+      if (p.projectPath) paths.add(p.projectPath);
+    }
+    for (const t of tabs) {
+      paths.add(t.root);
+    }
+    return [...paths].sort().map((path) => ({
+      path,
+      name: path.split('/').pop() || path,
+    }));
+  }, [plans, tabs]);
 
   // Phase 13 §A: discover plan directories committed in the project's
   // `.codetrellis/plans/` so the user can one-click import them.
@@ -83,7 +131,7 @@ export function PlanList() {
         message: `${data.plan.title} — ${data.tasks.length} tasks, ${data.docs.length} docs${w}`,
         duration: 6000,
       });
-      await fetchPlans(root || undefined);
+      await fetchPlans();
       setActivePlan(data.plan.uid);
     } catch (err) {
       addToast({ type: 'error', title: 'Import failed', message: String(err) });
@@ -159,23 +207,31 @@ export function PlanList() {
       });
       if (!res.ok) throw new Error(await res.text());
       const plan = await res.json();
-      await fetchPlans(root);
+      await fetchPlans();
       await setActivePlan(plan.uid);
     } catch (err) {
       addToast({ type: 'error', title: 'Could not create plan', message: String(err) });
     }
   };
 
-  // Filter plans by search query
+  // Filter plans by project scope + search query
   const filteredPlans = useMemo(() => {
-    if (!searchQuery.trim()) return plans;
-    const q = searchQuery.toLowerCase();
-    return plans.filter((p) =>
-      p.title.toLowerCase().includes(q) ||
-      p.status.toLowerCase().includes(q) ||
-      p.uid.toLowerCase().includes(q)
-    );
-  }, [plans, searchQuery]);
+    let result = plans;
+    // Apply project scope filter
+    if (planScope !== 'all') {
+      result = result.filter((p) => p.projectPath === planScope);
+    }
+    // Apply text search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.status.toLowerCase().includes(q) ||
+        p.uid.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [plans, planScope, searchQuery]);
 
   const handleDeleteSingle = useCallback(async (uid: string) => {
     const ok = await deletePlan(uid);
@@ -247,6 +303,37 @@ export function PlanList() {
           </button>
         </div>
       </div>
+
+      {/* Project scope filter — shown when plans span multiple projects */}
+      {projectChips.length > 1 && (
+        <div className="flex items-center gap-1 px-1.5 mb-2 overflow-x-auto scrollbar-none">
+          <button
+            onClick={() => setPlanScope('all')}
+            className={`shrink-0 flex items-center gap-1 px-2.5 py-1 text-[11.5px] rounded-md border transition-colors ${
+              planScope === 'all'
+                ? 'bg-accent/10 border-accent/30 text-accent font-medium'
+                : 'border-white/[0.06] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+            }`}
+          >
+            All projects
+          </button>
+          {projectChips.map((chip) => (
+            <button
+              key={chip.path}
+              onClick={() => setPlanScope(chip.path)}
+              className={`shrink-0 flex items-center gap-1 px-2.5 py-1 text-[11.5px] rounded-md border transition-colors truncate max-w-[160px] ${
+                planScope === chip.path
+                  ? 'bg-accent/10 border-accent/30 text-accent font-medium'
+                  : 'border-white/[0.06] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
+              }`}
+              title={chip.path}
+            >
+              <FolderOpen size={11} className="shrink-0" />
+              {chip.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* DB ↔ disk reconciliation status */}
       {reconcile && reconcile.orphanedOnDisk.length > 0 && (
@@ -438,6 +525,11 @@ export function PlanList() {
                 title="Click to open the plan workspace"
               >
                 <span className="text-[13px] font-medium text-foreground truncate block">{plan.title}</span>
+                {planScope === 'all' && plan.projectPath && (
+                  <span className="text-[10.5px] text-foreground-muted/60 truncate block mt-0.5">
+                    {projectName(plan.projectPath)}
+                  </span>
+                )}
               </button>
               <StatusBadge status={plan.status} />
               {/* Delete button — visible on hover */}
