@@ -19,7 +19,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { usePlans, useDeviationCounts, useActiveProject } from '../../lib/store';
+import { usePlans, useDeviationCounts } from '../../lib/store';
 
 type StatusFilter = 'all' | 'active' | 'draft' | 'completed';
 
@@ -47,13 +47,11 @@ export default function PlansTab() {
   const router = useRouter();
   const plans = usePlans();
   const deviationCounts = useDeviationCounts();
-  const activeProject = useActiveProject();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  // Project scope: 'all' or a projectPath string.
-  // Default to active project if there is one.
-  const [projectScope, setProjectScope] = useState<'all' | string>(
-    activeProject?.path ?? 'all',
-  );
+  // Project scope: 'all' or a projectPath string. Default to 'all' so every
+  // plan is visible — plans often live in projects other than the active one
+  // (and the active project may have none). Tap a project chip to narrow.
+  const [projectScope, setProjectScope] = useState<'all' | string>('all');
 
   // Derive unique projects from the plans list for scope chips
   const projectChips = useMemo(() => {
