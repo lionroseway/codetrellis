@@ -120,6 +120,8 @@ interface PresenceSummary {
   text: string;
   tone: string;
   createdAt: number;
+  agentId: string | null;
+  linkTo: string | null;
 }
 
 interface AudioStatusSummary {
@@ -327,6 +329,8 @@ export function collectSnapshot(): SyncStateSnapshot {
     text: c.text,
     tone: c.tone,
     createdAt: c.createdAt,
+    agentId: c.agentId ?? null,
+    linkTo: c.linkTo ?? null,
   }));
 
   // Audio status

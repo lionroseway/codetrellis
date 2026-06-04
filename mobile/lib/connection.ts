@@ -11,10 +11,13 @@
  *   4. Auto-reconnect on disconnect
  */
 
+import { router } from 'expo-router';
+import { AppState, type AppStateStatus } from 'react-native';
 import { webrtc } from './webrtc';
 import { touchPairedDesktop } from './storage';
 import { useWorkspaceStore } from './store';
-import { handleRpcResponse, cancelAllPendingRpc } from './rpc';
+import { handleRpcResponse, cancelAllPendingRpc, rpc } from './rpc';
+import { getDiscoveredDesktops } from './discovery';
 import type {
   ConnectionTarget,
   ConnectionState,
@@ -41,6 +44,13 @@ class ConnectionManager {
   private unsubState: (() => void) | null = null;
   private currentSnapshot: WorkspaceSnapshot | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private reconnecting = false;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private missedPings = 0;
+  private lastInboundAt = 0;
+  private pinging = false;
+  private appStateSub: { remove: () => void } | null = null;
 
   /**
    * Connect to a target (desktop or hosted).
@@ -61,6 +71,10 @@ class ConnectionManager {
    */
   disconnect(): void {
     this.cancelReconnect();
+    this.stopHeartbeat();
+    this.reconnectAttempts = 0;
+    this.reconnecting = false;
+    if (this.appStateSub) { this.appStateSub.remove(); this.appStateSub = null; }
 
     if (this.unsubMessage) { this.unsubMessage(); this.unsubMessage = null; }
     if (this.unsubState) { this.unsubState(); this.unsubState = null; }
@@ -142,6 +156,13 @@ class ConnectionManager {
   // --- Internals -------------------------------------------------------------
 
   private async connectWebRTC(target: Extract<ConnectionTarget, { type: 'webrtc' }>): Promise<void> {
+    // Re-link when the app returns to the foreground — iOS suspends the app in
+    // the background, which silently kills the WebRTC transport. (Registered
+    // once; persists across reconnects.)
+    if (!this.appStateSub) {
+      this.appStateSub = AppState.addEventListener('change', (s) => this.handleAppState(s));
+    }
+
     // Listen for messages from the desktop
     this.unsubMessage = webrtc.onMessage((channel, data) => {
       this.handleMessage(channel, data);
@@ -154,6 +175,11 @@ class ConnectionManager {
       if (state === 'connected') {
         touchPairedDesktop(target.fingerprint);
         this.cancelReconnect();
+        this.reconnectAttempts = 0;
+        this.reconnecting = false;
+        this.missedPings = 0;
+        this.lastInboundAt = Date.now();
+        this.startHeartbeat();
         // Silent pairingId upgrade: if the desktop returned a pairingId
         // during reconnect, store it so future connects use it.
         const upgradedPairingId = webrtc.lastReconnectPairingId;
@@ -196,6 +222,8 @@ class ConnectionManager {
   }
 
   private handleMessage(channel: string, data: string | ArrayBuffer): void {
+    // Any inbound message proves the peer is alive — feeds the liveness check.
+    this.lastInboundAt = Date.now();
     if (channel === 'ui') {
       this.handleUiMessage(data);
     } else if (channel === 'terminal') {
@@ -254,21 +282,132 @@ class ConnectionManager {
     // Check if this is an RPC response (correlated by request ID)
     if (handleRpcResponse(data)) return;
 
-    // Other control messages (future: agent events, etc.)
+    try {
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      const msg = JSON.parse(text);
+      // Desktop liveness ping → reply with a pong so the desktop can detect
+      // when WE go away and reap the dead peer. Without this the desktop's
+      // sends succeed into a killed socket and the peer lingers forever.
+      if (msg && msg.type === 'ping') {
+        webrtc.sendControl({ type: 'pong', id: msg.id, ts: Date.now() });
+        return;
+      }
+      // Desktop → mobile command (MCP drives the phone): navigate / screenshot.
+      if (msg && msg.mcp && typeof msg.cmd === 'string') {
+        void handleMobileCommand(msg);
+      }
+    } catch {
+      // not JSON / not a command — ignore
+    }
+  }
+
+  // --- Liveness heartbeat ----------------------------------------------------
+  // WebRTC's connectionState can lag (or not fire) when the desktop process
+  // dies, leaving the phone showing a stale "Connected". An active ping over
+  // the control channel detects a dead peer within a few seconds and kicks off
+  // reconnection.
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => { void this.pingLiveness(); }, 10_000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+  }
+
+  private async pingLiveness(): Promise<void> {
+    if (this.reconnecting || this.pinging) return;
+    // If we've heard from the desktop recently (snapshots, patches, any reply),
+    // it's alive — skip the probe. This keeps a busy/healthy connection from
+    // ever false-positiving into a reconnect (which would spawn a duplicate peer).
+    if (Date.now() - this.lastInboundAt < 12_000) { this.missedPings = 0; return; }
+
+    this.pinging = true;
+    try {
+      // Cheap, side-effect-free RPC. A reply (even an error) proves the channel
+      // is alive; only a timeout / closed channel counts as a miss.
+      await rpc('project.active', {}, 8_000);
+      this.missedPings = 0;
+    } catch {
+      this.missedPings += 1;
+      // ~3 quiet, unanswered probes (>30s of silence) before treating the peer
+      // as dead — conservative enough to avoid churn, fast enough to recover.
+      if (this.missedPings >= 3) {
+        this.missedPings = 0;
+        console.log('[Connection] Liveness lost — peer not responding, reconnecting');
+        this.stopHeartbeat();
+        if (this.target && this.target.type === 'webrtc') {
+          this.emitStateChange('disconnected', this.target.fingerprint);
+        }
+        this.scheduleReconnect();
+      }
+    } finally {
+      this.pinging = false;
+    }
+  }
+
+  // --- Reconnect with backoff ------------------------------------------------
+
+  /** Best-effort fresh address for the target: prefer a live mDNS hit, else stored. */
+  private resolveAddress(target: Extract<ConnectionTarget, { type: 'webrtc' }>): string | null {
+    try {
+      const hit = getDiscoveredDesktops().find((d) => d.fingerprint === target.fingerprint && d.address);
+      if (hit?.address) return hit.address;
+    } catch { /* discovery may be unavailable */ }
+    return target.desktopAddress || null;
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer) return;
-    if (!this.target) return;
+    if (this.reconnectTimer || this.reconnecting) return;
+    if (!this.target || this.target.type !== 'webrtc') return;
 
-    this.reconnectTimer = setTimeout(() => {
+    // Exponential backoff capped at 15s; keep retrying as long as a target is set.
+    const delay = Math.min(2_000 * Math.pow(1.6, this.reconnectAttempts), 15_000);
+
+    this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
-      if (this.target) {
-        console.log('[Connection] Attempting reconnect…');
-        // Reconnect logic would go here — requires re-negotiation
-        // with the desktop, which needs the desktop to be discoverable.
+      const target = this.target;
+      if (!target || target.type !== 'webrtc') return;
+
+      this.reconnecting = true;
+      this.reconnectAttempts += 1;
+      this.emitStateChange('connecting', target.fingerprint);
+
+      const address = this.resolveAddress(target);
+      try {
+        if (!address) throw new Error('No reachable address for desktop');
+        await webrtc.reconnectToDesktop(
+          address,
+          target.pairingId,
+          target.mobileApiPort,
+          target.fingerprint,
+        );
+        // Success path: the 'connected' state handler resets counters, restarts
+        // the heartbeat, and cancels any pending reconnect.
+        this.reconnecting = false;
+      } catch (err) {
+        console.log(`[Connection] Reconnect attempt ${this.reconnectAttempts} failed: ${err instanceof Error ? err.message : String(err)}`);
+        this.reconnecting = false;
+        this.scheduleReconnect(); // try again with longer backoff
       }
-    }, 5_000);
+    }, delay);
+  }
+
+  private handleAppState(s: AppStateStatus): void {
+    if (!this.target || this.target.type !== 'webrtc') return;
+    if (s === 'active') {
+      // Resume: the transport often dies while backgrounded — re-link promptly.
+      this.lastInboundAt = 0; // force the next heartbeat to actually probe
+      this.startHeartbeat();
+      if (webrtc.state !== 'connected' && !this.reconnecting) {
+        this.reconnectAttempts = 0; // snappy resume (no long backoff)
+        this.scheduleReconnect();
+      }
+    } else if (s === 'background') {
+      // The OS freezes timers when suspended; stop pinging to save battery.
+      this.stopHeartbeat();
+    }
   }
 
   private cancelReconnect(): void {
@@ -289,3 +428,58 @@ class ConnectionManager {
 
 /** Singleton instance. */
 export const connection = new ConnectionManager();
+
+// --- Desktop → mobile commands (MCP drives the phone) ------------------------
+
+async function handleMobileCommand(msg: { cmd: string; route?: string; id?: string }): Promise<void> {
+  if (msg.cmd === 'navigate' && typeof msg.route === 'string') {
+    try {
+      // router.navigate handles both tab routes and pushable detail routes.
+      router.navigate(msg.route as never);
+    } catch {
+      /* invalid route — ignore */
+    }
+    return;
+  }
+
+  if (msg.cmd === 'screenshot' && msg.id) {
+    const id = msg.id;
+    try {
+      // Lazily require so the JS bundle still loads in dev clients that don't
+      // yet have the native module built in (screenshot just errors until then).
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { captureScreen } = require('react-native-view-shot');
+      // Downscale to a small JPEG: a full-res PNG base64 is multiple MB, which
+      // silently exceeds the data channel's max message size (the send is
+      // dropped, not thrown) — so the desktop just times out. A ~540px JPEG is
+      // tens of KB, which we then chunk to stay well under the per-message cap.
+      const data: string = await captureScreen({
+        format: 'jpg',
+        quality: 0.6,
+        width: 540,
+        result: 'base64',
+      });
+      const CHUNK = 8000;
+      const total = Math.max(1, Math.ceil(data.length / CHUNK));
+      for (let seq = 0; seq < total; seq++) {
+        webrtc.sendControl({
+          mcp: true,
+          cmd: 'screenshot.chunk',
+          id,
+          seq,
+          total,
+          mime: 'image/jpeg',
+          data: data.slice(seq * CHUNK, (seq + 1) * CHUNK),
+        });
+      }
+    } catch (err) {
+      webrtc.sendControl({
+        mcp: true,
+        cmd: 'screenshot.result',
+        id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+}

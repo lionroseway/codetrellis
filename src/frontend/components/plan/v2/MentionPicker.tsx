@@ -90,6 +90,7 @@ export function useMentionPicker(opts: {
   const flatFiles = useMemo(() => {
     const out: Array<{ name: string; path: string; type: string }> = [];
     const walk = (nodes: typeof fileTree) => {
+      if (!Array.isArray(nodes)) return;
       for (const n of nodes) {
         out.push({ name: n.name, path: n.path, type: n.type });
         if (n.children) walk(n.children);

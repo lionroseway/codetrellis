@@ -153,6 +153,8 @@ export interface PresenceSummary {
   text: string;
   tone: string;
   createdAt: number;
+  agentId?: string | null;
+  linkTo?: string | null;
 }
 
 // --- v2 types (M1 enrichment) ------------------------------------------------

@@ -119,6 +119,7 @@ function FileTreeItem({
 }
 
 function filterTree(nodes: FileTreeNode[], query: string): FileTreeNode[] {
+  if (!Array.isArray(nodes)) return [];
   if (!query) return nodes;
   const q = query.toLowerCase();
   const result: FileTreeNode[] = [];

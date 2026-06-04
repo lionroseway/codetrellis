@@ -10,16 +10,19 @@
  * Status filter chips: All / Active / Draft / Completed.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { usePlans, useDeviationCounts } from '../../lib/store';
+import { usePlans, useDeviationCounts, useActiveProject } from '../../lib/store';
+import { rpc } from '../../lib/rpc';
 
 type StatusFilter = 'all' | 'active' | 'draft' | 'completed';
 
@@ -52,6 +55,28 @@ export default function PlansTab() {
   // plan is visible — plans often live in projects other than the active one
   // (and the active project may have none). Tap a project chip to narrow.
   const [projectScope, setProjectScope] = useState<'all' | string>('all');
+  const activeProject = useActiveProject();
+  const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const createPlan = useCallback(async () => {
+    if (!newTitle.trim()) return;
+    setBusy(true);
+    try {
+      const plan = await rpc<{ uid: string }>('plan.create', {
+        title: newTitle.trim(),
+        ...(activeProject?.path ? { projectPath: activeProject.path } : {}),
+      });
+      setNewTitle('');
+      setCreating(false);
+      router.push(`/plan-detail?uid=${plan.uid}`);
+    } catch (err: unknown) {
+      Alert.alert('Could not create plan', err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [newTitle, activeProject, router]);
 
   // Derive unique projects from the plans list for scope chips
   const projectChips = useMemo(() => {
@@ -86,6 +111,45 @@ export default function PlansTab() {
 
   return (
     <View style={styles.container}>
+      {/* New plan */}
+      <View style={styles.newRow}>
+        <Text style={styles.newRowTitle}>PLANS</Text>
+        {!creating && (
+          <View style={styles.newBtnGroup}>
+            <TouchableOpacity style={styles.newBtnGhost} onPress={() => router.push('/plan-templates')}>
+              <Text style={styles.newBtnGhostText}>Template</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.newBtn} onPress={() => setCreating(true)}>
+              <Text style={styles.newBtnText}>＋ New plan</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+      {creating && (
+        <View style={styles.createBox}>
+          <TextInput
+            style={styles.createInput}
+            value={newTitle}
+            onChangeText={setNewTitle}
+            placeholder="Plan title…"
+            placeholderTextColor="#52525b"
+            autoFocus
+          />
+          <View style={styles.createActions}>
+            <TouchableOpacity onPress={() => { setCreating(false); setNewTitle(''); }} hitSlop={8}>
+              <Text style={styles.createCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.createBtn, (!newTitle.trim() || busy) && styles.createBtnDisabled]}
+              onPress={createPlan}
+              disabled={!newTitle.trim() || busy}
+            >
+              <Text style={styles.createBtnText}>{busy ? '…' : 'Create'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Project scope chips */}
       {projectChips.length > 1 && (
         <ScrollView
@@ -235,6 +299,57 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#09090b',
   },
+  newRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  newRowTitle: { color: '#71717a', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  newBtnGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  newBtnGhost: {
+    borderWidth: 1,
+    borderColor: '#27272a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  newBtnGhostText: { color: '#a1a1aa', fontSize: 12, fontWeight: '700' },
+  newBtn: {
+    backgroundColor: '#3b82f620',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  newBtnText: { color: '#3b82f6', fontSize: 12, fontWeight: '700' },
+  createBox: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#141416',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#27272a',
+    padding: 12,
+  },
+  createInput: {
+    backgroundColor: '#18181b',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#27272a',
+    color: '#e4e4e7',
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  createActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 10 },
+  createCancel: { color: '#a1a1aa', fontSize: 14 },
+  createBtn: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  createBtnDisabled: { backgroundColor: '#27272a' },
+  createBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   // Project scope chips
   projectScroll: {

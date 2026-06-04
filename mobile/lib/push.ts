@@ -21,6 +21,9 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    // SDK 52+ split shouldShowAlert into banner + list.
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 

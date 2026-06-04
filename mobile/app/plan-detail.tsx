@@ -6,7 +6,7 @@
  * from the desktop in real-time.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  Alert,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { rpc } from '../lib/rpc';
+import Markdown from '../components/Markdown';
+import MarkdownBody from '../components/MarkdownBody';
+import CommentComposer from '../components/CommentComposer';
+import ItemCreator from '../components/ItemCreator';
 
 // --- Types (from desktop plan-service / plan-item-service) -------------------
 
@@ -25,6 +32,7 @@ interface PlanDetail {
   uid: string;
   title: string;
   status: string;
+  description?: string | null;
   projectPath: string;
   createdAt: number;
   updatedAt: number | null;
@@ -51,10 +59,49 @@ interface Deviation {
   createdAt: number;
 }
 
+interface PlanPhase {
+  uid: string;
+  title: string;
+  status?: string | null;
+  phaseNumber?: number;
+  scope?: string;
+  acceptanceCriteria?: string;
+}
+
+interface PlanDocSummary {
+  uid: string;
+  docType: string;
+  title: string;
+  version?: number;
+  bodyLength?: number;
+  updatedAt?: number | null;
+}
+
+interface ExternalRef {
+  uid: string;
+  url: string;
+  title?: string | null;
+  kind?: string | null;
+}
+
+interface PlanComment {
+  uid: string;
+  body: string;
+  author?: string | null;
+  authorType?: string | null;
+  commentType?: string | null;
+  createdAt: number;
+  replies?: PlanComment[];
+}
+
 interface PlanGetResult {
   plan: PlanDetail;
   items: PlanItem[];
   deviations: Deviation[];
+  phases?: PlanPhase[];
+  documents?: PlanDocSummary[];
+  externalRefs?: ExternalRef[];
+  comments?: PlanComment[];
 }
 
 // --- Status helpers ----------------------------------------------------------
@@ -87,6 +134,41 @@ function deviationTypeColor(type: string): string {
   }
 }
 
+function phaseStatusColor(status?: string | null): string {
+  switch (status) {
+    case 'complete':
+    case 'completed':
+    case 'done':
+      return '#3b82f6';
+    case 'in_progress':
+    case 'active':
+      return '#22c55e';
+    case 'blocked':
+      return '#ef4444';
+    default:
+      return '#52525b';
+  }
+}
+
+function docTypeLabel(docType: string): string {
+  return docType
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function relTime(ts?: number | null): string {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'just now';
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
 // --- Component ---------------------------------------------------------------
 
 export default function PlanDetailScreen() {
@@ -97,6 +179,9 @@ export default function PlanDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PlanGetResult | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
 
   const fetchPlan = useCallback(async () => {
     if (!uid) return;
@@ -108,6 +193,60 @@ export default function PlanDetailScreen() {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [uid]);
+
+  const deletePlan = useCallback(() => {
+    if (!uid) return;
+    Alert.alert('Delete plan?', 'This removes the plan and its items. This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await rpc('plan.delete', { uid });
+            router.back();
+          } catch (err: unknown) {
+            Alert.alert('Delete failed', err instanceof Error ? err.message : String(err));
+          }
+        },
+      },
+    ]);
+  }, [uid, router]);
+
+  const copyAsPrompt = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const res = await rpc<{ prompt: string }>('plan.copyAsPrompt', { uid });
+      await Clipboard.setStringAsync(res.prompt);
+      Alert.alert('Copied', 'Plan prompt copied to the clipboard — paste it into your agent.');
+    } catch (err: unknown) {
+      Alert.alert('Copy failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [uid]);
+
+  const exportPlan = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const res = await rpc<{ planDir: string; fileCount: number }>('plan.file.export', { planUid: uid });
+      Alert.alert('Exported', `${res.fileCount} file${res.fileCount !== 1 ? 's' : ''} written to ${res.planDir.split('/').slice(-3).join('/')}`);
+    } catch (err: unknown) {
+      Alert.alert('Export failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [uid]);
+
+  const saveTitle = useCallback(async () => {
+    if (!uid || !titleDraft.trim()) { setEditingTitle(false); return; }
+    setSavingTitle(true);
+    try {
+      await rpc('plan.update', { uid, title: titleDraft.trim() });
+      await fetchPlan();
+      setEditingTitle(false);
+    } catch (err: unknown) {
+      Alert.alert('Rename failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingTitle(false);
+    }
+  }, [uid, titleDraft, fetchPlan]);
 
   // Initial fetch
   useEffect(() => {
@@ -121,6 +260,16 @@ export default function PlanDetailScreen() {
     await fetchPlan();
     setRefreshing(false);
   }, [fetchPlan]);
+
+  // Refetch when returning from the body editor (skip the initial focus —
+  // the mount effect already loaded it).
+  const didMount = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMount.current) fetchPlan();
+      else didMount.current = true;
+    }, [fetchPlan]),
+  );
 
   // Resolve deviation
   const resolveDeviation = useCallback(
@@ -160,6 +309,10 @@ export default function PlanDetailScreen() {
   if (!data) return null;
 
   const { plan, items, deviations } = data;
+  const phases = data.phases ?? [];
+  const documents = data.documents ?? [];
+  const externalRefs = data.externalRefs ?? [];
+  const comments = data.comments ?? [];
   const totalItems = items.length;
   const doneItems = items.filter((i) => i.status === 'done' || i.status === 'completed').length;
   const inProgress = items.filter((i) => i.status === 'in_progress' || i.status === 'assigned').length;
@@ -189,7 +342,34 @@ export default function PlanDetailScreen() {
       }
     >
       {/* Plan header */}
-      <Text style={styles.planTitle}>{plan.title}</Text>
+      {editingTitle ? (
+        <View style={styles.titleEditRow}>
+          <TextInput
+            style={styles.titleInput}
+            value={titleDraft}
+            onChangeText={setTitleDraft}
+            autoFocus
+            multiline
+            placeholder="Plan title"
+            placeholderTextColor="#52525b"
+          />
+          <View style={styles.titleEditActions}>
+            <TouchableOpacity onPress={() => setEditingTitle(false)} hitSlop={8}>
+              <Text style={styles.titleCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.titleSave} onPress={saveTitle} disabled={savingTitle}>
+              <Text style={styles.titleSaveText}>{savingTitle ? '…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => { setTitleDraft(plan.title); setEditingTitle(true); }}
+        >
+          <Text style={styles.planTitle}>{plan.title}</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.metaRow}>
         <View
           style={[
@@ -217,6 +397,58 @@ export default function PlanDetailScreen() {
         <View style={[styles.progressFill, { width: `${pct}%` }]} />
       </View>
 
+      {/* Discussion entry point */}
+      <TouchableOpacity
+        style={styles.discussionBtn}
+        activeOpacity={0.7}
+        onPress={() =>
+          router.push(
+            `/plan-channel?planUid=${plan.uid}&planTitle=${encodeURIComponent(plan.title)}`,
+          )
+        }
+      >
+        <Text style={styles.discussionIcon}>{'\u{1F4AC}'}</Text>
+        <View style={styles.discussionBody}>
+          <Text style={styles.discussionTitle}>Discussion</Text>
+          <Text style={styles.discussionSub}>
+            Channel threads · ask, decide, steer, hand off
+          </Text>
+        </View>
+        <Text style={styles.itemChevron}>&gt;</Text>
+      </TouchableOpacity>
+
+      {/* Plan overview (editable markdown body) */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>OVERVIEW</Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push(
+                `/body-editor?target=plan&uid=${plan.uid}&label=${encodeURIComponent('Plan overview')}`,
+              )
+            }
+          >
+            <Text style={styles.editLink}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        {plan.description && plan.description.trim().length > 0 ? (
+          <View style={styles.markdownCard}>
+            <MarkdownBody source={plan.description} planUid={plan.uid} />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.addBodyCard}
+            onPress={() =>
+              router.push(
+                `/body-editor?target=plan&uid=${plan.uid}&label=${encodeURIComponent('Plan overview')}`,
+              )
+            }
+          >
+            <Text style={styles.addBodyText}>＋ Add an overview</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Pending deviations */}
       {pendingDeviations.length > 0 && (
         <View style={styles.section}>
@@ -242,7 +474,9 @@ export default function PlanDetailScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.devSummary}>{dev.summary}</Text>
+              <View style={styles.devSummary}>
+                <Markdown compact>{dev.summary}</Markdown>
+              </View>
               <View style={styles.devActions}>
                 <TouchableOpacity
                   style={[styles.devBtn, styles.devBtnAccept]}
@@ -265,6 +499,67 @@ export default function PlanDetailScreen() {
               </View>
             </View>
           ))}
+        </View>
+      )}
+
+      {/* Spec documents */}
+      {documents.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>SPEC DOCS ({documents.length})</Text>
+          {documents.map((doc) => (
+            <TouchableOpacity
+              key={doc.uid}
+              style={styles.docCard}
+              activeOpacity={0.7}
+              onPress={() =>
+                router.push(
+                  `/doc-viewer?docUid=${doc.uid}&title=${encodeURIComponent(doc.title)}`,
+                )
+              }
+            >
+              <Text style={styles.docIcon}>{'\u{1F4C4}'}</Text>
+              <View style={styles.docBody}>
+                <Text style={styles.docTitle} numberOfLines={2}>
+                  {doc.title}
+                </Text>
+                <Text style={styles.docMeta}>
+                  {docTypeLabel(doc.docType)}
+                  {doc.version ? ` · v${doc.version}` : ''}
+                  {doc.updatedAt ? ` · ${relTime(doc.updatedAt)}` : ''}
+                </Text>
+              </View>
+              <Text style={styles.itemChevron}>&gt;</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Phases */}
+      {phases.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>PHASES ({phases.length})</Text>
+          {phases
+            .slice()
+            .sort((a, b) => (a.phaseNumber ?? 0) - (b.phaseNumber ?? 0))
+            .map((phase) => (
+              <View key={phase.uid} style={styles.phaseCard}>
+                <View
+                  style={[
+                    styles.phaseDot,
+                    { backgroundColor: phaseStatusColor(phase.status) },
+                  ]}
+                />
+                <View style={styles.phaseBody}>
+                  <Text style={styles.phaseTitle} numberOfLines={2}>
+                    {phase.phaseNumber != null ? `${phase.phaseNumber}. ` : ''}
+                    {phase.title}
+                  </Text>
+                  {!!phase.status && (
+                    <Text style={styles.phaseMeta}>{phase.status}</Text>
+                  )}
+                </View>
+              </View>
+            ))}
         </View>
       )}
 
@@ -350,8 +645,92 @@ export default function PlanDetailScreen() {
             <Text style={styles.emptyText}>No items in this plan yet</Text>
           </View>
         )}
+        <ItemCreator planUid={plan.uid} label="＋ Add item" onCreated={() => fetchPlan()} />
       </View>
+
+      {/* External references / links */}
+      {externalRefs.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>LINKS ({externalRefs.length})</Text>
+          {externalRefs.map((ref) => (
+            <View key={ref.uid} style={styles.refCard}>
+              <Text style={styles.refKind}>
+                {(ref.kind ?? 'link').toUpperCase()}
+              </Text>
+              <View style={styles.refBody}>
+                <Text style={styles.refTitle} numberOfLines={1}>
+                  {ref.title || ref.url}
+                </Text>
+                <Text style={styles.refUrl} numberOfLines={1}>
+                  {ref.url}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Discussion / comments */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>
+          DISCUSSION{comments.length > 0 ? ` (${comments.length})` : ''}
+        </Text>
+        {comments.map((c) => (
+          <CommentThread key={c.uid} comment={c} depth={0} />
+        ))}
+        <CommentComposer
+          targetType="plan"
+          targetUid={plan.uid}
+          onPosted={() => fetchPlan()}
+        />
+      </View>
+
+      {/* Handoff + export + danger zone */}
+      <TouchableOpacity style={styles.handoffBtn} onPress={copyAsPrompt}>
+        <Text style={styles.handoffBtnText}>🤖  Copy as prompt (hand to agent)</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.exportBtn} onPress={exportPlan}>
+        <Text style={styles.exportBtnText}>⬆ Export to files (.codetrellis/plans/)</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.deleteBtn} onPress={deletePlan}>
+        <Text style={styles.deleteBtnText}>Delete plan</Text>
+      </TouchableOpacity>
     </ScrollView>
+  );
+}
+
+// --- Comment thread (recursive) ----------------------------------------------
+
+function CommentThread({
+  comment,
+  depth,
+}: {
+  comment: PlanComment;
+  depth: number;
+}) {
+  const isAgent = comment.authorType && comment.authorType !== 'human';
+  return (
+    <View style={[styles.commentCard, depth > 0 && styles.commentReply]}>
+      <View style={styles.commentHeader}>
+        <View
+          style={[
+            styles.commentDot,
+            { backgroundColor: isAgent ? '#8b5cf6' : '#3b82f6' },
+          ]}
+        />
+        <Text style={styles.commentAuthor}>
+          {comment.author || (isAgent ? 'agent' : 'you')}
+        </Text>
+        {!!comment.commentType && comment.commentType !== 'comment' && (
+          <Text style={styles.commentType}>{comment.commentType}</Text>
+        )}
+        <Text style={styles.commentTime}>{relTime(comment.createdAt)}</Text>
+      </View>
+      <Markdown compact>{comment.body}</Markdown>
+      {comment.replies?.map((r) => (
+        <CommentThread key={r.uid} comment={r} depth={depth + 1} />
+      ))}
+    </View>
   );
 }
 
@@ -411,6 +790,53 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 10,
   },
+  titleEditRow: { marginBottom: 10 },
+  titleInput: {
+    color: '#e4e4e7',
+    fontSize: 22,
+    fontWeight: '700',
+    backgroundColor: '#18181b',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  titleEditActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 8 },
+  titleCancel: { color: '#a1a1aa', fontSize: 14 },
+  titleSave: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 7 },
+  titleSaveText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  handoffBtn: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3b82f640',
+    backgroundColor: '#3b82f615',
+  },
+  handoffBtnText: { color: '#3b82f6', fontSize: 13, fontWeight: '700' },
+  exportBtn: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#27272a',
+    backgroundColor: '#18181b',
+  },
+  exportBtnText: { color: '#a1a1aa', fontSize: 13, fontWeight: '600' },
+  deleteBtn: {
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ef444440',
+    backgroundColor: '#ef44440d',
+  },
+  deleteBtnText: { color: '#ef4444', fontSize: 14, fontWeight: '600' },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -579,6 +1005,209 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 8,
     alignSelf: 'center',
+  },
+
+  // Discussion entry point
+  discussionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#3b82f640',
+  },
+  discussionIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  discussionBody: {
+    flex: 1,
+  },
+  discussionTitle: {
+    color: '#e4e4e7',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  discussionSub: {
+    color: '#71717a',
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  // Editable-section affordances
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  editLink: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
+  addBodyCard: {
+    backgroundColor: '#141416',
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#3f3f46',
+    alignItems: 'center',
+  },
+  addBodyText: { color: '#71717a', fontSize: 13, fontWeight: '500' },
+
+  // Markdown body card (plan overview)
+  markdownCard: {
+    backgroundColor: '#141416',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+
+  // Spec doc cards
+  docCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  docIcon: {
+    fontSize: 18,
+    marginRight: 10,
+  },
+  docBody: {
+    flex: 1,
+  },
+  docTitle: {
+    color: '#e4e4e7',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  docMeta: {
+    color: '#52525b',
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  // Phase cards
+  phaseCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  phaseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 3,
+    marginRight: 10,
+  },
+  phaseBody: {
+    flex: 1,
+  },
+  phaseTitle: {
+    color: '#e4e4e7',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  phaseMeta: {
+    color: '#52525b',
+    fontSize: 11,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+
+  // External ref cards
+  refCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  refKind: {
+    color: '#8b5cf6',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginRight: 10,
+    minWidth: 48,
+  },
+  refBody: {
+    flex: 1,
+  },
+  refTitle: {
+    color: '#e4e4e7',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  refUrl: {
+    color: '#52525b',
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  // Comment cards
+  commentCard: {
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  commentReply: {
+    marginLeft: 20,
+    backgroundColor: '#141416',
+    borderColor: '#1f1f23',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  commentDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  commentAuthor: {
+    color: '#a1a1aa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  commentType: {
+    color: '#8b5cf6',
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  commentTime: {
+    color: '#52525b',
+    fontSize: 11,
+    marginLeft: 'auto',
+  },
+  commentBody: {
+    color: '#d4d4d8',
+    fontSize: 13,
+    lineHeight: 19,
   },
 
   // Empty

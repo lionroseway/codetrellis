@@ -140,9 +140,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setFileTree: (tree) => {
+    // Coerce to an array — scanning a missing/empty project (e.g. a plan
+    // that points at a deleted directory) can yield `undefined` here, which
+    // would poison every file-tree consumer (`for (const n of fileTree)` →
+    // "nodes is not iterable") and crash the whole app via the error boundary.
+    const safeTree = Array.isArray(tree) ? tree : [];
     const s = get();
-    const tabs = updateActiveTab(s.tabs, s.activeTabId, { fileTree: tree });
-    set({ tabs, fileTree: tree });
+    const tabs = updateActiveTab(s.tabs, s.activeTabId, { fileTree: safeTree });
+    set({ tabs, fileTree: safeTree });
   },
 
   setGitStatus: (gitStatus) => {

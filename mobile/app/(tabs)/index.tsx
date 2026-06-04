@@ -226,11 +226,20 @@ export default function HomeTab() {
         )}
       </View>
 
-      {/* Recent projects */}
-      {recentProjects.length > 1 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>RECENT PROJECTS</Text>
-          {recentProjects
+      {/* Recent projects + browse */}
+      <View style={styles.section}>
+        <View style={styles.projectsHeader}>
+          <Text style={styles.sectionTitle}>PROJECTS</Text>
+          <TouchableOpacity
+            style={styles.browseBtn}
+            activeOpacity={0.7}
+            onPress={() => router.push('/project-browser')}
+          >
+            <Text style={styles.browseBtnText}>＋ Open folder</Text>
+          </TouchableOpacity>
+        </View>
+        {recentProjects.length > 1 &&
+          recentProjects
             .filter((p) => p.path !== activeProject?.path)
             .slice(0, 5)
             .map((proj) => (
@@ -259,8 +268,27 @@ export default function HomeTab() {
                 )}
               </TouchableOpacity>
             ))}
-        </View>
-      )}
+      </View>
+
+      {/* Manage — projects / docs / settings */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>MANAGE</Text>
+        <TouchableOpacity style={styles.manageRow} activeOpacity={0.7} onPress={() => router.push('/projects')}>
+          <Text style={styles.manageIcon}>📁</Text>
+          <Text style={styles.manageLabel}>Projects</Text>
+          <Text style={styles.manageChevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.manageRow} activeOpacity={0.7} onPress={() => router.push('/system-docs')}>
+          <Text style={styles.manageIcon}>📄</Text>
+          <Text style={styles.manageLabel}>System Docs</Text>
+          <Text style={styles.manageChevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.manageRow} activeOpacity={0.7} onPress={() => router.push('/settings')}>
+          <Text style={styles.manageIcon}>⚙︎</Text>
+          <Text style={styles.manageLabel}>Settings</Text>
+          <Text style={styles.manageChevron}>›</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -341,6 +369,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8,
   },
+  projectsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  browseBtn: {
+    backgroundColor: '#3b82f620',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 8,
+  },
+  browseBtnText: { color: '#3b82f6', fontSize: 12, fontWeight: '700' },
 
   // Project card
   projectCard: {
@@ -482,6 +526,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+
+  // Manage rows
+  manageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  manageIcon: { fontSize: 16, marginRight: 12 },
+  manageLabel: { color: '#e4e4e7', fontSize: 14, fontWeight: '600', flex: 1 },
+  manageChevron: { color: '#52525b', fontSize: 18 },
 
   // Empty state
   emptyCard: {

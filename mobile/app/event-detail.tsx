@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { rpc } from '../lib/rpc';
+import Markdown from '../components/Markdown';
 
 // --- Types -------------------------------------------------------------------
 
@@ -195,9 +196,9 @@ export default function EventDetailScreen() {
             </View>
           </View>
 
-          <Text style={styles.eventMessage}>
-            {event.payload?.message ?? '(no message)'}
-          </Text>
+          <View style={styles.eventMessage}>
+            <Markdown compact>{event.payload?.message ?? '(no message)'}</Markdown>
+          </View>
 
           <View style={styles.eventMeta}>
             <Text style={styles.metaText}>
@@ -241,9 +242,9 @@ export default function EventDetailScreen() {
                       {formatRelative(reply.createdAt)}
                     </Text>
                   </View>
-                  <Text style={styles.replyMessage}>
-                    {reply.payload?.message ?? ''}
-                  </Text>
+                  <View style={styles.replyMessage}>
+                    <Markdown compact>{reply.payload?.message ?? ''}</Markdown>
+                  </View>
                   <Text style={styles.replyAuthor}>
                     {reply.author}
                     {reply.authorType ? ` (${reply.authorType})` : ''}
