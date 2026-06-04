@@ -5,7 +5,7 @@
  * assignee, and subtasks. Editable fields save via RPC.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,10 +17,11 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
+import CommentComposer from '../components/CommentComposer';
 
 // --- Types -------------------------------------------------------------------
 
@@ -157,6 +158,32 @@ export default function ItemDetailScreen() {
     setRefreshing(false);
   }, [fetchItem]);
 
+  // Refetch when returning from the body editor (skip the first focus).
+  const didMount = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMount.current) fetchItem();
+      else didMount.current = true;
+    }, [fetchItem]),
+  );
+
+  // Generic field patch (assignee / blocked / progress).
+  const patchItem = useCallback(
+    async (patch: Record<string, unknown>) => {
+      if (!uid) return;
+      setSaving(true);
+      try {
+        const updated = await rpc<PlanItem>('plan.item.update', { uid, ...patch });
+        setItem(updated);
+      } catch (err: unknown) {
+        Alert.alert('Update failed', err instanceof Error ? err.message : String(err));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [uid],
+  );
+
   const updateStatus = useCallback(
     async (newStatus: string) => {
       if (!uid || !item) return;
@@ -277,14 +304,30 @@ export default function ItemDetailScreen() {
         </View>
       )}
 
-      {/* Progress */}
-      {item.progressPercent != null && item.progressPercent > 0 && (
+      {/* Progress (editable stepper for actions) */}
+      {item.kind === 'action' && (
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>PROGRESS</Text>
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${item.progressPercent}%` }]} />
+            <View style={[styles.progressFill, { width: `${item.progressPercent ?? 0}%` }]} />
           </View>
-          <Text style={styles.progressText}>{item.progressPercent}%</Text>
+          <View style={styles.stepperRow}>
+            <TouchableOpacity
+              style={styles.stepBtn}
+              disabled={saving}
+              onPress={() => patchItem({ progressPercent: Math.max(0, (item.progressPercent ?? 0) - 10) })}
+            >
+              <Text style={styles.stepText}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.progressText}>{item.progressPercent ?? 0}%</Text>
+            <TouchableOpacity
+              style={styles.stepBtn}
+              disabled={saving}
+              onPress={() => patchItem({ progressPercent: Math.min(100, (item.progressPercent ?? 0) + 10) })}
+            >
+              <Text style={styles.stepText}>＋</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -298,15 +341,37 @@ export default function ItemDetailScreen() {
         </View>
       )}
 
-      {/* Description / Body (markdown — reads like the desktop page) */}
-      {item.body && item.body.trim().length > 0 && (
-        <View style={styles.section}>
+      {/* Description / Body (markdown — editable, reads like the desktop page) */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionLabel}>DESCRIPTION</Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push(
+                `/body-editor?target=item&uid=${uid}&label=${encodeURIComponent('Edit description')}`,
+              )
+            }
+          >
+            <Text style={styles.editLink}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        {item.body && item.body.trim().length > 0 ? (
           <View style={styles.bodyCard}>
             <MarkdownBody source={item.body} planUid={planUid} />
           </View>
-        </View>
-      )}
+        ) : (
+          <TouchableOpacity
+            style={styles.addBodyCard}
+            onPress={() =>
+              router.push(
+                `/body-editor?target=item&uid=${uid}&label=${encodeURIComponent('Edit description')}`,
+              )
+            }
+          >
+            <Text style={styles.addBodyText}>＋ Add a description</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Scope path */}
       {item.scopePath && (
@@ -425,14 +490,15 @@ export default function ItemDetailScreen() {
       )}
 
       {/* Discussion / comments */}
-      {comments.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>DISCUSSION ({comments.length})</Text>
-          {comments.map((c) => (
-            <ItemCommentThread key={c.uid} comment={c} depth={0} />
-          ))}
-        </View>
-      )}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>
+          DISCUSSION{comments.length > 0 ? ` (${comments.length})` : ''}
+        </Text>
+        {comments.map((c) => (
+          <ItemCommentThread key={c.uid} comment={c} depth={0} />
+        ))}
+        <CommentComposer targetType="item" targetUid={uid!} onPosted={() => fetchItem()} />
+      </View>
     </ScrollView>
   );
 }
@@ -565,6 +631,34 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  editLink: { color: '#3b82f6', fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  addBodyCard: {
+    backgroundColor: '#141416',
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#3f3f46',
+    alignItems: 'center',
+  },
+  addBodyText: { color: '#71717a', fontSize: 13, fontWeight: '500' },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 },
+  stepBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#27272a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepText: { color: '#e4e4e7', fontSize: 18, fontWeight: '700' },
 
   // Status
   statusButton: {

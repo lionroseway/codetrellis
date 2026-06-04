@@ -115,6 +115,14 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="body-editor"
+          options={{
+            title: 'Edit',
+            presentation: 'modal',
+            headerStyle: { backgroundColor: '#111113' },
+          }}
+        />
+        <Stack.Screen
           name="connection-switcher"
           options={{
             title: 'Connections',

@@ -6,7 +6,7 @@
  * from the desktop in real-time.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,10 +16,11 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
+import CommentComposer from '../components/CommentComposer';
 
 // --- Types (from desktop plan-service / plan-item-service) -------------------
 
@@ -199,6 +200,16 @@ export default function PlanDetailScreen() {
     setRefreshing(false);
   }, [fetchPlan]);
 
+  // Refetch when returning from the body editor (skip the initial focus —
+  // the mount effect already loaded it).
+  const didMount = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (didMount.current) fetchPlan();
+      else didMount.current = true;
+    }, [fetchPlan]),
+  );
+
   // Resolve deviation
   const resolveDeviation = useCallback(
     async (id: number, resolution: 'accepted' | 'reverted' | 'ignored') => {
@@ -318,15 +329,37 @@ export default function PlanDetailScreen() {
         <Text style={styles.itemChevron}>&gt;</Text>
       </TouchableOpacity>
 
-      {/* Plan overview (markdown body) */}
-      {!!plan.description && plan.description.trim().length > 0 && (
-        <View style={styles.section}>
+      {/* Plan overview (editable markdown body) */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>OVERVIEW</Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push(
+                `/body-editor?target=plan&uid=${plan.uid}&label=${encodeURIComponent('Plan overview')}`,
+              )
+            }
+          >
+            <Text style={styles.editLink}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        {plan.description && plan.description.trim().length > 0 ? (
           <View style={styles.markdownCard}>
             <MarkdownBody source={plan.description} planUid={plan.uid} />
           </View>
-        </View>
-      )}
+        ) : (
+          <TouchableOpacity
+            style={styles.addBodyCard}
+            onPress={() =>
+              router.push(
+                `/body-editor?target=plan&uid=${plan.uid}&label=${encodeURIComponent('Plan overview')}`,
+              )
+            }
+          >
+            <Text style={styles.addBodyText}>＋ Add an overview</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Pending deviations */}
       {pendingDeviations.length > 0 && (
@@ -547,14 +580,19 @@ export default function PlanDetailScreen() {
       )}
 
       {/* Discussion / comments */}
-      {comments.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>DISCUSSION ({comments.length})</Text>
-          {comments.map((c) => (
-            <CommentThread key={c.uid} comment={c} depth={0} />
-          ))}
-        </View>
-      )}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>
+          DISCUSSION{comments.length > 0 ? ` (${comments.length})` : ''}
+        </Text>
+        {comments.map((c) => (
+          <CommentThread key={c.uid} comment={c} depth={0} />
+        ))}
+        <CommentComposer
+          targetType="plan"
+          targetUid={plan.uid}
+          onPosted={() => fetchPlan()}
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -848,6 +886,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+
+  // Editable-section affordances
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  editLink: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
+  addBodyCard: {
+    backgroundColor: '#141416',
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#3f3f46',
+    alignItems: 'center',
+  },
+  addBodyText: { color: '#71717a', fontSize: 13, fontWeight: '500' },
 
   // Markdown body card (plan overview)
   markdownCard: {

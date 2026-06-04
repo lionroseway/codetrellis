@@ -53,6 +53,7 @@ import {
 import { listCrossSystemEdges } from './cross-system-service';
 import { captureSnapshot, computeDiff, getBaseline } from './diff-engine';
 import { computeProjection } from './projection-service';
+import { getAuthorKey } from './settings-service';
 import {
   scanProject,
   getActiveProjectPath,
@@ -193,7 +194,8 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       const updates: Record<string, unknown> = {};
       if (params.title !== undefined) updates.title = params.title;
       if (params.status !== undefined) updates.status = params.status;
-      planService.updatePlan(uid, updates as any, 'mobile-user');
+      if (params.description !== undefined) updates.description = params.description;
+      planService.updatePlan(uid, updates as any, getAuthorKey('human'));
       return { ok: true };
     }
 
@@ -214,9 +216,30 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       if (params.title !== undefined) updates.title = params.title;
       if (params.assignee !== undefined) updates.assignee = params.assignee;
       if (params.body !== undefined) updates.body = params.body;
+      if (params.blockedReason !== undefined) updates.blockedReason = params.blockedReason;
+      if (params.progressPercent !== undefined) updates.progressPercent = params.progressPercent;
       const updated = planItemService.updateItem(uid, updates as any);
       if (!updated) throw new Error(`Item not found: ${uid}`);
       return updated;
+    }
+
+    case 'comment.add': {
+      // Post a comment from mobile. targetType 'item' (plan item) or 'plan'.
+      const targetUid = requireString(params, 'targetUid');
+      const body = requireString(params, 'body');
+      const targetType = (params.targetType as string) === 'plan' ? 'plan' : 'item';
+      const kind = (params.kind as string) || 'note';
+      const parentUid = (params.parentUid as string) || undefined;
+      const comment = commentService.addComment(
+        targetType as 'plan' | 'item',
+        targetUid,
+        getAuthorKey('human'),
+        'human',
+        body,
+        { kind: kind as any, parentUid },
+      );
+      broadcast('comment-added', { comment });
+      return comment;
     }
 
     // --- Deviations ----------------------------------------------------------
