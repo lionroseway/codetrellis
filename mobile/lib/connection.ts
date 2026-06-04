@@ -15,7 +15,8 @@ import { router } from 'expo-router';
 import { webrtc } from './webrtc';
 import { touchPairedDesktop } from './storage';
 import { useWorkspaceStore } from './store';
-import { handleRpcResponse, cancelAllPendingRpc } from './rpc';
+import { handleRpcResponse, cancelAllPendingRpc, rpc } from './rpc';
+import { getDiscoveredDesktops } from './discovery';
 import type {
   ConnectionTarget,
   ConnectionState,
@@ -42,6 +43,10 @@ class ConnectionManager {
   private unsubState: (() => void) | null = null;
   private currentSnapshot: WorkspaceSnapshot | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private reconnecting = false;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private missedPings = 0;
 
   /**
    * Connect to a target (desktop or hosted).
@@ -62,6 +67,9 @@ class ConnectionManager {
    */
   disconnect(): void {
     this.cancelReconnect();
+    this.stopHeartbeat();
+    this.reconnectAttempts = 0;
+    this.reconnecting = false;
 
     if (this.unsubMessage) { this.unsubMessage(); this.unsubMessage = null; }
     if (this.unsubState) { this.unsubState(); this.unsubState = null; }
@@ -155,6 +163,10 @@ class ConnectionManager {
       if (state === 'connected') {
         touchPairedDesktop(target.fingerprint);
         this.cancelReconnect();
+        this.reconnectAttempts = 0;
+        this.reconnecting = false;
+        this.missedPings = 0;
+        this.startHeartbeat();
         // Silent pairingId upgrade: if the desktop returned a pairingId
         // during reconnect, store it so future connects use it.
         const upgradedPairingId = webrtc.lastReconnectPairingId;
@@ -267,18 +279,87 @@ class ConnectionManager {
     }
   }
 
-  private scheduleReconnect(): void {
-    if (this.reconnectTimer) return;
-    if (!this.target) return;
+  // --- Liveness heartbeat ----------------------------------------------------
+  // WebRTC's connectionState can lag (or not fire) when the desktop process
+  // dies, leaving the phone showing a stale "Connected". An active ping over
+  // the control channel detects a dead peer within a few seconds and kicks off
+  // reconnection.
 
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (this.target) {
-        console.log('[Connection] Attempting reconnect…');
-        // Reconnect logic would go here — requires re-negotiation
-        // with the desktop, which needs the desktop to be discoverable.
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => { void this.pingLiveness(); }, 7_000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+  }
+
+  private async pingLiveness(): Promise<void> {
+    if (this.reconnecting) return;
+    try {
+      // Cheap, side-effect-free RPC. A reply (even an error) proves the channel
+      // is alive; only a timeout / closed channel counts as a miss.
+      await rpc('project.active', {}, 5_000);
+      this.missedPings = 0;
+    } catch {
+      this.missedPings += 1;
+      if (this.missedPings >= 2) {
+        this.missedPings = 0;
+        console.log('[Connection] Liveness lost — peer not responding, reconnecting');
+        this.stopHeartbeat();
+        if (this.target && this.target.type === 'webrtc') {
+          this.emitStateChange('disconnected', this.target.fingerprint);
+        }
+        this.scheduleReconnect();
       }
-    }, 5_000);
+    }
+  }
+
+  // --- Reconnect with backoff ------------------------------------------------
+
+  /** Best-effort fresh address for the target: prefer a live mDNS hit, else stored. */
+  private resolveAddress(target: Extract<ConnectionTarget, { type: 'webrtc' }>): string | null {
+    try {
+      const hit = getDiscoveredDesktops().find((d) => d.fingerprint === target.fingerprint && d.address);
+      if (hit?.address) return hit.address;
+    } catch { /* discovery may be unavailable */ }
+    return target.desktopAddress || null;
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || this.reconnecting) return;
+    if (!this.target || this.target.type !== 'webrtc') return;
+
+    // Exponential backoff capped at 15s; keep retrying as long as a target is set.
+    const delay = Math.min(2_000 * Math.pow(1.6, this.reconnectAttempts), 15_000);
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      const target = this.target;
+      if (!target || target.type !== 'webrtc') return;
+
+      this.reconnecting = true;
+      this.reconnectAttempts += 1;
+      this.emitStateChange('connecting', target.fingerprint);
+
+      const address = this.resolveAddress(target);
+      try {
+        if (!address) throw new Error('No reachable address for desktop');
+        await webrtc.reconnectToDesktop(
+          address,
+          target.pairingId,
+          target.mobileApiPort,
+          target.fingerprint,
+        );
+        // Success path: the 'connected' state handler resets counters, restarts
+        // the heartbeat, and cancels any pending reconnect.
+        this.reconnecting = false;
+      } catch (err) {
+        console.log(`[Connection] Reconnect attempt ${this.reconnectAttempts} failed: ${err instanceof Error ? err.message : String(err)}`);
+        this.reconnecting = false;
+        this.scheduleReconnect(); // try again with longer backoff
+      }
+    }, delay);
   }
 
   private cancelReconnect(): void {
