@@ -12,6 +12,7 @@
  */
 
 import { router } from 'expo-router';
+import { AppState, type AppStateStatus } from 'react-native';
 import { webrtc } from './webrtc';
 import { touchPairedDesktop } from './storage';
 import { useWorkspaceStore } from './store';
@@ -49,6 +50,7 @@ class ConnectionManager {
   private missedPings = 0;
   private lastInboundAt = 0;
   private pinging = false;
+  private appStateSub: { remove: () => void } | null = null;
 
   /**
    * Connect to a target (desktop or hosted).
@@ -72,6 +74,7 @@ class ConnectionManager {
     this.stopHeartbeat();
     this.reconnectAttempts = 0;
     this.reconnecting = false;
+    if (this.appStateSub) { this.appStateSub.remove(); this.appStateSub = null; }
 
     if (this.unsubMessage) { this.unsubMessage(); this.unsubMessage = null; }
     if (this.unsubState) { this.unsubState(); this.unsubState = null; }
@@ -153,6 +156,13 @@ class ConnectionManager {
   // --- Internals -------------------------------------------------------------
 
   private async connectWebRTC(target: Extract<ConnectionTarget, { type: 'webrtc' }>): Promise<void> {
+    // Re-link when the app returns to the foreground — iOS suspends the app in
+    // the background, which silently kills the WebRTC transport. (Registered
+    // once; persists across reconnects.)
+    if (!this.appStateSub) {
+      this.appStateSub = AppState.addEventListener('change', (s) => this.handleAppState(s));
+    }
+
     // Listen for messages from the desktop
     this.unsubMessage = webrtc.onMessage((channel, data) => {
       this.handleMessage(channel, data);
@@ -375,6 +385,22 @@ class ConnectionManager {
         this.scheduleReconnect(); // try again with longer backoff
       }
     }, delay);
+  }
+
+  private handleAppState(s: AppStateStatus): void {
+    if (!this.target || this.target.type !== 'webrtc') return;
+    if (s === 'active') {
+      // Resume: the transport often dies while backgrounded — re-link promptly.
+      this.lastInboundAt = 0; // force the next heartbeat to actually probe
+      this.startHeartbeat();
+      if (webrtc.state !== 'connected' && !this.reconnecting) {
+        this.reconnectAttempts = 0; // snappy resume (no long backoff)
+        this.scheduleReconnect();
+      }
+    } else if (s === 'background') {
+      // The OS freezes timers when suspended; stop pinging to save battery.
+      this.stopHeartbeat();
+    }
   }
 
   private cancelReconnect(): void {
