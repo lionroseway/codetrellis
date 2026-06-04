@@ -47,6 +47,8 @@ class ConnectionManager {
   private reconnecting = false;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private missedPings = 0;
+  private lastInboundAt = 0;
+  private pinging = false;
 
   /**
    * Connect to a target (desktop or hosted).
@@ -166,6 +168,7 @@ class ConnectionManager {
         this.reconnectAttempts = 0;
         this.reconnecting = false;
         this.missedPings = 0;
+        this.lastInboundAt = Date.now();
         this.startHeartbeat();
         // Silent pairingId upgrade: if the desktop returned a pairingId
         // during reconnect, store it so future connects use it.
@@ -209,6 +212,8 @@ class ConnectionManager {
   }
 
   private handleMessage(channel: string, data: string | ArrayBuffer): void {
+    // Any inbound message proves the peer is alive — feeds the liveness check.
+    this.lastInboundAt = Date.now();
     if (channel === 'ui') {
       this.handleUiMessage(data);
     } else if (channel === 'terminal') {
@@ -287,7 +292,7 @@ class ConnectionManager {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    this.heartbeatTimer = setInterval(() => { void this.pingLiveness(); }, 7_000);
+    this.heartbeatTimer = setInterval(() => { void this.pingLiveness(); }, 10_000);
   }
 
   private stopHeartbeat(): void {
@@ -295,15 +300,23 @@ class ConnectionManager {
   }
 
   private async pingLiveness(): Promise<void> {
-    if (this.reconnecting) return;
+    if (this.reconnecting || this.pinging) return;
+    // If we've heard from the desktop recently (snapshots, patches, any reply),
+    // it's alive — skip the probe. This keeps a busy/healthy connection from
+    // ever false-positiving into a reconnect (which would spawn a duplicate peer).
+    if (Date.now() - this.lastInboundAt < 12_000) { this.missedPings = 0; return; }
+
+    this.pinging = true;
     try {
       // Cheap, side-effect-free RPC. A reply (even an error) proves the channel
       // is alive; only a timeout / closed channel counts as a miss.
-      await rpc('project.active', {}, 5_000);
+      await rpc('project.active', {}, 8_000);
       this.missedPings = 0;
     } catch {
       this.missedPings += 1;
-      if (this.missedPings >= 2) {
+      // ~3 quiet, unanswered probes (>30s of silence) before treating the peer
+      // as dead — conservative enough to avoid churn, fast enough to recover.
+      if (this.missedPings >= 3) {
         this.missedPings = 0;
         console.log('[Connection] Liveness lost — peer not responding, reconnecting');
         this.stopHeartbeat();
@@ -312,6 +325,8 @@ class ConnectionManager {
         }
         this.scheduleReconnect();
       }
+    } finally {
+      this.pinging = false;
     }
   }
 
