@@ -116,14 +116,39 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
     const text = typeof data === 'string' ? data : data.toString('utf-8');
     const msg = JSON.parse(text);
 
-    // Reply to a desktop→mobile command (e.g. a screenshot the agent asked for).
+    // Reassemble a chunked screenshot reply from the phone. A full-screen image
+    // is far larger than one SCTP message, so the phone splits the base64 into
+    // ordered chunks; we stitch them back together here.
+    if (msg.mcp && msg.cmd === 'screenshot.chunk' && msg.id) {
+      const pend = pendingScreenshots.get(msg.id);
+      if (!pend) return;
+      let acc = screenshotChunks.get(msg.id);
+      if (!acc) {
+        acc = { parts: new Array(msg.total), total: msg.total, received: 0, mime: msg.mime || 'image/jpeg' };
+        screenshotChunks.set(msg.id, acc);
+      }
+      if (typeof msg.seq === 'number' && acc.parts[msg.seq] === undefined) {
+        acc.parts[msg.seq] = typeof msg.data === 'string' ? msg.data : '';
+        acc.received++;
+      }
+      if (acc.received >= acc.total) {
+        clearTimeout(pend.timer);
+        pendingScreenshots.delete(msg.id);
+        screenshotChunks.delete(msg.id);
+        pend.resolve({ data: acc.parts.join(''), mime: acc.mime });
+      }
+      return;
+    }
+
+    // Single-shot reply (errors, or a small image that fit in one message).
     if (msg.mcp && msg.cmd === 'screenshot.result' && msg.id) {
       const pend = pendingScreenshots.get(msg.id);
       if (pend) {
         clearTimeout(pend.timer);
         pendingScreenshots.delete(msg.id);
+        screenshotChunks.delete(msg.id);
         if (msg.error) pend.reject(new Error(String(msg.error)));
-        else pend.resolve(typeof msg.data === 'string' ? msg.data : '');
+        else pend.resolve({ data: typeof msg.data === 'string' ? msg.data : '', mime: msg.mime || 'image/png' });
       }
       return;
     }
@@ -140,9 +165,14 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
 
 // --- Desktop → mobile commands (MCP drives the phone) ------------------------
 
+interface MobileImage { data: string; mime: string }
 const pendingScreenshots = new Map<
   string,
-  { resolve: (b64: string) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+  { resolve: (img: MobileImage) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+>();
+const screenshotChunks = new Map<
+  string,
+  { parts: string[]; total: number; received: number; mime: string }
 >();
 let commandSeq = 0;
 
@@ -164,12 +194,13 @@ export function navigateMobile(route: string): number {
   return sendMobileCommand('navigate', { route });
 }
 
-/** Request a screenshot from a connected phone; resolves to base64 PNG. */
-export function requestMobileScreenshot(timeoutMs = 12_000): Promise<string> {
+/** Request a screenshot from a connected phone; resolves to a base64 image + mime. */
+export function requestMobileScreenshot(timeoutMs = 20_000): Promise<MobileImage> {
   const id = `mss-${++commandSeq}-${Date.now()}`;
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<MobileImage>((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingScreenshots.delete(id);
+      screenshotChunks.delete(id);
       reject(new Error('Mobile screenshot timed out — is a phone connected and on screen?'));
     }, timeoutMs);
     pendingScreenshots.set(id, { resolve, reject, timer });

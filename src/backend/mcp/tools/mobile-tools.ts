@@ -76,11 +76,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         return { content: [{ type: 'text' as const, text: 'No mobile device is connected.' }], isError: true };
       }
       try {
-        const base64 = await requestMobileScreenshot();
-        if (!base64) {
+        const img = await requestMobileScreenshot();
+        if (!img.data) {
           return { content: [{ type: 'text' as const, text: 'The phone returned an empty image (screenshot support may not be built into this dev client yet).' }], isError: true };
         }
-        return { content: [{ type: 'image' as const, data: base64, mimeType: 'image/png' }] };
+        return { content: [{ type: 'image' as const, data: img.data, mimeType: img.mime || 'image/png' }] };
       } catch (err) {
         return { content: [{ type: 'text' as const, text: err instanceof Error ? err.message : String(err) }], isError: true };
       }

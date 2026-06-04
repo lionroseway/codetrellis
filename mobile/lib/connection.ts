@@ -320,8 +320,29 @@ async function handleMobileCommand(msg: { cmd: string; route?: string; id?: stri
       // yet have the native module built in (screenshot just errors until then).
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { captureScreen } = require('react-native-view-shot');
-      const data: string = await captureScreen({ format: 'png', result: 'base64', quality: 0.85 });
-      webrtc.sendControl({ mcp: true, cmd: 'screenshot.result', id, data });
+      // Downscale to a small JPEG: a full-res PNG base64 is multiple MB, which
+      // silently exceeds the data channel's max message size (the send is
+      // dropped, not thrown) — so the desktop just times out. A ~540px JPEG is
+      // tens of KB, which we then chunk to stay well under the per-message cap.
+      const data: string = await captureScreen({
+        format: 'jpg',
+        quality: 0.6,
+        width: 540,
+        result: 'base64',
+      });
+      const CHUNK = 8000;
+      const total = Math.max(1, Math.ceil(data.length / CHUNK));
+      for (let seq = 0; seq < total; seq++) {
+        webrtc.sendControl({
+          mcp: true,
+          cmd: 'screenshot.chunk',
+          id,
+          seq,
+          total,
+          mime: 'image/jpeg',
+          data: data.slice(seq * CHUNK, (seq + 1) * CHUNK),
+        });
+      }
     } catch (err) {
       webrtc.sendControl({
         mcp: true,
