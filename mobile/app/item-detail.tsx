@@ -120,6 +120,8 @@ export default function ItemDetailScreen() {
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [editField, setEditField] = useState<null | 'assignee' | 'blocked'>(null);
   const [draft, setDraft] = useState('');
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
   const fetchItem = useCallback(async () => {
     if (!uid) return;
@@ -251,7 +253,40 @@ export default function ItemDetailScreen() {
       </View>
 
       {/* Title */}
-      <Text style={styles.title}>{item.title}</Text>
+      {editingTitle ? (
+        <View style={styles.titleEditRow}>
+          <TextInput
+            style={styles.titleInput}
+            value={titleDraft}
+            onChangeText={setTitleDraft}
+            autoFocus
+            multiline
+            placeholder="Title"
+            placeholderTextColor="#52525b"
+          />
+          <View style={styles.editActions}>
+            <TouchableOpacity onPress={() => setEditingTitle(false)} hitSlop={8}>
+              <Text style={styles.cancelLink}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.saveChip}
+              onPress={async () => {
+                if (titleDraft.trim()) await patchItem({ title: titleDraft.trim() });
+                setEditingTitle(false);
+              }}
+            >
+              <Text style={styles.saveChipText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => { setTitleDraft(item.title); setEditingTitle(true); }}
+        >
+          <Text style={styles.title}>{item.title}</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Status picker */}
       <View style={styles.section}>
@@ -709,6 +744,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 28,
     marginBottom: 16,
+  },
+  titleEditRow: { marginBottom: 16 },
+  titleInput: {
+    color: '#e4e4e7',
+    fontSize: 20,
+    fontWeight: '700',
+    backgroundColor: '#18181b',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
 
   // Sections

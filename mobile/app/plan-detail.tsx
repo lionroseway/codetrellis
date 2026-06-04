@@ -15,6 +15,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { rpc } from '../lib/rpc';
@@ -176,6 +178,9 @@ export default function PlanDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PlanGetResult | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
 
   const fetchPlan = useCallback(async () => {
     if (!uid) return;
@@ -187,6 +192,20 @@ export default function PlanDetailScreen() {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [uid]);
+
+  const saveTitle = useCallback(async () => {
+    if (!uid || !titleDraft.trim()) { setEditingTitle(false); return; }
+    setSavingTitle(true);
+    try {
+      await rpc('plan.update', { uid, title: titleDraft.trim() });
+      await fetchPlan();
+      setEditingTitle(false);
+    } catch (err: unknown) {
+      Alert.alert('Rename failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingTitle(false);
+    }
+  }, [uid, titleDraft, fetchPlan]);
 
   // Initial fetch
   useEffect(() => {
@@ -282,7 +301,34 @@ export default function PlanDetailScreen() {
       }
     >
       {/* Plan header */}
-      <Text style={styles.planTitle}>{plan.title}</Text>
+      {editingTitle ? (
+        <View style={styles.titleEditRow}>
+          <TextInput
+            style={styles.titleInput}
+            value={titleDraft}
+            onChangeText={setTitleDraft}
+            autoFocus
+            multiline
+            placeholder="Plan title"
+            placeholderTextColor="#52525b"
+          />
+          <View style={styles.titleEditActions}>
+            <TouchableOpacity onPress={() => setEditingTitle(false)} hitSlop={8}>
+              <Text style={styles.titleCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.titleSave} onPress={saveTitle} disabled={savingTitle}>
+              <Text style={styles.titleSaveText}>{savingTitle ? '…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => { setTitleDraft(plan.title); setEditingTitle(true); }}
+        >
+          <Text style={styles.planTitle}>{plan.title}</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.metaRow}>
         <View
           style={[
@@ -387,7 +433,9 @@ export default function PlanDetailScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.devSummary}>{dev.summary}</Text>
+              <View style={styles.devSummary}>
+                <Markdown compact>{dev.summary}</Markdown>
+              </View>
               <View style={styles.devActions}>
                 <TouchableOpacity
                   style={[styles.devBtn, styles.devBtnAccept]}
@@ -690,6 +738,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 10,
   },
+  titleEditRow: { marginBottom: 10 },
+  titleInput: {
+    color: '#e4e4e7',
+    fontSize: 22,
+    fontWeight: '700',
+    backgroundColor: '#18181b',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  titleEditActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 8 },
+  titleCancel: { color: '#a1a1aa', fontSize: 14 },
+  titleSave: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 7 },
+  titleSaveText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
