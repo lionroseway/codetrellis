@@ -770,6 +770,7 @@ function TreeNode({
 // ---------------------------------------------------------------------------
 
 function flattenTree(nodes: FileTreeNode[], out: FileTreeNode[] = []): FileTreeNode[] {
+  if (!Array.isArray(nodes)) return out;
   for (const n of nodes) {
     out.push(n);
     if (n.children) flattenTree(n.children, out);
