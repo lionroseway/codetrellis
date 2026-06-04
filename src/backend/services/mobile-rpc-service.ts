@@ -29,6 +29,8 @@ import { DATA_CHANNELS } from '../../shared/types';
 import {
   onChannelMessage,
   sendToPeer,
+  broadcastToAllPeers,
+  connectedPeerCount,
 } from './webrtc-service';
 import * as planService from './plan-service';
 import * as planItemService from './plan-item-service';
@@ -114,6 +116,18 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
     const text = typeof data === 'string' ? data : data.toString('utf-8');
     const msg = JSON.parse(text);
 
+    // Reply to a desktop→mobile command (e.g. a screenshot the agent asked for).
+    if (msg.mcp && msg.cmd === 'screenshot.result' && msg.id) {
+      const pend = pendingScreenshots.get(msg.id);
+      if (pend) {
+        clearTimeout(pend.timer);
+        pendingScreenshots.delete(msg.id);
+        if (msg.error) pend.reject(new Error(String(msg.error)));
+        else pend.resolve(typeof msg.data === 'string' ? msg.data : '');
+      }
+      return;
+    }
+
     // Only handle messages with rpc marker and an id
     if (!msg.rpc || !msg.id) return;
 
@@ -122,6 +136,53 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
   } catch {
     // Not a valid RPC message — ignore (other control messages handled elsewhere)
   }
+}
+
+// --- Desktop → mobile commands (MCP drives the phone) ------------------------
+
+const pendingScreenshots = new Map<
+  string,
+  { resolve: (b64: string) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+>();
+let commandSeq = 0;
+
+/** Is at least one mobile device connected over WebRTC? */
+export function mobileConnected(): boolean {
+  return connectedPeerCount() > 0;
+}
+
+/** Push a fire-and-forget command to every connected phone. Returns peer count reached. */
+export function sendMobileCommand(cmd: string, params: Record<string, unknown> = {}): number {
+  return broadcastToAllPeers(
+    DATA_CHANNELS.CONTROL,
+    JSON.stringify({ mcp: true, cmd, ...params }),
+  );
+}
+
+/** Ask a connected phone to navigate to an Expo Router route. */
+export function navigateMobile(route: string): number {
+  return sendMobileCommand('navigate', { route });
+}
+
+/** Request a screenshot from a connected phone; resolves to base64 PNG. */
+export function requestMobileScreenshot(timeoutMs = 12_000): Promise<string> {
+  const id = `mss-${++commandSeq}-${Date.now()}`;
+  return new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingScreenshots.delete(id);
+      reject(new Error('Mobile screenshot timed out — is a phone connected and on screen?'));
+    }, timeoutMs);
+    pendingScreenshots.set(id, { resolve, reject, timer });
+    const reached = broadcastToAllPeers(
+      DATA_CHANNELS.CONTROL,
+      JSON.stringify({ mcp: true, cmd: 'screenshot', id }),
+    );
+    if (reached === 0) {
+      clearTimeout(timer);
+      pendingScreenshots.delete(id);
+      reject(new Error('No mobile device connected.'));
+    }
+  });
 }
 
 async function handleRpc(fingerprint: string, req: RpcRequest): Promise<void> {

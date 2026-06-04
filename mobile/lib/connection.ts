@@ -11,6 +11,7 @@
  *   4. Auto-reconnect on disconnect
  */
 
+import { router } from 'expo-router';
 import { webrtc } from './webrtc';
 import { touchPairedDesktop } from './storage';
 import { useWorkspaceStore } from './store';
@@ -254,7 +255,16 @@ class ConnectionManager {
     // Check if this is an RPC response (correlated by request ID)
     if (handleRpcResponse(data)) return;
 
-    // Other control messages (future: agent events, etc.)
+    // Desktop → mobile command (MCP drives the phone): navigate / screenshot.
+    try {
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      const msg = JSON.parse(text);
+      if (msg && msg.mcp && typeof msg.cmd === 'string') {
+        void handleMobileCommand(msg);
+      }
+    } catch {
+      // not JSON / not a command — ignore
+    }
   }
 
   private scheduleReconnect(): void {
@@ -289,3 +299,37 @@ class ConnectionManager {
 
 /** Singleton instance. */
 export const connection = new ConnectionManager();
+
+// --- Desktop → mobile commands (MCP drives the phone) ------------------------
+
+async function handleMobileCommand(msg: { cmd: string; route?: string; id?: string }): Promise<void> {
+  if (msg.cmd === 'navigate' && typeof msg.route === 'string') {
+    try {
+      // router.navigate handles both tab routes and pushable detail routes.
+      router.navigate(msg.route as never);
+    } catch {
+      /* invalid route — ignore */
+    }
+    return;
+  }
+
+  if (msg.cmd === 'screenshot' && msg.id) {
+    const id = msg.id;
+    try {
+      // Lazily require so the JS bundle still loads in dev clients that don't
+      // yet have the native module built in (screenshot just errors until then).
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { captureScreen } = require('react-native-view-shot');
+      const data: string = await captureScreen({ format: 'png', result: 'base64', quality: 0.85 });
+      webrtc.sendControl({ mcp: true, cmd: 'screenshot.result', id, data });
+    } catch (err) {
+      webrtc.sendControl({
+        mcp: true,
+        cmd: 'screenshot.result',
+        id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+}

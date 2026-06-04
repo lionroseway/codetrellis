@@ -65,6 +65,7 @@ import { register as registerSessionTools } from './tools/session-tools';
 import { register as registerPlanTools } from './tools/plan-tools';
 import { register as registerPlanItemTools } from './tools/plan-item-tools';
 import { register as registerPresenceTools } from './tools/presence-tools';
+import { register as registerMobileTools } from './tools/mobile-tools';
 import { register as registerProjectConfigTools } from './tools/project-config-tools';
 import { register as registerGitTools } from './tools/git-tools';
 import { register as registerChannelTools } from './tools/channel-tools';
@@ -327,6 +328,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerPlanTools(mcpServer, deps);
   registerPlanItemTools(mcpServer, deps);
   registerPresenceTools(mcpServer, deps);
+  registerMobileTools(mcpServer, deps);
   registerProjectConfigTools(mcpServer, deps);
   registerGitTools(mcpServer, deps);
   registerChannelTools(mcpServer, deps);
