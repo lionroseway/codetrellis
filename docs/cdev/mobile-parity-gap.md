@@ -64,11 +64,11 @@ Legend: ✅ full · ◑ partial · ✗ missing
 | Capability | Desktop | Mobile | Priority |
 |---|---|---|---|
 | Open / browse projects | ✅ | ✅ *(now)* | — |
-| Multiple project tabs / branch pin / rescan | ✅ | ✗ | P3 |
+| Project management (switch / pin / rescan / rename / remove) | ✅ | ✅ *(now — Projects screen)* | **P3 done** |
 | Terminal (create, I/O, presets, resize) | ✅ | ✅ *(kill now)*; shell preset only | ◑ |
-| System docs browse/edit | ✅ | ✗ | P3 |
-| Plan lifecycle (create/delete/template/import) | ✅ | ◑ create/delete *(now)*; template/import ✗ | P3 |
-| Settings (identity/MCP/sync/data) | ✅ | ◑ pairing only | P3 |
+| System docs browse/edit | ✅ | ✅ *(now — list/read/edit/verify/delete)* | **P3 done** |
+| Plan lifecycle (create/delete/template/import) | ✅ | ✅ *(now — +template/import/export)* | **P3 done** |
+| Settings (identity/MCP/sync/data) | ✅ | ✅ *(now — phone-safe subset)* | **P3 done** |
 | MCP drives the phone (navigate/screenshot/present) | n/a | ✅ *(M8 part 3)* | **done** |
 
 ## Roadmap (recommended order)
@@ -85,21 +85,19 @@ Legend: ✅ full · ◑ partial · ✗ missing
    ✅ source preview, ✅ MCP-drives-phone (M8 part 3). _Remaining:_ @-mention
    picker for inline body chips; richer graph (file-level nodes, baseline mode);
    handoff / copy-as-prompt; presence walkthrough depth.
-5. **P3 — Lifecycle/admin** _(remaining track)_: ✅ plan create/delete; _todo:_
-   template/import, system docs, settings (identity/MCP/sync/data),
-   multi-tab/branch pin, routing & execution guardrails.
+5. ~~**P3 — Lifecycle/admin**~~ **✅ done**: plan create/delete + template/import/
+   export; system docs browse/read/edit/verify/delete; settings (phone-safe
+   subset); project management (switch / pin / rescan / rename / remove).
 
 ### What's left after this pass
-All P0/P1 and the high-value P2 gaps are closed. The outstanding work is the
-**P3 admin/lifecycle tail** plus a few P2 polish items:
-- **Settings screen** on mobile (identity / MCP / sync / data) — currently
-  pairing-only.
-- **System docs** browse/edit.
-- **Plan template + import**; **multi-project tabs**, branch pin, rescan.
+All P0/P1, the high-value P2 gaps, **and the P3 admin/lifecycle tail** are now
+closed. The remaining work is P2 polish + infra:
 - **Graph depth**: file-level visual nodes + baseline mode + git gutter.
 - **Handoff**: copy-plan-as-prompt / hand to agent from the phone.
 - **@-mention** inline chip insertion in the body editor (RefPicker covers
   external links today).
+- **Sync/data settings** + routing & execution guardrails stay desktop-only by
+  design (filesystem paths, ports — not phone-appropriate).
 - **Infra**: off-LAN / TURN relay, real-device + Android testing, EAS cloud
   build (needs the user's Apple/Google accounts), store assets.
 
