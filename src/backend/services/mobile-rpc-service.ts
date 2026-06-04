@@ -52,6 +52,7 @@ import {
 } from './database';
 import { listCrossSystemEdges } from './cross-system-service';
 import { captureSnapshot, computeDiff, getBaseline } from './diff-engine';
+import { computeProjection } from './projection-service';
 import {
   scanProject,
   getActiveProjectPath,
@@ -59,6 +60,9 @@ import {
   getGitWorkingTreeStatus,
   broadcast,
 } from '../server';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 // --- Types -------------------------------------------------------------------
 
@@ -236,6 +240,10 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
 
     case 'project.open': {
       const projectPath = requireString(params, 'projectPath');
+      // Surface on the desktop too: broadcast the same event the MCP
+      // open_project tool uses so the desktop opens a tab + switches to it
+      // (companion-app principle — mobile actions show up on the desktop).
+      broadcast('ui-open-project', { path: projectPath });
       const result = await scanProject(projectPath);
       return result;
     }
@@ -473,6 +481,21 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return searchSymbols(query);
     }
 
+    // --- Filesystem browse (open a folder as a project from mobile) -----------
+    case 'fs.browse': {
+      // List directories under `dir` so the phone can navigate the desktop's
+      // filesystem and pick a folder to open as a project. Defaults to $HOME.
+      const dir = (params.dir as string) || os.homedir();
+      return browseDirectory(dir);
+    }
+
+    // --- Renderable graph scene (cluster nodes + edges + planned/diverged) ----
+    case 'graph.scene': {
+      const planUid = (params.planUid as string) || undefined;
+      const mode = (params.mode as string) || 'live'; // live | planned | diff
+      return buildGraphScene(mode, planUid);
+    }
+
     default:
       throw new Error(`Unknown RPC method: ${method}`);
   }
@@ -491,6 +514,187 @@ function requireString(params: Record<string, unknown>, key: string): string {
 /** Run a getter, returning a fallback if it throws (service not ready / no rows). */
 function safe<T>(fn: () => T, fallback: T): T {
   try { return fn(); } catch { return fallback; }
+}
+
+// --- Filesystem browse -------------------------------------------------------
+
+interface BrowseEntry {
+  name: string;
+  path: string;
+  isGitRepo: boolean;
+  hasProjectMarker: boolean; // package.json / Cargo.toml / pom.xml / go.mod / pyproject.toml
+}
+
+const PROJECT_MARKERS = ['package.json', 'Cargo.toml', 'pom.xml', 'go.mod', 'pyproject.toml', 'composer.json', 'build.gradle'];
+
+/**
+ * List sub-directories of `dir` so the mobile app can navigate the desktop
+ * filesystem and open a folder as a project. Hidden dirs (except a few
+ * common ones) and noisy build dirs are filtered out. Each entry is flagged
+ * if it looks like a project root (git repo or has a known manifest).
+ */
+function browseDirectory(dir: string): {
+  path: string;
+  parent: string | null;
+  home: string;
+  entries: BrowseEntry[];
+} {
+  const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '.cache', 'target', '.venv', 'venv', '__pycache__', 'Library', '.Trash']);
+  let entries: BrowseEntry[] = [];
+  try {
+    const dirents = fs.readdirSync(dir, { withFileTypes: true });
+    entries = dirents
+      .filter((e) => e.isDirectory() && !SKIP.has(e.name) && (!e.name.startsWith('.') || e.name === '.codetrellis'))
+      .map((e) => {
+        const full = path.join(dir, e.name);
+        return {
+          name: e.name,
+          path: full,
+          isGitRepo: safe(() => fs.existsSync(path.join(full, '.git')), false),
+          hasProjectMarker: safe(() => PROJECT_MARKERS.some((m) => fs.existsSync(path.join(full, m))), false),
+        };
+      })
+      .sort((a, b) => {
+        // Project-looking dirs first, then alphabetical.
+        const ap = a.isGitRepo || a.hasProjectMarker ? 0 : 1;
+        const bp = b.isGitRepo || b.hasProjectMarker ? 0 : 1;
+        return ap - bp || a.name.localeCompare(b.name);
+      });
+  } catch {
+    // Unreadable dir — return empty so the UI shows "nothing here" rather than crash.
+  }
+  const parent = path.dirname(dir);
+  return {
+    path: dir,
+    parent: parent === dir ? null : parent,
+    home: os.homedir(),
+    entries,
+  };
+}
+
+// --- Graph scene (cluster-level, render-ready for mobile) ---------------------
+
+type NodeState = 'normal' | 'changed' | 'planned_add' | 'planned_modify' | 'planned_remove';
+
+interface SceneNode {
+  id: string;        // cluster id (relative path prefix) or `ghost:<path>`
+  label: string;
+  fileCount: number;
+  state: NodeState;
+  ghost?: boolean;
+}
+interface SceneEdge { source: string; target: string; weight: number; planned?: boolean }
+
+/** Cluster key for a relative path — first two segments (or one for top-level). */
+function clusterKey(rel: string): string {
+  const parts = rel.split('/');
+  if (parts.length <= 1) return '(root)';
+  if (parts.length === 2) return parts[0];
+  return `${parts[0]}/${parts[1]}`;
+}
+
+/**
+ * Build a mobile-render-ready graph scene: directory clusters as nodes,
+ * aggregated cross-cluster imports as edges. Overlays planned state (from a
+ * plan's projection) and diverged state (git working-tree + arch diff) so the
+ * phone can show Live / Planned / Diff visually with state-coloured nodes.
+ */
+function buildGraphScene(mode: string, planUid?: string): {
+  mode: string;
+  projectPath: string | null;
+  nodes: SceneNode[];
+  edges: SceneEdge[];
+  counts: { nodes: number; edges: number; changed: number; planned: number };
+} {
+  const projectPath = getActiveProjectPath()
+    || recentProjectsService.listRecentProjects()[0]?.path
+    || null;
+
+  const depEdges = safe(() => getDependencyEdges(), [] as ReturnType<typeof getDependencyEdges>);
+
+  const clusters = new Map<string, { fileCount: number; files: Set<string>; state: NodeState }>();
+  const ensure = (key: string) => {
+    let c = clusters.get(key);
+    if (!c) { c = { fileCount: 0, files: new Set(), state: 'normal' }; clusters.set(key, c); }
+    return c;
+  };
+  const addFile = (rel: string) => { const c = ensure(clusterKey(rel)); if (!c.files.has(rel)) { c.files.add(rel); c.fileCount++; } };
+
+  const edgeAgg = new Map<string, { source: string; target: string; weight: number; planned?: boolean }>();
+  for (const e of depEdges) {
+    addFile(e.sourceRelative);
+    addFile(e.targetRelative);
+    const s = clusterKey(e.sourceRelative);
+    const t = clusterKey(e.targetRelative);
+    if (s === t) continue;
+    const key = `${s}->${t}`;
+    const agg = edgeAgg.get(key);
+    if (agg) agg.weight++;
+    else edgeAgg.set(key, { source: s, target: t, weight: 1 });
+  }
+
+  // --- Diverged overlay (git working tree + arch diff vs baseline) ---
+  let changedCount = 0;
+  if (mode === 'diff' || mode === 'live') {
+    const changed = new Set<string>();
+    if (projectPath) {
+      const git = safe(() => getGitWorkingTreeStatus(projectPath), null);
+      if (git) {
+        for (const f of [
+          ...git.stagedAdded, ...git.stagedModified, ...git.stagedDeleted,
+          ...git.unstagedModified, ...git.unstagedDeleted, ...git.untracked,
+        ]) changed.add(f);
+      }
+      const baseline = safe(() => getBaseline(), null);
+      if (baseline) {
+        const arch = safe(() => {
+          const currentEdges = getDependencyEdges();
+          const fileData = readFilesSnapshot(projectPath);
+          return computeDiff(captureSnapshot(fileData, currentEdges));
+        }, null);
+        if (arch) for (const f of [...arch.addedFiles, ...arch.modifiedFiles]) changed.add(f);
+      }
+    }
+    for (const f of changed) {
+      const c = clusters.get(clusterKey(f));
+      if (c && c.state === 'normal') { c.state = 'changed'; }
+    }
+    changedCount = changed.size;
+  }
+
+  // --- Planned overlay (projection of a plan's actions) ---
+  let plannedCount = 0;
+  if ((mode === 'planned' || planUid) && planUid) {
+    const proj = safe(() => computeProjection(planUid), null);
+    if (proj) {
+      const mark = (relPath: string, state: NodeState, ghostOk: boolean) => {
+        const key = clusterKey(relPath);
+        let c = clusters.get(key);
+        if (!c && ghostOk) { c = ensure(key); c.fileCount = c.fileCount; }
+        if (c) c.state = state;
+      };
+      for (const g of proj.ghostFiles) { ensure(clusterKey(g.path)).state = 'planned_add'; }
+      for (const m of proj.modifiedFiles) mark(m.path, 'planned_modify', false);
+      for (const r of proj.removedFiles) mark(r.path, 'planned_remove', false);
+      plannedCount = proj.ghostFiles.length + proj.modifiedFiles.length + proj.removedFiles.length;
+    }
+  }
+
+  const nodes: SceneNode[] = [...clusters.entries()].map(([id, c]) => ({
+    id,
+    label: id,
+    fileCount: c.fileCount,
+    state: c.state,
+  }));
+  const edges: SceneEdge[] = [...edgeAgg.values()];
+
+  return {
+    mode,
+    projectPath,
+    nodes,
+    edges,
+    counts: { nodes: nodes.length, edges: edges.length, changed: changedCount, planned: plannedCount },
+  };
 }
 
 // --- Graph helpers -----------------------------------------------------------

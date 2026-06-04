@@ -107,6 +107,14 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="project-browser"
+          options={{
+            title: 'Open Project',
+            presentation: 'modal',
+            headerStyle: { backgroundColor: '#111113' },
+          }}
+        />
+        <Stack.Screen
           name="connection-switcher"
           options={{
             title: 'Connections',

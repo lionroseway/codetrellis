@@ -20,12 +20,22 @@ import {
 import { useRouter } from 'expo-router';
 import { useActiveProject, useConnectionState } from '../../lib/store';
 import { rpc } from '../../lib/rpc';
+import GraphScene, { type GraphSceneHandle, type SceneNode, type SceneEdge } from '../../components/GraphScene';
+import { useRef } from 'react';
 import type {
   GraphOverview,
   GraphDirectoryListing,
   GraphSearchResult,
   ChangesSummary,
 } from '../../lib/types';
+
+type TrellisMode = 'live' | 'planned' | 'diff';
+interface GraphSceneData {
+  mode: string;
+  nodes: SceneNode[];
+  edges: SceneEdge[];
+  counts: { nodes: number; edges: number; changed: number; planned: number };
+}
 
 // ── Language palette (matches desktop graph-visuals.ts) ──────────────
 
@@ -90,6 +100,31 @@ export default function GraphTab() {
   const [error, setError] = useState<string | null>(null);
   const [changes, setChanges] = useState<ChangesSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Visual "Map" mode (interactive cluster graph) + trellis overlay.
+  const [mapMode, setMapMode] = useState(false);
+  const [trellis, setTrellis] = useState<TrellisMode>('live');
+  const [scene, setScene] = useState<GraphSceneData | null>(null);
+  const [sceneLoading, setSceneLoading] = useState(false);
+  const sceneRef = useRef<GraphSceneHandle>(null);
+
+  const fetchScene = useCallback(async (mode: TrellisMode) => {
+    setSceneLoading(true);
+    try {
+      const data = await rpc<GraphSceneData>('graph.scene', { mode });
+      setScene(data);
+      sceneRef.current?.setScene(data.nodes ?? [], data.edges ?? []);
+    } catch {
+      setScene(null);
+    } finally {
+      setSceneLoading(false);
+    }
+  }, []);
+
+  // (Re)fetch the scene when entering map mode or switching trellis overlay.
+  useEffect(() => {
+    if (mapMode && connected) fetchScene(trellis);
+  }, [mapMode, trellis, connected, activeProject?.path, fetchScene]);
 
   // Set of changed relative paths for badging files in the graph.
   const changedSet = useMemo(
@@ -236,8 +271,70 @@ export default function GraphTab() {
         )}
       </View>
 
-      {/* Search results overlay */}
-      {searchResults !== null ? (
+      {/* Browse / Map mode toggle */}
+      <View style={styles.modeBar}>
+        <TouchableOpacity
+          style={[styles.modeBtn, !mapMode && styles.modeBtnActive]}
+          onPress={() => setMapMode(false)}
+        >
+          <Text style={[styles.modeBtnText, !mapMode && styles.modeBtnTextActive]}>☰ Browse</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeBtn, mapMode && styles.modeBtnActive]}
+          onPress={() => setMapMode(true)}
+        >
+          <Text style={[styles.modeBtnText, mapMode && styles.modeBtnTextActive]}>◉ Map</Text>
+        </TouchableOpacity>
+      </View>
+
+      {mapMode ? (
+        <View style={styles.mapWrap}>
+          {/* Trellis overlay selector — Live / Planned / Diverged */}
+          <View style={styles.trellisBar}>
+            {(['live', 'planned', 'diff'] as TrellisMode[]).map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.trellisBtn, trellis === m && styles.trellisBtnActive]}
+                onPress={() => setTrellis(m)}
+              >
+                <Text style={[styles.trellisText, trellis === m && styles.trellisTextActive]}>
+                  {m === 'live' ? 'Live' : m === 'planned' ? 'Planned' : 'Diverged'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {scene && (
+              <Text style={styles.sceneCounts}>
+                {scene.counts.nodes}n·{scene.counts.edges}e
+                {scene.counts.changed > 0 ? ` ·${scene.counts.changed}±` : ''}
+                {scene.counts.planned > 0 ? ` ·${scene.counts.planned}◆` : ''}
+              </Text>
+            )}
+          </View>
+          <View style={styles.sceneCanvas}>
+            <GraphScene
+              ref={sceneRef}
+              onReady={() => { if (scene) sceneRef.current?.setScene(scene.nodes, scene.edges); }}
+              onTapNode={(id) => {
+                if (id === '(root)') return;
+                setMapMode(false);
+                setBreadcrumb((prev) => [...prev, { type: 'directory', dir: id, label: id }]);
+              }}
+            />
+            {sceneLoading && (
+              <View style={styles.sceneLoading}>
+                <ActivityIndicator color="#3b82f6" />
+              </View>
+            )}
+          </View>
+          {/* Legend */}
+          <View style={styles.legend}>
+            <LegendDot color="#3b82f6" label="module" />
+            <LegendDot color="#f59e0b" label="diverged" />
+            <LegendDot color="#22c55e" label="planned +" />
+            <LegendDot color="#ef4444" label="planned −" />
+          </View>
+        </View>
+      ) : searchResults !== null ? (
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
           <Text style={styles.sectionLabel}>
             {searchResults.length} RESULT{searchResults.length !== 1 ? 'S' : ''}
@@ -624,6 +721,17 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   );
 }
 
+// ── Map legend dot ──────────────────────────────────────────────────
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendLabel}>{label}</Text>
+    </View>
+  );
+}
+
 // ── Styles ──────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -631,6 +739,69 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#09090b',
   },
+
+  // Browse / Map toggle
+  modeBar: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  modeBtnActive: {
+    backgroundColor: '#3b82f620',
+    borderColor: '#3b82f6',
+  },
+  modeBtnText: { color: '#a1a1aa', fontSize: 13, fontWeight: '600' },
+  modeBtnTextActive: { color: '#3b82f6' },
+
+  // Map view
+  mapWrap: { flex: 1 },
+  trellisBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 6,
+  },
+  trellisBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 7,
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  trellisBtnActive: { backgroundColor: '#27272a', borderColor: '#52525b' },
+  trellisText: { color: '#71717a', fontSize: 12, fontWeight: '600' },
+  trellisTextActive: { color: '#e4e4e7' },
+  sceneCounts: { color: '#52525b', fontSize: 11, marginLeft: 'auto' },
+  sceneCanvas: { flex: 1, position: 'relative' },
+  sceneLoading: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#1f1f23',
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendLabel: { color: '#71717a', fontSize: 11 },
 
   // Empty state
   emptyContainer: {
