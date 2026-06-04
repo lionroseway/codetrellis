@@ -41,6 +41,7 @@
     "capture:videos": "playwright test --config=playwright.marketing.config.ts videos",
     "smoke:plan-items": "tsx scripts/smoke-plan-items.ts",
     "smoke:plan-migrate": "tsx scripts/smoke-plan-migrate.ts",
+    "smoke:schema-reconcile": "tsx scripts/smoke-schema-reconcile.ts",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit"
   },

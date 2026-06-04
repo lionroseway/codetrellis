@@ -4,6 +4,17 @@ import path from 'node:path';
 import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
 import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
+import { reconcileSchemaFromSql } from './schema-reconciler';
+import {
+  SCHEMA_AST,
+  SCHEMA_PLANS_CORE,
+  SCHEMA_ATTACHMENTS,
+  SCHEMA_PLAN_ITEMS,
+  SCHEMA_SYSTEM_DOCS,
+  SCHEMA_EXTERNAL_REFS,
+  PERSISTENT_SCHEMA_SQL,
+  EPHEMERAL_TABLES,
+} from './db-schema';
 
 /**
  * Native SQLite via better-sqlite3, exposed through a thin
@@ -71,239 +82,14 @@ export async function initDatabase(): Promise<void> {
   db = makeShim(bdb);
   console.log(`[DB] Opened native SQLite (better-sqlite3) at ${dbPath}`);
 
-  // AST tables (ephemeral — rebuilt on scan)
-  db.run(`
-    CREATE TABLE IF NOT EXISTS files (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      path TEXT UNIQUE NOT NULL,
-      relative_path TEXT NOT NULL,
-      language TEXT NOT NULL,
-      content_hash TEXT NOT NULL,
-      last_parsed INTEGER NOT NULL
-    );
+  // AST tables (ephemeral — rebuilt on scan). Schema lives in
+  // ./db-schema.ts so the reconciler reads the same source of truth.
+  db.run(SCHEMA_AST);
 
-    CREATE TABLE IF NOT EXISTS symbols (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-      parent_symbol_id INTEGER REFERENCES symbols(id),
-      name TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      start_line INTEGER,
-      end_line INTEGER,
-      modifiers TEXT,
-      FOREIGN KEY (file_id) REFERENCES files(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS imports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-      source_path TEXT NOT NULL,
-      specifiers TEXT,
-      is_default INTEGER DEFAULT 0,
-      is_namespace INTEGER DEFAULT 0
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);
-    CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind);
-    CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
-    CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
-
-    -- Cross-system callsites — non-import couplings (HTTP fetches /
-    -- routes, SQL queries, subprocess calls). Populated per-file by
-    -- the language-specific extractors in callsites/<lang>.ts.
-    CREATE TABLE IF NOT EXISTS callsites (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-      kind TEXT NOT NULL,
-      protocol TEXT NOT NULL,
-      method TEXT,
-      url_pattern TEXT,
-      sql_text TEXT,
-      line INTEGER,
-      context TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_callsites_file ON callsites(file_id);
-    CREATE INDEX IF NOT EXISTS idx_callsites_kind ON callsites(kind);
-    CREATE INDEX IF NOT EXISTS idx_callsites_url ON callsites(url_pattern);
-
-    -- Cross-system edges produced by the matchers. Refreshed at the
-    -- end of every project scan from the callsites + files tables.
-    CREATE TABLE IF NOT EXISTS cross_system_edges (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-      target_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-      protocol TEXT NOT NULL,
-      label TEXT,
-      confidence REAL DEFAULT 1.0
-    );
-    CREATE INDEX IF NOT EXISTS idx_xs_edges_source ON cross_system_edges(source_file_id);
-    CREATE INDEX IF NOT EXISTS idx_xs_edges_target ON cross_system_edges(target_file_id);
-    CREATE INDEX IF NOT EXISTS idx_xs_edges_protocol ON cross_system_edges(protocol);
-  `);
-
-  // Plan tables (persistent — survive restarts)
-  db.run(`
-    CREATE TABLE IF NOT EXISTS plans (
-      uid TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      description TEXT DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'draft',
-      author TEXT NOT NULL,
-      author_type TEXT NOT NULL DEFAULT 'human',
-      project_path TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS plan_versions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      plan_uid TEXT NOT NULL REFERENCES plans(uid),
-      version INTEGER NOT NULL,
-      snapshot TEXT NOT NULL,
-      change_summary TEXT,
-      author TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      UNIQUE(plan_uid, version)
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      uid TEXT PRIMARY KEY,
-      plan_uid TEXT NOT NULL REFERENCES plans(uid),
-      sort_order INTEGER NOT NULL,
-      description TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      assignee TEXT,
-      assignee_type TEXT,
-      assignee_model TEXT,
-      affected_files TEXT DEFAULT '[]',
-      affected_symbols TEXT DEFAULT '[]',
-      new_connections TEXT DEFAULT '[]',
-      removed_connections TEXT DEFAULT '[]',
-      dependencies TEXT DEFAULT '[]',
-      file_spec TEXT,
-      symbol_specs TEXT DEFAULT '[]',
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS plan_phases (
-      uid TEXT PRIMARY KEY,
-      plan_uid TEXT NOT NULL REFERENCES plans(uid),
-      phase_number INTEGER NOT NULL,
-      title TEXT NOT NULL,
-      scope TEXT NOT NULL DEFAULT '',
-      prerequisites TEXT NOT NULL DEFAULT '',
-      git_checkpoint TEXT,
-      acceptance_criteria TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending',
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_plan_phases_plan ON plan_phases(plan_uid);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_phases_unique ON plan_phases(plan_uid, phase_number);
-
-    CREATE TABLE IF NOT EXISTS comments (
-      uid TEXT PRIMARY KEY,
-      target_type TEXT NOT NULL,
-      target_uid TEXT NOT NULL,
-      parent_uid TEXT,
-      author TEXT NOT NULL,
-      author_type TEXT NOT NULL DEFAULT 'human',
-      body TEXT NOT NULL,
-      comment_type TEXT NOT NULL DEFAULT 'comment',
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS agent_sessions (
-      session_id TEXT PRIMARY KEY,
-      agent_type TEXT NOT NULL,
-      model TEXT,
-      active_plan_uid TEXT REFERENCES plans(uid),
-      connected_at INTEGER NOT NULL,
-      last_seen INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'active'
-    );
-
-    CREATE TABLE IF NOT EXISTS deviations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      plan_uid TEXT NOT NULL REFERENCES plans(uid),
-      deviation_type TEXT NOT NULL,
-      severity TEXT NOT NULL DEFAULT 'warning',
-      description TEXT NOT NULL,
-      resolution TEXT NOT NULL DEFAULT 'pending',
-      detected_at INTEGER NOT NULL,
-      resolved_at INTEGER
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_tasks_plan ON tasks(plan_uid);
-    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_uid);
-    CREATE INDEX IF NOT EXISTS idx_plan_versions_plan ON plan_versions(plan_uid);
-    CREATE INDEX IF NOT EXISTS idx_sessions_plan ON agent_sessions(active_plan_uid);
-    CREATE INDEX IF NOT EXISTS idx_deviations_plan ON deviations(plan_uid);
-
-    CREATE TABLE IF NOT EXISTS trellis_snapshots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      snapshot_type TEXT NOT NULL,
-      plan_uid TEXT REFERENCES plans(uid),
-      git_branch TEXT,
-      files_json TEXT NOT NULL,
-      edges_json TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_trellis_plan ON trellis_snapshots(plan_uid);
-    CREATE INDEX IF NOT EXISTS idx_trellis_type ON trellis_snapshots(snapshot_type);
-
-    CREATE TABLE IF NOT EXISTS plan_documents (
-      uid TEXT PRIMARY KEY,
-      plan_uid TEXT NOT NULL REFERENCES plans(uid),
-      doc_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      body TEXT NOT NULL DEFAULT '',
-      version INTEGER NOT NULL DEFAULT 1,
-      author TEXT NOT NULL,
-      author_type TEXT NOT NULL DEFAULT 'human',
-      order_hint TEXT,
-      parent_doc_uid TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_plan_docs_plan ON plan_documents(plan_uid);
-    CREATE INDEX IF NOT EXISTS idx_plan_docs_type ON plan_documents(doc_type);
-    -- idx_plan_docs_parent is created in the migration block below
-    -- (after the ALTER TABLE that adds parent_doc_uid). Defining it
-    -- here would fail on databases that pre-date Phase 12 §C — the
-    -- table exists, the column doesn't, CREATE INDEX errors. Fresh
-    -- installs still get the index via the migration block too.
-
-    CREATE TABLE IF NOT EXISTS plan_document_versions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      doc_uid TEXT NOT NULL REFERENCES plan_documents(uid),
-      version INTEGER NOT NULL,
-      body TEXT NOT NULL,
-      change_summary TEXT,
-      author TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      UNIQUE(doc_uid, version)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_plan_doc_versions ON plan_document_versions(doc_uid);
-
-    CREATE TABLE IF NOT EXISTS recent_projects (
-      path TEXT PRIMARY KEY,
-      display_name TEXT NOT NULL,
-      branch TEXT,
-      pinned INTEGER NOT NULL DEFAULT 0,
-      last_opened_at INTEGER NOT NULL,
-      first_opened_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_recent_projects_opened ON recent_projects(last_opened_at DESC);
-  `);
+  // Plan tables (persistent — survive restarts). Schema lives in
+  // ./db-schema.ts; the reconciler at end-of-init backfills any
+  // columns that were added later than this DB was first created.
+  db.run(SCHEMA_PLANS_CORE);
 
   // Phase 15 §15.D — plan-level git context. Captures user intent
   // ("base off `main`, land on `feat/auth`, optionally use this
@@ -354,143 +140,13 @@ export async function initDatabase(): Promise<void> {
   try { db.run(`ALTER TABLE comments ADD COLUMN source TEXT`); } catch { /* exists */ }
   try { db.run(`ALTER TABLE comments ADD COLUMN metadata TEXT`); } catch { /* exists */ }
 
-  // Phase 14 §A — task / plan-doc attachments rail. Single table covers
-  // both targets via target_type so the UI can render task and doc
-  // rails uniformly without a second table.
-  db.run(`
-    CREATE TABLE IF NOT EXISTS attachments (
-      uid TEXT PRIMARY KEY,
-      target_type TEXT NOT NULL,
-      target_uid TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      value TEXT NOT NULL,
-      label TEXT,
-      content_type TEXT,
-      author TEXT NOT NULL,
-      author_type TEXT NOT NULL DEFAULT 'human',
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_attachments_target ON attachments(target_uid);
-    CREATE INDEX IF NOT EXISTS idx_attachments_target_type ON attachments(target_type, target_uid);
-  `);
+  // Phase 14 §A — task / plan-doc attachments rail. Schema in ./db-schema.ts.
+  db.run(SCHEMA_ATTACHMENTS);
 
-  // Phase 15 §15.A — Object/Action unified model. Replaces (eventually)
-  // plan_documents + plan_phases + tasks. For now the new tables are
-  // built alongside; nothing reads from them until §15.C wires the
-  // service layer + MCP tools. See `docs/PLAN-WORKSPACE-DESIGN.md`
-  // (v0.5) for the full schema design.
-  //
-  //   - plan_items          — unified tree (kind = 'object' | 'action')
-  //   - plan_item_versions  — per-item edit history (M1)
-  //   - plan_events         — append-only structural mutation log
-  //                           (drives the activity rail + timeline
-  //                            scrubber — "show how plans shift")
-  //
-  // Old tables stay readable; the service layer dual-reads during
-  // the cutover window. Migration script lives in §15.B.
-  db.run(`
-    CREATE TABLE IF NOT EXISTS plan_items (
-      uid              TEXT PRIMARY KEY,
-      plan_uid         TEXT NOT NULL REFERENCES plans(uid),
-      parent_uid       TEXT REFERENCES plan_items(uid),
-      sort_order       INTEGER NOT NULL DEFAULT 0,
-      kind             TEXT NOT NULL,
-      title            TEXT NOT NULL,
-      body             TEXT NOT NULL DEFAULT '',
-      template         TEXT,
-      status           TEXT,
-      assignee         TEXT,
-      assignee_type    TEXT,
-      assignee_model   TEXT,
-      progress_percent INTEGER,
-      blocked_reason   TEXT,
-      scope_path       TEXT,
-      file_specs       TEXT NOT NULL DEFAULT '[]',
-      symbol_specs     TEXT NOT NULL DEFAULT '[]',
-      new_connections  TEXT NOT NULL DEFAULT '[]',
-      removed_conns    TEXT NOT NULL DEFAULT '[]',
-      dependencies     TEXT NOT NULL DEFAULT '[]',
-      -- Phase 17.N-Q: routing & execution rules
-      skills             TEXT NOT NULL DEFAULT '[]',
-      skills_mode        TEXT DEFAULT 'inherit',
-      claim_policy       TEXT DEFAULT NULL,
-      claim_policy_mode  TEXT DEFAULT 'inherit',
-      execution_config   TEXT DEFAULT NULL,
-      execution_config_mode TEXT DEFAULT 'inherit',
-      -- Phase 17.F: constraints & guardrails
-      constraints        TEXT DEFAULT NULL,
-      constraints_mode   TEXT DEFAULT 'inherit',
-      -- Phase 17.K: approval gate
-      requires_approval  INTEGER NOT NULL DEFAULT 0,
-      author           TEXT NOT NULL,
-      author_type      TEXT NOT NULL DEFAULT 'human',
-      created_at       INTEGER NOT NULL,
-      updated_at       INTEGER NOT NULL,
-      migrated_from    TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_plan_items_plan       ON plan_items(plan_uid);
-    CREATE INDEX IF NOT EXISTS idx_plan_items_parent     ON plan_items(parent_uid);
-    CREATE INDEX IF NOT EXISTS idx_plan_items_kind       ON plan_items(kind);
-    CREATE INDEX IF NOT EXISTS idx_plan_items_status     ON plan_items(status);
-    CREATE INDEX IF NOT EXISTS idx_plan_items_sort       ON plan_items(plan_uid, parent_uid, sort_order);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_items_migrated ON plan_items(migrated_from);
-
-    CREATE TABLE IF NOT EXISTS plan_item_versions (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      item_uid        TEXT NOT NULL REFERENCES plan_items(uid),
-      version         INTEGER NOT NULL,
-      body_snapshot   TEXT,
-      meta_snapshot   TEXT,
-      change_summary  TEXT,
-      author          TEXT NOT NULL,
-      author_type     TEXT NOT NULL DEFAULT 'human',
-      created_at      INTEGER NOT NULL,
-      UNIQUE(item_uid, version)
-    );
-    CREATE INDEX IF NOT EXISTS idx_plan_item_versions_item ON plan_item_versions(item_uid);
-
-    CREATE TABLE IF NOT EXISTS plan_events (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      plan_uid     TEXT NOT NULL REFERENCES plans(uid),
-      item_uid     TEXT,
-      event_type   TEXT NOT NULL,
-      before_state TEXT,
-      after_state  TEXT,
-      summary      TEXT NOT NULL,
-      author       TEXT NOT NULL,
-      author_type  TEXT NOT NULL DEFAULT 'human',
-      created_at   INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_plan_events_plan ON plan_events(plan_uid, created_at);
-    CREATE INDEX IF NOT EXISTS idx_plan_events_item ON plan_events(item_uid, created_at);
-    CREATE INDEX IF NOT EXISTS idx_plan_events_type ON plan_events(event_type);
-
-    -- CDev Phase 1.3 — channel events (peer-to-peer team coordination).
-    -- Distinct from plan_events: channel events are durable manifest
-    -- content (exported to .codetrellis/plans/<slug>/channels/*.yaml),
-    -- carry a fixed vocabulary of six types (stuck, need-decision,
-    -- need-context, handing-off, steer, weigh-in), and support threading
-    -- via responds_to.
-    CREATE TABLE IF NOT EXISTS channel_events (
-      uid          TEXT PRIMARY KEY,
-      plan_uid     TEXT NOT NULL REFERENCES plans(uid),
-      item_uid     TEXT,
-      event_type   TEXT NOT NULL,
-      payload      TEXT NOT NULL DEFAULT '{}',
-      author       TEXT NOT NULL,
-      author_type  TEXT NOT NULL DEFAULT 'human',
-      agent_model  TEXT,
-      responds_to  TEXT REFERENCES channel_events(uid),
-      status       TEXT NOT NULL DEFAULT 'open',
-      created_at   INTEGER NOT NULL,
-      updated_at   INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_channel_events_plan ON channel_events(plan_uid, created_at);
-    CREATE INDEX IF NOT EXISTS idx_channel_events_item ON channel_events(item_uid, created_at);
-    CREATE INDEX IF NOT EXISTS idx_channel_events_type ON channel_events(event_type);
-    CREATE INDEX IF NOT EXISTS idx_channel_events_thread ON channel_events(responds_to);
-    CREATE INDEX IF NOT EXISTS idx_channel_events_status ON channel_events(status, plan_uid);
-  `);
+  // Phase 15 §15.A — Object/Action unified model. plan_items,
+  // plan_item_versions, plan_events, channel_events. Schema in
+  // ./db-schema.ts.
+  db.run(SCHEMA_PLAN_ITEMS);
 
   // Phase 17.N-Q — add routing/execution columns to existing plan_items tables
   try { db.run(`ALTER TABLE plan_items ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
@@ -541,53 +197,33 @@ export async function initDatabase(): Promise<void> {
   try { db.run(`ALTER TABLE plans ADD COLUMN scope TEXT NOT NULL DEFAULT '[]'`); } catch { /* exists */ }
   try { db.run(`CREATE INDEX IF NOT EXISTS idx_plans_home_repo ON plans(home_repo)`); } catch { /* exists */ }
 
-  // CDev Phase 3.4 — repo-wide system documentation. Each doc is a
-  // markdown file at `.codetrellis/docs/<topic>.md` (with YAML
-  // frontmatter); the DB is an index for fast list / search / cross-
-  // reference. `references` is JSON ({ files: [...], symbols: [...],
-  // items: [...] }) — the points in the codebase + plans the doc
-  // describes. `captured_against_commit` stamps the git SHA the doc
-  // was last verified against; the freshness sensor compares it to
-  // current HEAD.
-  db.run(`
-    CREATE TABLE IF NOT EXISTS system_docs (
-      uid TEXT PRIMARY KEY,
-      project_path TEXT NOT NULL,
-      slug TEXT NOT NULL,
-      title TEXT NOT NULL,
-      body TEXT NOT NULL DEFAULT '',
-      owner TEXT,
-      tags TEXT NOT NULL DEFAULT '[]',
-      "references" TEXT NOT NULL DEFAULT '{}',
-      captured_against_commit TEXT,
-      last_verified_at INTEGER,
-      author TEXT NOT NULL DEFAULT 'human',
-      author_type TEXT NOT NULL DEFAULT 'human',
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      UNIQUE(project_path, slug)
-    );
-    CREATE INDEX IF NOT EXISTS idx_system_docs_project ON system_docs(project_path);
-    CREATE INDEX IF NOT EXISTS idx_system_docs_slug ON system_docs(slug);
-    CREATE INDEX IF NOT EXISTS idx_system_docs_updated ON system_docs(updated_at DESC);
-  `);
+  // CDev Phase 3.4 — repo-wide system documentation. Schema in ./db-schema.ts.
+  db.run(SCHEMA_SYSTEM_DOCS);
 
   // Phase 17.R — external references table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS external_refs (
-      uid TEXT PRIMARY KEY,
-      item_uid TEXT NOT NULL,
-      kind TEXT NOT NULL DEFAULT 'url',
-      url TEXT NOT NULL,
-      title TEXT NOT NULL DEFAULT '',
-      metadata TEXT DEFAULT NULL,
-      author TEXT NOT NULL DEFAULT 'human',
-      author_type TEXT NOT NULL DEFAULT 'human',
-      created_at INTEGER NOT NULL
+  db.run(SCHEMA_EXTERNAL_REFS);
+
+  // Schema reconciler — catches the "added a column to CREATE TABLE
+  // but forgot the matching ALTER" class of bug. Diffs the declared
+  // persistent schema against the live DB and ALTERs in any column
+  // that's declared but missing (additive only — never drops or
+  // renames). The lazy `ALTER TABLE` block above stays the right
+  // place for non-additive changes (NOT NULL with backfill, renames,
+  // indexes, data migrations); the reconciler is the safety net.
+  const reconcile = reconcileSchemaFromSql(db, PERSISTENT_SCHEMA_SQL, {
+    skipTables: EPHEMERAL_TABLES,
+  });
+  if (reconcile.columnsAdded.length > 0) {
+    console.log(
+      `[DB] Schema reconciler added ${reconcile.columnsAdded.length} column(s):`,
+      reconcile.columnsAdded.map((c) => `${c.table}.${c.column}`).join(', '),
     );
-    CREATE INDEX IF NOT EXISTS idx_external_refs_item ON external_refs(item_uid);
-    CREATE INDEX IF NOT EXISTS idx_external_refs_kind ON external_refs(kind);
-  `);
+  }
+  if (reconcile.errors.length > 0) {
+    for (const e of reconcile.errors) {
+      console.warn(`[DB] Schema reconciler failed for ${e.table}.${e.column}: ${e.error}`);
+    }
+  }
 
   console.log('[DB] SQLite initialized');
 }
