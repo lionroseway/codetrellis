@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { rpc } from '../lib/rpc';
+import Markdown from '../components/Markdown';
 
 // --- Types (from desktop plan-service / plan-item-service) -------------------
 
@@ -25,6 +26,7 @@ interface PlanDetail {
   uid: string;
   title: string;
   status: string;
+  description?: string | null;
   projectPath: string;
   createdAt: number;
   updatedAt: number | null;
@@ -315,6 +317,16 @@ export default function PlanDetailScreen() {
         <Text style={styles.itemChevron}>&gt;</Text>
       </TouchableOpacity>
 
+      {/* Plan overview (markdown body) */}
+      {!!plan.description && plan.description.trim().length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>OVERVIEW</Text>
+          <View style={styles.markdownCard}>
+            <Markdown>{plan.description}</Markdown>
+          </View>
+        </View>
+      )}
+
       {/* Pending deviations */}
       {pendingDeviations.length > 0 && (
         <View style={styles.section}>
@@ -573,7 +585,7 @@ function CommentThread({
         )}
         <Text style={styles.commentTime}>{relTime(comment.createdAt)}</Text>
       </View>
-      <Text style={styles.commentBody}>{comment.body}</Text>
+      <Markdown compact>{comment.body}</Markdown>
       {comment.replies?.map((r) => (
         <CommentThread key={r.uid} comment={r} depth={depth + 1} />
       ))}
@@ -834,6 +846,16 @@ const styles = StyleSheet.create({
     color: '#71717a',
     fontSize: 12,
     marginTop: 2,
+  },
+
+  // Markdown body card (plan overview)
+  markdownCard: {
+    backgroundColor: '#141416',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#27272a',
   },
 
   // Spec doc cards

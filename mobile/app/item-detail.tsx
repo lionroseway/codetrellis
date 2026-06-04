@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { rpc } from '../lib/rpc';
+import Markdown from '../components/Markdown';
 
 // --- Types -------------------------------------------------------------------
 
@@ -296,12 +297,12 @@ export default function ItemDetailScreen() {
         </View>
       )}
 
-      {/* Description / Body */}
+      {/* Description / Body (markdown — reads like the desktop page) */}
       {item.body && item.body.trim().length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>DESCRIPTION</Text>
           <View style={styles.bodyCard}>
-            <Text style={styles.bodyText}>{item.body}</Text>
+            <Markdown>{item.body}</Markdown>
           </View>
         </View>
       )}
@@ -462,7 +463,7 @@ function ItemCommentThread({
         )}
         <Text style={styles.commentTime}>{relTime(comment.createdAt)}</Text>
       </View>
-      <Text style={styles.commentBody}>{comment.body}</Text>
+      <Markdown compact>{comment.body}</Markdown>
       {comment.replies?.map((r) => (
         <ItemCommentThread key={r.uid} comment={r} depth={depth + 1} />
       ))}
