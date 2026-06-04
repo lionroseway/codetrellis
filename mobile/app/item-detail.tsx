@@ -22,6 +22,7 @@ import { rpc } from '../lib/rpc';
 import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
 import CommentComposer from '../components/CommentComposer';
+import ItemCreator from '../components/ItemCreator';
 
 // --- Types -------------------------------------------------------------------
 
@@ -117,6 +118,8 @@ export default function ItemDetailScreen() {
   const [attachments, setAttachments] = useState<ItemAttachment[]>([]);
   const [saving, setSaving] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [editField, setEditField] = useState<null | 'assignee' | 'blocked'>(null);
+  const [draft, setDraft] = useState('');
 
   const fetchItem = useCallback(async () => {
     if (!uid) return;
@@ -291,18 +294,52 @@ export default function ItemDetailScreen() {
         )}
       </View>
 
-      {/* Assignee */}
-      {item.assignee && (
-        <View style={styles.section}>
+      {/* Assignee (editable) */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionLabel}>ASSIGNEE</Text>
+          {editField !== 'assignee' && (
+            <TouchableOpacity
+              onPress={() => { setDraft(item.assignee ?? ''); setEditField('assignee'); }}
+            >
+              <Text style={styles.editLink}>{item.assignee ? 'Edit' : 'Set'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {editField === 'assignee' ? (
+          <View>
+            <TextInput
+              style={styles.fieldInput}
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="name or email"
+              placeholderTextColor="#52525b"
+              autoCapitalize="none"
+              autoFocus
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity onPress={() => setEditField(null)} hitSlop={8}>
+                <Text style={styles.cancelLink}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveChip}
+                onPress={async () => { await patchItem({ assignee: draft.trim() || null }); setEditField(null); }}
+              >
+                <Text style={styles.saveChipText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
           <View style={styles.assigneeRow}>
-            <Text style={styles.assigneeText}>{item.assignee}</Text>
+            <Text style={item.assignee ? styles.assigneeText : styles.assigneeEmpty}>
+              {item.assignee || 'Unassigned'}
+            </Text>
             {item.assigneeType && (
               <Text style={styles.assigneeType}>{item.assigneeType}</Text>
             )}
           </View>
-        </View>
-      )}
+        )}
+      </View>
 
       {/* Progress (editable stepper for actions) */}
       {item.kind === 'action' && (
@@ -331,13 +368,57 @@ export default function ItemDetailScreen() {
         </View>
       )}
 
-      {/* Blocked reason */}
-      {item.blockedReason && (
+      {/* Blocked (editable for actions) */}
+      {item.kind === 'action' && (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>BLOCKED</Text>
-          <View style={styles.blockedCard}>
-            <Text style={styles.blockedText}>{item.blockedReason}</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>BLOCKED</Text>
+            {editField !== 'blocked' && (
+              <View style={styles.blockedActions}>
+                {item.status === 'blocked' ? (
+                  <TouchableOpacity onPress={() => patchItem({ status: 'pending', blockedReason: null })}>
+                    <Text style={styles.editLink}>Unblock</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => { setDraft(item.blockedReason ?? ''); setEditField('blocked'); }}
+                  >
+                    <Text style={styles.blockLink}>Mark blocked</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
+          {editField === 'blocked' ? (
+            <View>
+              <TextInput
+                style={styles.fieldInput}
+                value={draft}
+                onChangeText={setDraft}
+                placeholder="What's blocking this?"
+                placeholderTextColor="#52525b"
+                multiline
+                autoFocus
+              />
+              <View style={styles.editActions}>
+                <TouchableOpacity onPress={() => setEditField(null)} hitSlop={8}>
+                  <Text style={styles.cancelLink}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveChip}
+                  onPress={async () => { await patchItem({ status: 'blocked', blockedReason: draft.trim() }); setEditField(null); }}
+                >
+                  <Text style={styles.saveChipText}>Block</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : item.blockedReason ? (
+            <View style={styles.blockedCard}>
+              <Text style={styles.blockedText}>{item.blockedReason}</Text>
+            </View>
+          ) : (
+            <Text style={styles.assigneeEmpty}>Not blocked</Text>
+          )}
         </View>
       )}
 
@@ -348,7 +429,7 @@ export default function ItemDetailScreen() {
           <TouchableOpacity
             onPress={() =>
               router.push(
-                `/body-editor?target=item&uid=${uid}&label=${encodeURIComponent('Edit description')}`,
+                `/body-editor?target=item&uid=${uid}&planUid=${planUid}&label=${encodeURIComponent('Edit description')}`,
               )
             }
           >
@@ -364,7 +445,7 @@ export default function ItemDetailScreen() {
             style={styles.addBodyCard}
             onPress={() =>
               router.push(
-                `/body-editor?target=item&uid=${uid}&label=${encodeURIComponent('Edit description')}`,
+                `/body-editor?target=item&uid=${uid}&planUid=${planUid}&label=${encodeURIComponent('Edit description')}`,
               )
             }
           >
@@ -405,9 +486,10 @@ export default function ItemDetailScreen() {
       )}
 
       {/* Subtasks / children */}
-      {children.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SUBTASKS ({children.length})</Text>
+      <View style={styles.section}>
+          <Text style={styles.sectionLabel}>
+            SUBTASKS{children.length > 0 ? ` (${children.length})` : ''}
+          </Text>
           {children.map((child) => (
             <TouchableOpacity
               key={child.uid}
@@ -442,8 +524,17 @@ export default function ItemDetailScreen() {
               <Text style={styles.childChevron}>&gt;</Text>
             </TouchableOpacity>
           ))}
-        </View>
-      )}
+          {planUid && (
+            <ItemCreator
+              planUid={planUid}
+              parentUid={uid}
+              allowKindToggle={false}
+              defaultKind="action"
+              label="＋ Add subtask"
+              onCreated={() => fetchItem()}
+            />
+          )}
+      </View>
 
       {/* External references / links */}
       {externalRefs.length > 0 && (
@@ -726,10 +817,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  assigneeEmpty: {
+    color: '#52525b',
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
   assigneeType: {
     color: '#52525b',
     fontSize: 12,
   },
+
+  // Inline field editing
+  fieldInput: {
+    backgroundColor: '#18181b',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#27272a',
+    color: '#e4e4e7',
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  editActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 16,
+    marginTop: 8,
+  },
+  cancelLink: { color: '#a1a1aa', fontSize: 14 },
+  saveChip: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 7 },
+  saveChipText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  blockedActions: { flexDirection: 'row' },
+  blockLink: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
 
   // Progress
   progressBar: {

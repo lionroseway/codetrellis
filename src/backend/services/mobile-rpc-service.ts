@@ -223,6 +223,22 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return updated;
     }
 
+    case 'plan.item.create': {
+      const planUid = requireString(params, 'planUid');
+      const title = requireString(params, 'title');
+      const kind = (params.kind as string) === 'object' ? 'object' : 'action';
+      const created = planItemService.createItem({
+        planUid,
+        kind: kind as any,
+        title,
+        parentUid: (params.parentUid as string) || null,
+        body: (params.body as string) || undefined,
+        author: getAuthorKey('human'),
+        authorType: 'human',
+      });
+      return created;
+    }
+
     case 'comment.add': {
       // Post a comment from mobile. targetType 'item' (plan item) or 'plan'.
       const targetUid = requireString(params, 'targetUid');

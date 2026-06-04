@@ -20,19 +20,34 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
+import RefPicker from '../components/RefPicker';
 
 export default function BodyEditorScreen() {
   const router = useRouter();
-  const { target, uid, label } = useLocalSearchParams<{
+  const { target, uid, label, planUid } = useLocalSearchParams<{
     target: 'plan' | 'item';
     uid: string;
     label?: string;
+    planUid?: string;
   }>();
 
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sel, setSel] = useState({ start: 0, end: 0 });
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const effectivePlanUid = target === 'plan' ? uid : planUid;
+
+  const insertChip = useCallback((chip: string) => {
+    setText((t) => {
+      const start = Math.min(sel.start, t.length);
+      const end = Math.min(sel.end, t.length);
+      const next = t.slice(0, start) + chip + t.slice(end);
+      return next;
+    });
+  }, [sel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,17 +111,34 @@ export default function BodyEditorScreen() {
       ) : error ? (
         <View style={styles.center}><Text style={styles.errorText}>{error}</Text></View>
       ) : (
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Write markdown… # headings, - lists, ```code```"
-          placeholderTextColor="#52525b"
-          multiline
-          autoFocus
-          textAlignVertical="top"
-        />
+        <>
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
+            placeholder="Write markdown… # headings, - lists, ```code```"
+            placeholderTextColor="#52525b"
+            multiline
+            autoFocus
+            textAlignVertical="top"
+          />
+          {!!effectivePlanUid && (
+            <View style={styles.toolbar}>
+              <TouchableOpacity style={styles.toolBtn} onPress={() => setPickerOpen(true)}>
+                <Text style={styles.toolBtnText}>＠ Insert reference</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
       )}
+
+      <RefPicker
+        visible={pickerOpen}
+        planUid={effectivePlanUid}
+        onClose={() => setPickerOpen(false)}
+        onInsert={insertChip}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -126,4 +158,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Menlo',
     padding: 16,
   },
+  toolbar: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#27272a',
+    backgroundColor: '#111113',
+  },
+  toolBtn: {
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#27272a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  toolBtnText: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
 });

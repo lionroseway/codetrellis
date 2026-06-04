@@ -21,6 +21,7 @@ import { rpc } from '../lib/rpc';
 import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
 import CommentComposer from '../components/CommentComposer';
+import ItemCreator from '../components/ItemCreator';
 
 // --- Types (from desktop plan-service / plan-item-service) -------------------
 
@@ -555,6 +556,7 @@ export default function PlanDetailScreen() {
             <Text style={styles.emptyText}>No items in this plan yet</Text>
           </View>
         )}
+        <ItemCreator planUid={plan.uid} label="＋ Add item" onCreated={() => fetchPlan()} />
       </View>
 
       {/* External references / links */}
