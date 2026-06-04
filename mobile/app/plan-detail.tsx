@@ -212,6 +212,16 @@ export default function PlanDetailScreen() {
     ]);
   }, [uid, router]);
 
+  const exportPlan = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const res = await rpc<{ planDir: string; fileCount: number }>('plan.file.export', { planUid: uid });
+      Alert.alert('Exported', `${res.fileCount} file${res.fileCount !== 1 ? 's' : ''} written to ${res.planDir.split('/').slice(-3).join('/')}`);
+    } catch (err: unknown) {
+      Alert.alert('Export failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [uid]);
+
   const saveTitle = useCallback(async () => {
     if (!uid || !titleDraft.trim()) { setEditingTitle(false); return; }
     setSavingTitle(true);
@@ -663,7 +673,10 @@ export default function PlanDetailScreen() {
         />
       </View>
 
-      {/* Danger zone */}
+      {/* Export + danger zone */}
+      <TouchableOpacity style={styles.exportBtn} onPress={exportPlan}>
+        <Text style={styles.exportBtnText}>⬆ Export to files (.codetrellis/plans/)</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.deleteBtn} onPress={deletePlan}>
         <Text style={styles.deleteBtnText}>Delete plan</Text>
       </TouchableOpacity>
@@ -778,6 +791,16 @@ const styles = StyleSheet.create({
   titleCancel: { color: '#a1a1aa', fontSize: 14 },
   titleSave: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 7 },
   titleSaveText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  exportBtn: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#27272a',
+    backgroundColor: '#18181b',
+  },
+  exportBtnText: { color: '#a1a1aa', fontSize: 13, fontWeight: '600' },
   deleteBtn: {
     marginTop: 8,
     marginBottom: 8,

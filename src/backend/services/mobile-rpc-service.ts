@@ -55,7 +55,11 @@ import {
 import { listCrossSystemEdges } from './cross-system-service';
 import { captureSnapshot, computeDiff, getBaseline } from './diff-engine';
 import { computeProjection } from './projection-service';
-import { getAuthorKey } from './settings-service';
+import { getAuthorKey, getSettings, updateSettings } from './settings-service';
+import * as systemDocsService from './system-docs-service';
+import * as planTemplates from './plan-templates';
+import * as planTemplatesService from './plan-templates-service';
+import * as planFileService from './plan-file-service';
 import {
   scanProject,
   getActiveProjectPath,
@@ -425,6 +429,173 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       const activePath = getActiveProjectPath();
       if (!activePath) return null;
       return recentProjectsService.getRecentProject(activePath);
+    }
+
+    case 'project.close': {
+      const projectPath = requireString(params, 'projectPath');
+      // Mirror the desktop close_project tool so the tab closes there too.
+      broadcast('ui-close-project', { path: projectPath });
+      return { ok: true };
+    }
+
+    case 'project.pin': {
+      const projectPath = requireString(params, 'projectPath');
+      const pinned = params.pinned !== false; // default true
+      recentProjectsService.setRecentProjectPinned(projectPath, pinned);
+      return recentProjectsService.getRecentProject(projectPath);
+    }
+
+    case 'project.remove': {
+      const projectPath = requireString(params, 'projectPath');
+      recentProjectsService.removeRecentProject(projectPath);
+      return { ok: true };
+    }
+
+    case 'project.alias': {
+      const projectPath = requireString(params, 'projectPath');
+      const alias = requireString(params, 'alias');
+      return recentProjectsService.setProjectAlias(projectPath, alias);
+    }
+
+    case 'project.rescan': {
+      const projectPath = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path;
+      if (!projectPath) throw new Error('No project to rescan.');
+      const result = await scanProject(projectPath);
+      return result;
+    }
+
+    // --- Settings ------------------------------------------------------------
+    case 'settings.get': {
+      return getSettings();
+    }
+
+    case 'settings.update': {
+      // Phone-safe subset only — never let the phone change ports / data paths.
+      const patch: Record<string, unknown> = {};
+      if (params.identity !== undefined) patch.identity = params.identity;
+      if (params.plans !== undefined) patch.plans = params.plans;
+      if (params.device !== undefined) patch.device = params.device;
+      const updated = updateSettings(patch as any);
+      broadcast('settings-changed', { settings: updated });
+      return updated;
+    }
+
+    // --- System docs ---------------------------------------------------------
+    case 'sysdoc.list': {
+      const projectPath = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path;
+      if (!projectPath) throw new Error('No active project on the desktop');
+      const search = params.search as string | undefined;
+      return search
+        ? systemDocsService.searchSystemDocs(projectPath, search)
+        : systemDocsService.listSystemDocs(projectPath);
+    }
+
+    case 'sysdoc.read': {
+      const uid = requireString(params, 'uid');
+      const doc = systemDocsService.getSystemDoc(uid);
+      if (!doc) throw new Error(`Doc not found: ${uid}`);
+      const freshness = safe(() => systemDocsService.getFreshness(uid), null);
+      return { doc, freshness };
+    }
+
+    case 'sysdoc.create': {
+      const projectPath = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path;
+      if (!projectPath) throw new Error('No active project on the desktop');
+      const title = requireString(params, 'title');
+      const doc = systemDocsService.createSystemDoc({
+        projectPath,
+        title,
+        body: (params.body as string) || '',
+        owner: (params.owner as string) || null,
+        tags: (params.tags as string[]) || [],
+        author: getAuthorKey('human'),
+        authorType: 'human',
+      });
+      return doc;
+    }
+
+    case 'sysdoc.update': {
+      const uid = requireString(params, 'uid');
+      const updates: Record<string, unknown> = { author: getAuthorKey('human'), authorType: 'human' };
+      if (params.title !== undefined) updates.title = params.title;
+      if (params.body !== undefined) updates.body = params.body;
+      if (params.owner !== undefined) updates.owner = params.owner;
+      if (params.tags !== undefined) updates.tags = params.tags;
+      const doc = systemDocsService.updateSystemDoc(uid, updates as any);
+      if (!doc) throw new Error(`Doc not found: ${uid}`);
+      return doc;
+    }
+
+    case 'sysdoc.delete': {
+      const uid = requireString(params, 'uid');
+      return { ok: systemDocsService.deleteSystemDoc(uid) };
+    }
+
+    case 'sysdoc.verify': {
+      const uid = requireString(params, 'uid');
+      const doc = systemDocsService.verifySystemDoc(uid);
+      if (!doc) throw new Error(`Doc not found: ${uid}`);
+      return doc;
+    }
+
+    // --- Plan templates + file import/export ---------------------------------
+    case 'plan.template.list': {
+      const projectRoot = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path
+        || undefined;
+      return planTemplates.listTemplates(projectRoot);
+    }
+
+    case 'plan.template.create': {
+      const templateId = requireString(params, 'templateId');
+      const projectPath = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path;
+      if (!projectPath) throw new Error('No project to create the plan in.');
+      const result = planTemplatesService.applyTemplate({
+        templateId,
+        projectPath,
+        title: (params.title as string) || undefined,
+        description: (params.description as string) || undefined,
+        placeholderValues: (params.placeholderValues as Record<string, string>) || undefined,
+        author: getAuthorKey('human'),
+        authorType: 'human',
+      });
+      broadcast('plan-created', { uid: result.plan.uid });
+      return { plan: result.plan, itemCount: result.items.length, version: result.version };
+    }
+
+    case 'plan.file.export': {
+      const planUid = requireString(params, 'planUid');
+      const projectRoot = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path;
+      if (!projectRoot) throw new Error('No active project on the desktop');
+      const result = planFileService.exportPlan(planUid, projectRoot);
+      return { planDir: result.planDir, fileCount: result.files.length };
+    }
+
+    case 'plan.file.discover': {
+      const projectRoot = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path;
+      if (!projectRoot) throw new Error('No active project on the desktop');
+      const dirs = planFileService.discoverPlanDirs(projectRoot);
+      return dirs.map((d) => ({ dir: d, name: path.basename(d) }));
+    }
+
+    case 'plan.file.import': {
+      const planDir = requireString(params, 'planDir');
+      const result = planFileService.importPlan(planDir);
+      broadcast('plan-created', { uid: result.plan?.uid });
+      return { plan: result.plan, warnings: result.warnings };
     }
 
     // --- Terminals -----------------------------------------------------------

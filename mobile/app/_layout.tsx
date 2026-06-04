@@ -131,6 +131,30 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="settings"
+          options={{ title: 'Settings', headerStyle: { backgroundColor: '#09090b' } }}
+        />
+        <Stack.Screen
+          name="projects"
+          options={{ title: 'Projects', headerStyle: { backgroundColor: '#09090b' } }}
+        />
+        <Stack.Screen
+          name="system-docs"
+          options={{ title: 'System Docs', headerStyle: { backgroundColor: '#09090b' } }}
+        />
+        <Stack.Screen
+          name="system-doc-detail"
+          options={{ title: 'Document', headerStyle: { backgroundColor: '#09090b' } }}
+        />
+        <Stack.Screen
+          name="plan-templates"
+          options={{
+            title: 'New from template',
+            presentation: 'modal',
+            headerStyle: { backgroundColor: '#111113' },
+          }}
+        />
+        <Stack.Screen
           name="workspace"
           options={{ headerShown: false }}
         />

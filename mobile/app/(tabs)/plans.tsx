@@ -115,9 +115,14 @@ export default function PlansTab() {
       <View style={styles.newRow}>
         <Text style={styles.newRowTitle}>PLANS</Text>
         {!creating && (
-          <TouchableOpacity style={styles.newBtn} onPress={() => setCreating(true)}>
-            <Text style={styles.newBtnText}>＋ New plan</Text>
-          </TouchableOpacity>
+          <View style={styles.newBtnGroup}>
+            <TouchableOpacity style={styles.newBtnGhost} onPress={() => router.push('/plan-templates')}>
+              <Text style={styles.newBtnGhostText}>Template</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.newBtn} onPress={() => setCreating(true)}>
+              <Text style={styles.newBtnText}>＋ New plan</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
       {creating && (
@@ -303,6 +308,15 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   newRowTitle: { color: '#71717a', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  newBtnGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  newBtnGhost: {
+    borderWidth: 1,
+    borderColor: '#27272a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  newBtnGhostText: { color: '#a1a1aa', fontSize: 12, fontWeight: '700' },
   newBtn: {
     backgroundColor: '#3b82f620',
     borderWidth: 1,
