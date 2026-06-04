@@ -7,7 +7,7 @@
  * (e.g. after returning from the pair screen).
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -114,7 +114,7 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const handleConnect = async (device: PairedDesktop) => {
+  const handleConnect = useCallback(async (device: PairedDesktop, silent = false) => {
     try {
       // pairingId may be missing for pre-upgrade devices — the desktop
       // accepts fingerprint as a fallback and returns the pairingId
@@ -135,9 +135,27 @@ export default function HomeScreen() {
 
       router.push('/(tabs)');
     } catch (err) {
-      Alert.alert('Connection Failed', String(err));
+      // Auto-connect attempts fail quietly (e.g. desktop just went offline) —
+      // only surface an alert for an explicit user-initiated connect.
+      if (!silent) Alert.alert('Connection Failed', String(err));
     }
-  };
+  }, [router]);
+
+  // Auto-connect on launch: if a paired desktop is reachable and we're not
+  // already connected, link to the most-recently-used one automatically (once
+  // per app session) so opening the app "just works" — no manual Connect tap.
+  const autoConnectedRef = useRef(false);
+  useEffect(() => {
+    if (autoConnectedRef.current) return;
+    if (connectionState === 'connected' || connectionState === 'connecting') return;
+    const candidate = devices
+      .filter((d) => reachable[d.fingerprint] === true)
+      .sort((a, b) => (Date.parse(b.lastConnected || '') || 0) - (Date.parse(a.lastConnected || '') || 0))[0];
+    if (candidate) {
+      autoConnectedRef.current = true;
+      void handleConnect(candidate, true);
+    }
+  }, [devices, reachable, connectionState, handleConnect]);
 
   const handleDisconnect = () => {
     connection.disconnect();
