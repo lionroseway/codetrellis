@@ -291,6 +291,27 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return { ok: true };
     }
 
+    case 'plan.create': {
+      const title = requireString(params, 'title');
+      const projectPath = (params.projectPath as string)
+        || getActiveProjectPath()
+        || recentProjectsService.listRecentProjects()[0]?.path;
+      if (!projectPath) throw new Error('No project to create the plan in.');
+      const plan = planService.createPlan(
+        { title, description: (params.description as string) || '', tasks: [] },
+        getAuthorKey('human'),
+        'human',
+        projectPath,
+      );
+      return plan;
+    }
+
+    case 'plan.delete': {
+      const uid = requireString(params, 'uid');
+      planService.deletePlan(uid);
+      return { ok: true };
+    }
+
     case 'plan.item.get': {
       const uid = requireString(params, 'uid');
       const item = planItemService.getItem(uid);
@@ -348,6 +369,27 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       );
       broadcast('comment-added', { comment });
       return comment;
+    }
+
+    // --- External references (links) on a plan item --------------------------
+    case 'item.ref.add': {
+      const itemUid = requireString(params, 'itemUid');
+      const url = requireString(params, 'url');
+      const ref = externalRefsService.createExternalRef({
+        itemUid,
+        url,
+        title: (params.title as string) || undefined,
+        kind: (params.kind as any) || undefined,
+        author: getAuthorKey('human'),
+        authorType: 'human',
+      });
+      return ref;
+    }
+
+    case 'item.ref.remove': {
+      const uid = requireString(params, 'uid');
+      externalRefsService.deleteExternalRef(uid);
+      return { ok: true };
     }
 
     // --- Deviations ----------------------------------------------------------
@@ -561,6 +603,31 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       } catch { /* cross-system table may not exist */ }
 
       return { filePath, language, symbols, ...deps, crossSystemOut, crossSystemIn };
+    }
+
+    case 'graph.fileSource': {
+      // Read a file's source for the mobile preview. Capped + sandboxed to the
+      // active project root.
+      const filePath = requireString(params, 'filePath');
+      const root = getActiveProjectPath() || recentProjectsService.listRecentProjects()[0]?.path;
+      const resolved = path.resolve(filePath);
+      if (root && !resolved.startsWith(path.resolve(root))) {
+        throw new Error('File is outside the active project');
+      }
+      if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) {
+        throw new Error('File not found');
+      }
+      const MAX = 200 * 1024;
+      const stat = fs.statSync(resolved);
+      const truncated = stat.size > MAX;
+      const buf = fs.readFileSync(resolved);
+      const content = (truncated ? buf.subarray(0, MAX) : buf).toString('utf-8');
+      let language = 'unknown';
+      try {
+        const r = getDb().exec(`SELECT language FROM files WHERE path = ?`, [filePath]);
+        if (r[0]?.values[0]) language = r[0].values[0][0] as string;
+      } catch { /* */ }
+      return { content, language, truncated, lineCount: content.split('\n').length };
     }
 
     // --- Changes / diff -------------------------------------------------------

@@ -66,6 +66,20 @@ export default function TerminalsTab() {
     }
   }, [router]);
 
+  const handleKill = useCallback((id: string, title: string) => {
+    Alert.alert('Kill terminal?', title, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Kill',
+        style: 'destructive',
+        onPress: async () => {
+          try { await rpc('terminal.kill', { id }); }
+          catch (err: unknown) { Alert.alert('Kill failed', err instanceof Error ? err.message : String(err)); }
+        },
+      },
+    ]);
+  }, []);
+
   const handleRespond = useCallback(async (requestId: string, response: string) => {
     setSending(true);
     try {
@@ -186,6 +200,14 @@ export default function TerminalsTab() {
                 <Text style={styles.termTitle} numberOfLines={1}>
                   {term.title || `Terminal ${term.id}`}
                 </Text>
+                {term.alive && (
+                  <TouchableOpacity
+                    hitSlop={10}
+                    onPress={() => handleKill(term.id, term.title || `Terminal ${term.id}`)}
+                  >
+                    <Text style={styles.termKill}>Kill</Text>
+                  </TouchableOpacity>
+                )}
                 <Text style={styles.termAction}>Open</Text>
               </View>
               <Text style={styles.termCwd} numberOfLines={1}>
@@ -415,6 +437,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  termKill: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 'auto',
   },
   termCwd: {
     color: '#71717a',

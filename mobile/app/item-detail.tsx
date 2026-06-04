@@ -122,6 +122,8 @@ export default function ItemDetailScreen() {
   const [draft, setDraft] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const [addingRef, setAddingRef] = useState(false);
+  const [refUrl, setRefUrl] = useState('');
 
   const fetchItem = useCallback(async () => {
     if (!uid) return;
@@ -571,27 +573,79 @@ export default function ItemDetailScreen() {
           )}
       </View>
 
-      {/* External references / links */}
-      {externalRefs.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>LINKS ({externalRefs.length})</Text>
-          {externalRefs.map((ref) => (
-            <View key={ref.uid} style={styles.refCard}>
-              <Text style={styles.refKind}>
-                {(ref.kind ?? 'link').toUpperCase()}
-              </Text>
-              <View style={styles.refBody}>
-                <Text style={styles.refTitle} numberOfLines={1}>
-                  {ref.title || ref.url}
-                </Text>
-                <Text style={styles.refUrl} numberOfLines={1}>
-                  {ref.url}
-                </Text>
-              </View>
-            </View>
-          ))}
+      {/* External references / links (add + remove) */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>
+            LINKS{externalRefs.length > 0 ? ` (${externalRefs.length})` : ''}
+          </Text>
+          {!addingRef && (
+            <TouchableOpacity onPress={() => setAddingRef(true)}>
+              <Text style={styles.editLink}>＋ Add</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      )}
+        {externalRefs.map((ref) => (
+          <TouchableOpacity
+            key={ref.uid}
+            style={styles.refCard}
+            activeOpacity={0.7}
+            onLongPress={() =>
+              Alert.alert('Remove link?', ref.title || ref.url, [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Remove',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try { await rpc('item.ref.remove', { uid: ref.uid }); await fetchItem(); }
+                    catch (err: unknown) { Alert.alert('Remove failed', err instanceof Error ? err.message : String(err)); }
+                  },
+                },
+              ])
+            }
+          >
+            <Text style={styles.refKind}>{(ref.kind ?? 'link').toUpperCase()}</Text>
+            <View style={styles.refBody}>
+              <Text style={styles.refTitle} numberOfLines={1}>{ref.title || ref.url}</Text>
+              <Text style={styles.refUrl} numberOfLines={1}>{ref.url}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+        {addingRef && (
+          <View style={styles.addRefBox}>
+            <TextInput
+              style={styles.fieldInput}
+              value={refUrl}
+              onChangeText={setRefUrl}
+              placeholder="https://… (GitHub, Linear, Figma, any URL)"
+              placeholderTextColor="#52525b"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity onPress={() => { setAddingRef(false); setRefUrl(''); }} hitSlop={8}>
+                <Text style={styles.cancelLink}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveChip}
+                onPress={async () => {
+                  if (!refUrl.trim() || !uid) return;
+                  try {
+                    await rpc('item.ref.add', { itemUid: uid, url: refUrl.trim() });
+                    setRefUrl(''); setAddingRef(false); await fetchItem();
+                  } catch (err: unknown) {
+                    Alert.alert('Could not add link', err instanceof Error ? err.message : String(err));
+                  }
+                }}
+              >
+                <Text style={styles.saveChipText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.refHint}>Long-press a link to remove it.</Text>
+          </View>
+        )}
+      </View>
 
       {/* Attachments */}
       {attachments.length > 0 && (
@@ -1018,6 +1072,8 @@ const styles = StyleSheet.create({
   },
 
   // External ref / attachment cards
+  addRefBox: { marginTop: 6 },
+  refHint: { color: '#52525b', fontSize: 11, marginTop: 8, fontStyle: 'italic' },
   refCard: {
     flexDirection: 'row',
     alignItems: 'center',

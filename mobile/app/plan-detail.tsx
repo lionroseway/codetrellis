@@ -193,6 +193,25 @@ export default function PlanDetailScreen() {
     }
   }, [uid]);
 
+  const deletePlan = useCallback(() => {
+    if (!uid) return;
+    Alert.alert('Delete plan?', 'This removes the plan and its items. This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await rpc('plan.delete', { uid });
+            router.back();
+          } catch (err: unknown) {
+            Alert.alert('Delete failed', err instanceof Error ? err.message : String(err));
+          }
+        },
+      },
+    ]);
+  }, [uid, router]);
+
   const saveTitle = useCallback(async () => {
     if (!uid || !titleDraft.trim()) { setEditingTitle(false); return; }
     setSavingTitle(true);
@@ -643,6 +662,11 @@ export default function PlanDetailScreen() {
           onPosted={() => fetchPlan()}
         />
       </View>
+
+      {/* Danger zone */}
+      <TouchableOpacity style={styles.deleteBtn} onPress={deletePlan}>
+        <Text style={styles.deleteBtnText}>Delete plan</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -754,6 +778,17 @@ const styles = StyleSheet.create({
   titleCancel: { color: '#a1a1aa', fontSize: 14 },
   titleSave: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 7 },
   titleSaveText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  deleteBtn: {
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ef444440',
+    backgroundColor: '#ef44440d',
+  },
+  deleteBtnText: { color: '#ef4444', fontSize: 14, fontWeight: '600' },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',

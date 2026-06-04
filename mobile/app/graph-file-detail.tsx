@@ -60,7 +60,7 @@ const KIND_COLORS: Record<string, string> = {
 
 // ── Tab type ────────────────────────────────────────────────────────
 
-type DetailTab = 'symbols' | 'imports' | 'importedBy' | 'connections';
+type DetailTab = 'symbols' | 'imports' | 'importedBy' | 'connections' | 'source';
 
 // Protocol accent colors for cross-system edges
 const PROTOCOL_COLORS: Record<string, string> = {
@@ -84,6 +84,18 @@ export default function GraphFileDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('symbols');
   const [refreshing, setRefreshing] = useState(false);
+  const [source, setSource] = useState<{ content: string; truncated: boolean; lineCount: number } | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+
+  // Lazily fetch the file source the first time the Source tab is opened.
+  useEffect(() => {
+    if (activeTab !== 'source' || source || sourceLoading || !filePath) return;
+    setSourceLoading(true);
+    rpc<{ content: string; truncated: boolean; lineCount: number }>('graph.fileSource', { filePath })
+      .then((r) => setSource(r))
+      .catch(() => setSource({ content: '', truncated: false, lineCount: 0 }))
+      .finally(() => setSourceLoading(false));
+  }, [activeTab, source, sourceLoading, filePath]);
 
   const fetchDetail = useCallback(async () => {
     if (!filePath) return;
@@ -139,6 +151,7 @@ export default function GraphFileDetailScreen() {
     { key: 'imports', label: 'Imports', count: detail.imports.length },
     { key: 'importedBy', label: 'Imported By', count: detail.importedBy.length },
     { key: 'connections', label: 'Connections', count: connectionCount },
+    { key: 'source', label: 'Source', count: source?.lineCount ?? 0 },
   ];
 
   return (
@@ -428,6 +441,23 @@ export default function GraphFileDetailScreen() {
             )}
           </>
         )}
+
+        {activeTab === 'source' && (
+          sourceLoading ? (
+            <ActivityIndicator color="#3b82f6" style={{ marginTop: 24 }} />
+          ) : !source || !source.content ? (
+            <Text style={styles.sourceEmpty}>Source unavailable.</Text>
+          ) : (
+            <View>
+              <ScrollView horizontal showsHorizontalScrollIndicator>
+                <Text style={styles.sourceText} selectable>{source.content}</Text>
+              </ScrollView>
+              {source.truncated && (
+                <Text style={styles.sourceTruncated}>… truncated (first 200 KB)</Text>
+              )}
+            </View>
+          )
+        )}
       </ScrollView>
     </View>
   );
@@ -604,6 +634,15 @@ const styles = StyleSheet.create({
   scrollArea: {
     flex: 1,
   },
+  sourceText: {
+    color: '#d4d4d8',
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'Menlo',
+    paddingVertical: 4,
+  },
+  sourceEmpty: { color: '#52525b', fontSize: 13, fontStyle: 'italic', marginTop: 16, textAlign: 'center' },
+  sourceTruncated: { color: '#71717a', fontSize: 11, marginTop: 8, fontStyle: 'italic' },
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
