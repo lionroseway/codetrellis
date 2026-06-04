@@ -36,7 +36,7 @@ Legend: ✅ full · ◑ partial · ✗ missing
 | Set assignee / blocked / progress | ✅ | ✅ *(now)* | **P1 done** |
 | **Create** page/task/subtask | ✅ slash + tree | ✅ *(now — ItemCreator)* | **P2 done** |
 | Post **comment** (note/blocker/question) | ✅ | ✅ *(now)* | **P1 done** |
-| @-mention files/symbols/items → chips | ✅ | ◑ RefPicker in body-editor | P2 |
+| @-mention files/symbols/items → chips | ✅ | ✅ *(now — items/files/symbols)* | **P2 done** |
 | Add context anchors / targets / refs / attachments | ✅ | ◑ refs (now); anchors/attachments ✗ | P2 |
 | Resolve deviation (accept/ignore/revert) | ✅ | ✅ | — |
 | Routing & execution config / guardrails | ✅ | ✗ | P3 |
@@ -45,18 +45,18 @@ Legend: ✅ full · ◑ partial · ✗ missing
 | Capability | Desktop | Mobile | Priority |
 |---|---|---|---|
 | Channel threads — start (6 types), reply, resolve | ✅ | ✅ | — |
-| Presence / walkthrough narration | ✅ | ◑ read banner | P2 |
+| Presence / walkthrough narration | ✅ | ✅ *(now — markdown card stack)* | **P2 done** |
 | Connected agents view | ✅ | ✅ | — |
 | Input-request response (await_user_input) | ✅ | ✅ | — |
-| Handoff to agent / copy-as-prompt | ✅ | ✗ | P2 |
+| Handoff to agent / copy-as-prompt | ✅ | ✅ *(now — copy as prompt)* | **P2 done** |
 
 ### Graph
 | Capability | Desktop | Mobile | Priority |
 |---|---|---|---|
 | Drill-down browse (overview→dir→file→symbol) | ✅ | ✅ | — |
-| Visual interactive map | ✅ file-level | ◑ cluster-level (pan/zoom/tap) | P2 (file-level depth) |
-| Trellis Live/Baseline/Planned/Diff | ✅ 4 modes | ◑ Live/Planned/Diverged | P2 (baseline) |
-| Node inspect → source preview + git gutter | ✅ | ◑ source preview *(now)*, no git gutter | P2 |
+| Visual interactive map | ✅ file-level | ✅ *(now — cluster + file granularity)* | **P2 done** |
+| Trellis Live/Baseline/Planned/Diff | ✅ 4 modes | ✅ *(now — Base/Live/Planned/Diverged)* | **P2 done** |
+| Node inspect → source preview + git gutter | ✅ | ✅ *(now — source + git gutter)* | **P2 done** |
 | Select nodes → plan these / add to task | ✅ | ✗ | P3 |
 | Cross-system edges | ✅ | ✅ (file detail) | — |
 
@@ -90,14 +90,14 @@ Legend: ✅ full · ◑ partial · ✗ missing
    subset); project management (switch / pin / rescan / rename / remove).
 
 ### What's left after this pass
-All P0/P1, the high-value P2 gaps, **and the P3 admin/lifecycle tail** are now
-closed. The remaining work is P2 polish + infra:
-- **Graph depth**: file-level visual nodes + baseline mode + git gutter.
-- **Handoff**: copy-plan-as-prompt / hand to agent from the phone.
-- **@-mention** inline chip insertion in the body editor (RefPicker covers
-  external links today).
+Feature parity is effectively complete — all P0/P1, the P2 polish (graph
+file-depth + base mode + git gutter, handoff, @-mention files, presence card
+stack), **and** the P3 admin/lifecycle tail are closed. What remains is by
+design or infra:
 - **Sync/data settings** + routing & execution guardrails stay desktop-only by
   design (filesystem paths, ports — not phone-appropriate).
+- **Verification**: a human tap-through on a real device to exercise the write
+  paths the simulator can't (TCC blocks synthetic taps).
 - **Infra**: off-LAN / TURN relay, real-device + Android testing, EAS cloud
   build (needs the user's Apple/Google accounts), store assets.
 
