@@ -78,14 +78,27 @@ function protocolColor(p: string) {
 
 export default function GraphFileDetailScreen() {
   const router = useRouter();
-  const { filePath } = useLocalSearchParams<{ filePath: string }>();
+  const { filePath, tab } = useLocalSearchParams<{ filePath: string; tab?: string }>();
   const [detail, setDetail] = useState<GraphFileDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DetailTab>('symbols');
+  const [activeTab, setActiveTab] = useState<DetailTab>(
+    (['symbols', 'imports', 'importedBy', 'connections', 'source'].includes(tab ?? '')
+      ? (tab as DetailTab)
+      : 'symbols'),
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [source, setSource] = useState<{ content: string; truncated: boolean; lineCount: number } | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
+
+  // React to a `tab` param arriving on an already-mounted screen (e.g. an MCP
+  // walkthrough navigating here a second time) — the useState initializer only
+  // runs on first mount, so sync it when the param changes.
+  useEffect(() => {
+    if (tab && ['symbols', 'imports', 'importedBy', 'connections', 'source'].includes(tab)) {
+      setActiveTab(tab as DetailTab);
+    }
+  }, [tab]);
 
   // Lazily fetch the file source the first time the Source tab is opened.
   useEffect(() => {

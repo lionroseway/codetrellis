@@ -282,10 +282,17 @@ class ConnectionManager {
     // Check if this is an RPC response (correlated by request ID)
     if (handleRpcResponse(data)) return;
 
-    // Desktop → mobile command (MCP drives the phone): navigate / screenshot.
     try {
       const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
       const msg = JSON.parse(text);
+      // Desktop liveness ping → reply with a pong so the desktop can detect
+      // when WE go away and reap the dead peer. Without this the desktop's
+      // sends succeed into a killed socket and the peer lingers forever.
+      if (msg && msg.type === 'ping') {
+        webrtc.sendControl({ type: 'pong', id: msg.id, ts: Date.now() });
+        return;
+      }
+      // Desktop → mobile command (MCP drives the phone): navigate / screenshot.
       if (msg && msg.mcp && typeof msg.cmd === 'string') {
         void handleMobileCommand(msg);
       }

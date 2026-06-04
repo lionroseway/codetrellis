@@ -36,6 +36,16 @@ const HEARTBEAT_INTERVAL_MS = 10_000;
 /** Missed heartbeats before connection is presumed dead. */
 const MAX_MISSED_HEARTBEATS = 3;
 
+/**
+ * No inbound traffic (pong or otherwise) for this long ⇒ the peer is presumed
+ * dead and reaped from the registry. A killed mobile app leaves its SCTP
+ * channel "open" from our side, so outbound sends keep succeeding and the old
+ * miss-on-send-failure check never fires — the only reliable liveness signal
+ * is inbound traffic. Live peers pong every HEARTBEAT_INTERVAL_MS, so this 4×
+ * margin is safe against false reaps even during long desktop→mobile streams.
+ */
+const STALE_PEER_MS = 4 * HEARTBEAT_INTERVAL_MS; // 40s
+
 /** Max time to wait for ICE gathering to complete. */
 const ICE_GATHERING_TIMEOUT_MS = 10_000;
 
@@ -449,6 +459,11 @@ function createChannel(entry: PeerEntry, name: DataChannelName): void {
 
   // werift emits the data directly (string | Buffer), not wrapped in an object
   channel.onMessage.subscribe((data: string | Buffer) => {
+    // Any inbound byte proves the peer is alive — refresh the liveness clock
+    // the stale-peer reaper reads. (Pongs from the mobile keep this fresh even
+    // on an otherwise one-way desktop→mobile stream.)
+    entry.lastHeartbeat = Date.now();
+    entry.missedHeartbeats = 0;
     // Dispatch to channel-level listeners
     const listeners = messageListeners.get(name);
     if (listeners) {
@@ -507,7 +522,19 @@ function startHeartbeat(entry: PeerEntry): void {
       return;
     }
 
-    // Send ping on control channel
+    // Reap a peer that has gone silent. A killed mobile app leaves its SCTP
+    // channel "open" from our side, so the send below keeps succeeding forever
+    // and the old miss-on-send-failure check never fires — the peer would
+    // linger in the registry (and receive every broadcast) indefinitely.
+    // Inbound traffic (pongs) is the only reliable signal; if there's been
+    // none for STALE_PEER_MS, drop it.
+    if (Date.now() - entry.lastHeartbeat > STALE_PEER_MS) {
+      console.warn(`[WebRTC] ${entry.alias}: no inbound for ${Math.round(STALE_PEER_MS / 1000)}s — reaping dead peer`);
+      void disconnectPeer(entry.fingerprint);
+      return;
+    }
+
+    // Send ping on control channel; a live peer pongs, refreshing lastHeartbeat.
     const pingId = randomBytes(4).toString('hex');
     const sent = sendToPeer(entry.fingerprint, DATA_CHANNELS.CONTROL,
       JSON.stringify({ type: 'ping', id: pingId, ts: Date.now() }),
@@ -519,9 +546,7 @@ function startHeartbeat(entry: PeerEntry): void {
 
     if (entry.missedHeartbeats >= MAX_MISSED_HEARTBEATS) {
       console.warn(`[WebRTC] ${entry.alias}: ${MAX_MISSED_HEARTBEATS} heartbeats missed — connection presumed dead`);
-      entry.state = 'failed';
-      emitConnectionState(entry.fingerprint, 'failed');
-      stopHeartbeat(entry);
+      void disconnectPeer(entry.fingerprint);
     }
   }, HEARTBEAT_INTERVAL_MS);
 }
