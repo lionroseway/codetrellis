@@ -19,6 +19,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import Markdown from '../components/Markdown';
+import MarkdownBody from '../components/MarkdownBody';
 
 // --- Types (from desktop plan-service / plan-item-service) -------------------
 
@@ -322,7 +323,7 @@ export default function PlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>OVERVIEW</Text>
           <View style={styles.markdownCard}>
-            <Markdown>{plan.description}</Markdown>
+            <MarkdownBody source={plan.description} planUid={plan.uid} />
           </View>
         </View>
       )}
