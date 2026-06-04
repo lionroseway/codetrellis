@@ -73,7 +73,16 @@ export default function ProjectBrowserScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Open Project' }} />
+      <Stack.Screen
+        options={{
+          title: 'Open Project',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+              <Text style={styles.cancelBtn}>Cancel</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
 
       {/* Current path + up */}
       <View style={styles.pathBar}>
@@ -166,6 +175,7 @@ export default function ProjectBrowserScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#09090b' },
+  cancelBtn: { color: '#3b82f6', fontSize: 16, fontWeight: '600' },
   pathBar: {
     paddingHorizontal: 14,
     paddingTop: 12,
