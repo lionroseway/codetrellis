@@ -38,19 +38,23 @@ export default function BodyEditorScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState({ start: 0, end: 0 });
+  // One-shot controlled selection: set only right after a chip insert so the
+  // caret lands after the chip, then released back to uncontrolled so normal
+  // typing isn't disrupted.
+  const [pendingSel, setPendingSel] = useState<{ start: number; end: number } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
 
   const effectivePlanUid = target === 'plan' ? uid : planUid;
 
   const insertChip = useCallback((chip: string) => {
-    setText((t) => {
-      const start = Math.min(sel.start, t.length);
-      const end = Math.min(sel.end, t.length);
-      const next = t.slice(0, start) + chip + t.slice(end);
-      return next;
-    });
-  }, [sel]);
+    const start = Math.min(sel.start, text.length);
+    const end = Math.min(sel.end, text.length);
+    const insert = `${chip} `; // trailing space so you can keep typing
+    setText(text.slice(0, start) + insert + text.slice(end));
+    const caret = start + insert.length;
+    setPendingSel({ start: caret, end: caret });
+  }, [sel, text]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,7 +139,11 @@ export default function BodyEditorScreen() {
               style={styles.input}
               value={text}
               onChangeText={setText}
-              onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
+              selection={pendingSel ?? undefined}
+              onSelectionChange={(e) => {
+                setSel(e.nativeEvent.selection);
+                if (pendingSel) setPendingSel(null); // release control after the reposition lands
+              }}
               placeholder="Write in markdown…  # heading · - list · **bold** · ```code```"
               placeholderTextColor="#52525b"
               multiline
@@ -156,7 +164,7 @@ export default function BodyEditorScreen() {
             <View style={styles.toolbar}>
               {!!effectivePlanUid && (
                 <TouchableOpacity style={styles.toolBtn} onPress={() => setPickerOpen(true)}>
-                  <Text style={styles.toolBtnText}>＠  Link item or symbol</Text>
+                  <Text style={styles.toolBtnText}>＠  Mention item · file · symbol</Text>
                 </TouchableOpacity>
               )}
               <Text style={styles.toolHint}>Markdown</Text>

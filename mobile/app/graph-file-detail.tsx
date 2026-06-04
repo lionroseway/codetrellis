@@ -88,7 +88,7 @@ export default function GraphFileDetailScreen() {
       : 'symbols'),
   );
   const [refreshing, setRefreshing] = useState(false);
-  const [source, setSource] = useState<{ content: string; truncated: boolean; lineCount: number } | null>(null);
+  const [source, setSource] = useState<{ content: string; truncated: boolean; lineCount: number; lineStatus?: Array<'unchanged' | 'added' | 'modified'> | null } | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
 
   // React to a `tab` param arriving on an already-mounted screen (e.g. an MCP
@@ -104,7 +104,7 @@ export default function GraphFileDetailScreen() {
   useEffect(() => {
     if (activeTab !== 'source' || source || sourceLoading || !filePath) return;
     setSourceLoading(true);
-    rpc<{ content: string; truncated: boolean; lineCount: number }>('graph.fileSource', { filePath })
+    rpc<{ content: string; truncated: boolean; lineCount: number; lineStatus?: Array<'unchanged' | 'added' | 'modified'> | null }>('graph.fileSource', { filePath })
       .then((r) => setSource(r))
       .catch(() => setSource({ content: '', truncated: false, lineCount: 0 }))
       .finally(() => setSourceLoading(false));
@@ -461,17 +461,73 @@ export default function GraphFileDetailScreen() {
           ) : !source || !source.content ? (
             <Text style={styles.sourceEmpty}>Source unavailable.</Text>
           ) : (
-            <View>
-              <ScrollView horizontal showsHorizontalScrollIndicator>
-                <Text style={styles.sourceText} selectable>{source.content}</Text>
-              </ScrollView>
-              {source.truncated && (
-                <Text style={styles.sourceTruncated}>… truncated (first 200 KB)</Text>
-              )}
-            </View>
+            <SourceView
+              content={source.content}
+              lineStatus={source.lineStatus ?? null}
+              truncated={source.truncated}
+            />
           )
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+// ── Source view with git gutter ─────────────────────────────────────
+
+/** Max lines we render with a per-line gutter before falling back to plain. */
+const GUTTER_MAX_LINES = 800;
+
+function SourceView({
+  content,
+  lineStatus,
+  truncated,
+}: {
+  content: string;
+  lineStatus: Array<'unchanged' | 'added' | 'modified'> | null;
+  truncated: boolean;
+}) {
+  const lines = content.split('\n');
+  const dirty = !!lineStatus && lineStatus.some((s) => s !== 'unchanged');
+
+  // Fast path: no git changes (or file too big) → plain selectable block.
+  if (!dirty || lines.length > GUTTER_MAX_LINES) {
+    return (
+      <View>
+        {dirty && lines.length > GUTTER_MAX_LINES && (
+          <Text style={styles.sourceTruncated}>Gutter hidden — file too large.</Text>
+        )}
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <Text style={styles.sourceText} selectable>{content}</Text>
+        </ScrollView>
+        {truncated && <Text style={styles.sourceTruncated}>… truncated (first 200 KB)</Text>}
+      </View>
+    );
+  }
+
+  // Gutter path: per-line rows with a colored change bar + line number.
+  return (
+    <View>
+      <View style={styles.gutterLegend}>
+        <View style={[styles.gutterChip, { borderColor: '#22c55e55' }]}><View style={[styles.gutterDot, { backgroundColor: '#22c55e' }]} /><Text style={styles.gutterLegendText}>added</Text></View>
+        <View style={[styles.gutterChip, { borderColor: '#f59e0b55' }]}><View style={[styles.gutterDot, { backgroundColor: '#f59e0b' }]} /><Text style={styles.gutterLegendText}>modified</Text></View>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator>
+        <View>
+          {lines.map((ln, i) => {
+            const st = lineStatus![i] ?? 'unchanged';
+            const barColor = st === 'added' ? '#22c55e' : st === 'modified' ? '#f59e0b' : 'transparent';
+            return (
+              <View key={i} style={styles.codeRow}>
+                <View style={[styles.codeBar, { backgroundColor: barColor }]} />
+                <Text style={styles.codeLineNo}>{i + 1}</Text>
+                <Text style={styles.codeLine} selectable>{ln || ' '}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+      {truncated && <Text style={styles.sourceTruncated}>… truncated (first 200 KB)</Text>}
     </View>
   );
 }
@@ -656,6 +712,16 @@ const styles = StyleSheet.create({
   },
   sourceEmpty: { color: '#52525b', fontSize: 13, fontStyle: 'italic', marginTop: 16, textAlign: 'center' },
   sourceTruncated: { color: '#71717a', fontSize: 11, marginTop: 8, fontStyle: 'italic' },
+
+  // Git gutter source view
+  gutterLegend: { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  gutterChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
+  gutterDot: { width: 7, height: 7, borderRadius: 4 },
+  gutterLegendText: { color: '#a1a1aa', fontSize: 11, fontWeight: '600' },
+  codeRow: { flexDirection: 'row', alignItems: 'flex-start', minHeight: 18 },
+  codeBar: { width: 3, alignSelf: 'stretch', borderRadius: 2, marginRight: 8 },
+  codeLineNo: { color: '#3f3f46', fontSize: 11, lineHeight: 18, fontFamily: 'Menlo', width: 38, textAlign: 'right', marginRight: 10 },
+  codeLine: { color: '#d4d4d8', fontSize: 12, lineHeight: 18, fontFamily: 'Menlo' },
   scrollContent: {
     padding: 16,
     paddingBottom: 40,

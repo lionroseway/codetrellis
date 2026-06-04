@@ -26,6 +26,15 @@ import {
   usePendingInputRequests,
   usePlans,
 } from '../../lib/store';
+import Markdown from '../../components/Markdown';
+
+// Tone → accent color for walkthrough narration cards.
+const PRESENCE_TONE: Record<string, string> = {
+  neutral: '#3b82f6',
+  success: '#22c55e',
+  warning: '#f59e0b',
+  question: '#8b5cf6',
+};
 
 // --- Colors ------------------------------------------------------------------
 
@@ -86,27 +95,33 @@ export default function ActivityTab() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* ── Live Walkthrough Banner ───────────────────────────────── */}
+      {/* ── Live Walkthrough ──────────────────────────────────────── */}
       {(walkthroughActive || presence.length > 0) && (
         <View style={styles.section}>
           <View style={styles.liveBanner}>
             <View style={styles.liveRow}>
               <View style={styles.liveDot} />
               <Text style={styles.liveLabel}>LIVE WALKTHROUGH</Text>
+              {presence.length > 1 && <Text style={styles.liveCount}>{presence.length} steps</Text>}
             </View>
             <Text style={styles.liveSubtext}>
-              The desktop is presenting a walkthrough
+              The desktop is narrating — newest first
             </Text>
 
-            {/* Show presence cards (narration) */}
-            {presence.map((card) => (
-              <View key={card.id} style={styles.presenceCard}>
-                <Text style={styles.presenceText}>{card.text}</Text>
-                <Text style={styles.presenceMeta}>
-                  {card.tone} · {formatRelative(card.createdAt)}
-                </Text>
-              </View>
-            ))}
+            {/* Narration cards: markdown body, tone-colored rail, agent + time. */}
+            {[...presence].reverse().map((card, idx) => {
+              const accent = PRESENCE_TONE[card.tone] ?? '#3b82f6';
+              return (
+                <View key={card.id} style={[styles.presenceCard, { borderLeftColor: accent }, idx === 0 && styles.presenceCardCurrent]}>
+                  <Markdown compact>{card.text}</Markdown>
+                  <View style={styles.presenceFooter}>
+                    {card.agentId ? <Text style={[styles.presenceAgent, { color: accent }]}>{card.agentId}</Text> : null}
+                    {card.linkTo ? <Text style={styles.presenceLink}>▸ linked</Text> : null}
+                    <Text style={styles.presenceMeta}>{formatRelative(card.createdAt)}</Text>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         </View>
       )}
@@ -316,28 +331,31 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
+  liveCount: { color: '#818cf8', fontSize: 11, fontWeight: '600', marginLeft: 'auto' },
   liveSubtext: {
     color: '#818cf8',
     fontSize: 12,
     marginBottom: 8,
   },
 
-  // Presence cards inside walkthrough
+  // Presence (narration) cards inside the walkthrough
   presenceCard: {
-    backgroundColor: '#312e81',
+    backgroundColor: '#1e1b4b',
     borderRadius: 10,
-    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3b82f6',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginTop: 8,
   },
-  presenceText: {
-    color: '#e0e7ff',
-    fontSize: 14,
-    lineHeight: 20,
-  },
+  presenceCardCurrent: { backgroundColor: '#312e81' },
+  presenceFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  presenceAgent: { fontSize: 11, fontWeight: '700' },
+  presenceLink: { color: '#a5b4fc', fontSize: 11, fontWeight: '600' },
   presenceMeta: {
     color: '#6366f1',
     fontSize: 11,
-    marginTop: 6,
+    marginLeft: 'auto',
   },
 
   // ── Input Request Cards ──

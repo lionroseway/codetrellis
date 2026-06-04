@@ -65,8 +65,10 @@ import {
   getActiveProjectPath,
   readFilesSnapshot,
   getGitWorkingTreeStatus,
+  computeGitLineAnnotations,
   broadcast,
 } from '../server';
+import { buildPlanPrompt } from '../mcp/prompt-builders';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -314,6 +316,18 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       const uid = requireString(params, 'uid');
       planService.deletePlan(uid);
       return { ok: true };
+    }
+
+    case 'plan.copyAsPrompt': {
+      // Serialise the plan as a handoff prompt — same markdown the desktop's
+      // "Copy as prompt" button produces. The phone copies it to the clipboard.
+      const uid = requireString(params, 'uid');
+      const plan = planService.getPlan(uid);
+      if (!plan) throw new Error(`Plan not found: ${uid}`);
+      const items = planItemService.listAllItems(uid);
+      const refs = safe(() => externalRefsService.getExternalRefsByPlan(uid), []);
+      const prompt = buildPlanPrompt(plan as any, items as any, refs as any);
+      return { prompt };
     }
 
     case 'plan.item.get': {
@@ -793,12 +807,37 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       const truncated = stat.size > MAX;
       const buf = fs.readFileSync(resolved);
       const content = (truncated ? buf.subarray(0, MAX) : buf).toString('utf-8');
+      const lineCount = content.split('\n').length;
       let language = 'unknown';
       try {
         const r = getDb().exec(`SELECT language FROM files WHERE path = ?`, [filePath]);
         if (r[0]?.values[0]) language = r[0].values[0][0] as string;
       } catch { /* */ }
-      return { content, language, truncated, lineCount: content.split('\n').length };
+      // Per-line git status for the gutter (added / modified vs HEAD).
+      let lineStatus: Array<'unchanged' | 'added' | 'modified'> | null = null;
+      if (root) {
+        lineStatus = safe(() => computeGitLineAnnotations(root, resolved, lineCount), null);
+      }
+      return { content, language, truncated, lineCount, lineStatus };
+    }
+
+    case 'graph.fileSearch': {
+      // Search the files table by path for the mention picker's Files tab.
+      const query = requireString(params, 'query').toLowerCase();
+      const d = getDb();
+      const out: Array<{ path: string; relativePath: string; name: string }> = [];
+      try {
+        const root = getActiveProjectPath() || recentProjectsService.listRecentProjects()[0]?.path || '';
+        const r = d.exec(`SELECT path FROM files WHERE LOWER(path) LIKE ? ORDER BY path LIMIT 40`, [`%${query}%`]);
+        if (r[0]?.values.length) {
+          for (const row of r[0].values) {
+            const p = row[0] as string;
+            const rel = root && p.startsWith(root) ? path.relative(root, p) : p;
+            out.push({ path: p, relativePath: rel, name: path.basename(p) });
+          }
+        }
+      } catch { /* files table may not exist */ }
+      return out;
     }
 
     // --- Changes / diff -------------------------------------------------------
@@ -861,8 +900,9 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
     // --- Renderable graph scene (cluster nodes + edges + planned/diverged) ----
     case 'graph.scene': {
       const planUid = (params.planUid as string) || undefined;
-      const mode = (params.mode as string) || 'live'; // live | planned | diff
-      return buildGraphScene(mode, planUid);
+      const mode = (params.mode as string) || 'live'; // live | base | planned | diff
+      const granularity = (params.granularity as string) === 'file' ? 'file' : 'cluster';
+      return buildGraphScene(mode, planUid, granularity);
     }
 
     default:
@@ -968,12 +1008,17 @@ function clusterKey(rel: string): string {
  * plan's projection) and diverged state (git working-tree + arch diff) so the
  * phone can show Live / Planned / Diff visually with state-coloured nodes.
  */
-function buildGraphScene(mode: string, planUid?: string): {
+/** Cap on file-granularity nodes — keeps the WebView force layout responsive. */
+const MAX_FILE_NODES = 140;
+
+function buildGraphScene(mode: string, planUid?: string, granularity: 'cluster' | 'file' = 'cluster'): {
   mode: string;
+  granularity: string;
   projectPath: string | null;
   nodes: SceneNode[];
   edges: SceneEdge[];
   counts: { nodes: number; edges: number; changed: number; planned: number };
+  truncated?: boolean;
 } {
   const projectPath = getActiveProjectPath()
     || recentProjectsService.listRecentProjects()[0]?.path
@@ -981,20 +1026,26 @@ function buildGraphScene(mode: string, planUid?: string): {
 
   const depEdges = safe(() => getDependencyEdges(), [] as ReturnType<typeof getDependencyEdges>);
 
+  // File granularity → one node per file (id = relative path, label = basename).
+  // Cluster granularity → one node per top-2 path segments (the default view).
+  const fileMode = granularity === 'file';
+  const keyFn = (rel: string): string => (fileMode ? rel : clusterKey(rel));
+  const labelFn = (key: string): string => (fileMode ? (key.split('/').pop() || key) : key);
+
   const clusters = new Map<string, { fileCount: number; files: Set<string>; state: NodeState }>();
   const ensure = (key: string) => {
     let c = clusters.get(key);
     if (!c) { c = { fileCount: 0, files: new Set(), state: 'normal' }; clusters.set(key, c); }
     return c;
   };
-  const addFile = (rel: string) => { const c = ensure(clusterKey(rel)); if (!c.files.has(rel)) { c.files.add(rel); c.fileCount++; } };
+  const addFile = (rel: string) => { const c = ensure(keyFn(rel)); if (!c.files.has(rel)) { c.files.add(rel); c.fileCount++; } };
 
   const edgeAgg = new Map<string, { source: string; target: string; weight: number; planned?: boolean }>();
   for (const e of depEdges) {
     addFile(e.sourceRelative);
     addFile(e.targetRelative);
-    const s = clusterKey(e.sourceRelative);
-    const t = clusterKey(e.targetRelative);
+    const s = keyFn(e.sourceRelative);
+    const t = keyFn(e.targetRelative);
     if (s === t) continue;
     const key = `${s}->${t}`;
     const agg = edgeAgg.get(key);
@@ -1003,6 +1054,7 @@ function buildGraphScene(mode: string, planUid?: string): {
   }
 
   // --- Diverged overlay (git working tree + arch diff vs baseline) ---
+  // 'base' mode = committed structure, no live/uncommitted overlay (reference view).
   let changedCount = 0;
   if (mode === 'diff' || mode === 'live') {
     const changed = new Set<string>();
@@ -1025,7 +1077,7 @@ function buildGraphScene(mode: string, planUid?: string): {
       }
     }
     for (const f of changed) {
-      const c = clusters.get(clusterKey(f));
+      const c = clusters.get(keyFn(f));
       if (c && c.state === 'normal') { c.state = 'changed'; }
     }
     changedCount = changed.size;
@@ -1037,32 +1089,56 @@ function buildGraphScene(mode: string, planUid?: string): {
     const proj = safe(() => computeProjection(planUid), null);
     if (proj) {
       const mark = (relPath: string, state: NodeState, ghostOk: boolean) => {
-        const key = clusterKey(relPath);
+        const key = keyFn(relPath);
         let c = clusters.get(key);
         if (!c && ghostOk) { c = ensure(key); c.fileCount = c.fileCount; }
         if (c) c.state = state;
       };
-      for (const g of proj.ghostFiles) { ensure(clusterKey(g.path)).state = 'planned_add'; }
+      for (const g of proj.ghostFiles) { ensure(keyFn(g.path)).state = 'planned_add'; }
       for (const m of proj.modifiedFiles) mark(m.path, 'planned_modify', false);
       for (const r of proj.removedFiles) mark(r.path, 'planned_remove', false);
       plannedCount = proj.ghostFiles.length + proj.modifiedFiles.length + proj.removedFiles.length;
     }
   }
 
-  const nodes: SceneNode[] = [...clusters.entries()].map(([id, c]) => ({
+  let nodes: SceneNode[] = [...clusters.entries()].map(([id, c]) => ({
     id,
-    label: id,
+    label: labelFn(id),
     fileCount: c.fileCount,
     state: c.state,
   }));
-  const edges: SceneEdge[] = [...edgeAgg.values()];
+  let edges: SceneEdge[] = [...edgeAgg.values()];
+  let truncated = false;
+
+  // File granularity can produce hundreds of nodes — keep the most-connected
+  // ones (plus any non-normal/state-flagged node) so the layout stays usable.
+  if (fileMode && nodes.length > MAX_FILE_NODES) {
+    const degree = new Map<string, number>();
+    for (const e of edges) {
+      degree.set(e.source, (degree.get(e.source) ?? 0) + e.weight);
+      degree.set(e.target, (degree.get(e.target) ?? 0) + e.weight);
+    }
+    const ranked = [...nodes].sort((a, b) => {
+      // Always keep flagged (changed/planned) nodes.
+      const fa = a.state !== 'normal' ? 1 : 0;
+      const fb = b.state !== 'normal' ? 1 : 0;
+      if (fa !== fb) return fb - fa;
+      return (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0);
+    });
+    const keep = new Set(ranked.slice(0, MAX_FILE_NODES).map((n) => n.id));
+    nodes = nodes.filter((n) => keep.has(n.id));
+    edges = edges.filter((e) => keep.has(e.source) && keep.has(e.target));
+    truncated = true;
+  }
 
   return {
     mode,
+    granularity,
     projectPath,
     nodes,
     edges,
     counts: { nodes: nodes.length, edges: edges.length, changed: changedCount, planned: plannedCount },
+    truncated,
   };
 }
 

@@ -19,6 +19,7 @@ import {
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { rpc } from '../lib/rpc';
 import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
@@ -211,6 +212,17 @@ export default function PlanDetailScreen() {
       },
     ]);
   }, [uid, router]);
+
+  const copyAsPrompt = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const res = await rpc<{ prompt: string }>('plan.copyAsPrompt', { uid });
+      await Clipboard.setStringAsync(res.prompt);
+      Alert.alert('Copied', 'Plan prompt copied to the clipboard — paste it into your agent.');
+    } catch (err: unknown) {
+      Alert.alert('Copy failed', err instanceof Error ? err.message : String(err));
+    }
+  }, [uid]);
 
   const exportPlan = useCallback(async () => {
     if (!uid) return;
@@ -673,7 +685,10 @@ export default function PlanDetailScreen() {
         />
       </View>
 
-      {/* Export + danger zone */}
+      {/* Handoff + export + danger zone */}
+      <TouchableOpacity style={styles.handoffBtn} onPress={copyAsPrompt}>
+        <Text style={styles.handoffBtnText}>🤖  Copy as prompt (hand to agent)</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.exportBtn} onPress={exportPlan}>
         <Text style={styles.exportBtnText}>⬆ Export to files (.codetrellis/plans/)</Text>
       </TouchableOpacity>
@@ -791,8 +806,18 @@ const styles = StyleSheet.create({
   titleCancel: { color: '#a1a1aa', fontSize: 14 },
   titleSave: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 7 },
   titleSaveText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  exportBtn: {
+  handoffBtn: {
     marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3b82f640',
+    backgroundColor: '#3b82f615',
+  },
+  handoffBtnText: { color: '#3b82f6', fontSize: 13, fontWeight: '700' },
+  exportBtn: {
+    marginTop: 8,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',

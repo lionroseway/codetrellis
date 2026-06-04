@@ -29,12 +29,16 @@ import type {
   ChangesSummary,
 } from '../../lib/types';
 
-type TrellisMode = 'live' | 'planned' | 'diff';
+type TrellisMode = 'live' | 'base' | 'planned' | 'diff';
+type Granularity = 'cluster' | 'file';
 interface GraphSceneData {
   mode: string;
+  granularity?: string;
+  projectPath?: string | null;
   nodes: SceneNode[];
   edges: SceneEdge[];
   counts: { nodes: number; edges: number; changed: number; planned: number };
+  truncated?: boolean;
 }
 
 // ── Language palette (matches desktop graph-visuals.ts) ──────────────
@@ -104,14 +108,15 @@ export default function GraphTab() {
   // Visual "Map" mode (interactive cluster graph) + trellis overlay.
   const [mapMode, setMapMode] = useState(false);
   const [trellis, setTrellis] = useState<TrellisMode>('live');
+  const [granularity, setGranularity] = useState<Granularity>('cluster');
   const [scene, setScene] = useState<GraphSceneData | null>(null);
   const [sceneLoading, setSceneLoading] = useState(false);
   const sceneRef = useRef<GraphSceneHandle>(null);
 
-  const fetchScene = useCallback(async (mode: TrellisMode) => {
+  const fetchScene = useCallback(async (mode: TrellisMode, gran: Granularity) => {
     setSceneLoading(true);
     try {
-      const data = await rpc<GraphSceneData>('graph.scene', { mode });
+      const data = await rpc<GraphSceneData>('graph.scene', { mode, granularity: gran });
       setScene(data);
       sceneRef.current?.setScene(data.nodes ?? [], data.edges ?? []);
     } catch {
@@ -121,10 +126,10 @@ export default function GraphTab() {
     }
   }, []);
 
-  // (Re)fetch the scene when entering map mode or switching trellis overlay.
+  // (Re)fetch the scene when entering map mode or switching overlay/granularity.
   useEffect(() => {
-    if (mapMode && connected) fetchScene(trellis);
-  }, [mapMode, trellis, connected, activeProject?.path, fetchScene]);
+    if (mapMode && connected) fetchScene(trellis, granularity);
+  }, [mapMode, trellis, granularity, connected, activeProject?.path, fetchScene]);
 
   // Set of changed relative paths for badging files in the graph.
   const changedSet = useMemo(
@@ -289,16 +294,30 @@ export default function GraphTab() {
 
       {mapMode ? (
         <View style={styles.mapWrap}>
-          {/* Trellis overlay selector — Live / Planned / Diverged */}
+          {/* Trellis overlay selector — Base / Live / Planned / Diverged */}
           <View style={styles.trellisBar}>
-            {(['live', 'planned', 'diff'] as TrellisMode[]).map((m) => (
+            {(['base', 'live', 'planned', 'diff'] as TrellisMode[]).map((m) => (
               <TouchableOpacity
                 key={m}
                 style={[styles.trellisBtn, trellis === m && styles.trellisBtnActive]}
                 onPress={() => setTrellis(m)}
               >
                 <Text style={[styles.trellisText, trellis === m && styles.trellisTextActive]}>
-                  {m === 'live' ? 'Live' : m === 'planned' ? 'Planned' : 'Diverged'}
+                  {m === 'base' ? 'Base' : m === 'live' ? 'Live' : m === 'planned' ? 'Planned' : 'Diverged'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {/* Granularity (cluster vs file) + counts */}
+          <View style={styles.granBar}>
+            {(['cluster', 'file'] as Granularity[]).map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.granBtn, granularity === g && styles.granBtnActive]}
+                onPress={() => setGranularity(g)}
+              >
+                <Text style={[styles.granText, granularity === g && styles.granTextActive]}>
+                  {g === 'cluster' ? '◇ Clusters' : '▢ Files'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -307,6 +326,7 @@ export default function GraphTab() {
                 {scene.counts.nodes}n·{scene.counts.edges}e
                 {scene.counts.changed > 0 ? ` ·${scene.counts.changed}±` : ''}
                 {scene.counts.planned > 0 ? ` ·${scene.counts.planned}◆` : ''}
+                {scene.truncated ? ' ·top' : ''}
               </Text>
             )}
           </View>
@@ -316,6 +336,14 @@ export default function GraphTab() {
               onReady={() => { if (scene) sceneRef.current?.setScene(scene.nodes, scene.edges); }}
               onTapNode={(id) => {
                 if (id === '(root)') return;
+                // File granularity → the node id is a relative path; open the
+                // file detail. Cluster granularity → drill into the directory.
+                if (granularity === 'file') {
+                  const root = scene?.projectPath;
+                  const abs = root ? `${root}/${id}` : id;
+                  router.push(`/graph-file-detail?filePath=${encodeURIComponent(abs)}`);
+                  return;
+                }
                 setMapMode(false);
                 setBreadcrumb((prev) => [...prev, { type: 'directory', dir: id, label: id }]);
               }}
@@ -783,6 +811,24 @@ const styles = StyleSheet.create({
   trellisBtnActive: { backgroundColor: '#27272a', borderColor: '#52525b' },
   trellisText: { color: '#71717a', fontSize: 12, fontWeight: '600' },
   trellisTextActive: { color: '#e4e4e7' },
+  granBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  granBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  granBtnActive: { backgroundColor: '#3b82f620', borderColor: '#3b82f6' },
+  granText: { color: '#71717a', fontSize: 11, fontWeight: '700' },
+  granTextActive: { color: '#3b82f6' },
   sceneCounts: { color: '#52525b', fontSize: 11, marginLeft: 'auto' },
   sceneCanvas: { flex: 1, position: 'relative' },
   sceneLoading: {

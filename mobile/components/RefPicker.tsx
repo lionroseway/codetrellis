@@ -23,6 +23,8 @@ import { rpc } from '../lib/rpc';
 
 interface ItemLite { uid: string; title: string; kind: string }
 interface SymbolLite { name: string; kind: string; relativePath: string }
+interface FileLite { path: string; relativePath: string; name: string }
+type Tab = 'items' | 'files' | 'symbols';
 
 export default function RefPicker({
   visible,
@@ -35,9 +37,10 @@ export default function RefPicker({
   onClose: () => void;
   onInsert: (chip: string) => void;
 }) {
-  const [tab, setTab] = useState<'items' | 'symbols'>('items');
+  const [tab, setTab] = useState<Tab>('items');
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<ItemLite[]>([]);
+  const [files, setFiles] = useState<FileLite[]>([]);
   const [symbols, setSymbols] = useState<SymbolLite[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -49,15 +52,24 @@ export default function RefPicker({
       .catch(() => setItems([]));
   }, [visible, planUid]);
 
-  // Debounced symbol search.
+  // Debounced file / symbol search (both need a query).
   useEffect(() => {
-    if (!visible || tab !== 'symbols' || query.trim().length < 2) { setSymbols([]); return; }
+    if (!visible || (tab !== 'symbols' && tab !== 'files') || query.trim().length < 2) {
+      if (tab === 'symbols') setSymbols([]);
+      if (tab === 'files') setFiles([]);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
+    const method = tab === 'symbols' ? 'graph.search' : 'graph.fileSearch';
     const t = setTimeout(() => {
-      rpc<SymbolLite[]>('graph.search', { query: query.trim() })
-        .then((r) => { if (!cancelled) setSymbols(Array.isArray(r) ? r.slice(0, 40) : []); })
-        .catch(() => { if (!cancelled) setSymbols([]); })
+      rpc<any[]>(method, { query: query.trim() })
+        .then((r) => {
+          if (cancelled) return;
+          if (tab === 'symbols') setSymbols(Array.isArray(r) ? r.slice(0, 40) : []);
+          else setFiles(Array.isArray(r) ? r.slice(0, 40) : []);
+        })
+        .catch(() => { if (!cancelled) { if (tab === 'symbols') setSymbols([]); else setFiles([]); } })
         .finally(() => { if (!cancelled) setLoading(false); });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
@@ -70,6 +82,11 @@ export default function RefPicker({
   const pickItem = useCallback((it: ItemLite) => {
     const kind = it.kind === 'action' ? 'action' : 'item';
     onInsert(`[[${kind}:${it.uid}|${it.title}]]`);
+    onClose();
+  }, [onInsert, onClose]);
+
+  const pickFile = useCallback((f: FileLite) => {
+    onInsert(`[[file:${f.relativePath}|${f.name}]]`);
     onClose();
   }, [onInsert, onClose]);
 
@@ -90,14 +107,14 @@ export default function RefPicker({
           </View>
 
           <View style={styles.tabs}>
-            {(['items', 'symbols'] as const).map((t) => (
+            {(['items', 'files', 'symbols'] as const).map((t) => (
               <TouchableOpacity
                 key={t}
                 style={[styles.tab, tab === t && styles.tabActive]}
                 onPress={() => setTab(t)}
               >
                 <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                  {t === 'items' ? 'Plan items' : 'Symbols'}
+                  {t === 'items' ? 'Items' : t === 'files' ? 'Files' : 'Symbols'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -107,14 +124,38 @@ export default function RefPicker({
             style={styles.search}
             value={query}
             onChangeText={setQuery}
-            placeholder={tab === 'items' ? 'Filter items…' : 'Search symbols (2+ chars)…'}
+            placeholder={
+              tab === 'items' ? 'Filter items…'
+                : tab === 'files' ? 'Search files (2+ chars)…'
+                : 'Search symbols (2+ chars)…'
+            }
             placeholderTextColor="#52525b"
             autoCapitalize="none"
             autoCorrect={false}
             autoFocus
           />
 
-          {tab === 'items' ? (
+          {tab === 'files' ? (
+            <FlatList
+              data={files}
+              keyExtractor={(f, i) => `${f.relativePath}:${i}`}
+              keyboardShouldPersistTaps="handled"
+              style={styles.list}
+              ListEmptyComponent={
+                loading ? <ActivityIndicator color="#3b82f6" style={{ marginTop: 16 }} />
+                  : <Text style={styles.empty}>{query.trim().length < 2 ? 'Type to search' : 'No files'}</Text>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.row} onPress={() => pickFile(item)}>
+                  <Text style={[styles.rowIcon, { color: '#a78bfa' }]}>▢</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowText} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.rowSub} numberOfLines={1}>{item.relativePath}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          ) : tab === 'items' ? (
             <FlatList
               data={filteredItems}
               keyExtractor={(i) => i.uid}

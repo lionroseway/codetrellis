@@ -1008,7 +1008,7 @@ function detectLanguage(filePath: string): string {
  * tracked yet (whole file is implicitly 'added' — caller can detect via
  * isDirty=true) or if git fails.
  */
-function computeGitLineAnnotations(
+export function computeGitLineAnnotations(
   projectPath: string,
   filePath: string,
   lineCount: number,
