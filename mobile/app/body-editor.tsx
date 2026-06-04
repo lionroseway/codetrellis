@@ -11,6 +11,7 @@ import {
   View,
   Text,
   TextInput,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -21,6 +22,7 @@ import {
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import RefPicker from '../components/RefPicker';
+import MarkdownBody from '../components/MarkdownBody';
 
 export default function BodyEditorScreen() {
   const router = useRouter();
@@ -37,6 +39,7 @@ export default function BodyEditorScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState({ start: 0, end: 0 });
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
 
   const effectivePlanUid = target === 'plan' ? uid : planUid;
 
@@ -112,22 +115,51 @@ export default function BodyEditorScreen() {
         <View style={styles.center}><Text style={styles.errorText}>{error}</Text></View>
       ) : (
         <>
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
-            placeholder="Write markdown… # headings, - lists, ```code```"
-            placeholderTextColor="#52525b"
-            multiline
-            autoFocus
-            textAlignVertical="top"
-          />
-          {!!effectivePlanUid && (
-            <View style={styles.toolbar}>
-              <TouchableOpacity style={styles.toolBtn} onPress={() => setPickerOpen(true)}>
-                <Text style={styles.toolBtnText}>＠ Insert reference</Text>
+          {/* Edit / Preview toggle */}
+          <View style={styles.segment}>
+            {(['edit', 'preview'] as const).map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.segBtn, mode === m && styles.segBtnActive]}
+                onPress={() => setMode(m)}
+              >
+                <Text style={[styles.segText, mode === m && styles.segTextActive]}>
+                  {m === 'edit' ? 'Write' : 'Preview'}
+                </Text>
               </TouchableOpacity>
+            ))}
+          </View>
+
+          {mode === 'edit' ? (
+            <TextInput
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              onSelectionChange={(e) => setSel(e.nativeEvent.selection)}
+              placeholder="Write in markdown…  # heading · - list · **bold** · ```code```"
+              placeholderTextColor="#52525b"
+              multiline
+              autoFocus
+              textAlignVertical="top"
+            />
+          ) : (
+            <ScrollView style={styles.preview} contentContainerStyle={styles.previewContent}>
+              {text.trim().length > 0 ? (
+                <MarkdownBody source={text} planUid={effectivePlanUid} />
+              ) : (
+                <Text style={styles.previewEmpty}>Nothing to preview yet.</Text>
+              )}
+            </ScrollView>
+          )}
+
+          {mode === 'edit' && (
+            <View style={styles.toolbar}>
+              {!!effectivePlanUid && (
+                <TouchableOpacity style={styles.toolBtn} onPress={() => setPickerOpen(true)}>
+                  <Text style={styles.toolBtnText}>＠  Link item or symbol</Text>
+                </TouchableOpacity>
+              )}
+              <Text style={styles.toolHint}>Markdown</Text>
             </View>
           )}
         </>
@@ -150,18 +182,49 @@ const styles = StyleSheet.create({
   cancel: { color: '#a1a1aa', fontSize: 16 },
   save: { color: '#3b82f6', fontSize: 16, fontWeight: '700' },
   saveDisabled: { color: '#3f3f46' },
+
+  // Write / Preview segmented control
+  segment: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  segBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  segBtnActive: { backgroundColor: '#3b82f620', borderColor: '#3b82f6' },
+  segText: { color: '#a1a1aa', fontSize: 13, fontWeight: '600' },
+  segTextActive: { color: '#3b82f6' },
+
+  // Writing surface — proportional font, generous line-height (Notion-like).
   input: {
     flex: 1,
     color: '#e4e4e7',
-    fontSize: 14,
-    lineHeight: 21,
-    fontFamily: 'Menlo',
-    padding: 16,
+    fontSize: 16,
+    lineHeight: 24,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
+
+  // Preview
+  preview: { flex: 1 },
+  previewContent: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 24 },
+  previewEmpty: { color: '#52525b', fontSize: 14, fontStyle: 'italic', marginTop: 8 },
+
   toolbar: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#27272a',
     backgroundColor: '#111113',
@@ -169,10 +232,11 @@ const styles = StyleSheet.create({
   toolBtn: {
     backgroundColor: '#18181b',
     borderWidth: 1,
-    borderColor: '#27272a',
+    borderColor: '#3b82f640',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   toolBtnText: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
+  toolHint: { color: '#3f3f46', fontSize: 11, marginLeft: 'auto' },
 });
