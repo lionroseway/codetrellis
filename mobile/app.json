@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CodeTrellis",
+    "name": "CodeTrellis Companion",
     "slug": "codetrellis",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -10,12 +10,13 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#09090b"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.codetrellis.mobile",
       "infoPlist": {
+        "CFBundleDisplayName": "CodeTrellis",
         "NSCameraUsageDescription": "CodeTrellis uses the camera to scan QR codes for pairing with your desktop.",
         "NSLocalNetworkUsageDescription": "CodeTrellis needs local network access to pair with your desktop and sync workspace data.",
         "NSAppTransportSecurity": {
@@ -25,7 +26,8 @@
         "UIBackgroundModes": [
           "remote-notification"
         ]
-      }
+      },
+      "bitcode": false
     },
     "android": {
       "adaptiveIcon": {
@@ -34,7 +36,15 @@
       },
       "package": "dev.codetrellis.mobile",
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
       ]
     },
     "plugins": [
@@ -53,6 +63,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "20f79cc7-0bad-4fbf-8c75-1b55706a7eac"
+      }
+    },
+    "owner": "saif.swf"
   }
 }
