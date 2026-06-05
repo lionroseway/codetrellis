@@ -99,6 +99,15 @@ export function startMdns(deviceName?: string, fingerprint?: string, mobileApiPo
     publishedService = bonjourInstance.publish({
       name: `${name} (${instanceId})`,
       type: SERVICE_TYPE,
+      // Advertise under a unique, CodeTrellis-owned hostname rather than the
+      // machine's real `.local` name. bonjour-service runs its own mDNS
+      // responder and announces A-records for `host`; if that's the system
+      // hostname (the default), it collides with macOS's built-in Bonjour
+      // responder, which resolves the conflict by renaming the Mac to
+      // "…-2.local", "…-3.local" on every (especially unclean) restart.
+      // A dedicated host keeps discovery working (peers read the IP from the
+      // record's addresses) without ever touching the OS hostname.
+      host: `codetrellis-${instanceId}.local`,
       port: advertisePort,
       txt: {
         instanceId,
