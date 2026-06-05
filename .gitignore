@@ -7,6 +7,19 @@ dist/
 *.db-shm
 .DS_Store
 *.log
+
+# Signing / credentials — never commit (belt-and-suspenders for open-sourcing)
+*.p8
+*.p12
+*.pem
+*.key
+*.keystore
+*.cer
+*.mobileprovision
+AuthKey_*.p8
+.env
+.env.*
+
 .claude/
 test-results/
 marketing-assets/test-results/
