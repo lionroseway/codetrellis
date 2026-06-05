@@ -13,9 +13,12 @@
  */
 
 import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { DiscoveredPeer } from '../../shared/types';
 import { BUILD_INFO } from '../../shared/build-info';
+import { getSettingsDir } from './persistence';
 
 // Lazy-load bonjour-service to keep startup fast and avoid crashes if
 // the module fails (e.g. UDP port 5353 already in use).
@@ -30,11 +33,33 @@ const STALE_PEER_MS = 120_000; // 2 minutes without seeing → remove
 // --- State -------------------------------------------------------------------
 
 /**
- * Persistent instance ID — generated once per backend process. Used to
- * distinguish this instance from others in mDNS records. Not persisted
- * across restarts — it's ephemeral, like a session ID for discovery.
+ * Stable per-machine instance ID, persisted to the settings dir.
+ *
+ * Persisting it (rather than minting a fresh random id each launch) means a
+ * crash + restart RE-ANNOUNCES the same mDNS record — the responder treats it
+ * as a refresh, so the dead session's advertisement is superseded instead of
+ * stacked. Result: no ghost/session buildup after crashes, and discovery sees
+ * one continuous identity (no down→up flap, so no spurious reconnect trigger
+ * on paired phones). Falls back to an ephemeral id if persistence ever fails.
  */
-const instanceId = randomUUID().slice(0, 8);
+function loadOrCreateInstanceId(): string {
+  try {
+    const dir = getSettingsDir();
+    const file = path.join(dir, 'mdns-instance-id');
+    if (fs.existsSync(file)) {
+      const existing = fs.readFileSync(file, 'utf-8').trim();
+      if (/^[0-9a-f]{8}$/i.test(existing)) return existing;
+    }
+    const id = randomUUID().slice(0, 8);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, id, 'utf-8');
+    return id;
+  } catch {
+    return randomUUID().slice(0, 8); // ephemeral fallback if persistence fails
+  }
+}
+
+const instanceId = loadOrCreateInstanceId();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let bonjourInstance: any = null;
