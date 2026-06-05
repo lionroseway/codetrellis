@@ -1,7 +1,7 @@
 {
   "name": "codetrellis",
   "productName": "CodeTrellis",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
   "license": "Apache-2.0",
   "homepage": "https://codetrellis.dev",
@@ -23,6 +23,7 @@
     "package:mac": "electron-vite build && electron-builder --mac --arm64",
     "package:mac-x64": "electron-vite build && electron-builder --mac --x64",
     "package:mac-universal": "electron-vite build && electron-builder --mac",
+    "package:mac:signed": "electron-vite build && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
     "package:win": "electron-vite build && electron-builder --win --x64",
     "package:linux": "electron-vite build && electron-builder --linux",
     "package:all": "electron-vite build && electron-builder --mac --arm64 --win --x64 --linux",

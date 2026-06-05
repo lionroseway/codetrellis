@@ -22,6 +22,14 @@ exports.default = async function afterPack(context) {
   const target = context.electronPlatformName;
   if (target !== 'darwin' && target !== 'mas') return;
 
+  // Real signed builds (npm run package:mac:signed) set CT_SIGN=1.
+  // In that mode electron-builder performs proper Developer ID signing +
+  // notarization, so stand down — an ad-hoc signature here would stomp it.
+  if (process.env.CT_SIGN === '1') {
+    console.log('[adhoc-sign] CT_SIGN=1 — skipping ad-hoc signing (electron-builder will sign + notarize for real)');
+    return;
+  }
+
   const appPath = path.join(
     context.appOutDir,
     `${context.packager.appInfo.productFilename}.app`,
