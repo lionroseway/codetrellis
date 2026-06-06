@@ -1,0 +1,5 @@
+# Every change requires review from the code owner.
+# With branch protection / rulesets enabled (GitHub Pro), this BLOCKS merge
+# to `main` until @lionroseway approves. On the free plan it still auto-requests
+# @lionroseway's review on every PR (not enforced, but the prompt is there).
+* @lionroseway
