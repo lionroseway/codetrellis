@@ -27,7 +27,9 @@ jobs:
       - name: Install deps
         run: npm install --legacy-peer-deps
       - name: Build NSIS installer + portable exe
-        run: npm run package:win
+        # --publish never: electron-builder auto-publishes on CI detection; we
+        # publish via gh from release.sh, so just build the artifacts here.
+        run: npm run package:win -- --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installers
@@ -46,7 +48,7 @@ jobs:
       - name: Install deps
         run: npm install --legacy-peer-deps
       - name: Build AppImage (x64)
-        run: npm run package:linux -- AppImage
+        run: npm run package:linux -- AppImage --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
