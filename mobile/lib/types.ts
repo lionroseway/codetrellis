@@ -95,6 +95,13 @@ export interface PairedDesktop {
   lastConnected: string | null;
   /** LAN address from the last QR scan (may have changed). */
   lastKnownAddress: string;
+  /**
+   * All known reachable addresses for this desktop (LAN + Tailscale/VPN),
+   * ordered LAN-first. Seeded from the QR at pair time and refreshed from the
+   * desktop's snapshot on every connect. Reconnect tries each in order, which
+   * is what lets a LAN pairing reconnect over a VPN without re-pairing.
+   */
+  candidateAddresses?: string[];
   /** Mobile API port from the last connection (default 19480). */
   lastKnownPort: number;
   /** Push notification token registered with this desktop. */
@@ -103,7 +110,7 @@ export interface PairedDesktop {
 
 /** Abstract connection target — WebRTC today, cloud later. */
 export type ConnectionTarget =
-  | { type: 'webrtc'; pairingId: string; fingerprint: string; sharedSecret: string; desktopAddress: string; mobileApiPort: number }
+  | { type: 'webrtc'; pairingId: string; fingerprint: string; sharedSecret: string; desktopAddress: string; mobileApiPort: number; candidateAddresses?: string[] }
   | { type: 'hosted'; url: string; apiKey: string };
 
 /** Connection states. */
@@ -220,6 +227,14 @@ export interface WorkspaceSnapshot {
   pendingInputRequests: InputRequestSummary[];
   walkthroughActive: boolean;
   deviationCounts: DeviationCountsSummary;
+
+  /**
+   * Desktop's reachable IPv4 addresses (LAN + Tailscale/VPN), LAN-first.
+   * Optional for back-compat with older desktops. The companion persists
+   * these into the paired-desktop record so a LAN pairing auto-upgrades to
+   * work over a VPN on the next reconnect — no re-pairing needed.
+   */
+  deviceAddresses?: string[];
 }
 
 // --- Graph (M4) --------------------------------------------------------------

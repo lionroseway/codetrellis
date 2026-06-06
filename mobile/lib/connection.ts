@@ -14,7 +14,7 @@
 import { router } from 'expo-router';
 import { AppState, type AppStateStatus } from 'react-native';
 import { webrtc } from './webrtc';
-import { touchPairedDesktop } from './storage';
+import { recordConnect, mergeCandidateAddresses } from './storage';
 import { useWorkspaceStore } from './store';
 import { handleRpcResponse, cancelAllPendingRpc, rpc } from './rpc';
 import { getDiscoveredDesktops } from './discovery';
@@ -173,32 +173,33 @@ class ConnectionManager {
       this.emitStateChange(state, target.fingerprint);
 
       if (state === 'connected') {
-        touchPairedDesktop(target.fingerprint);
         this.cancelReconnect();
         this.reconnectAttempts = 0;
         this.reconnecting = false;
         this.missedPings = 0;
         this.lastInboundAt = Date.now();
         this.startHeartbeat();
-        // Silent pairingId upgrade: if the desktop returned a pairingId
-        // during reconnect, store it so future connects use it.
+
+        // Make the address that actually worked sticky (handles LAN churn and
+        // an off-LAN VPN connect), and silently upgrade the pairingId if the
+        // desktop returned a new one. recordConnect() only touches these
+        // fields — it won't blank the alias or other untouched values.
+        const workingAddress = webrtc.lastReconnectAddress || target.desktopAddress;
         const upgradedPairingId = webrtc.lastReconnectPairingId;
-        if (upgradedPairingId && upgradedPairingId !== target.pairingId) {
-          console.log(`[Connection] Upgrading pairingId: ${upgradedPairingId.slice(0, 8)}…`);
-          import('./storage').then(({ upsertPairedDesktop }) => {
-            upsertPairedDesktop({
-              fingerprint: target.fingerprint,
-              pairingId: upgradedPairingId,
-              alias: '', // won't overwrite — upsert merges
-              sharedSecret: target.sharedSecret,
-              pairedAt: '',
-              lastConnected: new Date().toISOString(),
-              lastKnownAddress: target.desktopAddress,
-              lastKnownPort: target.mobileApiPort,
-              pushToken: null,
-            });
-          });
+        const pairingIdChanged = !!upgradedPairingId && upgradedPairingId !== target.pairingId;
+        if (workingAddress) target.desktopAddress = workingAddress;
+        if (pairingIdChanged) {
+          console.log(`[Connection] Upgrading pairingId: ${upgradedPairingId!.slice(0, 8)}…`);
+          target.pairingId = upgradedPairingId!;
         }
+        recordConnect(
+          { pairingId: target.pairingId || undefined, fingerprint: target.fingerprint },
+          {
+            lastKnownAddress: workingAddress,
+            lastKnownPort: target.mobileApiPort,
+            pairingId: pairingIdChanged ? upgradedPairingId! : undefined,
+          },
+        ).catch(() => { /* best-effort persistence */ });
       } else if (state === 'disconnected' || state === 'failed') {
         this.scheduleReconnect();
       }
@@ -208,15 +209,18 @@ class ConnectionManager {
     // The desktop's mobile API server is on a dedicated port (default 19480),
     // separate from the desktop UI server.
     // Auth: pairingId (preferred) or fingerprint (fallback for pre-upgrade clients).
-    if (target.desktopAddress) {
+    // Address: try every known candidate (live mDNS hit, stored LAN + Tailscale)
+    // so a pairing made on the LAN also connects over a VPN without re-pairing.
+    const candidates = this.resolveCandidates(target);
+    if (candidates.length > 0) {
       await webrtc.reconnectToDesktop(
-        target.desktopAddress,
+        candidates,
         target.pairingId,
         target.mobileApiPort,
         target.fingerprint, // fallback for silent pairingId upgrade
       );
     } else {
-      console.warn('[Connection] No desktop address stored — cannot reconnect');
+      console.warn('[Connection] No reachable address for desktop — cannot reconnect');
       this.emitStateChange('failed', target.fingerprint);
     }
   }
@@ -240,6 +244,9 @@ class ConnectionManager {
 
       if (msg.type === 'snapshot' && msg.snapshot) {
         this.currentSnapshot = msg.snapshot;
+        // Auto-upgrade: learn the desktop's full address list (LAN + Tailscale)
+        // so a pairing made on the LAN can reconnect over a VPN next time.
+        this.absorbDeviceAddresses(msg.snapshot);
         // Push into Zustand store for reactive UI
         useWorkspaceStore.getState().applySnapshot(msg.snapshot);
         for (const handler of this.snapshotHandlers) {
@@ -349,13 +356,40 @@ class ConnectionManager {
 
   // --- Reconnect with backoff ------------------------------------------------
 
-  /** Best-effort fresh address for the target: prefer a live mDNS hit, else stored. */
-  private resolveAddress(target: Extract<ConnectionTarget, { type: 'webrtc' }>): string | null {
+  /**
+   * Ordered, deduped list of addresses to try for this target:
+   *   1. a live mDNS hit (known reachable on the current LAN right now),
+   *   2. stored candidates (LAN-first, then Tailscale) from QR + snapshots,
+   *   3. the last-known single address as a final fallback.
+   * reconnectToDesktop() tries these in order, so a LAN pairing still
+   * reconnects over a VPN when the LAN address is unreachable.
+   */
+  private resolveCandidates(target: Extract<ConnectionTarget, { type: 'webrtc' }>): string[] {
+    const list: string[] = [];
     try {
       const hit = getDiscoveredDesktops().find((d) => d.fingerprint === target.fingerprint && d.address);
-      if (hit?.address) return hit.address;
+      if (hit?.address) list.push(hit.address);
     } catch { /* discovery may be unavailable */ }
-    return target.desktopAddress || null;
+    if (target.candidateAddresses) list.push(...target.candidateAddresses);
+    if (target.desktopAddress) list.push(target.desktopAddress);
+    return [...new Set(list.filter(Boolean))];
+  }
+
+  /**
+   * Persist the desktop's advertised address list from a snapshot so an
+   * existing (LAN-made) pairing auto-upgrades to reach the desktop over a VPN.
+   * Also updates the in-memory target so the very next reconnect can use them.
+   */
+  private absorbDeviceAddresses(snapshot: WorkspaceSnapshot): void {
+    const target = this.target;
+    if (!target || target.type !== 'webrtc') return;
+    const addrs = snapshot.deviceAddresses;
+    if (!addrs || addrs.length === 0) return;
+    target.candidateAddresses = [...new Set([...(target.candidateAddresses ?? []), ...addrs])];
+    mergeCandidateAddresses(
+      { pairingId: target.pairingId || undefined, fingerprint: target.fingerprint },
+      addrs,
+    ).catch(() => { /* best-effort persistence */ });
   }
 
   private scheduleReconnect(): void {
@@ -374,11 +408,11 @@ class ConnectionManager {
       this.reconnectAttempts += 1;
       this.emitStateChange('connecting', target.fingerprint);
 
-      const address = this.resolveAddress(target);
+      const candidates = this.resolveCandidates(target);
       try {
-        if (!address) throw new Error('No reachable address for desktop');
+        if (candidates.length === 0) throw new Error('No reachable address for desktop');
         await webrtc.reconnectToDesktop(
-          address,
+          candidates,
           target.pairingId,
           target.mobileApiPort,
           target.fingerprint,

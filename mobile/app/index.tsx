@@ -125,6 +125,7 @@ export default function HomeScreen() {
         fingerprint: device.fingerprint,
         sharedSecret: device.sharedSecret,
         desktopAddress: device.lastKnownAddress,
+        candidateAddresses: device.candidateAddresses,
         mobileApiPort: device.lastKnownPort || 19480,
       });
 
