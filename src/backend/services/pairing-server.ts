@@ -44,8 +44,11 @@ export interface PairingServerOpts {
 export interface PairingServerResult {
   /** 6-digit pairing code. */
   code: string;
-  /** LAN IPv4 address the server is bound to. */
+  /** Primary IPv4 address (first reachable; kept for back-compat). */
   address: string;
+  /** All reachable IPv4 addresses (LAN + Tailscale/VPN), so the phone can
+   *  try each — this is what lets a pairing made on LAN also work over a VPN. */
+  addresses: string[];
   /** Port the server is listening on. */
   port: number;
   /** Random nonce for this pairing session. */
@@ -235,9 +238,10 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
 
       activeServer = server;
       const port = addr.port;
-      const lanAddress = getLocalIpAddress();
+      const addresses = getAllAddresses();
+      const lanAddress = addresses[0] ?? '127.0.0.1';
 
-      console.log(`[PairingServer] Listening on ${lanAddress}:${port} (code=${code})`);
+      console.log(`[PairingServer] Listening on ${addresses.join(', ') || lanAddress}:${port} (code=${code})`);
 
       // Auto-close after timeout
       activeTimeout = setTimeout(() => {
@@ -251,6 +255,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
       resolveStart({
         code,
         address: lanAddress,
+        addresses,
         port,
         nonce,
         pairingId,
@@ -320,19 +325,30 @@ function generateCode(): string {
 }
 
 /**
- * Get the first non-internal IPv4 address (LAN address).
- * Falls back to 127.0.0.1 if nothing found.
+ * All non-internal IPv4 addresses this host is reachable on, ordered:
+ * regular LAN (192.168/10/172.16) first, then CGNAT/Tailscale (100.64.0.0/10),
+ * then anything else. The phone races these when pairing/reconnecting, so a
+ * pairing made on the LAN also works later over a VPN like Tailscale.
  */
-function getLocalIpAddress(): string {
+export function getAllAddresses(): string[] {
+  const out: string[] = [];
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
-    const addrs = interfaces[name];
-    if (!addrs) continue;
-    for (const addr of addrs) {
-      if (addr.family === 'IPv4' && !addr.internal) {
-        return addr.address;
-      }
+    for (const addr of interfaces[name] ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal) out.push(addr.address);
     }
   }
-  return '127.0.0.1';
+  const rank = (ip: string): number => {
+    if (/^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) return 0; // LAN
+    if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return 1;     // CGNAT / Tailscale
+    return 2;                                                              // other / public
+  };
+  return out.sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * First reachable IPv4 address (back-compat). Falls back to 127.0.0.1.
+ */
+function getLocalIpAddress(): string {
+  return getAllAddresses()[0] ?? '127.0.0.1';
 }

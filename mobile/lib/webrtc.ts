@@ -113,22 +113,36 @@ export class WebRTCManager {
     offerData: PairingOfferResponse;
     baseUrl: string;
   }> {
-    const baseUrl = `http://${qrPayload.h}:${qrPayload.p}`;
+    // Try every address the desktop advertised (LAN + Tailscale/VPN) and use
+    // whichever answers first — so a QR works on the same network OR over a VPN
+    // without the phone knowing which it's on. Falls back to the single `h`.
+    const hosts = qrPayload.hs && qrPayload.hs.length ? qrPayload.hs : [qrPayload.h];
+    console.log(`[WebRTC] Fetching offer — racing ${hosts.length} host(s): ${hosts.join(', ')}`);
 
-    console.log(`[WebRTC] Fetching offer from ${baseUrl}/offer`);
-    const offerRes = await fetch(`${baseUrl}/offer?c=${encodeURIComponent(qrPayload.c)}`);
-    if (!offerRes.ok) {
-      const body = await offerRes.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(`Failed to fetch offer: ${body.error || offerRes.status}`);
+    const tryHost = async (host: string) => {
+      const baseUrl = `http://${host}:${qrPayload.p}`;
+      const res = await fetch(`${baseUrl}/offer?c=${encodeURIComponent(qrPayload.c)}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(`offer ${host}: ${body.error || res.status}`);
+      }
+      return { offerData: (await res.json()) as PairingOfferResponse, baseUrl };
+    };
+
+    let winner: { offerData: PairingOfferResponse; baseUrl: string };
+    try {
+      winner = await Promise.any(hosts.map(tryHost));
+    } catch {
+      throw new Error(
+        `Couldn't reach your desktop on any address (${hosts.join(', ')}). ` +
+        `Make sure you're on the same Wi-Fi or your VPN (e.g. Tailscale) is connected.`,
+      );
     }
-    const offerData: PairingOfferResponse = await offerRes.json();
 
     console.log(
-      `[WebRTC] Got offer — fp=${offerData.fingerprint.slice(0, 16)}… ` +
-      `nonce=${offerData.nonce.slice(0, 8)}…`,
+      `[WebRTC] Got offer via ${winner.baseUrl} — fp=${winner.offerData.fingerprint.slice(0, 16)}…`,
     );
-
-    return { offerData, baseUrl };
+    return winner;
   }
 
   /**
