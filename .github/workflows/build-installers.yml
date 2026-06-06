@@ -1,0 +1,73 @@
+name: Build installers (Windows + Linux)
+
+# Why this exists:
+# CodeTrellis has native modules (better-sqlite3, node-pty). node-pty cannot be
+# cross-compiled from macOS to Windows/Linux (node-gyp can't cross-OS), so the
+# mac dev box can only produce the signed macOS DMGs. This workflow builds the
+# Windows + Linux installers on their *own* OS runners, where node-pty compiles
+# cleanly, and publishes them as downloadable artifacts (and, if a releases-repo
+# token is configured, attaches them to the matching GitHub Release).
+#
+# Trigger it manually (Actions tab → "Run workflow") or it runs automatically
+# when a v* tag is pushed.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install --legacy-peer-deps
+      - name: Build NSIS installer + portable exe
+        run: npm run package:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            out/make/*Setup*.exe
+            out/make/*Portable*.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install --legacy-peer-deps
+      - name: Build AppImage (x64)
+        run: npm run package:linux -- AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: out/make/*.AppImage
+          if-no-files-found: error
+
+  # OPTIONAL — auto-attach to the public release. Requires a repo secret
+  # RELEASES_TOKEN (a PAT with `contents: write` on lionroseway/codetrellis-releases).
+  # Without the secret this job is skipped and you just download the artifacts above.
+  attach-to-release:
+    needs: [windows, linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Upload to releases repo (if token present)
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "No RELEASES_TOKEN secret — skipping upload; grab the artifacts above."; exit 0; fi
+          TAG="${GITHUB_REF_NAME}"
+          gh release upload "$TAG" dist/**/* --repo lionroseway/codetrellis-releases --clobber
