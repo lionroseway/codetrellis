@@ -1,0 +1,15 @@
+# Copy to scripts/release-env.sh (gitignored) and fill in your values.
+# release.sh sources this so signing/notarization secrets never live in the repo.
+#
+#   cp scripts/release-env.sh.example scripts/release-env.sh
+#   # then edit scripts/release-env.sh with your real values
+
+# App Store Connect API key (.p8) — used for macOS notarization.
+# Keep the .p8 OUTSIDE the repo (e.g. ~/.appstoreconnect/private/).
+export APPLE_API_KEY="$HOME/.appstoreconnect/private/AuthKey_XXXXXXXXXX.p8"
+export APPLE_API_KEY_ID="XXXXXXXXXX"
+export APPLE_API_ISSUER="00000000-0000-0000-0000-000000000000"
+
+# Apple Developer Team ID (10 chars) — must match the Developer ID
+# Application cert installed in your login keychain.
+export APPLE_TEAM_ID="XXXXXXXXXX"

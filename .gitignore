@@ -19,6 +19,7 @@ dist/
 AuthKey_*.p8
 .env
 .env.*
+scripts/release-env.sh
 
 .claude/
 test-results/
