@@ -51,11 +51,14 @@ class ConnectionManager {
   private lastInboundAt = 0;
   private pinging = false;
   private appStateSub: { remove: () => void } | null = null;
+  /** True after a deliberate user disconnect — suppresses all auto-reconnect. */
+  private userDisconnected = false;
 
   /**
    * Connect to a target (desktop or hosted).
    */
   async connect(target: ConnectionTarget): Promise<void> {
+    this.userDisconnected = false;
     this.target = target;
 
     if (target.type === 'webrtc') {
@@ -70,6 +73,7 @@ class ConnectionManager {
    * Disconnect from the current target.
    */
   disconnect(): void {
+    this.userDisconnected = true;
     this.cancelReconnect();
     this.stopHeartbeat();
     this.reconnectAttempts = 0;
@@ -393,6 +397,7 @@ class ConnectionManager {
   }
 
   private scheduleReconnect(): void {
+    if (this.userDisconnected) return; // deliberate disconnect — stay down
     if (this.reconnectTimer || this.reconnecting) return;
     if (!this.target || this.target.type !== 'webrtc') return;
 

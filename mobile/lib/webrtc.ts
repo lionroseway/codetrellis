@@ -90,6 +90,8 @@ export class WebRTCManager {
   private messageHandlers = new Set<MessageHandler>();
   private stateHandlers = new Set<StateHandler>();
   private _state: ConnectionState = 'disconnected';
+  /** Set by disconnect() to abort an in-flight multi-candidate reconnect sweep. */
+  private reconnectCanceled = false;
 
   get state(): ConnectionState {
     return this._state;
@@ -319,6 +321,7 @@ export class WebRTCManager {
     this.cleanup();
     this.lastReconnectPairingId = null;
     this.lastReconnectAddress = null;
+    this.reconnectCanceled = false;
 
     const candidates = [
       ...new Set(
@@ -336,8 +339,10 @@ export class WebRTCManager {
 
     const errors: string[] = [];
     for (const address of candidates) {
+      if (this.reconnectCanceled) break; // user hit Cancel / Disconnect
       try {
         await this.attemptReconnect(address, pairingId, mobileApiPort, fingerprint);
+        if (this.reconnectCanceled) { this.cleanup(); break; }
         this.lastReconnectAddress = address;
         return; // success — the 'connected' state handler takes over from here
       } catch (err) {
@@ -347,6 +352,10 @@ export class WebRTCManager {
         this.cleanup(); // tear down the half-open PC before trying the next one
       }
     }
+
+    // Canceled mid-sweep: disconnect() already set 'disconnected' — don't flip
+    // to 'failed' (which would re-arm the connection manager's auto-reconnect).
+    if (this.reconnectCanceled) return;
 
     this.setState('failed');
     throw new Error(
@@ -518,6 +527,7 @@ export class WebRTCManager {
    * Close the connection and clean up.
    */
   disconnect(): void {
+    this.reconnectCanceled = true; // abort any in-flight reconnect sweep
     this.cleanup();
     this.setState('disconnected');
   }

@@ -162,6 +162,13 @@ export default function HomeScreen() {
     connection.disconnect();
   };
 
+  // Cancel an in-progress connect (aborts the candidate sweep and prevents
+  // auto-reconnect until the user taps Connect again).
+  const handleCancelConnect = () => {
+    connection.disconnect();
+    setConnectionState('disconnected');
+  };
+
   const handleUnpair = (device: PairedDesktop) => {
     Alert.alert(
       'Remove Device',
@@ -275,14 +282,16 @@ export default function HomeScreen() {
                 disabled={isConnecting}
               >
                 <Text style={styles.actionButtonPrimaryText}>
-                  {isConnecting ? 'Connecting...' : 'Connect'}
+                  {isConnecting ? 'Connecting…' : 'Connect'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionButtonSecondary}
-                onPress={() => handleUnpair(item)}
+                onPress={() => (isConnecting ? handleCancelConnect() : handleUnpair(item))}
               >
-                <Text style={styles.actionButtonDangerText}>Remove</Text>
+                <Text style={styles.actionButtonDangerText}>
+                  {isConnecting ? 'Cancel' : 'Remove'}
+                </Text>
               </TouchableOpacity>
             </>
           )}
