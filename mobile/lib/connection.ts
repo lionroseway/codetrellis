@@ -53,6 +53,9 @@ class ConnectionManager {
   private appStateSub: { remove: () => void } | null = null;
   /** True after a deliberate user disconnect — suppresses all auto-reconnect. */
   private userDisconnected = false;
+  /** Snapshot-pull retry (rides out slow VPN convergence + reconnect bounces). */
+  private resyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private resyncAttempts = 0;
 
   /**
    * Connect to a target (desktop or hosted).
@@ -75,6 +78,7 @@ class ConnectionManager {
   disconnect(): void {
     this.userDisconnected = true;
     this.cancelReconnect();
+    this.cancelHydration();
     this.stopHeartbeat();
     this.reconnectAttempts = 0;
     this.reconnecting = false;
@@ -183,6 +187,11 @@ class ConnectionManager {
         this.missedPings = 0;
         this.lastInboundAt = Date.now();
         this.startHeartbeat();
+        // Pull a fresh snapshot until we're actually hydrated. The desktop only
+        // pushes one in the first ~3s after connect; over a slow-to-converge VPN
+        // (or after a 4G↔5G / VPN-drop bounce) that push can be missed, leaving
+        // the UI empty forever. Re-runs on every (re)connect → bounce-resilient.
+        this.startHydration();
 
         // Make the address that actually worked sticky (handles LAN churn and
         // an off-LAN VPN connect), and silently upgrade the pairingId if the
@@ -248,6 +257,7 @@ class ConnectionManager {
 
       if (msg.type === 'snapshot' && msg.snapshot) {
         this.currentSnapshot = msg.snapshot;
+        this.cancelHydration(); // hydrated — stop pulling
         // Auto-upgrade: learn the desktop's full address list (LAN + Tailscale)
         // so a pairing made on the LAN can reconnect over a VPN next time.
         this.absorbDeviceAddresses(msg.snapshot);
@@ -394,6 +404,42 @@ class ConnectionManager {
       { pairingId: target.pairingId || undefined, fingerprint: target.fingerprint },
       addrs,
     ).catch(() => { /* best-effort persistence */ });
+  }
+
+  // --- Hydration pull --------------------------------------------------------
+  // The desktop only PUSHES a snapshot in the first ~3s after connect; over a
+  // slow/relayed VPN path or a mobile-network bounce that push can be missed,
+  // leaving the UI permanently empty (patches have no base to apply to). So the
+  // phone also PULLS: ask for a snapshot on every (re)connect and keep asking
+  // until one actually lands (cancelHydration() is called by the snapshot
+  // handler). This is what makes hydration resilient to slow VPN convergence
+  // and 4G↔5G / VPN-drop bounces.
+
+  private startHydration(): void {
+    this.cancelHydration();
+    this.resyncAttempts = 0;
+    this.sendResyncRequest(); // ask once immediately on (re)connect
+    const tick = (): void => {
+      this.resyncTimer = null;
+      if (this.currentSnapshot) return;       // hydrated — stop
+      if (this.resyncAttempts >= 20) return;  // give up quietly after ~30s
+      this.resyncAttempts += 1;
+      this.sendResyncRequest();
+      this.resyncTimer = setTimeout(tick, 1500);
+    };
+    this.resyncTimer = setTimeout(tick, 1500);
+  }
+
+  /** Ask the desktop for a full snapshot (resync-request on the UI channel). */
+  private sendResyncRequest(): void {
+    try {
+      webrtc.send('ui', JSON.stringify({ type: 'resync-request', ts: Date.now() }));
+    } catch { /* channel not open yet — a later tick retries */ }
+  }
+
+  private cancelHydration(): void {
+    if (this.resyncTimer) { clearTimeout(this.resyncTimer); this.resyncTimer = null; }
+    this.resyncAttempts = 0;
   }
 
   private scheduleReconnect(): void {
