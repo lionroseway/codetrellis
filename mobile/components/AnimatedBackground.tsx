@@ -1,14 +1,15 @@
 /**
  * AnimatedBackground — desktop-graph-inspired ambience behind the whole app.
  *
- * Two layers, echoing the desktop graph canvas:
- *   1. A faint static dot-grid (graph-paper texture).
- *   2. A few large, very soft glows anchored to the corners/edges that slowly
- *      breathe in and out on staggered loops — so glows "appear now and then".
+ * Two layers, matching the desktop graph canvas:
+ *   1. A blue dot-grid, mirroring the desktop's ReactFlow background
+ *      (`<Background color="rgba(59,130,246,0.06)" gap={24} size={1} />`).
+ *   2. A few large, *feathered* glows anchored to the corners/edges that slowly
+ *      breathe in and out on staggered loops — built from stacked concentric
+ *      rings so the falloff is a soft radial gradient (no hard disc edge).
  *
- * Rendered once globally (in the root layout) behind transparent screens, so
- * the dot grid's cost is paid a single time. Native-driver opacity/scale only;
- * `pointerEvents="none"` so it never intercepts touches.
+ * Rendered once globally (root layout) behind transparent screens, so the grid
+ * is paid for once. Native-driver opacity/scale only; pointerEvents none.
  */
 
 import { useEffect, useRef, useMemo } from 'react';
@@ -16,7 +17,7 @@ import { Animated, StyleSheet, Dimensions, Easing, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-// --- Soft corner/edge glows --------------------------------------------------
+// --- Feathered corner/edge glows ---------------------------------------------
 
 type Glow = {
   x: number; // fraction of width (can be <0 / >1 to anchor off the edge)
@@ -25,16 +26,21 @@ type Glow = {
   color: string;
   period: number; // ms for a full in/out breath
   delay: number;
-  max: number; // peak opacity
+  max: number; // peak group opacity
 };
 
 const GLOWS: Glow[] = [
-  { x: -0.18, y: -0.06, size: 0.75, color: '#3b82f6', period: 9000, delay: 0, max: 0.16 },   // top-left
-  { x: 0.82, y: -0.12, size: 0.62, color: '#a855f7', period: 11000, delay: 2600, max: 0.12 }, // top-right
-  { x: 0.9, y: 0.5, size: 0.66, color: '#3b82f6', period: 10000, delay: 1300, max: 0.11 },    // right edge
-  { x: -0.22, y: 0.72, size: 0.78, color: '#818cf8', period: 12000, delay: 3600, max: 0.13 }, // bottom-left
-  { x: 0.62, y: 1.02, size: 0.6, color: '#a855f7', period: 10500, delay: 700, max: 0.11 },    // bottom edge
+  { x: -0.25, y: -0.12, size: 0.95, color: '#3b82f6', period: 9000, delay: 0, max: 0.95 },    // top-left
+  { x: 0.78, y: -0.18, size: 0.8, color: '#a855f7', period: 11000, delay: 2600, max: 0.7 },   // top-right
+  { x: 0.9, y: 0.45, size: 0.85, color: '#3b82f6', period: 10000, delay: 1300, max: 0.6 },    // right edge
+  { x: -0.3, y: 0.7, size: 1.0, color: '#818cf8', period: 12000, delay: 3600, max: 0.75 },    // bottom-left
+  { x: 0.55, y: 1.05, size: 0.8, color: '#a855f7', period: 10500, delay: 700, max: 0.6 },     // bottom edge
 ];
+
+// Concentric ring radii (outer → inner). Each ring is faint; overlapping them
+// builds a smooth radial falloff — a feathered glow rather than a hard disc.
+const RING_FRACS = [1.0, 0.84, 0.68, 0.53, 0.4, 0.28, 0.17];
+const RING_OPACITY = 0.02;
 
 function SoftGlow({ g }: { g: Glow }) {
   const t = useRef(new Animated.Value(0)).current;
@@ -53,7 +59,7 @@ function SoftGlow({ g }: { g: Glow }) {
 
   const d = width * g.size;
   const opacity = t.interpolate({ inputRange: [0, 1], outputRange: [0, g.max] });
-  const scale = t.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.06] });
+  const scale = t.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.08] });
 
   return (
     <Animated.View
@@ -63,23 +69,37 @@ function SoftGlow({ g }: { g: Glow }) {
         top: g.y * height,
         width: d,
         height: d,
-        borderRadius: d / 2,
-        backgroundColor: g.color,
-        shadowColor: g.color,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 60,
         opacity,
         transform: [{ scale }],
       }}
-    />
+    >
+      {RING_FRACS.map((f, i) => {
+        const rd = d * f;
+        return (
+          <View
+            key={i}
+            style={{
+              position: 'absolute',
+              left: (d - rd) / 2,
+              top: (d - rd) / 2,
+              width: rd,
+              height: rd,
+              borderRadius: rd / 2,
+              backgroundColor: g.color,
+              opacity: RING_OPACITY,
+            }}
+          />
+        );
+      })}
+    </Animated.View>
   );
 }
 
-// --- Faint dot-grid texture --------------------------------------------------
+// --- Blue dot-grid (matches the desktop graph canvas) ------------------------
 
-const DOT_SPACING = 34;
-const DOT = 1.5;
+const DOT_SPACING = 26; // desktop uses gap=24
+const DOT = 1.4;
+const DOT_COLOR = 'rgba(59, 130, 246, 0.08)';
 
 function DotGrid() {
   const dots = useMemo(() => {
@@ -104,8 +124,7 @@ function DotGrid() {
             width: DOT,
             height: DOT,
             borderRadius: DOT / 2,
-            backgroundColor: '#ffffff',
-            opacity: 0.04,
+            backgroundColor: DOT_COLOR,
           }}
         />
       ))}
