@@ -12,6 +12,7 @@
  */
 
 import { webrtc } from './webrtc';
+import { getRpcTimeoutMs } from './prefs';
 
 // --- Types -------------------------------------------------------------------
 
@@ -26,7 +27,13 @@ interface PendingRequest {
 const pending = new Map<string, PendingRequest>();
 let nextId = 1;
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+// The default timeout is user-configurable (Settings → Connection) and read
+// fresh per call from prefs, so people on slow/VPN links can raise it without
+// a new build. Generous by default (30s) so RPCs survive a higher-latency link
+// — e.g. connecting over a VPN like Tailscale, where the WebRTC data path can
+// be relayed and round-trips are far slower than on a LAN. Dead-peer detection
+// doesn't rely on this (the connection liveness heartbeat handles that), so a
+// longer ceiling only prevents false timeouts.
 
 // --- Public API --------------------------------------------------------------
 
@@ -35,7 +42,8 @@ const DEFAULT_TIMEOUT_MS = 15_000;
  *
  * @param method  RPC method name (e.g. 'plan.get', 'terminal.write')
  * @param params  Parameters object
- * @param timeoutMs  Max time to wait for response (default 15s)
+ * @param timeoutMs  Max time to wait for response (default 30s; generous so
+ *                   RPCs survive a high-latency VPN/relayed link)
  * @returns The result from the desktop
  * @throws Error if the desktop returns an error, the request times out,
  *         or the control channel is not open
@@ -43,7 +51,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export function rpc<T = unknown>(
   method: string,
   params: Record<string, unknown> = {},
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  timeoutMs: number = getRpcTimeoutMs(),
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const id = `rpc-${nextId++}-${Date.now()}`;
@@ -64,7 +72,11 @@ export function rpc<T = unknown>(
     // Set up timeout
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error(`RPC timeout: ${method} (${timeoutMs}ms)`));
+      reject(new Error(
+        `Request timed out after ${Math.round(timeoutMs / 1000)}s (${method}). ` +
+        `On a slow or VPN connection this can happen — increase the request ` +
+        `timeout in Settings → Connection and try again.`,
+      ));
     }, timeoutMs);
 
     // Store the pending request

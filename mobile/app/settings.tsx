@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
+import { getRpcTimeoutMs, setRpcTimeoutMs, RPC_TIMEOUT_MIN_MS, RPC_TIMEOUT_MAX_MS } from '../lib/prefs';
 
 interface AppSettings {
   identity: { displayName: string; email: string };
@@ -97,13 +98,22 @@ export default function SettingsScreen() {
     );
   }
   if (error || !settings) {
+    // Desktop settings unavailable (often a slow/unreachable connection) — but
+    // still expose the local Connection timeout here, since raising it is the
+    // very fix for that situation.
     return (
-      <View style={styles.center}>
+      <View style={styles.container}>
         <Stack.Screen options={{ title: 'Settings' }} />
-        <Text style={styles.errorText}>{error ?? 'No settings'}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={load}>
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+          <ConnectionTimeoutCard />
+          <Text style={styles.sectionTitle}>DESKTOP SETTINGS</Text>
+          <View style={styles.card}>
+            <Text style={styles.errorText}>{error ?? 'No settings'}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={load}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -206,6 +216,9 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Connection (on-device) */}
+        <ConnectionTimeoutCard />
+
         {/* Read-only desktop info */}
         <Text style={styles.sectionTitle}>DESKTOP (READ-ONLY)</Text>
         <View style={styles.card}>
@@ -221,6 +234,55 @@ export default function SettingsScreen() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+/**
+ * On-device request-timeout control. Persists locally (not to the desktop),
+ * so it works even when the desktop is unreachable — which is exactly when a
+ * user on a slow/VPN link needs to raise it. The RPC layer reads this value
+ * on every request, so changes apply immediately (no reconnect/rebuild).
+ */
+function ConnectionTimeoutCard() {
+  const [sec, setSec] = useState(String(Math.round(getRpcTimeoutMs() / 1000)));
+  const [savedAt, setSavedAt] = useState(false);
+  const minSec = Math.round(RPC_TIMEOUT_MIN_MS / 1000);
+  const maxSec = Math.round(RPC_TIMEOUT_MAX_MS / 1000);
+
+  const commit = useCallback(async () => {
+    const n = parseInt(sec, 10);
+    const ms = Number.isFinite(n) ? n * 1000 : getRpcTimeoutMs();
+    const stored = await setRpcTimeoutMs(ms);
+    setSec(String(Math.round(stored / 1000))); // reflect the clamped value
+    setSavedAt(true);
+    setTimeout(() => setSavedAt(false), 1500);
+  }, [sec]);
+
+  return (
+    <>
+      <Text style={styles.sectionTitle}>CONNECTION</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>Request timeout (seconds)</Text>
+        <TextInput
+          style={styles.input}
+          value={sec}
+          onChangeText={setSec}
+          onEndEditing={commit}
+          onBlur={commit}
+          keyboardType="number-pad"
+          returnKeyType="done"
+          placeholder="30"
+          placeholderTextColor="#52525b"
+          maxLength={3}
+        />
+        <Text style={styles.hint}>
+          How long the app waits for the desktop to answer each request. Raise
+          this if you connect over a slow link or VPN (e.g. Tailscale) and see
+          “request timed out” errors. Applies on this device only ({minSec}–{maxSec}s).
+          {savedAt ? '  ✓ Saved' : ''}
+        </Text>
+      </View>
+    </>
   );
 }
 

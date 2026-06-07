@@ -161,6 +161,10 @@ export default function PairScreen() {
         pairedAt: new Date().toISOString(),
         lastConnected: new Date().toISOString(),
         lastKnownAddress: pairingResult.desktopAddress,
+        // All addresses the desktop advertised (LAN + Tailscale/VPN), so a
+        // pairing made on the LAN can later reconnect over a VPN without
+        // re-pairing. Refreshed from the desktop snapshot on every connect.
+        candidateAddresses: pairingResult.candidateAddresses,
         lastKnownPort: 19480, // Default — will be updated on reconnection via mDNS
         pushToken: null,
       });

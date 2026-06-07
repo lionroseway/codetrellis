@@ -47,6 +47,7 @@ import * as recentProjectsService from './recent-projects-service';
 import * as terminalService from './terminal-service';
 import * as deviationService from './deviation-service';
 import * as remoteInteractionService from './remote-interaction-service';
+import { getAllAddresses } from './pairing-server';
 import { getActiveProjectPath } from '../server';
 
 // --- Types -------------------------------------------------------------------
@@ -83,6 +84,12 @@ export interface SyncStateSnapshot {
   walkthroughActive: boolean;
   /** Deviation counts for attention badges. */
   deviationCounts: DeviationCountsSummary;
+  /**
+   * All IPv4 addresses this desktop is reachable on (LAN + Tailscale/VPN),
+   * ordered LAN-first. The companion persists these so a pairing made on the
+   * LAN can later reconnect over a VPN without re-pairing (auto-upgrade).
+   */
+  deviceAddresses: string[];
 }
 
 interface PlanSummary {
@@ -429,7 +436,17 @@ export function collectSnapshot(): SyncStateSnapshot {
     pendingInputRequests,
     walkthroughActive,
     deviationCounts,
+    deviceAddresses: safeAddresses(),
   };
+}
+
+/** Reachable IPv4s for the auto-upgrade hint; never throws. */
+function safeAddresses(): string[] {
+  try {
+    return getAllAddresses();
+  } catch {
+    return [];
+  }
 }
 
 // --- Internals: broadcasting -------------------------------------------------

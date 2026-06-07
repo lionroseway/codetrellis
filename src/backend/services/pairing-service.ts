@@ -81,7 +81,8 @@ export async function initiatePairing(
 
   const qrPayload: PairingQrPayload = {
     v: 4,
-    h: server.address,
+    h: server.address,          // primary (back-compat with older phones)
+    hs: server.addresses,       // all reachable hosts — phone tries each (LAN + Tailscale/VPN)
     p: server.port,
     c: server.code,
   };

@@ -114,7 +114,7 @@ export default function TerminalDetailScreen() {
   const write = useCallback(async (data: string) => {
     if (!id) return;
     try {
-      await rpc('terminal.write', { id, data }, 6000);
+      await rpc('terminal.write', { id, data }, 20000);
       setTimeout(pump, 120);
     } catch { /* ignore */ }
   }, [id, pump]);
@@ -156,7 +156,7 @@ export default function TerminalDetailScreen() {
     lastSizeRef.current = { cols, rows };
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
     resizeTimerRef.current = setTimeout(() => {
-      rpc('terminal.resize', { id, cols, rows }, 6000).catch(() => {});
+      rpc('terminal.resize', { id, cols, rows }, 20000).catch(() => {});
     }, 250);
   }, [id]);
 

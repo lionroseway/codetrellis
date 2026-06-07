@@ -125,6 +125,7 @@ export default function HomeScreen() {
         fingerprint: device.fingerprint,
         sharedSecret: device.sharedSecret,
         desktopAddress: device.lastKnownAddress,
+        candidateAddresses: device.candidateAddresses,
         mobileApiPort: device.lastKnownPort || 19480,
       });
 
@@ -159,6 +160,13 @@ export default function HomeScreen() {
 
   const handleDisconnect = () => {
     connection.disconnect();
+  };
+
+  // Cancel an in-progress connect (aborts the candidate sweep and prevents
+  // auto-reconnect until the user taps Connect again).
+  const handleCancelConnect = () => {
+    connection.disconnect();
+    setConnectionState('disconnected');
   };
 
   const handleUnpair = (device: PairedDesktop) => {
@@ -274,14 +282,16 @@ export default function HomeScreen() {
                 disabled={isConnecting}
               >
                 <Text style={styles.actionButtonPrimaryText}>
-                  {isConnecting ? 'Connecting...' : 'Connect'}
+                  {isConnecting ? 'Connecting…' : 'Connect'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionButtonSecondary}
-                onPress={() => handleUnpair(item)}
+                onPress={() => (isConnecting ? handleCancelConnect() : handleUnpair(item))}
               >
-                <Text style={styles.actionButtonDangerText}>Remove</Text>
+                <Text style={styles.actionButtonDangerText}>
+                  {isConnecting ? 'Cancel' : 'Remove'}
+                </Text>
               </TouchableOpacity>
             </>
           )}

@@ -70,8 +70,14 @@ export interface PairingResult {
   confirmCode: string;
   /** Desktop's DTLS fingerprint. */
   desktopFingerprint: string;
-  /** Desktop's LAN address. */
+  /** The address that actually answered during pairing (LAN or VPN). */
   desktopAddress: string;
+  /**
+   * All addresses the desktop advertised in the QR (LAN + Tailscale/VPN),
+   * winner first. Stored so reconnect can try each — a LAN pairing then works
+   * over a VPN without re-pairing.
+   */
+  candidateAddresses: string[];
   /** Stable pairing identity — survives restarts on both sides. */
   pairingId: string;
 }
@@ -84,6 +90,8 @@ export class WebRTCManager {
   private messageHandlers = new Set<MessageHandler>();
   private stateHandlers = new Set<StateHandler>();
   private _state: ConnectionState = 'disconnected';
+  /** Set by disconnect() to abort an in-flight multi-candidate reconnect sweep. */
+  private reconnectCanceled = false;
 
   get state(): ConnectionState {
     return this._state;
@@ -113,22 +121,36 @@ export class WebRTCManager {
     offerData: PairingOfferResponse;
     baseUrl: string;
   }> {
-    const baseUrl = `http://${qrPayload.h}:${qrPayload.p}`;
+    // Try every address the desktop advertised (LAN + Tailscale/VPN) and use
+    // whichever answers first — so a QR works on the same network OR over a VPN
+    // without the phone knowing which it's on. Falls back to the single `h`.
+    const hosts = qrPayload.hs && qrPayload.hs.length ? qrPayload.hs : [qrPayload.h];
+    console.log(`[WebRTC] Fetching offer — racing ${hosts.length} host(s): ${hosts.join(', ')}`);
 
-    console.log(`[WebRTC] Fetching offer from ${baseUrl}/offer`);
-    const offerRes = await fetch(`${baseUrl}/offer?c=${encodeURIComponent(qrPayload.c)}`);
-    if (!offerRes.ok) {
-      const body = await offerRes.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(`Failed to fetch offer: ${body.error || offerRes.status}`);
+    const tryHost = async (host: string) => {
+      const baseUrl = `http://${host}:${qrPayload.p}`;
+      const res = await fetch(`${baseUrl}/offer?c=${encodeURIComponent(qrPayload.c)}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(`offer ${host}: ${body.error || res.status}`);
+      }
+      return { offerData: (await res.json()) as PairingOfferResponse, baseUrl };
+    };
+
+    let winner: { offerData: PairingOfferResponse; baseUrl: string };
+    try {
+      winner = await Promise.any(hosts.map(tryHost));
+    } catch {
+      throw new Error(
+        `Couldn't reach your desktop on any address (${hosts.join(', ')}). ` +
+        `Make sure you're on the same Wi-Fi or your VPN (e.g. Tailscale) is connected.`,
+      );
     }
-    const offerData: PairingOfferResponse = await offerRes.json();
 
     console.log(
-      `[WebRTC] Got offer — fp=${offerData.fingerprint.slice(0, 16)}… ` +
-      `nonce=${offerData.nonce.slice(0, 8)}…`,
+      `[WebRTC] Got offer via ${winner.baseUrl} — fp=${winner.offerData.fingerprint.slice(0, 16)}…`,
     );
-
-    return { offerData, baseUrl };
+    return winner;
   }
 
   /**
@@ -238,10 +260,18 @@ export class WebRTCManager {
       `[WebRTC] Answer accepted — confirmCode=${answerResult.confirmCode} pairingId=${answerResult.pairingId?.slice(0, 8)}…`,
     );
 
+    // The host that actually answered (parsed from the winning baseUrl).
+    const winningHost = baseUrl.replace(/^https?:\/\//, '').split(':')[0] || qrPayload.h;
+    // All advertised addresses, winner first so reconnect tries the working
+    // one before the rest (LAN pairing → still reconnects over a VPN later).
+    const advertised = qrPayload.hs && qrPayload.hs.length ? qrPayload.hs : [qrPayload.h];
+    const candidateAddresses = [...new Set([winningHost, ...advertised])].filter(Boolean);
+
     return {
       confirmCode: answerResult.confirmCode,
       desktopFingerprint: ensureColonFingerprint(offerData.fingerprint),
-      desktopAddress: qrPayload.h,
+      desktopAddress: winningHost,
+      candidateAddresses,
       pairingId: answerResult.pairingId,
     };
   }
@@ -267,32 +297,109 @@ export class WebRTCManager {
    * pre-upgrade clients can store it for future use.
    */
   lastReconnectPairingId: string | null = null;
+  /** Address that produced the last successful reconnect (for sticky reuse). */
+  lastReconnectAddress: string | null = null;
 
+  /**
+   * Reconnect to a previously paired desktop. Accepts a single address or a
+   * list of candidate addresses (LAN + Tailscale/VPN). Candidates are tried in
+   * order — failing fast on unreachable ones — and the first that returns a
+   * valid offer wins. This is what lets a pairing made on the LAN reconnect
+   * later over a VPN without re-pairing.
+   *
+   * Candidates are tried SEQUENTIALLY, never raced: the desktop keeps a single
+   * pending-offer peer connection per machine, so two concurrent reconnect
+   * requests to the same desktop (two of its IPs) would clobber each other's
+   * DTLS offer and fail the handshake.
+   */
   async reconnectToDesktop(
-    desktopAddress: string,
+    desktopAddress: string | string[],
     pairingId: string,
     mobileApiPort: number = 19480,
     fingerprint?: string,
   ): Promise<void> {
     this.cleanup();
     this.lastReconnectPairingId = null;
+    this.lastReconnectAddress = null;
+    this.reconnectCanceled = false;
 
+    const candidates = [
+      ...new Set(
+        (Array.isArray(desktopAddress) ? desktopAddress : [desktopAddress])
+          .map((a) => (a || '').trim())
+          .filter(Boolean),
+      ),
+    ];
+    if (candidates.length === 0) {
+      this.setState('failed');
+      throw new Error('No desktop address to reconnect to');
+    }
+
+    this.setState('connecting');
+
+    const errors: string[] = [];
+    for (const address of candidates) {
+      if (this.reconnectCanceled) break; // user hit Cancel / Disconnect
+      try {
+        await this.attemptReconnect(address, pairingId, mobileApiPort, fingerprint);
+        if (this.reconnectCanceled) { this.cleanup(); break; }
+        this.lastReconnectAddress = address;
+        return; // success — the 'connected' state handler takes over from here
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${address}: ${msg}`);
+        console.log(`[WebRTC] Reconnect candidate ${address} failed: ${msg}`);
+        this.cleanup(); // tear down the half-open PC before trying the next one
+      }
+    }
+
+    // Canceled mid-sweep: disconnect() already set 'disconnected' — don't flip
+    // to 'failed' (which would re-arm the connection manager's auto-reconnect).
+    if (this.reconnectCanceled) return;
+
+    this.setState('failed');
+    throw new Error(
+      `Reconnect failed — tried ${candidates.length} address(es): ${errors.join(' | ')}`,
+    );
+  }
+
+  /**
+   * A single reconnect attempt against one address. Throws on any failure so
+   * the multi-candidate driver can move on; it deliberately does NOT set the
+   * 'failed' state — only the driver does that, once every candidate has failed.
+   */
+  private async attemptReconnect(
+    desktopAddress: string,
+    pairingId: string,
+    mobileApiPort: number,
+    fingerprint?: string,
+  ): Promise<void> {
     const baseUrl = `http://${desktopAddress}:${mobileApiPort}`;
 
     console.log(`[WebRTC] Requesting reconnect offer from ${baseUrl} (pairingId=${pairingId?.slice(0, 8) ?? 'none'}, fp=${fingerprint?.slice(0, 12) ?? 'none'})`);
-    this.setState('connecting');
 
-    // 1. Request a reconnection offer — send pairingId (preferred) + fingerprint (fallback)
-    const offerRes = await fetch(`${baseUrl}/api/mobile/reconnect`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pairingId: pairingId || undefined, fingerprint: fingerprint || undefined }),
-    });
+    // 1. Request a reconnection offer — send pairingId (preferred) + fingerprint
+    //    (fallback). Bounded by an AbortController so an unreachable address
+    //    fails in a few seconds instead of hanging on the OS TCP timeout (which
+    //    would stall the whole candidate sweep).
+    const offerRes = await (async () => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        return await fetch(`${baseUrl}/api/mobile/reconnect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pairingId: pairingId || undefined, fingerprint: fingerprint || undefined }),
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
 
     if (!offerRes.ok) {
       const body = await offerRes.json().catch(() => ({ error: 'Request failed' }));
-      this.setState('failed');
-      throw new Error(`Reconnect failed: ${body.error || offerRes.status}`);
+      throw new Error(`offer rejected: ${body.error || offerRes.status}`);
     }
 
     const offerData = await offerRes.json();
@@ -309,7 +416,6 @@ export class WebRTCManager {
     try {
       webrtcMod = getWebRTC();
     } catch {
-      this.setState('failed');
       throw new Error('WebRTC native module not available');
     }
 
@@ -373,8 +479,7 @@ export class WebRTCManager {
 
     if (!answerRes.ok) {
       const body = await answerRes.json().catch(() => ({ error: 'Answer rejected' }));
-      this.setState('failed');
-      throw new Error(`Reconnect answer failed: ${body.error || answerRes.status}`);
+      throw new Error(`answer rejected: ${body.error || answerRes.status}`);
     }
 
     console.log('[WebRTC] Reconnect answer accepted — waiting for WebRTC connection');
@@ -422,6 +527,7 @@ export class WebRTCManager {
    * Close the connection and clean up.
    */
   disconnect(): void {
+    this.reconnectCanceled = true; // abort any in-flight reconnect sweep
     this.cleanup();
     this.setState('disconnected');
   }

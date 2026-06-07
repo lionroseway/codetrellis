@@ -1,7 +1,7 @@
 {
   "name": "codetrellis",
   "productName": "CodeTrellis",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
   "license": "Apache-2.0",
   "homepage": "https://codetrellis.dev",
@@ -11,6 +11,7 @@
   },
   "main": "out/main/main.js",
   "scripts": {
+    "postinstall": "patch-package",
     "predev": "bash scripts/free-dev-ports.sh && node scripts/generate-build-info.js",
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "predev:frontend": "bash scripts/free-dev-ports.sh 5173",
@@ -62,6 +63,7 @@
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "jsqr": "^1.4.0",
+    "patch-package": "^8.0.1",
     "png2icons": "^2.0.1",
     "tailwindcss": "^4.0.0",
     "tree-sitter-java": "^0.23.5",

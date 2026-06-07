@@ -74,8 +74,10 @@ export interface PairedDevice {
 export interface PairingQrPayload {
   /** Version of the QR payload format (4 = temp-server). */
   v: 4;
-  /** Temporary pairing server LAN address (IPv4). */
+  /** Primary pairing server IPv4 address (back-compat). */
   h: string;
+  /** All reachable IPv4 addresses (LAN + Tailscale/VPN) — phone tries each. */
+  hs?: string[];
   /** Temporary pairing server port. */
   p: number;
   /** 6-digit pairing code (authenticates requests to the temp server). */
