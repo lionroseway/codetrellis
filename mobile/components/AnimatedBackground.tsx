@@ -97,9 +97,9 @@ function SoftGlow({ g }: { g: Glow }) {
 
 // --- Blue dot-grid (matches the desktop graph canvas) ------------------------
 
-const DOT_SPACING = 26; // desktop uses gap=24
-const DOT = 1.4;
-const DOT_COLOR = 'rgba(59, 130, 246, 0.08)';
+const DOT_SPACING = 24; // matches the desktop graph gap
+const DOT = 1.6;
+const DOT_COLOR = 'rgba(96, 165, 250, 0.18)'; // lighter blue, reads on the navy base
 
 function DotGrid() {
   const dots = useMemo(() => {

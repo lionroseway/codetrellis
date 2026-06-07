@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
   },
   header: {
-    backgroundColor: '#09090b',
+    backgroundColor: '#0a0c18',
     borderBottomWidth: 0,
     shadowOpacity: 0,
     elevation: 0,
