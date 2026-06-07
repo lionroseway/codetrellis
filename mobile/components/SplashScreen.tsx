@@ -8,7 +8,6 @@
 
 import { useEffect, useRef } from 'react';
 import {
-  View,
   Text,
   Animated,
   StyleSheet,
@@ -90,55 +89,18 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
       {/* Background glow */}
       <Animated.View style={[styles.glow, { opacity: glowOpacity }]} />
 
-      {/* Logo mark — trellis grid */}
-      <Animated.View
+      {/* Logo mark — the real CodeTrellis node-graph icon, scaling/fading in */}
+      <Animated.Image
+        source={require('../assets/icon.png')}
+        resizeMode="contain"
         style={[
-          styles.logoContainer,
+          styles.logo,
           {
             opacity: logoOpacity,
             transform: [{ scale: logoScale }],
           },
         ]}
-      >
-        <View style={styles.trellisGrid}>
-          {/* 3x3 grid of nodes with connecting lines implied by layout */}
-          <View style={styles.trellisRow}>
-            <View style={[styles.trellisNode, styles.nodeAccent]} />
-            <View style={styles.trellisConnector} />
-            <View style={[styles.trellisNode, styles.nodeDim]} />
-            <View style={styles.trellisConnector} />
-            <View style={[styles.trellisNode, styles.nodeAccent]} />
-          </View>
-          <View style={styles.trellisVerticals}>
-            <View style={styles.trellisVertLine} />
-            <View style={{ width: 24 }} />
-            <View style={[styles.trellisVertLine, { backgroundColor: '#3b82f620' }]} />
-            <View style={{ width: 24 }} />
-            <View style={styles.trellisVertLine} />
-          </View>
-          <View style={styles.trellisRow}>
-            <View style={[styles.trellisNode, styles.nodeDim]} />
-            <View style={[styles.trellisConnector, { backgroundColor: '#3b82f620' }]} />
-            <View style={[styles.trellisNode, styles.nodeHighlight]} />
-            <View style={[styles.trellisConnector, { backgroundColor: '#3b82f620' }]} />
-            <View style={[styles.trellisNode, styles.nodeDim]} />
-          </View>
-          <View style={styles.trellisVerticals}>
-            <View style={[styles.trellisVertLine, { backgroundColor: '#3b82f620' }]} />
-            <View style={{ width: 24 }} />
-            <View style={styles.trellisVertLine} />
-            <View style={{ width: 24 }} />
-            <View style={[styles.trellisVertLine, { backgroundColor: '#3b82f620' }]} />
-          </View>
-          <View style={styles.trellisRow}>
-            <View style={[styles.trellisNode, styles.nodeAccent]} />
-            <View style={styles.trellisConnector} />
-            <View style={[styles.trellisNode, styles.nodeDim]} />
-            <View style={styles.trellisConnector} />
-            <View style={[styles.trellisNode, styles.nodeAccent]} />
-          </View>
-        </View>
-      </Animated.View>
+      />
 
       {/* Wordmark */}
       <Animated.View
@@ -173,57 +135,18 @@ const styles = StyleSheet.create({
   // Background glow
   glow: {
     position: 'absolute',
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: width * 0.3,
+    width: width * 0.8,
+    height: width * 0.8,
+    borderRadius: width * 0.4,
     backgroundColor: '#3b82f6',
-    opacity: 0.06,
+    opacity: 0.09,
   },
 
-  // Logo
-  logoContainer: {
-    marginBottom: 28,
-  },
-  trellisGrid: {
-    alignItems: 'center',
-  },
-  trellisRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trellisNode: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
-  nodeAccent: {
-    backgroundColor: '#3b82f6',
-  },
-  nodeHighlight: {
-    backgroundColor: '#60a5fa',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-  },
-  nodeDim: {
-    backgroundColor: '#3b82f640',
-  },
-  trellisConnector: {
-    width: 24,
-    height: 2,
-    backgroundColor: '#3b82f650',
-    marginHorizontal: 2,
-  },
-  trellisVerticals: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 20,
-  },
-  trellisVertLine: {
-    width: 2,
-    height: 20,
-    backgroundColor: '#3b82f650',
+  // Logo — the node-graph app icon
+  logo: {
+    width: width * 0.52,
+    height: width * 0.52,
+    marginBottom: 6,
   },
 
   // Title

@@ -26,6 +26,7 @@ import { connection } from '../lib/connection';
 import { registerForPush, sendPushTokenToDesktop } from '../lib/push';
 import { startDiscovery, stopDiscovery, getDiscoveredDesktops, onDiscoveryChange, type DiscoveredDesktop } from '../lib/discovery';
 import type { PairedDesktop, ConnectionState } from '../lib/types';
+import AnimatedBackground from '../components/AnimatedBackground';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -302,6 +303,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <AnimatedBackground />
       {/* Header with safe area */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerTop}>
