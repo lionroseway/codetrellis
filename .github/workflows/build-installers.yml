@@ -61,6 +61,30 @@ jobs:
             out/make/*.rpm
           if-no-files-found: error
 
+  linux-arm64:
+    # GitHub-hosted arm64 Linux runner. node-pty compiles natively here, so this
+    # produces real arm64 .deb/.rpm/AppImage (cross-compiling from x64 can't).
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install --legacy-peer-deps
+      - name: Install rpm tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: Build AppImage + .deb + .rpm (arm64)
+        run: npm run package:linux -- AppImage deb rpm --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-installers-arm64
+          path: |
+            out/make/*.AppImage
+            out/make/*.deb
+            out/make/*.rpm
+          if-no-files-found: error
+
   # OPTIONAL — auto-attach to the public release. Requires a repo secret
   # RELEASES_TOKEN (a PAT with `contents: write` on lionroseway/codetrellis-releases).
   # Without the secret this job is skipped and you just download the artifacts above.

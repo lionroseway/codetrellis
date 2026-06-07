@@ -249,6 +249,9 @@
       "vendor": "CodeTrellis",
       "synopsis": "Monitor AI coding agents and visualize codebase architecture",
       "description": "CodeTrellis monitors AI coding agents (starting with Claude Code) and visualizes their impact on codebase architecture in real-time."
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     }
   }
 }
