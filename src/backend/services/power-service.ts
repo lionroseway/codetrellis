@@ -26,6 +26,7 @@ import type {
   AcState,
   PowerPlatform,
 } from '../../shared/types/power';
+import type { PowerSettings } from '../../shared/types';
 import { getSettings } from './settings-service';
 
 const DEBOUNCE_MS = 5000;
@@ -63,22 +64,36 @@ const PLATFORM: PowerPlatform = detectPlatform();
 // --- State machine ------------------------------------------------------
 
 /**
- * Pure evaluator: given current inputs + settings, compute the status
- * that should be emitted right now. No side effects.
+ * Inputs to the pure power-status evaluator. Extracted as an explicit
+ * struct so the truth-table test (Plan 9.3) can exercise every
+ * combination without touching globals or the filesystem.
+ */
+export interface PowerInputs {
+  settings: PowerSettings;
+  mobileConnected: boolean;
+  agentActive: boolean;
+  ac: AcState;
+  platform: PowerPlatform;
+}
+
+/**
+ * Pure evaluator: given inputs + settings, compute the status that
+ * should be emitted right now. No side effects, no globals. The
+ * internal `evaluate()` wraps this with the current module state.
  *
  * Reason precedence when multiple triggers fire (cosmetic — shouldBlock
  * is the same): always > mobile-connected > agent-active. "Always" is
  * the strongest claim ("I want this on no matter what"), so it wins.
  */
-function evaluate(): PowerStatus {
-  const settings = getSettings().power;
+export function evaluatePower(inputs: PowerInputs): PowerStatus {
+  const { settings, mobileConnected: mob, agentActive: agt, ac, platform } = inputs;
 
   let reason: PowerReason = null;
   if (settings.triggers.always) {
     reason = 'always';
-  } else if (settings.triggers.whileMobileConnected && mobileConnected) {
+  } else if (settings.triggers.whileMobileConnected && mob) {
     reason = 'mobile-connected';
-  } else if (settings.triggers.whileAgentActive && agentActive) {
+  } else if (settings.triggers.whileAgentActive && agt) {
     reason = 'agent-active';
   }
 
@@ -88,7 +103,7 @@ function evaluate(): PowerStatus {
   // suppress the blocker. `'unknown'` is treated as plugged-in (web
   // mode, desktops with no battery) so we don't punish stationary
   // users with the safety net.
-  if (shouldBlock && settings.onlyWhenOnAC && acState === 'battery') {
+  if (shouldBlock && settings.onlyWhenOnAC && ac === 'battery') {
     shouldBlock = false;
     reason = null;
   }
@@ -96,10 +111,20 @@ function evaluate(): PowerStatus {
   return {
     shouldBlock,
     reason,
-    ac: acState,
-    platform: PLATFORM,
+    ac,
+    platform,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function evaluate(): PowerStatus {
+  return evaluatePower({
+    settings: getSettings().power,
+    mobileConnected,
+    agentActive,
+    ac: acState,
+    platform: PLATFORM,
+  });
 }
 
 /**

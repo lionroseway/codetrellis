@@ -184,7 +184,13 @@ function saveSettings(settings: AppSettings): void {
   }
 }
 
-function mergeWithDefaults(raw: any): AppSettings {
+/**
+ * Backwards-compat field-by-field merge. Exported so the test for
+ * 9.7 can exercise default-fill behavior without writing a real
+ * settings.json — the pure function is what guarantees older
+ * settings files still parse after we add a new section.
+ */
+export function mergeWithDefaults(raw: any): AppSettings {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS };
   return {
     identity: {

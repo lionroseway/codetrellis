@@ -292,8 +292,19 @@ function wirePowerControl(): void {
   startPowerService();
   startPowerSignals();
 
-  // Drive the OS-level assertions off authoritative status.
+  // Drive the OS-level assertions off authoritative status. Log
+  // each transition so it's traceable in session-persistence
+  // debugging — pairs with [WebRTC][Lifecycle] + [MobileRPC][Lifecycle]
+  // lines from Plan 9.1.
+  let lastBlock: boolean | null = null;
   unsubPowerStatus = onPowerStatusChange((status) => {
+    if (lastBlock !== status.shouldBlock) {
+      console.log(
+        `[Power][Lifecycle] ${status.shouldBlock ? 'engaged' : 'released'} ` +
+        `reason=${status.reason ?? 'none'} ac=${status.ac} platform=${status.platform}`,
+      );
+      lastBlock = status.shouldBlock;
+    }
     setBlocker(status.shouldBlock);
     setCaffeinate(status.shouldBlock);
   });

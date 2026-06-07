@@ -228,11 +228,22 @@ export function requestMobileScreenshot(timeoutMs = 20_000): Promise<MobileImage
 }
 
 async function handleRpc(fingerprint: string, req: RpcRequest): Promise<void> {
+  const startedAt = Date.now();
   try {
     const result = await routeMethod(req.method, req.params ?? {});
     sendResponse(fingerprint, { result, id: req.id, rpc: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    // Lifecycle-tagged structured RPC failure log (Plan 9.1 backend half).
+    // Without this, mobile-side "request timed out" toasts have no
+    // server-side counterpart in logs — a class of bug becomes nearly
+    // impossible to triage. Tagged so `grep '[Lifecycle]'` surfaces
+    // the full peer-transition narrative around the failure.
+    const durationMs = Date.now() - startedAt;
+    console.warn(
+      `[MobileRPC][Lifecycle] rpc_failure peer=${fingerprint.slice(0, 12)}… ` +
+      `method=${req.method} id=${req.id} durationMs=${durationMs} message=${JSON.stringify(message)}`,
+    );
     sendResponse(fingerprint, { error: message, id: req.id, rpc: true });
   }
 }

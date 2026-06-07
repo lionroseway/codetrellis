@@ -78,6 +78,15 @@ export interface ListChannelEventsOptions {
 const PER_PLAN_RING_SIZE = 500;
 let nextSeq = 1;
 const seqRings = new Map<string, Array<{ seq: number; event: ChannelEvent }>>();
+/**
+ * First seq ever assigned per plan. Used to distinguish "this plan
+ * has only ever had events from seq X onward" (sinceSeq < X is fine,
+ * no gap) from "the ring evicted older events" (sinceSeq < oldest →
+ * real gap). Without this distinction, a plan whose first event lands
+ * at a high global seq (because other plans were busy) would falsely
+ * report a gap for any sinceSeq below its first event.
+ */
+const firstSeqByPlan = new Map<string, number>();
 
 function recordSeq(event: ChannelEvent): number {
   const seq = nextSeq++;
@@ -85,6 +94,7 @@ function recordSeq(event: ChannelEvent): number {
   if (!ring) {
     ring = [];
     seqRings.set(event.planUid, ring);
+    firstSeqByPlan.set(event.planUid, seq);
   }
   ring.push({ seq, event });
   if (ring.length > PER_PLAN_RING_SIZE) ring.shift();
@@ -93,10 +103,10 @@ function recordSeq(event: ChannelEvent): number {
 
 /**
  * Replay-since-seqnum: return all events with seq > sinceSeq for this
- * plan, capped at `limit`. If `sinceSeq` predates the in-memory ring
- * (we evicted that far back, or the process restarted), `gap: true`
- * tells the caller to drop their cache and do a fresh `listChannelEvents`
- * by createdAt cutoff. `latestSeq` lets the caller record where it
+ * plan, capped at `limit`. `gap: true` tells the caller to drop their
+ * cache and do a fresh `listChannelEvents` by createdAt cutoff
+ * (because we evicted history from this plan's ring that the caller
+ * may have wanted). `latestSeq` lets the caller record where it
  * caught up to.
  */
 export function getChannelEventsSinceSeq(
@@ -105,16 +115,25 @@ export function getChannelEventsSinceSeq(
   limit = 200,
 ): { events: ChannelEvent[]; latestSeq: number; gap: boolean } {
   const ring = seqRings.get(planUid) ?? [];
-  const latestSeq = ring.length > 0 ? ring[ring.length - 1].seq : nextSeq - 1;
+  const firstSeq = firstSeqByPlan.get(planUid) ?? null;
+  const latestSeq = ring.length > 0
+    ? ring[ring.length - 1].seq
+    : (firstSeq === null ? nextSeq - 1 : firstSeq - 1);
+
   if (ring.length === 0) {
     return { events: [], latestSeq, gap: false };
   }
+
   const oldestRingSeq = ring[0].seq;
-  if (sinceSeq < oldestRingSeq - 1) {
-    // sinceSeq predates the ring — caller can't safely catch up
-    // incrementally; signal that they should re-fetch from scratch.
+  // Eviction occurred *for this plan* iff its ring's oldest seq is now
+  // newer than the first seq we ever assigned to it. If never evicted,
+  // no sinceSeq value can be a gap — the caller just gets the full
+  // available history.
+  const evicted = firstSeq !== null && oldestRingSeq > firstSeq;
+  if (evicted && sinceSeq < oldestRingSeq - 1) {
     return { events: [], latestSeq, gap: true };
   }
+
   const newer = ring.filter((r) => r.seq > sinceSeq).slice(0, limit);
   return { events: newer.map((r) => r.event), latestSeq, gap: false };
 }
@@ -122,6 +141,23 @@ export function getChannelEventsSinceSeq(
 /** Read-only — for diagnostics + tests. */
 export function getCurrentSeqHead(): number {
   return nextSeq - 1;
+}
+
+/**
+ * Test-only — push a synthetic event into the in-memory seqnum ring so
+ * unit tests can exercise `getChannelEventsSinceSeq` (including the
+ * gap-marker path) without booting the DB. Underscored to signal
+ * "test surface, not API."
+ */
+export function _recordSeqForTests(event: ChannelEvent): number {
+  return recordSeq(event);
+}
+
+/** Test-only — reset the ring + counter to a clean state. */
+export function _resetSeqForTests(): void {
+  nextSeq = 1;
+  seqRings.clear();
+  firstSeqByPlan.clear();
 }
 
 // --- Posting ----------------------------------------------------------------
