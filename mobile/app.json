@@ -2,7 +2,7 @@
   "expo": {
     "name": "CodeTrellis Companion",
     "slug": "codetrellis",
-    "version": "0.1.0",
+    "version": "0.1.12",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
