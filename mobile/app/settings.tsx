@@ -324,10 +324,10 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#09090b' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   scroll: { flex: 1 },
   content: { padding: 16, paddingBottom: 48 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: '#09090b' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: 'transparent' },
   errorText: { color: '#a1a1aa', fontSize: 14, textAlign: 'center', marginBottom: 16 },
   retryBtn: {
     backgroundColor: '#3b82f620', borderWidth: 1, borderColor: '#3b82f6',

@@ -220,10 +220,10 @@ function ArchStat({ label, value, color }: { label: string; value: number; color
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#09090b' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: 16, paddingBottom: 40 },
   center: {
-    flex: 1, backgroundColor: '#09090b', alignItems: 'center', justifyContent: 'center', padding: 32,
+    flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 32,
   },
   errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center', marginBottom: 16 },
   retryBtn: {

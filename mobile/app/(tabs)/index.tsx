@@ -28,7 +28,6 @@ import {
   useSnapshot,
 } from '../../lib/store';
 import { rpc } from '../../lib/rpc';
-import AnimatedBackground from '../../components/AnimatedBackground';
 
 export default function HomeTab() {
   const router = useRouter();
@@ -70,9 +69,7 @@ export default function HomeTab() {
     pendingInputs.length > 0;
 
   return (
-    <View style={styles.root}>
-      <AnimatedBackground />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Connection indicator */}
       {connState === 'disconnected' || connState === 'failed' ? (
         <TouchableOpacity
@@ -292,8 +289,7 @@ export default function HomeTab() {
           <Text style={styles.manageChevron}>›</Text>
         </TouchableOpacity>
       </View>
-      </ScrollView>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -307,10 +303,6 @@ function formatAge(ts: number): string {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#09090b',
-  },
   container: {
     flex: 1,
     backgroundColor: 'transparent',

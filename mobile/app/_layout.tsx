@@ -10,6 +10,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import SplashScreen from '../components/SplashScreen';
+import AnimatedBackground from '../components/AnimatedBackground';
 import { initPrefs } from '../lib/prefs';
 
 export default function RootLayout() {
@@ -22,12 +23,15 @@ export default function RootLayout() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+      {/* Global living-graph background — sits behind every screen (screens
+          render transparent over it). Terminal/WebView screens stay opaque. */}
+      <AnimatedBackground />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: '#09090b' },
           headerTintColor: '#e4e4e7',
           headerTitleStyle: { fontWeight: '600' },
-          contentStyle: { backgroundColor: '#09090b' },
+          contentStyle: { backgroundColor: 'transparent' },
           animation: 'slide_from_right',
           // Show just the chevron — without this the back button inherits the
           // previous route's name and reads "(tabs)" everywhere.

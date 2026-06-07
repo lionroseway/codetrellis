@@ -338,7 +338,7 @@ export default function EventDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
   scroll: {
     flex: 1,
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
