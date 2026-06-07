@@ -21,7 +21,6 @@
         "NSCameraUsageDescription": "CodeTrellis uses the camera to scan QR codes for pairing with your desktop.",
         "NSLocalNetworkUsageDescription": "CodeTrellis needs local network access to pair with your desktop and sync workspace data.",
         "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true,
           "NSAllowsArbitraryLoads": true
         },
         "UIBackgroundModes": [
