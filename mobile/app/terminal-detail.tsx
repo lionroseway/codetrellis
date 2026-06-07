@@ -32,6 +32,7 @@ const CONTROL_KEYS: { label: string; seq: string }[] = [
   { label: 'esc', seq: '\x1b' },
   { label: '^C', seq: '\x03' },
   { label: 'tab', seq: '\t' },
+  { label: '⏎', seq: '\r' },
   { label: '⇧tab', seq: '\x1b[Z' },
   { label: '↑', seq: '\x1b[A' },
   { label: '↓', seq: '\x1b[B' },
@@ -49,7 +50,7 @@ const CONTROL_KEYS: { label: string; seq: string }[] = [
   { label: '⌥←', seq: '\x1bb' },
   { label: '⌥→', seq: '\x1bf' },
 ];
-const PRIMARY_LABELS = new Set(['esc', '^C', 'tab', '↑', '↓', '←', '→']);
+const PRIMARY_LABELS = new Set(['esc', '^C', 'tab', '⏎', '↑', '↓', '←', '→']);
 const PRIMARY_KEYS = CONTROL_KEYS.filter((k) => PRIMARY_LABELS.has(k.label));
 
 export default function TerminalDetailScreen() {
