@@ -26,7 +26,12 @@ interface PendingRequest {
 const pending = new Map<string, PendingRequest>();
 let nextId = 1;
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+// Generous by default so RPCs survive a higher-latency link (e.g. connecting
+// to the desktop over a VPN like Tailscale, where the WebRTC data path can be
+// relayed and round-trips are far slower than on a LAN). Dead-peer detection
+// doesn't rely on this — the connection manager's liveness heartbeat handles
+// that independently — so a longer ceiling only prevents false timeouts.
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 // --- Public API --------------------------------------------------------------
 
@@ -35,7 +40,8 @@ const DEFAULT_TIMEOUT_MS = 15_000;
  *
  * @param method  RPC method name (e.g. 'plan.get', 'terminal.write')
  * @param params  Parameters object
- * @param timeoutMs  Max time to wait for response (default 15s)
+ * @param timeoutMs  Max time to wait for response (default 30s; generous so
+ *                   RPCs survive a high-latency VPN/relayed link)
  * @returns The result from the desktop
  * @throws Error if the desktop returns an error, the request times out,
  *         or the control channel is not open
