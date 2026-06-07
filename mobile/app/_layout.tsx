@@ -5,14 +5,19 @@
  * reveals the navigation stack with a dark theme.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import SplashScreen from '../components/SplashScreen';
+import { initPrefs } from '../lib/prefs';
 
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
+
+  // Hydrate on-device preferences (e.g. the configurable RPC timeout) once at
+  // startup so the cached values are ready before the first request.
+  useEffect(() => { void initPrefs(); }, []);
 
   return (
     <View style={styles.container}>
