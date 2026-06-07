@@ -29,6 +29,10 @@ export default function RootLayout() {
           headerTitleStyle: { fontWeight: '600' },
           contentStyle: { backgroundColor: '#09090b' },
           animation: 'slide_from_right',
+          // Show just the chevron — without this the back button inherits the
+          // previous route's name and reads "(tabs)" everywhere.
+          headerBackButtonDisplayMode: 'minimal',
+          headerBackTitle: '',
         }}
       >
         <Stack.Screen
