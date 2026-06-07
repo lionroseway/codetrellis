@@ -181,7 +181,7 @@ function freshnessColor(d: SystemDocSummary): string {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#09090b' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   headerAction: { color: '#3b82f6', fontSize: 15, fontWeight: '700' },
 
   searchBar: { padding: 12, paddingBottom: 6 },

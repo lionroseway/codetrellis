@@ -723,7 +723,7 @@ function ItemCommentThread({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
   content: {
     padding: 16,
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,

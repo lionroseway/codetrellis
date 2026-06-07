@@ -410,7 +410,7 @@ function formatRelative(isoDate: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
 
   // Header

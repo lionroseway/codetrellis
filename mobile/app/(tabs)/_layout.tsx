@@ -69,6 +69,8 @@ export default function TabLayout() {
         headerStyle: styles.header,
         headerTintColor: '#e4e4e7',
         headerTitleStyle: styles.headerTitle,
+        // Transparent scene so the root global background shows behind tabs.
+        sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
       <Tabs.Screen
@@ -134,7 +136,7 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
   },
   header: {
-    backgroundColor: '#09090b',
+    backgroundColor: '#0a0c18',
     borderBottomWidth: 0,
     shadowOpacity: 0,
     elevation: 0,

@@ -765,7 +765,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
 
   // Browse / Map toggle
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
   // Empty state
   emptyContainer: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,

@@ -569,11 +569,11 @@ function SymbolCard({ symbol }: { symbol: GraphSymbol }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
   centerContainer: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,

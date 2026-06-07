@@ -232,7 +232,7 @@ function RenameBox({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#09090b' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   scroll: { flex: 1 },
   content: { padding: 16, paddingBottom: 48 },
   headerAction: { color: '#3b82f6', fontSize: 15, fontWeight: '700' },

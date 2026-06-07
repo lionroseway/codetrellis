@@ -297,7 +297,7 @@ export default function PlansTab() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
   newRow: {
     flexDirection: 'row',

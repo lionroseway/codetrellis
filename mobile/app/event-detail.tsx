@@ -19,7 +19,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import Markdown from '../components/Markdown';
 
@@ -77,6 +77,12 @@ function formatRelative(dateStr: string): string {
 
 export default function EventDetailScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
+  const router = useRouter();
+  // Explicit, guaranteed back — the default header back was unreliable here.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/activity');
+  }, [router]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +177,15 @@ export default function EventDetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
+      <Stack.Screen
+        options={{
+          headerLeft: () => (
+            <TouchableOpacity onPress={goBack} hitSlop={16} style={{ paddingHorizontal: 4 }}>
+              <Text style={{ color: '#e4e4e7', fontSize: 30, marginTop: -2 }}>‹</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -323,7 +338,7 @@ export default function EventDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
   scroll: {
     flex: 1,
@@ -334,7 +349,7 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,

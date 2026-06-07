@@ -10,6 +10,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import SplashScreen from '../components/SplashScreen';
+import AnimatedBackground from '../components/AnimatedBackground';
 import { initPrefs } from '../lib/prefs';
 
 export default function RootLayout() {
@@ -22,13 +23,20 @@ export default function RootLayout() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+      {/* Global living-graph background — sits behind every screen (screens
+          render transparent over it). Terminal/WebView screens stay opaque. */}
+      <AnimatedBackground />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: '#09090b' },
+          headerStyle: { backgroundColor: '#0a0c18' },
           headerTintColor: '#e4e4e7',
           headerTitleStyle: { fontWeight: '600' },
-          contentStyle: { backgroundColor: '#09090b' },
+          contentStyle: { backgroundColor: 'transparent' },
           animation: 'slide_from_right',
+          // Show just the chevron — without this the back button inherits the
+          // previous route's name and reads "(tabs)" everywhere.
+          headerBackButtonDisplayMode: 'minimal',
+          headerBackTitle: '',
         }}
       >
         <Stack.Screen
@@ -51,35 +59,35 @@ export default function RootLayout() {
           name="plan-detail"
           options={{
             title: 'Plan',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
           name="terminal-detail"
           options={{
             title: 'Terminal',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
           name="item-detail"
           options={{
             title: 'Item',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
           name="event-detail"
           options={{
             title: 'Event',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
           name="graph-file-detail"
           options={{
             title: 'File',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
@@ -94,21 +102,21 @@ export default function RootLayout() {
           name="changes"
           options={{
             title: 'Changes',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
           name="doc-viewer"
           options={{
             title: 'Document',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
           name="plan-channel"
           options={{
             title: 'Discussion',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
@@ -132,24 +140,24 @@ export default function RootLayout() {
           options={{
             title: 'Connections',
             presentation: 'modal',
-            headerStyle: { backgroundColor: '#09090b' },
+            headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />
         <Stack.Screen
           name="settings"
-          options={{ title: 'Settings', headerStyle: { backgroundColor: '#09090b' } }}
+          options={{ title: 'Settings', headerStyle: { backgroundColor: '#0a0c18' } }}
         />
         <Stack.Screen
           name="projects"
-          options={{ title: 'Projects', headerStyle: { backgroundColor: '#09090b' } }}
+          options={{ title: 'Projects', headerStyle: { backgroundColor: '#0a0c18' } }}
         />
         <Stack.Screen
           name="system-docs"
-          options={{ title: 'System Docs', headerStyle: { backgroundColor: '#09090b' } }}
+          options={{ title: 'System Docs', headerStyle: { backgroundColor: '#0a0c18' } }}
         />
         <Stack.Screen
           name="system-doc-detail"
-          options={{ title: 'Document', headerStyle: { backgroundColor: '#09090b' } }}
+          options={{ title: 'Document', headerStyle: { backgroundColor: '#0a0c18' } }}
         />
         <Stack.Screen
           name="plan-templates"
@@ -175,6 +183,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: '#0a0c18',
   },
 });

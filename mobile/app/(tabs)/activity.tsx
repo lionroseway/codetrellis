@@ -286,7 +286,7 @@ export default function ActivityTab() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: 'transparent',
   },
   content: {
     padding: 16,
