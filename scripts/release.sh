@@ -106,7 +106,7 @@ if [[ "$SKIP_BUILD" -eq 0 && "$MAC_ONLY" -eq 0 ]]; then
   log "Downloading Windows + Linux artifacts → ${OUT_DIR}"
   CI_DL="$(mktemp -d)"
   gh run download "$RUN_ID" --repo "$SOURCE_REPO_SLUG" --dir "$CI_DL"
-  find "$CI_DL" \( -name '*.exe' -o -name '*.AppImage' \) -exec cp -v {} "$OUT_DIR/" \;
+  find "$CI_DL" \( -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp -v {} "$OUT_DIR/" \;
   rm -rf "$CI_DL"
 elif [[ "$MAC_ONLY" -eq 1 ]]; then
   log "--mac-only: skipping the Windows/Linux CI build."
@@ -121,7 +121,9 @@ for f in \
   "${OUT_DIR}/CodeTrellis-${VERSION}-x64.dmg" \
   "${OUT_DIR}/CodeTrellis-Setup-${VERSION}.exe" \
   "${OUT_DIR}/CodeTrellis-Portable-${VERSION}.exe" \
-  "${OUT_DIR}"/CodeTrellis-${VERSION}*.AppImage ; do
+  "${OUT_DIR}"/CodeTrellis-${VERSION}*.AppImage \
+  "${OUT_DIR}"/*.deb \
+  "${OUT_DIR}"/*.rpm ; do
   [[ -f "$f" ]] && upload_files+=("$f")
 done
 shopt -u nullglob
@@ -160,7 +162,8 @@ CodeTrellis ${VERSION} — installer downloads.
 - **macOS (Intel)** — \`CodeTrellis-${VERSION}-x64.dmg\` (signed + notarized)
 - **Windows installer (NSIS)** — \`CodeTrellis-Setup-${VERSION}.exe\`
 - **Windows portable** — \`CodeTrellis-Portable-${VERSION}.exe\`
-- **Linux AppImage** — \`CodeTrellis-${VERSION}.AppImage\`
+- **Linux AppImage** — \`CodeTrellis-${VERSION}.AppImage\` (portable, no install)
+- **Linux .deb** (Debian / Ubuntu) and **.rpm** (Fedora / RHEL) — also attached
 
 ## First-launch notes
 
@@ -170,7 +173,9 @@ CodeTrellis ${VERSION} — installer downloads.
   attributes), clear it once: \`xattr -cr /Applications/CodeTrellis.app\`.
 - **Windows** — not code-signed yet, so SmartScreen may warn once →
   "More info" → "Run anyway".
-- **Linux** — \`chmod +x CodeTrellis-${VERSION}.AppImage && ./CodeTrellis-${VERSION}.AppImage\`.
+- **Linux (AppImage)** — \`chmod +x CodeTrellis-${VERSION}.AppImage && ./CodeTrellis-${VERSION}.AppImage\`.
+- **Linux (.deb)** — \`sudo apt install ./codetrellis_*.deb\` (or \`sudo dpkg -i\`).
+- **Linux (.rpm)** — \`sudo dnf install ./codetrellis-*.rpm\` (or \`sudo rpm -i\`).
 
 ---
 Built from \`${SOURCE_REPO_SLUG}\` @ \`${COMMIT_SHORT}\` (macOS local + Windows/Linux CI).
