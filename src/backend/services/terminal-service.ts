@@ -44,11 +44,21 @@ const sessions = new Map<string, TerminalSession>();
 let counter = 0;
 
 /**
- * Per-session output ring buffer for `terminal_read`. Stores the last
- * RING_BUFFER_MAX_BYTES of PTY output so MCP tools can read recent
- * terminal content without needing a live WS connection.
+ * Per-session output ring buffer. Stores the last RING_BUFFER_MAX_BYTES
+ * of PTY output so:
+ *  - MCP `terminal_read` can read recent content without a live WS,
+ *  - the `terminal.stream` RPC can hand a fresh client the existing
+ *    scrollback via `readTerminalDelta(id)` with no `since`,
+ *  - the remote-terminal relay can hydrate a freshly-connected peer
+ *    (e.g. mobile after backgrounding) so its terminal view never
+ *    renders blank.
+ *
+ * 256 KB ≈ many minutes of an interactive session at typical output
+ * rates and is the snapshot ceiling sent over the wire on attach.
+ * Keep it in-memory only — encrypted persistence across desktop
+ * restarts is out of scope for v1 per the plan's "OUT" list.
  */
-const RING_BUFFER_MAX_BYTES = 64 * 1024; // 64 KB per session
+const RING_BUFFER_MAX_BYTES = 256 * 1024;
 const outputBuffers = new Map<string, string>();
 /** Monotonic total bytes ever written per session (for delta streaming). */
 const bufferTotals = new Map<string, number>();

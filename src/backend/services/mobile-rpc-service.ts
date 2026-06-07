@@ -56,6 +56,11 @@ import { listCrossSystemEdges } from './cross-system-service';
 import { captureSnapshot, computeDiff, getBaseline } from './diff-engine';
 import { computeProjection } from './projection-service';
 import { getAuthorKey, getSettings, updateSettings } from './settings-service';
+import {
+  getCurrentPowerStatus,
+  notifyPowerSettingsChanged,
+} from './power-service';
+import type { PowerSettings } from '../../shared/types';
 import * as systemDocsService from './system-docs-service';
 import * as planTemplates from './plan-templates';
 import * as planTemplatesService from './plan-templates-service';
@@ -678,11 +683,49 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return { ok };
     }
 
+    // --- Power (session-persistence plan / Track A) -------------------------
+    //
+    // Mobile gets push status broadcasts via the existing 'power-status'
+    // broadcast channel (wired in initializeBackend). These RPCs cover
+    // the explicit read/write paths.
+
+    case 'power.getSettings': {
+      return getSettings().power;
+    }
+
+    case 'power.setSettings': {
+      // Accept a partial PowerSettings; settings-service handles
+      // nested-triggers-safe merging + backwards-compat defaults.
+      const patch = (params ?? {}) as Partial<PowerSettings>;
+      const next = updateSettings({ power: patch });
+      // The state machine must re-evaluate even if no input signal
+      // changed — settings flipping `always: true` alone should
+      // engage the blocker.
+      notifyPowerSettingsChanged();
+      return next.power;
+    }
+
+    case 'power.status': {
+      return getCurrentPowerStatus();
+    }
+
     // --- Channel events ------------------------------------------------------
     case 'channel.events': {
       const planUid = requireString(params, 'planUid');
       const limit = (params.limit as number) ?? 50;
       return channelEventService.listChannelEvents(planUid, { limit });
+    }
+
+    case 'channel.eventsSinceSeq': {
+      // Session-persistence plan / Track B §7.4 — replay-since-seqnum
+      // on reconnect. Mobile records the latest `seq` it saw and asks
+      // for the delta when its data channel comes back. If `gap: true`
+      // is returned, mobile drops its cache and re-fetches via
+      // `channel.events` (createdAt-based) instead.
+      const planUid = requireString(params, 'planUid');
+      const sinceSeq = (params.sinceSeq as number) ?? 0;
+      const limit = (params.limit as number) ?? 200;
+      return channelEventService.getChannelEventsSinceSeq(planUid, sinceSeq, limit);
     }
 
     case 'channel.post': {

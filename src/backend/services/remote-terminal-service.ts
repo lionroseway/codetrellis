@@ -35,6 +35,7 @@ import {
   onTerminalExit,
   writeTerminal,
   resizeTerminal,
+  readTerminalDelta,
 } from './terminal-service';
 
 // --- Constants ---------------------------------------------------------------
@@ -106,10 +107,18 @@ export function startRemoteTerminals(): void {
   // Listen for terminal channel messages from peers
   unsubMessage = onChannelMessage(DATA_CHANNELS.TERMINAL, handleTerminalMessage);
 
-  // Send terminal list when a peer connects
+  // Send terminal list AND scrollback snapshot when a peer connects.
+  //
+  // The snapshot push is the session-persistence fix (Plan 7.2): when
+  // mobile resumes from background / lock-screen / network change, the
+  // WebRTC layer transitions through disconnected → connected, and the
+  // peer's terminal view is blank until live PTY output happens to
+  // arrive. Replaying the buffered scrollback here primes their xterm
+  // so it never renders empty, with no client-side change required.
   unsubConnection = onConnectionStateChange((fingerprint, state) => {
     if (state === 'connected') {
       sendTerminalList(fingerprint);
+      sendTerminalSnapshots(fingerprint);
     } else if (state === 'disconnected' || state === 'failed') {
       remoteTerminals.delete(fingerprint);
       emitEvent('remote-terminals-changed', { fingerprint });
@@ -258,6 +267,48 @@ function broadcastTerminalList(): void {
     String.fromCharCode(MSG.TERMINAL_LIST) + JSON.stringify(list),
   );
   broadcastToAllPeers(DATA_CHANNELS.TERMINAL, msg);
+}
+
+/**
+ * Replay each alive local terminal's buffered scrollback to a single
+ * peer, encoded as ordinary TERMINAL_OUTPUT (0x02) messages so existing
+ * mobile-companion builds render it correctly without any protocol
+ * change. Prefixes ANSI clear-screen + cursor-home so the peer's xterm
+ * replaces whatever stale state it had (from before the disconnect)
+ * with the authoritative server-side scrollback.
+ *
+ * Called from the connection-state handler immediately after
+ * `sendTerminalList(fingerprint)`. Indices match the list just sent.
+ *
+ * Backward-compatible by design: this is "live output that happens to
+ * be the snapshot" on the wire — no new opcode, no new fields. A
+ * smarter snapshot opcode (0x07) can be added later if we want to
+ * distinguish replay from live for richer UI affordances.
+ */
+function sendTerminalSnapshots(fingerprint: string): void {
+  const terminals = listTerminals();
+  // Keep indices consistent with the list just broadcast.
+  localTerminalIds = terminals.map((t) => t.id);
+
+  // ESC[2J = erase entire display; ESC[H = move cursor to home.
+  // Sent once per terminal so the snapshot fully overwrites any
+  // partial / stale content the peer's xterm was holding.
+  const SCREEN_RESET = '\x1b[2J\x1b[H';
+
+  for (let i = 0; i < terminals.length; i++) {
+    const t = terminals[i];
+    if (!t.alive) continue;
+
+    const delta = readTerminalDelta(t.id);
+    if (delta === null || delta.data.length === 0) continue;
+
+    const data = SCREEN_RESET + delta.data;
+    const payload = Buffer.alloc(2 + Buffer.byteLength(data, 'utf-8'));
+    payload[0] = MSG.TERMINAL_OUTPUT;
+    payload[1] = i;
+    payload.write(data, 2, 'utf-8');
+    sendToPeer(fingerprint, DATA_CHANNELS.TERMINAL, payload);
+  }
 }
 
 function sendTerminalList(fingerprint: string): void {

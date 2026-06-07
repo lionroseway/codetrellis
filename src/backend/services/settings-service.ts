@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/types';
+import { DEFAULT_SETTINGS, type AppSettings, type PowerTriggers } from '../../shared/types';
 import { getSettingsDir } from './persistence';
 
 /**
@@ -66,6 +66,17 @@ export function updateSettings(patch: DeepPartial<AppSettings>): AppSettings {
     plans: { ...current.plans, ...(patch.plans ?? {}) },
     data: { ...current.data, ...(patch.data ?? {}) },
     device: { ...current.device, ...(patch.device ?? {}) },
+    power: {
+      ...current.power,
+      ...(patch.power ?? {}),
+      // triggers is a nested object — preserve unspecified flags
+      // instead of letting a partial { triggers: { always: true } }
+      // patch wipe whileMobileConnected / whileAgentActive.
+      triggers: {
+        ...current.power.triggers,
+        ...((patch.power?.triggers as Partial<PowerTriggers> | undefined) ?? {}),
+      },
+    },
     firstRunComplete: patch.firstRunComplete ?? current.firstRunComplete,
     updatedAt: new Date().toISOString(),
   };
@@ -200,6 +211,25 @@ function mergeWithDefaults(raw: any): AppSettings {
       mobileApiPort: typeof raw?.device?.mobileApiPort === 'number' && raw.device.mobileApiPort > 0
         ? raw.device.mobileApiPort
         : DEFAULT_SETTINGS.device.mobileApiPort,
+    },
+    power: {
+      triggers: {
+        whileMobileConnected: typeof raw?.power?.triggers?.whileMobileConnected === 'boolean'
+          ? raw.power.triggers.whileMobileConnected
+          : DEFAULT_SETTINGS.power.triggers.whileMobileConnected,
+        whileAgentActive: typeof raw?.power?.triggers?.whileAgentActive === 'boolean'
+          ? raw.power.triggers.whileAgentActive
+          : DEFAULT_SETTINGS.power.triggers.whileAgentActive,
+        always: typeof raw?.power?.triggers?.always === 'boolean'
+          ? raw.power.triggers.always
+          : DEFAULT_SETTINGS.power.triggers.always,
+      },
+      preventLidCloseSleep: typeof raw?.power?.preventLidCloseSleep === 'boolean'
+        ? raw.power.preventLidCloseSleep
+        : DEFAULT_SETTINGS.power.preventLidCloseSleep,
+      onlyWhenOnAC: typeof raw?.power?.onlyWhenOnAC === 'boolean'
+        ? raw.power.onlyWhenOnAC
+        : DEFAULT_SETTINGS.power.onlyWhenOnAC,
     },
     firstRunComplete: typeof raw?.firstRunComplete === 'boolean' ? raw.firstRunComplete : DEFAULT_SETTINGS.firstRunComplete,
     updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : '',

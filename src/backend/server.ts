@@ -2895,7 +2895,36 @@ app.put('/api/settings', (req, res) => {
       console.warn('[Backend] mDNS reconfigure failed:', err);
     }
   }
+  // Session-persistence plan / Track A — if anything in the power
+  // section changed, the state machine needs to re-evaluate (a toggle
+  // can engage / drop the blocker even when no input signal moved).
+  if (JSON.stringify(before.power) !== JSON.stringify(next.power)) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { notifyPowerSettingsChanged } = require('./services/power-service');
+      notifyPowerSettingsChanged();
+    } catch (err) {
+      console.warn('[Backend] notifyPowerSettingsChanged failed:', err);
+    }
+  }
   res.json(next);
+});
+
+/**
+ * Read the current power-service status. Used by the desktop UI
+ * (Settings panel section + TopBar awake indicator) to render whether
+ * the blocker is currently engaged and why. Real-time updates also
+ * arrive via the `power-status` broadcast — this endpoint is the
+ * lazy/initial fetch path.
+ */
+app.get('/api/power/status', (_req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCurrentPowerStatus } = require('./services/power-service');
+    res.json(getCurrentPowerStatus());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 /**
@@ -3675,6 +3704,23 @@ export async function initializeBackend(): Promise<void> {
     initSensorBridge(broadcast);
   } catch (err) {
     console.warn('[Backend] Sensor bridge failed to init:', err);
+  }
+
+  // Session-persistence plan / Track A — start the power state machine
+  // and broadcast its status to all subscribers (renderer + mobile).
+  // Idempotent — Electron main calls startPowerService again from
+  // its `wirePowerControl()` block; the second call is a no-op. In
+  // web mode this is the *only* place it gets started — UI still
+  // sees status, just without OS-side effects (the Electron block
+  // owns powerSaveBlocker + caffeinate).
+  try {
+    const { startPowerService, onPowerStatusChange } = await import('./services/power-service');
+    const { startPowerSignals } = await import('./services/power-signals');
+    startPowerService();
+    startPowerSignals();
+    onPowerStatusChange((status) => broadcast('power-status', status));
+  } catch (err) {
+    console.warn('[Backend] Power service failed to start:', err);
   }
 
   // Re-arm per-project watchers for known projects. Without this, a
