@@ -2,12 +2,53 @@ import { Search, ChevronRight, ChevronDown, Folder, FolderOpen, FileCode, FileJs
 import { useUiStore } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
-import type { FileTreeNode } from '@shared/types';
+import { usePlanStore } from '../../stores/plan-store';
+import type { FileTreeNode, ProposedChange } from '@shared/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectGitStatus } from '../../stores/project-store';
 
 type SidebarGitState = 'staged' | 'unstaged' | 'untracked' | 'deleted';
 const SIDEBAR_DIRTY_STATE_CLEAR_CONFIRMATIONS = 3;
+
+// --- Plan-state overlay -----------------------------------------------------
+// The active plan's intended file changes, projected onto the tree alongside
+// the git markers. Mirrors the graph canvas's planned/diverged language so a
+// file reads the same in the explorer as it does on the graph.
+//   planned     — a plan task intends to touch this file; not yet reflected
+//   in_progress — a task on this file is assigned / in progress
+//   satisfied   — the change is present and matches the plan
+//   diverged    — task done but change absent, or change present but unclaimed
+//   unplanned   — changed on disk (git-dirty) but no active-plan task covers it
+type PlanFileState = 'planned' | 'in_progress' | 'satisfied' | 'diverged' | 'unplanned';
+
+interface PlanFileChange { target: string; state: PlanFileState }
+
+const PLAN_META: Record<PlanFileState, { glyph: string; tone: string; legend: string }> = {
+  planned:     { glyph: '◇', tone: 'text-violet-300',  legend: 'Planned' },
+  in_progress: { glyph: '◐', tone: 'text-amber-300',   legend: 'In progress' },
+  satisfied:   { glyph: '✓', tone: 'text-emerald-300', legend: 'Aligned' },
+  diverged:    { glyph: '▲', tone: 'text-rose-300',    legend: 'Diverged' },
+  unplanned:   { glyph: '◆', tone: 'text-fuchsia-300', legend: 'Unplanned' },
+};
+// Severity order — picks a directory's dominant tone and orders the legend.
+const PLAN_ORDER: PlanFileState[] = ['diverged', 'unplanned', 'in_progress', 'planned', 'satisfied'];
+
+function driftToPlanState(drift: ProposedChange['driftStatus']): PlanFileState {
+  switch (drift) {
+    case 'in_progress': return 'in_progress';
+    case 'satisfied': return 'satisfied';
+    case 'missing':
+    case 'unexpected': return 'diverged';
+    default: return 'planned';
+  }
+}
+
+function normalizePlanTarget(target: string): string {
+  // File moves arrive as "from → to" — the destination is what exists in the
+  // tree, so key on that. Normalize slashes, strip leading "./" and trailing "/".
+  const dest = target.includes('→') ? target.split('→').pop()! : target;
+  return normalizePath(dest.trim()).replace(/^\.\//, '').replace(/\/+$/, '');
+}
 
 function getFileIcon(node: FileTreeNode) {
   if (node.type === 'package') return <Package size={13} className="text-accent shrink-0 drop-shadow-[0_0_3px_rgba(59,130,246,0.4)]" />;
@@ -26,10 +67,12 @@ function FileTreeItem({
   node,
   depth = 0,
   gitStatesByPath,
+  planStatesByPath,
 }: {
   node: FileTreeNode;
   depth?: number;
   gitStatesByPath: Map<string, SidebarGitState[]>;
+  planStatesByPath: Map<string, PlanFileState>;
 }) {
   const [sidebarExpanded, setSidebarExpanded] = useState(depth < 1);
   const selectedNodeId = useUiStore((s) => s.selectedNodeId);
@@ -45,6 +88,12 @@ function FileTreeItem({
   const toneClass = getTreeToneClass(displayGitStates, Boolean(isSelected));
   const stateCounts = isDir ? collectDescendantGitStateCounts(node, gitStatesByPath) : null;
   const fileMarker = !isDir ? getPrimaryMarker(ownGitStates) : null;
+
+  const ownPlanState = !isDir ? (planStatesByPath.get(node.path) ?? null) : null;
+  const planCounts = isDir ? collectDescendantPlanCounts(node, planStatesByPath) : null;
+
+  const showGit = isDir ? Boolean(stateCounts && hasAnyCounts(stateCounts)) : Boolean(fileMarker);
+  const showPlan = isDir ? Boolean(planCounts && hasAnyPlanCounts(planCounts)) : Boolean(ownPlanState);
 
   return (
     <div>
@@ -77,40 +126,57 @@ function FileTreeItem({
           getFileIcon(node)
         )}
         <span className="truncate ml-0.5">{node.name}</span>
-        {isDir && stateCounts && hasAnyCounts(stateCounts) && (
-          <div className="ml-auto flex items-center gap-1 pl-2">
-            {stateCounts.unstaged > 0 && (
-              <span className="text-[10px] font-semibold text-orange-300">
-                {stateCounts.unstaged}M
+        {(showGit || showPlan) && (
+          <div className="ml-auto flex items-center gap-1.5 pl-2">
+            {/* Plan-state overlay — sits left of the git markers. */}
+            {!isDir && ownPlanState && (
+              <span
+                className={`text-[11px] font-semibold ${PLAN_META[ownPlanState].tone}`}
+                title={PLAN_META[ownPlanState].legend}
+              >
+                {PLAN_META[ownPlanState].glyph}
               </span>
             )}
-            {stateCounts.untracked > 0 && (
-              <span className="text-[10px] font-semibold text-emerald-300">
-                {stateCounts.untracked}U
+            {isDir && planCounts && hasAnyPlanCounts(planCounts) && (
+              <span className="flex items-center gap-1">
+                {PLAN_ORDER.map((st) => planCounts[st] > 0 ? (
+                  <span
+                    key={st}
+                    className={`text-[10px] font-semibold ${PLAN_META[st].tone}`}
+                    title={PLAN_META[st].legend}
+                  >
+                    {planCounts[st]}{PLAN_META[st].glyph}
+                  </span>
+                ) : null)}
               </span>
             )}
-            {stateCounts.staged > 0 && (
-              <span className="text-[10px] font-semibold text-sky-300">
-                {stateCounts.staged}A
+            {/* Git markers. */}
+            {isDir && stateCounts && hasAnyCounts(stateCounts) && (
+              <span className="flex items-center gap-1">
+                {stateCounts.unstaged > 0 && (
+                  <span className="text-[10px] font-semibold text-orange-300">{stateCounts.unstaged}M</span>
+                )}
+                {stateCounts.untracked > 0 && (
+                  <span className="text-[10px] font-semibold text-emerald-300">{stateCounts.untracked}U</span>
+                )}
+                {stateCounts.staged > 0 && (
+                  <span className="text-[10px] font-semibold text-sky-300">{stateCounts.staged}A</span>
+                )}
+                {stateCounts.deleted > 0 && (
+                  <span className="text-[10px] font-semibold text-red-300">{stateCounts.deleted}D</span>
+                )}
               </span>
             )}
-            {stateCounts.deleted > 0 && (
-              <span className="text-[10px] font-semibold text-red-300">
-                {stateCounts.deleted}D
-              </span>
+            {!isDir && fileMarker && (
+              <span className={`text-[11px] font-semibold ${fileMarker.color}`}>{fileMarker.label}</span>
             )}
           </div>
-        )}
-        {!isDir && fileMarker && (
-          <span className={`ml-auto pl-2 text-[11px] font-semibold ${fileMarker.color}`}>
-            {fileMarker.label}
-          </span>
         )}
       </button>
       {sidebarExpanded && hasChildren && (
         <div>
           {node.children!.map((child) => (
-            <FileTreeItem key={child.path} node={child} depth={depth + 1} gitStatesByPath={gitStatesByPath} />
+            <FileTreeItem key={child.path} node={child} depth={depth + 1} gitStatesByPath={gitStatesByPath} planStatesByPath={planStatesByPath} />
           ))}
         </div>
       )}
@@ -194,8 +260,38 @@ export function Sidebar() {
     setStableGitStatus((previous) => reconcileGitStatus(previous, mergedGitStatus, cleanRefreshStreakRef));
   }, [sharedGitStatus, polledGitStatus, root, scanStatus]);
 
+  const activePlanUid = usePlanStore((s) => s.activePlanUid);
+  const [planChanges, setPlanChanges] = useState<PlanFileChange[]>([]);
+
+  // Pull the active plan's intended file changes so the tree can overlay
+  // planned / in-progress / diverged state next to the git markers.
+  useEffect(() => {
+    if (!activePlanUid) { setPlanChanges([]); return; }
+    let cancelled = false;
+    fetch(`/api/plans/${activePlanUid}/changes`)
+      .then((r) => r.json())
+      .then((data: ProposedChange[]) => {
+        if (cancelled || !Array.isArray(data)) return;
+        const fileChanges: PlanFileChange[] = data
+          .filter((c) => c.kind === 'file')
+          .map((c) => ({ target: normalizePlanTarget(c.target), state: driftToPlanState(c.driftStatus) }));
+        setPlanChanges(fileChanges);
+      })
+      .catch(() => { if (!cancelled) setPlanChanges([]); });
+    return () => { cancelled = true; };
+  }, [activePlanUid, refreshVersion]);
+
   const gitStatesByPath = useMemo(() => buildGitStatesByPath(root, stableGitStatus), [root, stableGitStatus]);
   const treeWithGitEntries = useMemo(() => mergeGitStatusIntoTree(fileTree, root, stableGitStatus), [fileTree, root, stableGitStatus]);
+  const planStatesByPath = useMemo(
+    () => buildPlanStatesByPath(treeWithGitEntries, root, planChanges, gitStatesByPath, Boolean(activePlanUid)),
+    [treeWithGitEntries, root, planChanges, gitStatesByPath, activePlanUid],
+  );
+  const planLegendStates = useMemo(() => {
+    const present = new Set<PlanFileState>();
+    for (const st of planStatesByPath.values()) present.add(st);
+    return PLAN_ORDER.filter((s) => present.has(s));
+  }, [planStatesByPath]);
   const displayTree = filterTree(treeWithGitEntries, searchQuery);
 
   if (!visible) return null;
@@ -244,9 +340,20 @@ export function Sidebar() {
           </div>
         )}
         {displayTree.map((node) => (
-          <FileTreeItem key={node.path} node={node} gitStatesByPath={gitStatesByPath} />
+          <FileTreeItem key={node.path} node={node} gitStatesByPath={gitStatesByPath} planStatesByPath={planStatesByPath} />
         ))}
       </div>
+
+      {planLegendStates.length > 0 && (
+        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 px-3 py-2 border-t border-border-subtle">
+          {planLegendStates.map((st) => (
+            <span key={st} className="flex items-center gap-1 text-[10px] text-foreground-subtle">
+              <span className={`font-semibold ${PLAN_META[st].tone}`}>{PLAN_META[st].glyph}</span>
+              {PLAN_META[st].legend}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -310,6 +417,70 @@ function collectDescendantGitStateCounts(
 
   visit(node);
   return counts;
+}
+
+// --- Plan-state tree helpers -------------------------------------------------
+
+function buildPlanStatesByPath(
+  tree: FileTreeNode[],
+  root: string | null,
+  changes: PlanFileChange[],
+  gitStatesByPath: Map<string, SidebarGitState[]>,
+  planActive: boolean,
+): Map<string, PlanFileState> {
+  const out = new Map<string, PlanFileState>();
+  if (!root || !planActive) return out;
+  const normRoot = normalizePath(root).replace(/\/+$/, '');
+
+  // Plan targets are authored as relative paths (usually root-relative, but
+  // a task scope can make them shorter). Match tolerantly: exact, or either
+  // path is a path-segment suffix of the other.
+  const matchChange = (relPath: string): PlanFileState | null => {
+    for (const ch of changes) {
+      if (!ch.target) continue;
+      if (relPath === ch.target || relPath.endsWith(`/${ch.target}`) || ch.target.endsWith(`/${relPath}`)) {
+        return ch.state;
+      }
+    }
+    return null;
+  };
+
+  const visit = (node: FileTreeNode) => {
+    if (node.type === 'file') {
+      const norm = normalizePath(node.path);
+      const relPath = norm.startsWith(`${normRoot}/`) ? norm.slice(normRoot.length + 1) : norm;
+      const planned = matchChange(relPath);
+      if (planned) {
+        out.set(node.path, planned);
+      } else if ((gitStatesByPath.get(node.path) || []).length > 0) {
+        // Changed on disk but no active-plan task claims it → unplanned.
+        out.set(node.path, 'unplanned');
+      }
+    }
+    for (const child of node.children || []) visit(child);
+  };
+  for (const n of tree) visit(n);
+  return out;
+}
+
+function collectDescendantPlanCounts(
+  node: FileTreeNode,
+  planStatesByPath: Map<string, PlanFileState>,
+): Record<PlanFileState, number> {
+  const counts: Record<PlanFileState, number> = {
+    planned: 0, in_progress: 0, satisfied: 0, diverged: 0, unplanned: 0,
+  };
+  const visit = (current: FileTreeNode) => {
+    const st = planStatesByPath.get(current.path);
+    if (st) counts[st] += 1;
+    for (const child of current.children || []) visit(child);
+  };
+  visit(node);
+  return counts;
+}
+
+function hasAnyPlanCounts(counts: Record<PlanFileState, number>): boolean {
+  return PLAN_ORDER.some((s) => counts[s] > 0);
 }
 
 function getTreeToneClass(states: SidebarGitState[], isSelected: boolean): string {

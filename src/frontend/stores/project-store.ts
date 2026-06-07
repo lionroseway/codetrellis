@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import type { MonorepoConfig, ScanStatus, FileTreeNode } from '@shared/types';
 
+/** The shape returned by `api.scanProject` — kept loose so the store can
+ *  apply it defensively (a hard failure may carry only `error`). */
+interface ScanResultLike {
+  monorepoConfig?: MonorepoConfig | null;
+  fileTree?: FileTreeNode[] | null;
+  astError?: string | null;
+  error?: string | null;
+}
+
 export interface ProjectGitStatus {
   staged: string[];
   unstaged: string[];
@@ -49,6 +58,7 @@ interface ProjectState {
   setRoot: (path: string) => void;
   setMonorepoConfig: (config: MonorepoConfig) => void;
   setFileTree: (tree: FileTreeNode[]) => void;
+  applyScanResult: (result: ScanResultLike | null | undefined) => void;
   setGitStatus: (gitStatus: ProjectGitStatus | null) => void;
   setScanStatus: (status: ScanStatus) => void;
   setScanProgress: (progress: number) => void;
@@ -148,6 +158,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const s = get();
     const tabs = updateActiveTab(s.tabs, s.activeTabId, { fileTree: safeTree });
     set({ tabs, fileTree: safeTree });
+  },
+
+  applyScanResult: (result) => {
+    const s = get();
+    // A hard failure carries `error` and NO usable tree — surface it
+    // instead of flipping to `ready` with an empty tree (the bug that
+    // collapsed the explorer to changed-files-only). A degraded scan
+    // (corrupt DB etc.) still returns the tree alongside `astError`; we
+    // keep the tree and let the analysis catch up on the next scan.
+    if (!result || (!Array.isArray(result.fileTree) && result.error)) {
+      s.setError(result?.error ? String(result.error) : 'Scan failed');
+      return;
+    }
+    if (result.monorepoConfig) s.setMonorepoConfig(result.monorepoConfig);
+    s.setFileTree(Array.isArray(result.fileTree) ? result.fileTree : []);
+    s.setScanStatus('ready');
+    if (result.astError) {
+      console.warn('[Scan] Analysis degraded (file tree intact):', result.astError);
+    }
   },
 
   setGitStatus: (gitStatus) => {

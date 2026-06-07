@@ -76,9 +76,7 @@ export function WelcomeScreen() {
     store.setScanStatus('scanning');
     try {
       const result = await api.scanProject(projectPath);
-      store.setMonorepoConfig(result.monorepoConfig);
-      store.setFileTree(result.fileTree);
-      store.setScanStatus('ready');
+      store.applyScanResult(result);
     } catch (err) {
       store.setError(String(err));
     }

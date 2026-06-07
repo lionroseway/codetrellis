@@ -69,12 +69,66 @@ function makeShim(conn: any): Database {
   };
 }
 
+/**
+ * True if the connection's database file fails SQLite's integrity check.
+ *
+ * better-sqlite3 is disk-backed, so a corrupt `data.db` (e.g. after a hard
+ * kill mid-write — see the macOS SIGKILL note in CLAUDE.md) persists across
+ * launches. Without this guard every scan throws "database disk image is
+ * malformed" forever, which silently collapsed the file explorer to
+ * changed-files-only. `quick_check` is the cheaper cousin of
+ * `integrity_check` — enough to catch the B-tree damage we see in practice.
+ */
+function isDatabaseCorrupt(conn: any): boolean {
+  try {
+    const result = conn.pragma('quick_check', { simple: true });
+    return result !== 'ok';
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /malformed|not a database|corrupt|disk image|encrypted/i.test(msg);
+  }
+}
+
+/**
+ * Move a corrupt DB (and its -wal/-shm sidecars) aside so a fresh one can
+ * be created in its place. Renames rather than deletes — the quarantined
+ * file is left on disk for forensic recovery (`sqlite3 … .recover`). Falls
+ * back to unlink only if the rename fails (locked / read-only FS).
+ */
+function quarantineCorruptDatabase(dbPath: string): void {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  for (const suffix of ['', '-wal', '-shm']) {
+    const src = `${dbPath}${suffix}`;
+    if (!fs.existsSync(src)) continue;
+    const dest = `${dbPath}.corrupt-${stamp}${suffix}`;
+    try {
+      fs.renameSync(src, dest);
+      console.error(`[DB] Quarantined ${src} -> ${dest}`);
+    } catch {
+      try { fs.unlinkSync(src); } catch { /* best-effort */ }
+    }
+  }
+}
+
 export async function initDatabase(): Promise<void> {
   if (db) return;
 
   ensureDataDir();
   const dbPath = path.join(getDataDir(), 'data.db');
   bdb = new BetterSqlite3(dbPath);
+
+  // Self-heal a corrupt on-disk database. The AST tables are ephemeral
+  // (rebuilt on the next scan) and plans live as YAML under .codetrellis/
+  // (re-imported on project open), so quarantining + rebuilding loses no
+  // source-of-truth data — and it un-wedges scanning, which a malformed DB
+  // would otherwise break on every launch.
+  if (isDatabaseCorrupt(bdb)) {
+    console.error('[DB] Integrity check FAILED — quarantining corrupt data.db and rebuilding from scratch');
+    try { bdb.close(); } catch { /* already unusable */ }
+    quarantineCorruptDatabase(dbPath);
+    bdb = new BetterSqlite3(dbPath); // fresh, empty file
+  }
+
   // WAL = concurrent reads + in-place durable writes (no full-DB export).
   bdb.pragma('journal_mode = WAL');
   bdb.pragma('synchronous = NORMAL');

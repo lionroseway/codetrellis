@@ -215,9 +215,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
             const { getAPI } = await import('../bridge');
             const api = getAPI();
             const result = await api.scanProject(plan.projectPath);
-            projectStore.setMonorepoConfig(result.monorepoConfig);
-            projectStore.setFileTree(result.fileTree);
-            projectStore.setScanStatus('ready');
+            projectStore.applyScanResult(result);
           } catch (err) {
             projectStore.setError(String(err));
           }

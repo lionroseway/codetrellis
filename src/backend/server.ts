@@ -827,6 +827,28 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     startWatching(projectPath);
     startClaudeCodeWatcher(projectPath);
 
+    // Repopulate plans from their on-disk YAML manifests when the DB has
+    // none for this project. The plan file watcher binds with
+    // `ignoreInitial`, so it never imports plans that already exist on
+    // disk — which means a fresh DB (first open, or after a self-heal
+    // rebuild of a corrupt data.db) would otherwise show zero plans even
+    // though the manifests are right there under .codetrellis/plans/.
+    // Guarded on an empty DB so steady-state opens keep the DB as the
+    // live source and we don't churn re-imports on every scan.
+    try {
+      if (planService.listPlans(projectPath).length === 0) {
+        const planDirs = discoverPlanDirs(projectPath);
+        let imported = 0;
+        for (const dir of planDirs) {
+          try { importPlan(dir); imported++; }
+          catch (err) { console.warn(`[Scan] Plan re-import failed for ${dir}:`, err); }
+        }
+        if (imported > 0) console.log(`[Scan] Re-imported ${imported} plan(s) from disk into a fresh DB`);
+      }
+    } catch (err) {
+      console.warn('[Scan] Plan re-import pass failed:', err);
+    }
+
     try {
       startPlanFileWatcher(projectPath);
     } catch (err) {
@@ -866,21 +888,43 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
 app.post('/api/project/scan', async (req, res) => {
   const { projectPath } = req.body;
   try {
-    const stats = await scanProject(projectPath);
+    // The file tree is pure filesystem — compute it FIRST and
+    // independently of the AST/DB pass. The explorer depends only on
+    // this, so it must render even when parsing or the database is
+    // unhealthy (e.g. a corrupt data.db). Decoupling the two is what
+    // stops a DB error from collapsing the sidebar to changed-files-only.
     const monorepoConfig = detectMonorepo(projectPath);
     const fileTree = scanDirectory(projectPath);
     const fileCount = countFiles(fileTree);
     const depGraph: Record<string, string[]> = {};
     monorepoConfig.dependencyGraph.forEach((v, k) => { depGraph[k] = v; });
+
+    // AST parse + DB write — best-effort. If it throws (corrupt DB,
+    // parser fault, or a scan already in progress), we still return the
+    // file tree so the UI stays usable, with a non-fatal `astError` the
+    // frontend can surface. A genuinely corrupt DB also self-heals on the
+    // next process start (see database.ts initDatabase).
+    let astStats: Awaited<ReturnType<typeof scanProject>> | null = null;
+    let astError: string | null = null;
+    try {
+      astStats = await scanProject(projectPath);
+    } catch (err) {
+      astError = err instanceof Error ? err.message : String(err);
+      console.error('[Scan] AST/DB pass failed — serving file tree only:', astError);
+    }
+
     res.json({
       monorepoConfig: { ...monorepoConfig, dependencyGraph: depGraph },
       fileTree,
       fileCount,
-      astStats: stats,
+      astStats,
+      astError,
     });
   } catch (err) {
+    // Only a filesystem-level failure (missing / unreadable path) reaches
+    // here — the file tree itself couldn't be built.
     const msg = err instanceof Error ? err.message : String(err);
-    const status = msg.includes('already in progress') ? 409 : msg.includes('required') || msg.includes('does not exist') ? 400 : 500;
+    const status = msg.includes('required') || msg.includes('does not exist') ? 400 : 500;
     if (!res.headersSent) {
       res.status(status).json({ error: msg });
     }

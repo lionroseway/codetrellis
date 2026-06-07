@@ -67,9 +67,7 @@ async function openProject() {
   store.setScanStatus('scanning');
   try {
     const result = await api.scanProject(projectPath);
-    store.setMonorepoConfig(result.monorepoConfig);
-    store.setFileTree(result.fileTree);
-    store.setScanStatus('ready');
+    store.applyScanResult(result);
   } catch (err) {
     store.setError(String(err));
   }
@@ -93,9 +91,7 @@ async function rescanActiveTab() {
   try {
     const api = getAPI();
     const result = await api.scanProject(activeTab.root);
-    store.setMonorepoConfig(result.monorepoConfig);
-    store.setFileTree(result.fileTree);
-    store.setScanStatus('ready');
+    store.applyScanResult(result);
   } catch (err) {
     store.setError(String(err));
   }
@@ -229,11 +225,9 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
                     const store = useProjectStore.getState();
                     store.addTab(wt.path, wt.branch);
                     store.setScanStatus('scanning');
-                    getAPI().scanProject(wt.path).then((result) => {
-                      store.setMonorepoConfig(result.monorepoConfig);
-                      store.setFileTree(result.fileTree);
-                      store.setScanStatus('ready');
-                    }).catch((err) => store.setError(String(err)));
+                    getAPI().scanProject(wt.path)
+                      .then((result) => store.applyScanResult(result))
+                      .catch((err) => store.setError(String(err)));
                   }}
                   className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover rounded transition-colors text-left"
                 >
