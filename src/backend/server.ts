@@ -3707,18 +3707,16 @@ export async function initializeBackend(): Promise<void> {
   }
 
   // Session-persistence plan / Track A — start the power state machine
-  // and broadcast its status to all subscribers (renderer + mobile).
-  // Idempotent — Electron main calls startPowerService again from
-  // its `wirePowerControl()` block; the second call is a no-op. In
-  // web mode this is the *only* place it gets started — UI still
-  // sees status, just without OS-side effects (the Electron block
-  // owns powerSaveBlocker + caffeinate).
+  // + signal sources. Idempotent — Electron main also calls
+  // startPowerService() from `wirePowerControl()`; the second call is
+  // a no-op. In web mode this is the only place it boots; UI consumes
+  // status via the `/api/power/status` poll path (no `power-status`
+  // broadcast — no client subscribes to it).
   try {
-    const { startPowerService, onPowerStatusChange } = await import('./services/power-service');
+    const { startPowerService } = await import('./services/power-service');
     const { startPowerSignals } = await import('./services/power-signals');
     startPowerService();
     startPowerSignals();
-    onPowerStatusChange((status) => broadcast('power-status', status));
   } catch (err) {
     console.warn('[Backend] Power service failed to start:', err);
   }

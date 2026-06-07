@@ -56,11 +56,7 @@ import { listCrossSystemEdges } from './cross-system-service';
 import { captureSnapshot, computeDiff, getBaseline } from './diff-engine';
 import { computeProjection } from './projection-service';
 import { getAuthorKey, getSettings, updateSettings } from './settings-service';
-import {
-  getCurrentPowerStatus,
-  notifyPowerSettingsChanged,
-} from './power-service';
-import type { PowerSettings } from '../../shared/types';
+import { notifyPowerSettingsChanged } from './power-service';
 import * as systemDocsService from './system-docs-service';
 import * as planTemplates from './plan-templates';
 import * as planTemplatesService from './plan-templates-service';
@@ -507,7 +503,13 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       if (params.identity !== undefined) patch.identity = params.identity;
       if (params.plans !== undefined) patch.plans = params.plans;
       if (params.device !== undefined) patch.device = params.device;
+      // Session-persistence plan / Track A — power section is safe for
+      // the phone to write (no port / path settings). Re-evaluate the
+      // state machine after the patch lands so a toggle alone can
+      // engage / disengage the blocker.
+      if (params.power !== undefined) patch.power = params.power;
       const updated = updateSettings(patch as any);
+      if (params.power !== undefined) notifyPowerSettingsChanged();
       broadcast('settings-changed', { settings: updated });
       return updated;
     }
@@ -692,32 +694,6 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       const rows = (params.rows as number) ?? 24;
       const ok = terminalService.resizeTerminal(id, cols, rows);
       return { ok };
-    }
-
-    // --- Power (session-persistence plan / Track A) -------------------------
-    //
-    // Mobile gets push status broadcasts via the existing 'power-status'
-    // broadcast channel (wired in initializeBackend). These RPCs cover
-    // the explicit read/write paths.
-
-    case 'power.getSettings': {
-      return getSettings().power;
-    }
-
-    case 'power.setSettings': {
-      // Accept a partial PowerSettings; settings-service handles
-      // nested-triggers-safe merging + backwards-compat defaults.
-      const patch = (params ?? {}) as Partial<PowerSettings>;
-      const next = updateSettings({ power: patch });
-      // The state machine must re-evaluate even if no input signal
-      // changed — settings flipping `always: true` alone should
-      // engage the blocker.
-      notifyPowerSettingsChanged();
-      return next.power;
-    }
-
-    case 'power.status': {
-      return getCurrentPowerStatus();
     }
 
     // --- Channel events ------------------------------------------------------
