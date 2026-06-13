@@ -21,7 +21,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { loadPairedDesktops, removePairedDesktop } from '../lib/storage';
+import {
+  loadPairedDesktops,
+  removePairedDesktop,
+  setManualDisconnect,
+  getManualDisconnect,
+} from '../lib/storage';
 import { connection } from '../lib/connection';
 import { registerForPush, sendPushTokenToDesktop } from '../lib/push';
 import { startDiscovery, stopDiscovery, getDiscoveredDesktops, onDiscoveryChange, type DiscoveredDesktop } from '../lib/discovery';
@@ -39,6 +44,12 @@ export default function HomeScreen() {
   // mobile-API health endpoint so "Offline" means the app isn't running, vs
   // "Available" when it's up but we just haven't connected over WebRTC yet.
   const [reachable, setReachable] = useState<Record<string, boolean>>({});
+  // Which device a connect attempt is currently targeting (so only that row
+  // shows "Connecting…", not every row).
+  const [connectingFingerprint, setConnectingFingerprint] = useState<string | null>(null);
+  // null = still loading; true = user explicitly disconnected last session
+  // (skip launch auto-connect); false = ok to auto-connect.
+  const [skipAutoConnect, setSkipAutoConnect] = useState<boolean | null>(null);
 
   const loadDevices = useCallback(async () => {
     const loaded = await loadPairedDesktops();
@@ -108,6 +119,11 @@ export default function HomeScreen() {
     return unsub;
   }, []);
 
+  // Load the "user explicitly disconnected last session" preference once.
+  useEffect(() => {
+    getManualDisconnect().then(setSkipAutoConnect);
+  }, []);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadDevices();
@@ -115,6 +131,10 @@ export default function HomeScreen() {
   };
 
   const handleConnect = useCallback(async (device: PairedDesktop, silent = false) => {
+    // An explicit (or auto) connect clears the "leave it disconnected" pref.
+    setSkipAutoConnect(false);
+    void setManualDisconnect(false);
+    setConnectingFingerprint(device.fingerprint);
     try {
       // pairingId may be missing for pre-upgrade devices — the desktop
       // accepts fingerprint as a fallback and returns the pairingId
@@ -139,34 +159,46 @@ export default function HomeScreen() {
       // Auto-connect attempts fail quietly (e.g. desktop just went offline) —
       // only surface an alert for an explicit user-initiated connect.
       if (!silent) Alert.alert('Connection Failed', String(err));
+    } finally {
+      setConnectingFingerprint(null);
     }
   }, [router]);
 
-  // Auto-connect on launch: if a paired desktop is reachable and we're not
-  // already connected, link to the most-recently-used one automatically (once
-  // per app session) so opening the app "just works" — no manual Connect tap.
+  // Smart launch auto-connect (once per app session). We only auto-connect
+  // when there's EXACTLY ONE paired desktop, it's reachable, and the user
+  // didn't explicitly disconnect last session — so the common single-desktop
+  // case "just works" with a visible, cancellable Connecting state, while
+  // users with several desktops always choose (no wrong-desktop guess) and a
+  // deliberate disconnect survives a restart.
   const autoConnectedRef = useRef(false);
   useEffect(() => {
     if (autoConnectedRef.current) return;
+    if (skipAutoConnect !== false) return; // null = still loading; true = user opted out
     if (connectionState === 'connected' || connectionState === 'connecting') return;
-    const candidate = devices
-      .filter((d) => reachable[d.fingerprint] === true)
-      .sort((a, b) => (Date.parse(b.lastConnected || '') || 0) - (Date.parse(a.lastConnected || '') || 0))[0];
-    if (candidate) {
-      autoConnectedRef.current = true;
-      void handleConnect(candidate, true);
-    }
-  }, [devices, reachable, connectionState, handleConnect]);
+    if (devices.length !== 1) return;
+    const only = devices[0];
+    if (reachable[only.fingerprint] !== true) return;
+    autoConnectedRef.current = true;
+    void handleConnect(only, true);
+  }, [devices, reachable, connectionState, skipAutoConnect, handleConnect]);
 
   const handleDisconnect = () => {
+    // A deliberate disconnect: don't auto-connect on the next launch.
+    setSkipAutoConnect(true);
+    void setManualDisconnect(true);
+    autoConnectedRef.current = true;
     connection.disconnect();
   };
 
   // Cancel an in-progress connect (aborts the candidate sweep and prevents
   // auto-reconnect until the user taps Connect again).
   const handleCancelConnect = () => {
+    setSkipAutoConnect(true);
+    void setManualDisconnect(true);
+    autoConnectedRef.current = true;
     connection.disconnect();
     setConnectionState('disconnected');
+    setConnectingFingerprint(null);
   };
 
   const handleUnpair = (device: PairedDesktop) => {
@@ -192,7 +224,8 @@ export default function HomeScreen() {
 
   const renderDevice = ({ item }: { item: PairedDesktop }) => {
     const isConnected = connectedFingerprint === item.fingerprint;
-    const isConnecting = connectionState === 'connecting' && !isConnected;
+    // Only the row being connected to shows "Connecting…" (not every row).
+    const isConnecting = connectingFingerprint === item.fingerprint && !isConnected;
     // 3-state: Live (WebRTC connected) → Available (reachable, not connected)
     // → Offline (CodeTrellis not running / unreachable).
     const isAvailable = !isConnected && reachable[item.fingerprint] === true;
