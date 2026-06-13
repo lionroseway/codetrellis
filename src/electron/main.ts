@@ -415,9 +415,23 @@ terminalService.onTerminalExit((id, code) => {
   terminalIpcListeners.delete(id);
 });
 
-// Renderer connects to a terminal — start forwarding output
+// Renderer connects to a terminal — start forwarding output AND
+// immediately replay the current ring buffer so the xterm panel
+// doesn't render blank after a click-away / re-mount. Plan item
+// 12.1. Mirrors what `sendTerminalSnapshots` does for WebRTC peers
+// in remote-terminal-service.ts — same ANSI clear-screen prefix so
+// any stale renderer state is replaced cleanly.
 ipcMain.on('codetrellis:terminal-connect', (_event, termId: string) => {
   terminalIpcListeners.add(termId);
+  try {
+    const delta = terminalService.readTerminalDelta(termId);
+    if (delta && delta.data.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(`codetrellis:terminal-data:${termId}`, {
+        type: 'output',
+        data: '\x1b[2J\x1b[H' + delta.data,
+      });
+    }
+  } catch { /* unknown terminal id — drop silently, same as before */ }
 });
 
 // Renderer disconnects from a terminal
