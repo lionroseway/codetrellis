@@ -17,6 +17,22 @@
  */
 
 import type { ChannelEvent } from '../../shared/types';
+import { getPeerConnection } from './webrtc-service';
+
+/**
+ * Presence gate: skip push to a device whose WebRTC peer is currently
+ * connected. When the phone is foreground its peer is up and it receives the
+ * event live over the snapshot/control channel; when it's backgrounded or
+ * closed the peer drops, so push is exactly what's needed. (No explicit
+ * foreground signal required — the connection itself is the proxy.)
+ */
+function isDeviceActive(fingerprint: string): boolean {
+  try {
+    return getPeerConnection(fingerprint)?.state === 'connected';
+  } catch {
+    return false;
+  }
+}
 
 // --- Types -------------------------------------------------------------------
 
@@ -57,6 +73,7 @@ const PUSH_WORTHY_EVENTS: ReadonlySet<string> = new Set([
   'stuck',
   'need-decision',
   'need-context',
+  'handing-off',
 ]);
 
 let started = false;
@@ -138,6 +155,7 @@ export async function pushForChannelEvent(event: ChannelEvent): Promise<void> {
 
   const payloads: PushPayload[] = [];
   for (const { token, fingerprint } of tokens) {
+    if (isDeviceActive(fingerprint)) continue; // already watching live — don't push
     if (isRateLimited(fingerprint, event.eventType)) continue;
     markSent(fingerprint, event.eventType);
     payloads.push({
@@ -177,6 +195,7 @@ export async function pushForInputRequest(
 
   const payloads: PushPayload[] = [];
   for (const { token, fingerprint } of tokens) {
+    if (isDeviceActive(fingerprint)) continue; // already watching live — don't push
     if (isRateLimited(fingerprint, 'input-request')) continue;
     markSent(fingerprint, 'input-request');
     payloads.push({
