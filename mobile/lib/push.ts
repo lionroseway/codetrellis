@@ -10,8 +10,20 @@
  */
 
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { webrtc } from './webrtc';
+
+// The desktop sends pushes with this Android channel id — it MUST exist on the
+// device or Android drops/min-importances the notification. Keep in sync with
+// push-notification-service.ts (`channelId: 'codetrellis-events'`).
+const ANDROID_CHANNEL_ID = 'codetrellis-events';
+
+// Expo push tokens are scoped to the EAS *project id* (a UUID), not the slug.
+// Read it from the app config so it can never drift from app.json.
+const EAS_PROJECT_ID =
+  (Constants.expoConfig?.extra?.eas?.projectId as string | undefined) ||
+  '47be6d4e-2e16-47a9-958d-afb4ebaab412';
 
 // --- Configuration -----------------------------------------------------------
 
@@ -48,10 +60,11 @@ export async function registerForPush(): Promise<string | null> {
       return null;
     }
 
-    // Set Android notification channel
+    // Create the Android channel the desktop targets (must match the
+    // push payload's channelId, or Android won't surface the notification).
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'CodeTrellis',
+      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+        name: 'CodeTrellis events',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#3b82f6',
@@ -59,7 +72,7 @@ export async function registerForPush(): Promise<string | null> {
     }
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'codetrellis', // Must match app.json slug
+      projectId: EAS_PROJECT_ID, // EAS project UUID, not the slug
     });
 
     return tokenData.data;
@@ -82,41 +95,61 @@ export function sendPushTokenToDesktop(token: string): boolean {
 }
 
 /**
- * Listen for notification taps (user tapped a push notification).
- * Returns the event data from the notification payload, or null.
+ * Normalized notification payload — matches what the desktop's
+ * push-notification-service attaches in `data`.
+ */
+export interface NotificationData {
+  type?: string;       // 'channel-event' | 'input-request' | …
+  eventId?: string;    // channel event uid
+  planUid?: string;
+  requestId?: string;  // input request id
+  eventType?: string;
+}
+
+function extract(data: Record<string, unknown> | undefined): NotificationData {
+  return {
+    type: data?.type as string | undefined,
+    eventId: data?.eventId as string | undefined,
+    planUid: data?.planUid as string | undefined,
+    requestId: data?.requestId as string | undefined,
+    eventType: data?.eventType as string | undefined,
+  };
+}
+
+/** Map a notification payload to the Expo Router path it should open, or null. */
+export function routeForNotification(d: NotificationData): string | null {
+  if (d.type === 'input-request' && d.requestId) {
+    return `/input-request?requestId=${encodeURIComponent(d.requestId)}`;
+  }
+  if (d.type === 'channel-event' && d.eventId) {
+    return `/event-detail?uid=${encodeURIComponent(d.eventId)}`;
+  }
+  if (d.planUid) {
+    return `/plan-detail?uid=${encodeURIComponent(d.planUid)}`;
+  }
+  return null;
+}
+
+/**
+ * Listen for notification taps. Returns the normalized payload to the handler.
  */
 export function onNotificationTap(
-  handler: (data: { eventId?: string; planSlug?: string }) => void,
+  handler: (data: NotificationData) => void,
 ): () => void {
   const subscription = Notifications.addNotificationResponseReceivedListener(
-    (response) => {
-      const data = response.notification.request.content.data as Record<string, unknown>;
-      handler({
-        eventId: data?.eventId as string | undefined,
-        planSlug: data?.planSlug as string | undefined,
-      });
-    },
+    (response) => handler(extract(response.notification.request.content.data as Record<string, unknown>)),
   );
-
   return () => subscription.remove();
 }
 
 /**
- * Get the notification that launched the app (if any).
- * Used for deep-linking when the app is opened from a notification.
+ * The notification that launched the app from cold start (if any), for
+ * deep-linking on open.
  */
-export async function getInitialNotification(): Promise<{
-  eventId?: string;
-  planSlug?: string;
-} | null> {
+export async function getInitialNotification(): Promise<NotificationData | null> {
   const response = await Notifications.getLastNotificationResponseAsync();
   if (!response) return null;
-
-  const data = response.notification.request.content.data as Record<string, unknown>;
-  return {
-    eventId: data?.eventId as string | undefined,
-    planSlug: data?.planSlug as string | undefined,
-  };
+  return extract(response.notification.request.content.data as Record<string, unknown>);
 }
 
 /**

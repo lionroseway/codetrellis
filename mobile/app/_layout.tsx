@@ -6,12 +6,13 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import SplashScreen from '../components/SplashScreen';
 import AnimatedBackground from '../components/AnimatedBackground';
 import { initPrefs } from '../lib/prefs';
+import { onNotificationTap, getInitialNotification, routeForNotification } from '../lib/push';
 
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
@@ -19,6 +20,15 @@ export default function RootLayout() {
   // Hydrate on-device preferences (e.g. the configurable RPC timeout) once at
   // startup so the cached values are ready before the first request.
   useEffect(() => { void initPrefs(); }, []);
+
+  // Deep-link notification taps to the right screen — both while running and
+  // from a cold start. (The push payload's `data` resolves to a route.)
+  useEffect(() => {
+    const go = (route: string | null) => { if (route) { try { router.navigate(route as never); } catch { /* not ready */ } } };
+    const unsub = onNotificationTap((d) => go(routeForNotification(d)));
+    void getInitialNotification().then((d) => { if (d) setTimeout(() => go(routeForNotification(d)), 600); });
+    return unsub;
+  }, []);
 
   return (
     <View style={styles.container}>
