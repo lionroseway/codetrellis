@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useUiStore } from '../../stores/ui-store';
 import { getAPI } from '../../bridge';
-import type { ViewDepth } from '../../../shared/types';
+import type { ViewDepth, PowerStatus } from '../../../shared/types';
 import { ConnectedAgents } from './ConnectedAgents';
 import { DeviceIndicator } from '../pairing/DeviceIndicator';
 import { SettingsModal } from '../settings/SettingsModal';
@@ -397,6 +397,7 @@ export function TopBar() {
       </button>
 
       <ConnectedAgents />
+      <AwakeIndicator />
       <DeviceIndicator />
 
       <button
@@ -482,4 +483,59 @@ function useUpdateAvailable(settingsOpen: boolean): boolean {
   }, [settingsOpen]);
 
   return available;
+}
+
+/**
+ * AwakeIndicator — session-persistence plan / Track A §4.2.
+ *
+ * Small Zap icon next to the connection indicators. Glows when the
+ * desktop sleep-prevent assertion is currently engaged, with hover
+ * tooltip explaining the active reason. Click → opens Settings.
+ * Hidden in web mode (no Electron blocker available).
+ */
+function AwakeIndicator() {
+  const [status, setStatus] = useState<PowerStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      fetch('/api/power/status')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((s: PowerStatus | null) => { if (!cancelled && s) setStatus(s); })
+        .catch(() => { /* backend booting / network blip — keep last */ });
+    };
+    tick();
+    const id = window.setInterval(tick, 4000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, []);
+
+  if (!status) return null;
+  // Web mode = no powerSaveBlocker available; hide the indicator so
+  // we don't promise behavior we can't deliver.
+  if (status.platform === 'web') return null;
+
+  const active = status.shouldBlock;
+  const reasonText =
+    status.reason === 'mobile-connected' ? 'Mobile connected'
+    : status.reason === 'agent-active' ? 'Agent active'
+    : status.reason === 'always' ? 'Always-on'
+    : null;
+  const title = active && reasonText
+    ? `Keeping desktop awake — ${reasonText}`
+    : 'Desktop sleep allowed (configure in Settings → Power)';
+
+  return (
+    <button
+      onClick={() => window.dispatchEvent(new CustomEvent('open-settings'))}
+      className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-surface-hover transition-all shrink-0"
+      title={title}
+      aria-label={title}
+    >
+      <Zap
+        size={13}
+        className={active ? 'text-emerald-400 drop-shadow-[0_0_4px_rgba(110,231,183,0.4)]' : 'text-foreground-subtle/60'}
+        fill={active ? 'currentColor' : 'none'}
+      />
+    </button>
+  );
 }

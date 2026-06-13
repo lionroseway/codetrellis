@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^14.0.0",
+    "@react-native-community/netinfo": "^11.4.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "expo": "~54.0.0",
@@ -24,6 +25,7 @@
     "expo-clipboard": "~8.0.0",
     "expo-constants": "~18.0.13",
     "expo-font": "~14.0.11",
+    "expo-haptics": "~14.0.0",
     "expo-linking": "~8.0.12",
     "expo-notifications": "~0.32.17",
     "expo-router": "~6.0.23",

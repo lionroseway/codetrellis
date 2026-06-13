@@ -492,22 +492,36 @@ function createChannel(entry: PeerEntry, name: DataChannelName): void {
 }
 
 function handleConnectionStateChange(entry: PeerEntry, state: string): void {
+  // Capture prior state + connection-held duration BEFORE mutating
+  // `entry`, so the Lifecycle log line carries the transition context
+  // (was-X for Ys → now-Y). Critical for diagnosing the
+  // "blank terminal after foreground" class of bug — the disconnect
+  // log + held-duration tells you whether mobile died cleanly or
+  // hung partway through a session-persistence plan transition.
+  const prevState = entry.state;
+  const prevConnectedAt = entry.connectedAt;
+  const fp = entry.fingerprint.slice(0, 12);
+  const heldFor = (prevConnectedAt && prevState === 'connected')
+    ? Math.round((Date.now() - prevConnectedAt.getTime()) / 1000)
+    : null;
+  const heldStr = heldFor !== null ? ` heldFor=${heldFor}s` : '';
+
   switch (state) {
     case 'connected':
       entry.state = 'connected';
       entry.connectedAt = new Date();
-      console.log(`[WebRTC] Connected to ${entry.alias} (${entry.fingerprint.slice(0, 12)}…)`);
+      console.log(`[WebRTC][Lifecycle] connected peer=${entry.alias} (${fp}…) prev=${prevState}`);
       break;
     case 'disconnected':
     case 'closed':
       entry.state = 'disconnected';
       stopHeartbeat(entry);
-      console.log(`[WebRTC] Disconnected from ${entry.alias}`);
+      console.log(`[WebRTC][Lifecycle] disconnected peer=${entry.alias} (${fp}…) prev=${prevState}${heldStr} missedHeartbeats=${entry.missedHeartbeats} ice=${state}`);
       break;
     case 'failed':
       entry.state = 'failed';
       stopHeartbeat(entry);
-      console.log(`[WebRTC] Connection failed to ${entry.alias}`);
+      console.log(`[WebRTC][Lifecycle] failed peer=${entry.alias} (${fp}…) prev=${prevState}${heldStr} missedHeartbeats=${entry.missedHeartbeats}`);
       break;
   }
   emitConnectionState(entry.fingerprint, entry.state);

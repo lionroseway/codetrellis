@@ -7,8 +7,19 @@
 
 import { useEffect, useRef } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { Text, View, StyleSheet } from 'react-native';
-import { useConnectionState, useAttentionCount } from '../../lib/store';
+import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { useDebouncedConnectionState, useAttentionCount } from '../../lib/store';
+import { useDrawerStore } from '../../lib/drawer';
+import ConnectionStatusPill from '../../components/ConnectionStatusPill';
+
+function MenuButton() {
+  const openDrawer = useDrawerStore((s) => s.openDrawer);
+  return (
+    <TouchableOpacity onPress={openDrawer} hitSlop={12} style={styles.menuBtn}>
+      <Text style={styles.menuIcon}>{'☰'}</Text>
+    </TouchableOpacity>
+  );
+}
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -35,7 +46,10 @@ function BadgeIcon({ emoji, focused, count }: { emoji: string; focused: boolean;
 
 export default function TabLayout() {
   const router = useRouter();
-  const connState = useConnectionState();
+  // Plan items 5.4 + 10.6.a — consume the *debounced* state so sub-2s
+  // blips don't kick the user back to the pairing screen. Combined
+  // with the wasConnected gate below, only sustained drops navigate.
+  const connState = useDebouncedConnectionState();
   const attentionCount = useAttentionCount();
 
   // Track whether we were ever connected. Only redirect home
@@ -69,6 +83,12 @@ export default function TabLayout() {
         headerStyle: styles.header,
         headerTintColor: '#e4e4e7',
         headerTitleStyle: styles.headerTitle,
+        // Global nav drawer trigger — restores device/app traversal once
+        // you've dropped into the connected tab stack.
+        headerLeft: () => <MenuButton />,
+        // Plan item 5.5 — persistent connection-status pill in the
+        // header. Visible across every tab. Tap → connection-switcher.
+        headerRight: () => <ConnectionStatusPill />,
         // Transparent scene so the root global background shows behind tabs.
         sceneStyle: { backgroundColor: 'transparent' },
       }}
@@ -144,6 +164,15 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontWeight: '700',
     fontSize: 17,
+  },
+  menuBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  menuIcon: {
+    color: '#e4e4e7',
+    fontSize: 22,
+    fontWeight: '400',
   },
   badge: {
     position: 'absolute',

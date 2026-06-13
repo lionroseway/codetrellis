@@ -25,6 +25,28 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import { getRpcTimeoutMs, setRpcTimeoutMs, RPC_TIMEOUT_MIN_MS, RPC_TIMEOUT_MAX_MS } from '../lib/prefs';
+import { useDevicePowerStatus } from '../lib/store';
+import { flushDiagnosticsToDesktop, snapshot as diagnosticsSnapshot } from '../lib/diagnostics';
+
+interface PowerTriggers {
+  whileMobileConnected: boolean;
+  whileAgentActive: boolean;
+  always: boolean;
+}
+
+interface PowerSettings {
+  triggers: PowerTriggers;
+  preventLidCloseSleep: boolean;
+  onlyWhenOnAC: boolean;
+}
+
+interface PowerStatus {
+  shouldBlock: boolean;
+  reason: 'mobile-connected' | 'agent-active' | 'always' | null;
+  ac: 'plugged' | 'battery' | 'unknown';
+  platform: 'darwin' | 'win32' | 'linux' | 'web';
+  updatedAt: string;
+}
 
 interface AppSettings {
   identity: { displayName: string; email: string };
@@ -33,6 +55,7 @@ interface AppSettings {
     attachmentLocation: 'project' | 'user';
   };
   device: { deviceName: string; advertise: boolean; shareAudio: boolean; mobileApiPort: number };
+  power: PowerSettings;
   mcp: { port: number };
 }
 
@@ -43,6 +66,17 @@ export default function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Plan item 4.4 + 11.1 — runtime power status (shouldBlock, reason,
+  // ac, platform). Now read reactively from the state-sync snapshot
+  // (which carries `powerStatus` since 11.1) instead of a 4s RPC poll.
+  // Drives both the live status strip and the platform-gate for the
+  // macOS-only lid-close toggle.
+  const powerStatusFromSnapshot = useDevicePowerStatus();
+  // Fallback poll: when connected to a pre-11.1 desktop (snapshot has
+  // no powerStatus), poll `power.status` once on mount as before so the
+  // UI still works. Cheap to keep; pure backwards-compat.
+  const [powerStatusFallback, setPowerStatusFallback] = useState<PowerStatus | null>(null);
+  const powerStatus = powerStatusFromSnapshot ?? powerStatusFallback;
 
   const load = useCallback(async () => {
     setError(null);
@@ -57,6 +91,18 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Pre-11.1 desktops don't put powerStatus in the snapshot. Probe
+  // once on mount, then forget — if the snapshot ever provides it
+  // we'll silently switch over via the ?? above. No interval poll.
+  useEffect(() => {
+    if (powerStatusFromSnapshot) return; // snapshot has it — skip RPC
+    let cancelled = false;
+    rpc<PowerStatus>('power.status')
+      .then((s) => { if (!cancelled) setPowerStatusFallback(s); })
+      .catch(() => { /* desktop unreachable / no power.status RPC — keep null */ });
+    return () => { cancelled = true; };
+  }, [powerStatusFromSnapshot]);
 
   // Mutate a nested field locally and flag dirty.
   const patch = useCallback(<K extends keyof AppSettings>(
@@ -79,6 +125,7 @@ export default function SettingsScreen() {
           advertise: settings.device.advertise,
           shareAudio: settings.device.shareAudio,
         },
+        power: settings.power,
       });
       setDirty(false);
       Alert.alert('Saved', 'Settings updated on the desktop.');
@@ -216,8 +263,117 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Power (session-persistence plan / Track A) */}
+        <Text style={styles.sectionTitle}>POWER</Text>
+        <View style={styles.card}>
+          <Text style={styles.hint}>
+            Keep the desktop awake based on what you&apos;re doing. Toggles are independent — the blocker engages on the union of what&apos;s checked, then disengaged by the battery safety net if that&apos;s on.
+          </Text>
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchLabel}>
+              <Text style={styles.label}>Awake while mobile connected</Text>
+              <Text style={styles.hint}>Holds the assertion while your phone is paired and active.</Text>
+            </View>
+            <Switch
+              value={settings.power.triggers.whileMobileConnected}
+              onValueChange={(v) => patch('power', {
+                triggers: { ...settings.power.triggers, whileMobileConnected: v },
+              })}
+              trackColor={{ true: '#3b82f6', false: '#27272a' }}
+            />
+          </View>
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchLabel}>
+              <Text style={styles.label}>Awake while agent active</Text>
+              <Text style={styles.hint}>Stays on for 5 minutes after the last MCP tool call.</Text>
+            </View>
+            <Switch
+              value={settings.power.triggers.whileAgentActive}
+              onValueChange={(v) => patch('power', {
+                triggers: { ...settings.power.triggers, whileAgentActive: v },
+              })}
+              trackColor={{ true: '#3b82f6', false: '#27272a' }}
+            />
+          </View>
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchLabel}>
+              <Text style={styles.label}>Awake always</Text>
+              <Text style={styles.hint}>Holds the assertion the entire time CodeTrellis runs.</Text>
+            </View>
+            <Switch
+              value={settings.power.triggers.always}
+              onValueChange={(v) => patch('power', {
+                triggers: { ...settings.power.triggers, always: v },
+              })}
+              trackColor={{ true: '#3b82f6', false: '#27272a' }}
+            />
+          </View>
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchLabel}>
+              <Text style={styles.label}>Disable when on battery</Text>
+              <Text style={styles.hint}>
+                {powerStatus && powerStatus.ac !== 'unknown'
+                  ? `Current AC state: ${powerStatus.ac}.`
+                  : 'No battery info — this toggle has no effect on this desktop.'}
+              </Text>
+            </View>
+            <Switch
+              value={settings.power.onlyWhenOnAC}
+              onValueChange={(v) => patch('power', { onlyWhenOnAC: v })}
+              trackColor={{ true: '#3b82f6', false: '#27272a' }}
+            />
+          </View>
+
+          {powerStatus?.platform === 'darwin' && (
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabel}>
+                <Text style={styles.label}>Prevent lid-close sleep</Text>
+                <Text style={styles.hint}>
+                  macOS-only. Uses `caffeinate -s` while awake. powerSaveBlocker alone doesn&apos;t beat lid-close on Mac.
+                </Text>
+              </View>
+              <Switch
+                value={settings.power.preventLidCloseSleep}
+                onValueChange={(v) => patch('power', { preventLidCloseSleep: v })}
+                trackColor={{ true: '#3b82f6', false: '#27272a' }}
+              />
+            </View>
+          )}
+
+          {/* Live status strip — mirrors the desktop's bottom-of-section indicator */}
+          <View style={styles.statusStrip}>
+            <Text style={styles.statusStripText}>
+              <Text style={styles.statusStripMono}>Status:</Text>{' '}
+              {powerStatus ? (
+                powerStatus.shouldBlock ? (
+                  <Text style={styles.statusActive}>
+                    awake{powerStatus.reason ? ` (${powerStatus.reason})` : ''}
+                  </Text>
+                ) : (
+                  <Text>idle</Text>
+                )
+              ) : (
+                <Text>loading…</Text>
+              )}
+              {powerStatus && powerStatus.ac !== 'unknown' && (
+                <Text>{' · AC: '}<Text style={styles.statusStripMono}>{powerStatus.ac}</Text></Text>
+              )}
+              {powerStatus && (
+                <Text>{' · '}<Text style={styles.statusStripMono}>{powerStatus.platform}</Text></Text>
+              )}
+            </Text>
+          </View>
+        </View>
+
         {/* Connection (on-device) */}
         <ConnectionTimeoutCard />
+
+        {/* Diagnostics (Plan 11.2) */}
+        <DiagnosticsCard />
 
         {/* Read-only desktop info */}
         <Text style={styles.sectionTitle}>DESKTOP (READ-ONLY)</Text>
@@ -281,6 +437,53 @@ function ConnectionTimeoutCard() {
           “request timed out” errors. Applies on this device only ({minSec}–{maxSec}s).
           {savedAt ? '  ✓ Saved' : ''}
         </Text>
+      </View>
+    </>
+  );
+}
+
+/**
+ * Plan 11.2 — diagnostics ring shipping. Shows the current ring depth
+ * and a "Send to desktop" button that calls the `diagnostics.flush`
+ * RPC. The desktop's daily-rotated log file then contains the
+ * cross-side lifecycle narrative for the most recent ~500 events.
+ */
+function DiagnosticsCard() {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  // Re-read count when the screen re-focuses or after a flush.
+  const [count, setCount] = useState<number>(() => diagnosticsSnapshot().length);
+
+  const send = useCallback(async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const wrote = await flushDiagnosticsToDesktop();
+      setStatus(wrote > 0 ? `Sent ${wrote} entries to the desktop log.` : 'Nothing to send (or desktop unreachable).');
+    } finally {
+      setBusy(false);
+      setCount(diagnosticsSnapshot().length);
+    }
+  }, []);
+
+  return (
+    <>
+      <Text style={styles.sectionTitle}>DIAGNOSTICS</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>Recent events buffered: {count}</Text>
+        <Text style={styles.hint}>
+          Lifecycle, network, and RPC events from the last few minutes are kept
+          in memory on this device. Send them to the desktop log if something
+          weird happens — easier to share than a screenshot.
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryBtn, busy && { opacity: 0.5 }]}
+          onPress={send}
+          disabled={busy}
+        >
+          <Text style={styles.retryText}>{busy ? 'Sending…' : 'Send to desktop log'}</Text>
+        </TouchableOpacity>
+        {status && <Text style={styles.hint}>{status}</Text>}
       </View>
     </>
   );
@@ -380,4 +583,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginTop: 24,
   },
   saveCtaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Power status strip
+  statusStrip: {
+    marginTop: 16, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: '#27272a',
+  },
+  statusStripText: { color: '#a1a1aa', fontSize: 11, lineHeight: 16 },
+  statusStripMono: { fontFamily: 'Menlo', color: '#71717a' },
+  statusActive: { color: '#10b981', fontWeight: '600' },
 });

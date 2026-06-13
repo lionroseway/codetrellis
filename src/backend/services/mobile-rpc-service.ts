@@ -44,6 +44,7 @@ import * as planDocumentsService from './plan-documents-service';
 import * as commentService from './comment-service';
 import * as externalRefsService from './external-refs-service';
 import * as taskAttachmentsService from './task-attachments-service';
+import * as terminalHistoryService from './terminal-history-service';
 import {
   getArchitectureSummary,
   getFileSymbols,
@@ -56,6 +57,7 @@ import { listCrossSystemEdges } from './cross-system-service';
 import { captureSnapshot, computeDiff, getBaseline } from './diff-engine';
 import { computeProjection } from './projection-service';
 import { getAuthorKey, getSettings, updateSettings } from './settings-service';
+import { notifyPowerSettingsChanged, getCurrentPowerStatus } from './power-service';
 import * as systemDocsService from './system-docs-service';
 import * as planTemplates from './plan-templates';
 import * as planTemplatesService from './plan-templates-service';
@@ -223,11 +225,22 @@ export function requestMobileScreenshot(timeoutMs = 20_000): Promise<MobileImage
 }
 
 async function handleRpc(fingerprint: string, req: RpcRequest): Promise<void> {
+  const startedAt = Date.now();
   try {
-    const result = await routeMethod(req.method, req.params ?? {});
+    const result = await routeMethod(req.method, req.params ?? {}, fingerprint);
     sendResponse(fingerprint, { result, id: req.id, rpc: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    // Lifecycle-tagged structured RPC failure log (Plan 9.1 backend half).
+    // Without this, mobile-side "request timed out" toasts have no
+    // server-side counterpart in logs — a class of bug becomes nearly
+    // impossible to triage. Tagged so `grep '[Lifecycle]'` surfaces
+    // the full peer-transition narrative around the failure.
+    const durationMs = Date.now() - startedAt;
+    console.warn(
+      `[MobileRPC][Lifecycle] rpc_failure peer=${fingerprint.slice(0, 12)}… ` +
+      `method=${req.method} id=${req.id} durationMs=${durationMs} message=${JSON.stringify(message)}`,
+    );
     sendResponse(fingerprint, { error: message, id: req.id, rpc: true });
   }
 }
@@ -238,7 +251,11 @@ function sendResponse(fingerprint: string, response: RpcResponse): void {
 
 // --- Method router -----------------------------------------------------------
 
-async function routeMethod(method: string, params: Record<string, unknown>): Promise<unknown> {
+async function routeMethod(
+  method: string,
+  params: Record<string, unknown>,
+  fingerprint: string = '',
+): Promise<unknown> {
   switch (method) {
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {
@@ -491,9 +508,48 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       if (params.identity !== undefined) patch.identity = params.identity;
       if (params.plans !== undefined) patch.plans = params.plans;
       if (params.device !== undefined) patch.device = params.device;
+      // Session-persistence plan / Track A — power section is safe for
+      // the phone to write (no port / path settings). Re-evaluate the
+      // state machine after the patch lands so a toggle alone can
+      // engage / disengage the blocker.
+      if (params.power !== undefined) patch.power = params.power;
       const updated = updateSettings(patch as any);
+      if (params.power !== undefined) notifyPowerSettingsChanged();
       broadcast('settings-changed', { settings: updated });
       return updated;
+    }
+
+    // Session-persistence plan / Track A — runtime status (shouldBlock,
+    // reason, ac, platform). Phone polls every 4s to render the awake
+    // indicator + gate the macOS-only lid-close toggle. Distinct from
+    // `settings.get` which returns configuration; this returns the
+    // power-service's *current decision* state.
+    case 'power.status': {
+      return getCurrentPowerStatus();
+    }
+
+    // Plan 11.2 — mobile ships its in-RAM diagnostics ring buffer to
+    // the desktop logger so cross-side `[Lifecycle]` greps work
+    // end-to-end. `installFileLogger` already captures every
+    // console.log/warn into the daily log file, so the RPC just
+    // routes each entry through console.log with a peer-tag prefix.
+    case 'diagnostics.flush': {
+      const entries = Array.isArray(params.entries) ? (params.entries as Array<{
+        ts: number; kind: string; text: string; data?: unknown;
+      }>) : [];
+      const fpTag = `mobile:${fingerprint.slice(0, 8)}`;
+      let wrote = 0;
+      for (const e of entries) {
+        if (typeof e?.text !== 'string') continue;
+        const tag = typeof e.kind === 'string' ? `[${e.kind}]` : '';
+        const dataStr = e.data ? ' ' + JSON.stringify(e.data) : '';
+        // Prefix with the original mobile timestamp so cross-side
+        // event ordering survives the RPC round-trip latency.
+        const tsIso = new Date(e.ts).toISOString();
+        console.log(`[${fpTag}] [${tsIso}] [Lifecycle]${tag} ${e.text}${dataStr}`);
+        wrote++;
+      }
+      return { wrote };
     }
 
     // --- System docs ---------------------------------------------------------
@@ -678,11 +734,38 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return { ok };
     }
 
+    // Session-persistence plan §7.6 — paginated read of the
+    // persistent on-disk terminal history. Clients pass `before` from
+    // the previous response's `prevOffset` to walk backwards through
+    // the log; omit it to start at the tail. The data is raw ANSI —
+    // safe to feed straight into xterm.
+    case 'terminal.history': {
+      // Static import — a runtime require() here is not bundled by
+      // electron-vite and throws MODULE_NOT_FOUND in the packaged app.
+      // (The module has no top-level disk I/O, so eager import is safe.)
+      const id = requireString(params, 'id');
+      const before = typeof params.before === 'number' ? (params.before as number) : undefined;
+      const limit = typeof params.limit === 'number' ? (params.limit as number) : 64 * 1024;
+      return terminalHistoryService.getHistoryChunk(id, before, limit);
+    }
+
     // --- Channel events ------------------------------------------------------
     case 'channel.events': {
       const planUid = requireString(params, 'planUid');
       const limit = (params.limit as number) ?? 50;
       return channelEventService.listChannelEvents(planUid, { limit });
+    }
+
+    case 'channel.eventsSinceSeq': {
+      // Session-persistence plan / Track B §7.4 — replay-since-seqnum
+      // on reconnect. Mobile records the latest `seq` it saw and asks
+      // for the delta when its data channel comes back. If `gap: true`
+      // is returned, mobile drops its cache and re-fetches via
+      // `channel.events` (createdAt-based) instead.
+      const planUid = requireString(params, 'planUid');
+      const sinceSeq = (params.sinceSeq as number) ?? 0;
+      const limit = (params.limit as number) ?? 200;
+      return channelEventService.getChannelEventsSinceSeq(planUid, sinceSeq, limit);
     }
 
     case 'channel.post': {

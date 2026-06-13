@@ -10,6 +10,29 @@ import * as SecureStore from 'expo-secure-store';
 import type { PairedDesktop } from './types';
 
 const DEVICES_KEY = 'codetrellis_paired_devices';
+const MANUAL_DISCONNECT_KEY = 'codetrellis_manual_disconnect';
+
+/**
+ * Whether the user *explicitly* disconnected (vs. the app just closing or a
+ * transient drop). When set, launch auto-connect is skipped — a deliberate
+ * "leave it disconnected" should survive an app restart. Cleared the moment
+ * the user taps Connect again.
+ */
+export async function setManualDisconnect(value: boolean): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(MANUAL_DISCONNECT_KEY, value ? '1' : '0');
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function getManualDisconnect(): Promise<boolean> {
+  try {
+    return (await SecureStore.getItemAsync(MANUAL_DISCONNECT_KEY)) === '1';
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Load all paired desktops from secure storage.

@@ -96,6 +96,37 @@ export interface DataSettings {
   personalSyncMode: PersonalSyncMode;
 }
 
+/**
+ * Session-persistence plan / Track A — independent triggers for the
+ * "keep desktop awake" assertion. The blocker engages on the *union*
+ * of the checked triggers, then AND-gated by `onlyWhenOnAC` if set.
+ * No exclusive modes — the user composes the behavior they want.
+ */
+export interface PowerTriggers {
+  /** Hold the assertion while a paired mobile peer's heartbeat is fresh. */
+  whileMobileConnected: boolean;
+  /** Hold the assertion while any MCP agent has tool-called recently. */
+  whileAgentActive: boolean;
+  /** Hold the assertion the entire time CodeTrellis is running. */
+  always: boolean;
+}
+
+export interface PowerSettings {
+  triggers: PowerTriggers;
+  /**
+   * macOS-only: also prevent lid-close sleep via a `caffeinate -s`
+   * helper. powerSaveBlocker alone doesn't beat lid-close on Mac.
+   * UI hides this toggle on non-darwin platforms.
+   */
+  preventLidCloseSleep: boolean;
+  /**
+   * Safety net: when true and the laptop is on battery, the blocker
+   * does NOT engage even if a trigger is checked. Prevents the
+   * "walked away unplugged → dead battery" footgun.
+   */
+  onlyWhenOnAC: boolean;
+}
+
 export interface AppSettings {
   identity: IdentitySettings;
   mcp: McpSettings;
@@ -106,6 +137,12 @@ export interface AppSettings {
    * Controls mDNS advertisement, device name, audio sharing with peers.
    */
   device: DeviceSettings;
+  /**
+   * Session-persistence plan / Track A — desktop awake control.
+   * Independent triggers + AC gate + macOS lid-close prevention.
+   * All toggles default `false` (no behavior change for existing users).
+   */
+  power: PowerSettings;
   /**
    * Phase 5.1 — true once the user completes the first-run wizard.
    * When false (or absent in older settings files), the frontend
@@ -139,6 +176,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
     advertise: true,
     shareAudio: false,
     mobileApiPort: 19480,
+  },
+  power: {
+    triggers: {
+      whileMobileConnected: false,
+      whileAgentActive: false,
+      always: false,
+    },
+    preventLidCloseSleep: false,
+    onlyWhenOnAC: true,
   },
   firstRunComplete: false,
   updatedAt: '',

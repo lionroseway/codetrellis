@@ -30,6 +30,14 @@ function formatAge(ts: number): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+/** Plan 11.4 — compact byte formatter for the persistent-history badge. */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
 export default function TerminalsTab() {
   const router = useRouter();
   const rawTerminals = useTerminals();
@@ -217,6 +225,12 @@ export default function TerminalsTab() {
                 {term.alive ? 'Running' : 'Exited'}
                 {' · '}
                 {formatAge(term.createdAt)}
+                {/* Plan 11.4 — persistent-history disk usage. Hidden
+                    for pre-11.4 desktops (field absent) and for
+                    sessions that have produced no output yet. */}
+                {term.bytesOnDisk != null && term.bytesOnDisk > 0 && (
+                  <>{' · '}{formatBytes(term.bytesOnDisk)} history</>
+                )}
               </Text>
             </TouchableOpacity>
           ))

@@ -10,6 +10,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 const RPC_TIMEOUT_KEY = 'codetrellis_rpc_timeout_ms';
+const TERMINAL_FONT_KEY = 'codetrellis_terminal_font_px';
 
 /** Default request timeout — generous so RPCs survive a high-latency VPN link. */
 export const RPC_TIMEOUT_DEFAULT_MS = 30_000;
@@ -17,12 +18,24 @@ export const RPC_TIMEOUT_DEFAULT_MS = 30_000;
 export const RPC_TIMEOUT_MIN_MS = 5_000;
 export const RPC_TIMEOUT_MAX_MS = 120_000;
 
+/** Default terminal font size (px). Matches the in-bundle xterm default. */
+export const TERMINAL_FONT_DEFAULT_PX = 12;
+/** Clamp bounds — below 8 is unreadable, above 24 wastes screen on a phone. */
+export const TERMINAL_FONT_MIN_PX = 8;
+export const TERMINAL_FONT_MAX_PX = 24;
+
 // In-memory cache (hydrated by initPrefs).
 let rpcTimeoutMs = RPC_TIMEOUT_DEFAULT_MS;
+let terminalFontPx = TERMINAL_FONT_DEFAULT_PX;
 
 function clampTimeout(ms: number): number {
   if (!Number.isFinite(ms)) return RPC_TIMEOUT_DEFAULT_MS;
   return Math.min(RPC_TIMEOUT_MAX_MS, Math.max(RPC_TIMEOUT_MIN_MS, Math.round(ms)));
+}
+
+function clampFont(px: number): number {
+  if (!Number.isFinite(px)) return TERMINAL_FONT_DEFAULT_PX;
+  return Math.min(TERMINAL_FONT_MAX_PX, Math.max(TERMINAL_FONT_MIN_PX, Math.round(px)));
 }
 
 /** Hydrate cached prefs from storage. Safe to call once at app startup. */
@@ -32,6 +45,15 @@ export async function initPrefs(): Promise<void> {
     if (raw) {
       const n = parseInt(raw, 10);
       if (Number.isFinite(n)) rpcTimeoutMs = clampTimeout(n);
+    }
+  } catch {
+    /* keep default */
+  }
+  try {
+    const raw = await SecureStore.getItemAsync(TERMINAL_FONT_KEY);
+    if (raw) {
+      const n = parseInt(raw, 10);
+      if (Number.isFinite(n)) terminalFontPx = clampFont(n);
     }
   } catch {
     /* keep default */
@@ -55,4 +77,20 @@ export async function setRpcTimeoutMs(ms: number): Promise<number> {
     /* best-effort */
   }
   return rpcTimeoutMs;
+}
+
+/** Plan item 10.5 — current terminal font size (px). */
+export function getTerminalFontPx(): number {
+  return terminalFontPx;
+}
+
+/** Plan item 10.5 — update + persist terminal font size. Clamps to bounds. */
+export async function setTerminalFontPx(px: number): Promise<number> {
+  terminalFontPx = clampFont(px);
+  try {
+    await SecureStore.setItemAsync(TERMINAL_FONT_KEY, String(terminalFontPx));
+  } catch {
+    /* best-effort */
+  }
+  return terminalFontPx;
 }

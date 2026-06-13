@@ -78,6 +78,8 @@ import {
 import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
 import * as externalRefsService from './services/external-refs-service';
 import * as terminalService from './services/terminal-service';
+import * as powerService from './services/power-service';
+import * as terminalHistoryService from './services/terminal-history-service';
 import * as planImportService from './services/plan-import-service';
 import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
 import {
@@ -2895,7 +2897,57 @@ app.put('/api/settings', (req, res) => {
       console.warn('[Backend] mDNS reconfigure failed:', err);
     }
   }
+  // Session-persistence plan / Track A — if anything in the power
+  // section changed, the state machine needs to re-evaluate (a toggle
+  // can engage / drop the blocker even when no input signal moved).
+  if (JSON.stringify(before.power) !== JSON.stringify(next.power)) {
+    try {
+      powerService.notifyPowerSettingsChanged();
+    } catch (err) {
+      console.warn('[Backend] notifyPowerSettingsChanged failed:', err);
+    }
+  }
   res.json(next);
+});
+
+/**
+ * Session-persistence plan §7.5/§7.6 — paginated read of the
+ * persistent on-disk terminal history. Same shape as the mobile RPC
+ * but addressable from the renderer for the eventual desktop
+ * scrollback-UI follow-up.
+ *   GET /api/terminals/:id/history?before=<int>&limit=<int>
+ *   → { data, prevOffset, hasMore, fileSize, capped }
+ */
+app.get('/api/terminals/:id/history', (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const beforeRaw = req.query.before;
+    const limitRaw = req.query.limit;
+    const before = typeof beforeRaw === 'string' ? Number(beforeRaw) : undefined;
+    const limit = typeof limitRaw === 'string' ? Number(limitRaw) : undefined;
+    res.json(terminalHistoryService.getHistoryChunk(
+      id,
+      Number.isFinite(before) ? before : undefined,
+      Number.isFinite(limit) ? limit : undefined,
+    ));
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
+ * Read the current power-service status. Used by the desktop UI
+ * (Settings panel section + TopBar awake indicator) to render whether
+ * the blocker is currently engaged and why. Real-time updates also
+ * arrive via the `power-status` broadcast — this endpoint is the
+ * lazy/initial fetch path.
+ */
+app.get('/api/power/status', (_req, res) => {
+  try {
+    res.json(powerService.getCurrentPowerStatus());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 /**
@@ -3675,6 +3727,31 @@ export async function initializeBackend(): Promise<void> {
     initSensorBridge(broadcast);
   } catch (err) {
     console.warn('[Backend] Sensor bridge failed to init:', err);
+  }
+
+  // Session-persistence plan / Track A — start the power state machine
+  // + signal sources. Idempotent — Electron main also calls
+  // startPowerService() from `wirePowerControl()`; the second call is
+  // a no-op. In web mode this is the only place it boots; UI consumes
+  // status via the `/api/power/status` poll path (no `power-status`
+  // broadcast — no client subscribes to it).
+  try {
+    const { startPowerService } = await import('./services/power-service');
+    const { startPowerSignals } = await import('./services/power-signals');
+    startPowerService();
+    startPowerSignals();
+  } catch (err) {
+    console.warn('[Backend] Power service failed to start:', err);
+  }
+
+  // Session-persistence plan / 11.3 — terminal history housekeeping.
+  // Reports current on-disk usage and prunes oldest files if the
+  // global cap is exceeded. Cheap, best-effort, runs once per boot.
+  try {
+    const { initTerminalHistory } = await import('./services/terminal-history-service');
+    initTerminalHistory();
+  } catch (err) {
+    console.warn('[Backend] Terminal history init failed:', err);
   }
 
   // Re-arm per-project watchers for known projects. Without this, a

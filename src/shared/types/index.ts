@@ -10,3 +10,4 @@ export * from './project-config';
 export * from './channel';
 export * from './system-doc';
 export * from './peer';
+export * from './power';

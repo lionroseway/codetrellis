@@ -16,6 +16,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { spawn as ptySpawn, type IPty } from 'node-pty';
+import { appendHistory, closeTerminalHistory } from './terminal-history-service';
 
 export type AgentPreset = 'claude' | 'codex' | 'aider' | 'shell';
 
@@ -44,11 +45,21 @@ const sessions = new Map<string, TerminalSession>();
 let counter = 0;
 
 /**
- * Per-session output ring buffer for `terminal_read`. Stores the last
- * RING_BUFFER_MAX_BYTES of PTY output so MCP tools can read recent
- * terminal content without needing a live WS connection.
+ * Per-session output ring buffer. Stores the last RING_BUFFER_MAX_BYTES
+ * of PTY output so:
+ *  - MCP `terminal_read` can read recent content without a live WS,
+ *  - the `terminal.stream` RPC can hand a fresh client the existing
+ *    scrollback via `readTerminalDelta(id)` with no `since`,
+ *  - the remote-terminal relay can hydrate a freshly-connected peer
+ *    (e.g. mobile after backgrounding) so its terminal view never
+ *    renders blank.
+ *
+ * 256 KB ≈ many minutes of an interactive session at typical output
+ * rates and is the snapshot ceiling sent over the wire on attach.
+ * Keep it in-memory only — encrypted persistence across desktop
+ * restarts is out of scope for v1 per the plan's "OUT" list.
  */
-const RING_BUFFER_MAX_BYTES = 64 * 1024; // 64 KB per session
+const RING_BUFFER_MAX_BYTES = 256 * 1024;
 const outputBuffers = new Map<string, string>();
 /** Monotonic total bytes ever written per session (for delta streaming). */
 const bufferTotals = new Map<string, number>();
@@ -234,14 +245,23 @@ export function createTerminal(opts: {
 
   sessions.set(id, session);
 
-  // Pipe PTY output to ring buffer + all registered listeners
+  // Pipe PTY output to ring buffer + persistent history + all registered listeners.
+  // The history append is async-buffered (terminal-history-service flushes
+  // in the background), so the PTY data callback isn't blocked.
   pty.onData((data) => {
     appendToBuffer(id, data);
+    appendHistory(id, data);
     for (const fn of dataListeners) fn(id, data);
   });
 
   pty.onExit(({ exitCode }) => {
     session.alive = false;
+    // Plan 11.3 — flush + close the disk-history fd on natural PTY
+    // exit (process ended, user typed `exit`). Without this, the fd
+    // stayed open until killTerminal was called, which never happens
+    // for naturally-exited sessions. Idempotent — safe if
+    // killTerminal also calls it later.
+    closeTerminalHistory(id);
     for (const fn of exitListeners) fn(id, exitCode);
   });
 
@@ -298,6 +318,9 @@ export function killTerminal(id: string): boolean {
   s.pty.kill();
   sessions.delete(id);
   outputBuffers.delete(id);
+  // Close the disk handle; the log file is left on disk so the user
+  // can still scroll through it from a later session before GC runs.
+  closeTerminalHistory(id);
   return true;
 }
 
@@ -322,6 +345,9 @@ export function getTerminal(id: string): TerminalSessionInfo | null {
 export function killAllTerminals(): void {
   for (const s of sessions.values()) {
     s.pty.kill();
+    // Best-effort close of each history file; closeTerminalHistory
+    // also flushes pending writes.
+    try { closeTerminalHistory(s.id); } catch { /* */ }
   }
   sessions.clear();
   outputBuffers.clear();

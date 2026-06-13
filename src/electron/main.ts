@@ -1,5 +1,15 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, type WebContents } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  powerMonitor,
+  powerSaveBlocker,
+  type WebContents,
+} from 'electron';
 import path from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
 import {
   initializeBackend,
   startServer,
@@ -10,6 +20,16 @@ import { setElectronScreenshotCapture } from '../backend/mcp/server';
 import { dispatch, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
+import {
+  startPowerService,
+  setAcState,
+  onPowerStatusChange,
+} from '../backend/services/power-service';
+import {
+  startPowerSignals,
+  stopPowerSignals,
+} from '../backend/services/power-signals';
+import { getSettings } from '../backend/services/settings-service';
 
 // Mirror console.* to <dataDir>/logs/<YYYY-MM-DD>.log so the
 // packaged app produces a discoverable trail when no terminal is
@@ -174,6 +194,16 @@ app.whenReady().then(async () => {
   const backendOk = await bootstrap();
   createWindow(backendOk);
 
+  // Session-persistence plan / Track A — wire AC monitor + start the
+  // power state machine + drive the OS sleep-prevent assertion off
+  // its output. Safe even if backend boot failed (setBlocker / setAc
+  // are no-ops without an active subscription, and the renderer can
+  // still surface controls; the user just won't see any
+  // status changes until the backend recovers).
+  if (backendOk) {
+    wirePowerControl();
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(backendOk);
   });
@@ -187,6 +217,114 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+// Clean shutdown — release the OS power assertion + any caffeinate
+// child. Without this the assertion can persist a tick into shutdown
+// (cosmetic) and a `caffeinate` child can orphan briefly.
+app.on('before-quit', () => {
+  teardownPowerControl();
+});
+
+// =============================================================
+// Power control — session-persistence plan / Track A
+// =============================================================
+//
+// This block is the *only* place that talks to the OS sleep-prevent
+// assertion. It listens to the backend power-service for the
+// authoritative `{ shouldBlock, reason, ac, platform }` status and
+// starts/stops `powerSaveBlocker` accordingly. On macOS, when
+// `preventLidCloseSleep` is also on, it manages a `caffeinate -s`
+// child process — `powerSaveBlocker('prevent-app-suspension')` alone
+// doesn't beat lid-close sleep on Macs.
+
+let blockerId: number | null = null;
+let caffeinate: ChildProcess | null = null;
+let unsubPowerStatus: (() => void) | null = null;
+let powerListenersInstalled = false;
+
+function setBlocker(on: boolean): void {
+  if (on && blockerId === null) {
+    blockerId = powerSaveBlocker.start('prevent-app-suspension');
+  } else if (!on && blockerId !== null) {
+    if (powerSaveBlocker.isStarted(blockerId)) {
+      powerSaveBlocker.stop(blockerId);
+    }
+    blockerId = null;
+  }
+}
+
+function setCaffeinate(on: boolean): void {
+  // Lid-close prevention is macOS-only; on other platforms the toggle
+  // is hidden by the UI so this path effectively no-ops.
+  if (process.platform !== 'darwin') return;
+
+  const settings = getSettings();
+  const wanted = on && settings.power.preventLidCloseSleep;
+
+  if (wanted && !caffeinate) {
+    try {
+      caffeinate = spawn('caffeinate', ['-s'], { stdio: 'ignore' });
+      caffeinate.on('exit', () => { caffeinate = null; });
+    } catch (err) {
+      console.warn('[Electron] Failed to spawn caffeinate:', err);
+      caffeinate = null;
+    }
+  } else if (!wanted && caffeinate) {
+    try { caffeinate.kill('SIGTERM'); } catch { /* race with exit */ }
+    caffeinate = null;
+  }
+}
+
+function wirePowerControl(): void {
+  if (powerListenersInstalled) return;
+  powerListenersInstalled = true;
+
+  // Initial AC state — must be read after app.whenReady() (which is
+  // when this is called).
+  setAcState(powerMonitor.isOnBatteryPower() ? 'battery' : 'plugged');
+
+  // Subscribe to subsequent AC transitions. These events fire on
+  // plug/unplug and on battery exhaustion.
+  powerMonitor.on('on-battery', () => setAcState('battery'));
+  powerMonitor.on('on-ac', () => setAcState('plugged'));
+
+  // Boot the state machine + signal wiring.
+  startPowerService();
+  startPowerSignals();
+
+  // Drive the OS-level assertions off authoritative status. Log
+  // each transition so it's traceable in session-persistence
+  // debugging — pairs with [WebRTC][Lifecycle] + [MobileRPC][Lifecycle]
+  // lines from Plan 9.1.
+  let lastBlock: boolean | null = null;
+  unsubPowerStatus = onPowerStatusChange((status) => {
+    if (lastBlock !== status.shouldBlock) {
+      console.log(
+        `[Power][Lifecycle] ${status.shouldBlock ? 'engaged' : 'released'} ` +
+        `reason=${status.reason ?? 'none'} ac=${status.ac} platform=${status.platform}`,
+      );
+      lastBlock = status.shouldBlock;
+    }
+    setBlocker(status.shouldBlock);
+    setCaffeinate(status.shouldBlock);
+  });
+}
+
+function teardownPowerControl(): void {
+  if (unsubPowerStatus) { unsubPowerStatus(); unsubPowerStatus = null; }
+  stopPowerSignals();
+  if (caffeinate) {
+    try { caffeinate.kill('SIGTERM'); } catch { /* */ }
+    caffeinate = null;
+  }
+  if (blockerId !== null) {
+    try {
+      if (powerSaveBlocker.isStarted(blockerId)) powerSaveBlocker.stop(blockerId);
+    } catch { /* */ }
+    blockerId = null;
+  }
+  powerListenersInstalled = false;
+}
 
 // =============================================================
 // IPC handlers
@@ -277,9 +415,23 @@ terminalService.onTerminalExit((id, code) => {
   terminalIpcListeners.delete(id);
 });
 
-// Renderer connects to a terminal — start forwarding output
+// Renderer connects to a terminal — start forwarding output AND
+// immediately replay the current ring buffer so the xterm panel
+// doesn't render blank after a click-away / re-mount. Plan item
+// 12.1. Mirrors what `sendTerminalSnapshots` does for WebRTC peers
+// in remote-terminal-service.ts — same ANSI clear-screen prefix so
+// any stale renderer state is replaced cleanly.
 ipcMain.on('codetrellis:terminal-connect', (_event, termId: string) => {
   terminalIpcListeners.add(termId);
+  try {
+    const delta = terminalService.readTerminalDelta(termId);
+    if (delta && delta.data.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(`codetrellis:terminal-data:${termId}`, {
+        type: 'output',
+        data: '\x1b[2J\x1b[H' + delta.data,
+      });
+    }
+  } catch { /* unknown terminal id — drop silently, same as before */ }
 });
 
 // Renderer disconnects from a terminal

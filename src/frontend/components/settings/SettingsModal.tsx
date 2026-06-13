@@ -18,9 +18,10 @@ import {
   Smartphone,
   QrCode,
   Loader2,
+  Zap,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
-import type { AppSettings } from '@shared/types';
+import type { AppSettings, PowerStatus, PowerTriggers } from '@shared/types';
 
 /**
  * Settings panel — Phase 13 §D.
@@ -37,7 +38,7 @@ import type { AppSettings } from '@shared/types';
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'devices' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
@@ -45,6 +46,7 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
   { key: 'data', label: 'Data', Icon: HardDrive },
   { key: 'devices', label: 'Devices', Icon: Smartphone },
+  { key: 'power', label: 'Power', Icon: Zap },
   { key: 'sync', label: 'Sync', Icon: RefreshCw },
   { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
@@ -156,6 +158,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             )}
             {section === 'devices' && (
               <DevicesSection settings={settings} onChange={update} />
+            )}
+            {section === 'power' && (
+              <PowerSection settings={settings} onChange={update} />
             )}
             {section === 'telemetry' && <TelemetrySection />}
             {section === 'updates' && <UpdatesSection />}
@@ -1471,6 +1476,156 @@ function formatRelativeTime(d: Date): string {
   if (ageMs < 3600_000) return `${Math.floor(ageMs / 60_000)}m ago`;
   if (ageMs < 86400_000) return `${Math.floor(ageMs / 3600_000)}h ago`;
   return `${Math.floor(ageMs / 86400_000)}d ago`;
+}
+
+// --- Power (session-persistence plan / Track A) ---
+
+function PowerSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
+  const [status, setStatus] = useState<PowerStatus | null>(null);
+
+  // Pull current status on mount + after each toggle so the "right
+  // now" indicator at the bottom reflects what the OS assertion is
+  // doing. Polling beats a WS subscription for this single-screen
+  // surface and matches the rest of the panel's stateless fetches.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      fetch('/api/power/status')
+        .then((r) => r.ok ? r.json() : null)
+        .then((s) => { if (!cancelled && s) setStatus(s); })
+        .catch(() => { /* network blip — keep last */ });
+    };
+    tick();
+    const id = window.setInterval(tick, 4000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, []);
+
+  const triggers = settings.power.triggers;
+  const platform = status?.platform ?? 'web';
+  const acKnown = !!status && status.ac !== 'unknown';
+  const showLidClose = platform === 'darwin';
+
+  const patchPower = (partial: Partial<AppSettings['power']>) => {
+    onChange({ power: { ...settings.power, ...partial } });
+  };
+  const patchTriggers = (partial: Partial<PowerTriggers>) => {
+    onChange({
+      power: {
+        ...settings.power,
+        triggers: { ...triggers, ...partial },
+      },
+    });
+  };
+
+  return (
+    <>
+      <p className="text-[11px] text-foreground-muted leading-relaxed">
+        Keep this desktop awake based on what you&apos;re doing. Toggles are independent — the blocker engages on the union of what&apos;s checked, then disengaged by the battery safety net if that&apos;s on.
+      </p>
+
+      <Field label="Keep awake when…">
+        <div className="flex flex-col gap-2">
+          <Toggle
+            checked={triggers.whileMobileConnected}
+            onChange={(v) => patchTriggers({ whileMobileConnected: v })}
+            label="A mobile companion is connected"
+            sub="Holds the assertion while the paired mobile app's heartbeat is fresh."
+          />
+          <Toggle
+            checked={triggers.whileAgentActive}
+            onChange={(v) => patchTriggers({ whileAgentActive: v })}
+            label="An MCP agent is active"
+            sub="Stays on for 5 minutes after the last tool call from any agent."
+          />
+          <Toggle
+            checked={triggers.always}
+            onChange={(v) => patchTriggers({ always: v })}
+            label="Always (while CodeTrellis runs)"
+            sub="Blunt — holds the assertion the entire time the app is open."
+          />
+        </div>
+      </Field>
+
+      <Field label="Safety net">
+        <Toggle
+          checked={settings.power.onlyWhenOnAC}
+          onChange={(v) => patchPower({ onlyWhenOnAC: v })}
+          label="Disable when on battery"
+          sub={acKnown
+            ? `Current AC state: ${status!.ac}.`
+            : 'No battery detected — this toggle has no effect on this device.'}
+          disabled={!acKnown}
+        />
+      </Field>
+
+      {showLidClose && (
+        <Field label="Lid-close behavior (macOS)">
+          <Toggle
+            checked={settings.power.preventLidCloseSleep}
+            onChange={(v) => patchPower({ preventLidCloseSleep: v })}
+            label="Also prevent lid-close sleep"
+            sub={'Uses a small `caffeinate -s` helper while awake. powerSaveBlocker alone doesn’t beat lid-close on Mac.'}
+          />
+        </Field>
+      )}
+
+      <div className="mt-3 rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10.5px] text-foreground-subtle">
+        {status ? (
+          <>
+            <span className="font-mono text-foreground-muted">Status:</span>{' '}
+            {status.shouldBlock ? (
+              <>
+                <span className="text-emerald-300">awake</span>
+                {status.reason && <> ({status.reason})</>}
+              </>
+            ) : (
+              <span>idle</span>
+            )}
+            {status.ac !== 'unknown' && <> · AC: <span className="font-mono">{status.ac}</span></>}
+            {' · '}<span className="font-mono">{status.platform}</span>
+          </>
+        ) : (
+          <>Loading current status…</>
+        )}
+      </div>
+    </>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+  sub,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  sub?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className={`flex items-start gap-2.5 text-[11.5px] leading-snug ${disabled ? 'opacity-50' : ''}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-accent mt-[3px]"
+      />
+      <div>
+        <div className="text-foreground-muted">{label}</div>
+        {sub && <div className="text-[10px] text-foreground-subtle mt-0.5">{sub}</div>}
+      </div>
+    </label>
+  );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

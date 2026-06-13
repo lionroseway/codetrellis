@@ -45,10 +45,13 @@ import * as channelEventService from './channel-event-service';
 import * as presenceService from './presence-service';
 import * as recentProjectsService from './recent-projects-service';
 import * as terminalService from './terminal-service';
+import { getHistorySize } from './terminal-history-service';
 import * as deviationService from './deviation-service';
 import * as remoteInteractionService from './remote-interaction-service';
 import { getAllAddresses } from './pairing-server';
+import { getCurrentPowerStatus } from './power-service';
 import { getActiveProjectPath } from '../server';
+import type { PowerStatus } from '../../shared/types/power';
 
 // --- Types -------------------------------------------------------------------
 
@@ -90,6 +93,14 @@ export interface SyncStateSnapshot {
    * LAN can later reconnect over a VPN without re-pairing (auto-upgrade).
    */
   deviceAddresses: string[];
+  /**
+   * Plan 11.1 — runtime decision from the power-service state machine
+   * (shouldBlock, reason, ac, platform). Travels with the snapshot so
+   * mobile UIs read it reactively via state-sync instead of polling
+   * `power.status` on a timer. Throttled by the existing 100ms patch
+   * debounce on top of power-service's own 5s emit debounce.
+   */
+  powerStatus: PowerStatus;
 }
 
 interface PlanSummary {
@@ -158,6 +169,11 @@ interface TerminalSummary {
   cwd: string;
   alive: boolean;
   createdAt: number;
+  /** Plan 11.4 — persistent-history disk usage in bytes. Lets the
+   *  mobile terminal list show a per-terminal "X MB" badge without an
+   *  extra RPC. Best-effort: 0 if the history file hasn't been
+   *  written yet. */
+  bytesOnDisk: number;
 }
 
 interface InputRequestSummary {
@@ -382,12 +398,21 @@ export function collectSnapshot(): SyncStateSnapshot {
   // --- v2: terminals ---
   let terminals: TerminalSummary[] = [];
   try {
+    // Plan 11.4 — bytesOnDisk via getHistorySize is a cached number
+    // read from the in-memory log entry (or a single fs.statSync if
+    // the file hasn't been opened this session). Cheap; safe to call
+    // every snapshot tick. (Static import — a runtime require() here is
+    // not bundled by electron-vite and throws in the packaged app, which
+    // emptied the whole terminals list.)
     terminals = terminalService.listTerminals().map((t) => ({
       id: t.id,
       title: t.title,
       cwd: t.cwd,
       alive: t.alive,
       createdAt: t.createdAt,
+      bytesOnDisk: (() => {
+        try { return getHistorySize(t.id); } catch { return 0; }
+      })(),
     }));
   } catch { /* terminal service may not be started */ }
 
@@ -422,6 +447,9 @@ export function collectSnapshot(): SyncStateSnapshot {
     deviationCounts = { pending: totalPending, byPlan };
   } catch { /* deviation service may not be ready */ }
 
+  // --- 11.1: power status (replaces mobile 4s poll) ---
+  const powerStatus = getCurrentPowerStatus();
+
   return {
     v: 2,
     ts: Date.now(),
@@ -437,6 +465,7 @@ export function collectSnapshot(): SyncStateSnapshot {
     walkthroughActive,
     deviationCounts,
     deviceAddresses: safeAddresses(),
+    powerStatus,
   };
 }
 
