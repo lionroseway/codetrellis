@@ -25,6 +25,8 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import { getRpcTimeoutMs, setRpcTimeoutMs, RPC_TIMEOUT_MIN_MS, RPC_TIMEOUT_MAX_MS } from '../lib/prefs';
+import { useDevicePowerStatus } from '../lib/store';
+import { flushDiagnosticsToDesktop, snapshot as diagnosticsSnapshot } from '../lib/diagnostics';
 
 interface PowerTriggers {
   whileMobileConnected: boolean;
@@ -64,11 +66,17 @@ export default function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  // Plan item 4.4 — runtime power status (shouldBlock, reason, ac,
-  // platform). Polled on a 4s interval, mirroring the desktop's poll
-  // pattern. Drives both the live status strip and the platform-gate
-  // for the macOS-only lid-close toggle.
-  const [powerStatus, setPowerStatus] = useState<PowerStatus | null>(null);
+  // Plan item 4.4 + 11.1 — runtime power status (shouldBlock, reason,
+  // ac, platform). Now read reactively from the state-sync snapshot
+  // (which carries `powerStatus` since 11.1) instead of a 4s RPC poll.
+  // Drives both the live status strip and the platform-gate for the
+  // macOS-only lid-close toggle.
+  const powerStatusFromSnapshot = useDevicePowerStatus();
+  // Fallback poll: when connected to a pre-11.1 desktop (snapshot has
+  // no powerStatus), poll `power.status` once on mount as before so the
+  // UI still works. Cheap to keep; pure backwards-compat.
+  const [powerStatusFallback, setPowerStatusFallback] = useState<PowerStatus | null>(null);
+  const powerStatus = powerStatusFromSnapshot ?? powerStatusFallback;
 
   const load = useCallback(async () => {
     setError(null);
@@ -84,18 +92,17 @@ export default function SettingsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Pre-11.1 desktops don't put powerStatus in the snapshot. Probe
+  // once on mount, then forget — if the snapshot ever provides it
+  // we'll silently switch over via the ?? above. No interval poll.
   useEffect(() => {
+    if (powerStatusFromSnapshot) return; // snapshot has it — skip RPC
     let cancelled = false;
-    const tick = async () => {
-      try {
-        const s = await rpc<PowerStatus>('power.status');
-        if (!cancelled) setPowerStatus(s);
-      } catch { /* desktop unreachable — keep last known */ }
-    };
-    tick();
-    const id = setInterval(tick, 4000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
+    rpc<PowerStatus>('power.status')
+      .then((s) => { if (!cancelled) setPowerStatusFallback(s); })
+      .catch(() => { /* desktop unreachable / no power.status RPC — keep null */ });
+    return () => { cancelled = true; };
+  }, [powerStatusFromSnapshot]);
 
   // Mutate a nested field locally and flag dirty.
   const patch = useCallback(<K extends keyof AppSettings>(
@@ -365,6 +372,9 @@ export default function SettingsScreen() {
         {/* Connection (on-device) */}
         <ConnectionTimeoutCard />
 
+        {/* Diagnostics (Plan 11.2) */}
+        <DiagnosticsCard />
+
         {/* Read-only desktop info */}
         <Text style={styles.sectionTitle}>DESKTOP (READ-ONLY)</Text>
         <View style={styles.card}>
@@ -427,6 +437,53 @@ function ConnectionTimeoutCard() {
           “request timed out” errors. Applies on this device only ({minSec}–{maxSec}s).
           {savedAt ? '  ✓ Saved' : ''}
         </Text>
+      </View>
+    </>
+  );
+}
+
+/**
+ * Plan 11.2 — diagnostics ring shipping. Shows the current ring depth
+ * and a "Send to desktop" button that calls the `diagnostics.flush`
+ * RPC. The desktop's daily-rotated log file then contains the
+ * cross-side lifecycle narrative for the most recent ~500 events.
+ */
+function DiagnosticsCard() {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  // Re-read count when the screen re-focuses or after a flush.
+  const [count, setCount] = useState<number>(() => diagnosticsSnapshot().length);
+
+  const send = useCallback(async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const wrote = await flushDiagnosticsToDesktop();
+      setStatus(wrote > 0 ? `Sent ${wrote} entries to the desktop log.` : 'Nothing to send (or desktop unreachable).');
+    } finally {
+      setBusy(false);
+      setCount(diagnosticsSnapshot().length);
+    }
+  }, []);
+
+  return (
+    <>
+      <Text style={styles.sectionTitle}>DIAGNOSTICS</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>Recent events buffered: {count}</Text>
+        <Text style={styles.hint}>
+          Lifecycle, network, and RPC events from the last few minutes are kept
+          in memory on this device. Send them to the desktop log if something
+          weird happens — easier to share than a screenshot.
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryBtn, busy && { opacity: 0.5 }]}
+          onPress={send}
+          disabled={busy}
+        >
+          <Text style={styles.retryText}>{busy ? 'Sending…' : 'Send to desktop log'}</Text>
+        </TouchableOpacity>
+        {status && <Text style={styles.hint}>{status}</Text>}
       </View>
     </>
   );

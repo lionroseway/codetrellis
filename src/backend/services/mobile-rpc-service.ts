@@ -226,7 +226,7 @@ export function requestMobileScreenshot(timeoutMs = 20_000): Promise<MobileImage
 async function handleRpc(fingerprint: string, req: RpcRequest): Promise<void> {
   const startedAt = Date.now();
   try {
-    const result = await routeMethod(req.method, req.params ?? {});
+    const result = await routeMethod(req.method, req.params ?? {}, fingerprint);
     sendResponse(fingerprint, { result, id: req.id, rpc: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -250,7 +250,11 @@ function sendResponse(fingerprint: string, response: RpcResponse): void {
 
 // --- Method router -----------------------------------------------------------
 
-async function routeMethod(method: string, params: Record<string, unknown>): Promise<unknown> {
+async function routeMethod(
+  method: string,
+  params: Record<string, unknown>,
+  fingerprint: string = '',
+): Promise<unknown> {
   switch (method) {
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {
@@ -521,6 +525,30 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
     // power-service's *current decision* state.
     case 'power.status': {
       return getCurrentPowerStatus();
+    }
+
+    // Plan 11.2 — mobile ships its in-RAM diagnostics ring buffer to
+    // the desktop logger so cross-side `[Lifecycle]` greps work
+    // end-to-end. `installFileLogger` already captures every
+    // console.log/warn into the daily log file, so the RPC just
+    // routes each entry through console.log with a peer-tag prefix.
+    case 'diagnostics.flush': {
+      const entries = Array.isArray(params.entries) ? (params.entries as Array<{
+        ts: number; kind: string; text: string; data?: unknown;
+      }>) : [];
+      const fpTag = `mobile:${fingerprint.slice(0, 8)}`;
+      let wrote = 0;
+      for (const e of entries) {
+        if (typeof e?.text !== 'string') continue;
+        const tag = typeof e.kind === 'string' ? `[${e.kind}]` : '';
+        const dataStr = e.data ? ' ' + JSON.stringify(e.data) : '';
+        // Prefix with the original mobile timestamp so cross-side
+        // event ordering survives the RPC round-trip latency.
+        const tsIso = new Date(e.ts).toISOString();
+        console.log(`[${fpTag}] [${tsIso}] [Lifecycle]${tag} ${e.text}${dataStr}`);
+        wrote++;
+      }
+      return { wrote };
     }
 
     // --- System docs ---------------------------------------------------------

@@ -31,6 +31,15 @@ import { getDataDir } from './persistence';
 
 /** Per-terminal hard cap. Many hours of an interactive session. */
 const PER_TERMINAL_CAP_BYTES = 200 * 1024 * 1024; // 200 MB
+/**
+ * Global cap across all terminal history files on disk. When exceeded,
+ * the oldest files (by mtime) are deleted until the total is back
+ * under cap. Live sessions are *never* deleted regardless of mtime.
+ *
+ * 5 GB is generous — typical interactive output compresses well and
+ * 5 GB of raw ANSI is roughly months of busy sessions.
+ */
+const GLOBAL_HISTORY_CAP_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
 /** Pending writes are batched + flushed at the first of:
  *  - WRITE_FLUSH_INTERVAL_MS since the previous flush
  *  - WRITE_FLUSH_BYTES of pending data
@@ -195,5 +204,86 @@ export function closeTerminalHistory(terminalId: string): void {
 export function closeAllTerminalHistory(): void {
   for (const id of Array.from(logs.keys())) {
     closeTerminalHistory(id);
+  }
+}
+
+/**
+ * Plan 11.3 — startup sweep. Called from initializeBackend().
+ *
+ * Walks the on-disk terminals directory once at boot:
+ *   1. Logs how many .log files exist + their total size (so the
+ *      desktop log shows where the disk is going).
+ *   2. Enforces the global cap (`GLOBAL_HISTORY_CAP_BYTES`) by
+ *      deleting the oldest-by-mtime files until total ≤ cap. Live
+ *      sessions are never deleted (we just opened, so `logs` is
+ *      empty at this point — but we check anyway for re-entry
+ *      safety).
+ *
+ * Does NOT close orphan fds from a previous process — those went
+ * with the process death. Open fds for active sessions only happen
+ * after the first append, so this sweep is safe to run before any
+ * terminal is created.
+ *
+ * Idempotent + best-effort: errors are logged but do not throw,
+ * because terminal history is a soft-fail subsystem (live reads
+ * still work via the in-memory ring even if disk is unavailable).
+ */
+export function initTerminalHistory(): void {
+  const dir = getTerminalsDir();
+  if (!fs.existsSync(dir)) {
+    // No prior history yet — nothing to sweep. The dir is created
+    // lazily by `ensureLog`.
+    return;
+  }
+  let files: fs.Dirent[];
+  try {
+    files = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    console.warn('[TerminalHistory] init: readdir failed:', err);
+    return;
+  }
+  const logFiles: Array<{ path: string; size: number; mtimeMs: number; id: string }> = [];
+  let totalBytes = 0;
+  for (const f of files) {
+    if (!f.isFile() || !f.name.endsWith('.log')) continue;
+    const full = path.join(dir, f.name);
+    try {
+      const stat = fs.statSync(full);
+      const id = f.name.slice(0, -'.log'.length);
+      logFiles.push({ path: full, size: stat.size, mtimeMs: stat.mtimeMs, id });
+      totalBytes += stat.size;
+    } catch { /* file vanished between readdir + stat — skip */ }
+  }
+  console.log(
+    `[TerminalHistory] init — ${logFiles.length} log file(s), ` +
+    `total ${Math.round(totalBytes / 1024 / 1024)} MB ` +
+    `(cap ${Math.round(GLOBAL_HISTORY_CAP_BYTES / 1024 / 1024)} MB)`,
+  );
+  if (totalBytes <= GLOBAL_HISTORY_CAP_BYTES) return;
+
+  // Over cap — delete oldest first. Skip any file whose id is in the
+  // live `logs` map (we just opened it; shouldn't happen at boot but
+  // safe for re-entry).
+  const candidates = logFiles
+    .filter((f) => !logs.has(f.id))
+    .sort((a, b) => a.mtimeMs - b.mtimeMs);
+  let deleted = 0;
+  let bytesFreed = 0;
+  for (const f of candidates) {
+    if (totalBytes <= GLOBAL_HISTORY_CAP_BYTES) break;
+    try {
+      fs.unlinkSync(f.path);
+      totalBytes -= f.size;
+      bytesFreed += f.size;
+      deleted++;
+    } catch (err) {
+      console.warn(`[TerminalHistory] init: failed to delete ${f.path}:`, err);
+    }
+  }
+  if (deleted > 0) {
+    console.log(
+      `[TerminalHistory] init — pruned ${deleted} file(s), ` +
+      `freed ${Math.round(bytesFreed / 1024 / 1024)} MB`,
+    );
   }
 }

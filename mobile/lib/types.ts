@@ -208,6 +208,17 @@ export interface DeviationCountsSummary {
   byPlan: Array<{ planUid: string; planName: string; count: number }>;
 }
 
+/** Plan 11.1 — desktop power-service status, traveling on the state-sync
+ *  snapshot so mobile reads it reactively (no 4s poll). Mirrors
+ *  src/shared/types/power.ts on desktop. */
+export interface PowerStatus {
+  shouldBlock: boolean;
+  reason: 'mobile-connected' | 'agent-active' | 'always' | null;
+  ac: 'plugged' | 'battery' | 'unknown';
+  platform: 'darwin' | 'win32' | 'linux' | 'web';
+  updatedAt: string;
+}
+
 /** Full workspace state snapshot from the desktop (v2). */
 export interface WorkspaceSnapshot {
   v: 2;
@@ -235,6 +246,9 @@ export interface WorkspaceSnapshot {
    * work over a VPN on the next reconnect — no re-pairing needed.
    */
   deviceAddresses?: string[];
+  /** Plan 11.1 — runtime power-service status. Optional for back-compat
+   *  with desktops on pre-11.1 builds (mobile falls back to power.status RPC). */
+  powerStatus?: PowerStatus;
 }
 
 // --- Graph (M4) --------------------------------------------------------------

@@ -25,6 +25,7 @@ import type {
   TerminalSummary,
   InputRequestSummary,
   DeviationCountsSummary,
+  PowerStatus,
 } from './types';
 
 // --- Store shape -------------------------------------------------------------
@@ -158,6 +159,15 @@ export function useSnapshot(): WorkspaceSnapshot {
 
 export function useConnectionState(): ConnectionState {
   return useWorkspaceStore((s) => s.connectionState);
+}
+
+/** Plan 11.1 — desktop power-service status from the state-sync snapshot.
+ *  Returns null when the desktop hasn't sent a snapshot yet OR when the
+ *  desktop predates 11.1 (the `powerStatus` field is missing from the
+ *  snapshot). Callers can fall back to `rpc('power.status')` for first-paint
+ *  if they want immediate value. */
+export function useDevicePowerStatus(): PowerStatus | null {
+  return useWorkspaceStore((s) => s.snapshot?.powerStatus ?? null);
 }
 
 /**

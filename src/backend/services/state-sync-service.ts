@@ -48,7 +48,9 @@ import * as terminalService from './terminal-service';
 import * as deviationService from './deviation-service';
 import * as remoteInteractionService from './remote-interaction-service';
 import { getAllAddresses } from './pairing-server';
+import { getCurrentPowerStatus } from './power-service';
 import { getActiveProjectPath } from '../server';
+import type { PowerStatus } from '../../shared/types/power';
 
 // --- Types -------------------------------------------------------------------
 
@@ -90,6 +92,14 @@ export interface SyncStateSnapshot {
    * LAN can later reconnect over a VPN without re-pairing (auto-upgrade).
    */
   deviceAddresses: string[];
+  /**
+   * Plan 11.1 — runtime decision from the power-service state machine
+   * (shouldBlock, reason, ac, platform). Travels with the snapshot so
+   * mobile UIs read it reactively via state-sync instead of polling
+   * `power.status` on a timer. Throttled by the existing 100ms patch
+   * debounce on top of power-service's own 5s emit debounce.
+   */
+  powerStatus: PowerStatus;
 }
 
 interface PlanSummary {
@@ -422,6 +432,9 @@ export function collectSnapshot(): SyncStateSnapshot {
     deviationCounts = { pending: totalPending, byPlan };
   } catch { /* deviation service may not be ready */ }
 
+  // --- 11.1: power status (replaces mobile 4s poll) ---
+  const powerStatus = getCurrentPowerStatus();
+
   return {
     v: 2,
     ts: Date.now(),
@@ -437,6 +450,7 @@ export function collectSnapshot(): SyncStateSnapshot {
     walkthroughActive,
     deviationCounts,
     deviceAddresses: safeAddresses(),
+    powerStatus,
   };
 }
 

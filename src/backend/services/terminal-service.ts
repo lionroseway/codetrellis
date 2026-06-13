@@ -256,6 +256,12 @@ export function createTerminal(opts: {
 
   pty.onExit(({ exitCode }) => {
     session.alive = false;
+    // Plan 11.3 — flush + close the disk-history fd on natural PTY
+    // exit (process ended, user typed `exit`). Without this, the fd
+    // stayed open until killTerminal was called, which never happens
+    // for naturally-exited sessions. Idempotent — safe if
+    // killTerminal also calls it later.
+    closeTerminalHistory(id);
     for (const fn of exitListeners) fn(id, exitCode);
   });
 

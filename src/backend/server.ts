@@ -3748,6 +3748,16 @@ export async function initializeBackend(): Promise<void> {
     console.warn('[Backend] Power service failed to start:', err);
   }
 
+  // Session-persistence plan / 11.3 — terminal history housekeeping.
+  // Reports current on-disk usage and prunes oldest files if the
+  // global cap is exceeded. Cheap, best-effort, runs once per boot.
+  try {
+    const { initTerminalHistory } = await import('./services/terminal-history-service');
+    initTerminalHistory();
+  } catch (err) {
+    console.warn('[Backend] Terminal history init failed:', err);
+  }
+
   // Re-arm per-project watchers for known projects. Without this, a
   // backend restart (dev: tsx watch reload; packaged: app restart)
   // orphans any pre-existing project-config + plan-file watchers, and

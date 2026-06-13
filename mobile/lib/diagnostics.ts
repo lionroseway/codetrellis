@@ -80,3 +80,30 @@ export function format(): string {
 export function _reset(): void {
   ring.length = 0;
 }
+
+/**
+ * Plan 11.2 — ship the current ring to the desktop logger via the
+ * `diagnostics.flush` RPC. Each entry lands in the desktop's daily
+ * rotated log file (logger.ts captures all console.log calls), tagged
+ * `[mobile:<fp>] [<isoTs>] [Lifecycle][<kind>] <text> <data>` so a
+ * single grep on the desktop log shows the cross-side narrative.
+ *
+ * Returns the number of entries the desktop accepted, or 0 on RPC
+ * failure. Does NOT clear the local ring on success — keeping the
+ * recent buffer around lets a second flush call (or an on-device
+ * viewer) see the same window. If the buffer grows past the cap,
+ * older entries fall off via the existing ring-buffer eviction.
+ */
+export async function flushDiagnosticsToDesktop(): Promise<number> {
+  // Lazy require to avoid a circular import: rpc.ts → diagnostics.ts
+  // for its own error logging.
+  const { rpc } = await import('./rpc');
+  const entries = snapshot();
+  if (entries.length === 0) return 0;
+  try {
+    const r = await rpc<{ wrote: number }>('diagnostics.flush', { entries });
+    return r?.wrote ?? 0;
+  } catch {
+    return 0;
+  }
+}
