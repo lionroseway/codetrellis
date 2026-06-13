@@ -78,6 +78,8 @@ import {
 import { listProposedChanges, summarizeChanges, getChange } from './services/plan-changes-service';
 import * as externalRefsService from './services/external-refs-service';
 import * as terminalService from './services/terminal-service';
+import * as powerService from './services/power-service';
+import * as terminalHistoryService from './services/terminal-history-service';
 import * as planImportService from './services/plan-import-service';
 import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
 import {
@@ -2900,9 +2902,7 @@ app.put('/api/settings', (req, res) => {
   // can engage / drop the blocker even when no input signal moved).
   if (JSON.stringify(before.power) !== JSON.stringify(next.power)) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { notifyPowerSettingsChanged } = require('./services/power-service');
-      notifyPowerSettingsChanged();
+      powerService.notifyPowerSettingsChanged();
     } catch (err) {
       console.warn('[Backend] notifyPowerSettingsChanged failed:', err);
     }
@@ -2920,14 +2920,12 @@ app.put('/api/settings', (req, res) => {
  */
 app.get('/api/terminals/:id/history', (req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const historyService = require('./services/terminal-history-service');
     const id = String(req.params.id);
     const beforeRaw = req.query.before;
     const limitRaw = req.query.limit;
     const before = typeof beforeRaw === 'string' ? Number(beforeRaw) : undefined;
     const limit = typeof limitRaw === 'string' ? Number(limitRaw) : undefined;
-    res.json(historyService.getHistoryChunk(
+    res.json(terminalHistoryService.getHistoryChunk(
       id,
       Number.isFinite(before) ? before : undefined,
       Number.isFinite(limit) ? limit : undefined,
@@ -2946,9 +2944,7 @@ app.get('/api/terminals/:id/history', (req, res) => {
  */
 app.get('/api/power/status', (_req, res) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getCurrentPowerStatus } = require('./services/power-service');
-    res.json(getCurrentPowerStatus());
+    res.json(powerService.getCurrentPowerStatus());
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

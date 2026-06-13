@@ -45,6 +45,7 @@ import * as channelEventService from './channel-event-service';
 import * as presenceService from './presence-service';
 import * as recentProjectsService from './recent-projects-service';
 import * as terminalService from './terminal-service';
+import { getHistorySize } from './terminal-history-service';
 import * as deviationService from './deviation-service';
 import * as remoteInteractionService from './remote-interaction-service';
 import { getAllAddresses } from './pairing-server';
@@ -400,9 +401,9 @@ export function collectSnapshot(): SyncStateSnapshot {
     // Plan 11.4 — bytesOnDisk via getHistorySize is a cached number
     // read from the in-memory log entry (or a single fs.statSync if
     // the file hasn't been opened this session). Cheap; safe to call
-    // every snapshot tick.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getHistorySize } = require('./terminal-history-service') as { getHistorySize: (id: string) => number };
+    // every snapshot tick. (Static import — a runtime require() here is
+    // not bundled by electron-vite and throws in the packaged app, which
+    // emptied the whole terminals list.)
     terminals = terminalService.listTerminals().map((t) => ({
       id: t.id,
       title: t.title,

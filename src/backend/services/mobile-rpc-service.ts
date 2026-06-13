@@ -44,6 +44,7 @@ import * as planDocumentsService from './plan-documents-service';
 import * as commentService from './comment-service';
 import * as externalRefsService from './external-refs-service';
 import * as taskAttachmentsService from './task-attachments-service';
+import * as terminalHistoryService from './terminal-history-service';
 import {
   getArchitectureSummary,
   getFileSymbols,
@@ -739,14 +740,13 @@ async function routeMethod(
     // the log; omit it to start at the tail. The data is raw ANSI —
     // safe to feed straight into xterm.
     case 'terminal.history': {
-      // Lazy require so this only loads when first hit (avoids
-      // touching the disk dir at module-load time on web mode).
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const historyService = require('./terminal-history-service');
+      // Static import — a runtime require() here is not bundled by
+      // electron-vite and throws MODULE_NOT_FOUND in the packaged app.
+      // (The module has no top-level disk I/O, so eager import is safe.)
       const id = requireString(params, 'id');
       const before = typeof params.before === 'number' ? (params.before as number) : undefined;
       const limit = typeof params.limit === 'number' ? (params.limit as number) : 64 * 1024;
-      return historyService.getHistoryChunk(id, before, limit);
+      return terminalHistoryService.getHistoryChunk(id, before, limit);
     }
 
     // --- Channel events ------------------------------------------------------
