@@ -168,6 +168,11 @@ interface TerminalSummary {
   cwd: string;
   alive: boolean;
   createdAt: number;
+  /** Plan 11.4 — persistent-history disk usage in bytes. Lets the
+   *  mobile terminal list show a per-terminal "X MB" badge without an
+   *  extra RPC. Best-effort: 0 if the history file hasn't been
+   *  written yet. */
+  bytesOnDisk: number;
 }
 
 interface InputRequestSummary {
@@ -392,12 +397,21 @@ export function collectSnapshot(): SyncStateSnapshot {
   // --- v2: terminals ---
   let terminals: TerminalSummary[] = [];
   try {
+    // Plan 11.4 — bytesOnDisk via getHistorySize is a cached number
+    // read from the in-memory log entry (or a single fs.statSync if
+    // the file hasn't been opened this session). Cheap; safe to call
+    // every snapshot tick.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getHistorySize } = require('./terminal-history-service') as { getHistorySize: (id: string) => number };
     terminals = terminalService.listTerminals().map((t) => ({
       id: t.id,
       title: t.title,
       cwd: t.cwd,
       alive: t.alive,
       createdAt: t.createdAt,
+      bytesOnDisk: (() => {
+        try { return getHistorySize(t.id); } catch { return 0; }
+      })(),
     }));
   } catch { /* terminal service may not be started */ }
 

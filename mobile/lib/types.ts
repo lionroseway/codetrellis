@@ -191,6 +191,9 @@ export interface TerminalSummary {
   cwd: string;
   alive: boolean;
   createdAt: number;
+  /** Plan 11.4 — persistent-history disk usage in bytes. Optional for
+   *  back-compat with pre-11.4 desktops; falls back to 0 in UIs. */
+  bytesOnDisk?: number;
 }
 
 /** Pending agent input request awaiting a human response. */
