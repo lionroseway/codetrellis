@@ -8,7 +8,8 @@
 import { useEffect, useRef } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Text, View, StyleSheet } from 'react-native';
-import { useConnectionState, useAttentionCount } from '../../lib/store';
+import { useDebouncedConnectionState, useAttentionCount } from '../../lib/store';
+import ConnectionStatusPill from '../../components/ConnectionStatusPill';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -35,7 +36,10 @@ function BadgeIcon({ emoji, focused, count }: { emoji: string; focused: boolean;
 
 export default function TabLayout() {
   const router = useRouter();
-  const connState = useConnectionState();
+  // Plan items 5.4 + 10.6.a — consume the *debounced* state so sub-2s
+  // blips don't kick the user back to the pairing screen. Combined
+  // with the wasConnected gate below, only sustained drops navigate.
+  const connState = useDebouncedConnectionState();
   const attentionCount = useAttentionCount();
 
   // Track whether we were ever connected. Only redirect home
@@ -69,6 +73,9 @@ export default function TabLayout() {
         headerStyle: styles.header,
         headerTintColor: '#e4e4e7',
         headerTitleStyle: styles.headerTitle,
+        // Plan item 5.5 — persistent connection-status pill in the
+        // header. Visible across every tab. Tap → connection-switcher.
+        headerRight: () => <ConnectionStatusPill />,
         // Transparent scene so the root global background shows behind tabs.
         sceneStyle: { backgroundColor: 'transparent' },
       }}

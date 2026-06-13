@@ -22,7 +22,8 @@ import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import { WebViewBridge } from '../lib/bridge';
 import { connection } from '../lib/connection';
-import type { ConnectionState, WorkspaceSnapshot } from '../lib/types';
+import { useDebouncedConnectionState } from '../lib/store';
+import type { WorkspaceSnapshot } from '../lib/types';
 
 // The bundled mobile UI HTML. In production, this would be loaded from
 // expo-asset. For now, we use a minimal inline HTML that receives state
@@ -144,7 +145,11 @@ export default function WorkspaceScreen() {
   const router = useRouter();
   const webViewRef = useRef<WebView>(null);
   const bridgeRef = useRef<WebViewBridge | null>(null);
-  const [connState, setConnState] = useState<ConnectionState>(connection.state);
+  // Plan items 5.4 + 10.6.a — debounced state means a sub-2s drop
+  // never swaps the WebView for a "Disconnected" placeholder. The
+  // raw state is still used for the mount-time guard below (so a
+  // user landing here cold without a connection still redirects).
+  const connState = useDebouncedConnectionState();
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(connection.snapshot);
 
   useEffect(() => {
@@ -160,17 +165,12 @@ export default function WorkspaceScreen() {
     bridgeRef.current = bridge;
     bridge.start();
 
-    const unsubState = connection.onStateChange((state) => {
-      setConnState(state);
-    });
-
     const unsubSnapshot = connection.onSnapshot((snap) => {
       setSnapshot(snap);
     });
 
     return () => {
       bridge.stop();
-      unsubState();
       unsubSnapshot();
     };
   }, []);

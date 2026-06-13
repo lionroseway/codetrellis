@@ -56,7 +56,7 @@ import { listCrossSystemEdges } from './cross-system-service';
 import { captureSnapshot, computeDiff, getBaseline } from './diff-engine';
 import { computeProjection } from './projection-service';
 import { getAuthorKey, getSettings, updateSettings } from './settings-service';
-import { notifyPowerSettingsChanged } from './power-service';
+import { notifyPowerSettingsChanged, getCurrentPowerStatus } from './power-service';
 import * as systemDocsService from './system-docs-service';
 import * as planTemplates from './plan-templates';
 import * as planTemplatesService from './plan-templates-service';
@@ -512,6 +512,15 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       if (params.power !== undefined) notifyPowerSettingsChanged();
       broadcast('settings-changed', { settings: updated });
       return updated;
+    }
+
+    // Session-persistence plan / Track A — runtime status (shouldBlock,
+    // reason, ac, platform). Phone polls every 4s to render the awake
+    // indicator + gate the macOS-only lid-close toggle. Distinct from
+    // `settings.get` which returns configuration; this returns the
+    // power-service's *current decision* state.
+    case 'power.status': {
+      return getCurrentPowerStatus();
     }
 
     // --- System docs ---------------------------------------------------------

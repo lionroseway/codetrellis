@@ -10,6 +10,7 @@
  * desktop's 100ms debounced JSON-RFC-6902 diffs.
  */
 
+import { useState, useEffect } from 'react';
 import { create } from 'zustand';
 import { applyPatch, type Operation } from 'fast-json-patch';
 import type {
@@ -157,6 +158,41 @@ export function useSnapshot(): WorkspaceSnapshot {
 
 export function useConnectionState(): ConnectionState {
   return useWorkspaceStore((s) => s.connectionState);
+}
+
+/**
+ * Session-persistence plan / item 5.4 — debounced connection state for
+ * UI consumers. Flips to `connected` immediately on recovery, but
+ * delays flipping to any non-connected state for `SUPPRESS_BLIP_MS`.
+ * Net effect: connection blips shorter than the window never surface
+ * to the UI, killing the "kicked out to the pairing screen" sensation
+ * on transient drops.
+ *
+ * Internal machinery (reconnect scheduling, RPC retries) should keep
+ * reading the raw state from `useConnectionState()` or `connection.state`.
+ * This hook is the *UX layer* — purely cosmetic.
+ */
+const SUPPRESS_BLIP_MS = 2000;
+
+export function useDebouncedConnectionState(): ConnectionState {
+  const raw = useConnectionState();
+  const [stable, setStable] = useState<ConnectionState>(raw);
+
+  useEffect(() => {
+    if (raw === stable) return;
+    if (raw === 'connected') {
+      // Recovery: flip immediately so the user sees the green pill
+      // the moment they're back online.
+      setStable(raw);
+      return;
+    }
+    // Otherwise wait — if raw flips back to 'connected' within the
+    // window, the timer is cleared and `stable` never moved.
+    const id = setTimeout(() => setStable(raw), SUPPRESS_BLIP_MS);
+    return () => clearTimeout(id);
+  }, [raw, stable]);
+
+  return stable;
 }
 
 export function useConnectedFingerprint(): string | null {

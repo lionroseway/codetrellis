@@ -24,8 +24,9 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { rpc } from '../lib/rpc';
+import { connection } from '../lib/connection';
 import XtermView, { type XtermHandle } from '../components/XtermView';
 
 const CONTROL_KEYS: { label: string; seq: string }[] = [
@@ -74,6 +75,9 @@ export default function TerminalDetailScreen() {
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
 
   // Pull incremental raw output and write it into the emulator.
+  // No explicit timeout — inherits the user-configurable default
+  // (`getRpcTimeoutMs`, 30s). Previously hardcoded to 6s, which made
+  // cold cellular / VPN / post-foreground RPCs falsely time out.
   const pump = useCallback(async () => {
     if (!id || inFlightRef.current) return;
     inFlightRef.current = true;
@@ -81,7 +85,6 @@ export default function TerminalDetailScreen() {
       const r = await rpc<{ data: string; total: number; reset: boolean }>(
         'terminal.stream',
         { id, since: sinceRef.current },
-        6000,
       );
       errorStreakRef.current = 0;
       if (r.reset) xtermRef.current?.reset();
@@ -99,6 +102,18 @@ export default function TerminalDetailScreen() {
     }
   }, [id, error]);
 
+  // (Re)start the stream from a clean state — used by mount, the
+  // connection-state-change effect, and the Retry button. Resetting
+  // `sinceRef` to undefined forces the server to send `reset: true` +
+  // the full snapshot so the xterm view rehydrates cleanly.
+  const restartStream = useCallback(() => {
+    setError(null);
+    errorStreakRef.current = 0;
+    sinceRef.current = undefined;
+    if (!pollRef.current) pollRef.current = setInterval(pump, 600);
+    pump();
+  }, [pump]);
+
   // Start streaming once xterm is ready (and on id change).
   useEffect(() => {
     if (!ready || !id) return;
@@ -111,11 +126,43 @@ export default function TerminalDetailScreen() {
     };
   }, [ready, id, pump]);
 
+  // Auto-restart on reconnect. The mount-effect above clears the
+  // poll after 3 RPC errors (e.g., when the WebRTC transport went
+  // stale during backgrounding); without this, the user had to tap
+  // Retry. Subscribing to `connection.onStateChange` lets the screen
+  // self-heal: on the next `'connected'`, restart polling, reset the
+  // cursor to force a snapshot replay, clear the error banner.
+  // ConnectionManager only ever emits 'connecting'|'connected'|
+  // 'disconnected'|'failed' — 'reconnecting' is in the type but
+  // unused. Trigger is 'connected'.
+  useEffect(() => {
+    if (!ready || !id) return;
+    const unsub = connection.onStateChange((state) => {
+      if (state === 'connected') restartStream();
+    });
+    return unsub;
+  }, [ready, id, restartStream]);
+
+  // Re-pump when the screen regains focus. Plan item 5.6 — covers the
+  // "navigated away, came back, terminal is blank" case. The mount
+  // effect alone doesn't fire when the screen is *re-focused* (only
+  // re-mounted); `useFocusEffect` does. Triggers an immediate pump so
+  // the user doesn't wait up to 600ms for the next poll tick. We
+  // don't reset the cursor here — that's reserved for the
+  // reconnect-after-error path (`restartStream`).
+  useFocusEffect(
+    useCallback(() => {
+      if (ready && id) pump();
+      return () => { /* no teardown on blur */ };
+    }, [ready, id, pump]),
+  );
+
   // Write raw bytes to the PTY (echo streams back via pump).
   const write = useCallback(async (data: string) => {
     if (!id) return;
     try {
-      await rpc('terminal.write', { id, data }, 20000);
+      // No explicit timeout — inherits the user-configurable default.
+      await rpc('terminal.write', { id, data });
       setTimeout(pump, 120);
     } catch { /* ignore */ }
   }, [id, pump]);
@@ -157,7 +204,7 @@ export default function TerminalDetailScreen() {
     lastSizeRef.current = { cols, rows };
     if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
     resizeTimerRef.current = setTimeout(() => {
-      rpc('terminal.resize', { id, cols, rows }, 20000).catch(() => {});
+      rpc('terminal.resize', { id, cols, rows }).catch(() => {});
     }, 250);
   }, [id]);
 
@@ -168,7 +215,16 @@ export default function TerminalDetailScreen() {
       keyboardVerticalOffset={100}
     >
       {/* Terminal emulator */}
-      <View style={styles.termWrap}>
+      <View
+        style={styles.termWrap}
+        // Plan item 5.6 — when the container resizes (keyboard drawer
+        // toggle, orientation flip, KeyboardAvoidingView padding
+        // change), tell xterm to re-fit its grid to the new
+        // dimensions. The WebView's internal layout observer is
+        // unreliable on some RN versions; this is the defensive belt
+        // that keeps the terminal visible after any layout shift.
+        onLayout={() => { if (ready) xtermRef.current?.fit(); }}
+      >
         <XtermView
           ref={xtermRef}
           onReady={() => setReady(true)}
@@ -184,14 +240,7 @@ export default function TerminalDetailScreen() {
         {error && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText} numberOfLines={2}>{error}</Text>
-            <TouchableOpacity
-              onPress={() => {
-                setError(null);
-                errorStreakRef.current = 0;
-                if (!pollRef.current) pollRef.current = setInterval(pump, 600);
-                pump();
-              }}
-            >
+            <TouchableOpacity onPress={restartStream}>
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>
