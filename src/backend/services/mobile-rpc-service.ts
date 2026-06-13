@@ -705,6 +705,22 @@ async function routeMethod(method: string, params: Record<string, unknown>): Pro
       return { ok };
     }
 
+    // Session-persistence plan §7.6 — paginated read of the
+    // persistent on-disk terminal history. Clients pass `before` from
+    // the previous response's `prevOffset` to walk backwards through
+    // the log; omit it to start at the tail. The data is raw ANSI —
+    // safe to feed straight into xterm.
+    case 'terminal.history': {
+      // Lazy require so this only loads when first hit (avoids
+      // touching the disk dir at module-load time on web mode).
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const historyService = require('./terminal-history-service');
+      const id = requireString(params, 'id');
+      const before = typeof params.before === 'number' ? (params.before as number) : undefined;
+      const limit = typeof params.limit === 'number' ? (params.limit as number) : 64 * 1024;
+      return historyService.getHistoryChunk(id, before, limit);
+    }
+
     // --- Channel events ------------------------------------------------------
     case 'channel.events': {
       const planUid = requireString(params, 'planUid');

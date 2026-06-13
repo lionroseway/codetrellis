@@ -16,6 +16,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { spawn as ptySpawn, type IPty } from 'node-pty';
+import { appendHistory, closeTerminalHistory } from './terminal-history-service';
 
 export type AgentPreset = 'claude' | 'codex' | 'aider' | 'shell';
 
@@ -244,9 +245,12 @@ export function createTerminal(opts: {
 
   sessions.set(id, session);
 
-  // Pipe PTY output to ring buffer + all registered listeners
+  // Pipe PTY output to ring buffer + persistent history + all registered listeners.
+  // The history append is async-buffered (terminal-history-service flushes
+  // in the background), so the PTY data callback isn't blocked.
   pty.onData((data) => {
     appendToBuffer(id, data);
+    appendHistory(id, data);
     for (const fn of dataListeners) fn(id, data);
   });
 
@@ -308,6 +312,9 @@ export function killTerminal(id: string): boolean {
   s.pty.kill();
   sessions.delete(id);
   outputBuffers.delete(id);
+  // Close the disk handle; the log file is left on disk so the user
+  // can still scroll through it from a later session before GC runs.
+  closeTerminalHistory(id);
   return true;
 }
 
@@ -332,6 +339,9 @@ export function getTerminal(id: string): TerminalSessionInfo | null {
 export function killAllTerminals(): void {
   for (const s of sessions.values()) {
     s.pty.kill();
+    // Best-effort close of each history file; closeTerminalHistory
+    // also flushes pending writes.
+    try { closeTerminalHistory(s.id); } catch { /* */ }
   }
   sessions.clear();
   outputBuffers.clear();

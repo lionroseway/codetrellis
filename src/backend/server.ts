@@ -2911,6 +2911,33 @@ app.put('/api/settings', (req, res) => {
 });
 
 /**
+ * Session-persistence plan §7.5/§7.6 — paginated read of the
+ * persistent on-disk terminal history. Same shape as the mobile RPC
+ * but addressable from the renderer for the eventual desktop
+ * scrollback-UI follow-up.
+ *   GET /api/terminals/:id/history?before=<int>&limit=<int>
+ *   → { data, prevOffset, hasMore, fileSize, capped }
+ */
+app.get('/api/terminals/:id/history', (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const historyService = require('./services/terminal-history-service');
+    const id = String(req.params.id);
+    const beforeRaw = req.query.before;
+    const limitRaw = req.query.limit;
+    const before = typeof beforeRaw === 'string' ? Number(beforeRaw) : undefined;
+    const limit = typeof limitRaw === 'string' ? Number(limitRaw) : undefined;
+    res.json(historyService.getHistoryChunk(
+      id,
+      Number.isFinite(before) ? before : undefined,
+      Number.isFinite(limit) ? limit : undefined,
+    ));
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
  * Read the current power-service status. Used by the desktop UI
  * (Settings panel section + TopBar awake indicator) to render whether
  * the blocker is currently engaged and why. Real-time updates also

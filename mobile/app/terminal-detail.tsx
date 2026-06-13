@@ -128,6 +128,56 @@ export default function TerminalDetailScreen() {
   // applied to the WebView once xterm is ready, persisted on change.
   const [fontPx, setFontPx] = useState<number>(getTerminalFontPx());
 
+  // Plan items 7.5/7.6 — persistent history overlay. The on-disk log
+  // can hold hours of output that the in-memory ring (256KB) lost.
+  // Tap the history button → fetch the tail of the log → "Load older"
+  // walks backwards in 64KB chunks. Closes back to the live xterm.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyText, setHistoryText] = useState(''); // raw text, oldest-at-top
+  const [historyOffset, setHistoryOffset] = useState<number | undefined>(undefined);
+  const [historyHasMore, setHistoryHasMore] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyFileSize, setHistoryFileSize] = useState<number | null>(null);
+
+  const loadHistoryChunk = useCallback(async (before: number | undefined) => {
+    if (!id) return;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const r = await rpc<{ data: string; prevOffset: number; hasMore: boolean; fileSize: number; capped: boolean }>(
+        'terminal.history',
+        { id, ...(before !== undefined ? { before } : {}) },
+      );
+      // Strip ANSI escapes for readability — the overlay is a plain
+      // text view, not an xterm grid. Keep newlines + tabs.
+      const ansi = /\x1b\[[0-9;?]*[A-Za-z]|\x1b\].*?\x07|\x1b[()][A-Z0-9]/g;
+      // eslint-disable-next-line no-control-regex
+      const ctrlChars = /[\x00-\x09\x0b\x0c\x0e-\x1f]/g;
+      const clean = r.data.replace(ansi, '').replace(ctrlChars, '');
+      // Prepend (oldest chunk goes at the top so combined text is in order).
+      setHistoryText((prev) => clean + prev);
+      setHistoryOffset(r.prevOffset);
+      setHistoryHasMore(r.hasMore);
+      setHistoryFileSize(r.fileSize);
+    } catch (e) {
+      setHistoryError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [id]);
+
+  const openHistory = useCallback(() => {
+    setHistoryOpen(true);
+    // Reset and load the tail chunk on each open so the user always
+    // sees the most-recent history first.
+    setHistoryText('');
+    setHistoryOffset(undefined);
+    setHistoryHasMore(true);
+    setHistoryError(null);
+    loadHistoryChunk(undefined);
+  }, [loadHistoryChunk]);
+
   const xtermRef = useRef<XtermHandle>(null);
   const sinceRef = useRef<number | undefined>(undefined);
   const inFlightRef = useRef(false);
@@ -331,6 +381,45 @@ export default function TerminalDetailScreen() {
             </TouchableOpacity>
           </View>
         )}
+        {/* Plan items 7.5/7.6 — full-history overlay. Sits over the
+            xterm view; tapping Done restores the live terminal. */}
+        {historyOpen && (
+          <View style={styles.historyOverlay}>
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyTitle}>HISTORY</Text>
+              <Text style={styles.historyMeta}>
+                {historyFileSize != null
+                  ? `${(historyFileSize / 1024).toFixed(0)} KB on disk`
+                  : ''}
+              </Text>
+              <TouchableOpacity onPress={() => setHistoryOpen(false)}>
+                <Text style={styles.keyDrawerDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.historyScroll}
+              contentContainerStyle={styles.historyScrollContent}
+            >
+              {historyHasMore && (
+                <TouchableOpacity
+                  style={styles.historyLoadMore}
+                  onPress={() => loadHistoryChunk(historyOffset)}
+                  disabled={historyLoading}
+                >
+                  <Text style={styles.historyLoadMoreText}>
+                    {historyLoading ? 'Loading…' : 'Load older'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {historyError && (
+                <Text style={styles.historyErrorText}>{historyError}</Text>
+              )}
+              <Text style={styles.historyBody} selectable>
+                {historyText || (historyLoading ? '' : '(no history yet)')}
+              </Text>
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* Bottom dock: key drawer + compact key row + input */}
@@ -402,6 +491,15 @@ export default function TerminalDetailScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+          {/* Plan items 7.5/7.6 — full-history overlay launcher. */}
+          <TouchableOpacity
+            style={[styles.moreBtn, historyOpen && styles.moreBtnActive]}
+            activeOpacity={0.6}
+            onPress={openHistory}
+            accessibilityLabel="Open full terminal history"
+          >
+            <Text style={styles.moreBtnText}>⌚</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.moreBtn, keysOpen && styles.moreBtnActive]}
             activeOpacity={0.6}
@@ -514,6 +612,32 @@ const styles = StyleSheet.create({
   },
   fontBtnText: { color: '#d4d4d8', fontSize: 12, fontWeight: '700', fontFamily: MONO },
   fontValue: { color: '#71717a', fontSize: 11, minWidth: 30, textAlign: 'center', fontFamily: MONO },
+
+  // Plan items 7.5/7.6 — full-history overlay.
+  historyOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: '#0a0a0c',
+  },
+  historyHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#27272a',
+    backgroundColor: '#141416', gap: 8,
+  },
+  historyTitle: { color: '#71717a', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  historyMeta: { color: '#52525b', fontSize: 10, flex: 1, textAlign: 'right' },
+  historyScroll: { flex: 1 },
+  historyScrollContent: { padding: 12 },
+  historyLoadMore: {
+    paddingVertical: 10, alignItems: 'center', borderRadius: 8,
+    backgroundColor: '#1a1a1d', borderWidth: 1, borderColor: '#27272a',
+    marginBottom: 10,
+  },
+  historyLoadMoreText: { color: '#3b82f6', fontSize: 12, fontWeight: '600' },
+  historyErrorText: { color: '#ef4444', fontSize: 11, marginBottom: 8 },
+  historyBody: {
+    color: '#d4d4d8', fontSize: 11, lineHeight: 16, fontFamily: MONO,
+  },
 
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
   inputPrompt: { color: '#22c55e', fontSize: 16, fontFamily: MONO, fontWeight: '700', marginRight: 8 },
