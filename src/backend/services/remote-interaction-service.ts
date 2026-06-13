@@ -343,9 +343,17 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
         // Mobile device sending its Expo Push Token
         const { token } = msg.params as { token: string };
         if (token) {
-          // Lazy import to avoid circular dependency
           const { registerPushToken } = _lazy___push_notification_service;
           registerPushToken(fingerprint, token);
+          // Acknowledge so the phone can show a confirmed "bound" state rather
+          // than guessing whether its token landed (the silent-failure fix).
+          try {
+            sendToPeer(
+              fingerprint,
+              DATA_CHANNELS.CONTROL,
+              JSON.stringify({ method: 'push-token-ack', params: { ok: true } }),
+            );
+          } catch { /* best-effort ack */ }
         }
         break;
       }

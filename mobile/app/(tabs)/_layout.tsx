@@ -7,9 +7,19 @@
 
 import { useEffect, useRef } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useDebouncedConnectionState, useAttentionCount } from '../../lib/store';
+import { useDrawerStore } from '../../lib/drawer';
 import ConnectionStatusPill from '../../components/ConnectionStatusPill';
+
+function MenuButton() {
+  const openDrawer = useDrawerStore((s) => s.openDrawer);
+  return (
+    <TouchableOpacity onPress={openDrawer} hitSlop={12} style={styles.menuBtn}>
+      <Text style={styles.menuIcon}>{'☰'}</Text>
+    </TouchableOpacity>
+  );
+}
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -73,6 +83,9 @@ export default function TabLayout() {
         headerStyle: styles.header,
         headerTintColor: '#e4e4e7',
         headerTitleStyle: styles.headerTitle,
+        // Global nav drawer trigger — restores device/app traversal once
+        // you've dropped into the connected tab stack.
+        headerLeft: () => <MenuButton />,
         // Plan item 5.5 — persistent connection-status pill in the
         // header. Visible across every tab. Tap → connection-switcher.
         headerRight: () => <ConnectionStatusPill />,
@@ -151,6 +164,15 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontWeight: '700',
     fontSize: 17,
+  },
+  menuBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  menuIcon: {
+    color: '#e4e4e7',
+    fontSize: 22,
+    fontWeight: '400',
   },
   badge: {
     position: 'absolute',

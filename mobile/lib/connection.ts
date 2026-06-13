@@ -19,6 +19,7 @@ import { recordConnect, mergeCandidateAddresses } from './storage';
 import { useWorkspaceStore } from './store';
 import { handleRpcResponse, cancelAllPendingRpc, rpc } from './rpc';
 import { getDiscoveredDesktops } from './discovery';
+import { notePushAck } from './push';
 import { log as diagLog } from './diagnostics';
 import type {
   ConnectionTarget,
@@ -330,6 +331,12 @@ class ConnectionManager {
       // sends succeed into a killed socket and the peer lingers forever.
       if (msg && msg.type === 'ping') {
         webrtc.sendControl({ type: 'pong', id: msg.id, ts: Date.now() });
+        return;
+      }
+      // Desktop confirms it stored our push token → close the bind loop so the
+      // notification settings screen can show "bound", not just "sent".
+      if (msg && msg.method === 'push-token-ack') {
+        notePushAck();
         return;
       }
       // Desktop → mobile command (MCP drives the phone): navigate / screenshot.

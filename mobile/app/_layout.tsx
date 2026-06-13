@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import SplashScreen from '../components/SplashScreen';
 import AnimatedBackground from '../components/AnimatedBackground';
+import AppDrawer from '../components/AppDrawer';
 import { initPrefs } from '../lib/prefs';
 import { onNotificationTap, getInitialNotification, routeForNotification } from '../lib/push';
 
@@ -158,6 +159,10 @@ export default function RootLayout() {
           options={{ title: 'Settings', headerStyle: { backgroundColor: '#0a0c18' } }}
         />
         <Stack.Screen
+          name="notification-settings"
+          options={{ title: 'Notifications', headerStyle: { backgroundColor: '#0a0c18' } }}
+        />
+        <Stack.Screen
           name="projects"
           options={{ title: 'Projects', headerStyle: { backgroundColor: '#0a0c18' } }}
         />
@@ -182,6 +187,10 @@ export default function RootLayout() {
           options={{ headerShown: false }}
         />
       </Stack>
+
+      {/* Global navigation side panel — overlays every screen, opened from the
+          ☰ in the tab header. */}
+      <AppDrawer />
 
       {showSplash && (
         <SplashScreen onFinish={() => setShowSplash(false)} />

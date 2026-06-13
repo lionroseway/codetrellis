@@ -39,6 +39,65 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// --- Bind state --------------------------------------------------------------
+//
+// We track, on this device, whether we've successfully handed a token to the
+// desktop (`tokenSent`) and whether the desktop *acknowledged* it over the
+// control channel (`acked`). The ack closes the loop: "sent into the void" vs
+// "the desktop confirmed it has my token". Surfaced in notification-settings.
+
+let lastSentToken: string | null = null;
+let acked = false;
+const ackListeners = new Set<() => void>();
+
+/** Called by the connection layer when a `push-token-ack` arrives from desktop. */
+export function notePushAck(): void {
+  acked = true;
+  for (const cb of ackListeners) { try { cb(); } catch { /* */ } }
+}
+
+/** Subscribe to desktop ack events. Returns an unsubscribe fn. */
+export function onPushAck(cb: () => void): () => void {
+  ackListeners.add(cb);
+  return () => ackListeners.delete(cb);
+}
+
+/** Current bind state for the settings UI. */
+export function getPushBindState(): { tokenSent: boolean; acked: boolean; token: string | null } {
+  return { tokenSent: lastSentToken !== null, acked, token: lastSentToken };
+}
+
+/** Current OS-level notification permission. */
+export async function getPushPermission(): Promise<'granted' | 'denied' | 'undetermined'> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    return status as 'granted' | 'denied' | 'undetermined';
+  } catch {
+    return 'undetermined';
+  }
+}
+
+/**
+ * Request permission, mint a token, and (re)send it to the connected desktop —
+ * the manual path behind the "Enable / Re-bind" button. Returns a structured
+ * result so the UI can explain exactly what failed instead of dying silently
+ * (which is the bug this whole control exists to fix).
+ */
+export async function bindPushToDesktop(): Promise<{
+  ok: boolean;
+  reason?: 'permission' | 'token' | 'offline';
+  token?: string;
+}> {
+  const token = await registerForPush();
+  if (!token) {
+    const perm = await getPushPermission();
+    return { ok: false, reason: perm !== 'granted' ? 'permission' : 'token' };
+  }
+  const sent = sendPushTokenToDesktop(token);
+  if (!sent) return { ok: false, reason: 'offline', token };
+  return { ok: true, token };
+}
+
 // --- Public API --------------------------------------------------------------
 
 /**
@@ -88,10 +147,15 @@ export async function registerForPush(): Promise<string | null> {
  * when the app is backgrounded.
  */
 export function sendPushTokenToDesktop(token: string): boolean {
-  return webrtc.sendControl({
+  const ok = webrtc.sendControl({
     method: 'register-push-token',
     params: { token, platform: Platform.OS },
   });
+  if (ok) {
+    lastSentToken = token;
+    acked = false; // awaiting the desktop's push-token-ack
+  }
+  return ok;
 }
 
 /**
