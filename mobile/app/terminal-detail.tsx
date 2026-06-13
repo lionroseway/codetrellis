@@ -286,13 +286,6 @@ export default function TerminalDetailScreen() {
     });
   }, []);
 
-  // Plan item 10.2 — haptic on every key tap. Wraps `write` so the
-  // existing CONTROL_KEYS rendering doesn't need per-key changes.
-  const tapKey = useCallback((seq: string) => {
-    tapHaptic();
-    write(seq);
-  }, [write]);
-
   // Write raw bytes to the PTY (echo streams back via pump).
   const write = useCallback(async (data: string) => {
     if (!id) return;
@@ -302,6 +295,13 @@ export default function TerminalDetailScreen() {
       setTimeout(pump, 120);
     } catch { /* ignore */ }
   }, [id, pump]);
+
+  // Plan item 10.2 — haptic on every key tap. Wraps `write` so the
+  // existing CONTROL_KEYS rendering doesn't need per-key changes.
+  const tapKey = useCallback((seq: string) => {
+    tapHaptic();
+    write(seq);
+  }, [write]);
 
   const sendInput = useCallback(async () => {
     if (!inputText.trim()) return;
