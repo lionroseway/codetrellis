@@ -72,6 +72,12 @@ const initScript = `
         if (m.type==='write') term.write(m.data);
         else if (m.type==='reset') term.reset();
         else if (m.type==='fit') doFit();
+        // Plan item 10.5 — runtime font size change. The set must
+        // happen via options.fontSize (xterm doesn't expose a method);
+        // a refit after the change so cols/rows recompute.
+        else if (m.type==='setFontSize' && typeof m.px === 'number') {
+          try { term.options.fontSize = m.px; doFit(); } catch(_) {}
+        }
       } catch(e){}
     };
     setTimeout(doFit, 60);

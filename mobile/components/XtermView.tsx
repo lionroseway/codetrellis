@@ -23,6 +23,8 @@ export interface XtermHandle {
   write: (data: string) => void;
   reset: () => void;
   fit: () => void;
+  /** Plan item 10.5 — runtime font size change. */
+  setFontSize: (px: number) => void;
 }
 
 interface XtermViewProps {
@@ -49,6 +51,7 @@ const XtermView = forwardRef<XtermHandle, XtermViewProps>(function XtermView(
     write: (data: string) => inject({ type: 'write', data }),
     reset: () => inject({ type: 'reset' }),
     fit: () => inject({ type: 'fit' }),
+    setFontSize: (px: number) => inject({ type: 'setFontSize', px }),
   }), [inject]);
 
   const handleMessage = useCallback((e: WebViewMessageEvent) => {

@@ -27,32 +27,91 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import { connection } from '../lib/connection';
+import {
+  getTerminalFontPx,
+  setTerminalFontPx,
+  TERMINAL_FONT_MIN_PX,
+  TERMINAL_FONT_MAX_PX,
+} from '../lib/prefs';
 import XtermView, { type XtermHandle } from '../components/XtermView';
 
-const CONTROL_KEYS: { label: string; seq: string }[] = [
-  { label: 'esc', seq: '\x1b' },
-  { label: '^C', seq: '\x03' },
-  { label: 'tab', seq: '\t' },
-  { label: '⏎', seq: '\r' },
-  { label: '⇧tab', seq: '\x1b[Z' },
-  { label: '↑', seq: '\x1b[A' },
-  { label: '↓', seq: '\x1b[B' },
-  { label: '←', seq: '\x1b[D' },
-  { label: '→', seq: '\x1b[C' },
-  { label: '^A', seq: '\x01' },
-  { label: '^E', seq: '\x05' },
-  { label: '^U', seq: '\x15' },
-  { label: '^W', seq: '\x17' },
-  { label: '^K', seq: '\x0b' },
-  { label: '^R', seq: '\x12' },
-  { label: '^D', seq: '\x04' },
-  { label: '^L', seq: '\x0c' },
-  { label: '^Z', seq: '\x1a' },
-  { label: '⌥←', seq: '\x1bb' },
-  { label: '⌥→', seq: '\x1bf' },
+// Plan item 10.2 — haptics on key tap. Loaded defensively because the
+// module isn't part of the EAS dev profile until it's added to package.json
+// AND rebuilt; this lets the code run today without the native module.
+let haptics: { impactAsync?: (s: number) => void; ImpactFeedbackStyle?: { Light: number } } = {};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  haptics = require('expo-haptics');
+} catch { /* fine — silent no-op until next build */ }
+function tapHaptic(): void {
+  try {
+    const style = haptics.ImpactFeedbackStyle?.Light;
+    if (style !== undefined && typeof haptics.impactAsync === 'function') {
+      haptics.impactAsync(style);
+    }
+  } catch { /* */ }
+}
+
+// Plan items 10.1 + 10.2 — full modifier + special-key surface, grouped
+// semantically. Each group renders its own drawer row so the layout is
+// scannable instead of an undifferentiated grid.
+interface KeyDef { label: string; seq: string }
+interface KeyGroup { name: string; keys: KeyDef[] }
+
+const KEY_GROUPS: KeyGroup[] = [
+  {
+    name: 'navigation',
+    keys: [
+      { label: '↑',    seq: '\x1b[A' },
+      { label: '↓',    seq: '\x1b[B' },
+      { label: '←',    seq: '\x1b[D' },
+      { label: '→',    seq: '\x1b[C' },
+      { label: 'Home', seq: '\x1bOH' },
+      { label: 'End',  seq: '\x1bOF' },
+      { label: 'PgUp', seq: '\x1b[5~' },
+      { label: 'PgDn', seq: '\x1b[6~' },
+    ],
+  },
+  {
+    name: 'editing',
+    keys: [
+      { label: 'esc',  seq: '\x1b' },
+      { label: 'tab',  seq: '\t' },
+      { label: '⇧tab', seq: '\x1b[Z' },
+      { label: '⏎',    seq: '\r' },
+      { label: 'del→', seq: '\x1b[3~' },
+      { label: 'ins',  seq: '\x1b[2~' },
+      { label: '⌥←',   seq: '\x1bb' },
+      { label: '⌥→',   seq: '\x1bf' },
+    ],
+  },
+  {
+    name: 'control',
+    keys: [
+      { label: '^C', seq: '\x03' }, { label: '^D', seq: '\x04' },
+      { label: '^A', seq: '\x01' }, { label: '^E', seq: '\x05' },
+      { label: '^U', seq: '\x15' }, { label: '^W', seq: '\x17' },
+      { label: '^K', seq: '\x0b' }, { label: '^L', seq: '\x0c' },
+      { label: '^R', seq: '\x12' }, { label: '^Z', seq: '\x1a' },
+    ],
+  },
+  {
+    name: 'function',
+    keys: [
+      { label: 'F1',  seq: '\x1bOP' },        { label: 'F2',  seq: '\x1bOQ' },
+      { label: 'F3',  seq: '\x1bOR' },        { label: 'F4',  seq: '\x1bOS' },
+      { label: 'F5',  seq: '\x1b[15~' },      { label: 'F6',  seq: '\x1b[17~' },
+      { label: 'F7',  seq: '\x1b[18~' },      { label: 'F8',  seq: '\x1b[19~' },
+      { label: 'F9',  seq: '\x1b[20~' },      { label: 'F10', seq: '\x1b[21~' },
+      { label: 'F11', seq: '\x1b[23~' },      { label: 'F12', seq: '\x1b[24~' },
+    ],
+  },
 ];
+
+// Flattened lookup for the compact bottom row.
+const ALL_KEYS: KeyDef[] = KEY_GROUPS.flatMap((g) => g.keys);
 const PRIMARY_LABELS = new Set(['esc', '^C', 'tab', '⏎', '↑', '↓', '←', '→']);
-const PRIMARY_KEYS = CONTROL_KEYS.filter((k) => PRIMARY_LABELS.has(k.label));
+const PRIMARY_KEYS = ALL_KEYS.filter((k) => PRIMARY_LABELS.has(k.label));
 
 export default function TerminalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string; title?: string }>();
@@ -65,6 +124,9 @@ export default function TerminalDetailScreen() {
   const [ctrl, setCtrl] = useState(false);
   const [alt, setAlt] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
+  // Plan item 10.5 — terminal font size. Hydrated from prefs at mount,
+  // applied to the WebView once xterm is ready, persisted on change.
+  const [fontPx, setFontPx] = useState<number>(getTerminalFontPx());
 
   const xtermRef = useRef<XtermHandle>(null);
   const sinceRef = useRef<number | undefined>(undefined);
@@ -156,6 +218,30 @@ export default function TerminalDetailScreen() {
       return () => { /* no teardown on blur */ };
     }, [ready, id, pump]),
   );
+
+  // Plan item 10.5 — apply persisted font size when xterm becomes
+  // ready. Subsequent +/- presses call setFontSize directly.
+  useEffect(() => {
+    if (!ready) return;
+    xtermRef.current?.setFontSize(fontPx);
+  }, [ready, fontPx]);
+
+  const bumpFont = useCallback((delta: number) => {
+    setFontPx((prev) => {
+      const next = Math.max(TERMINAL_FONT_MIN_PX, Math.min(TERMINAL_FONT_MAX_PX, prev + delta));
+      if (next === prev) return prev;
+      setTerminalFontPx(next).catch(() => { /* best-effort */ });
+      tapHaptic();
+      return next;
+    });
+  }, []);
+
+  // Plan item 10.2 — haptic on every key tap. Wraps `write` so the
+  // existing CONTROL_KEYS rendering doesn't need per-key changes.
+  const tapKey = useCallback((seq: string) => {
+    tapHaptic();
+    write(seq);
+  }, [write]);
 
   // Write raw bytes to the PTY (echo streams back via pump).
   const write = useCallback(async (data: string) => {
@@ -253,17 +339,37 @@ export default function TerminalDetailScreen() {
           <View style={styles.keyDrawer}>
             <View style={styles.keyDrawerHeader}>
               <Text style={styles.keyDrawerTitle}>KEYS</Text>
+              {/* Plan item 10.5 — font size +/- */}
+              <View style={styles.fontControls}>
+                <TouchableOpacity style={styles.fontBtn} onPress={() => bumpFont(-1)} hitSlop={6}>
+                  <Text style={styles.fontBtnText}>A−</Text>
+                </TouchableOpacity>
+                <Text style={styles.fontValue}>{fontPx}px</Text>
+                <TouchableOpacity style={styles.fontBtn} onPress={() => bumpFont(+1)} hitSlop={6}>
+                  <Text style={styles.fontBtnText}>A+</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity onPress={() => setKeysOpen(false)}>
                 <Text style={styles.keyDrawerDone}>Done</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.keyGrid}>
-              {CONTROL_KEYS.map((k) => (
-                <TouchableOpacity key={k.label} style={styles.keyBtn} activeOpacity={0.6} onPress={() => write(k.seq)}>
-                  <Text style={styles.keyBtnText}>{k.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {KEY_GROUPS.map((group) => (
+              <View key={group.name} style={styles.keyGroup}>
+                <Text style={styles.keyGroupLabel}>{group.name}</Text>
+                <View style={styles.keyGroupRow}>
+                  {group.keys.map((k) => (
+                    <TouchableOpacity
+                      key={k.label}
+                      style={styles.keyBtn}
+                      activeOpacity={0.6}
+                      onPress={() => tapKey(k.seq)}
+                    >
+                      <Text style={styles.keyBtnText}>{k.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ))}
           </View>
         )}
 
@@ -291,7 +397,7 @@ export default function TerminalDetailScreen() {
             </TouchableOpacity>
             <View style={styles.keyDivider} />
             {PRIMARY_KEYS.map((k) => (
-              <TouchableOpacity key={k.label} style={styles.keyBtn} activeOpacity={0.6} onPress={() => write(k.seq)}>
+              <TouchableOpacity key={k.label} style={styles.keyBtn} activeOpacity={0.6} onPress={() => tapKey(k.seq)}>
                 <Text style={styles.keyBtnText}>{k.label}</Text>
               </TouchableOpacity>
             ))}
@@ -364,7 +470,7 @@ const styles = StyleSheet.create({
   keyBar: { flex: 1, maxHeight: 48 },
   keyBarContent: { paddingHorizontal: 8, paddingVertical: 8, gap: 6, alignItems: 'center' },
   keyBtn: {
-    minWidth: 38, height: 32, paddingHorizontal: 10, borderRadius: 7,
+    minWidth: 44, height: 38, paddingHorizontal: 10, borderRadius: 7,
     backgroundColor: '#27272a', borderWidth: 1, borderColor: '#3f3f46',
     alignItems: 'center', justifyContent: 'center',
   },
@@ -392,6 +498,22 @@ const styles = StyleSheet.create({
   keyDrawerTitle: { color: '#71717a', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   keyDrawerDone: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
   keyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  // Plan items 10.1 + 10.2 — semantic key groups with labels.
+  keyGroup: { marginTop: 6 },
+  keyGroupLabel: {
+    color: '#52525b', fontSize: 9, fontWeight: '700', letterSpacing: 1.2,
+    textTransform: 'uppercase', marginLeft: 4, marginBottom: 4,
+  },
+  keyGroupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  // Plan item 10.5 — font size +/- inline in the drawer header.
+  fontControls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  fontBtn: {
+    paddingHorizontal: 10, height: 28, borderRadius: 6,
+    backgroundColor: '#27272a', borderWidth: 1, borderColor: '#3f3f46',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  fontBtnText: { color: '#d4d4d8', fontSize: 12, fontWeight: '700', fontFamily: MONO },
+  fontValue: { color: '#71717a', fontSize: 11, minWidth: 30, textAlign: 'center', fontFamily: MONO },
 
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
   inputPrompt: { color: '#22c55e', fontSize: 16, fontFamily: MONO, fontWeight: '700', marginRight: 8 },
