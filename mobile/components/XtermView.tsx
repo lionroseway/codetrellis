@@ -17,6 +17,7 @@ import { forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { StyleSheet } from 'react-native';
 import { TERMINAL_HTML } from './xterm-bundle';
+import { logTouch } from '../lib/diagnostics';
 
 export interface XtermHandle {
   write: (data: string) => void;
@@ -56,6 +57,12 @@ const XtermView = forwardRef<XtermHandle, XtermViewProps>(function XtermView(
       if (m.type === 'ready') onReady?.();
       else if (m.type === 'data') onData?.(m.data);
       else if (m.type === 'resize') onResize?.(m.cols, m.rows);
+      else if (m.type === 'touch') {
+        // Plan item 10.7 — feed touch events into the diagnostics
+        // ring so the next "scroll stuck" report has a precise
+        // gesture trace attached.
+        logTouch(`xterm ${m.kind}`, { x: m.x, y: m.y, target: m.target });
+      }
     } catch { /* ignore */ }
   }, [onReady, onData, onResize]);
 

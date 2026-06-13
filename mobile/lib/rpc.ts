@@ -13,6 +13,7 @@
 
 import { webrtc } from './webrtc';
 import { getRpcTimeoutMs } from './prefs';
+import { log as diagLog } from './diagnostics';
 
 // --- Types -------------------------------------------------------------------
 
@@ -55,36 +56,46 @@ export function rpc<T = unknown>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const id = `rpc-${nextId++}-${Date.now()}`;
+    const envelope = { method, params, id, rpc: true };
+
+    const armTimeoutAndPending = (): void => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        diagLog('rpc-error', `timeout ${method}`, { id, timeoutMs });
+        reject(new Error(
+          `Request timed out after ${Math.round(timeoutMs / 1000)}s (${method}). ` +
+          `On a slow or VPN connection this can happen — increase the request ` +
+          `timeout in Settings → Connection and try again.`,
+        ));
+      }, timeoutMs);
+      pending.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timer,
+      });
+    };
 
     // Send the request on the control channel
-    const sent = webrtc.sendControl({
-      method,
-      params,
-      id,
-      rpc: true,
-    });
-
-    if (!sent) {
-      reject(new Error('Control channel not open — cannot send RPC'));
+    const sent = webrtc.sendControl(envelope);
+    if (sent) {
+      armTimeoutAndPending();
       return;
     }
 
-    // Set up timeout
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(
-        `Request timed out after ${Math.round(timeoutMs / 1000)}s (${method}). ` +
-        `On a slow or VPN connection this can happen — increase the request ` +
-        `timeout in Settings → Connection and try again.`,
-      ));
-    }, timeoutMs);
-
-    // Store the pending request
-    pending.set(id, {
-      resolve: resolve as (value: unknown) => void,
-      reject,
-      timer,
-    });
+    // Plan item 8.2 — auto-retry once on transport-not-open. The most
+    // common cause of `sent === false` is a just-reconnected session
+    // whose control data channel hasn't fully re-opened yet. A 500ms
+    // beat is enough to clear that race in practice. We don't retry
+    // *successful sends that later time out* — that's a different
+    // failure mode and the mobile-side polling layers (e.g.
+    // terminal-detail) already do their own retries.
+    setTimeout(() => {
+      if (webrtc.sendControl(envelope)) {
+        armTimeoutAndPending();
+        return;
+      }
+      reject(new Error('Control channel not open — cannot send RPC'));
+    }, 500);
   });
 }
 
@@ -111,6 +122,7 @@ export function handleRpcResponse(data: string | ArrayBuffer): boolean {
 
     // Resolve or reject
     if (msg.error) {
+      diagLog('rpc-error', `server error`, { id: msg.id, error: String(msg.error).slice(0, 200) });
       req.reject(new Error(msg.error));
     } else {
       req.resolve(msg.result);

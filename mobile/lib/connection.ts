@@ -13,11 +13,13 @@
 
 import { router } from 'expo-router';
 import { AppState, type AppStateStatus } from 'react-native';
+import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { webrtc } from './webrtc';
 import { recordConnect, mergeCandidateAddresses } from './storage';
 import { useWorkspaceStore } from './store';
 import { handleRpcResponse, cancelAllPendingRpc, rpc } from './rpc';
 import { getDiscoveredDesktops } from './discovery';
+import { log as diagLog } from './diagnostics';
 import type {
   ConnectionTarget,
   ConnectionState,
@@ -51,6 +53,13 @@ class ConnectionManager {
   private lastInboundAt = 0;
   private pinging = false;
   private appStateSub: { remove: () => void } | null = null;
+  /** NetInfo subscription — fires on wifi↔cellular handoffs, VPN flips,
+   *  isInternetReachable transitions while the app is foreground-active.
+   *  Plan item 5.2. */
+  private netInfoUnsub: (() => void) | null = null;
+  /** Last NetInfo state we acted on — used to coalesce duplicate events. */
+  private lastNetInfoType: string | null = null;
+  private lastNetInfoReachable: boolean | null = null;
   /** True after a deliberate user disconnect — suppresses all auto-reconnect. */
   private userDisconnected = false;
   /** Snapshot-pull retry (rides out slow VPN convergence + reconnect bounces). */
@@ -83,6 +92,9 @@ class ConnectionManager {
     this.reconnectAttempts = 0;
     this.reconnecting = false;
     if (this.appStateSub) { this.appStateSub.remove(); this.appStateSub = null; }
+    if (this.netInfoUnsub) { this.netInfoUnsub(); this.netInfoUnsub = null; }
+    this.lastNetInfoType = null;
+    this.lastNetInfoReachable = null;
 
     if (this.unsubMessage) { this.unsubMessage(); this.unsubMessage = null; }
     if (this.unsubState) { this.unsubState(); this.unsubState = null; }
@@ -169,6 +181,13 @@ class ConnectionManager {
     // once; persists across reconnects.)
     if (!this.appStateSub) {
       this.appStateSub = AppState.addEventListener('change', (s) => this.handleAppState(s));
+    }
+    // Plan item 5.2 — proactively reconnect on network handoffs
+    // (wifi↔cellular, VPN flip, isInternetReachable transitions).
+    // Without this the user eats up to ~30s of stalled RPCs while
+    // the heartbeat catches the dead transport.
+    if (!this.netInfoUnsub) {
+      this.netInfoUnsub = NetInfo.addEventListener((s) => this.handleNetInfo(s));
     }
 
     // Listen for messages from the desktop
@@ -479,8 +498,45 @@ class ConnectionManager {
     }, delay);
   }
 
+  /**
+   * Plan item 5.2 — NetInfo handler. Fires on any network state change
+   * (wifi↔cellular, VPN flip, isInternetReachable transition). We
+   * coalesce on (type, isInternetReachable) — only meaningful changes
+   * trigger a reconnect kick, so a flapping signal doesn't thrash.
+   */
+  private handleNetInfo(s: NetInfoState): void {
+    if (!this.target || this.target.type !== 'webrtc') return;
+    const reachable = s.isInternetReachable;
+    const meaningful = (
+      s.type !== this.lastNetInfoType ||
+      reachable !== this.lastNetInfoReachable
+    );
+    this.lastNetInfoType = s.type;
+    this.lastNetInfoReachable = reachable;
+    if (!meaningful) return;
+    diagLog('netinfo', `transition type=${s.type} reachable=${String(reachable)}`);
+
+    // Only act on transitions back to reachable. Going offline is
+    // already handled reactively by the heartbeat; the proactive
+    // value here is "we just came back online — try a snappy
+    // reconnect now instead of waiting up to 30s for heartbeat
+    // timeout."
+    if (reachable !== true) return;
+    if (webrtc.state === 'connected') {
+      // Connection is still alive on this NetInfo report — but the
+      // network type changed (wifi↔cellular handoff). Force a probe
+      // by zeroing the heartbeat clock so the next tick checks.
+      this.lastInboundAt = 0;
+      return;
+    }
+    // Snappy reconnect path — same as AppState foreground.
+    this.reconnectAttempts = 0;
+    this.scheduleReconnect();
+  }
+
   private handleAppState(s: AppStateStatus): void {
     if (!this.target || this.target.type !== 'webrtc') return;
+    diagLog('lifecycle', `AppState → ${s}`);
     if (s === 'active') {
       // Resume: the transport often dies while backgrounded — re-link promptly.
       this.lastInboundAt = 0; // force the next heartbeat to actually probe
@@ -503,6 +559,7 @@ class ConnectionManager {
   }
 
   private emitStateChange(state: ConnectionState, fingerprint: string): void {
+    diagLog('connection', `→ ${state}`, { fp: fingerprint.slice(0, 12) });
     // Push into Zustand store for reactive UI
     useWorkspaceStore.getState().setConnectionState(state, fingerprint);
     for (const handler of this.stateHandlers) {

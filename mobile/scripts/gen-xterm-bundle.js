@@ -39,6 +39,34 @@ const initScript = `
     function doFit(){ try { fit.fit(); post({ type:'resize', cols:term.cols, rows:term.rows }); } catch(e){} }
     term.onData(function(d){ post({ type:'data', data:d }); });
     window.addEventListener('resize', doFit);
+    // Plan item 10.7 — touch event ring buffer for scroll-stick repro.
+    // Forwards touchstart/move/end to the RN side, which feeds them
+    // into the diagnostics buffer. Throttled at ~16ms (60Hz) so a
+    // rapid drag doesn't flood. 'move' events are most informative.
+    var lastMoveTs = 0;
+    function touchKey(t){ return t.identifier+':'+Math.round(t.clientX)+','+Math.round(t.clientY); }
+    function reportTouch(kind, e) {
+      try {
+        var t = e.touches && e.touches[0] ? e.touches[0]
+              : (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : null);
+        if (!t) return;
+        if (kind === 'move') {
+          var now = Date.now();
+          if (now - lastMoveTs < 16) return;
+          lastMoveTs = now;
+        }
+        post({
+          type: 'touch',
+          kind: kind,
+          x: Math.round(t.clientX),
+          y: Math.round(t.clientY),
+          target: (e.target && e.target.className) || '',
+        });
+      } catch(_) {}
+    }
+    document.addEventListener('touchstart', function(e){ reportTouch('start', e); }, { passive: true });
+    document.addEventListener('touchmove',  function(e){ reportTouch('move',  e); }, { passive: true });
+    document.addEventListener('touchend',   function(e){ reportTouch('end',   e); }, { passive: true });
     window.__recv = function(json){
       try { var m = JSON.parse(json);
         if (m.type==='write') term.write(m.data);
