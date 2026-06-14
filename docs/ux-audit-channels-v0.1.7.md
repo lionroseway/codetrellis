@@ -30,7 +30,7 @@ into a packaged binary, so verify after `npm run build` / a dev run).
 | **F9** `select_item` stale-by-one | ✅ done | `useWebSocket.ts` — `ui-select-item` now awaits reset+hydrate then applies the selection on the next frame, after the shell's reset effect |
 | **F10** no MCP tool opens Channel/History | ✅ done | `toggle_panel` enum extended to `channel`/`activity`/`history` (`session-tools.ts`); `ui-toggle` handler + a `toggle-history-rail` window event (`useWebSocket.ts`, `PlanWorkspaceShellV2.tsx`); `ui-nav` guide updated |
 | **F11** `navigate_to('timeline')` no-op | ✅ done | `useWebSocket.ts` — `timeline` now opens the plan workspace **and** the activity feed (distinct from `plan`) |
-| **F6** item-comments ↔ channel decisions | ⛔ not done — design call | needs a decision on the intended relationship before building |
+| **F6** item-comments ↔ channel decisions | 🟡 piece 1 done | **Decision: cross-link, don't merge** (honors the locked D1 "separate tables" decision; the item is the join key). Piece 1 shipped: `PlanItemCanvas.tsx` `ItemChannelBand` surfaces open Channel events anchored to the item + opens the panel. Follow-ups: (2) "Escalate to Channel" from a blocker/question comment + auto-unblock on resolve; (3) intent-clarifying copy. |
 
 Verify the visual fixes by rebuilding (`npm run build`) or a dev run
 (`npm run dev`) — source edits don't appear in the already-running packaged app.
