@@ -34,6 +34,11 @@ interface WorkspaceState {
   // --- Connection ---
   connectionState: ConnectionState;
   connectedFingerprint: string | null;
+  /** True once we've received a snapshot — distinguishes "connected but still
+   *  loading" from "connected and populated". Stays true across reconnect blips
+   *  so the UI keeps showing data (with a Reconnecting… badge) instead of
+   *  blanking; cleared only on a full reset/disconnect. */
+  hydrated: boolean;
 
   // --- Snapshot (v2) ---
   snapshot: WorkspaceSnapshot | null;
@@ -105,6 +110,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   // Initial state
   connectionState: 'disconnected',
   connectedFingerprint: null,
+  hydrated: false,
   snapshot: null,
   lastSnapshotAt: null,
 
@@ -113,7 +119,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ connectionState, connectedFingerprint }),
 
   applySnapshot: (snapshot) =>
-    set({ snapshot: dedupeSnapshot(snapshot), lastSnapshotAt: Date.now() }),
+    set({ snapshot: dedupeSnapshot(snapshot), lastSnapshotAt: Date.now(), hydrated: true }),
 
   applyPatch: (patch) => {
     const current = get().snapshot;
@@ -133,6 +139,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({
       connectionState: 'disconnected',
       connectedFingerprint: null,
+      hydrated: false,
       snapshot: null,
       lastSnapshotAt: null,
     }),
@@ -203,6 +210,48 @@ export function useDebouncedConnectionState(): ConnectionState {
   }, [raw, stable]);
 
   return stable;
+}
+
+export function useHydrated(): boolean {
+  return useWorkspaceStore((s) => s.hydrated);
+}
+
+/** Human-facing connection phase — the single source of truth the UI uses to
+ *  describe what's happening, so every surface says the same clear thing. */
+export type ConnectionPhase = 'idle' | 'connecting' | 'reconnecting' | 'syncing' | 'live';
+
+export interface ConnectionStatusInfo {
+  phase: ConnectionPhase;
+  /** Short label for chips/pills, e.g. "Reconnecting…". */
+  label: string;
+  color: string;
+  /** Whether the indicator should pulse (work-in-progress states). */
+  pulsing: boolean;
+}
+
+/**
+ * Derive the human connection status from the (debounced) transport state plus
+ * whether we've loaded data yet. This is what the pill / banners read — it
+ * folds the raw machine states into five states a person can reason about:
+ * idle, connecting, reconnecting, syncing (connected but still loading), live.
+ */
+export function useConnectionStatus(): ConnectionStatusInfo {
+  const state = useDebouncedConnectionState();
+  const hydrated = useHydrated();
+
+  if (state === 'connected') {
+    return hydrated
+      ? { phase: 'live', label: 'Connected', color: '#10b981', pulsing: false }
+      : { phase: 'syncing', label: 'Syncing…', color: '#3b82f6', pulsing: true };
+  }
+  if (state === 'connecting') {
+    return { phase: 'connecting', label: 'Connecting…', color: '#3b82f6', pulsing: true };
+  }
+  if (state === 'reconnecting') {
+    return { phase: 'reconnecting', label: 'Reconnecting…', color: '#eab308', pulsing: true };
+  }
+  // 'disconnected' | 'failed' — both terminal from the UI's perspective.
+  return { phase: 'idle', label: 'Not connected', color: '#71717a', pulsing: false };
 }
 
 export function useConnectedFingerprint(): string | null {

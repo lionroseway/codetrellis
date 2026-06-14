@@ -92,6 +92,11 @@ export class WebRTCManager {
   private _state: ConnectionState = 'disconnected';
   /** Set by disconnect() to abort an in-flight multi-candidate reconnect sweep. */
   private reconnectCanceled = false;
+  /** True once any data channel has actually opened — "we can talk now". We only
+   *  surface `connected` after this, NOT on bare ICE connectivity (which fires
+   *  several seconds early on slow/VPN links and produces a connected→
+   *  disconnected→connected flicker). */
+  private channelOpen = false;
 
   get state(): ConnectionState {
     return this._state;
@@ -552,11 +557,22 @@ export class WebRTCManager {
       const state = pc.connectionState;
       switch (state) {
         case 'connected':
-          this.setState('connected');
+          // Only surface `connected` once a data channel is open — ICE/peer
+          // connectivity alone isn't usable yet (and flickers on slow links).
+          this.markConnectedIfReady();
           break;
         case 'disconnected':
+          // Transient per the WebRTC spec — connectivity may self-heal without a
+          // full reconnect. (Only ever entered after we were connected.) Surface
+          // it as recovering, not a hard disconnect, so a blip never tears down
+          // or boots the user.
+          this.setState('reconnecting');
+          break;
         case 'closed':
-          this.setState('disconnected');
+          // We closed it — either a deliberate disconnect() (which sets the
+          // terminal 'disconnected' itself) or a reconnect teardown (which is
+          // about to re-establish). Don't emit a terminal state here, or a
+          // reconnect's own cleanup would spuriously boot the user.
           break;
         case 'failed':
           this.setState('failed');
@@ -569,11 +585,18 @@ export class WebRTCManager {
       const iceState = pc.iceConnectionState;
       console.log(`[WebRTC] ICE state: ${iceState}`);
       if (iceState === 'connected' || iceState === 'completed') {
-        this.setState('connected');
+        this.markConnectedIfReady();
+      } else if (iceState === 'disconnected') {
+        this.setState('reconnecting');
       } else if (iceState === 'failed') {
         this.setState('failed');
       }
     };
+  }
+
+  /** Surface `connected` only when a data channel is open (usable). */
+  private markConnectedIfReady(): void {
+    if (this.channelOpen) this.setState('connected');
   }
 
   private setupChannel(channel: any): void {
@@ -582,6 +605,10 @@ export class WebRTCManager {
 
     channel.onopen = () => {
       console.log(`[WebRTC] Channel ${name} opened`);
+      // A channel is open → the link is now usable. This is the point we call
+      // ourselves `connected` (not bare ICE), which removes the early flicker.
+      this.channelOpen = true;
+      this.setState('connected');
       // When the ui channel opens, request a full state snapshot from desktop.
       // This is more reliable than depending on the desktop's automatic send
       // (which may fire before channels are open due to WebRTC timing).
@@ -624,6 +651,7 @@ export class WebRTCManager {
   }
 
   private cleanup(): void {
+    this.channelOpen = false; // channels are about to close → no longer usable
     for (const channel of this.channels.values()) {
       try { channel.close(); } catch { /* */ }
     }
