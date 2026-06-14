@@ -133,8 +133,8 @@ for f in \
   "${OUT_DIR}/CodeTrellis-Setup-${VERSION}.exe" \
   "${OUT_DIR}/CodeTrellis-Portable-${VERSION}.exe" \
   "${OUT_DIR}"/CodeTrellis-${VERSION}*.AppImage \
-  "${OUT_DIR}"/*.deb \
-  "${OUT_DIR}"/*.rpm ; do
+  "${OUT_DIR}"/codetrellis_${VERSION}_*.deb \
+  "${OUT_DIR}"/codetrellis-${VERSION}.*.rpm ; do
   [[ -f "$f" ]] && upload_files+=("$f")
 done
 shopt -u nullglob
