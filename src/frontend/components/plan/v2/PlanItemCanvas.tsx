@@ -956,7 +956,44 @@ function CommentsBlock({
         Comments {sorted.length > 0 && <span className="opacity-60">· {sorted.length}</span>}
       </h3>
 
-      {/* Composer */}
+      {/* Thread — F7: existing comments render first so they aren't pushed
+          below the fold by the composer. */}
+      {sorted.length > 0 && (
+        <div className="space-y-2.5 mb-3">
+          {sorted.map((c) => {
+            const meta = COMMENT_KIND_META[c.kind ?? 'note'] ?? COMMENT_KIND_META.note;
+            const isAgent = (c.source ?? '') === 'agent' || c.authorType !== 'human';
+            return (
+              <div key={c.uid} className="group rounded-lg border border-white/[0.05] bg-white/[0.015] px-3.5 py-2.5">
+                <div className="flex items-center gap-2 text-[11.5px] text-foreground-subtle">
+                  <meta.Icon size={12} className={meta.tint} />
+                  <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
+                  <span>·</span>
+                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
+                  <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
+                  <button
+                    onClick={() => {
+                      if (confirm('Delete this comment?')) removeItemComment(itemUid, c.uid);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-foreground-subtle hover:text-red-300 hover:bg-red-500/10"
+                    title="Delete comment"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+                <div className="text-[14px] text-foreground mt-1 whitespace-pre-wrap leading-relaxed">
+                  {c.body}
+                  {c.metadata && typeof (c.metadata as { progressPercent?: number }).progressPercent === 'number' && (
+                    <span className="ml-1.5 text-[11.5px] text-accent">({(c.metadata as { progressPercent: number }).progressPercent}%)</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Composer — F7: rendered after the thread. */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
           {kinds.map((k) => {
@@ -998,42 +1035,6 @@ function CommentsBlock({
           </button>
         </div>
       </div>
-
-      {/* Thread */}
-      {sorted.length > 0 && (
-        <div className="space-y-2.5 mt-3">
-          {sorted.map((c) => {
-            const meta = COMMENT_KIND_META[c.kind ?? 'note'] ?? COMMENT_KIND_META.note;
-            const isAgent = (c.source ?? '') === 'agent' || c.authorType !== 'human';
-            return (
-              <div key={c.uid} className="group rounded-lg border border-white/[0.05] bg-white/[0.015] px-3.5 py-2.5">
-                <div className="flex items-center gap-2 text-[11.5px] text-foreground-subtle">
-                  <meta.Icon size={12} className={meta.tint} />
-                  <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
-                  <span>·</span>
-                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
-                  <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
-                  <button
-                    onClick={() => {
-                      if (confirm('Delete this comment?')) removeItemComment(itemUid, c.uid);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-foreground-subtle hover:text-red-300 hover:bg-red-500/10"
-                    title="Delete comment"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-                <div className="text-[14px] text-foreground mt-1 whitespace-pre-wrap leading-relaxed">
-                  {c.body}
-                  {c.metadata && typeof (c.metadata as { progressPercent?: number }).progressPercent === 'number' && (
-                    <span className="ml-1.5 text-[11.5px] text-accent">({(c.metadata as { progressPercent: number }).progressPercent}%)</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </section>
   );
 }

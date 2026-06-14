@@ -42,6 +42,15 @@ export function PlanWorkspaceShellV2() {
   const channelDrawerOpen = useChannelsStore((s) => s.drawerOpen);
   const toggleChannelDrawer = useChannelsStore((s) => s.toggleDrawer);
   const resetChannels = useChannelsStore((s) => s.reset);
+  // F1 — count of unresolved channel events, surfaced as a badge on the
+  // Channel button so a waiting decision is visible without opening the panel.
+  const openChannelCount = useChannelsStore((s) => {
+    let n = 0;
+    for (const uid in s.eventsByUid) if (s.eventsByUid[uid].status === 'open') n++;
+    return n;
+  });
+  // F13 — reactive item map used to compute toolbar progress (see below).
+  const itemsForProgress = usePlanItemsStore((s) => s.itemsByUid);
 
   // Hydrate the V2 store whenever the active plan changes.
   const hydratePlan = usePlanItemsStore((s) => s.hydratePlan);
@@ -55,6 +64,9 @@ export function PlanWorkspaceShellV2() {
       resetChannels(plan.uid);
     }
     hydratePlan(plan.uid);
+    // F1 — hydrate channels even when the Channel panel is closed so the
+    // open-event badge is accurate from the moment the plan loads.
+    useChannelsStore.getState().hydrate(plan.uid).catch(() => {});
   }, [plan?.uid, activeStorePlanUid, hydratePlan, resetForPlan, resetChannels]);
 
   // Esc minimizes (matches V1 behaviour from Phase 14.B).
@@ -92,7 +104,13 @@ export function PlanWorkspaceShellV2() {
     );
   }
 
-  const progress = plan.taskCount ? Math.round(((plan.completedTaskCount || 0) / (plan.taskCount || 1)) * 100) : 0;
+  // F13 — derive progress from the live V2 item tree (kind === 'action'),
+  // the same source the progress card uses. The legacy plan.taskCount/
+  // completedTaskCount fields are stale on V2 plans (often 0/0), which made
+  // the toolbar contradict the card.
+  const actions = Object.values(itemsForProgress).filter((i) => i.kind === 'action');
+  const doneActions = actions.filter((a) => a.status === 'done').length;
+  const progress = actions.length ? Math.round((doneActions / actions.length) * 100) : 0;
 
   return (
     <div
@@ -112,13 +130,13 @@ export function PlanWorkspaceShellV2() {
         </button>
         <div className="h-5 w-px bg-white/[0.08]" />
         <ListChecks size={12} className="text-accent shrink-0" />
-        <h2 className="text-[13px] font-semibold text-foreground truncate flex-1">{plan.title}</h2>
+        <h2 className="text-[13px] font-semibold text-foreground truncate flex-1 min-w-0" title={plan.title}>{plan.title}</h2>
         <span className="text-[11px] uppercase tracking-wider text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30">
           V2
         </span>
         <StatusBadge status={plan.status} />
         <div className="flex items-center gap-2 text-[12px] text-foreground-subtle">
-          <span>{plan.completedTaskCount || 0}/{plan.taskCount || 0} actions</span>
+          <span>{doneActions}/{actions.length} actions</span>
           <div className="h-1.5 w-24 rounded-full bg-white/[0.05] overflow-hidden">
             <div className="h-full bg-accent/60 rounded-full transition-all" style={{ width: `${progress}%` }} />
           </div>
@@ -161,10 +179,17 @@ export function PlanWorkspaceShellV2() {
               ? 'border-accent/30 bg-accent/10 text-accent'
               : 'border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]'
           }`}
-          title="Toggle channel — peer-to-peer team coordination events"
+          title={openChannelCount > 0
+            ? `Toggle channel — ${openChannelCount} open event${openChannelCount === 1 ? '' : 's'} need attention`
+            : 'Toggle channel — peer-to-peer team coordination events'}
         >
           <MessageCircle size={12} />
           Channel
+          {openChannelCount > 0 && (
+            <span className="ml-0.5 min-w-[16px] h-[16px] px-1 inline-flex items-center justify-center rounded-full bg-amber-500/90 text-[10px] font-semibold text-black leading-none">
+              {openChannelCount}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setHistoryRailOpen(!historyRailOpen)}
