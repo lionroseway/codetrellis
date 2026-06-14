@@ -27,8 +27,10 @@ into a packaged binary, so verify after `npm run build` / a dev run).
 | **F13** contradictory progress | ✅ done | `PlanWorkspaceShellV2.tsx` — toolbar now derives `done/total` from the live V2 item tree (kind==='action'), matching the progress card |
 | **F2** feed not live | ⏬ **downgraded — likely a test artifact** | plumbing traced end-to-end and is correct (see revised §3 F2). No code change. |
 | **F14** unlabeled 44% pill | ➖ already has a tooltip | `PlanReadinessRing.tsx` already sets `title="Plan readiness: N% — …"`; left as-is. Optional: add a visible label. |
+| **F9** `select_item` stale-by-one | ✅ done | `useWebSocket.ts` — `ui-select-item` now awaits reset+hydrate then applies the selection on the next frame, after the shell's reset effect |
+| **F10** no MCP tool opens Channel/History | ✅ done | `toggle_panel` enum extended to `channel`/`activity`/`history` (`session-tools.ts`); `ui-toggle` handler + a `toggle-history-rail` window event (`useWebSocket.ts`, `PlanWorkspaceShellV2.tsx`); `ui-nav` guide updated |
+| **F11** `navigate_to('timeline')` no-op | ✅ done | `useWebSocket.ts` — `timeline` now opens the plan workspace **and** the activity feed (distinct from `plan`) |
 | **F6** item-comments ↔ channel decisions | ⛔ not done — design call | needs a decision on the intended relationship before building |
-| **F9/F10/F11** MCP driver tools | ⛔ not done — backend | `select_item` lag, missing Channel/History nav tools, no-op nav targets |
 
 Verify the visual fixes by rebuilding (`npm run build`) or a dev run
 (`npm run dev`) — source edits don't appear in the already-running packaged app.

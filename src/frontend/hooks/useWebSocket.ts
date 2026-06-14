@@ -255,8 +255,18 @@ export function useWebSocket() {
                 useUiStore.getState().setWorkspaceMode('plan');
               })();
             } else if (target === 'timeline') {
-              useUiStore.getState().setWorkspaceMode('plan');
-              // Timeline is inside the plan workspace — opening plan mode is enough
+              // F11 — "timeline" means the plan event/activity feed. Open the
+              // plan workspace AND its activity drawer so this is visibly
+              // distinct from a plain 'plan' navigation (previously a no-op).
+              (async () => {
+                if (planUid) {
+                  await usePlanStore.getState().setActivePlan(planUid);
+                }
+                useUiStore.getState().setWorkspaceMode('plan');
+                if (!usePlanItemsStore.getState().activityDrawerOpen) {
+                  usePlanItemsStore.getState().toggleActivityDrawer();
+                }
+              })();
             }
           }
           if (type === 'ui-toggle') {
@@ -265,6 +275,21 @@ export function useWebSocket() {
             if (panel === 'inspector') useUiStore.getState().toggleInspector();
             if (panel === 'terminal') useUiStore.getState().toggleAgentPanel();
             if (panel === 'split') useUiStore.getState().toggleSplitView();
+            // F10 — Channel / Activity / History panels live in the plan
+            // workspace; make sure it's showing, then toggle the panel.
+            if (panel === 'channel' || panel === 'activity' || panel === 'history') {
+              if (usePlanStore.getState().activePlanUid) {
+                useUiStore.getState().setWorkspaceMode('plan');
+              }
+              if (panel === 'channel') {
+                (async () => {
+                  const { useChannelsStore } = await import('../stores/channels-store');
+                  useChannelsStore.getState().toggleDrawer();
+                })();
+              }
+              if (panel === 'activity') usePlanItemsStore.getState().toggleActivityDrawer();
+              if (panel === 'history') window.dispatchEvent(new CustomEvent('toggle-history-rail'));
+            }
           }
           if (type === 'ui-refresh') {
             // Force a full plan list refresh, respecting the current scope
@@ -433,13 +458,24 @@ export function useWebSocket() {
             const planUid = payload?.planUid as string | undefined;
             const itemUid = payload?.itemUid as string | undefined;
             if (planUid && itemUid) {
-              // Ensure the plan is active and fully hydrated before selecting.
-              // setActivePlan is async (fetches plan data) — we must await it
-              // so the items store has the plan's tree before selectItem runs.
+              // F9 — previously the selection landed one item behind. Cause:
+              // the workspace shell, on first seeing a new plan, runs
+              // resetForPlan()/hydratePlan() which null the selection — and
+              // that effect could fire *after* selectItem() ran, wiping it.
+              // Fix: drive the same reset+hydrate here and await it, then
+              // apply the selection on the next frame so the shell's mount
+              // effect has already run and won't clear it.
               (async () => {
                 try {
                   await usePlanStore.getState().setActivePlan(planUid);
-                  usePlanItemsStore.getState().selectItem(itemUid);
+                  const items = usePlanItemsStore.getState();
+                  if (items.activePlanUid !== planUid || Object.keys(items.itemsByUid).length === 0) {
+                    items.resetForPlan(planUid);
+                    await items.hydratePlan(planUid);
+                  }
+                  requestAnimationFrame(() => {
+                    usePlanItemsStore.getState().selectItem(itemUid);
+                  });
                 } catch (err) {
                   console.error('[WS] select_item failed:', err);
                 }

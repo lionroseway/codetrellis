@@ -86,6 +86,14 @@ export function PlanWorkspaceShellV2() {
   // Phase 6.2 — Plan history rail toggle.
   const [historyRailOpen, setHistoryRailOpen] = useState(false);
 
+  // F10 — let the MCP `toggle_panel('history')` tool drive the history rail
+  // (its open state is local to this component, so it listens for an event).
+  useEffect(() => {
+    const onToggle = () => setHistoryRailOpen((v) => !v);
+    window.addEventListener('toggle-history-rail', onToggle);
+    return () => window.removeEventListener('toggle-history-rail', onToggle);
+  }, []);
+
   // Entrance animation (matches V1 takeover).
   const [shown, setShown] = useState(false);
   useEffect(() => {
