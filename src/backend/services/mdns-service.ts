@@ -32,20 +32,58 @@ const STALE_PEER_MS = 120_000; // 2 minutes without seeing → remove
 
 // --- State -------------------------------------------------------------------
 
+/** Stable per-machine base id (one per settings dir). */
+const BASE_ID_FILE = 'mdns-instance-id';
+/** Live-instance registry: which pid currently owns which advertised id. */
+const INSTANCES_FILE = 'mdns-instances.json';
+
+interface LiveInstance {
+  /** The mDNS id this process advertises (host = codetrellis-<id>.local). */
+  id: string;
+  /** OS pid that owns it — used to detect crashed/dead owners on next launch. */
+  pid: number;
+  startedAt: string;
+}
+
 /**
- * Stable per-machine instance ID, persisted to the settings dir.
- *
- * Persisting it (rather than minting a fresh random id each launch) means a
- * crash + restart RE-ANNOUNCES the same mDNS record — the responder treats it
- * as a refresh, so the dead session's advertisement is superseded instead of
- * stacked. Result: no ghost/session buildup after crashes, and discovery sees
- * one continuous identity (no down→up flap, so no spurious reconnect trigger
- * on paired phones). Falls back to an ephemeral id if persistence ever fails.
+ * Is a pid currently running? `kill(pid, 0)` sends no signal — it only probes.
+ * ESRCH → no such process (dead); EPERM → exists but owned by another user.
  */
-function loadOrCreateInstanceId(): string {
+function isPidAlive(pid: number): boolean {
+  if (!pid || pid === process.pid) return false; // our own (re-used) pid → treat as stale
   try {
-    const dir = getSettingsDir();
-    const file = path.join(dir, 'mdns-instance-id');
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function readLiveInstances(dir: string): LiveInstance[] {
+  try {
+    const arr = JSON.parse(fs.readFileSync(path.join(dir, INSTANCES_FILE), 'utf-8'));
+    return Array.isArray(arr)
+      ? arr.filter((e) => e && typeof e.id === 'string' && typeof e.pid === 'number')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLiveInstances(dir: string, list: LiveInstance[]): void {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(dir, `${INSTANCES_FILE}.tmp`);
+    fs.writeFileSync(tmp, JSON.stringify(list), 'utf-8');
+    fs.renameSync(tmp, path.join(dir, INSTANCES_FILE)); // atomic-ish swap
+  } catch {
+    /* best-effort — registry is an optimisation, not load-bearing */
+  }
+}
+
+function loadStableBaseId(dir: string): string {
+  try {
+    const file = path.join(dir, BASE_ID_FILE);
     if (fs.existsSync(file)) {
       const existing = fs.readFileSync(file, 'utf-8').trim();
       if (/^[0-9a-f]{8}$/i.test(existing)) return existing;
@@ -55,11 +93,66 @@ function loadOrCreateInstanceId(): string {
     fs.writeFileSync(file, id, 'utf-8');
     return id;
   } catch {
-    return randomUUID().slice(0, 8); // ephemeral fallback if persistence fails
+    return randomUUID().slice(0, 8);
   }
 }
 
-const instanceId = loadOrCreateInstanceId();
+/**
+ * Acquire this process's advertised mDNS id.
+ *
+ * Prefers the STABLE base id so a crash + restart re-announces the same record
+ * (the responder refreshes it rather than stacking a ghost — see commit history).
+ * But before reusing it we check the live-instance registry: if another CURRENTLY
+ * RUNNING process already owns that id (the dev server + packaged app on one
+ * machine, say), we take a distinct id instead. Two responders publishing the
+ * same `codetrellis-<id>.local` A-record on one host is exactly what drives
+ * macOS to rename its own `.local` hostname to "…-2" — so we never let it happen.
+ *
+ * Dead owners (crashed without cleanup) are pruned here on startup — this is the
+ * "did we leave something registered, is it still there?" check.
+ */
+function acquireInstanceId(): string {
+  let dir: string;
+  try {
+    dir = getSettingsDir();
+  } catch {
+    return randomUUID().slice(0, 8); // no settings dir → ephemeral, still unique
+  }
+
+  const baseId = loadStableBaseId(dir);
+  // Keep only entries whose owning process is still alive (prunes crash ghosts).
+  const live = readLiveInstances(dir).filter((e) => isPidAlive(e.pid));
+  const taken = new Set(live.map((e) => e.id));
+
+  let chosen = baseId;
+  if (taken.has(chosen)) {
+    // A live sibling holds the base id — derive a distinct, collision-free one.
+    for (let i = 0; i < 50 && taken.has(chosen); i++) {
+      chosen = `${baseId}${randomUUID().slice(0, 2)}`.slice(0, 12);
+    }
+    if (taken.has(chosen)) chosen = randomUUID().slice(0, 8); // last resort
+    console.log(`[mDNS] Base id ${baseId} held by a live instance — using ${chosen} to avoid an A-record collision.`);
+  }
+
+  writeLiveInstances(dir, [...live, { id: chosen, pid: process.pid, startedAt: new Date().toISOString() }]);
+  return chosen;
+}
+
+/** Drop this process's entry from the live-instance registry (clean shutdown). */
+function releaseInstanceId(): void {
+  try {
+    const dir = getSettingsDir();
+    writeLiveInstances(dir, readLiveInstances(dir).filter((e) => e.pid !== process.pid && isPidAlive(e.pid)));
+  } catch {
+    /* best-effort */
+  }
+}
+
+const instanceId = acquireInstanceId();
+
+// Best-effort cleanup on normal exit. Hard crashes are caught by the
+// liveness prune on the next launch (above), so a missed release never stacks.
+process.once('exit', () => releaseInstanceId());
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let bonjourInstance: any = null;

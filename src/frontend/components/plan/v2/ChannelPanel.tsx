@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   MessageCircle, AlertTriangle, ArrowRight, Lightbulb,
   HelpCircle, ArrowRightLeft, CheckCheck, X, Reply, RefreshCw,
-  Link as LinkIcon,
+  Link as LinkIcon, RotateCcw, CornerDownRight,
 } from 'lucide-react';
 import { useChannelsStore } from '../../../stores/channels-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
@@ -94,18 +94,30 @@ export function ChannelPanel({ planUid }: { planUid: string }) {
         roots.push(ev);
       }
     }
-    // Newest threads first based on the most recent activity in each thread.
+    // F3 — open (actionable) threads float to the top so "what needs my
+    // attention" is never buried under resolved/dismissed history. Within
+    // each group, most-recent activity first.
     return roots
       .map((root) => ({
         root,
         descendants: collectDescendants(root.uid, childrenByParent),
       }))
       .sort((a, b) => {
+        const aOpen = a.root.status === 'open' ? 1 : 0;
+        const bOpen = b.root.status === 'open' ? 1 : 0;
+        if (aOpen !== bOpen) return bOpen - aOpen;
         const aLatest = Math.max(a.root.createdAt, ...a.descendants.map((d) => d.createdAt));
         const bLatest = Math.max(b.root.createdAt, ...b.descendants.map((d) => d.createdAt));
         return bLatest - aLatest;
       });
   }, [orderedUids, eventsByUid]);
+
+  // F3 — filter toggle: "Open" hides resolved/dismissed roots.
+  const [filter, setFilter] = useState<'all' | 'open'>('all');
+  const openCount = threads.filter((t) => t.root.status === 'open').length;
+  const visibleThreads = filter === 'open'
+    ? threads.filter((t) => t.root.status === 'open')
+    : threads;
 
   if (!drawerOpen) {
     return (
@@ -130,13 +142,24 @@ export function ChannelPanel({ planUid }: { planUid: string }) {
         eventCount={orderedUids.length}
       />
       <Composer />
+      {threads.length > 0 && (
+        <div className="flex items-center gap-1 px-2 py-1 border-b border-white/[0.06]">
+          <FilterTab label={`Open${openCount > 0 ? ` · ${openCount}` : ''}`} active={filter === 'open'} onClick={() => setFilter('open')} />
+          <FilterTab label={`All · ${threads.length}`} active={filter === 'all'} onClick={() => setFilter('all')} />
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
         {threads.length === 0 && !loading && (
           <div className="text-[12px] text-foreground-subtle px-2 py-4">
             Channels are empty. Use the composer above to post an event — Ask side (stuck / need-decision / need-context) or Offer side (steer / weigh-in / handing-off) — or wait for an agent to post via MCP.
           </div>
         )}
-        {threads.map(({ root, descendants }) => (
+        {threads.length > 0 && visibleThreads.length === 0 && (
+          <div className="text-[12px] text-foreground-subtle px-2 py-4">
+            Nothing open — all caught up. Switch to “All” to see resolved and dismissed events.
+          </div>
+        )}
+        {visibleThreads.map(({ root, descendants }) => (
           <ThreadCard key={root.uid} root={root} descendants={descendants} />
         ))}
       </div>
@@ -327,6 +350,21 @@ function TabRow({
   );
 }
 
+function FilterTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2 py-0.5 text-[10.5px] rounded transition-colors ${
+        active
+          ? 'bg-white/[0.08] text-foreground font-medium'
+          : 'text-foreground-subtle hover:text-foreground hover:bg-white/[0.04]'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function ThreadCard({ root, descendants }: { root: ChannelEvent; descendants: ChannelEvent[] }) {
   return (
     <div className="space-y-1">
@@ -345,9 +383,25 @@ function ThreadCard({ root, descendants }: { root: ChannelEvent; descendants: Ch
 
 function EventCard({ event, isRoot }: { event: ChannelEvent; isRoot: boolean }) {
   const setStatus = useChannelsStore((s) => s.setStatus);
+  const post = useChannelsStore((s) => s.post);
+  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  const selectItem = usePlanItemsStore((s) => s.selectItem);
   const meta = EVENT_META[event.eventType] ?? EVENT_META['weigh-in'];
   const Icon = meta.Icon;
   const statusMeta = STATUS_META[event.status];
+
+  // F5 — resolve the anchored plan item so the card can show which item
+  // this event is about (and let the user jump to it).
+  const anchorItem = event.itemUid ? itemsByUid[event.itemUid] : null;
+
+  const options = Array.isArray(event.payload.options) ? event.payload.options : [];
+  // F4 — a decision's options are pickable while it's open: choosing one
+  // posts the choice as a steer reply and resolves the decision in one click.
+  const optionsPickable = isRoot && event.eventType === 'need-decision' && event.status === 'open';
+  const chooseOption = async (choice: string) => {
+    await post({ eventType: 'steer', message: `Chose: ${choice}`, respondsTo: event.uid });
+    await setStatus(event.uid, 'resolved').catch(() => {});
+  };
 
   return (
     <div className={`rounded border border-white/[0.06] border-l-2 ${meta.border} bg-[#06070d] px-2 py-1.5`}>
@@ -382,17 +436,55 @@ function EventCard({ event, isRoot }: { event: ChannelEvent; isRoot: boolean }) 
             </button>
           </>
         )}
+        {/* F8 — let a mistakenly resolved/dismissed event be reopened. */}
+        {isRoot && event.status !== 'open' && (
+          <button
+            onClick={() => setStatus(event.uid, 'open').catch(() => {})}
+            className="p-0.5 rounded hover:bg-white/[0.05] text-foreground-subtle hover:text-amber-300"
+            title="Reopen"
+          >
+            <RotateCcw size={10} />
+          </button>
+        )}
       </div>
+      {/* F5 — anchor chip: which plan item this event is scoped to. */}
+      {anchorItem && (
+        <button
+          onClick={() => selectItem(anchorItem.uid)}
+          title={`Go to ${anchorItem.kind === 'action' ? 'action' : 'item'}: ${anchorItem.title || '(untitled)'}`}
+          className="mb-1 inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-[10px] text-foreground-subtle hover:text-foreground"
+        >
+          <CornerDownRight size={9} className="shrink-0" />
+          <span className="truncate">{anchorItem.title || '(untitled)'}</span>
+        </button>
+      )}
       <div className="text-[12.5px] text-foreground whitespace-pre-wrap">{event.payload.message}</div>
       {Array.isArray(event.payload.attempted) && event.payload.attempted.length > 0 && (
         <ul className="mt-1 ml-2 text-[11px] text-foreground-subtle list-disc list-inside space-y-0.5">
           {event.payload.attempted.map((line, i) => (<li key={i}>{line}</li>))}
         </ul>
       )}
-      {Array.isArray(event.payload.options) && event.payload.options.length > 0 && (
-        <ul className="mt-1 ml-2 text-[11px] text-foreground-subtle list-decimal list-inside space-y-0.5">
-          {event.payload.options.map((line, i) => (<li key={i}>{line}</li>))}
-        </ul>
+      {options.length > 0 && (
+        optionsPickable ? (
+          <div className="mt-1.5 flex flex-col gap-1">
+            {options.map((line, i) => (
+              <button
+                key={i}
+                onClick={() => chooseOption(line).catch(() => {})}
+                title="Choose this option — posts a steer and resolves the decision"
+                className="flex items-center gap-1.5 text-left px-2 py-1 rounded border border-white/[0.06] bg-white/[0.02] hover:bg-emerald-400/10 hover:border-emerald-400/30 text-[11.5px] text-foreground transition-colors"
+              >
+                <span className="text-foreground-subtle">{i + 1}.</span>
+                <span className="flex-1">{line}</span>
+                <ArrowRight size={10} className="text-emerald-300/70 shrink-0" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <ul className="mt-1 ml-2 text-[11px] text-foreground-subtle list-decimal list-inside space-y-0.5">
+            {options.map((line, i) => (<li key={i}>{line}</li>))}
+          </ul>
+        )
       )}
       <div className="text-[10px] text-foreground-subtle mt-1">{formatTimestamp(event.createdAt)}</div>
     </div>

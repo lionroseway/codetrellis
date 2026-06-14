@@ -9,6 +9,7 @@ import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { usePlanStore } from '../../../stores/plan-store';
 import { useProjectStore } from '../../../stores/project-store';
 import { useToastStore } from '../../../stores/toast-store';
+import { useChannelsStore } from '../../../stores/channels-store';
 import { fileToBase64 } from '../../../lib/attachment-helpers';
 import { useSlashMenu } from './SlashMenu';
 import { useMentionPicker } from './MentionPicker';
@@ -130,6 +131,7 @@ export function PlanItemCanvas() {
             research page rather than a metadata-stuffed admin panel. */}
         <div className="max-w-[42rem] mx-auto px-10 py-10 space-y-10">
           <ItemHeaderProperties item={item} />
+          <ItemChannelBand itemUid={item.uid} />
           <BodyEditor key={item.uid} item={item} />
           <TargetsStrip item={item} />
           <ItemRoutingPanel item={item} />
@@ -146,6 +148,75 @@ export function PlanItemCanvas() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Short labels for the six channel event types — kept local so the band
+// stays self-contained (the Channel panel owns the full icon/tint metadata).
+const CHANNEL_TYPE_META: Record<string, { label: string; tint: string }> = {
+  'stuck': { label: 'Stuck', tint: 'text-amber-300' },
+  'need-decision': { label: 'Decision', tint: 'text-violet-300' },
+  'need-context': { label: 'Context', tint: 'text-sky-300' },
+  'handing-off': { label: 'Handoff', tint: 'text-cyan-300' },
+  'steer': { label: 'Steer', tint: 'text-emerald-300' },
+  'weigh-in': { label: 'Weigh-in', tint: 'text-fuchsia-300' },
+};
+
+/**
+ * F6 — cross-link the two collaboration surfaces. A blocker/decision on an
+ * item often lives as BOTH an item comment and a Channel event anchored to
+ * the item. This band surfaces the open Channel events for the current item
+ * (the reverse link — the Channel card already shows an anchor chip back to
+ * the item) so the human doesn't have to mentally join two parallel threads.
+ * Pure presentation: reads the already-hydrated channels store, no new fetch.
+ */
+function ItemChannelBand({ itemUid }: { itemUid: string }) {
+  const eventsByUid = useChannelsStore((s) => s.eventsByUid);
+  const drawerOpen = useChannelsStore((s) => s.drawerOpen);
+  const toggleDrawer = useChannelsStore((s) => s.toggleDrawer);
+
+  const openEvents = useMemo(
+    () => Object.values(eventsByUid)
+      .filter((e) => e.itemUid === itemUid && e.status === 'open')
+      .sort((a, b) => b.createdAt - a.createdAt),
+    [eventsByUid, itemUid],
+  );
+
+  if (openEvents.length === 0) return null;
+
+  const openChannel = () => {
+    if (!drawerOpen) toggleDrawer();
+  };
+
+  return (
+    <button
+      onClick={openChannel}
+      title="Open the Channel panel"
+      className="w-full text-left rounded-xl border border-amber-400/20 bg-amber-400/[0.04] hover:bg-amber-400/[0.07] hover:border-amber-400/30 transition-colors px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <MessageSquare size={13} className="text-amber-300" />
+        <span className="text-[12.5px] font-medium text-foreground">
+          {openEvents.length} open in Channel
+        </span>
+        <span className="text-[11.5px] text-foreground-subtle">· needs attention on this item</span>
+        <span className="ml-auto text-[11.5px] text-amber-300/80">Open →</span>
+      </div>
+      <ul className="space-y-1">
+        {openEvents.slice(0, 4).map((e) => {
+          const meta = CHANNEL_TYPE_META[e.eventType] ?? { label: e.eventType, tint: 'text-foreground-subtle' };
+          return (
+            <li key={e.uid} className="flex items-center gap-2 text-[12px]">
+              <span className={`uppercase tracking-wide text-[10px] font-medium shrink-0 ${meta.tint}`}>{meta.label}</span>
+              <span className="text-foreground-muted truncate">{e.payload.message}</span>
+            </li>
+          );
+        })}
+        {openEvents.length > 4 && (
+          <li className="text-[11.5px] text-foreground-subtle">+{openEvents.length - 4} more…</li>
+        )}
+      </ul>
+    </button>
   );
 }
 
@@ -956,7 +1027,44 @@ function CommentsBlock({
         Comments {sorted.length > 0 && <span className="opacity-60">· {sorted.length}</span>}
       </h3>
 
-      {/* Composer */}
+      {/* Thread — F7: existing comments render first so they aren't pushed
+          below the fold by the composer. */}
+      {sorted.length > 0 && (
+        <div className="space-y-2.5 mb-3">
+          {sorted.map((c) => {
+            const meta = COMMENT_KIND_META[c.kind ?? 'note'] ?? COMMENT_KIND_META.note;
+            const isAgent = (c.source ?? '') === 'agent' || c.authorType !== 'human';
+            return (
+              <div key={c.uid} className="group rounded-lg border border-white/[0.05] bg-white/[0.015] px-3.5 py-2.5">
+                <div className="flex items-center gap-2 text-[11.5px] text-foreground-subtle">
+                  <meta.Icon size={12} className={meta.tint} />
+                  <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
+                  <span>·</span>
+                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
+                  <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
+                  <button
+                    onClick={() => {
+                      if (confirm('Delete this comment?')) removeItemComment(itemUid, c.uid);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-foreground-subtle hover:text-red-300 hover:bg-red-500/10"
+                    title="Delete comment"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+                <div className="text-[14px] text-foreground mt-1 whitespace-pre-wrap leading-relaxed">
+                  {c.body}
+                  {c.metadata && typeof (c.metadata as { progressPercent?: number }).progressPercent === 'number' && (
+                    <span className="ml-1.5 text-[11.5px] text-accent">({(c.metadata as { progressPercent: number }).progressPercent}%)</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Composer — F7: rendered after the thread. */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
           {kinds.map((k) => {
@@ -998,42 +1106,6 @@ function CommentsBlock({
           </button>
         </div>
       </div>
-
-      {/* Thread */}
-      {sorted.length > 0 && (
-        <div className="space-y-2.5 mt-3">
-          {sorted.map((c) => {
-            const meta = COMMENT_KIND_META[c.kind ?? 'note'] ?? COMMENT_KIND_META.note;
-            const isAgent = (c.source ?? '') === 'agent' || c.authorType !== 'human';
-            return (
-              <div key={c.uid} className="group rounded-lg border border-white/[0.05] bg-white/[0.015] px-3.5 py-2.5">
-                <div className="flex items-center gap-2 text-[11.5px] text-foreground-subtle">
-                  <meta.Icon size={12} className={meta.tint} />
-                  <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
-                  <span>·</span>
-                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
-                  <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
-                  <button
-                    onClick={() => {
-                      if (confirm('Delete this comment?')) removeItemComment(itemUid, c.uid);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-foreground-subtle hover:text-red-300 hover:bg-red-500/10"
-                    title="Delete comment"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-                <div className="text-[14px] text-foreground mt-1 whitespace-pre-wrap leading-relaxed">
-                  {c.body}
-                  {c.metadata && typeof (c.metadata as { progressPercent?: number }).progressPercent === 'number' && (
-                    <span className="ml-1.5 text-[11.5px] text-accent">({(c.metadata as { progressPercent: number }).progressPercent}%)</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </section>
   );
 }

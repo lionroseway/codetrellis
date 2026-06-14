@@ -61,9 +61,12 @@ export default function TabLayout() {
   useEffect(() => {
     if (connState === 'connected') {
       wasConnected.current = true;
-    } else if (wasConnected.current && (connState === 'disconnected' || connState === 'failed')) {
-      // Use dismissAll + navigate to fully pop out of the tab stack
-      // back to the root pairing screen.
+    } else if (wasConnected.current && connState === 'disconnected') {
+      // Only a *terminal* disconnect returns the user to pairing — i.e. the
+      // connection manager gave up after its long reconnect ceiling, or the user
+      // disconnected. Transient states ('connecting' / 'reconnecting' / 'failed'
+      // candidate-sweep) keep the user here while auto-reconnect runs, so a
+      // network blip no longer boots them out mid-session.
       try {
         router.dismissAll();
       } catch {

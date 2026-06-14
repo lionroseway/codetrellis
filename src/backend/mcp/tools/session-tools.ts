@@ -82,7 +82,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description: 'Navigate the CodeTrellis UI to a specific view. Use this to show the user what you are working on — open the plan workspace, switch to graph view, or enable split view.',
       inputSchema: {
-        target: z.enum(['plan', 'graph', 'split', 'timeline']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with timeline'),
+        target: z.enum(['plan', 'graph', 'split', 'timeline']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open'),
         plan_uid: z.string().optional().describe('If navigating to plan/split/timeline, which plan to show. If omitted, keeps the current active plan.'),
       },
     },
@@ -110,9 +110,13 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'toggle_panel',
     {
-      description: 'Toggle a UI panel on or off in the CodeTrellis interface.',
+      description: 'Toggle a UI panel on or off in the CodeTrellis interface. ' +
+        '"channel", "activity" and "history" live inside the plan workspace and will switch to it if a plan is active.',
       inputSchema: {
-        panel: z.enum(['sidebar', 'inspector', 'terminal', 'split']).describe('Which panel to toggle'),
+        panel: z.enum(['sidebar', 'inspector', 'terminal', 'split', 'channel', 'activity', 'history']).describe(
+          'Which panel to toggle. "channel" = peer-to-peer coordination Channel panel, ' +
+          '"activity" = plan activity/event feed, "history" = plan history (time-travel) rail.',
+        ),
       },
     },
     async ({ panel }) => {

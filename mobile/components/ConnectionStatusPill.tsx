@@ -1,36 +1,35 @@
 /**
- * ConnectionStatusPill — session-persistence plan / item 5.5.
+ * ConnectionStatusPill — always-visible connection indicator.
  *
- * Always-visible chrome indicator for the current connection state.
- * Reads the *debounced* state from `useDebouncedConnectionState` (item
- * 5.4) so sub-2s blips never surface as a colour flash. Tap → opens
- * the connection-switcher modal, which is already the existing
- * connection-management surface on mobile.
+ * Reads the single human-facing status (`useConnectionStatus`) so it says the
+ * same clear thing as every other surface: Connecting… / Reconnecting… /
+ * Syncing… / Connected / Not connected. The dot pulses during work-in-progress
+ * states (connecting, reconnecting, syncing) so a slow/VPN connect reads as
+ * "still working" rather than a confusing flicker. Tap → connection switcher.
  */
 
-import { Text, TouchableOpacity, StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Text, TouchableOpacity, StyleSheet, View, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useDebouncedConnectionState } from '../lib/store';
-import type { ConnectionState } from '../lib/types';
-
-interface StateVisual {
-  color: string;
-  bg: string;
-  label: string;
-}
-
-const STATE_STYLE: Record<ConnectionState, StateVisual> = {
-  connected:    { color: '#10b981', bg: '#10b98115', label: 'online' },
-  connecting:   { color: '#3b82f6', bg: '#3b82f615', label: 'connecting' },
-  reconnecting: { color: '#3b82f6', bg: '#3b82f615', label: 'reconnecting' },
-  disconnected: { color: '#71717a', bg: '#71717a15', label: 'offline' },
-  failed:       { color: '#ef4444', bg: '#ef444415', label: 'offline' },
-};
+import { useConnectionStatus } from '../lib/store';
 
 export default function ConnectionStatusPill() {
   const router = useRouter();
-  const state = useDebouncedConnectionState();
-  const s = STATE_STYLE[state];
+  const { label, color, pulsing } = useConnectionStatus();
+
+  // Pulse the dot while a connection is in progress.
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!pulsing) { pulse.setValue(1); return; }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulsing, pulse]);
 
   return (
     <TouchableOpacity
@@ -38,11 +37,11 @@ export default function ConnectionStatusPill() {
       hitSlop={8}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Connection: ${s.label}. Tap to open the connection switcher.`}
+      accessibilityLabel={`Connection: ${label}. Tap to open the connection switcher.`}
     >
-      <View style={[styles.pill, { backgroundColor: s.bg, borderColor: s.color }]}>
-        <View style={[styles.dot, { backgroundColor: s.color }]} />
-        <Text style={[styles.label, { color: s.color }]}>{s.label}</Text>
+      <View style={[styles.pill, { backgroundColor: `${color}15`, borderColor: color }]}>
+        <Animated.View style={[styles.dot, { backgroundColor: color, opacity: pulse }]} />
+        <Text style={[styles.label, { color }]}>{label}</Text>
       </View>
     </TouchableOpacity>
   );

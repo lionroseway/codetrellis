@@ -113,6 +113,66 @@ const ALL_KEYS: KeyDef[] = KEY_GROUPS.flatMap((g) => g.keys);
 const PRIMARY_LABELS = new Set(['esc', '^C', 'tab', '⏎', '↑', '↓', '←', '→']);
 const PRIMARY_KEYS = ALL_KEYS.filter((k) => PRIMARY_LABELS.has(k.label));
 
+// --- Sticky modifier keys ----------------------------------------------------
+// Four modifiers, each a 3-state toggle: off → armed (one-shot) → locked
+// (sticky) → off. `armed` clears after the next key; `locked` persists so you
+// can fire several shortcuts. They combine freely: ⌃⇧→, ⌃⌥c, etc.
+//
+// ⌘ has no native meaning to a PTY, so we map it to Meta (the same ESC-prefix /
+// modifier bit a Mac terminal sends for ⌘), which is the closest real behaviour.
+type ModState = 'off' | 'armed' | 'locked';
+type ModKey = 'ctrl' | 'alt' | 'shift' | 'meta';
+type Mods = Record<ModKey, ModState>;
+const MOD_OFF: Mods = { ctrl: 'off', alt: 'off', shift: 'off', meta: 'off' };
+
+interface ModFlags { ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
+const flagsOf = (m: Mods): ModFlags => ({
+  ctrl: m.ctrl !== 'off', alt: m.alt !== 'off', shift: m.shift !== 'off', meta: m.meta !== 'off',
+});
+const anyArmed = (m: Mods): boolean =>
+  m.ctrl !== 'off' || m.alt !== 'off' || m.shift !== 'off' || m.meta !== 'off';
+
+const MOD_BUTTONS: { key: ModKey; symbol: string; name: string }[] = [
+  { key: 'ctrl',  symbol: '⌃', name: 'ctrl' },
+  { key: 'alt',   symbol: '⌥', name: 'opt' },
+  { key: 'shift', symbol: '⇧', name: 'shift' },
+  { key: 'meta',  symbol: '⌘', name: 'cmd' },
+];
+
+// xterm modifier parameter: 1 + Shift(1) + Alt(2) + Ctrl(4) + Meta(8).
+function modParam(f: ModFlags): number {
+  return 1 + (f.shift ? 1 : 0) + (f.alt ? 2 : 0) + (f.ctrl ? 4 : 0) + (f.meta ? 8 : 0);
+}
+
+/** Encode a plain typed character under the active modifiers. */
+function encodeChar(ch: string, f: ModFlags): string {
+  let c = f.shift ? ch.toUpperCase() : ch;
+  if (f.ctrl && /^[A-Za-z@[\]\\^_ ]$/.test(c)) {
+    c = String.fromCharCode(c.toUpperCase().charCodeAt(0) & 0x1f);
+  }
+  if (f.alt || f.meta) c = '\x1b' + c; // Meta/Alt (incl. ⌘→Meta) → ESC prefix
+  return c;
+}
+
+/**
+ * Encode a special-key sequence under the active modifiers using the standard
+ * xterm CSI modifier forms — `\x1b[1;PA` for arrows/Home/End, `\x1b[N;P~` for
+ * tilde keys (Del/PgUp/…). Keys with no CSI form (esc/tab/⏎) just take an ESC
+ * prefix under Meta/Alt.
+ */
+function encodeSpecial(seq: string, f: ModFlags): string {
+  const p = modParam(f);
+  if (p === 1) return seq;
+  let m: RegExpExecArray | null;
+  // eslint-disable-next-line no-control-regex
+  if ((m = /^\x1b\[([0-9]+)~$/.exec(seq))) return `\x1b[${m[1]};${p}~`;
+  // eslint-disable-next-line no-control-regex
+  if ((m = /^\x1b\[([A-Z])$/.exec(seq))) return `\x1b[1;${p}${m[1]}`;
+  // eslint-disable-next-line no-control-regex
+  if ((m = /^\x1bO([A-Z])$/.exec(seq))) return `\x1b[1;${p}${m[1]}`;
+  return (f.alt || f.meta) ? '\x1b' + seq : seq;
+}
+
 export default function TerminalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string; title?: string }>();
   const insets = useSafeAreaInsets();
@@ -121,8 +181,7 @@ export default function TerminalDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
-  const [ctrl, setCtrl] = useState(false);
-  const [alt, setAlt] = useState(false);
+  const [mods, setMods] = useState<Mods>(MOD_OFF);
   const [keysOpen, setKeysOpen] = useState(false);
   // Plan item 10.5 — terminal font size. Hydrated from prefs at mount,
   // applied to the WebView once xterm is ready, persisted on change.
@@ -296,12 +355,28 @@ export default function TerminalDetailScreen() {
     } catch { /* ignore */ }
   }, [id, pump]);
 
-  // Plan item 10.2 — haptic on every key tap. Wraps `write` so the
-  // existing CONTROL_KEYS rendering doesn't need per-key changes.
+  // Cycle a modifier off → armed → locked → off, and clear the one-shot
+  // (`armed`) modifiers after a key fires (keeping any `locked` ones).
+  const cycleMod = useCallback((k: ModKey) => {
+    tapHaptic();
+    setMods((m) => ({ ...m, [k]: m[k] === 'off' ? 'armed' : m[k] === 'armed' ? 'locked' : 'off' }));
+  }, []);
+  const clearArmed = useCallback(() => {
+    setMods((m) => ({
+      ctrl: m.ctrl === 'armed' ? 'off' : m.ctrl,
+      alt: m.alt === 'armed' ? 'off' : m.alt,
+      shift: m.shift === 'armed' ? 'off' : m.shift,
+      meta: m.meta === 'armed' ? 'off' : m.meta,
+    }));
+  }, []);
+
+  // Plan item 10.2 — haptic on every key tap. Special keys now fold in any
+  // active modifiers (⌃→, ⇧Tab, ⌥End…) via the xterm CSI encoding.
   const tapKey = useCallback((seq: string) => {
     tapHaptic();
-    write(seq);
-  }, [write]);
+    write(encodeSpecial(seq, flagsOf(mods)));
+    if (anyArmed(mods)) clearArmed();
+  }, [mods, write, clearArmed]);
 
   const sendInput = useCallback(async () => {
     if (!inputText.trim()) return;
@@ -314,23 +389,24 @@ export default function TerminalDetailScreen() {
     }
   }, [inputText, write]);
 
-  // Sticky-modifier typing: Ctrl/⌥ + first char of an empty field.
+  // Sticky-modifier typing: when ⌃/⌥/⌘ is active, the next character from the
+  // keyboard becomes a key event (e.g. ⌃ + c → 0x03) instead of literal text.
+  // ⇧ alone doesn't intercept (the soft keyboard already does case); it only
+  // modifies a combo or a special key.
   const handleChangeText = useCallback((text: string) => {
-    if ((ctrl || alt) && inputText === '' && text.length >= 1) {
+    const f = flagsOf(mods);
+    if ((f.ctrl || f.alt || f.meta) && inputText === '' && text.length >= 1) {
       const ch = text[text.length - 1];
-      let seq = ch;
-      if (ctrl && /^[a-zA-Z@[\]\\^_]$/.test(ch)) {
-        seq = String.fromCharCode(ch.toUpperCase().charCodeAt(0) & 0x1f);
-      }
-      if (alt) seq = '\x1b' + seq;
-      write(seq);
-      setCtrl(false);
-      setAlt(false);
+      write(encodeChar(ch, f));
+      clearArmed();
       setInputText('');
       return;
     }
     setInputText(text);
-  }, [ctrl, alt, inputText, write]);
+  }, [mods, inputText, write, clearArmed]);
+
+  // Symbols of the currently-active modifiers, for the input hint.
+  const activeModSymbols = MOD_BUTTONS.filter((b) => mods[b.key] !== 'off').map((b) => b.symbol).join('');
 
   // Resize the PTY to match the emulator grid (debounced).
   const handleResize = useCallback((cols: number, rows: number) => {
@@ -442,6 +518,13 @@ export default function TerminalDetailScreen() {
                 <Text style={styles.keyDrawerDone}>Done</Text>
               </TouchableOpacity>
             </View>
+            {/* Sticky modifiers — tap to arm (one-shot), tap again to lock. */}
+            <View style={styles.keyGroup}>
+              <Text style={styles.keyGroupLabel}>modifiers · tap to arm, again to lock</Text>
+              <View style={styles.keyGroupRow}>
+                <ModKeyRow mods={mods} onCycle={cycleMod} />
+              </View>
+            </View>
             {KEY_GROUPS.map((group) => (
               <View key={group.name} style={styles.keyGroup}>
                 <Text style={styles.keyGroupLabel}>{group.name}</Text>
@@ -470,20 +553,7 @@ export default function TerminalDetailScreen() {
             contentContainerStyle={styles.keyBarContent}
             keyboardShouldPersistTaps="always"
           >
-            <TouchableOpacity
-              style={[styles.keyBtn, styles.modBtn, ctrl && styles.modBtnActive]}
-              activeOpacity={0.6}
-              onPress={() => setCtrl((v) => !v)}
-            >
-              <Text style={[styles.keyBtnText, ctrl && styles.modBtnTextActive]}>Ctrl</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.keyBtn, styles.modBtn, alt && styles.modBtnActive]}
-              activeOpacity={0.6}
-              onPress={() => setAlt((v) => !v)}
-            >
-              <Text style={[styles.keyBtnText, alt && styles.modBtnTextActive]}>⌥</Text>
-            </TouchableOpacity>
+            <ModKeyRow mods={mods} onCycle={cycleMod} />
             <View style={styles.keyDivider} />
             {PRIMARY_KEYS.map((k) => (
               <TouchableOpacity key={k.label} style={styles.keyBtn} activeOpacity={0.6} onPress={() => tapKey(k.seq)}>
@@ -516,8 +586,8 @@ export default function TerminalDetailScreen() {
             value={inputText}
             onChangeText={handleChangeText}
             onSubmitEditing={sendInput}
-            placeholder={ctrl || alt ? `${ctrl ? 'Ctrl' : ''}${ctrl && alt ? '+' : ''}${alt ? '⌥' : ''} + type a key…` : 'Type command...'}
-            placeholderTextColor={ctrl || alt ? '#3b82f6' : '#52525b'}
+            placeholder={activeModSymbols ? `${activeModSymbols} + type a key…` : 'Type command...'}
+            placeholderTextColor={activeModSymbols ? '#3b82f6' : '#52525b'}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="off"
@@ -534,6 +604,33 @@ export default function TerminalDetailScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+/** The four sticky modifier keys (⌃ ⌥ ⇧ ⌘). Used in both the compact bar and
+ *  the expanded KEYS drawer. Tap cycles off → armed → locked. */
+function ModKeyRow({ mods, onCycle }: { mods: Mods; onCycle: (k: ModKey) => void }) {
+  return (
+    <>
+      {MOD_BUTTONS.map((b) => {
+        const st = mods[b.key];
+        const active = st !== 'off';
+        return (
+          <TouchableOpacity
+            key={b.key}
+            style={[styles.modKey, st === 'armed' && styles.modKeyArmed, st === 'locked' && styles.modKeyLocked]}
+            activeOpacity={0.7}
+            onPress={() => onCycle(b.key)}
+            accessibilityRole="button"
+            accessibilityLabel={`${b.name} modifier ${st}. Tap to ${st === 'off' ? 'arm' : st === 'armed' ? 'lock' : 'clear'}.`}
+          >
+            <Text style={[styles.modKeySymbol, active && styles.modKeyTextActive]}>{b.symbol}</Text>
+            <Text style={[styles.modKeyName, active && styles.modKeyTextActive]}>{b.name}</Text>
+            {st === 'locked' && <View style={styles.modLockDot} />}
+          </TouchableOpacity>
+        );
+      })}
+    </>
   );
 }
 
@@ -573,9 +670,18 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   keyBtnText: { color: '#d4d4d8', fontSize: 13, fontWeight: '600', fontFamily: MONO },
-  modBtn: { backgroundColor: '#1e293b', borderColor: '#3b82f640' },
-  modBtnActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  modBtnTextActive: { color: '#ffffff' },
+  // Sticky modifier keys — symbol over a small name, with armed/locked states.
+  modKey: {
+    minWidth: 46, height: 40, paddingHorizontal: 8, borderRadius: 9,
+    backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#3b82f655',
+    alignItems: 'center', justifyContent: 'center', gap: 1,
+  },
+  modKeyArmed: { backgroundColor: '#3b82f6', borderColor: '#60a5fa' },
+  modKeyLocked: { backgroundColor: '#1d4ed8', borderColor: '#fde047' },
+  modKeySymbol: { color: '#93c5fd', fontSize: 15, fontWeight: '700', lineHeight: 17 },
+  modKeyName: { color: '#64748b', fontSize: 8, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
+  modKeyTextActive: { color: '#ffffff' },
+  modLockDot: { position: 'absolute', top: 3, right: 4, width: 5, height: 5, borderRadius: 3, backgroundColor: '#fde047' },
   keyDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', marginVertical: 6, backgroundColor: '#3f3f46' },
   moreBtn: {
     width: 44, height: 32, marginRight: 8, borderRadius: 7,

@@ -35,6 +35,11 @@ type PatchHandler = (patch: unknown[]) => void;
 type StateChangeHandler = (state: ConnectionState, fingerprint: string) => void;
 type TerminalHandler = (index: number, data: string) => void;
 
+/** How long we keep auto-reconnecting before surfacing a terminal disconnect
+ *  (which returns the user to the device list). Generous on purpose — only a
+ *  genuinely-gone desktop should ever reach it. */
+const RECONNECT_GIVEUP_MS = 90_000;
+
 // --- Connection Manager ------------------------------------------------------
 
 class ConnectionManager {
@@ -63,6 +68,16 @@ class ConnectionManager {
   private lastNetInfoReachable: boolean | null = null;
   /** True after a deliberate user disconnect — suppresses all auto-reconnect. */
   private userDisconnected = false;
+  /** True once we've reached a live connection for the current target — lets us
+   *  label a later drop as `reconnecting` (we had it) vs first-time `connecting`. */
+  private everConnected = false;
+  /** When the current outage began (epoch ms; 0 = connected). Drives the give-up
+   *  ceiling so a truly-gone desktop eventually returns the user to the device
+   *  list — but a normal blip never does. */
+  private outageStartedAt = 0;
+  /** Set once we've given up auto-reconnecting (ceiling hit) — surfaces a
+   *  terminal `disconnected` and stops the retry loop until the next connect(). */
+  private gaveUp = false;
   /** Snapshot-pull retry (rides out slow VPN convergence + reconnect bounces). */
   private resyncTimer: ReturnType<typeof setTimeout> | null = null;
   private resyncAttempts = 0;
@@ -72,6 +87,9 @@ class ConnectionManager {
    */
   async connect(target: ConnectionTarget): Promise<void> {
     this.userDisconnected = false;
+    this.everConnected = false;
+    this.outageStartedAt = 0;
+    this.gaveUp = false;
     this.target = target;
 
     if (target.type === 'webrtc') {
@@ -87,6 +105,9 @@ class ConnectionManager {
    */
   disconnect(): void {
     this.userDisconnected = true;
+    this.everConnected = false;
+    this.outageStartedAt = 0;
+    this.gaveUp = false;
     this.cancelReconnect();
     this.cancelHydration();
     this.stopHeartbeat();
@@ -201,6 +222,9 @@ class ConnectionManager {
       this.emitStateChange(state, target.fingerprint);
 
       if (state === 'connected') {
+        this.everConnected = true;
+        this.outageStartedAt = 0; // recovered → reset the give-up clock
+        this.gaveUp = false;
         this.cancelReconnect();
         this.reconnectAttempts = 0;
         this.reconnecting = false;
@@ -233,7 +257,10 @@ class ConnectionManager {
             pairingId: pairingIdChanged ? upgradedPairingId! : undefined,
           },
         ).catch(() => { /* best-effort persistence */ });
-      } else if (state === 'disconnected' || state === 'failed') {
+      } else if (state === 'reconnecting' || state === 'disconnected' || state === 'failed') {
+        // Transient transport states (blip, ICE drop, candidate-sweep failure) —
+        // keep the user where they are and try to recover. Only the give-up
+        // ceiling inside scheduleReconnect surfaces a terminal disconnect.
         this.scheduleReconnect();
       }
     });
@@ -385,7 +412,8 @@ class ConnectionManager {
         console.log('[Connection] Liveness lost — peer not responding, reconnecting');
         this.stopHeartbeat();
         if (this.target && this.target.type === 'webrtc') {
-          this.emitStateChange('disconnected', this.target.fingerprint);
+          // Recovering, not gone — keep the user on screen while we reconnect.
+          this.emitStateChange('reconnecting', this.target.fingerprint);
         }
         this.scheduleReconnect();
       }
@@ -469,9 +497,27 @@ class ConnectionManager {
   }
 
   private scheduleReconnect(): void {
-    if (this.userDisconnected) return; // deliberate disconnect — stay down
-    if (this.reconnectTimer || this.reconnecting) return;
+    if (this.userDisconnected || this.gaveUp) return; // deliberate / given up — stay down
     if (!this.target || this.target.type !== 'webrtc') return;
+
+    // Mark the start of the outage on the first retry of a run, so the give-up
+    // ceiling measures *continuous* unreachability (reset to 0 on reconnect).
+    if (!this.outageStartedAt) this.outageStartedAt = Date.now();
+
+    // Give up only after a long ceiling — long enough that tunnels, lifts, and
+    // wifi↔cellular handoffs never trip it, but a genuinely-gone desktop
+    // eventually surfaces a terminal disconnect (which returns the user to the
+    // device list). A normal blip recovers far inside this window.
+    if (Date.now() - this.outageStartedAt > RECONNECT_GIVEUP_MS) {
+      this.gaveUp = true;
+      this.cancelReconnect();
+      this.reconnecting = false;
+      console.log('[Connection] Reconnect ceiling reached — surfacing terminal disconnect');
+      this.emitStateChange('disconnected', this.target.fingerprint);
+      return;
+    }
+
+    if (this.reconnectTimer || this.reconnecting) return;
 
     // Exponential backoff capped at 15s; keep retrying as long as a target is set.
     const delay = Math.min(2_000 * Math.pow(1.6, this.reconnectAttempts), 15_000);
@@ -483,7 +529,9 @@ class ConnectionManager {
 
       this.reconnecting = true;
       this.reconnectAttempts += 1;
-      this.emitStateChange('connecting', target.fingerprint);
+      // "Reconnecting…" once we've had a live link; only the very first attempt
+      // for a never-connected target reads as plain "Connecting…".
+      this.emitStateChange(this.everConnected ? 'reconnecting' : 'connecting', target.fingerprint);
 
       const candidates = this.resolveCandidates(target);
       try {
