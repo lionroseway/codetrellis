@@ -35,6 +35,11 @@ cd "$REPO_ROOT"
 
 VERSION="$(node -p "require('./package.json').version")"
 TAG="v${VERSION}"
+# Transient staging release on the SOURCE repo that CI uploads Windows/Linux
+# installers to (as release assets — not Actions artifacts, so no artifact-storage
+# quota). release.sh downloads them locally, publishes the public release, then
+# deletes this staging release.
+STAGING_TAG="ci-v${VERSION}"
 OUT_DIR="${REPO_ROOT}/out/make"
 
 DRY_RUN=0; SKIP_BUILD=0; MAC_ONLY=0
@@ -94,8 +99,11 @@ if [[ "$SKIP_BUILD" -eq 0 && "$MAC_ONLY" -eq 0 ]]; then
   git push origin HEAD
 
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-  log "Triggering CI (${CI_WORKFLOW}) for Windows + Linux on ${BRANCH}…"
-  gh workflow run "$CI_WORKFLOW" --repo "$SOURCE_REPO_SLUG" --ref "$BRANCH"
+  # Clear any leftover staging release from a previous failed run so this run's
+  # downloads can't pick up stale assets.
+  gh release delete "$STAGING_TAG" --repo "$SOURCE_REPO_SLUG" --cleanup-tag --yes >/dev/null 2>&1 || true
+  log "Triggering CI (${CI_WORKFLOW}) for Windows + Linux on ${BRANCH} → staging ${STAGING_TAG}…"
+  gh workflow run "$CI_WORKFLOW" --repo "$SOURCE_REPO_SLUG" --ref "$BRANCH" -f tag="$STAGING_TAG"
 
   # Give GitHub a moment to register the run, then grab the newest one.
   sleep 8
@@ -103,9 +111,12 @@ if [[ "$SKIP_BUILD" -eq 0 && "$MAC_ONLY" -eq 0 ]]; then
   log "Watching CI run ${RUN_ID} (node-pty compiles natively on each OS)…"
   gh run watch "$RUN_ID" --repo "$SOURCE_REPO_SLUG" --exit-status
 
-  log "Downloading Windows + Linux artifacts → ${OUT_DIR}"
+  # Pull the installers from the staging RELEASE (assets), not Actions artifacts —
+  # this sidesteps the artifact-storage quota that used to block the upload.
+  log "Downloading Windows + Linux installers from ${STAGING_TAG} → ${OUT_DIR}"
   CI_DL="$(mktemp -d)"
-  gh run download "$RUN_ID" --repo "$SOURCE_REPO_SLUG" --dir "$CI_DL"
+  gh release download "$STAGING_TAG" --repo "$SOURCE_REPO_SLUG" --dir "$CI_DL" \
+    --pattern '*.exe' --pattern '*.AppImage' --pattern '*.deb' --pattern '*.rpm'
   find "$CI_DL" \( -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp -v {} "$OUT_DIR/" \;
   rm -rf "$CI_DL"
 elif [[ "$MAC_ONLY" -eq 1 ]]; then
@@ -189,4 +200,11 @@ gh release create "$TAG" \
   "${upload_files[@]}"
 
 log "Release published: https://github.com/${RELEASES_REPO_SLUG}/releases/tag/${TAG}"
+
+# Tidy up the transient CI staging release on the source repo.
+if [[ "$MAC_ONLY" -eq 0 ]]; then
+  log "Deleting staging release ${STAGING_TAG} from ${SOURCE_REPO_SLUG}…"
+  gh release delete "$STAGING_TAG" --repo "$SOURCE_REPO_SLUG" --cleanup-tag --yes >/dev/null 2>&1 || true
+fi
+
 log "Done."

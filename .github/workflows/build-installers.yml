@@ -5,16 +5,35 @@ name: Build installers (Windows + Linux)
 # cross-compiled from macOS to Windows/Linux (node-gyp can't cross-OS), so the
 # mac dev box can only produce the signed macOS DMGs. This workflow builds the
 # Windows + Linux installers on their *own* OS runners, where node-pty compiles
-# cleanly, and publishes them as downloadable artifacts (and, if a releases-repo
-# token is configured, attaches them to the matching GitHub Release).
+# cleanly.
 #
-# Trigger it manually (Actions tab → "Run workflow") or it runs automatically
-# when a v* tag is pushed.
+# How the installers get back to release.sh:
+# Each job uploads its installers as assets on a transient **staging release on
+# THIS repo** (`STAGING_TAG`), using the default GITHUB_TOKEN — a same-repo
+# operation that does NOT touch the Actions *artifact storage* quota (which is
+# small and lags 6-12h on recalc, and used to block releases). release.sh then
+# downloads those release assets locally (where the operator's gh has access to
+# both repos), publishes the public release, and deletes the staging release.
+# No cross-repo PAT needed, and no dependence on artifact storage.
+#
+# Trigger: release.sh runs it via workflow_dispatch with `tag=<STAGING_TAG>`,
+# or it runs on a v* tag push (staging onto that tag).
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Staging release tag on this repo to upload installers to'
+        required: true
+        default: ci-staging
   push:
     tags: ['v*']
+
+permissions:
+  contents: write   # create/upload the staging release on this repo
+
+env:
+  STAGING_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   windows:
@@ -27,16 +46,16 @@ jobs:
       - name: Install deps
         run: npm install --legacy-peer-deps
       - name: Build NSIS installer + portable exe
-        # --publish never: electron-builder auto-publishes on CI detection; we
-        # publish via gh from release.sh, so just build the artifacts here.
         run: npm run package:win -- --publish never
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-installers
-          path: |
-            out/make/*Setup*.exe
-            out/make/*Portable*.exe
-          if-no-files-found: error
+      - name: Stage installers on the CI release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$STAGING_TAG" --prerelease --target "$GITHUB_SHA" \
+            --title "CI staging $STAGING_TAG" \
+            --notes "Transient CI build assets — deleted once the public release is cut." 2>/dev/null || true
+          gh release upload "$STAGING_TAG" out/make/*Setup*.exe out/make/*Portable*.exe --clobber
 
   linux:
     runs-on: ubuntu-latest
@@ -52,14 +71,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Build AppImage + .deb + .rpm (x64)
         run: npm run package:linux -- AppImage deb rpm --publish never
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-installers
-          path: |
-            out/make/*.AppImage
-            out/make/*.deb
-            out/make/*.rpm
-          if-no-files-found: error
+      - name: Stage installers on the CI release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$STAGING_TAG" --prerelease --target "$GITHUB_SHA" \
+            --title "CI staging $STAGING_TAG" \
+            --notes "Transient CI build assets — deleted once the public release is cut." 2>/dev/null || true
+          gh release upload "$STAGING_TAG" out/make/*.AppImage out/make/*.deb out/make/*.rpm --clobber
 
   linux-arm64:
     # GitHub-hosted arm64 Linux runner. node-pty compiles natively here, so this
@@ -76,30 +95,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Build AppImage + .deb + .rpm (arm64)
         run: npm run package:linux -- AppImage deb rpm --publish never
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-installers-arm64
-          path: |
-            out/make/*.AppImage
-            out/make/*.deb
-            out/make/*.rpm
-          if-no-files-found: error
-
-  # OPTIONAL — auto-attach to the public release. Requires a repo secret
-  # RELEASES_TOKEN (a PAT with `contents: write` on lionroseway/codetrellis-releases).
-  # Without the secret this job is skipped and you just download the artifacts above.
-  attach-to-release:
-    needs: [windows, linux]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-      - name: Upload to releases repo (if token present)
+      - name: Stage installers on the CI release
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -z "$GH_TOKEN" ]; then echo "No RELEASES_TOKEN secret — skipping upload; grab the artifacts above."; exit 0; fi
-          TAG="${GITHUB_REF_NAME}"
-          gh release upload "$TAG" dist/**/* --repo lionroseway/codetrellis-releases --clobber
+          gh release create "$STAGING_TAG" --prerelease --target "$GITHUB_SHA" \
+            --title "CI staging $STAGING_TAG" \
+            --notes "Transient CI build assets — deleted once the public release is cut." 2>/dev/null || true
+          gh release upload "$STAGING_TAG" out/make/*.AppImage out/make/*.deb out/make/*.rpm --clobber
