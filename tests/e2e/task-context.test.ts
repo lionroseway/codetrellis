@@ -45,7 +45,34 @@ function parseToolJson<T = unknown>(text: string): T {
   return JSON.parse(text) as T;
 }
 
-test.describe('Phase 14 §A — task-as-context MCP tools', () => {
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ * SKIPPED — this file tests MCP tools that NO LONGER EXIST.
+ *
+ * The V2 MCP migration REMOVED (not deprecated) all 19 V1 plan tools:
+ * claim_task, add_subtask, update_task, update_task_progress,
+ * set_task_blocked, add_task_comment, add_task_attachment, get_next_task,
+ * add_plan_doc, add_plan_phase and the rest. `create_plan` also no longer
+ * accepts inline tasks, so `getPlan(...).tasks` comes back empty and every
+ * assertion here fails on an empty array rather than on its own logic.
+ *
+ * See docs/V2-MCP-MIGRATION.md §6 for the removal list.
+ *
+ * KEPT, NOT DELETED, because the SCENARIOS are still worth covering — the
+ * V1 plumbing underneath them is what went away. Whoever reseeds these onto
+ * the V2 surface (add_item / bulk_add_items / claim_item) gets the intent
+ * for free instead of rediscovering it.
+ *
+ * Coverage status: the V2 equivalents of these scenarios live in
+ * plan-items.test.ts (add_item trees, read_item_full, update/move, delete +
+ * restore, item comments/progress/blocked, get_plan_timeline). This file is
+ * the V1 mirror of that surface, so nothing is currently uncovered.
+ *
+ * To re-enable: rewrite against the V2 tools, then change
+ * `test.describe.skip` back to `test.describe`.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+test.describe.skip('Phase 14 §A — task-as-context MCP tools', () => {
   test.setTimeout(120_000);
 
   test('create_plan + claim_task returns the full task context blob', async () => {

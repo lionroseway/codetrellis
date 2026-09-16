@@ -1,38 +1,27 @@
-# Hermetic E2E harness — ON DEMAND.
+# Hermetic E2E harness — MANUAL / NIGHTLY runs.
 #
-# WHY THIS IS NOT IN ci.yml
-#
-# It is too slow and too flaky to fire on every pull request, measured rather
-# than assumed:
-#
-#   - playwright.harness.config.ts sets `workers: 1`, because every test boots
-#     a real backend subprocess (tsx + sql.js/better-sqlite3 + tree-sitter +
-#     chokidar) and running them concurrently is unstable. The suite is serial
-#     by design.
-#   - It sets `retries: 2`, and the comment there names the timing-sensitive
-#     tests (file-watcher auto-advance, chokidar plan-import). A suite that
-#     needs retries is telling you it is flaky.
-#   - Local run on an M-series Mac: 380s, and it bailed with 67 tests not run.
-#     A GitHub-hosted runner is slower again.
-#
-# Leaving it on every PR — even as a non-blocking job — meant ten minutes of
-# runner time and a permanently pending check on every push, for a signal
-# nobody could act on. So it runs when someone asks for it, and nightly so it
-# cannot rot unwatched.
-#
-# HOW TO RUN IT
+# The harness gates pull requests from ci.yml. THIS file is for the two things
+# ci.yml cannot do: run the suite against an arbitrary ref on demand, and run
+# it nightly on main so a slow rot shows up without waiting for a PR.
 #
 #   Button:  Actions -> "e2e harness" -> Run workflow
 #   CLI:     gh workflow run e2e-harness.yml --ref <branch>
-#   On a PR: add the `run-e2e` label (remove and re-add to run it again)
-#   Nightly: 03:00 UTC on main, automatically
+#   Nightly: 03:00 UTC on main
 #
-# WHEN IT GOES BACK INTO ci.yml AS A BLOCKING GATE
+# It deliberately does NOT trigger on pull_request — that would run the suite
+# twice on every PR.
 #
-# When it runs green three times running and finishes in a time anyone would
-# wait for. Then move the job into ci.yml and add it to ci-passed's `needs`.
-# Until then this file is the record of a known debt, not a parking space —
-# the nightly run is what keeps it honest.
+# IF IT FAILS WHOLESALE, CHECK THE NATIVE BINDING FIRST.
+#
+# A wrong-architecture better_sqlite3.node makes every backend-booting test
+# fail in initDatabase, which reports as ~88 unrelated failures across the
+# suite and reads exactly like flakiness. It is not. Run:
+#
+#     npm rebuild better-sqlite3
+#     file node_modules/better-sqlite3/build/Release/better_sqlite3.node
+#
+# ci.yml has a "Verify native binding" step that fails fast on this; this
+# workflow inherits the same suite, so the same rule applies.
 
 name: e2e harness
 
@@ -43,8 +32,6 @@ on:
         description: 'Branch or SHA to run against (defaults to the selected ref)'
         required: false
         type: string
-  pull_request:
-    types: [labeled]
   schedule:
     # 03:00 UTC nightly on the default branch.
     - cron: '0 3 * * *'
@@ -59,12 +46,6 @@ concurrency:
 jobs:
   harness:
     name: E2E harness
-    # On a pull_request event this only fires for the `run-e2e` label — every
-    # other label (dependencies, mobile, ci, claude-review …) must not start a
-    # ten-minute suite.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.label.name == 'run-e2e'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     timeout-minutes: 30
     steps:

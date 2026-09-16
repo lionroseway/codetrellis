@@ -98,10 +98,20 @@ a tagged candidate and on packaged artifacts.
   still reads as sql.js at the call sites, but storage is native and
   there is no export/autosave step (`persistence.ts` save is a no-op).
   Self-heals via `schema-reconciler`. FTS not yet enabled.
-  **This is a native binding**: it must be rebuilt for the Node version
-  in use, and it is currently broken on Node 25 (`ERR_DLOPEN_FAILED`).
-  `.nvmrc` pins Node 22 for that reason. Moving to Node 26 (the house
-  standard elsewhere) needs `better-sqlite3` 11 → 13 first.
+  **This is a native binding.** If it was installed under a different
+  architecture or Node version you get `ERR_DLOPEN_FAILED` and *every*
+  backend-booting test fails at once:
+
+  ```
+  npm rebuild better-sqlite3
+  file node_modules/better-sqlite3/build/Release/better_sqlite3.node
+  # must say arm64 on Apple Silicon — an x86_64 binary here is the bug
+  ```
+
+  This is the single highest-value thing to check when the E2E harness
+  fails wholesale. It presented as 88 flaky tests and was one wrong-arch
+  `.node` file. It is **not** a Node-version limit: 11.10.0 runs fine on
+  Node 25 once rebuilt for the right arch.
 - **Peer transport**: WebRTC mesh — `werift` on desktop,
   `react-native-webrtc` on mobile. Four named data channels:
   `control` (JSON-RPC), `ui` (snapshots + JSON patches), `terminal`
