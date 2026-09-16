@@ -68,11 +68,11 @@ jobs:
             artifact_glob: |
               out/make/*.exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # build-info uses `git rev-list --count HEAD`
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -101,7 +101,7 @@ jobs:
         run: npm run ${{ matrix.package_script }}
 
       - name: Upload build artefacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: codetrellis-${{ matrix.label }}
           path: ${{ matrix.artifact_glob }}
@@ -114,7 +114,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -125,7 +125,7 @@ jobs:
           find artifacts -type f -printf '%p (%s bytes)\n'
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
