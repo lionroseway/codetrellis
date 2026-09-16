@@ -19,8 +19,8 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { Stack } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { Stack, useFocusEffect } from 'expo-router';
+
 import { useConnectionState } from '../lib/store';
 import {
   getPushPermission,

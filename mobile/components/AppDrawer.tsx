@@ -208,7 +208,7 @@ function NavRow({ icon, label, onPress }: { icon: string; label: string; onPress
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   panel: {
     position: 'absolute', top: 0, bottom: 0, left: 0,
     backgroundColor: '#0a0c18',

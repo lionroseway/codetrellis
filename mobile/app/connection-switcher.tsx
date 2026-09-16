@@ -18,8 +18,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect } from 'expo-router';
+
 import { loadPairedDesktops } from '../lib/storage';
 import { connection } from '../lib/connection';
 import { registerForPush, sendPushTokenToDesktop } from '../lib/push';
