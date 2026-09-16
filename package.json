@@ -61,7 +61,7 @@
     "@types/ws": "^8.5.0",
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^9.0.0",
-    "electron": "^33.4.11",
+    "electron": "^44.4.1",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "jsqr": "^1.4.0",
