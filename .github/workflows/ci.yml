@@ -34,15 +34,34 @@
 #   desktop           ~1 min    typecheck, bundle guard, web build, unit tests
 #   mobile            ~30 s     typecheck
 #
-#   harness           ~2 min    139 tests, hermetic
-#
 # And what does NOT:
 #
 #   claude-review     varies    advisory permanently, see claude-review.yml
+#   harness           see below
 #
-# e2e-harness.yml still exists for running the suite manually against an
-# arbitrary ref, and nightly. It no longer fires on pull requests — that job
-# lives here now.
+# THE HARNESS IS GREEN BUT DOES NOT FIT HERE — AND THE NUMBERS MATTER.
+#
+#   local (M-series Mac):  139 passed, 16 skipped, 0 failed, 99s
+#   ubuntu-latest:         did not finish in 20 minutes, job cancelled
+#
+# It was briefly promoted into this file on the strength of the local number
+# alone. That was wrong: a >12x slowdown on a 4-core cloud runner is the
+# number that decides whether it can gate a PR, and nobody had measured it.
+#
+# The cause is structural, not a flake. playwright.harness.config.ts runs
+# `workers: 1`, and every one of the 139 tests boots a real backend
+# subprocess through tsx — TypeScript compiled on the fly, sql.js and
+# tree-sitter WASM loaded per test. That is sub-second on fast local hardware
+# and seconds apiece on a shared runner.
+#
+# It therefore runs from e2e-harness.yml — nightly and on demand, where a long
+# runtime costs nothing. Developers get the fast local run, which is where
+# this suite earns its keep.
+#
+# TO BRING IT BACK HERE: make it fit. Raising `workers` is the obvious lever
+# (the config's `workers: 1` was chosen for loaded local machines, not for CI)
+# or shard across jobs. Measure ON CI before promoting it again — that is the
+# mistake this comment exists to stop being repeated.
 #
 # `npm test` (the legacy Playwright suite under e2e/) is not run here at all:
 # it drives a real running app and needs a desktop session, a folder picker
@@ -157,70 +176,6 @@ jobs:
       #   # See the header note; eslint is currently not installed at all.
 
   # ---------------------------------------------------------------------------
-  # Hermetic E2E harness — BLOCKING as of the triage in test/harness-triage.
-  #
-  # It was advisory, then pulled out of this file entirely, because it failed
-  # 88 tests and took 380s. Both symptoms had ONE cause: node_modules held an
-  # x86_64 better_sqlite3.node on an arm64 machine, so every test that boots a
-  # backend died in initDatabase and then burned its two retries. It was never
-  # flaky — it was a broken install reported as 88 separate failures.
-  #
-  # After `npm rebuild better-sqlite3` and a pass over tests that assert a
-  # removed V1 API: 139 passed, 16 skipped, 0 failed, ~99s. That is fast
-  # enough and green enough to gate on, which is the whole point of having it.
-  #
-  # The 16 skips are documented in-file, each with what unskipping requires.
-  # They are debt with a name, not silence.
-  # ---------------------------------------------------------------------------
-  harness:
-    name: E2E harness
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install
-        run: npm ci
-
-      # Guard against exactly the failure that made this suite look flaky.
-      # `npm ci` can restore a cached node_modules built elsewhere; if the
-      # native binding does not match this runner, fail here with a clear
-      # message instead of as 88 mystery test failures.
-      - name: Verify native binding
-        run: |
-          node -e "const B=require('better-sqlite3');new B(':memory:').exec('create table t(a)');console.log('better-sqlite3 OK on',process.version,process.arch)" \
-            || { echo "::error::better-sqlite3 native binding failed to load — wrong arch or Node version. Try: npm rebuild better-sqlite3"; exit 1; }
-
-      # The harness git-inits its fixture repo, so git needs an identity or the
-      # first commit fails with "Author identity unknown".
-      - name: Configure git for fixtures
-        run: |
-          git config --global user.email "ci@codetrellis.invalid"
-          git config --global user.name "CodeTrellis CI"
-
-      - name: Install Playwright runner
-        run: npx playwright install --with-deps chromium
-
-      - name: Harness suite
-        run: npm run test:harness
-
-      - name: Upload report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-${{ github.run_id }}
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 7
-          if-no-files-found: ignore
-
-  # ---------------------------------------------------------------------------
   # Mobile: typecheck only.
   #
   # No build here — an EAS build needs credentials and a queue slot, and a
@@ -260,7 +215,10 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [no-private-docs, desktop, harness, mobile]
+    # `harness` is NOT here. It is green (139 passed, 0 failed) but it does
+    # not FIT: ~99s locally, >20min on ubuntu-latest, where it hit the job
+    # timeout. See e2e-harness.yml.
+    needs: [no-private-docs, desktop, mobile]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - name: Check results

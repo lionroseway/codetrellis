@@ -1,8 +1,9 @@
 # Hermetic E2E harness — MANUAL / NIGHTLY runs.
 #
-# The harness gates pull requests from ci.yml. THIS file is for the two things
-# ci.yml cannot do: run the suite against an arbitrary ref on demand, and run
-# it nightly on main so a slow rot shows up without waiting for a PR.
+# This is the ONLY place the harness runs. It does not gate pull requests:
+# it is green (139 passed, 16 skipped, 0 failed) but takes 99s locally and
+# more than 20 minutes on ubuntu-latest, where it hit the job timeout. The
+# reasoning is in ci.yml's header, along with what would let it gate again.
 #
 #   Button:  Actions -> "e2e harness" -> Run workflow
 #   CLI:     gh workflow run e2e-harness.yml --ref <branch>
@@ -20,8 +21,8 @@
 #     npm rebuild better-sqlite3
 #     file node_modules/better-sqlite3/build/Release/better_sqlite3.node
 #
-# ci.yml has a "Verify native binding" step that fails fast on this; this
-# workflow inherits the same suite, so the same rule applies.
+# This workflow has a "Verify native binding" step that fails fast on exactly
+# that, so it can never again present as ~88 mystery test failures.
 
 name: e2e harness
 
@@ -47,7 +48,11 @@ jobs:
   harness:
     name: E2E harness
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
-    timeout-minutes: 30
+    # 45, not 30. Measured: the suite runs 99s locally and did NOT finish in
+    # 20 minutes on ubuntu-latest — workers: 1, and every test boots a backend
+    # through tsx. Give the nightly room to actually complete, so the result
+    # is a real pass/fail rather than a timeout.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,6 +65,15 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # Guard against the failure that made this suite look flaky for months.
+      # A wrong-architecture better_sqlite3.node makes every backend-booting
+      # test die in initDatabase — reported as ~88 unrelated failures. Fail
+      # here with the fix instead.
+      - name: Verify native binding
+        run: |
+          node -e "const B=require('better-sqlite3');new B(':memory:').exec('create table t(a)');console.log('better-sqlite3 OK on',process.version,process.arch)" \
+            || { echo "::error::better-sqlite3 native binding failed to load — wrong arch or Node version. Try: npm rebuild better-sqlite3"; exit 1; }
 
       # The harness git-inits its fixture repo, so git needs an identity or the
       # first commit fails with "Author identity unknown".
