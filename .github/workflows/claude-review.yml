@@ -60,6 +60,21 @@
 
 name: Claude Review
 
+# NEVER CHANGE THIS TO pull_request_target.
+#
+# This repository is PUBLIC. `pull_request` runs from a fork receive NO
+# secrets — GitHub withholds them deliberately — so a fork's PR gets a job
+# that exits 0 having reviewed nothing. That looks like a bug and the obvious
+# "fix" is pull_request_target, which DOES receive secrets and runs the base
+# branch's workflow. Combined with any checkout of the PR head, that is the
+# textbook token-exfiltration vector: the attacker controls the code, and the
+# job holds CLAUDE_CODE_OAUTH_TOKEN — a subscription credential granting
+# Claude Code as the account that minted it.
+#
+# A fork PR going unreviewed is the correct, safe behaviour. If a fork PR
+# genuinely needs a review, a maintainer adds the `claude-review` label after
+# reading the diff — applying a label needs write access, so that path is
+# already gated on a human with push rights.
 on:
   pull_request:
     types: [opened, ready_for_review, labeled]

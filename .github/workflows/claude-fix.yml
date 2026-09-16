@@ -89,12 +89,33 @@ concurrency:
 jobs:
   fix:
     name: Claude fix
-    # Must be a PR, must mention @claude, must not be a bot. The bot check is
-    # the loop guard: with an App token in play, Claude's own push can trigger
-    # workflows, and without this a bot comment could start another fix.
+    # Must be a PR, must mention @claude, must not be a bot, AND the commenter
+    # must be trusted. The bot check is the loop guard: with an App token in
+    # play, Claude's own push can trigger workflows, and without this a bot
+    # comment could start another fix.
+    #
+    # THE author_association CHECK IS LOAD-BEARING ON A PUBLIC REPO.
+    #
+    # This repository is public, so anyone on the internet can comment on a PR
+    # or an issue. issue_comment runs the DEFAULT-BRANCH copy of this workflow
+    # and it DOES receive secrets — unlike a fork's pull_request run, which
+    # GitHub deliberately starves of them. Without this clause, a stranger
+    # typing "@claude fix ..." would run Claude Code as the owner of
+    # CLAUDE_CODE_OAUTH_TOKEN, with contents: write, and push a commit.
+    #
+    # That token is a SUBSCRIPTION credential, not a scoped API key. It grants
+    # Claude Code as the account that minted it, and it draws down that
+    # account's rate-limit window. Treat unrestricted invocation as account
+    # takeover, not as a cost problem.
+    #
+    # OWNER / MEMBER / COLLABORATOR are the associations that imply push
+    # rights. CONTRIBUTOR means "has had a PR merged" — NOT push rights — and
+    # must not be added here. NONE is a stranger.
     if: >-
       contains(github.event.comment.body, '@claude') &&
       github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+               github.event.comment.author_association) &&
       vars.CLAUDE_REVIEW != 'off' &&
       (github.event_name == 'pull_request_review_comment' ||
        github.event.issue.pull_request)

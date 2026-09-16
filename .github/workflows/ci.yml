@@ -28,13 +28,22 @@
 # Phase 19 Gate 3 work; the job below is written and commented out, ready to
 # enable in the same PR that adds the dependency.
 #
-# WHY THE HARNESS AND NOT `npm test`
+# WHAT ACTUALLY BLOCKS ON A PR
 #
-# `npm test` is Playwright against a real running app — it needs a desktop
-# session, a folder picker and a free port, and it is flaky by construction.
-# `npm run test:harness` boots an isolated backend in a temp data dir against a
-# fixture repo and tears it down. That is the suite that can be trusted to
-# block a merge. See docs/E2E-HARNESS.md.
+#   no-private-docs   seconds   this repo is public
+#   desktop           ~1 min    typecheck, bundle guard, web build, unit tests
+#   mobile            ~30 s     typecheck
+#
+# And what does NOT:
+#
+#   harness           10+ min   advisory — slow and flaky, see its header
+#   claude-review     varies    advisory permanently, see claude-review.yml
+#
+# `npm test` (the legacy Playwright suite under e2e/) is not run here at all:
+# it drives a real running app and needs a desktop session, a folder picker
+# and a free port. `npm run test:harness` is the hermetic replacement — it is
+# the right suite, it is just not yet fast or stable enough to gate on.
+# See docs/E2E-HARNESS.md.
 
 name: ci
 
@@ -43,6 +52,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    # 03:00 UTC nightly. The advisory harness is the reason this exists: a
+    # suite that does not block still has to be watched, or it rots silently
+    # and is useless on the day it is promoted.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -129,17 +144,53 @@ jobs:
       - name: Build (web)
         run: npm run build
 
+      # Unit tests live here rather than with the harness. They are fast and
+      # hermetic (plain node:test over the service layer, no subprocess, no
+      # browser), so they can block — which they cannot do sitting inside an
+      # advisory job.
+      - name: Unit tests
+        run: npm run test:unit
+
       # - name: Lint
       #   run: npm run lint
       #   # ENABLE IN THE SAME PR THAT ADDS ESLINT AS A DEVDEPENDENCY.
       #   # See the header note; eslint is currently not installed at all.
 
   # ---------------------------------------------------------------------------
-  # Hermetic end-to-end harness.
+  # Hermetic E2E harness — ADVISORY FOR NOW, and here is the condition to
+  # promote it.
+  #
+  # WHY IT IS NOT BLOCKING YET
+  #
+  # A gate has to be proven green and proven fast before it is allowed to
+  # block. This one is neither, measured rather than assumed:
+  #
+  #   - playwright.harness.config.ts sets workers: 1, because every test boots
+  #     a real backend subprocess (tsx + sql.js + tree-sitter + chokidar) and
+  #     running them concurrently is unstable. So the suite is serial by
+  #     design.
+  #   - It sets retries: 2, with a comment naming the timing-sensitive tests
+  #     (file-watcher auto-advance, chokidar plan-import). A suite that needs
+  #     retries is telling you it is flaky.
+  #   - Local run on an M-series Mac: 380s, and it bailed with 67 tests not
+  #     run. A GitHub-hosted runner is slower than that.
+  #
+  # Blocking every PR on a 10+ minute suite that sometimes bails is how people
+  # learn to bypass protection. Advisory keeps the signal visible while the
+  # runtime and the flakes get fixed.
+  #
+  # PROMOTE IT when it runs green three times running and finishes in a time
+  # anyone would wait for. Then add `harness` back to ci-passed's `needs` and
+  # drop continue-on-error. Do not leave it advisory out of habit — an
+  # advisory job nobody promotes is a job nobody reads.
+  #
+  # The nightly run below is what stops it rotting in the meantime.
   # ---------------------------------------------------------------------------
   harness:
-    name: E2E harness
+    name: E2E harness (advisory)
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    continue-on-error: true
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -163,9 +214,6 @@ jobs:
 
       - name: Harness suite
         run: npm run test:harness
-
-      - name: Unit tests
-        run: npm run test:unit
 
   # ---------------------------------------------------------------------------
   # Mobile: typecheck only.
@@ -207,7 +255,9 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [no-private-docs, desktop, harness, mobile]
+    # `harness` is NOT here — advisory until it is green and fast. See its
+    # header block for the promotion condition.
+    needs: [no-private-docs, desktop, mobile]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - name: Check results
