@@ -41,3 +41,21 @@ paths = [
   '''.*xterm-bundle\.ts$''',
   '''resources/tree-sitter/.*\.wasm$''',
 ]
+
+# Well-known public constants that are not secrets.
+#
+# gitleaks scans COMMITS, not the working tree, so an inline `gitleaks:allow`
+# added in a later commit does not clear a finding from an earlier one. A
+# regex allowlist applies regardless of which commit the string appears in,
+# which is the only thing that works for a value already in history.
+#
+# dGhlIHNhbXBsZSBub25jZQ== is the literal example Sec-WebSocket-Key from
+# RFC 6455 §1.3 — base64 of "the sample nonce". A WebSocket handshake
+# requires the header; the server echoes a hash of it back and never uses it
+# for authorisation. It is published in the RFC itself.
+#
+# Only add a value here when it is a PUBLISHED constant from a specification
+# or a documented example — never a value that is merely believed unused.
+regexes = [
+  '''dGhlIHNhbXBsZSBub25jZQ==''',
+]
