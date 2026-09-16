@@ -98,20 +98,22 @@ a tagged candidate and on packaged artifacts.
   still reads as sql.js at the call sites, but storage is native and
   there is no export/autosave step (`persistence.ts` save is a no-op).
   Self-heals via `schema-reconciler`. FTS not yet enabled.
-  **This is a native binding.** If it was installed under a different
-  architecture or Node version you get `ERR_DLOPEN_FAILED` and *every*
-  backend-booting test fails at once:
+  **This is a native binding.** v13 ships per-platform prebuilds
+  (`node_modules/better-sqlite3/prebuilds/darwin-arm64.node` and
+  friends) and picks the right one at runtime, which structurally
+  removes the wrong-architecture failure that v11 had. If it ever
+  fails to load anyway:
 
   ```
-  npm rebuild better-sqlite3
-  file node_modules/better-sqlite3/build/Release/better_sqlite3.node
-  # must say arm64 on Apple Silicon — an x86_64 binary here is the bug
+  node -e "new (require('better-sqlite3'))(':memory:')"
+  ls node_modules/better-sqlite3/prebuilds/
+  npm rebuild better-sqlite3      # last resort
   ```
 
-  This is the single highest-value thing to check when the E2E harness
-  fails wholesale. It presented as 88 flaky tests and was one wrong-arch
-  `.node` file. It is **not** a Node-version limit: 11.10.0 runs fine on
-  Node 25 once rebuilt for the right arch.
+  Check this **first** when the E2E harness fails wholesale. Under v11
+  a single x86_64 `.node` file on an arm64 machine made every
+  backend-booting test die in `initDatabase` and presented as 88
+  unrelated flaky tests. It was never a Node-version limit.
 - **Peer transport**: WebRTC mesh — `werift` on desktop,
   `react-native-webrtc` on mobile. Four named data channels:
   `control` (JSON-RPC), `ui` (snapshots + JSON patches), `terminal`
@@ -126,6 +128,43 @@ a tagged candidate and on packaged artifacts.
   patterns; `cross-system-service` pairs them across languages;
   `system-discovery` auto-detects microservices and endpoints.
 - **Layout**: dagre + d3-force in the renderer.
+
+## Upgrade ordering — Electron, better-sqlite3, Node
+
+These three are one locked set, and the order is not the obvious one.
+Measured 2026-09-16, not inferred:
+
+| | bundles Node | N-API |
+|---|---|---|
+| Electron 33 (current) | 20.18.3 | 9 |
+| Electron 44 | 24.20.0 | ✓ |
+
+- `better-sqlite3@13` declares `engines.node >= 22`. Under Electron 33 it
+  does not throw — **the process dies silently**, the backend never
+  reaches `initDatabase`, no `data.db` is created, and nothing is logged.
+- `better-sqlite3@11` **fails to build on Node 26** (node-gyp error), so
+  the dev/CI Node cannot move on its own either.
+
+So the chain is:
+
+```
+Electron 44  →  better-sqlite3 13  →  Node 26
+```
+
+**Electron goes first.** Upgrading the database first looks reasonable —
+storage is lower in the stack — and produces an app that passes
+typecheck, passes the web build, passes all 139 harness tests under plain
+Node, packages without error, and then cannot open its own database.
+
+**A packaged build is the only thing that catches this.** Nothing in CI
+does: CI builds the web bundle, and the harness runs under Node, not
+Electron. When changing any of these three, run `npm run package:mac`,
+launch the binary with an isolated `CODETRELLIS_DATA_DIR`, and confirm
+`data.db` appears. To probe the module alone:
+
+```
+ELECTRON_RUN_AS_NODE=1 out/make/mac-arm64/CodeTrellis.app/Contents/MacOS/CodeTrellis probe.js
+```
 
 ## Directory layout
 
