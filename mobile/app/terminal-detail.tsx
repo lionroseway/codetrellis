@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
 
   termWrap: { flex: 1, position: 'relative' },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0a0a0c',
