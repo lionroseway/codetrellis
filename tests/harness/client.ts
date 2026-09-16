@@ -164,7 +164,7 @@ export interface BuildInfo {
   [k: string]: unknown;
 }
 
-export function createClient(baseUrl: string): RestClient {
+export function createClient(baseUrl: string, capabilityToken?: string): RestClient {
   const json = async (method: string, path: string, body?: unknown): Promise<unknown> => {
     const res = await raw(method, path, body);
     if (!res.ok) {
@@ -182,9 +182,15 @@ export function createClient(baseUrl: string): RestClient {
 
   const raw = async (method: string, path: string, body?: unknown): Promise<Response> => {
     const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    // Phase 19 Gate 1.1 — every local transport requires the capability
+    // token. The harness is given it explicitly by startBackend rather than
+    // reading the file the backend writes, which would race the boot.
+    const headers: Record<string, string> = {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (capabilityToken) headers['x-codetrellis-token'] = capabilityToken;
     return fetch(url, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       // Test calls should fail fast, not hang.
       signal: AbortSignal.timeout(60000),
@@ -269,4 +275,28 @@ export function createClient(baseUrl: string): RestClient {
       )) as { removed: boolean; planDir: string | null };
     },
   };
+}
+
+/**
+ * `fetch` with this backend's capability token attached.
+ *
+ * Phase 19 Gate 1.1 made every local transport require a token, so a bare
+ * `fetch(`${baseUrl}/api/...`)` in a test now gets a 401. Most tests go
+ * through `RestClient`, which handles this — use this helper for the handful
+ * that need a raw response (status codes, headers, streaming).
+ *
+ * Tests that are DELIBERATELY unauthenticated (transport-auth.test.ts) should
+ * keep using bare `fetch`, which is the point of them.
+ */
+export function authFetch(
+  backend: { baseUrl: string; capabilityToken: string },
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const url = path.startsWith('http')
+    ? path
+    : `${backend.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  const headers = new Headers(init.headers ?? {});
+  headers.set('x-codetrellis-token', backend.capabilityToken);
+  return fetch(url, { ...init, headers });
 }

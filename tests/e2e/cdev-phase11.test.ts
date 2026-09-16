@@ -23,7 +23,7 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { setupHarness } from '../harness';
+import { setupHarness, authFetch } from '../harness';
 
 test.describe('CDev Phase 11 — Mobile companion', () => {
   test.setTimeout(120_000);
@@ -57,14 +57,14 @@ test.describe('CDev Phase 11 — Mobile companion', () => {
       const baseUrl = h.backend.baseUrl;
 
       // List should initially be empty
-      const listRes1 = await fetch(`${baseUrl}/api/peers/push-tokens`);
+      const listRes1 = await authFetch(h.backend, `/api/peers/push-tokens`);
       expect(listRes1.ok).toBe(true);
       const tokens1 = await listRes1.json();
       expect(tokens1.count).toBe(0);
       expect(Array.isArray(tokens1.tokens)).toBe(true);
 
       // Register a token
-      const regRes = await fetch(`${baseUrl}/api/peers/push-tokens`, {
+      const regRes = await authFetch(h.backend, `/api/peers/push-tokens`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -75,20 +75,20 @@ test.describe('CDev Phase 11 — Mobile companion', () => {
       expect(regRes.ok).toBe(true);
 
       // List should now have one
-      const listRes2 = await fetch(`${baseUrl}/api/peers/push-tokens`);
+      const listRes2 = await authFetch(h.backend, `/api/peers/push-tokens`);
       const tokens2 = await listRes2.json();
       expect(tokens2.count).toBe(1);
       expect(tokens2.tokens[0].fingerprint).toBe('fp-test-device');
       expect(tokens2.tokens[0].token).toBe('ExponentPushToken[test123]');
 
       // Unregister
-      const unregRes = await fetch(`${baseUrl}/api/peers/push-tokens/fp-test-device`, {
+      const unregRes = await authFetch(h.backend, `/api/peers/push-tokens/fp-test-device`, {
         method: 'DELETE',
       });
       expect(unregRes.ok).toBe(true);
 
       // List should be empty again
-      const listRes3 = await fetch(`${baseUrl}/api/peers/push-tokens`);
+      const listRes3 = await authFetch(h.backend, `/api/peers/push-tokens`);
       const tokens3 = await listRes3.json();
       expect(tokens3.count).toBe(0);
     } finally {

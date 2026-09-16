@@ -26,6 +26,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { scanDirectory, countFiles, collectFilePaths } from './services/project-scanner';
 import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
+import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
+import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -94,33 +96,24 @@ const app = express();
 app.use(express.json());
 
 /**
- * CORS for the packaged Electron renderer. The renderer loads from
- * `file://`, which browsers report as `Origin: null` for CORS. We
- * allow it through (alongside any `http://localhost:*` origin from
- * the Vite dev server) so the renderer can hit the backend at
- * 127.0.0.1:<port>. The server is bound to 127.0.0.1 only — no
- * untrusted host on the network can reach it.
+ * Origin / Host / capability-token enforcement.
+ *
+ * This REPLACED a middleware that reflected the caller's origin back with
+ * `Access-Control-Allow-Credentials: true`, on the stated reasoning that
+ * "we already gate access at the bind level (loopback only)".
+ *
+ * That reasoning was wrong, and it was the root of most of the Phase 19
+ * register. Loopback keeps out other machines; it does not keep out the
+ * user's own browser. Any page the user visited could call this API and,
+ * because of the reflection, read the responses.
+ *
+ * The packaged renderer does not need permissive CORS — it talks over IPC,
+ * not HTTP (`electron-ipc-shim.ts`). Only the dev server needs an origin,
+ * and it gets an exact one.
+ *
+ * See src/backend/middleware/local-auth.ts for the three layers.
  */
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  // file:// → "null", localhost dev → "http://localhost:5173" etc.
-  // Mirror whatever was sent so credentialed requests work; we
-  // already gate access at the bind level (loopback only).
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Vary', 'Origin');
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(204);
-    return;
-  }
-  next();
-});
+app.use(localAuthMiddleware);
 
 const server = http.createServer(app);
 
@@ -282,6 +275,33 @@ terminalService.onTerminalExit((id, code) => {
 // that occurs when two WSS instances both bind to `{ server }`.
 server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url ?? '', 'http://localhost').pathname;
+
+  // AUTHENTICATE BEFORE ROUTING.
+  //
+  // Upgrades never touch Express, so the middleware above does not see them.
+  // Without this check the WebSocket is an unauthenticated way around every
+  // control on the HTTP side — and `/terminal-ws` carries live PTY I/O, so
+  // that is the most valuable socket in the app to leave open.
+  //
+  // Browsers cannot set headers on a WebSocket handshake, so the token
+  // arrives as a query parameter here (see capability-token.ts).
+  const auth = isUpgradeAuthorised(
+    request.headers as Record<string, string | string[] | undefined>,
+    request.url,
+  );
+  if (!auth.ok) {
+    // Answer with a real HTTP status rather than a bare destroy, so a
+    // legitimate client that forgot its token gets a diagnosable failure
+    // instead of a silent disconnect.
+    socket.write(
+      `HTTP/1.1 401 Unauthorized\r\n` +
+        `Connection: close\r\n` +
+        `Content-Type: text/plain\r\n\r\n` +
+        `${auth.reason}\n`,
+    );
+    socket.destroy();
+    return;
+  }
 
   if (pathname === '/terminal-ws') {
     terminalWss.handleUpgrade(request, socket, head, (ws) => {
@@ -3692,6 +3712,12 @@ function rearmProjectWatchers(): void {
 }
 
 export async function initializeBackend(): Promise<void> {
+  // FIRST, before anything binds a port or serves a byte. Every local
+  // transport checks this token, so a surface that came up before it existed
+  // would be briefly unauthenticated.
+  initCapabilityToken();
+  console.log(`[Auth] Capability token ready — ${getTokenFilePath()}`);
+
   await initDatabase();
   await initParser();
 

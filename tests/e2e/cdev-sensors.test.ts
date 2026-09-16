@@ -19,7 +19,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { setupHarness, waitFor, sleep } from '../harness';
+import { setupHarness, waitFor, sleep, authFetch } from '../harness';
 
 test.describe('CDev Phase 4 — sensors', () => {
   test.setTimeout(120_000);
@@ -178,7 +178,7 @@ test.describe('CDev Phase 4 — sensors', () => {
       // Hit the doc-check REST endpoint (simulates git hook).
       const baseUrl = `http://localhost:${h.backend.backendPort}`;
       const checkUrl = `${baseUrl}/api/sensors/doc-check?project=${encodeURIComponent(h.fixture.projectPath)}`;
-      const checkRes = await fetch(checkUrl);
+      const checkRes = await authFetch(h.backend, checkUrl);
       const checkJson = (await checkRes.json()) as { staleCount: number; eventsSurfaced: number };
       expect(checkJson.staleCount).toBeGreaterThan(0);
       expect(checkJson.eventsSurfaced).toBeGreaterThan(0);
