@@ -183,6 +183,30 @@ handshake without a note about forced re-pairing.
 
 ---
 
+## werift is patched — the patch must survive every upgrade
+
+`patches/werift+<version>.patch` lowers SCTP's `USERDATA_MAX_LENGTH` from
+werift's default 1200 to **1024**. This is an MTU fix: CodeTrellis is
+explicitly a bring-your-own-VPN product, and a tunnel's overhead pushes a
+1200-byte SCTP chunk past the path MTU. The symptom is not a clean failure —
+it is a peer that pairs and then stalls on larger payloads (a UI snapshot,
+terminal scrollback).
+
+**Finding:** a werift version bump without a regenerated patch. patch-package
+silently stops protecting you when the version moves — the 0.23 → 0.24.4 bump
+invalidated both existing patches, and only surfaced because `npm ci` failed
+in CI. A patch that still *applies* to a renamed file and quietly does nothing
+would not even do that.
+
+`tests/e2e/webrtc-handshake.test.ts` asserts the resulting VALUE rather than
+the patch file, and is verified to fail when the patch is lost. If an upgrade
+moves the constant somewhere that test cannot see, re-target it — never delete
+it.
+
+**Finding:** a patch file for a package that is no longer a dependency.
+`werift-sctp` stopped existing at 0.24 and its stale patch broke every
+install until it was removed.
+
 ## Node is pinned at 22
 
 `.nvmrc` and `.node-version` both say 22. `better-sqlite3` is a native binding

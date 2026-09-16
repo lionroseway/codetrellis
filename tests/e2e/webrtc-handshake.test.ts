@@ -36,9 +36,58 @@
  */
 
 import { test, expect } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { RTCPeerConnection, RTCSessionDescription } from 'werift';
 
 test.describe('WebRTC transport (werift)', () => {
+  /**
+   * THE SCTP PATCH MUST SURVIVE EVERY werift UPGRADE.
+   *
+   * patches/werift+<version>.patch lowers SCTP's USERDATA_MAX_LENGTH from
+   * werift's default 1200 to 1024. That is an MTU fix: CodeTrellis is
+   * explicitly a bring-your-own-VPN product, and a VPN's tunnel overhead
+   * pushes a 1200-byte SCTP chunk past the path MTU, where it is fragmented
+   * or dropped. The symptom is not a clean failure — it is a peer that pairs
+   * and then stalls on larger payloads (a UI snapshot, terminal scrollback).
+   *
+   * patch-package silently stops protecting you when the version moves. The
+   * werift 0.23 -> 0.24.4 upgrade invalidated both existing patches, and the
+   * only reason it surfaced was that `npm ci` failed loudly in CI. It could
+   * just as easily have been a patch that still applied to a renamed file and
+   * quietly did nothing.
+   *
+   * So assert the VALUE, not the patch file. If a future upgrade moves the
+   * constant somewhere this cannot see, that is a real signal and this test
+   * should be taught the new location — never deleted.
+   */
+  test('SCTP payload cap is patched to 1024 (VPN MTU headroom)', async () => {
+    // werift's package.json is not listed in its `exports`, so it cannot be
+    // resolved directly. Resolve the module entry and walk UP until we find the
+    // directory that owns it — the entry sits several levels deep
+    // (lib/webrtc/src/index.js), so a fixed '..' is wrong.
+    let weriftDir = path.dirname(require.resolve('werift'));
+    while (weriftDir !== path.dirname(weriftDir) && path.basename(weriftDir) !== 'werift') {
+      weriftDir = path.dirname(weriftDir);
+    }
+    expect(path.basename(weriftDir), 'could not locate the werift package root').toBe('werift');
+    const targets = [
+      path.join(weriftDir, 'lib', 'index.mjs'),
+      path.join(weriftDir, 'lib', 'sctp', 'src', 'sctp.js'),
+    ];
+
+    for (const file of targets) {
+      expect(fs.existsSync(file), `${file} missing — werift layout changed, re-target the patch`).toBe(true);
+      const src = fs.readFileSync(file, 'utf-8');
+      const match = /USERDATA_MAX_LENGTH\s*=\s*(\d+)/.exec(src);
+      expect(match, `USERDATA_MAX_LENGTH not found in ${file} — re-target patches/werift+*.patch`).not.toBeNull();
+      expect(
+        Number(match![1]),
+        `${path.basename(file)} has USERDATA_MAX_LENGTH=${match![1]}; the patch did not apply`,
+      ).toBe(1024);
+    }
+  });
+
   test('two peers complete a DTLS handshake and exchange data', async () => {
     const a = new RTCPeerConnection({});
     const b = new RTCPeerConnection({});
