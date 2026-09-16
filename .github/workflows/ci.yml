@@ -36,8 +36,11 @@
 #
 # And what does NOT:
 #
-#   harness           10+ min   advisory — slow and flaky, see its header
 #   claude-review     varies    advisory permanently, see claude-review.yml
+#
+# The E2E harness is NOT in this file. It lives in e2e-harness.yml and runs on
+# demand (a button, or the `run-e2e` label) plus nightly — it is too slow and
+# too flaky to fire on every PR. See that file for the promotion condition.
 #
 # `npm test` (the legacy Playwright suite under e2e/) is not run here at all:
 # it drives a real running app and needs a desktop session, a folder picker
@@ -52,11 +55,6 @@ on:
     branches: [main]
   push:
     branches: [main]
-  schedule:
-    # 03:00 UTC nightly. The advisory harness is the reason this exists: a
-    # suite that does not block still has to be watched, or it rots silently
-    # and is useless on the day it is promoted.
-    - cron: '0 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -155,65 +153,6 @@ jobs:
       #   run: npm run lint
       #   # ENABLE IN THE SAME PR THAT ADDS ESLINT AS A DEVDEPENDENCY.
       #   # See the header note; eslint is currently not installed at all.
-
-  # ---------------------------------------------------------------------------
-  # Hermetic E2E harness — ADVISORY FOR NOW, and here is the condition to
-  # promote it.
-  #
-  # WHY IT IS NOT BLOCKING YET
-  #
-  # A gate has to be proven green and proven fast before it is allowed to
-  # block. This one is neither, measured rather than assumed:
-  #
-  #   - playwright.harness.config.ts sets workers: 1, because every test boots
-  #     a real backend subprocess (tsx + sql.js + tree-sitter + chokidar) and
-  #     running them concurrently is unstable. So the suite is serial by
-  #     design.
-  #   - It sets retries: 2, with a comment naming the timing-sensitive tests
-  #     (file-watcher auto-advance, chokidar plan-import). A suite that needs
-  #     retries is telling you it is flaky.
-  #   - Local run on an M-series Mac: 380s, and it bailed with 67 tests not
-  #     run. A GitHub-hosted runner is slower than that.
-  #
-  # Blocking every PR on a 10+ minute suite that sometimes bails is how people
-  # learn to bypass protection. Advisory keeps the signal visible while the
-  # runtime and the flakes get fixed.
-  #
-  # PROMOTE IT when it runs green three times running and finishes in a time
-  # anyone would wait for. Then add `harness` back to ci-passed's `needs` and
-  # drop continue-on-error. Do not leave it advisory out of habit — an
-  # advisory job nobody promotes is a job nobody reads.
-  #
-  # The nightly run below is what stops it rotting in the meantime.
-  # ---------------------------------------------------------------------------
-  harness:
-    name: E2E harness (advisory)
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
-    continue-on-error: true
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install
-        run: npm ci
-
-      # The harness git-inits its fixture repo, so git needs an identity or
-      # the first commit fails with "Author identity unknown".
-      - name: Configure git for fixtures
-        run: |
-          git config --global user.email "ci@codetrellis.invalid"
-          git config --global user.name "CodeTrellis CI"
-
-      - name: Install Playwright runner
-        run: npx playwright install --with-deps chromium
-
-      - name: Harness suite
-        run: npm run test:harness
 
   # ---------------------------------------------------------------------------
   # Mobile: typecheck only.
