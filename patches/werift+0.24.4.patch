@@ -1,8 +1,8 @@
 diff --git a/node_modules/werift/lib/index.mjs b/node_modules/werift/lib/index.mjs
-index 6e63c1c..b952b0e 100644
+index bd453cf..2e8ebc9 100644
 --- a/node_modules/werift/lib/index.mjs
 +++ b/node_modules/werift/lib/index.mjs
-@@ -11115,7 +11115,7 @@ var log29 = debug("werift/sctp/sctp");
+@@ -12750,7 +12750,7 @@ var log30 = debug("werift/sctp/sctp");
  var COOKIE_LENGTH = 24;
  var COOKIE_LIFETIME = 60;
  var MAX_STREAMS = 65535;
@@ -12,10 +12,10 @@ index 6e63c1c..b952b0e 100644
  var SCTP_DATA_FIRST_FRAG = 2;
  var SCTP_DATA_UNORDERED = 4;
 diff --git a/node_modules/werift/lib/sctp/src/sctp.js b/node_modules/werift/lib/sctp/src/sctp.js
-index 1bf6928..6c5fba2 100644
+index 45d5e3c..9a582c8 100644
 --- a/node_modules/werift/lib/sctp/src/sctp.js
 +++ b/node_modules/werift/lib/sctp/src/sctp.js
-@@ -14,7 +14,7 @@ const log = (0, common_1.debug)("werift/sctp/sctp");
+@@ -13,7 +13,7 @@ const log = (0, common_1.debug)("werift/sctp/sctp");
  const COOKIE_LENGTH = 24;
  const COOKIE_LIFETIME = 60;
  const MAX_STREAMS = 65535;
