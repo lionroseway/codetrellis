@@ -6,7 +6,10 @@
 [extend]
 useDefault = true
 
-[[allowlists]]
+# NOTE ON FORM: `[allowlist]` (singular table) is honoured by every gitleaks
+# v8; `[[allowlists]]` (array) only by newer builds. The action pins its own
+# version, so declare the singular form to avoid depending on which it ships.
+[allowlist]
 description = """
 Generated, fully-derived bundles. NOT hand-written, and nothing secret can
 reach them.
@@ -34,6 +37,7 @@ ONLY add a path here when its contents are entirely machine-generated AND
 something verifies that. A hand-edited file must never appear in this list.
 """
 paths = [
-  '''mobile/components/xterm-bundle\.ts''',
-  '''resources/tree-sitter/.*\.wasm''',
+  '''mobile/components/xterm-bundle\.ts$''',
+  '''.*xterm-bundle\.ts$''',
+  '''resources/tree-sitter/.*\.wasm$''',
 ]
