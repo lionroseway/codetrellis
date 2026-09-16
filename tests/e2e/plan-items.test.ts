@@ -26,6 +26,22 @@
 import { test, expect } from '@playwright/test';
 import { setupHarness } from '../harness';
 
+/**
+ * `list_items` returns a PAGINATED ENVELOPE, not a bare array.
+ *
+ * Phase A (A7) of the V2 MCP migration added `limit` / `offset` / `status`
+ * to `list_items`, which changed the response shape from `PlanItemJson[]` to
+ * `{ items, limit, offset, total }`. These tests asserted the old shape and
+ * failed with "received value must have a length property" — the behaviour
+ * they check is still correct, only the envelope moved.
+ */
+interface ListItemsEnvelope {
+  items: PlanItemJson[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
 interface PlanItemJson {
   uid: string;
   planUid: string;
@@ -121,13 +137,13 @@ test.describe('Phase 15 §C — unified Object/Action MCP surface', () => {
 
       // list_items returns 3 items, top-level filter returns 2
       const all = await agent.callTool('list_items', { plan_uid: plan.uid });
-      expect(parseJson<PlanItemJson[]>(all.text)).toHaveLength(3);
+      expect(parseJson<ListItemsEnvelope>(all.text).items).toHaveLength(3);
 
       const top = await agent.callTool('list_items', { plan_uid: plan.uid, parent_uid: '' });
-      expect(parseJson<PlanItemJson[]>(top.text)).toHaveLength(2);
+      expect(parseJson<ListItemsEnvelope>(top.text).items).toHaveLength(2);
 
       const onlyActions = await agent.callTool('list_items', { plan_uid: plan.uid, kind: 'action' });
-      expect(parseJson<PlanItemJson[]>(onlyActions.text)).toHaveLength(1);
+      expect(parseJson<ListItemsEnvelope>(onlyActions.text).items).toHaveLength(1);
     } finally {
       await h.teardown();
     }
@@ -276,9 +292,9 @@ test.describe('Phase 15 §C — unified Object/Action MCP surface', () => {
       expect(deletedResult.deleted).toContain(child.uid);
 
       // Both gone from list_items
-      const after = parseJson<PlanItemJson[]>(
+      const after = parseJson<ListItemsEnvelope>(
         (await agent.callTool('list_items', { plan_uid: plan.uid })).text,
-      );
+      ).items;
       expect(after.find((i) => i.uid === root.uid)).toBeUndefined();
       expect(after.find((i) => i.uid === child.uid)).toBeUndefined();
     } finally {

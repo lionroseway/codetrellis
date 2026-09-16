@@ -20,7 +20,34 @@
 import { test, expect } from '@playwright/test';
 import { setupHarness } from '../harness';
 
-test.describe('Multi-agent contention', () => {
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ * SKIPPED — this file tests MCP tools that NO LONGER EXIST.
+ *
+ * The V2 MCP migration REMOVED (not deprecated) all 19 V1 plan tools:
+ * claim_task, add_subtask, update_task, update_task_progress,
+ * set_task_blocked, add_task_comment, add_task_attachment, get_next_task,
+ * add_plan_doc, add_plan_phase and the rest. `create_plan` also no longer
+ * accepts inline tasks, so `getPlan(...).tasks` comes back empty and every
+ * assertion here fails on an empty array rather than on its own logic.
+ *
+ * See docs/V2-MCP-MIGRATION.md §6 for the removal list.
+ *
+ * KEPT, NOT DELETED, because the SCENARIOS are still worth covering — the
+ * V1 plumbing underneath them is what went away. Whoever reseeds these onto
+ * the V2 surface (add_item / bulk_add_items / claim_item) gets the intent
+ * for free instead of rediscovering it.
+ *
+ * Coverage status: the contention contract IS still enforced —
+ * plan-items.test.ts:289 spawns two separate MCP sessions and asserts that
+ * exactly one claim_item wins. That test passes. What is lost here is only
+ * the V1 claim_task spelling of the same rule.
+ *
+ * To re-enable: rewrite against the V2 tools, then change
+ * `test.describe.skip` back to `test.describe`.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+test.describe.skip('Multi-agent contention', () => {
   test.setTimeout(120_000);
 
   test('two agents racing on claim_task — exactly one wins', async () => {

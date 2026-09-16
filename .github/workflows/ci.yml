@@ -37,10 +37,31 @@
 # And what does NOT:
 #
 #   claude-review     varies    advisory permanently, see claude-review.yml
+#   harness           see below
 #
-# The E2E harness is NOT in this file. It lives in e2e-harness.yml and runs on
-# demand (a button, or the `run-e2e` label) plus nightly — it is too slow and
-# too flaky to fire on every PR. See that file for the promotion condition.
+# THE HARNESS IS GREEN BUT DOES NOT FIT HERE — AND THE NUMBERS MATTER.
+#
+#   local (M-series Mac):  139 passed, 16 skipped, 0 failed, 99s
+#   ubuntu-latest:         did not finish in 20 minutes, job cancelled
+#
+# It was briefly promoted into this file on the strength of the local number
+# alone. That was wrong: a >12x slowdown on a 4-core cloud runner is the
+# number that decides whether it can gate a PR, and nobody had measured it.
+#
+# The cause is structural, not a flake. playwright.harness.config.ts runs
+# `workers: 1`, and every one of the 139 tests boots a real backend
+# subprocess through tsx — TypeScript compiled on the fly, sql.js and
+# tree-sitter WASM loaded per test. That is sub-second on fast local hardware
+# and seconds apiece on a shared runner.
+#
+# It therefore runs from e2e-harness.yml — nightly and on demand, where a long
+# runtime costs nothing. Developers get the fast local run, which is where
+# this suite earns its keep.
+#
+# TO BRING IT BACK HERE: make it fit. Raising `workers` is the obvious lever
+# (the config's `workers: 1` was chosen for loaded local machines, not for CI)
+# or shard across jobs. Measure ON CI before promoting it again — that is the
+# mistake this comment exists to stop being repeated.
 #
 # `npm test` (the legacy Playwright suite under e2e/) is not run here at all:
 # it drives a real running app and needs a desktop session, a folder picker
@@ -194,8 +215,9 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    # `harness` is NOT here — advisory until it is green and fast. See its
-    # header block for the promotion condition.
+    # `harness` is NOT here. It is green (139 passed, 0 failed) but it does
+    # not FIT: ~99s locally, >20min on ubuntu-latest, where it hit the job
+    # timeout. See e2e-harness.yml.
     needs: [no-private-docs, desktop, mobile]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:

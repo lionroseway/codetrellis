@@ -15,7 +15,32 @@
 import { test, expect } from '@playwright/test';
 import { setupHarness, waitFor } from '../harness';
 
-test.describe('Agent-driven loop (via MCP)', () => {
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ * SKIPPED — this file tests MCP tools that NO LONGER EXIST.
+ *
+ * The V2 MCP migration REMOVED (not deprecated) all 19 V1 plan tools:
+ * claim_task, add_subtask, update_task, update_task_progress,
+ * set_task_blocked, add_task_comment, add_task_attachment, get_next_task,
+ * add_plan_doc, add_plan_phase and the rest. `create_plan` also no longer
+ * accepts inline tasks, so `getPlan(...).tasks` comes back empty and every
+ * assertion here fails on an empty array rather than on its own logic.
+ *
+ * See docs/V2-MCP-MIGRATION.md §6 for the removal list.
+ *
+ * KEPT, NOT DELETED, because the SCENARIOS are still worth covering — the
+ * V1 plumbing underneath them is what went away. Whoever reseeds these onto
+ * the V2 surface (add_item / bulk_add_items / claim_item) gets the intent
+ * for free instead of rediscovering it.
+ *
+ * Coverage status: full-loop.test.ts covers the agent lifecycle end to end
+ * (16 passing tests), so the loop itself is not going untested.
+ *
+ * To re-enable: rewrite against the V2 tools, then change
+ * `test.describe.skip` back to `test.describe`.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+test.describe.skip('Agent-driven loop (via MCP)', () => {
   test.setTimeout(120_000);
 
   test('agent connects, registers, claims a task, reports done — REST sees it', async () => {
