@@ -21,11 +21,17 @@
 name: release
 
 on:
-  # Tag-push trigger disabled while the repo is private — Actions
-  # minutes cost real money, and the maintainer is currently building
-  # locally + uploading via `gh release create`. Re-enable by
-  # un-commenting the `push.tags` block once the repo goes public
-  # (public repos get unlimited free Actions minutes).
+  # Tag-push trigger stays disabled — but NOT for the original reason.
+  #
+  # It was disabled to save Actions minutes while the repo was private.
+  # The repo is public now, so minutes are free and that reason is gone.
+  # It stays off because re-enabling it would DOUBLE-BUILD every release:
+  # scripts/release.sh already dispatches build-installers.yml itself, and
+  # a `v*` tag push would fire this workflow alongside it — two multi-
+  # platform builds racing to attach assets to the same release.
+  #
+  # Re-enable only if release.sh stops driving the build, and delete its
+  # dispatch when you do. One of the two owns the build, never both.
   #
   # push:
   #   tags:

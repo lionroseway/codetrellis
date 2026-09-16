@@ -1,0 +1,225 @@
+# Continuous integration for pull requests into main.
+#
+# WHAT BLOCKS, AND WHAT DOES NOT
+#
+# Branch protection requires exactly one context from this file: "CI passed".
+# That job is an aggregator — it depends on every real job and fails if any of
+# them failed. Pin the aggregator, never the individual jobs, or protection has
+# to be re-pinned every time a job is added or renamed.
+#
+# The Claude review (claude-review.yml) is deliberately NOT required. An LLM
+# reviewer is not deterministic, and a gate that fires inconsistently is one
+# people learn to click past. Findings it repeats graduate into checks *here*,
+# and those block.
+#
+# WHY GITHUB-HOSTED RUNNERS
+#
+# This repository is public, so Actions minutes are free. cocodraw routes CI to
+# a self-hosted VPS runner because it is private and minutes are metered; there
+# is nothing to gain from that here, and a self-hosted runner would add a
+# contended slot for no benefit. vars.CI_RUNNER is still honoured so the
+# decision is one repository variable away if this repo ever goes private.
+#
+# WHY THERE IS NO LINT JOB YET
+#
+# `npm run lint` runs `eslint src/`, and eslint is not a declared dependency —
+# it has never worked. Adding a lint gate before installing eslint would make
+# CI red on arrival and teach everyone to ignore it. Installing eslint is
+# Phase 19 Gate 3 work; the job below is written and commented out, ready to
+# enable in the same PR that adds the dependency.
+#
+# WHY THE HARNESS AND NOT `npm test`
+#
+# `npm test` is Playwright against a real running app — it needs a desktop
+# session, a folder picker and a free port, and it is flaky by construction.
+# `npm run test:harness` boots an isolated backend in a temp data dir against a
+# fixture repo and tears it down. That is the suite that can be trusted to
+# block a merge. See docs/E2E-HARNESS.md.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A rapid series of pushes cancels its own earlier runs rather than queueing
+# them. Never cancel on main — those runs are the record of what landed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Guard: nothing under docs/private/ may ever be tracked.
+  #
+  # This repo is PUBLIC and docs/private/ holds the Phase 19 finding register —
+  # unremediated issues with file paths. .gitignore covers it, but a gitignore
+  # is a default, not an enforcement: `git add -f` beats it, and so does anyone
+  # editing the ignore rule. This job is the enforcement.
+  #
+  # Cheap and first, so it fails in seconds rather than after a full install.
+  # ---------------------------------------------------------------------------
+  no-private-docs:
+    name: No private docs tracked
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert docs/private/ is untracked
+        run: |
+          tracked=$(git ls-files docs/private/ || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Files under docs/private/ are tracked in git."
+            echo "$tracked" | sed 's/^/  /'
+            echo ""
+            echo "This repository is public. docs/private/ holds the security"
+            echo "finding register and must never be committed."
+            echo "Fix: git rm --cached <file> && confirm .gitignore covers it."
+            exit 1
+          fi
+          echo "docs/private/ is clean"
+
+  # ---------------------------------------------------------------------------
+  # Desktop: typecheck + production build.
+  # ---------------------------------------------------------------------------
+  desktop:
+    name: Desktop (typecheck + build)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `npm ci` and not `npm install`: CI installs exactly the lockfile, and
+      # fails if package.json and the lockfile disagree. That disagreement is
+      # worth failing on — it means someone edited one without the other.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # THE HIGHEST-VALUE CHECK IN THIS FILE.
+      #
+      # `require('./relative')` in src/backend survives typecheck, survives
+      # `npm run build`, and works in dev — then throws MODULE_NOT_FOUND in the
+      # packaged app, because rollup leaves runtime CommonJS requires alone and
+      # the relative path does not exist next to the bundled main.js.
+      #
+      # This has shipped broken to users twice. scripts/check-no-relative-require.sh
+      # was added to catch it, but it was only wired into the `package:*`
+      # scripts — so it fires on release day, not on the PR that introduced the
+      # bug. Running it here moves the catch to where it is cheap.
+      - name: Bundle guard (no relative require in src/backend)
+        run: npm run check:bundle
+
+      # Note this is the WEB build (tsc + vite). It is not the Electron
+      # package — that needs electron-builder and a native toolchain per OS,
+      # which is what build-installers.yml is for. Green here does not mean the
+      # installer builds; the bundle guard above is what covers the gap that
+      # actually bit us.
+      - name: Build (web)
+        run: npm run build
+
+      # - name: Lint
+      #   run: npm run lint
+      #   # ENABLE IN THE SAME PR THAT ADDS ESLINT AS A DEVDEPENDENCY.
+      #   # See the header note; eslint is currently not installed at all.
+
+  # ---------------------------------------------------------------------------
+  # Hermetic end-to-end harness.
+  # ---------------------------------------------------------------------------
+  harness:
+    name: E2E harness
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The harness git-inits its fixture repo, so git needs an identity or
+      # the first commit fails with "Author identity unknown".
+      - name: Configure git for fixtures
+        run: |
+          git config --global user.email "ci@codetrellis.invalid"
+          git config --global user.name "CodeTrellis CI"
+
+      - name: Install Playwright runner
+        run: npx playwright install --with-deps chromium
+
+      - name: Harness suite
+        run: npm run test:harness
+
+      - name: Unit tests
+        run: npm run test:unit
+
+  # ---------------------------------------------------------------------------
+  # Mobile: typecheck only.
+  #
+  # No build here — an EAS build needs credentials and a queue slot, and a
+  # local prebuild needs Xcode or the Android SDK, neither of which a Linux
+  # runner has. Typecheck is what CI can honestly assert about mobile; that the
+  # native projects still build is a human check on a machine with the
+  # toolchain. Say so rather than letting green CI imply more than it means.
+  # ---------------------------------------------------------------------------
+  mobile:
+    name: Mobile (typecheck)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  # ---------------------------------------------------------------------------
+  # THE ONLY CONTEXT BRANCH PROTECTION PINS.
+  #
+  # `if: always()` so it runs even when a dependency failed — without it the
+  # job is skipped, and a skipped required check leaves the PR waiting forever
+  # on a status that will never report.
+  # ---------------------------------------------------------------------------
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [no-private-docs, desktop, harness, mobile]
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - name: Check results
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          if echo "$results" | grep -q '"result": *"failure"'; then
+            echo "::error::One or more CI jobs failed."
+            exit 1
+          fi
+          if echo "$results" | grep -q '"result": *"cancelled"'; then
+            echo "::error::One or more CI jobs were cancelled."
+            exit 1
+          fi
+          echo "all CI jobs passed"
