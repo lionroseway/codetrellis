@@ -103,3 +103,55 @@ test.describe('Committed build artifacts', () => {
     }
   });
 });
+
+/**
+ * The mobile terminal bundle is generated, committed, and easy to forget.
+ *
+ * mobile/components/xterm-bundle.ts inlines xterm.js, addon-fit and the CSS
+ * into a single HTML document so the terminal WebView works with no network.
+ * scripts/gen-xterm-bundle.js builds it, and its own header says "re-run after
+ * bumping the @xterm/* deps" — which is precisely the instruction that gets
+ * missed, because nothing fails if you don't.
+ *
+ * Merge an @xterm bump without regenerating and package.json claims one
+ * version while the app ships another. The xterm 5 -> 6 bump changed this file
+ * from 301,894 to 507,134 bytes, so the drift is not subtle once you look —
+ * the problem is that nobody looks.
+ *
+ * The generator is idempotent (verified), so the check is simply: regenerate
+ * into a temp file and compare bytes.
+ */
+test.describe('Mobile xterm bundle', () => {
+  test('mobile/components/xterm-bundle.ts is in sync with the installed @xterm packages', () => {
+    const mobileDir = path.join(repoRoot, 'mobile');
+    const bundle = path.join(mobileDir, 'components', 'xterm-bundle.ts');
+    const generator = path.join(mobileDir, 'scripts', 'gen-xterm-bundle.js');
+
+    // mobile/ has its own node_modules; skip rather than fail when only the
+    // desktop tree is installed (CI installs them in separate jobs).
+    if (!fs.existsSync(path.join(mobileDir, 'node_modules', '@xterm', 'xterm'))) {
+      test.skip(true, 'mobile/node_modules not installed — nothing to compare against');
+      return;
+    }
+
+    expect(fs.existsSync(bundle), `${bundle} is missing`).toBe(true);
+    expect(fs.existsSync(generator), `${generator} is missing`).toBe(true);
+
+    const before = fs.readFileSync(bundle);
+    const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
+
+    try {
+      execFileSync(process.execPath, [generator], { cwd: mobileDir, stdio: 'pipe' });
+      const after = fs.readFileSync(bundle);
+      expect(
+        before.equals(after),
+        'mobile/components/xterm-bundle.ts is out of date with the installed ' +
+          `@xterm packages (${before.length} vs ${after.length} bytes). Regenerate it:\n` +
+          '  cd mobile && node scripts/gen-xterm-bundle.js',
+      ).toBe(true);
+    } finally {
+      // Never leave the working tree modified by a test.
+      fs.writeFileSync(bundle, before);
+    }
+  });
+});
