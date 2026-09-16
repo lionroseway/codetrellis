@@ -60,19 +60,28 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # THRESHOLD IS `critical` TODAY, DELIBERATELY.
+      # THRESHOLD IS `low` — ANY production advisory fails the build.
       #
-      # Production currently carries high-severity advisories that Gate 3 has
-      # not cleared yet. Setting this to `high` now would make the gate red on
-      # arrival and train everyone to ignore it — the exact failure mode this
-      # whole file is trying to avoid.
+      # This started at `critical` because production carried 11 advisories,
+      # 7 of them high, and a gate that is red on arrival is one people learn
+      # to click past. The note here said to tighten it "the day the count
+      # reaches zero, not eventually". That day is today.
       #
-      # `critical` is a real floor that passes today, so the gate is honest
-      # from day one. Tighten to `high`, then `moderate`, as Gate 3 lands.
-      # Each tightening is a one-word commit and should happen the day the
-      # count reaches zero, not "eventually".
-      - name: Audit production dependencies (blocking, critical)
-        run: npm audit --omit=dev --audit-level=critical
+      #   11 -> 0 across every severity, via:
+      #     Electron 44 + better-sqlite3 13   (one atomic upgrade)
+      #     Node 26
+      #     the minor/patch sweep
+      #     werift 0.24.4                     (cleared the last two highs)
+      #
+      # Zero is the only threshold that stays honest. At any other, a new
+      # moderate lands silently and the number creeps back up unnoticed.
+      #
+      # If this fails and the fix is a major you cannot take today, the answer
+      # is a documented exception with reachability analysis — NOT raising the
+      # threshold back up. The mobile audit below is a worked example of that
+      # argument.
+      - name: Audit production dependencies (blocking, any severity)
+        run: npm audit --omit=dev --audit-level=low
 
       - name: Full production report (advisory)
         if: always()
