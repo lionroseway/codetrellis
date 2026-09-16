@@ -213,6 +213,14 @@ export function mergeWithDefaults(raw: any): AppSettings {
     device: {
       deviceName: typeof raw?.device?.deviceName === 'string' ? raw.device.deviceName : DEFAULT_SETTINGS.device.deviceName,
       advertise: typeof raw?.device?.advertise === 'boolean' ? raw.device.advertise : DEFAULT_SETTINGS.device.advertise,
+      // Deliberately does NOT inherit from `advertise` for existing profiles.
+      // Someone who turned advertising on before these were separated was
+      // consenting to discovery, not to a 0.0.0.0 listener they were never
+      // shown. Defaulting to false makes them opt in explicitly.
+      exposeMobileApi:
+        typeof raw?.device?.exposeMobileApi === 'boolean'
+          ? raw.device.exposeMobileApi
+          : DEFAULT_SETTINGS.device.exposeMobileApi,
       shareAudio: typeof raw?.device?.shareAudio === 'boolean' ? raw.device.shareAudio : DEFAULT_SETTINGS.device.shareAudio,
       mobileApiPort: typeof raw?.device?.mobileApiPort === 'number' && raw.device.mobileApiPort > 0
         ? raw.device.mobileApiPort

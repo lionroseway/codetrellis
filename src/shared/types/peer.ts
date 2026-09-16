@@ -190,11 +190,19 @@ export interface RemoteInputRequest {
 /** Device-related settings added to AppSettings. */
 export interface DeviceSettings {
   /**
+   * Bind the mobile API on 0.0.0.0 so a phone on the LAN can reach it.
+   *
+   * SEPARATE from `advertise` (Phase 19, finding 1.4). Discovery and
+   * exposure were one switch, and only mDNS honoured it — the listener
+   * started unconditionally. Enabling one must not enable the other.
+   */
+  exposeMobileApi: boolean;
+  /**
    * Human-readable name for this machine (shown to peers during discovery).
    * Defaults to `os.hostname()`.
    */
   deviceName: string;
-  /** Whether to advertise via mDNS on startup. Default true. */
+  /** Whether to advertise via mDNS on startup. Default FALSE (finding A3). */
   advertise: boolean;
   /** Whether to share audio capture with paired devices. Default false. */
   shareAudio: boolean;

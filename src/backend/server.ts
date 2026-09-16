@@ -6,6 +6,7 @@ import * as _lazy___services_system_docs_service from './services/system-docs-se
 import * as _lazy___services_recent_projects_service from './services/recent-projects-service';
 import * as _lazy___services_git_identity from './services/git-identity';
 import * as _lazy___services_mdns_service from './services/mdns-service';
+import * as _lazy___services_mobile_api_server from './services/mobile-api-server';
 import * as _lazy___services_personal_sync_service from './services/personal-sync-service';
 import * as _lazy___services_git_activity_service from './services/git-activity-service';
 import * as _lazy___services_plan_history_service from './services/plan-history-service';
@@ -2902,6 +2903,28 @@ app.put('/api/settings', (req, res) => {
   if (before.mcp.port !== next.mcp.port) {
     broadcast('mcp-port-config-changed', { configuredPort: next.mcp.port });
   }
+  // Phase 19 — live-toggle the LAN listener when the user changes it.
+  //
+  // Without this, turning exposure OFF would leave :19480 bound until the
+  // next restart: the user would be told they had closed it while the socket
+  // was still accepting connections. A security toggle that only takes
+  // effect on restart is worse than no toggle, because it is believed.
+  if (before.device.exposeMobileApi !== next.device.exposeMobileApi) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mobileApi = _lazy___services_mobile_api_server;
+      if (next.device.exposeMobileApi) {
+        void mobileApi.startMobileApiServer();
+        console.log('[Backend] Mobile API exposed on the local network (user-enabled)');
+      } else {
+        mobileApi.stopMobileApiServer();
+        console.log('[Backend] Mobile API listener closed (user-disabled)');
+      }
+    } catch (err) {
+      console.warn('[Backend] Mobile API reconfigure failed:', err);
+    }
+  }
+
   // Phase 9 — live-restart mDNS when device settings change.
   if (before.device.advertise !== next.device.advertise ||
       before.device.deviceName !== next.device.deviceName) {

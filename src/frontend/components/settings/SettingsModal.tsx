@@ -977,6 +977,32 @@ function DevicesSection({
           />
         </Field>
 
+        {/*
+          Two switches, not one (Phase 19, finding 1.4). Exposure is the
+          security-relevant control and is listed FIRST, because it is the one
+          that opens a socket to the network. Discovery without exposure is
+          inert; exposure without discovery is still reachable by anyone who
+          knows the address.
+        */}
+        <Field label="">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.device.exposeMobileApi}
+              onChange={(e) =>
+                onChange({ device: { ...settings.device, exposeMobileApi: e.target.checked } })
+              }
+              className="accent-accent"
+            />
+            <span className="text-[12px]">Allow phones on this network to connect</span>
+          </label>
+          <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
+            Required to pair the mobile companion. Opens a port on every network
+            interface ({settings.device.mobileApiPort}), so leave it off unless you are
+            actively using your phone. Off by default.
+          </p>
+        </Field>
+
         <Field label="">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -985,11 +1011,12 @@ function DevicesSection({
               onChange={(e) => onChange({ device: { ...settings.device, advertise: e.target.checked } })}
               className="accent-accent"
             />
-            <span className="text-[12px]">Advertise on local network (mDNS)</span>
+            <span className="text-[12px]">Announce this machine for discovery (mDNS)</span>
           </label>
           <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
-            When enabled, nearby devices can discover this instance for pairing.
-            Disable if you don&apos;t want to appear in discovery lists.
+            Lets a phone find this machine automatically instead of typing its
+            address. Has no effect on its own — a phone still cannot connect
+            unless the setting above is on.
           </p>
         </Field>
 

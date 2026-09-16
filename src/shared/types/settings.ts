@@ -173,7 +173,29 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   device: {
     deviceName: '',  // '' = auto-detect from os.hostname()
-    advertise: true,
+    // OFF BY DEFAULT (Phase 19, finding A3).
+    //
+    // This used to default to `true`, which meant every new profile bound
+    // the mobile API on 0.0.0.0 — every interface — and advertised itself
+    // over mDNS, on whatever network the machine happened to be on. The
+    // bring-your-own-VPN story describes the intended REMOTE model; it did
+    // not describe this default.
+    //
+    // Turning it off collapses the LAN attack surface behind the whole peer
+    // finding set: pairing, reconnect, terminal broadcast, the debug
+    // endpoints. They exist only once a user has deliberately enabled
+    // mobile pairing.
+    advertise: false,
+    // SEPARATE FROM `advertise`, and also off (Phase 19, finding A3 / 1.4).
+    //
+    // These were one switch, and worse, only mDNS ever honoured it —
+    // `startMobileApiServer()` ran unconditionally, so :19480 bound 0.0.0.0
+    // on every launch whatever the setting said. Discovery and exposure are
+    // now independent, as the review requires: advertising without a
+    // listener is inert, and a listener without advertising is still
+    // reachable by anyone who knows the address. The listener is the
+    // security-relevant one.
+    exposeMobileApi: false,
     shareAudio: false,
     mobileApiPort: 19480,
   },
