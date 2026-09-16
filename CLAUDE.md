@@ -127,6 +127,67 @@ a tagged candidate and on packaged artifacts.
   `system-discovery` auto-detects microservices and endpoints.
 - **Layout**: dagre + d3-force in the renderer.
 
+## Electron + better-sqlite3 move together — always
+
+These two are **one atomic upgrade**. Neither half works alone, and both
+failure modes were measured on 2026-09-16, not inferred:
+
+| | bundles Node | N-API |
+|---|---|---|
+| Electron 33 | 20.18.3 | 9 |
+| Electron 44 | 24.21.0 | 10 |
+
+- `better-sqlite3@11` uses **direct V8 APIs** (`Context::GetIsolate`,
+  `PropertyCallbackInfo::This`, 2-arg `External::New`). Electron 44's V8
+  removed or changed them, so `@electron/rebuild` **fails to compile it**
+  and packaging dies outright. It is not N-API, so it must be rebuilt for
+  every Electron version.
+- `better-sqlite3@13` is N-API (`node-addon-api`) and ships per-platform
+  prebuilds, but declares `engines.node >= 22`, so it needs Electron 44's
+  Node 24. It also structurally removes the wrong-architecture class of
+  failure v11 had.
+
+So: **bump Electron and better-sqlite3 in the same commit.** Verified
+together — packaged, launched, and a real 18MB database opened with its
+18MB WAL intact (479 files / 2222 symbols / 8 plans / 21 items preserved,
+`quick_check` ok).
+
+### A packaged build is the only thing that proves this
+
+Nothing in CI does. CI builds the **web** bundle, and the harness runs
+under **Node**, not Electron. A broken pairing passes typecheck, passes
+the web build, passes all 139 harness tests, and packages without a
+warning — and then cannot open its own database.
+
+When you touch either dependency:
+
+```
+npm ci                       # see the warning below — do not skip this
+npm run package:mac
+CODETRELLIS_DATA_DIR=/tmp/ct-probe \
+  out/make/mac-arm64/CodeTrellis.app/Contents/MacOS/CodeTrellis
+# confirm data.db appears and the log reaches "Backend initialised"
+```
+
+**Always `npm ci` before packaging.** A `node_modules` left over from
+several successive `npm install`s produced a silent boot hang — no error,
+no log past "App boot" — that looked exactly like a dependency
+incompatibility and was not one. A clean install made the same commit boot
+perfectly. Do not diagnose a packaging problem from a dirty tree.
+
+To probe the native module alone under the packaged Electron:
+
+```
+ELECTRON_RUN_AS_NODE=1 \
+  out/make/mac-arm64/CodeTrellis.app/Contents/MacOS/CodeTrellis probe.js
+```
+
+### Node 26 is a follow-on, not part of this
+
+`.nvmrc` stays at 22. `better-sqlite3@11` cannot build on Node 26 at all,
+so the dev/CI Node was blocked behind this upgrade; with v13 in place it
+is now unblocked and can move in its own change.
+
 ## Directory layout
 
 - `src/backend/` — Express server + ~50 services (grouped by domain in

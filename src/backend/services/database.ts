@@ -115,7 +115,35 @@ export async function initDatabase(): Promise<void> {
 
   ensureDataDir();
   const dbPath = path.join(getDataDir(), 'data.db');
-  bdb = new BetterSqlite3(dbPath);
+  // OPENING is itself a failure point, and it used to be unguarded.
+  //
+  // The corruption check below only runs once we HAVE a connection, so it
+  // cannot help when the constructor throws — a file SQLite refuses outright,
+  // a database written by a newer SQLite than this build understands, a bad
+  // permission, a truncated file from a failed copy. Any of those took the
+  // whole backend down with no recovery: initDatabase rejects, bootstrap()
+  // catches, and the app opens to a window with no backend behind it.
+  //
+  // That matters most during an UPGRADE, which is exactly when the on-disk
+  // file and the engine reading it are most likely to disagree. So the open
+  // gets the same treatment the corruption path already had: quarantine the
+  // file (rename, never delete — sidecars go with it, recoverable later with
+  // `sqlite3 … .recover`) and start fresh.
+  //
+  // Losing the file is safe by design: AST tables are ephemeral and rebuilt on
+  // the next scan, and plans live as YAML under .codetrellis/ and are
+  // re-imported on project open. Nothing here is a source of truth.
+  try {
+    bdb = new BetterSqlite3(dbPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[DB] Could not open data.db (${msg}) — quarantining and starting fresh`);
+    quarantineCorruptDatabase(dbPath);
+    // If THIS throws we genuinely cannot proceed: the data directory is not
+    // writable, and failing loudly beats looping.
+    bdb = new BetterSqlite3(dbPath);
+    console.warn('[DB] Recovered with an empty database — a scan will rebuild AST data, and plans re-import from .codetrellis/');
+  }
 
   // Self-heal a corrupt on-disk database. The AST tables are ephemeral
   // (rebuilt on the next scan) and plans live as YAML under .codetrellis/
