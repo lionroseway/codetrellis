@@ -225,7 +225,12 @@ test.describe('Gate 1.1 — transport authentication', () => {
         `Host: 127.0.0.1:${port}`,
         'Upgrade: websocket',
         'Connection: Upgrade',
-        'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
+        // The literal example key from RFC 6455 §1.3 — base64 of "the sample
+        // nonce". A WebSocket handshake requires this header, and its value
+        // is not a credential: the server echoes a hash of it back and never
+        // uses it for authorisation. gitleaks' entropy heuristic reads any
+        // base64 blob as a possible key, hence the inline allow.
+        'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==', // gitleaks:allow
         'Sec-WebSocket-Version: 13',
         ...extra,
       ];
