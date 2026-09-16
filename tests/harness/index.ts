@@ -129,6 +129,8 @@ export async function setupHarness(
   ): Promise<ScriptedAgent> => {
     const agent = createScriptedAgent({
       mcpPort: backend!.mcpPort,
+      // Gate 1.1 — the MCP transport authenticates too.
+      capabilityToken: backend!.capabilityToken,
       agentType: agentOpts.agentType ?? `harness-agent-${agents.length + 1}`,
       model: agentOpts.model,
       projectPath: fixture.projectPath,

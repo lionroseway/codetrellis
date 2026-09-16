@@ -8,6 +8,13 @@
 
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy____services_stuck_sensor_service from '../services/stuck-sensor-service';
+import {
+  extractToken,
+  verifyCapabilityToken,
+  getCapabilityToken,
+  getTokenFilePath,
+  TOKEN_HEADER,
+} from '../services/capability-token';
 import * as _lazy____server from '../server';
 import http from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -353,18 +360,74 @@ export async function startMcpServer(): Promise<void> {
   if (httpServer) return;
 
   const app = http.createServer(async (req, res) => {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // ── Authentication (Phase 19 Gate 1.1, finding 4) ────────────────
+    //
+    // This server binds 127.0.0.1 and used to answer with
+    // `Access-Control-Allow-Origin: *`. Loopback is not a boundary — any
+    // page the user visits can reach it — and the MCP tool surface includes
+    // TERMINAL EXECUTION. A wildcard ACAO on top meant a web page could both
+    // drive those tools and read the results.
+    //
+    // The token is the same per-launch secret the Express API uses, and the
+    // same reasoning applies: any MCP client the user configured can read it
+    // from <dataDir>/capability-token; a browser cannot. The product stays
+    // agent-agnostic.
+    //
+    // NOTE ON THE QUERY PARAMETER: an SSE client is an EventSource, which
+    // cannot set request headers. So `?ct_token=` is not a convenience here,
+    // it is the only way an SSE transport can authenticate at all.
+    const hostHeader = (req.headers.host || '').toString().replace(/:\d+$/, '').toLowerCase();
+    if (hostHeader && !['127.0.0.1', 'localhost', '[::1]', '::1'].includes(hostHeader)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Host not allowed' }));
+      return;
+    }
+
+    // No ACAO at all. Nothing legitimate needs cross-origin access to this
+    // server: MCP clients are processes, not pages, and the same-origin
+    // policy does not apply to them. Omitting the header is what stops a
+    // browser reading a response even if it manages to send a request.
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', `Content-Type, Authorization, ${TOKEN_HEADER}`);
+    res.setHeader('Vary', 'Origin');
 
     if (req.method === 'OPTIONS') {
-      res.writeHead(204);
+      // Preflight only ever comes from a browser, and no browser has business
+      // here. Refuse rather than advertise the surface.
+      res.writeHead(403);
       res.end();
       return;
     }
 
-    if (req.url === '/sse' && req.method === 'GET') {
+    const presented = extractToken(
+      req.headers as Record<string, string | string[] | undefined>,
+      req.url,
+    );
+    if (!verifyCapabilityToken(presented)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: 'Missing or invalid capability token',
+          hint: `Send the token from ${getTokenFilePath()} as the ${TOKEN_HEADER} header, an Authorization: Bearer value, or the ct_token query parameter.`,
+        }),
+      );
+      return;
+    }
+
+    // Match on PATHNAME, not the raw URL. The capability token may arrive
+    // as `?ct_token=…` (SSE clients are EventSource-based and cannot set
+    // headers), so `req.url === '/sse'` no longer holds for an authenticated
+    // request — it is `/sse?ct_token=…`. Exact-matching the raw URL here
+    // silently 404'd every authenticated MCP client.
+    const pathname = (() => {
+      try {
+        return new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+      } catch {
+        return req.url ?? '/';
+      }
+    })();
+
+    if (pathname === '/sse' && req.method === 'GET') {
       if (connectedTransports.size >= MAX_MCP_CONNECTIONS) {
         console.warn(`[MCP] Connection limit reached (${MAX_MCP_CONNECTIONS}), rejecting new SSE client`);
         res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -372,7 +435,20 @@ export async function startMcpServer(): Promise<void> {
         return;
       }
 
-      const transport = new SSEServerTransport('/messages', res);
+      // Advertise the POST-back endpoint WITH the token.
+      //
+      // An SSE session is two channels: this GET stream, and a POST to
+      // /messages for every client->server message. The SDK takes the POST
+      // URL from what we advertise here, and an EventSource client cannot
+      // attach headers to either.
+      //
+      // The client has ALREADY proved it holds the token — it could not have
+      // opened this stream otherwise — so echoing it back in the endpoint
+      // grants nothing new. It does mean every MCP client works with only a
+      // URL, no per-client header configuration, which is what keeps the
+      // product agent-agnostic.
+      const messagesEndpoint = `/messages?ct_token=${encodeURIComponent(getCapabilityToken())}`;
+      const transport = new SSEServerTransport(messagesEndpoint, res);
       const sessionId = transport.sessionId;
       connectedTransports.set(sessionId, transport);
 
@@ -431,8 +507,8 @@ export async function startMcpServer(): Promise<void> {
       return;
     }
 
-    if (req.url?.startsWith('/messages') && req.method === 'POST') {
-      const sessionId = new URL(req.url, `http://localhost:${boundPort}`).searchParams.get('sessionId');
+    if (pathname.startsWith('/messages') && req.method === 'POST') {
+      const sessionId = new URL(req.url ?? '/', `http://localhost:${boundPort}`).searchParams.get('sessionId');
       if (!sessionId || !connectedTransports.has(sessionId)) {
         res.writeHead(404);
         res.end('Session not found');
@@ -444,7 +520,7 @@ export async function startMcpServer(): Promise<void> {
     }
 
     // Health check
-    if (req.url === '/' || req.url === '/health') {
+    if (pathname === '/' || pathname === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         name: 'codetrellis-mcp',

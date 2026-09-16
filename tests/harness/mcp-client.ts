@@ -14,6 +14,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
 export interface McpClientOptions {
+  /**
+   * Capability token the backend requires (Phase 19 Gate 1.1).
+   *
+   * SSE clients are EventSource-based and cannot set request headers, so the
+   * token goes in the query string — that is the only channel available on
+   * this transport, not a shortcut.
+   */
+  capabilityToken?: string;
   /** Backend MCP port — usually `RunningBackend.mcpPort`. */
   mcpPort: number;
   /** Identifies this client in MCP introspection. Default: `harness-client`. */
@@ -47,6 +55,7 @@ export interface ScriptedMcp {
 
 export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
   const url = new URL(`http://127.0.0.1:${opts.mcpPort}/sse`);
+  if (opts.capabilityToken) url.searchParams.set('ct_token', opts.capabilityToken);
   let client: Client | null = null;
   let transport: SSEClientTransport | null = null;
   let connected = false;

@@ -291,4 +291,105 @@ test.describe('Gate 1.1 — transport authentication', () => {
       await h.teardown();
     }
   });
+
+  test('the MCP transport requires the token', async () => {
+    const h = await setupHarness('gate-1-1-mcp-auth');
+    try {
+      const mcpPort = h.backend.mcpPort;
+      const token = h.backend.capabilityToken;
+
+      // The MCP surface includes TERMINAL EXECUTION. Before Gate 1.1 this
+      // server answered with `Access-Control-Allow-Origin: *`, so a web page
+      // could both drive those tools and read the results.
+
+      // ── SSE stream, no token ────────────────────────────────────────
+      {
+        const res = await rawRequest(mcpPort, [
+          'GET /sse HTTP/1.1',
+          `Host: 127.0.0.1:${mcpPort}`,
+          'Accept: text/event-stream',
+          'Connection: close',
+        ]);
+        expect(res.status, 'an MCP connection with no token must be refused').toBe(401);
+      }
+
+      // ── message POST, no token ──────────────────────────────────────
+      {
+        const res = await rawRequest(mcpPort, [
+          'POST /messages?sessionId=anything HTTP/1.1',
+          `Host: 127.0.0.1:${mcpPort}`,
+          'Content-Type: application/json',
+          'Content-Length: 2',
+          'Connection: close',
+          '',
+          '{}',
+        ]);
+        expect(res.status, 'an unauthenticated MCP message POST must be refused').toBe(401);
+      }
+
+      // ── wrong token ─────────────────────────────────────────────────
+      {
+        const res = await rawRequest(mcpPort, [
+          `GET /sse?ct_token=${'f'.repeat(token.length)} HTTP/1.1`,
+          `Host: 127.0.0.1:${mcpPort}`,
+          'Accept: text/event-stream',
+          'Connection: close',
+        ]);
+        expect(res.status, 'a wrong token must not open an MCP stream').toBe(401);
+      }
+
+      // ── mismatched Host ─────────────────────────────────────────────
+      {
+        const res = await rawRequest(mcpPort, [
+          `GET /sse?ct_token=${encodeURIComponent(token)} HTTP/1.1`,
+          'Host: evil.example.com',
+          'Accept: text/event-stream',
+          'Connection: close',
+        ]);
+        expect(res.status, 'MCP must reject an unknown Host even with a valid token').toBe(403);
+      }
+
+      // ── no wildcard CORS ────────────────────────────────────────────
+      //
+      // The regression that matters most: nothing here should ever answer
+      // `Access-Control-Allow-Origin: *` again.
+      {
+        const res = await rawRequest(mcpPort, [
+          'GET /health HTTP/1.1',
+          `Host: 127.0.0.1:${mcpPort}`,
+          'Connection: close',
+        ]);
+        expect(
+          res.headers.includes('access-control-allow-origin: *'),
+          'the MCP server must never answer with a wildcard ACAO',
+        ).toBe(false);
+      }
+
+      // ── preflight is refused outright ───────────────────────────────
+      //
+      // Only a browser sends one, and no browser has business here.
+      {
+        const res = await rawRequest(mcpPort, [
+          'OPTIONS /sse HTTP/1.1',
+          `Host: 127.0.0.1:${mcpPort}`,
+          'Origin: https://evil.example.com',
+          'Access-Control-Request-Method: GET',
+          'Connection: close',
+        ]);
+        expect(res.status, 'MCP preflight must be refused').toBe(403);
+      }
+
+      // ── and a real agent still works end to end ─────────────────────
+      //
+      // Proves the lock has a key: this spawns a scripted MCP client through
+      // the harness, which authenticates exactly as a configured agent would.
+      {
+        const agent = await h.spawnAgent({ agentType: 'auth-probe' });
+        const result = await agent.callTool('list_plans', {});
+        expect(result.isError, 'an authenticated agent must still be able to call tools').not.toBe(true);
+      }
+    } finally {
+      await h.teardown();
+    }
+  });
 });
