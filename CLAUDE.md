@@ -93,10 +93,15 @@ a tagged candidate and on packaged artifacts.
   Express process. 7 languages: TS / TSX / JS / JSX / Python / Rust /
   PHP / Java. Plugin slots for parsers / resolvers / callsites
   per language.
-- **Database**: sql.js (in-memory, persisted to disk via export +
-  autosave). Self-heals via `schema-reconciler`. FTS not yet enabled.
-  `better-sqlite3` is also a declared dependency (native binding —
-  needs a rebuild on Node upgrades; the local dev Node is v25).
+- **Database**: **native SQLite via `better-sqlite3`** (disk-backed, WAL),
+  behind a sql.js-shaped facade in `services/database.ts` — the codebase
+  still reads as sql.js at the call sites, but storage is native and
+  there is no export/autosave step (`persistence.ts` save is a no-op).
+  Self-heals via `schema-reconciler`. FTS not yet enabled.
+  **This is a native binding**: it must be rebuilt for the Node version
+  in use, and it is currently broken on Node 25 (`ERR_DLOPEN_FAILED`).
+  `.nvmrc` pins Node 22 for that reason. Moving to Node 26 (the house
+  standard elsewhere) needs `better-sqlite3` 11 → 13 first.
 - **Peer transport**: WebRTC mesh — `werift` on desktop,
   `react-native-webrtc` on mobile. Four named data channels:
   `control` (JSON-RPC), `ui` (snapshots + JSON patches), `terminal`
