@@ -1,0 +1,256 @@
+# Claude Code review of pull requests. Template -- see saif-claude-pr-review.
+#
+# A PR THAT EDITS THIS FILE CANNOT BE REVIEWED BY IT
+#
+# claude-code-action refuses to run when the workflow file differs from the
+# copy on the default branch, and says so: "Workflow validation failed ...
+# must have identical content to the version on the repository's default
+# branch". It is a security boundary -- otherwise a PR could edit this file to
+# exfiltrate the token -- and it exits 0, so the job goes green in about twenty
+# seconds having done nothing.
+#
+# So the first PR adding these workflows never reviews itself, and neither does
+# any later PR touching them. Merge first, then test on a PR that changes
+# something else.
+#
+# ADVISORY, PERMANENTLY
+#
+# This is not in the required checks and exits 0 whatever it finds. An LLM
+# reviewer is not deterministic -- the same diff can produce a finding on one
+# run and not the next -- and a gate that fires inconsistently is one people
+# learn to click past. Same reasoning as ci.yml having no test job.
+#
+# The intended path is not "this eventually blocks". It is that findings it
+# repeats graduate into deterministic checks in ci.yml, and *those* block. The
+# review discovers rules; it does not enforce them. Anything an LLM re-derives
+# every PR that a grep could catch is waste.
+#
+# TURNING IT DOWN OR OFF
+#
+# Repository variable CLAUDE_REVIEW, changed in Settings -> Variables with no
+# commit and no PR:
+#
+#   auto (or unset)  reviews on open and ready-for-review, plus the label
+#   on-request       label and @claude only -- nothing fires by itself
+#   off              nothing runs; an explicit request gets told why
+#
+# A dial rather than a switch, because the pressure is usually "spend less",
+# not "stop". on-request keeps the capability while costing nothing until
+# someone asks for it.
+#
+# For a hard stop that works even if this file is broken, disable the workflow
+# from the Actions tab. That survives anything in here; the variable does not.
+#
+# WHY NOT ON EVERY PUSH
+#
+# Auth is CLAUDE_CODE_OAUTH_TOKEN -- a subscription, not metered credits. Runs
+# draw down the same rate-limit window as interactive Claude Code use, so
+# triggering on `synchronize` means an afternoon of force-pushes leaves you
+# throttled in your own terminal. Reviews happen when a PR is proposed, or on
+# request via the `claude-review` label. Add `synchronize` to the trigger below
+# if that turns out to be too little; expect to feel it.
+#
+# WHY NOT A SELF-HOSTED RUNNER
+#
+# This needs no Docker, no local state and nothing on an internal network, so it
+# has no reason to occupy a self-hosted slot that a deploy may be waiting on.
+# Auth is a repo secret rather than a machine login, so moving it onto your own
+# runner is a one-line change if Actions minutes ever matter more than the
+# contention does.
+
+name: Claude Review
+
+# NEVER CHANGE THIS TO pull_request_target.
+#
+# This repository is PUBLIC. `pull_request` runs from a fork receive NO
+# secrets — GitHub withholds them deliberately — so a fork's PR gets a job
+# that exits 0 having reviewed nothing. That looks like a bug and the obvious
+# "fix" is pull_request_target, which DOES receive secrets and runs the base
+# branch's workflow. Combined with any checkout of the PR head, that is the
+# textbook token-exfiltration vector: the attacker controls the code, and the
+# job holds CLAUDE_CODE_OAUTH_TOKEN — a subscription credential granting
+# Claude Code as the account that minted it.
+#
+# A fork PR going unreviewed is the correct, safe behaviour. If a fork PR
+# genuinely needs a review, a maintainer adds the `claude-review` label after
+# reading the diff — applying a label needs write access, so that path is
+# already gated on a human with push rights.
+on:
+  pull_request:
+    types: [opened, ready_for_review, labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  # id-token: write is required even though nothing here uses OIDC for its own
+  # sake. claude-code-action exchanges an OIDC token for its GitHub App token
+  # when no github_token is supplied; without this the action retries three
+  # times and fails with "Could not fetch an OIDC token" before Claude runs at
+  # all. It grants nothing beyond that exchange.
+  id-token: write
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude review
+    if: >-
+      github.event.pull_request.draft == false &&
+      vars.CLAUDE_REVIEW != 'off' &&
+      (
+        (github.event.action == 'labeled' &&
+         github.event.label.name == 'claude-review') ||
+        (github.event.action != 'labeled' &&
+         vars.CLAUDE_REVIEW != 'on-request')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      # Full history so the review can diff against the PR base; a shallow
+      # clone cannot. Head SHA rather than the merge commit, so line numbers in
+      # review comments match the file the author is looking at.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # A PR THAT EDITS THIS FILE IS NEVER REVIEWED
+      #
+      # The Check auth step below catches a missing credential. This catches
+      # nothing, because nothing can: the action refuses to run when this
+      # workflow differs from the copy on the default branch -- otherwise a PR
+      # could rewrite its own reviewer to print the secrets. It warns, skips,
+      # and exits 0, so the check goes GREEN having reviewed nothing.
+      #
+      # Same failure Check auth exists to stop, arriving by a route no step can
+      # intercept, so it is written down instead: a green Claude review on a PR
+      # touching .github/workflows/ means "not reviewed", not "no findings".
+      # The review resumes on the next PR after that one merges.
+      #
+      # It also makes the token look flaky when it is not. Split the runs by
+      # whether this file matched main and the pattern is exact -- the ones
+      # that matched reached Claude and failed identically; the ones that
+      # differed never attempted a review and went green.
+
+      # claude-code-action exits 0 without reviewing when it has no credential,
+      # so the job would go green having done nothing -- which is how this
+      # setup's first run reported success while Claude never started.
+      #
+      # But NOT set and set-but-broken are different, and only one of them is
+      # anybody's mistake. A repo that has not been given the secret yet would
+      # otherwise show a red check on every PR from the moment this file
+      # merges, which is the "red on day one" failure this workflow's header
+      # warns about -- people learn to click past it, then miss the red that
+      # matters.
+      #
+      # So: no secret skips the review and says so in the summary; a secret
+      # that exists but does not work fails at the 401 below, where
+      # continue-on-error and the summary step handle it.
+      - name: Check auth
+        id: auth
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Claude review is not configured"
+              echo
+              echo "\`CLAUDE_CODE_OAUTH_TOKEN\` is not set on this repository, so"
+              echo "**this PR has not been reviewed**. The check is green because"
+              echo "an unconfigured reviewer is not a failing PR."
+              echo
+              echo "To enable it: run \`claude setup-token\` and add the result as"
+              echo "the repository secret \`CLAUDE_CODE_OAUTH_TOKEN\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ADVISORY MEANS ADVISORY, INCLUDING WHEN IT BREAKS
+      #
+      # Without this the check reports failure whenever the action cannot run --
+      # an expired token, an exhausted subscription window, a config mistake,
+      # an upstream outage -- none of which say anything about the diff. A
+      # permanently red advisory check is what this file's header warns about:
+      # people learn to click past red, then miss the red that matters.
+      #
+      # The step after it says in the job summary that no review happened, so a
+      # green check is never mistaken for a clean review.
+      - id: review
+        if: steps.auth.outputs.ready == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The action hides the SDK stream by default, which means a failure
+          # reports is_error with no message and nothing to act on. Set the
+          # repository variable CLAUDE_DEBUG=true to see it, and unset it after
+          # -- the full stream can carry file contents into the log.
+          show_full_output: ${{ vars.CLAUDE_DEBUG == 'true' }}
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }} in
+            ${{ github.repository }}, following the codetrellis-pr-review skill.
+
+            Diff against ${{ github.event.pull_request.base.sha }}.
+
+            $REPO and $PR are set in the environment for the gh call that posts
+            the review. Post exactly one review. Do not modify any file.
+          # Write is here so the review can put its JSON payload in a file. Without
+      # it the only way to build the payload is a shell heredoc, and escaping
+      # review prose -- backticks, quotes, newlines, code fences -- into one by
+      # trial and error cost 50 turns and a complete review that never posted.
+      # The job has contents: read and pushes nothing, so a write cannot leave
+      # the runner.
+      #
+      # QUOTE --allowedTools. The action shell-parses claude_args, so the
+          # spaces inside Bash(...) split each permission into fragments --
+          # "Bash(git", "diff:*)", "pr" -- leaving Claude with no working Bash
+          # permission at all. It then fails on turn one having called no model
+          # (total_cost_usd 0, empty modelUsage), which reads like an auth or
+          # quota problem and is not one.
+          claude_args: >-
+            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(gh pr view:*),Bash(gh api:*)"
+            --max-turns 90
+
+      - if: steps.review.outcome == 'failure'
+        run: |
+          {
+            echo "## Claude review did not run"
+            echo
+            echo "The action failed before or during the review, so **this PR has"
+            echo "not been reviewed**. The check is green because the review is"
+            echo "advisory; it is not evidence of a clean review."
+            echo
+            echo "A \`result\` block with \`total_cost_usd: 0\` and an empty"
+            echo "\`modelUsage\` means no model was ever called. That narrows it to"
+            echo "the request being rejected or malformed, but it does **not**"
+            echo "identify which -- an expired token, an exhausted subscription"
+            echo "window and a bad \`claude_args\` all produce it identically."
+            echo "A mangled \`--allowedTools\` has already caused it once here."
+            echo
+            echo "Set the repository variable \`CLAUDE_DEBUG=true\` and re-run to"
+            echo "see the actual error, then unset it."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Costs an Actions minute and no Claude budget. Without it, labelling a PR
+  # while the review is off looks identical to the job being broken.
+  disabled-notice:
+    name: Review is off
+    if: >-
+      vars.CLAUDE_REVIEW == 'off' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'claude-review'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --body "Claude review is currently **off** (repository variable \`CLAUDE_REVIEW\`). Set it to \`on-request\` or \`auto\` to re-enable."

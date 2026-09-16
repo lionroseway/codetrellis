@@ -21,7 +21,21 @@ AuthKey_*.p8
 .env.*
 scripts/release-env.sh
 
-.claude/
+# .claude/ is ignored EXCEPT skills/.
+#
+# The PR-review skill has to be committed: claude-review.yml checks out the
+# repo and loads .claude/skills/codetrellis-pr-review by name, so an ignored
+# skill means the reviewer silently falls back to generic findings.
+#
+# Note `.claude/*` and not `.claude/` — git cannot re-include a path whose
+# parent directory is excluded, so the trailing-slash form would make the
+# negation below do nothing.
+#
+# Everything else under .claude/ stays local: settings.local.json holds
+# per-machine permissions, worktrees/ holds working copies.
+.claude/*
+!.claude/skills/
+
 test-results/
 marketing-assets/test-results/
 playwright-report/
@@ -36,3 +50,19 @@ playwright-report/
 # function skips any path segment starting with `.`, which would
 # silently neutralise the fixture inside.
 tests/_tmp/
+
+# ---------------------------------------------------------------------------
+# Private security working notes. NEVER COMMITTED.
+#
+# This repository is PUBLIC. docs/private/ holds the Phase 19 finding
+# register: unremediated vulnerabilities with file paths and line numbers.
+# Publishing that is an exploitation roadmap for software running on
+# developer workstations with network reach into adjacent systems.
+#
+# Safe to publish: the architectural rules the findings produced (they read
+# as standards). Not safe: severities, reproduction detail, or which sink is
+# still open. Those live here and stay here.
+#
+# ci.yml enforces this — a tracked file under docs/private/ fails the build.
+# ---------------------------------------------------------------------------
+docs/private/

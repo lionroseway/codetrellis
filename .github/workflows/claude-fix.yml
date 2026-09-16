@@ -1,0 +1,304 @@
+# Apply review findings on request: comment "@claude fix ..." on a PR.
+# Template -- see saif-claude-pr-review.
+#
+# A PR THAT EDITS THIS FILE CANNOT BE REVIEWED BY IT
+#
+# claude-code-action refuses to run when the workflow file differs from the
+# copy on the default branch, and says so: "Workflow validation failed ...
+# must have identical content to the version on the repository's default
+# branch". It is a security boundary -- otherwise a PR could edit this file to
+# exfiltrate the token -- and it exits 0, so the job goes green in about twenty
+# seconds having done nothing.
+#
+# So the first PR adding these workflows never reviews itself, and neither does
+# any later PR touching them. Merge first, then test on a PR that changes
+# something else.
+#
+# THE GITHUB APP IS NOT OPTIONAL IF YOU WANT THIS TO MERGE
+#
+# Anything pushed using the automatic GITHUB_TOKEN does not trigger further
+# workflow runs -- GitHub's loop prevention. Branch protection evaluates required
+# checks against the PR head SHA, so a fix
+# pushed with GITHUB_TOKEN lands a head commit CI never runs on, and the PR
+# wedges on "Expected -- waiting for status to be reported" with no way out but
+# a manual empty commit.
+#
+# A GitHub App installation token does trigger workflows. Set the repository
+# variable CLAUDE_APP_ID and the secret CLAUDE_APP_PRIVATE_KEY and pushes from
+# here re-run CI normally. Without them this still works, but every fix needs an
+# empty commit afterwards to un-wedge the PR -- the job says so in its summary
+# rather than leaving you to discover it.
+#
+# An App beats a PAT here: scoped to this repo, its own identity in the commit
+# log, revocable without touching a personal account.
+#
+# You can also skip the App entirely: closing and reopening the PR re-runs the
+# checks, because CI triggering on pull_request without a types: filter listens
+# for `reopened` by default. Two clicks per fix, nothing to configure, and the
+# review workflow does not list `reopened` so it will not loop. Manual, and easy
+# to forget -- worth the App once fixes become routine.
+#
+# TURNING IT OFF
+#
+# Repository variable CLAUDE_REVIEW == 'off' disables this too. 'on-request'
+# leaves it working, because @claude *is* a request -- the on-request setting
+# exists to stop things firing by themselves, not to stop you asking.
+#
+# WHICH COMMENT YOU REPLY TO DECIDES WHICH WORKFLOW RUNS
+#
+# issue_comment -- a plain comment on the PR -- runs THIS FILE AS IT IS ON THE
+# DEFAULT BRANCH. pull_request_review_comment -- replying under a review
+# finding -- runs the copy on the PR's own branch, which on any branch older
+# than the last change to this file is stale. Observed directly: three replies
+# to a review comment ran a superseded version and did nothing, while a plain
+# PR comment thirty seconds later worked.
+#
+# Replying to a finding is the natural gesture, so this stays as a trigger. But
+# when a fix behaves like an older version of this workflow, that is why -- ask
+# again as a plain PR comment before debugging anything else.
+#
+# WHY THIS IS A SEPARATE WORKFLOW FROM THE REVIEW
+#
+# Different trigger, different permissions, different blast radius. The review
+# never writes; this one does, and only when a human asked it to by name. Two
+# files keeps that boundary readable, and makes the read-only half safe to copy
+# into a repo that should never be written to.
+
+name: Claude Fix
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  # id-token: write is required even though nothing here uses OIDC for its own
+  # sake. claude-code-action exchanges an OIDC token for its GitHub App token
+  # when no github_token is supplied; without this the action retries three
+  # times and fails with "Could not fetch an OIDC token" before Claude runs at
+  # all. It grants nothing beyond that exchange.
+  id-token: write
+
+concurrency:
+  group: claude-fix-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    name: Claude fix
+    # Must be a PR, must mention @claude, must not be a bot, AND the commenter
+    # must be trusted. The bot check is the loop guard: with an App token in
+    # play, Claude's own push can trigger workflows, and without this a bot
+    # comment could start another fix.
+    #
+    # THE author_association CHECK IS LOAD-BEARING ON A PUBLIC REPO.
+    #
+    # This repository is public, so anyone on the internet can comment on a PR
+    # or an issue. issue_comment runs the DEFAULT-BRANCH copy of this workflow
+    # and it DOES receive secrets — unlike a fork's pull_request run, which
+    # GitHub deliberately starves of them. Without this clause, a stranger
+    # typing "@claude fix ..." would run Claude Code as the owner of
+    # CLAUDE_CODE_OAUTH_TOKEN, with contents: write, and push a commit.
+    #
+    # That token is a SUBSCRIPTION credential, not a scoped API key. It grants
+    # Claude Code as the account that minted it, and it draws down that
+    # account's rate-limit window. Treat unrestricted invocation as account
+    # takeover, not as a cost problem.
+    #
+    # OWNER / MEMBER / COLLABORATOR are the associations that imply push
+    # rights. CONTRIBUTOR means "has had a PR merged" — NOT push rights — and
+    # must not be added here. NONE is a stranger.
+    if: >-
+      contains(github.event.comment.body, '@claude') &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+               github.event.comment.author_association) &&
+      vars.CLAUDE_REVIEW != 'off' &&
+      (github.event_name == 'pull_request_review_comment' ||
+       github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint App token
+        id: app
+        if: vars.CLAUDE_APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CLAUDE_APP_ID }}
+          private-key: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
+
+      - name: Pick token
+        id: pick
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          FALLBACK: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "$APP_TOKEN" ]; then
+            echo "token=$APP_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "retriggers=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "token=$FALLBACK" >> "$GITHUB_OUTPUT"
+            echo "retriggers=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No GitHub App configured. The fix commit will not re-run CI, and the PR will need an empty commit before it can merge. Set CLAUDE_APP_ID and CLAUDE_APP_PRIVATE_KEY."
+          fi
+
+      # issue_comment carries no branch information, so resolve the PR head.
+      - name: Resolve PR head
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.pick.outputs.token }}
+          NUM: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" \
+            --json headRefName \
+            --jq '"ref=" + .headRefName' >> "$GITHUB_OUTPUT"
+          echo "num=$NUM" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.pr.outputs.ref }}
+          # Persists for the push below. With an App token, that push re-runs CI.
+          token: ${{ steps.pick.outputs.token }}
+
+      # claude-code-action exits 0 without reviewing when it has no
+      # credential, so the job goes green having done nothing -- which is how
+      # this setup's first run reported success while Claude never started.
+      # Fail loudly instead.
+      # Failing loudly is right here, unlike in claude-review.yml: somebody
+      # typed @claude and is waiting, so silence is the wrong answer even when
+      # the repo was never configured.
+      - name: Check auth
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || {
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set. Run 'claude setup-token' and add the result as a repository secret."
+            exit 1
+          }
+
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ steps.pick.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.num }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # See claude-review.yml. CLAUDE_DEBUG=true surfaces the SDK stream.
+          show_full_output: ${{ vars.CLAUDE_DEBUG == 'true' }}
+          prompt: |
+            A reviewer asked for a fix on PR #${{ steps.pr.outputs.num }} in
+            ${{ github.repository }}. Their comment:
+
+            ---
+            ${{ github.event.comment.body }}
+            ---
+
+            Follow the "Fixing on request" section of the codetrellis-pr-review skill.
+            Change only what the request describes. If it needs a design
+            decision, change nothing and explain why in the commit message file.
+
+            Read the PR's existing review comments for context on which finding
+            is meant.
+
+            Edit files only. Do NOT run git.
+
+            ALWAYS write /tmp/claude-note.md: what you changed, or -- if you
+            changed nothing -- why not, and what decision a person needs to
+            make. This is posted back to the PR, so it is the only way your
+            reasoning reaches anybody.
+
+            If and only if you changed files, also write /tmp/commit-msg.txt: a
+            subject line naming the finding fixed, and a body explaining the
+            change.
+          # QUOTE --allowedTools. The action shell-parses claude_args, so the
+          # spaces inside Bash(...) split each permission into fragments --
+          # "Bash(git", "diff:*)", "pr" -- leaving Claude with no working Bash
+          # permission at all. It then fails on turn one having called no model
+          # (total_cost_usd 0, empty modelUsage), which reads like an auth or
+          # quota problem and is not one.
+          claude_args: >-
+            --allowedTools "Read,Grep,Glob,Edit,Write,Bash(git diff:*),Bash(git log:*),Bash(gh pr view:*),Bash(gh api:*)"
+            --max-turns 60
+
+      # Committing here rather than in the agent keeps git credentials out of
+      # its tool list, and means an empty diff is a no-op instead of an error.
+      # Declining to change anything is a legitimate outcome -- the skill tells
+      # it to stop rather than guess when a fix needs a design decision. The
+      # first real run did exactly that, and this step swallowed the reason:
+      # somebody asked @claude for a fix, got silence, and had to read the
+      # workflow to find out why. The note is posted back to the thread.
+      - name: Commit and push
+        env:
+          RETRIGGERS: ${{ steps.pick.outputs.retriggers }}
+          NUM: ${{ steps.pr.outputs.num }}
+          GH_TOKEN: ${{ steps.pick.outputs.token }}
+        run: |
+          # claude-code-action restores .claude, CLAUDE.md, .mcp.json and
+          # friends from the default branch before running, because the PR head
+          # is untrusted. On a branch that predates a change to any of them the
+          # working tree therefore differs from the branch through no action of
+          # Claude's, and `git add -A` commits that difference alongside the
+          # fix. The first successful fix here carried an unrelated
+          # conventions.md rewrite for exactly this reason.
+          set -- \
+            ":(exclude).claude" ":(exclude).claude.json" ":(exclude).mcp.json" \
+            ":(exclude)CLAUDE.md" ":(exclude)CLAUDE.local.md" \
+            ":(exclude).husky" ":(exclude).ripgreprc" ":(exclude).gitmodules"
+          note=/tmp/claude-note.md
+          if [ -z "$(git status --porcelain -- . "$@")" ]; then
+            if [ -s "$note" ]; then
+              gh pr comment "$NUM" --repo "$GITHUB_REPOSITORY" \
+                --body "$(printf 'No changes made.\n\n%s' "$(cat "$note")")"
+              { echo "## No changes made"; echo; cat "$note"; } >> "$GITHUB_STEP_SUMMARY"
+            else
+              gh pr comment "$NUM" --repo "$GITHUB_REPOSITORY" \
+                --body "No changes made, and no reason was recorded. Check the job log."
+              echo "No changes made, and no note was written." >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 0
+          fi
+          if [ ! -f /tmp/commit-msg.txt ]; then
+            printf 'Apply review fix requested on #%s\n' "$NUM" > /tmp/commit-msg.txt
+          fi
+          git config user.name  "claude[bot]"
+          git config user.email "claude[bot]@users.noreply.github.com"
+          git add -A -- . "$@"
+          git commit -F /tmp/commit-msg.txt
+          git push
+          {
+            echo "### Fix pushed"
+            echo
+            git log -1 --pretty='%s'
+            echo
+            if [ "$RETRIGGERS" != "true" ]; then
+              echo "> CI will **not** re-run on this commit (no GitHub App configured)."
+              echo "> The PR needs an empty commit before it can merge."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # @claude going nowhere is worse here than for the review -- someone typed it
+  # and is waiting. React rather than comment, to keep the thread readable.
+  disabled-notice:
+    name: Fix is off
+    if: >-
+      contains(github.event.comment.body, '@claude') &&
+      github.event.comment.user.type != 'Bot' &&
+      vars.CLAUDE_REVIEW == 'off' &&
+      (github.event_name == 'pull_request_review_comment' ||
+       github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A review comment and an issue comment are different resources with
+          # different reaction endpoints; the wrong one 404s.
+          KIND: ${{ github.event_name == 'pull_request_review_comment' && 'pulls' || 'issues' }}
+          ID: ${{ github.event.comment.id }}
+        run: |
+          gh api -X POST \
+            "repos/$GITHUB_REPOSITORY/$KIND/comments/$ID/reactions" \
+            -f content=confused
+          echo "CLAUDE_REVIEW is off; ignored the @claude request." >> "$GITHUB_STEP_SUMMARY"

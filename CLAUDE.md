@@ -31,12 +31,59 @@ Deep-dive docs live in `docs/claude/`:
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.
 
+## Phase 19 — Security Hardening (in progress)
+
+CodeTrellis runs on developer workstations with network reach into the
+systems it maps, so the security posture has to match that trust tier
+before it deploys into managed environments. Phase 19 commissions an
+external review, works the findings through gated remediation, and
+leaves behind a standing acceptance suite so posture is re-provable on
+every release rather than asserted once.
+
+**This repository is public. The finding register is not in it.** It
+lives in `docs/private/` (gitignored, CI-enforced) because an open list
+of unremediated issues with file paths is an exploitation roadmap, not
+documentation. What belongs here is the *rules the review produced* —
+those are architecture, and they are below.
+
+### Security rules — these are not optional
+
+Write new code to these regardless of what neighbouring code does. Where
+existing code disagrees, the existing code is what Phase 19 is fixing.
+
+- **Loopback is not an authorisation boundary.** Any page in any browser
+  on the machine can reach `127.0.0.1`. Every local transport — Express,
+  WebSocket, MCP — authenticates with the per-launch capability token.
+  Never add surface that assumes the bind address protects it.
+- **CORS is an exact allowlist**, never a reflected origin, and never
+  with credentials. `Origin: null` is rejected, not trusted. Validate
+  `Host` on every request.
+- **All sensitive filesystem access goes through the single confined-file
+  helper.** Lexical `path.resolve` / `path.relative` containment is
+  insufficient — junctions and symlinks defeat it. Canonicalise, reject
+  links at sensitive boundaries, re-check immediately before mutation.
+- **Never accept `projectRoot` / `projectPath` from a request body.**
+  Derive roots from the stored item, plan, or opened-project record.
+- **Peer identity comes from the DTLS transport**, never from a
+  fingerprint in a request body or in SDP text.
+- **MCP tools authorise per tool by capability**, not per connection.
+- **Remote surfaces are off by default** and require an explicit user
+  action to enable. Discovery and API exposure are separate switches.
+- **Chromium sandboxing stays on in every distributed format.** A target
+  that disables it is not shipped.
+
+No release ships until the gates close and the acceptance suite passes on
+a tagged candidate and on packaged artifacts.
+
 ## Tech Stack
 
-- **Desktop runtime**: Electron 41 (primary). Embedded Express on `:3001`,
-  Vite on `:5173` in dev. macOS arm64 + x64, Windows x64, Linux
-  AppImage / .deb / .rpm. Session persistence and power-aware sleep
-  prevention are wired in.
+- **Desktop runtime**: Electron (primary) — pinned `^33.4.11`; a major
+  upgrade to a currently supported release is Phase 19 work. Embedded
+  Express on `:3001`, Vite `^6` on `:5173` in dev. macOS arm64 + x64,
+  Windows x64, Linux .deb / .rpm. **AppImage is built but not
+  distributed** — the target disables the Chromium sandbox, and
+  sandboxing stays on in everything we ship. Session persistence and
+  power-aware sleep prevention are wired in.
 - **Mobile runtime**: Expo SDK 54 + React Native 0.81.5 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),
@@ -48,6 +95,8 @@ The team's design docs (vision, UX, plans) live alongside these at the
   per language.
 - **Database**: sql.js (in-memory, persisted to disk via export +
   autosave). Self-heals via `schema-reconciler`. FTS not yet enabled.
+  `better-sqlite3` is also a declared dependency (native binding —
+  needs a rebuild on Node upgrades; the local dev Node is v25).
 - **Peer transport**: WebRTC mesh — `werift` on desktop,
   `react-native-webrtc` on mobile. Four named data channels:
   `control` (JSON-RPC), `ui` (snapshots + JSON patches), `terminal`
@@ -131,9 +180,20 @@ Run from `mobile/`:
 
 ### Desktop
 
-Source stays in the private `codetrellis` repo. Releases (binaries +
-release notes) go to the **public** repo
-[lionroseway/codetrellis-releases](https://github.com/lionroseway/codetrellis-releases).
+**This source repo is public.** Releases (binaries + release notes) go
+to a separate public repo,
+[lionroseway/codetrellis-releases](https://github.com/lionroseway/codetrellis-releases),
+so download URLs are stable and independent of the source tree — and so
+the release resolver needs no authentication.
+
+Two consequences of the source repo being public:
+
+- **Actions minutes are free**, so CI runs on GitHub-hosted runners.
+  No self-hosted runner is needed here (unlike `cocodraw`). If this repo
+  ever goes private, minutes become metered and that decision flips.
+- **Nothing sensitive goes in the tree.** No finding registers, no
+  credentials, no customer names. `docs/private/` is gitignored and CI
+  fails if anything under it is ever tracked.
 
 #### Automated (preferred)
 
@@ -146,6 +206,31 @@ npm run release -- --skip-build  # upload existing out/make/* artifacts
 Runs `scripts/release.sh`. Requires a clean working tree and
 `gh auth status` to be logged in. Reads the version from
 `package.json`.
+
+How the script is shaped, and why (see [`saif-desktop-app-releases`]):
+
+- **Clean tree is enforced**, so a release is reproducible from the
+  commit it claims to be.
+- **macOS is built and signed locally**; Windows and Linux are built on
+  native CI runners (`.github/workflows/build-installers.yml`), because
+  `node-pty` is a native module and cannot cross-compile.
+- **CI artifacts move through a transient staging release**, not Actions
+  artifacts — Actions storage has a quota and a retention window that
+  release assets don't. The staging release is deleted after download.
+- **Download globs are version-pinned** (`*-${VERSION}.deb`, not
+  `*.deb`). An unpinned glob sweeps a stale build from a previous run
+  into the release and nothing about the result looks wrong until a user
+  reports the wrong version.
+- **Signing identity comes from the environment**
+  (`CSC_NAME="…" npm run package:mac`), never the build config — a
+  machine with no certificate still produces a build instead of failing.
+
+The update server is **allowed to be down**: the desktop falls back to
+the GitHub Releases API, so codetrellis.dev is a quality-of-life
+upgrade, not a dependency. Keep the asset-name→platform resolver in one
+module shared by both paths, or they disagree the first time an artifact
+is renamed. A platform with no asset in a release must report **no
+update** — never 404, and never offer a download the user cannot run.
 
 #### Manual steps
 
@@ -188,17 +273,54 @@ Runs `scripts/release.sh`. Requires a clean working tree and
 
 ### Mobile
 
-Mobile release is **build-only today** — no `eas.json` and no submit
-configuration yet, so App Store / Play Console submission is manual:
+`mobile/eas.json` exists with 5 build profiles, and **iOS production
+submit is already configured** (`ascAppId 6777139934`, AILAR Limited,
+team `35GKY9KGZ3`). Android submit is not.
+
+**Expo does not require EAS's hosted builders.** EAS Build is the
+optional hosted service; the framework builds locally. Three paths, in
+order of preference:
+
+| Path | Command | Queue? |
+|---|---|---|
+| Local native build | `npm run ios` / `npm run android` | None |
+| EAS pipeline, own machine | `npx eas build --local --profile production` | None |
+| EAS hosted | `npm run build:prod` | Yes — rate-limited |
+
+Prefer `--local` for releases: identical config and credential handling
+to the hosted service, same reproducible output, but it runs on this Mac
+so there is no queue and no build quota. It needs `fastlane` for iOS
+(`brew install fastlane`) — the only missing piece on this machine;
+Xcode 26.4, CocoaPods and the Android SDK are all present.
+
+Then `npx eas submit --platform ios` uses the submit block above.
+
+**This is a CNG (managed) project** — `ios/` and `android/` are
+gitignored and regenerated by `expo prebuild`. Never hand-edit the Xcode
+project: changes are wiped on the next prebuild. Native config belongs
+in `app.json` or a config plugin.
+
+Release flow:
 
 1. Bump version in `mobile/app.json`.
-2. `cd mobile && npm run build:prod` — kicks off EAS build for both
-   platforms (project ID `47be6d4e-2e16-47a9-958d-afb4ebaab412`,
-   org `ailar`).
-3. Download IPA / AAB from EAS once builds complete.
-4. Submit manually to TestFlight / Play Console.
+2. `npx eas build --local --profile production --platform ios`
+3. `npx eas submit --platform ios`
+4. Android: build locally, upload the AAB to Play Console by hand until
+   an Android submit profile exists.
 
-Mobile is not integrated into `scripts/release.sh`. When mobile
-release is formalised, add `mobile/eas.json` with build + submit
-profiles and a `scripts/release-mobile.sh`. See
-`docs/claude/mobile-companion.md` for the full gap list.
+Mobile is not integrated into `scripts/release.sh`. Remaining gaps: an
+Android submit profile and a `scripts/release-mobile.sh`. See
+`docs/claude/mobile-companion.md`.
+
+**Mobile stays Expo / React Native — this is a settled decision.** The
+companion is a genuinely native client: WebRTC mesh, four data
+channels, binary PTY, audio. That is the case where native modules are
+the point, so a webview shell (Capacitor loading a remote URL) is the
+wrong architecture — a shell cannot host `react-native-webrtc`. See
+[`saif-webview-app-shell`] for the decision rule: the value here is in
+the device, not in the pages. Build-queue frustration is not a reason to
+re-platform — it is a reason to build locally, per the table above.
+
+**Gate 1.2 of Phase 19 changes the pairing and reconnect
+protocol**, so the next mobile release must ship in lockstep
+with desktop and will force re-pairing for every existing user.

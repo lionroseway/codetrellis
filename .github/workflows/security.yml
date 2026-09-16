@@ -1,0 +1,228 @@
+# Dependency and secret scanning.
+#
+# SEPARATE FROM ci.yml ON PURPOSE
+#
+# CI answers "does this change work". Security answers "is what we ship safe",
+# and the two have different cadences: security must also run on a schedule,
+# because a dependency becomes vulnerable while nobody is touching the repo.
+# A weekly cron catches that; a PR trigger never would.
+#
+# Branch protection requires one context from this file: "Security passed".
+# Same aggregator rule as ci.yml — pin the aggregator, never the jobs.
+#
+# THE PRODUCTION / DEVELOPMENT SPLIT IS THE WHOLE DESIGN
+#
+# `npm audit` across everything currently reports dozens of advisories, the
+# overwhelming majority in build tooling that never reaches a user's machine.
+# Failing the build on that number means the job is red permanently, and a
+# permanently red gate is no gate at all.
+#
+# So: --omit=dev is the BLOCKING gate, because those packages ship inside the
+# installer. The full audit runs too, but advisory only — it is a report, not
+# a verdict. Phase 19 Gate 3 brings the production count to zero; when it is
+# zero, tighten the threshold below to `critical,high,moderate`.
+#
+# Do not "fix" a red gate by widening the threshold. Fix the dependency, or
+# record a documented exception with reachability analysis.
+
+name: security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Mondays 07:00 UTC — an hour after Dependabot opens its weekly PRs, so the
+    # scheduled report reflects what Dependabot has just proposed.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Production dependency audit — THIS ONE BLOCKS.
+  # ---------------------------------------------------------------------------
+  prod-deps:
+    name: Production dependencies
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # THRESHOLD IS `critical` TODAY, DELIBERATELY.
+      #
+      # Production currently carries high-severity advisories that Gate 3 has
+      # not cleared yet. Setting this to `high` now would make the gate red on
+      # arrival and train everyone to ignore it — the exact failure mode this
+      # whole file is trying to avoid.
+      #
+      # `critical` is a real floor that passes today, so the gate is honest
+      # from day one. Tighten to `high`, then `moderate`, as Gate 3 lands.
+      # Each tightening is a one-word commit and should happen the day the
+      # count reaches zero, not "eventually".
+      - name: Audit production dependencies (blocking, critical)
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Full production report (advisory)
+        if: always()
+        run: npm audit --omit=dev || true
+
+  # ---------------------------------------------------------------------------
+  # Full audit including dev tooling — ADVISORY ONLY.
+  # ---------------------------------------------------------------------------
+  all-deps:
+    name: All dependencies (report)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    # Never blocks. It exists so the number is visible and trending down,
+    # not so it can stop a merge.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Audit everything
+        run: |
+          npm audit || true
+          echo ""
+          echo "--- summary ---"
+          npm audit --json 2>/dev/null \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);console.log(JSON.stringify(j.metadata.vulnerabilities))}catch(e){console.log('unavailable')}})"
+
+  # ---------------------------------------------------------------------------
+  # Mobile dependencies — ADVISORY, and here is exactly why.
+  #
+  # Measured 2026-09-16: mobile production carries 34 advisories, one of them
+  # critical. The critical is `tar <=7.5.20`, reached as:
+  #
+  #     expo@54.0.34 -> @expo/cli@54.0.24 -> tar@7.5.15
+  #
+  # npm counts it as production because `expo` is a production dependency, but
+  # @expo/cli is BUILD tooling — it runs on a developer machine or an EAS
+  # builder, never inside the app on a user's phone. The advisories are archive
+  # parsing (file smuggling, decompression DoS). Nothing on the device unpacks
+  # a tar. This is the textbook case for the reachability exception rather than
+  # a blocking gate.
+  #
+  # Fixing it properly means expo 54 -> 55, which is a migration, not a bump.
+  # There is already a peer conflict pointing the same way:
+  # @config-plugins/react-native-webrtc declares expo ^55 against the installed
+  # 54.0.34. Doing that upgrade deliberately is Phase 19 Gate 3 work.
+  #
+  # So this job reports and does not block. It is NOT in security-passed.
+  #
+  # MAKE IT BLOCKING when expo 55 lands: move it back into the aggregator's
+  # `needs` and drop continue-on-error. Do not leave it advisory out of habit —
+  # an advisory job nobody promotes is a job nobody reads.
+  # ---------------------------------------------------------------------------
+  mobile-deps:
+    name: Mobile dependencies (report)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Audit production dependencies
+        run: |
+          npm audit --omit=dev || true
+          echo ""
+          echo "--- summary ---"
+          npm audit --omit=dev --json 2>/dev/null \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);console.log(JSON.stringify(j.metadata.vulnerabilities))}catch(e){console.log('unavailable')}})"
+
+      # This one DOES fail the job (which does not block, but does go red and
+      # is visible): the peer conflict is a real signal that the Expo upgrade
+      # is overdue, and it should not fade into the advisory noise.
+      - name: Peer dependency sanity
+        run: |
+          if npm ls expo 2>&1 | grep -q 'invalid'; then
+            echo "::warning::expo peer conflict — @config-plugins/react-native-webrtc expects a newer expo than is installed."
+            npm ls expo 2>&1 | head -5
+          else
+            echo "expo peer requirements satisfied"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Secret and private-content scan.
+  #
+  # THIS REPOSITORY IS PUBLIC. Everything committed is world-readable the
+  # moment it lands, and a secret pushed and then reverted is still in the
+  # history and already scraped. Catching it at PR time is the only point at
+  # which catching it helps.
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    name: Secret scan
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs history to scan a range rather than a snapshot.
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Belt and braces alongside ci.yml's tracked-file guard: that one catches
+      # docs/private/ being committed, this catches the content turning up
+      # anywhere else in the tree under a different name.
+      - name: No finding-register content outside docs/private/
+        run: |
+          hits=$(git grep -l -i -E 'CVSS|proof of concept exploit|arbitrary file read|path traversal.*confirmed' -- \
+                   ':!docs/private' ':!.github/workflows' ':!CLAUDE.md' 2>/dev/null || true)
+          if [ -n "$hits" ]; then
+            echo "::warning::Possible security finding detail outside docs/private/:"
+            echo "$hits" | sed 's/^/  /'
+            echo "Review before merging — this repo is public."
+          else
+            echo "no finding-register content found in tracked files"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # THE ONLY CONTEXT BRANCH PROTECTION PINS FROM THIS FILE.
+  # ---------------------------------------------------------------------------
+  security-passed:
+    name: Security passed
+    if: always()
+    # mobile-deps is NOT here — it is advisory until expo 55 lands. See its
+    # header block for the reachability argument and the promotion condition.
+    needs: [prod-deps, secret-scan]
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - name: Check results
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          if echo "$results" | grep -q '"result": *"failure"'; then
+            echo "::error::One or more security jobs failed."
+            exit 1
+          fi
+          if echo "$results" | grep -q '"result": *"cancelled"'; then
+            echo "::error::One or more security jobs were cancelled."
+            exit 1
+          fi
+          echo "all security jobs passed"

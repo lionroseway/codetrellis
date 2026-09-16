@@ -1,0 +1,129 @@
+# Dependabot configuration.
+#
+# EXPECT A FLOOD, AND EXPECT IT TO SETTLE
+#
+# Measured 2026-09-16: the desktop tree carries 36 advisories (3 critical,
+# 26 high) and mobile carries 34. Nothing has been picking up patches on its
+# own, so the first few runs will open a lot of pull requests. That is the
+# backlog becoming visible, not something going wrong. It settles to roughly
+# one grouped PR per ecosystem per week once the arrears clear.
+#
+# THE GROUPING RULE
+#
+#   Routine bumps arrive grouped and weekly, so they are one review.
+#   Majors arrive alone, so they get individual attention.
+#
+# That second half matters here more than usual, because the upgrades that
+# actually matter ARE majors: Electron 33 to current, werift, Vite, Expo 54
+# to 55. Those are migrations. Grouping them would produce one enormous PR
+# that cannot be reviewed and cannot be reverted in pieces.
+#
+# The volume knob is open-pull-requests-limit. Lower it if the queue gets
+# unmanageable; do not fix volume by widening the groups.
+#
+# SEQUENCE MATTERS MORE THAN SPEED HERE
+#
+# Two majors collide with hand-written work and must land FIRST, or the work
+# gets done twice:
+#
+#   werift    before the peer-authentication rewrite (both own the WebRTC path)
+#   electron  before the CSP and navigation-guard work (both own electron/main)
+#
+# Neither is ignored below — they should be proposed. But merge them ahead of
+# the code that builds on them, not after.
+
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # Desktop (repository root).
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/London
+    open-pull-requests-limit: 6
+    labels:
+      - dependencies
+
+    groups:
+      # Electron and electron-builder move together. electron-builder reads
+      # the Electron version to pick its packaging behaviour, and a mismatch
+      # surfaces at PACKAGE time rather than build time — which means CI can
+      # be green and the installer still broken. Reviewing one half alone is
+      # the mistake, so majors are deliberately included in this group.
+      electron-stack:
+        patterns:
+          - "electron"
+          - "electron-builder"
+          - "electron-vite"
+          - "@electron/*"
+
+      # Everything else routine, grouped, minor and patch only.
+      desktop-minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # ---------------------------------------------------------------------------
+  # Mobile.
+  #
+  # Monthly, not weekly. The React Native dependency graph is enormous and
+  # highly interlocked — a weekly cadence here would out-shout the desktop
+  # tree, which is the one carrying the security programme.
+  #
+  # Nothing is ignored. It is tempting to ignore the Expo SDK because upgrades
+  # are painful, but the 54 -> 55 upgrade is exactly the change that clears
+  # mobile's critical advisory (tar, via @expo/cli) and resolves the existing
+  # @config-plugins/react-native-webrtc peer conflict. It should be proposed
+  # and then done deliberately, not hidden.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: monthly
+      timezone: Europe/London
+    open-pull-requests-limit: 4
+    labels:
+      - dependencies
+      - mobile
+
+    groups:
+      # The Expo SDK, React Native and the packages pinned to them are one
+      # locked set. react-native-webrtc and the config plugin in particular
+      # track the SDK, and bumping any of them alone produces a PR that cannot
+      # install. Majors included, same lockstep reasoning as electron-stack.
+      expo-sdk:
+        patterns:
+          - "expo"
+          - "expo-*"
+          - "@expo/*"
+          - "react-native"
+          - "react-native-*"
+          - "@config-plugins/*"
+
+      mobile-minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # ---------------------------------------------------------------------------
+  # The workflows' own actions.
+  #
+  # Monthly and grouped — action bumps are almost always safe, and a separate
+  # PR per action is pure noise. Worth watching at all because a compromised
+  # or abandoned action runs with the workflow's token.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      timezone: Europe/London
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - ci
+    groups:
+      actions:
+        patterns: ["*"]

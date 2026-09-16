@@ -1,0 +1,275 @@
+# Continuous integration for pull requests into main.
+#
+# WHAT BLOCKS, AND WHAT DOES NOT
+#
+# Branch protection requires exactly one context from this file: "CI passed".
+# That job is an aggregator — it depends on every real job and fails if any of
+# them failed. Pin the aggregator, never the individual jobs, or protection has
+# to be re-pinned every time a job is added or renamed.
+#
+# The Claude review (claude-review.yml) is deliberately NOT required. An LLM
+# reviewer is not deterministic, and a gate that fires inconsistently is one
+# people learn to click past. Findings it repeats graduate into checks *here*,
+# and those block.
+#
+# WHY GITHUB-HOSTED RUNNERS
+#
+# This repository is public, so Actions minutes are free. cocodraw routes CI to
+# a self-hosted VPS runner because it is private and minutes are metered; there
+# is nothing to gain from that here, and a self-hosted runner would add a
+# contended slot for no benefit. vars.CI_RUNNER is still honoured so the
+# decision is one repository variable away if this repo ever goes private.
+#
+# WHY THERE IS NO LINT JOB YET
+#
+# `npm run lint` runs `eslint src/`, and eslint is not a declared dependency —
+# it has never worked. Adding a lint gate before installing eslint would make
+# CI red on arrival and teach everyone to ignore it. Installing eslint is
+# Phase 19 Gate 3 work; the job below is written and commented out, ready to
+# enable in the same PR that adds the dependency.
+#
+# WHAT ACTUALLY BLOCKS ON A PR
+#
+#   no-private-docs   seconds   this repo is public
+#   desktop           ~1 min    typecheck, bundle guard, web build, unit tests
+#   mobile            ~30 s     typecheck
+#
+# And what does NOT:
+#
+#   harness           10+ min   advisory — slow and flaky, see its header
+#   claude-review     varies    advisory permanently, see claude-review.yml
+#
+# `npm test` (the legacy Playwright suite under e2e/) is not run here at all:
+# it drives a real running app and needs a desktop session, a folder picker
+# and a free port. `npm run test:harness` is the hermetic replacement — it is
+# the right suite, it is just not yet fast or stable enough to gate on.
+# See docs/E2E-HARNESS.md.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # 03:00 UTC nightly. The advisory harness is the reason this exists: a
+    # suite that does not block still has to be watched, or it rots silently
+    # and is useless on the day it is promoted.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A rapid series of pushes cancels its own earlier runs rather than queueing
+# them. Never cancel on main — those runs are the record of what landed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Guard: nothing under docs/private/ may ever be tracked.
+  #
+  # This repo is PUBLIC and docs/private/ holds the Phase 19 finding register —
+  # unremediated issues with file paths. .gitignore covers it, but a gitignore
+  # is a default, not an enforcement: `git add -f` beats it, and so does anyone
+  # editing the ignore rule. This job is the enforcement.
+  #
+  # Cheap and first, so it fails in seconds rather than after a full install.
+  # ---------------------------------------------------------------------------
+  no-private-docs:
+    name: No private docs tracked
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert docs/private/ is untracked
+        run: |
+          tracked=$(git ls-files docs/private/ || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Files under docs/private/ are tracked in git."
+            echo "$tracked" | sed 's/^/  /'
+            echo ""
+            echo "This repository is public. docs/private/ holds the security"
+            echo "finding register and must never be committed."
+            echo "Fix: git rm --cached <file> && confirm .gitignore covers it."
+            exit 1
+          fi
+          echo "docs/private/ is clean"
+
+  # ---------------------------------------------------------------------------
+  # Desktop: typecheck + production build.
+  # ---------------------------------------------------------------------------
+  desktop:
+    name: Desktop (typecheck + build)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `npm ci` and not `npm install`: CI installs exactly the lockfile, and
+      # fails if package.json and the lockfile disagree. That disagreement is
+      # worth failing on — it means someone edited one without the other.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # THE HIGHEST-VALUE CHECK IN THIS FILE.
+      #
+      # `require('./relative')` in src/backend survives typecheck, survives
+      # `npm run build`, and works in dev — then throws MODULE_NOT_FOUND in the
+      # packaged app, because rollup leaves runtime CommonJS requires alone and
+      # the relative path does not exist next to the bundled main.js.
+      #
+      # This has shipped broken to users twice. scripts/check-no-relative-require.sh
+      # was added to catch it, but it was only wired into the `package:*`
+      # scripts — so it fires on release day, not on the PR that introduced the
+      # bug. Running it here moves the catch to where it is cheap.
+      - name: Bundle guard (no relative require in src/backend)
+        run: npm run check:bundle
+
+      # Note this is the WEB build (tsc + vite). It is not the Electron
+      # package — that needs electron-builder and a native toolchain per OS,
+      # which is what build-installers.yml is for. Green here does not mean the
+      # installer builds; the bundle guard above is what covers the gap that
+      # actually bit us.
+      - name: Build (web)
+        run: npm run build
+
+      # Unit tests live here rather than with the harness. They are fast and
+      # hermetic (plain node:test over the service layer, no subprocess, no
+      # browser), so they can block — which they cannot do sitting inside an
+      # advisory job.
+      - name: Unit tests
+        run: npm run test:unit
+
+      # - name: Lint
+      #   run: npm run lint
+      #   # ENABLE IN THE SAME PR THAT ADDS ESLINT AS A DEVDEPENDENCY.
+      #   # See the header note; eslint is currently not installed at all.
+
+  # ---------------------------------------------------------------------------
+  # Hermetic E2E harness — ADVISORY FOR NOW, and here is the condition to
+  # promote it.
+  #
+  # WHY IT IS NOT BLOCKING YET
+  #
+  # A gate has to be proven green and proven fast before it is allowed to
+  # block. This one is neither, measured rather than assumed:
+  #
+  #   - playwright.harness.config.ts sets workers: 1, because every test boots
+  #     a real backend subprocess (tsx + sql.js + tree-sitter + chokidar) and
+  #     running them concurrently is unstable. So the suite is serial by
+  #     design.
+  #   - It sets retries: 2, with a comment naming the timing-sensitive tests
+  #     (file-watcher auto-advance, chokidar plan-import). A suite that needs
+  #     retries is telling you it is flaky.
+  #   - Local run on an M-series Mac: 380s, and it bailed with 67 tests not
+  #     run. A GitHub-hosted runner is slower than that.
+  #
+  # Blocking every PR on a 10+ minute suite that sometimes bails is how people
+  # learn to bypass protection. Advisory keeps the signal visible while the
+  # runtime and the flakes get fixed.
+  #
+  # PROMOTE IT when it runs green three times running and finishes in a time
+  # anyone would wait for. Then add `harness` back to ci-passed's `needs` and
+  # drop continue-on-error. Do not leave it advisory out of habit — an
+  # advisory job nobody promotes is a job nobody reads.
+  #
+  # The nightly run below is what stops it rotting in the meantime.
+  # ---------------------------------------------------------------------------
+  harness:
+    name: E2E harness (advisory)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    continue-on-error: true
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The harness git-inits its fixture repo, so git needs an identity or
+      # the first commit fails with "Author identity unknown".
+      - name: Configure git for fixtures
+        run: |
+          git config --global user.email "ci@codetrellis.invalid"
+          git config --global user.name "CodeTrellis CI"
+
+      - name: Install Playwright runner
+        run: npx playwright install --with-deps chromium
+
+      - name: Harness suite
+        run: npm run test:harness
+
+  # ---------------------------------------------------------------------------
+  # Mobile: typecheck only.
+  #
+  # No build here — an EAS build needs credentials and a queue slot, and a
+  # local prebuild needs Xcode or the Android SDK, neither of which a Linux
+  # runner has. Typecheck is what CI can honestly assert about mobile; that the
+  # native projects still build is a human check on a machine with the
+  # toolchain. Say so rather than letting green CI imply more than it means.
+  # ---------------------------------------------------------------------------
+  mobile:
+    name: Mobile (typecheck)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  # ---------------------------------------------------------------------------
+  # THE ONLY CONTEXT BRANCH PROTECTION PINS.
+  #
+  # `if: always()` so it runs even when a dependency failed — without it the
+  # job is skipped, and a skipped required check leaves the PR waiting forever
+  # on a status that will never report.
+  # ---------------------------------------------------------------------------
+  ci-passed:
+    name: CI passed
+    if: always()
+    # `harness` is NOT here — advisory until it is green and fast. See its
+    # header block for the promotion condition.
+    needs: [no-private-docs, desktop, mobile]
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - name: Check results
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          if echo "$results" | grep -q '"result": *"failure"'; then
+            echo "::error::One or more CI jobs failed."
+            exit 1
+          fi
+          if echo "$results" | grep -q '"result": *"cancelled"'; then
+            echo "::error::One or more CI jobs were cancelled."
+            exit 1
+          fi
+          echo "all CI jobs passed"
