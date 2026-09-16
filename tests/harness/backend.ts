@@ -17,6 +17,7 @@
  * `services/persistence.ts` + `server.ts` + `mcp/server.ts`).
  */
 
+import { randomBytes } from 'node:crypto';
 import { spawn, ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { REPO_ROOT } from './paths';
@@ -29,6 +30,8 @@ export interface RunningBackend {
   mcpPort: number;
   /** Base URL for REST calls — `http://127.0.0.1:<backendPort>`. */
   baseUrl: string;
+  /** Capability token this backend requires on every request (Gate 1.1). */
+  capabilityToken: string;
   /** Stop the backend cleanly. Idempotent — safe to call twice. */
   stop(): Promise<void>;
 }
@@ -60,11 +63,19 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     opts.mcpPort ? Promise.resolve(opts.mcpPort) : pickPort(),
   ]);
 
+  // Unique per spawned backend — see CODETRELLIS_CAPABILITY_TOKEN below.
+  const capabilityToken = randomBytes(24).toString('hex');
+
   const env = {
     ...process.env,
     CODETRELLIS_DATA_DIR: opts.dataDir,
     CODETRELLIS_BACKEND_PORT: String(backendPort),
     CODETRELLIS_MCP_PORT: String(mcpPort),
+    // Every local transport requires a capability token (Phase 19 Gate 1.1).
+    // Pinning it here rather than reading the file the backend writes avoids
+    // racing the write during boot, and keeps each harness backend's token
+    // distinct so a leaked one cannot reach another test's instance.
+    CODETRELLIS_CAPABILITY_TOKEN: capabilityToken,
     PORT: String(backendPort),
     NODE_ENV: 'test',
   };
@@ -114,7 +125,7 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     await killChild(child);
   };
 
-  return { backendPort, mcpPort, baseUrl, stop };
+  return { backendPort, mcpPort, baseUrl, capabilityToken, stop };
 }
 
 async function pickPort(): Promise<number> {
@@ -128,7 +139,10 @@ async function waitForReady(
   earlyExit: () => { code: number | null; signal: NodeJS.Signals | null } | null,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const deadline = Date.now() + timeoutMs;
-  const url = `${baseUrl}/api/build-info`;
+  // /api/health is the ONLY unauthenticated path (see local-auth.ts).
+  // build-info used to serve here, but it now requires the capability token,
+  // and polling it would 401 until timeout rather than detecting readiness.
+  const url = `${baseUrl}/api/health`;
   while (Date.now() < deadline) {
     const exit = earlyExit();
     if (exit) {
