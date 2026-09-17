@@ -298,7 +298,9 @@ export const SCHEMA_PLAN_ITEMS = `
     author_type      TEXT NOT NULL DEFAULT 'human',
     created_at       INTEGER NOT NULL,
     updated_at       INTEGER NOT NULL,
-    migrated_from    TEXT
+    migrated_from    TEXT,
+    estimate_minutes   INTEGER,
+    estimate_cost_usd  REAL
   );
   CREATE INDEX IF NOT EXISTS idx_plan_items_plan       ON plan_items(plan_uid);
   CREATE INDEX IF NOT EXISTS idx_plan_items_parent     ON plan_items(parent_uid);
@@ -306,6 +308,50 @@ export const SCHEMA_PLAN_ITEMS = `
   CREATE INDEX IF NOT EXISTS idx_plan_items_status     ON plan_items(status);
   CREATE INDEX IF NOT EXISTS idx_plan_items_sort       ON plan_items(plan_uid, parent_uid, sort_order);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_items_migrated ON plan_items(migrated_from);
+
+  -- Phase 23 — time and cost. One row per closed TURN (see
+  -- budget-service), not per tool call: an agent's wall-clock is mostly
+  -- model thinking between calls, so summing tool durations would
+  -- undercount it several-fold.
+  --
+  -- item_uid is nullable on purpose. Time an agent spends before
+  -- claiming anything is real time and belongs to the plan; dropping it
+  -- would make every plan look cheaper than it was.
+  --
+  -- cost_usd is nullable for the same reason costOf returns null:
+  -- an agent that does not report its model has an unknown cost, and
+  -- zero would read as free.
+  CREATE TABLE IF NOT EXISTS item_time_entries (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_uid           TEXT NOT NULL,
+    item_uid           TEXT,
+    session_id         TEXT,
+    agent_type         TEXT,
+    agent_model        TEXT,
+    started_at         INTEGER NOT NULL,
+    ended_at           INTEGER NOT NULL,
+    input_tokens       INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    cost_usd           REAL,
+    pricing_version    TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_time_entries_plan ON item_time_entries(plan_uid);
+  CREATE INDEX IF NOT EXISTS idx_time_entries_item ON item_time_entries(item_uid);
+
+  -- A ceiling is advisory, the same posture as the stuck sensor: we have
+  -- no mechanism to halt an agent, and pretending otherwise would be
+  -- worse than honest advice. notified_at exists so the 80% warning
+  -- fires once rather than on every tool call.
+  CREATE TABLE IF NOT EXISTS plan_budgets (
+    plan_uid    TEXT PRIMARY KEY,
+    minutes     INTEGER,
+    cost_usd    REAL,
+    exempt      INTEGER NOT NULL DEFAULT 0,
+    notified_at INTEGER,
+    updated_at  INTEGER NOT NULL
+  );
 
   CREATE TABLE IF NOT EXISTS plan_item_versions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

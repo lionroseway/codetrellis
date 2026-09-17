@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import type { AgentEvent } from '../../shared/types';
 import { broadcast } from '../server';
+import { recordTokens } from '../services/budget-service';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions');
@@ -65,6 +66,32 @@ function parseJsonlEntry(line: string): AgentEvent | null {
     const type = entry.type;
 
     if (type === 'assistant') {
+      // Phase 23 — token usage. Claude Code records it on every
+      // assistant entry, and it is the only place any agent tells us
+      // what it actually spent. Reported to the budget service as a side
+      // effect rather than as an event, because it is accounting, not
+      // something the Timeline should render.
+      //
+      // Cache tokens are carried separately on purpose: for a long agent
+      // session they dominate, and pricing them at the input rate would
+      // overstate cost several-fold.
+      const usage = entry.message?.usage;
+      const sessionId = entry.sessionId ?? entry.session_id;
+      if (usage && typeof sessionId === 'string') {
+        try {
+          recordTokens({
+            sessionId,
+            model: entry.message?.model ?? null,
+            tokens: {
+              inputTokens: usage.input_tokens ?? 0,
+              outputTokens: usage.output_tokens ?? 0,
+              cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+              cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+            },
+          });
+        } catch { /* accounting must never break the watcher */ }
+      }
+
       const content = entry.message?.content;
       if (!Array.isArray(content)) return null;
 

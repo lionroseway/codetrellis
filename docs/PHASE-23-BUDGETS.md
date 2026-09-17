@@ -1,7 +1,8 @@
 # Phase 23 — Time and cost budgets
 
 > Drafted: 2026-09-17
-> Status: designed, not built
+> Status: **built** 2026-09-17 (backend + MCP + REST; the UI surfaces in
+> §4 are the remaining piece).
 > Depends on: [Phase 22](PHASE-22-AGENT-ACTIVITY-CLARITY.md) turn grouping.
 
 ---
@@ -60,16 +61,32 @@ silently corrupts every historical figure.
 
 ### Storage
 
-New columns on plan items (`estimate_minutes`, `estimate_cost`), and a
-new `item_time_entries` table: `(item_uid, session_id, agent_type,
-started_at, ended_at, tokens_in, tokens_out, cost)`. One row per turn.
-Roll up on read; do not maintain a denormalised total that can drift
-from its rows.
+`plan_items` gains `estimate_minutes` and `estimate_cost_usd` — both
+nullable, so the schema reconciler adds them to existing databases with
+no migration step.
 
-Per the Phase 19 rules: the writer derives `item_uid` from the claiming
-session's stored state, **never from a request body**, and the MCP tool
-that sets an estimate authorises per tool by capability like every
-other.
+`item_time_entries` holds one row **per closed turn**, with cache tokens
+counted separately from input tokens. For a long agent session cache
+reads dominate, and pricing them at the input rate overstates cost
+several-fold.
+
+Two nullable columns carry meaning:
+
+- **`item_uid` is nullable.** Time an agent spends before claiming
+  anything is real time and belongs to the plan. Dropping it would make
+  every plan look cheaper than it was.
+- **`cost_usd` is nullable.** An agent that does not report a model has
+  an unknown cost, and zero would read as "free".
+
+`plan_budgets` holds the ceiling, plus `notified_at` so the 80% warning
+fires once rather than on every sweep.
+
+Rollups are computed on read. No denormalised total to drift from its
+rows.
+
+Per the Phase 19 rules: the plan uid comes from the route, never from a
+request body, and `item_uid` is derived from the claiming session's own
+activity rather than from tool arguments.
 
 ## 4. Surfaces
 
@@ -118,15 +135,27 @@ four items is noise wearing a suit.
 
 ## 7. Tests
 
-1. Turn time sums into the claimed item; unclaimed time is attributed
-   to the plan, not silently dropped.
-2. A sleep/wake cycle mid-turn does not produce a fantasy duration.
-3. Claude sessions produce token and cost figures; a generic MCP
-   session produces time and a null cost, never a zero.
-4. Crossing 80% fires exactly one event, not one per call.
-5. `check_budget` returns false past the ceiling and true for an
-   exempt plan.
-6. Rollups match the sum of their rows after out-of-order turn writes.
+20 unit tests in `budget-service.test.ts`, covering the arithmetic and —
+more importantly — the restraint:
+
+1. Cache reads are priced as cache reads, not as input.
+2. An unknown model yields **null**, never zero, and formats as `—`.
+3. A more specific pricing row wins over a general one.
+4. The forecast refuses to project from almost nothing: one item done
+   out of twenty produces null, not a confident number.
+5. Both budget dimensions are checked and the worse one wins — a plan
+   can be inside its time budget and well past its cost budget.
+6. An unknown cost **cannot** breach a cost ceiling. Treating null as
+   zero would report "well within budget" for an agent whose spend we
+   cannot see at all.
+7. Activity inside the gap extends one turn; concurrent sessions
+   accumulate separately; claiming an item attributes the open turn.
+8. Tokens arriving with no open turn are dropped rather than guessed at
+   — usage alone does not say which plan it belongs to.
+9. A negative span clamps to zero instead of propagating.
+
+Still to cover at harness level: the end-to-end path from a scripted
+agent's tool calls through to a rollup, and the once-only warning.
 
 ## 8. Done when
 

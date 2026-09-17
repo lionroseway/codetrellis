@@ -43,6 +43,7 @@ import { startMcpServer, getMcpStatus, getMcpConfig } from './mcp/server';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
+import * as budgetService from './services/budget-service';
 import * as commentService from './services/comment-service';
 import * as sessionService from './services/session-service';
 import * as taskAttachmentsService from './services/task-attachments-service';
@@ -2520,6 +2521,33 @@ app.get('/api/plans/:uid/changes', (req, res) => {
   }
 });
 
+// --- Budgets (Phase 23) ---
+//
+// Time is measured for every agent; cost only where the agent reports a
+// model we have prices for. An unknown cost comes back as null, never
+// zero — see services/pricing.ts.
+app.get('/api/plans/:uid/budget', (req, res) => {
+  res.json(budgetService.getBudgetReport(req.params.uid));
+});
+
+app.put('/api/plans/:uid/budget', (req, res) => {
+  const body = (req.body ?? {}) as { minutes?: number | null; costUsd?: number | null; exempt?: boolean };
+  // The plan uid comes from the route, never from the body — the same
+  // rule Phase 19 applies to project roots.
+  const budget = budgetService.setBudget({
+    planUid: req.params.uid,
+    minutes: body.minutes,
+    costUsd: body.costUsd,
+    exempt: body.exempt,
+  });
+  broadcast('plan-budget-changed', { planUid: req.params.uid, budget });
+  res.json(budgetService.getBudgetReport(req.params.uid));
+});
+
+app.get('/api/plans/:uid/budget/check', (req, res) => {
+  res.json(budgetService.checkBudget(req.params.uid));
+});
+
 app.get('/api/plans/:uid/changes/:changeId', (req, res) => {
   const change = getChange(req.params.uid, req.params.changeId);
   if (!change) { res.status(404).json({ error: 'Change not found' }); return; }
@@ -3924,6 +3952,10 @@ export async function initializeBackend(): Promise<void> {
   // reconnect churn and the widget over-counts.
   try {
     sessionService.startSessionSweep();
+    // Phase 23 — flush turns that have gone quiet and warn on budgets
+    // that have crossed their threshold. Unflushed time is time never
+    // recorded, which would make every plan look cheaper than it was.
+    budgetService.startBudgetSweep();
   } catch (err) {
     console.warn('[Backend] Session sweep failed to start:', err);
   }

@@ -74,6 +74,63 @@ shared via the bridge abstraction.
 
 ## 2. Recently Shipped
 
+### Sep 17, 2026 — Phase 23: time and cost budgets
+
+Design: [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) (reconciled).
+Backend, MCP and REST shipped; the UI surfaces are the remaining piece.
+
+Three numbers per plan — estimate, actual, forecast — plus one
+consequence: a ceiling a well-behaved agent checks before claiming more
+work.
+
+**Why it belongs here at all**: agents can count their own tokens. What
+they cannot answer is "how much has *this plan* cost across three agents
+and two days, and which item ate it". CodeTrellis is the only component
+that sees every agent's activity attributed to one shared plan, which
+makes this structural rather than a feature.
+
+**Shipped:**
+
+- **`services/pricing.ts`** — a versioned data table, not constants in a
+  service, because a stale multiplier buried in code silently corrupts
+  every figure already shown to someone. Cache reads and writes priced
+  separately: for a long agent session they dominate, and pricing them
+  at the input rate overstates cost several-fold.
+- **`services/budget-service.ts`** — time accumulated per **turn**, not
+  per tool call. Summing `durationMs` undercounts badly because an
+  agent's wall-clock is mostly model thinking between calls. Turns work
+  for every MCP client, so Codex and Cursor get time even though they
+  report no tokens.
+- **Token capture** — the Claude Code watcher already parsed
+  `message.content` for tool blocks and ignored `message.usage`, which
+  is the only place any agent tells us what it actually spent.
+- **`item_time_entries` + `plan_budgets`** tables, and
+  `estimate_minutes` / `estimate_cost_usd` on `plan_items` (nullable, so
+  the schema reconciler adds them with no migration).
+- **MCP**: `get_budget`, `set_budget`, `check_budget` — the last
+  mirroring `check_freeze`. **REST**: `GET/PUT /api/plans/:uid/budget`
+  and `/budget/check`.
+- **Sweep** — flushes turns that have gone quiet (unflushed time is time
+  never recorded) and raises a `need-decision` channel event once per
+  ceiling crossing.
+
+**The rule the tests are really about: an unknown cost stays unknown.**
+`costOf` returns null, never zero, for a model we have no prices for.
+Zero reads as "this was free"; null reads as "we do not know", which is
+the truth for any agent that does not report its model. An unknown cost
+also cannot breach a cost ceiling — treating it as zero would report
+"well within budget" for an agent whose spend is entirely invisible to
+us. Same restraint on the forecast: one item done out of twenty produces
+null rather than a number that looks precise and is noise.
+
+**Advisory, deliberately.** Nothing here can halt an agent, and building
+as though it could would be worse than honest advice — the same posture
+as the stuck sensor.
+
+**Coverage**: 20 unit tests. Harness coverage of the end-to-end path
+(scripted agent → rollup) and the once-only warning is still to write.
+
+
 ### Sep 17, 2026 — Phase 22: agent activity clarity
 
 Design: [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md)

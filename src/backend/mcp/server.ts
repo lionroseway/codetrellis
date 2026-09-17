@@ -28,6 +28,7 @@ import { broadcast, getBoundBackendPort, scanProject } from '../server';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
+import * as budgetService from '../services/budget-service';
 import * as taskAttachmentsService from '../services/task-attachments-service';
 import * as planItemService from '../services/plan-item-service';
 import * as planEventService from '../services/plan-event-service';
@@ -78,6 +79,7 @@ import { register as registerGitTools } from './tools/git-tools';
 import { register as registerChannelTools } from './tools/channel-tools';
 import { register as registerSystemDocsTools } from './tools/system-docs-tools';
 import { register as registerGovernanceTools } from './tools/governance-tools';
+import { register as registerBudgetTools } from './tools/budget-tools';
 import { registerContributionTools } from './tools/contribution-tools';
 import { registerAudioTools } from './tools/audio-tools';
 import { registerPeerTools } from './tools/peer-tools';
@@ -175,6 +177,25 @@ function broadcastToolEvent(payload: ToolEventPayload): void {
       error: payload.error,
     });
   } catch { /* best-effort */ }
+
+  // Phase 23 — feed the budget service. Time is accumulated per TURN,
+  // not per call: an agent's wall-clock is mostly model thinking
+  // between calls, so summing durationMs would undercount it several
+  // times over. This call just says "the session was alive at this
+  // moment"; the turn's span is what gets recorded.
+  try {
+    if (payload.sessionId) {
+      const session = sessionService
+        .getActiveSessions()
+        .find((s) => s.sessionId === payload.sessionId);
+      budgetService.recordActivity({
+        sessionId: payload.sessionId,
+        planUid: session?.activePlanUid ?? null,
+        agentType: payload.agentType,
+        agentModel: payload.agentModel,
+      });
+    }
+  } catch { /* best-effort — accounting must never break a tool call */ }
 }
 
 function summarizeArgs(args: any): string {
@@ -341,6 +362,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerChannelTools(mcpServer, deps);
   registerSystemDocsTools(mcpServer, deps);
   registerGovernanceTools(mcpServer, deps);
+  registerBudgetTools(mcpServer, deps);
   registerContributionTools(mcpServer);
   registerAudioTools(mcpServer);
   registerPeerTools(mcpServer);
