@@ -99,3 +99,65 @@ test.describe('Finding 10 — git option injection', () => {
     }
   });
 });
+
+test.describe('Finding 7 — terminal history path traversal and read-side creation', () => {
+  test('a read cannot create a file, and ids cannot traverse', async () => {
+    const h = await setupHarness('finding-7-terminal-history');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    try {
+      // Assert the harness actually gave us a data dir. Without this, a
+      // missing value silently turns every path below into a relative one
+      // and the whole test passes while checking nothing — which is exactly
+      // what it did until `startBackend` was fixed to return it.
+      const dataDir = h.backend.dataDir;
+      expect(dataDir, 'the harness must expose the backend data dir').toBeTruthy();
+      expect(path.isAbsolute(dataDir), 'data dir must be absolute').toBe(true);
+      const canary = path.join(dataDir, 'canary-written-by-a-read.log');
+      const outside = path.join(dataDir, '..', 'escaped-terminal-log.log');
+
+      // ── traversal ───────────────────────────────────────────────────
+      //
+      // The id was interpolated straight into a filename, so `../…` left
+      // the terminals directory entirely.
+      const traversals = [
+        '../escaped-terminal-log',
+        '../../escaped-terminal-log',
+        'sub/dir/escape',
+        '..%2Fescaped',
+      ];
+      for (const id of traversals) {
+        const res = await authFetch(
+          h.backend,
+          `/api/terminals/${encodeURIComponent(id)}/history`,
+        );
+        expect(
+          [400, 404, 500].includes(res.status),
+          `a traversing terminal id ("${id}") must not be served a 200`,
+        ).toBe(true);
+      }
+
+      expect(
+        fs.existsSync(outside),
+        'no terminal-history request may create a file outside the terminals directory',
+      ).toBe(false);
+
+      // ── a read must not create ──────────────────────────────────────
+      //
+      // Reading the scrollback of a terminal that does not exist used to
+      // open 'a+' and bring the file into being.
+      {
+        const res = await authFetch(h.backend, '/api/terminals/canary-written-by-a-read/history');
+        // Either an empty history or a 404 is fine. Creating a file is not.
+        expect([200, 404].includes(res.status), 'a missing terminal reads as empty').toBe(true);
+      }
+
+      const terminalsDir = path.join(dataDir, 'terminals');
+      const created = fs.existsSync(path.join(terminalsDir, 'canary-written-by-a-read.log'));
+      expect(created, 'reading a non-existent terminal must NOT create its log file').toBe(false);
+      expect(fs.existsSync(canary), 'no stray file in the data dir either').toBe(false);
+    } finally {
+      await h.teardown();
+    }
+  });
+});

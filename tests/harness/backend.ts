@@ -125,7 +125,11 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     await killChild(child);
   };
 
-  return { backendPort, mcpPort, baseUrl, capabilityToken, stop };
+  // dataDir was declared on RunningBackend but never returned, so
+  // `backend.dataDir` was silently undefined. A test asserting on paths
+  // under it therefore checked the wrong location and passed regardless —
+  // found while writing the finding-7 test.
+  return { backendPort, mcpPort, baseUrl, capabilityToken, dataDir: opts.dataDir, stop };
 }
 
 async function pickPort(): Promise<number> {
