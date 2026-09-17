@@ -84,10 +84,26 @@ export function localAuthMiddleware(req: Request, res: Response, next: NextFunct
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Vary', 'Origin');
     } else {
-      // No ACAO header at all. The browser then refuses to expose the
-      // response to the caller even if the request itself went through.
-      // `Origin: null` lands here, which is the point.
+      // REFUSED, not merely unreadable.
+      //
+      // Withholding `Access-Control-Allow-Origin` stops the browser handing
+      // the RESPONSE to the page — but the request still ran, and its side
+      // effects happened. A simple request (a GET, or a POST the browser does
+      // not preflight) needs no response to be useful: creating a terminal
+      // and writing to it is entirely a side effect.
+      //
+      // The token already stops a blind page, so this is depth rather than
+      // the only control. But the WebSocket upgrade path refuses a foreign
+      // Origin outright and this should not be the weaker of the two.
+      //
+      // `Origin: null` lands here too, which is the point: a sandboxed
+      // iframe and a data: URL both send it, so it can never identify
+      // anything.
       res.setHeader('Vary', 'Origin');
+      if (!isPublicPath(req.path)) {
+        res.status(403).json({ error: 'Origin not allowed' });
+        return;
+      }
     }
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
