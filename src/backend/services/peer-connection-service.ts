@@ -57,7 +57,7 @@ import {
   onConnectionStateChange,
   connectedPeerCount,
 } from './webrtc-service';
-import { getSettings } from './settings-service';
+import { getSettings, updateSettings } from './settings-service';
 import { extractSingleFingerprint, fingerprintsEqual } from '../../shared/lib/sdp-fingerprint';
 import {
   issueChallenge,
@@ -279,6 +279,30 @@ export function completePairing(
 
   if (!device) {
     return { success: false, error: 'Confirmation code mismatch or no active session' };
+  }
+
+  // PAIRING A PHONE IS ASKING FOR A PHONE TO CONNECT.
+  //
+  // `exposeMobileApi` defaults off (finding A3) so the LAN listener is not
+  // running on machines nobody asked to expose. But a user who opened "Pair
+  // Mobile Device", scanned a QR and typed a confirmation code has said what
+  // they want as clearly as the UI allows.
+  //
+  // Leaving it off here produced a genuinely bad outcome: pairing succeeded,
+  // the phone stored a usable secret, and every reconnect then failed with
+  // "Could not connect to the server" — an error that blames the network for a
+  // switch on this machine. Nothing in the flow mentioned the switch.
+  //
+  // This does NOT weaken the default. A machine that never pairs never listens.
+  if (!getSettings().device.exposeMobileApi) {
+    updateSettings({ device: { exposeMobileApi: true } });
+    console.log(
+      `[PeerManager] Enabled the mobile API for "${deviceAlias}" — a paired phone ` +
+      'needs it to reconnect. Turn it off in Settings → Devices to stop accepting connections.',
+    );
+    startMobileApiServer()
+      .then((port) => console.log(`[PeerManager] Mobile API now listening on 0.0.0.0:${port}`))
+      .catch((err) => console.warn('[PeerManager] Mobile API failed to start after pairing:', err));
   }
 
   return { success: true, device };

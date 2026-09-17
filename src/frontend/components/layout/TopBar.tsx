@@ -333,6 +333,7 @@ export function TopBar() {
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const setViewDepth = useGraphStore((s) => s.setViewDepth);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<'identity' | 'devices'>('identity');
   const updateAvailable = useUpdateAvailable(settingsOpen);
 
   // Allow MCP to open settings via CustomEvent
@@ -398,7 +399,9 @@ export function TopBar() {
 
       <ConnectedAgents />
       <AwakeIndicator />
-      <DeviceIndicator />
+      <DeviceIndicator
+        onPairDevice={() => { setSettingsSection('devices'); setSettingsOpen(true); }}
+      />
 
       <button
         onClick={() => useUiStore.getState().setLearnTrellisOpen(true)}
@@ -423,7 +426,12 @@ export function TopBar() {
         )}
       </button>
 
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsModal
+          initialSection={settingsSection}
+          onClose={() => { setSettingsOpen(false); setSettingsSection('identity'); }}
+        />
+      )}
     </div>
   );
 }

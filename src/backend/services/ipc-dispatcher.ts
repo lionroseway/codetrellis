@@ -22,6 +22,7 @@
 import { Socket } from 'node:net';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import type { Express } from 'express';
+import { getCapabilityToken, TOKEN_HEADER } from './capability-token';
 
 export interface IpcRequest {
   /** HTTP method, uppercased. */
@@ -48,6 +49,39 @@ export interface IpcResponse {
    * (none today) would need a different encoding strategy.
    */
   body: string;
+}
+
+/**
+ * Dispatch an IPC request from our own renderer, authenticated.
+ *
+ * WHY THIS EXISTS (and why it is not optional)
+ *
+ * `dispatch` runs the request through EVERY middleware, which is the whole
+ * point of it — including the capability-token check added in Gate 1.1. The
+ * renderer cannot supply that token: it has no filesystem access, and handing
+ * it one would put a live credential inside a web context for no reason.
+ *
+ * So the main process attaches it here. That is sound because this path has no
+ * socket: it is our own renderer, over a contextIsolated preload, inside the
+ * same process. Nothing else can reach it. The alternative — exempting IPC
+ * requests inside the auth middleware — would put a bypass branch in the one
+ * piece of code that must not have one.
+ *
+ * WITHOUT THIS THE PACKAGED APP IS A BLANK WINDOW. Every `/api/*` call 401s,
+ * the renderer gets `{error: …}` where it expected data, and the first deep
+ * property read throws. It is invisible in dev (the Vite proxy attaches the
+ * token) and invisible to the harness (it speaks HTTP with a token), so only
+ * launching the packaged binary and LOOKING at it catches this.
+ */
+export function dispatchAuthorised(app: Express, req: IpcRequest): Promise<IpcResponse> {
+  return dispatch(app, {
+    ...req,
+    headers: {
+      ...(req.headers ?? {}),
+      // Last, deliberately: a caller cannot override it with a wrong value.
+      [TOKEN_HEADER]: getCapabilityToken(),
+    },
+  });
 }
 
 /**

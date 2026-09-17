@@ -39,7 +39,7 @@ function connectionBadge(state: string): { color: string; label: string } {
   }
 }
 
-export function DeviceIndicator() {
+export function DeviceIndicator({ onPairDevice }: { onPairDevice?: () => void } = {}) {
   const [status, setStatus] = useState<PeerStatus | null>(null);
   const [devices, setDevices] = useState<PairedDevice[]>([]);
   const [connections, setConnections] = useState<PeerConnectionInfo[]>([]);
@@ -102,11 +102,21 @@ export function DeviceIndicator() {
     } catch { /* ignore */ }
   };
 
-  const handleInitiatePairing = async () => {
-    try {
-      await fetch('/api/pairing/initiate', { method: 'POST' });
-      // TODO: open QR modal
-    } catch { /* ignore */ }
+  /**
+   * Hand off to the real pairing UI in Settings → Devices.
+   *
+   * This used to POST /api/pairing/initiate and do nothing else, behind a
+   * `// TODO: open QR modal`. So clicking it opened a 60-second pairing window
+   * with no QR anywhere on screen, which then timed out — worse than an inert
+   * button, because it also consumed the pairing session the user was about to
+   * start properly from Settings.
+   *
+   * There is exactly one pairing UI and it lives in Settings; this points at
+   * it rather than growing a second one.
+   */
+  const handleInitiatePairing = () => {
+    setOpen(false);
+    onPairDevice?.();
   };
 
   return (

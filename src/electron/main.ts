@@ -17,7 +17,7 @@ import {
   addBroadcastTarget,
 } from '../backend/server';
 import { setElectronScreenshotCapture } from '../backend/mcp/server';
-import { dispatch, type IpcRequest } from '../backend/services/ipc-dispatcher';
+import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
 import {
@@ -454,7 +454,7 @@ ipcMain.handle('codetrellis:api', async (_event, req: IpcRequest) => {
       body: 'invalid IPC request shape',
     };
   }
-  return dispatch(expressApp, req);
+  return dispatchAuthorised(expressApp, req);
 });
 
 // Native dialogs / shell integration — Electron-only features that
