@@ -41,6 +41,18 @@ const LANG_MAP: Record<string, string> = {
   '.sql': 'sql',
 };
 
+/**
+ * Every language tag this scanner can attach to a file.
+ *
+ * Exported so the parser registry can cross-check it — see
+ * `findUnparsedLanguages`. A language that is tagged here but parsed
+ * nowhere renders as a file with no symbols and no edges, which looks
+ * like a working scan of an empty file.
+ */
+export function listTaggedLanguages(): string[] {
+  return [...new Set(Object.values(LANG_MAP))];
+}
+
 function isSourceFile(name: string): boolean {
   return path.extname(name).toLowerCase() in LANG_MAP;
 }

@@ -32,6 +32,7 @@ failure, so:
 | File | sha256 | Source |
 |---|---|---|
 | `tree-sitter-go.wasm` | `9504573f352b20be7f2f1911754d710622aedc15afff16d5ed8fb5645681aee7` | npm `tree-sitter-go@0.25.0`, the `tree-sitter-go.wasm` shipped in the package (Phase 20) |
+| `tree-sitter-ruby.wasm` | `09a96427d7c72f0613ed470cd9812223fc4a91d6a9c025c0235cc6bd59ff96f4` | npm `tree-sitter-ruby@0.23.1`, the `tree-sitter-ruby.wasm` shipped in the package (Phase 27) |
 | `tree-sitter-java.wasm` | `4fdeac4ca6ca089f06c6f7e562abcac1733cd465728cc7031ebb73c2019122c4` | unrecorded — predates this file |
 | `tree-sitter-javascript.wasm` | `5fb488d0cabb4775a594bab85682de5ad6ce83c0d6ac997a9f82dd084d571240` | unrecorded — predates this file |
 | `tree-sitter-php.wasm` | `d4df6a6ff08c87c3ec4f9cbb785fe09998a0cb570e03f57d7b19b3acfb146aa7` | unrecorded — predates this file |
@@ -52,7 +53,12 @@ have an answer.
 ## Adding a grammar
 
 1. Obtain the `.wasm` (prefer the grammar's own npm package — those are
-   built against a current runtime).
+   built against a current runtime). **Check first whether the package
+   ships one at all**: as of 2026-09-17, `tree-sitter-ruby` and
+   `tree-sitter-c-sharp` do; `tree-sitter-swift` and `tree-sitter-kotlin`
+   do not, and both also carry an external C scanner, so they need a
+   local build with the tree-sitter CLI plus Emscripten or Docker. See
+   [docs/PHASE-27-LANGUAGE-EXPANSION.md](../../docs/PHASE-27-LANGUAGE-EXPANSION.md).
 2. Verify it loads and parses before writing any plugin code. A unit
    test like `parsers/go.test.ts` is the cheapest way.
 3. Commit it here and add a row above with its sha256 and exact source.

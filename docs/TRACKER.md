@@ -33,7 +33,7 @@ shared via the bridge abstraction.
 |---|---|---|---|
 | Data Model & Types | 100 | High | Plan, Task, Comment, PlanDocument, ProjectionData, Trellis snapshots all typed |
 | Database Persistence | 100 | Good | sql.js with file export — survives restarts |
-| AST Parsing (8 langs + SQL) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java, **Go** — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go landed in Phase 20 (parser + module-path resolver + callsites). **SQL** (Phase 21) has symbols and references but deliberately no parser plugin, grammar or resolver — it has no import graph; see `services/sql/`. |
+| AST Parsing (9 langs + SQL) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java, **Go**, **Ruby** — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go landed in Phase 20 (parser + module-path resolver + callsites). **SQL** (Phase 21) has symbols and references but deliberately no parser plugin, grammar or resolver — it has no import graph; see `services/sql/`. |
 | Multi-System Ingestion | 75 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve. Cross-system MVP shipped (HTTP TS↔Python). Remaining: systems DB + UI, SQL / subprocess / env matchers, server-side per-scope views. |
 | Cross-system edges | 35 | Medium | MVP shipped: TS/JS `fetch(...)` + `axios.*` ↔ Python FastAPI/Flask route matcher. New `callsites/<lang>.ts` plugin slot + `cross-system-service` matcher + dashed protocol-tinted graph edges. REST + MCP (`list_cross_system_edges`). **Apr 28**: edges now auto-refresh on file change (500 ms debounced recompute fired from the file-watcher), no longer need a manual re-scan. Pending: SQL ref tracker, subprocess, env-configured URLs, OpenAPI contracts. |
 | MCP Server | 100 | High | 30+ tools across architecture queries / plans / phases / tasks / spec docs / proposed-changes / templates / comments / sessions / drift / trellis snapshots. Skill resources (`codetrellis://skill[/quickstart|/power-user]`). |
@@ -73,6 +73,55 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Sep 17, 2026 — Phase 27 (part): Ruby, and a guard so this cannot recur
+
+Design: [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md).
+
+**This closed a live bug, not a feature gap.** `'ruby'` was in the
+`SupportedLanguage` union and `.rb` was in the scanner's `LANG_MAP`, with
+no parser behind either — so a Ruby repository scanned cleanly, drew every
+file as a node, and showed zero symbols and zero edges. Confidently
+empty, no error to read. Exactly the state Go was in before Phase 20.
+
+- **`parsers/ruby.ts`** — classes, modules, methods, `attr_*`, constants,
+  with full nesting (`Billing::Invoice#post`). Methods are qualified the
+  way Ruby writes them: `#` for instance, `.` for class. Ruby codebases
+  are full of `call` / `run` / `perform` / `to_s` on different classes,
+  so flat names would collide constantly.
+- **`resolvers/ruby.ts`** — `require_relative` resolves against the
+  requiring file; bare `require` probes the conventional roots (`lib/`,
+  `app/`); stdlib and gems resolve to nothing. The header states the real
+  limitation plainly: **in a Rails app most dependencies are invisible
+  here**, because autoloading means referencing `User` loads
+  `app/models/user.rb` with no `require` anywhere. Expect a sparse graph
+  on Rails until a convention-based resolver exists — that absence means
+  "not yet extracted", not "not coupled".
+- **`ImportDeclaration.isRelative`** — Ruby is the first language where
+  `require_relative 'x'` and `require 'x'` are identical strings with
+  different meanings, so relativeness now travels with the import
+  (through a new `imports.is_relative` column) instead of being
+  re-derived from the string.
+
+**The structural fix matters more than the parser.** This was the third
+instance of a hand-maintained list falling out of sync — the
+file-watcher's extension list twice, and now the language tags — and
+every one failed silently. `findUnparsedLanguages()` now cross-checks the
+scanner's language tags against the parser registry at startup and warns,
+with a standing unit test asserting the set is empty. It reports rather
+than throws: refusing to boot over a cosmetic mismatch would be a worse
+failure than the one it prevents.
+
+**Grammar availability, measured** (packed each npm package and looked
+inside): `tree-sitter-ruby` and `tree-sitter-c-sharp` ship prebuilt wasm;
+`tree-sitter-swift` and `tree-sitter-kotlin` ship none **and** carry
+external C scanners, so they need a local build toolchain this repo does
+not have. Kotlin before Swift — it covers Android and JVM backend work,
+compounding with the existing Java parser.
+
+**Coverage**: 14 unit tests (including the grammar-load guard and the
+unparsed-language assertion) + 3 harness tests.
+
 
 ### Sep 17, 2026 — Phase 25 (part): snapshot selection + plan review
 

@@ -377,8 +377,8 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
     // Store imports
     for (const imp of parsed.imports) {
       d.run(
-        `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace) VALUES (?, ?, ?, ?, ?)`,
-        [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0]
+        `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace, is_relative) VALUES (?, ?, ?, ?, ?, ?)`,
+        [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0, imp.isRelative ? 1 : 0]
       );
     }
 
@@ -616,7 +616,9 @@ export function resolveImports(
   try { d.run(`ALTER TABLE tasks ADD COLUMN phase_uid TEXT`); } catch { /* exists */ }
 
   // Get all imports
-  const importsResult = d.exec(`SELECT i.id, i.source_path, f.path FROM imports i JOIN files f ON i.file_id = f.id`);
+  const importsResult = d.exec(
+    `SELECT i.id, i.source_path, f.path, i.is_relative FROM imports i JOIN files f ON i.file_id = f.id`,
+  );
   if (!importsResult[0]) return;
 
   let resolved = 0;
@@ -624,6 +626,11 @@ export function resolveImports(
     const importId = row[0] as number;
     const sourcePath = row[1] as string;
     const importerPath = row[2] as string;
+    // Phase 27 — Ruby is the first language where `require_relative 'x'`
+    // and `require 'x'` have identical sources and different meanings,
+    // so relativeness has to travel with the import rather than being
+    // re-derived from the string.
+    const isRelative = Boolean(row[3]);
 
     const language = fileLangByPath.get(importerPath);
     const resolver = language ? getResolverForLanguage(language) : null;
@@ -635,6 +642,7 @@ export function resolveImports(
           knownFiles: filePathSet,
           aliasMap,
           systems,
+          isRelative,
         })
       : null;
     if (resolvedPath) {

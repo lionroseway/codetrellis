@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ParsedFile, ParsedSymbol, Callsite, SupportedLanguage } from '../../shared/types';
 import { createHash } from 'node:crypto';
-import { PARSER_PLUGINS, getPluginForFile, listPluginExtensions, type ParserPlugin } from './parsers';
+import { PARSER_PLUGINS, getPluginForFile, listPluginExtensions, findUnparsedLanguages, type ParserPlugin } from './parsers';
+import { listTaggedLanguages } from './project-scanner';
 import { getCallsiteExtractor } from './callsites';
 import { extractSqlSymbols, extractTableRefs, sqlRefsToCallsites, applyMigrationFold } from './sql';
 import { extractEmbeddedSql } from './sql/embedded';
@@ -106,6 +107,22 @@ export async function initParser(): Promise<void> {
   });
 
   await loadGrammars();
+
+  // Phase 27 — shout about a language the scanner will tag but nothing
+  // parses. Ruby sat in that state for months and presented as a Rails
+  // repo full of empty nodes. Reporting rather than throwing: refusing
+  // to boot over this would be a worse failure than the one it warns
+  // about.
+  try {
+    const unparsed = findUnparsedLanguages(listTaggedLanguages());
+    if (unparsed.length > 0) {
+      console.warn(
+        `[AST] These languages are tagged by the scanner but have no parser: ${unparsed.join(', ')}. ` +
+          'Files in them will show zero symbols and zero edges, which looks like a working scan of an ' +
+          'empty file. Add a parser plugin or stop tagging them.',
+      );
+    }
+  } catch { /* diagnostics must never block startup */ }
 
   initialized = true;
   parsesSinceInit = 0;

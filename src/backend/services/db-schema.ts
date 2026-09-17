@@ -46,7 +46,8 @@ export const SCHEMA_AST = `
     source_path TEXT NOT NULL,
     specifiers TEXT,
     is_default INTEGER DEFAULT 0,
-    is_namespace INTEGER DEFAULT 0
+    is_namespace INTEGER DEFAULT 0,
+    is_relative INTEGER DEFAULT 0
   );
 
   CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);

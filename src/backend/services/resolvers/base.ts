@@ -22,6 +22,14 @@ export interface ResolveContext {
   aliasMap: AliasMapping[];
   /** All discovered systems — used by per-language resolvers to find the importer's nearest ancestor system root. */
   systems: DiscoveredSystem[];
+  /**
+   * The import was written in a form that resolves relative to the
+   * importing file. Only meaningful where the language cannot express
+   * that in `importSource` itself — Ruby's `require_relative 'x'` versus
+   * `require 'x'` (Phase 27). Every other language so far encodes it in
+   * the string.
+   */
+  isRelative?: boolean;
 }
 
 export interface ResolverPlugin {
