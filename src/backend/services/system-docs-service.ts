@@ -22,6 +22,29 @@
 
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy____server from '../server';
+import { writeFileWithin, resolveWithin, ConfinementError } from './confined-fs';
+
+/**
+ * Slugs become filenames, so they are constrained to what is safe as one.
+ *
+ * Phase 19, finding 8. `slug` is caller-supplied (`input.slug ?? slugify(title)`)
+ * and was interpolated straight into `<project>/<docs-dir>/<slug>.md`, so
+ * `../../evil` wrote outside the docs directory — and outside the project.
+ *
+ * No dots at all: a slug never legitimately contains one, and excluding them
+ * removes `..` without having to reason about where it can appear.
+ */
+const SAFE_SLUG = /^[a-z0-9][a-z0-9-]{0,127}$/i;
+
+function assertSafeSlug(slug: unknown): string {
+  if (typeof slug !== 'string' || !SAFE_SLUG.test(slug)) {
+    throw new ConfinementError(
+      `Invalid system-doc slug "${String(slug).slice(0, 64)}" — ` +
+        'slugs may contain only letters, digits and hyphens.',
+    );
+  }
+  return slug;
+}
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -163,7 +186,7 @@ export function createSystemDoc(input: CreateSystemDocInput): SystemDoc {
   // Slug: caller-supplied wins, else slugify the title. Append a
   // short uid suffix only when there's a clash so the filename stays
   // human-readable in the common case.
-  let slug = (input.slug ?? slugify(input.title)) || 'doc';
+  let slug = assertSafeSlug((input.slug ?? slugify(input.title)) || 'doc');
   if (getSystemDocBySlug(projectPath, slug)) {
     slug = `${slug}-${uid.split('-')[0]}`;
   }

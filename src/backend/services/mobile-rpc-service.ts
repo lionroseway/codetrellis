@@ -26,6 +26,8 @@
  */
 
 import { DATA_CHANNELS } from '../../shared/types';
+import { readFileWithin, isWithin } from './confined-fs';
+import { listTrustedRoots } from './trusted-roots';
 import {
   onChannelMessage,
   sendToPeer,
@@ -877,19 +879,33 @@ async function routeMethod(
       // Read a file's source for the mobile preview. Capped + sandboxed to the
       // active project root.
       const filePath = requireString(params, 'filePath');
-      const root = getActiveProjectPath() || recentProjectsService.listRecentProjects()[0]?.path;
-      const resolved = path.resolve(filePath);
-      if (root && !resolved.startsWith(path.resolve(root))) {
-        throw new Error('File is outside the active project');
+
+      // TWO BUGS IN THE OLD CHECK (Phase 19, finding 22), both now gone.
+      //
+      // 1. IT FAILED OPEN. `if (root && ...)` skipped the check entirely
+      //    when there was no active project and no recent one — so with no
+      //    project open, a paired phone could read ANY file on the machine.
+      //    Absence of a root must mean "deny", never "allow".
+      //
+      // 2. IT ACCEPTED SIBLINGS. `resolved.startsWith(root)` is a string
+      //    prefix test, so "/work/project-evil" passes for root
+      //    "/work/project". isWithin compares resolved paths by segment.
+      //
+      // And it is now checked against EVERY opened project rather than only
+      // the first recent one, which is what a multi-project session needs.
+      const roots = listTrustedRoots();
+      const owningRoot = roots.find((r) => isWithin(r, filePath));
+      if (!owningRoot) {
+        throw new Error('File is outside every opened project');
       }
-      if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) {
-        throw new Error('File not found');
-      }
+      // Read through the boundary so a symlink inside the project cannot
+      // reach outside it, and so the check and the open cannot drift apart.
+      const confinedBuffer = readFileWithin(owningRoot, filePath, 'graph.fileSource');
       const MAX = 200 * 1024;
-      const stat = fs.statSync(resolved);
-      const truncated = stat.size > MAX;
-      const buf = fs.readFileSync(resolved);
-      const content = (truncated ? buf.subarray(0, MAX) : buf).toString('utf-8');
+      // Use the CONFINED buffer. Re-reading via `resolved` here would
+      // reopen the gap the confined read just closed.
+      const truncated = confinedBuffer.length > MAX;
+      const content = (truncated ? confinedBuffer.subarray(0, MAX) : confinedBuffer).toString('utf-8');
       const lineCount = content.split('\n').length;
       let language = 'unknown';
       try {
@@ -898,9 +914,12 @@ async function routeMethod(
       } catch { /* */ }
       // Per-line git status for the gutter (added / modified vs HEAD).
       let lineStatus: Array<'unchanged' | 'added' | 'modified'> | null = null;
-      if (root) {
-        lineStatus = safe(() => computeGitLineAnnotations(root, resolved, lineCount), null);
-      }
+      // `owningRoot` replaces the old `root`: the project that actually
+      // contains this file, rather than whichever happened to be first.
+      lineStatus = safe(
+        () => computeGitLineAnnotations(owningRoot, path.resolve(filePath), lineCount),
+        null,
+      );
       return { content, language, truncated, lineCount, lineStatus };
     }
 

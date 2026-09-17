@@ -14,6 +14,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { resolveWithin, readTextWithin, writeFileWithin } from './confined-fs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -84,7 +85,16 @@ export function detectManifestConflicts(projectRoot: string): ConflictSummary {
   let autoResolvable = 0;
 
   for (const filePath of conflictedPaths) {
-    const fullPath = path.join(projectRoot, filePath);
+    // CONFINE BEFORE TOUCHING THE FILE (Phase 19, finding A1).
+  //
+  // The reviewer joined projectRoot with ../outside/victim.json, this
+  // function MODIFIED the external file, and only then did `git add` fail.
+  // The filesystem mutation had already happened — a later git failure does
+  // not undo it, which is why "git will reject it anyway" was not a control.
+  //
+  // Applies to field-level and whole-side resolution alike; both call in
+  // here for their path.
+  const fullPath = resolveWithin(projectRoot, filePath, 'resolveFileConflict(filePath)');
     if (!fs.existsSync(fullPath)) continue;
 
     const rawContent = fs.readFileSync(fullPath, 'utf-8');
@@ -130,7 +140,16 @@ export function resolveFileConflict(
   filePath: string,
   resolutions: ResolveFieldInput[],
 ): { resolved: boolean; error?: string } {
-  const fullPath = path.join(projectRoot, filePath);
+  // CONFINE BEFORE TOUCHING THE FILE (Phase 19, finding A1).
+  //
+  // The reviewer joined projectRoot with ../outside/victim.json, this
+  // function MODIFIED the external file, and only then did `git add` fail.
+  // The filesystem mutation had already happened — a later git failure does
+  // not undo it, which is why "git will reject it anyway" was not a control.
+  //
+  // Applies to field-level and whole-side resolution alike; both call in
+  // here for their path.
+  const fullPath = resolveWithin(projectRoot, filePath, 'resolveFileConflict(filePath)');
   if (!fs.existsSync(fullPath)) {
     return { resolved: false, error: `File not found: ${filePath}` };
   }
@@ -185,10 +204,12 @@ export function resolveFileConflict(
   try {
     const isJson = filePath.endsWith('.json');
     if (isJson) {
-      fs.writeFileSync(fullPath, JSON.stringify(merged, null, 2));
+      // Re-checked immediately before the mutation rather than trusting the
+      // resolve above — that gap is the link-swap race.
+      writeFileWithin(projectRoot, fullPath, JSON.stringify(merged, null, 2), 'conflict resolve (json)');
     } else {
       const { stringify } = require('yaml');
-      fs.writeFileSync(fullPath, stringify(merged));
+      writeFileWithin(projectRoot, fullPath, stringify(merged), 'conflict resolve (yaml)');
     }
   } catch (err) {
     return { resolved: false, error: `Failed to write resolved file: ${err}` };

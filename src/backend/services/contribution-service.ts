@@ -13,6 +13,33 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { removeWithin, resolveWithin, ConfinementError } from './confined-fs';
+
+/**
+ * Branch names become directory names under `.codetrellis/contributions/`.
+ *
+ * Phase 19, finding 12. A branch name is not a safe path component: git
+ * permits `/`, and the value reaches a RECURSIVE DELETE. Anything that can
+ * influence the checked-out branch could therefore choose what gets removed.
+ *
+ * Slashes are kept — `dev/saif` is an ordinary branch and nests harmlessly —
+ * but `..` segments and absolute forms are refused, and the delete itself is
+ * confined below.
+ */
+function assertSafeBranchSegment(branch: string): string {
+  if (typeof branch !== 'string' || branch.length === 0 || branch.length > 255) {
+    throw new ConfinementError('Invalid branch name for a contributions directory');
+  }
+  if (branch.split(/[\\/]/).some((seg) => seg === '..' || seg === '.' || seg === '')) {
+    throw new ConfinementError(
+      `Branch name "${branch}" contains a path segment that cannot be used as a directory`,
+    );
+  }
+  if (path.isAbsolute(branch)) {
+    throw new ConfinementError(`Branch name "${branch}" looks like an absolute path`);
+  }
+  return branch;
+}
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
@@ -67,7 +94,7 @@ export function promoteItemToContribution(
   },
 ): Contribution {
   const branch = getCurrentBranch(projectRoot);
-  const contribDir = path.join(projectRoot, '.codetrellis', 'contributions', branch, 'items');
+  const contribDir = path.join(projectRoot, '.codetrellis', 'contributions', assertSafeBranchSegment(branch), 'items');
   fs.mkdirSync(contribDir, { recursive: true });
 
   // If re-promoting with a changed title, remove the old file to prevent orphans.
@@ -127,7 +154,7 @@ export function promoteAttachmentToContribution(
   },
 ): Contribution {
   const branch = getCurrentBranch(projectRoot);
-  const contribDir = path.join(projectRoot, '.codetrellis', 'contributions', branch, 'attachments');
+  const contribDir = path.join(projectRoot, '.codetrellis', 'contributions', assertSafeBranchSegment(branch), 'attachments');
   fs.mkdirSync(contribDir, { recursive: true });
 
   // Copy the file
@@ -270,8 +297,29 @@ export function acceptContributions(
     }
   }
 
-  // Clean up the contributions directory after acceptance
-  fs.rmSync(contribDir, { recursive: true, force: true });
+  // RECURSIVE DELETE, CONFINED (Phase 19, finding 12).
+  //
+  // This is the least forgiving operation in the service, and its path was
+  // built from a git branch name. removeWithin re-canonicalises, refuses to
+  // follow a link out of the project, and refuses to delete the containment
+  // root itself — so the worst case is deleting the wrong directory INSIDE
+  // `.codetrellis/contributions`, not outside the project.
+  try {
+    removeWithin(
+      path.join(projectRoot, '.codetrellis', 'contributions'),
+      contribDir,
+      { recursive: true },
+      'contributions cleanup',
+    );
+  } catch (err) {
+    if (!(err instanceof ConfinementError)) {
+      // ENOENT is normal — nothing to clean up.
+      const e = err as NodeJS.ErrnoException;
+      if (e.code !== 'ENOENT') throw err;
+    } else {
+      throw err;
+    }
+  }
 
   return { accepted, planSlug, errors };
 }

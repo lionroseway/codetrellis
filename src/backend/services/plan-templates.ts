@@ -12,6 +12,7 @@
  */
 
 import fs from 'node:fs';
+import { readTextWithin } from './confined-fs';
 import path from 'node:path';
 import os from 'node:os';
 import { parse as parseYaml } from 'yaml';
@@ -885,9 +886,17 @@ function readTemplate(tplDir: string, source: PlanTemplateSource): PlanTemplate 
     if (!d) continue;
     let body = typeof d.body === 'string' ? d.body : '';
     if (!body && typeof d.bodyPath === 'string') {
-      const bodyFile = path.join(tplDir, d.bodyPath);
-      if (fs.existsSync(bodyFile)) {
-        body = fs.readFileSync(bodyFile, 'utf-8');
+      // `bodyPath` comes from a template's own YAML, and a template can be
+      // installed from anywhere — a shared directory, a downloaded bundle.
+      // `path.join(tplDir, '../../../etc/passwd')` was an arbitrary read
+      // (Phase 19, finding 21a). Confined to the template directory, links
+      // refused.
+      try {
+        body = readTextWithin(tplDir, d.bodyPath, 'template doc bodyPath');
+      } catch {
+        // Missing or out-of-bounds: the doc simply has no body, exactly as
+        // before when the file did not exist.
+        body = '';
       }
     }
     docs.push({
@@ -947,9 +956,14 @@ function resolveItemBodyPaths(items: any[], tplDir: string): any[] {
   return items.map((item) => {
     const resolved = { ...item };
     if (!resolved.body && typeof resolved.bodyPath === 'string') {
-      const bodyFile = path.join(tplDir, resolved.bodyPath);
-      if (fs.existsSync(bodyFile)) {
-        resolved.body = fs.readFileSync(bodyFile, 'utf-8');
+      // Finding 21b — the ITEM variant. The review notes this must apply to
+      // every recursive instance, not only the document path above; this
+      // function recurses into children, so each nested item is confined
+      // by the same call.
+      try {
+        resolved.body = readTextWithin(tplDir, resolved.bodyPath, 'template item bodyPath');
+      } catch {
+        resolved.body = '';
       }
     }
     if (Array.isArray(resolved.children)) {
