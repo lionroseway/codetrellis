@@ -10,6 +10,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { assertSafeGitRef } from './git-safety';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
@@ -65,6 +66,15 @@ export function getPlanAtCommit(
   planSlug: string,
   commitHash: string,
 ): HistoricalPlanState | null {
+  // VALIDATE BEFORE IT REACHES A GIT ARGUMENT (Phase 19, finding 10).
+  //
+  // execFileSync means there is no shell, so nothing here can be shell-
+  // injected. But git parses any argument starting with `-` as a FLAG, and
+  // this value is interpolated into `git show <ref>:<path>` where a `--`
+  // separator cannot protect it — the ref has to come before the path.
+  // A "commit hash" of `--output=…` would be an instruction.
+  assertSafeGitRef(commitHash, 'getPlanAtCommit(commitHash)');
+
   const planDir = `.codetrellis/plans/${planSlug}`;
 
   // Get commit timestamp
@@ -110,6 +120,12 @@ export function diffPlanBetweenCommits(
   baseCommit: string,
   headCommit: string,
 ): PlanHistoryDiff {
+  // Validated here as well as in getPlanAtCommit: this is a public entry
+  // point in its own right, and a caller should get a clear rejection rather
+  // than a confusing failure two frames down.
+  assertSafeGitRef(baseCommit, 'diffPlanBetweenCommits(baseCommit)');
+  assertSafeGitRef(headCommit, 'diffPlanBetweenCommits(headCommit)');
+
   const baseState = getPlanAtCommit(projectRoot, planSlug, baseCommit);
   const headState = getPlanAtCommit(projectRoot, planSlug, headCommit);
 

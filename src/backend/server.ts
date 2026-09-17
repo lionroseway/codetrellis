@@ -6,6 +6,7 @@ import * as _lazy___services_system_docs_service from './services/system-docs-se
 import * as _lazy___services_recent_projects_service from './services/recent-projects-service';
 import * as _lazy___services_git_identity from './services/git-identity';
 import * as _lazy___services_mdns_service from './services/mdns-service';
+import * as _lazy___services_mobile_api_server from './services/mobile-api-server';
 import * as _lazy___services_personal_sync_service from './services/personal-sync-service';
 import * as _lazy___services_git_activity_service from './services/git-activity-service';
 import * as _lazy___services_plan_history_service from './services/plan-history-service';
@@ -27,6 +28,7 @@ import { scanDirectory, countFiles, collectFilePaths } from './services/project-
 import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
+import { isSafeGitRef } from './services/git-safety';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -577,6 +579,13 @@ app.get('/api/git/branch-tip', (req, res) => {
   const branch = req.query.branch as string;
   if (!projectPath || !branch) {
     res.status(400).json({ error: 'path and branch query params required' });
+    return;
+  }
+  // `git rev-parse <branch>` reads any argument starting with `-` as a flag
+  // (Phase 19, finding 10). execFileSync stops shell injection, not option
+  // injection, and there is no `--` position that protects this operand.
+  if (!isSafeGitRef(branch)) {
+    res.status(400).json({ error: 'Invalid branch name' });
     return;
   }
 
@@ -2902,6 +2911,28 @@ app.put('/api/settings', (req, res) => {
   if (before.mcp.port !== next.mcp.port) {
     broadcast('mcp-port-config-changed', { configuredPort: next.mcp.port });
   }
+  // Phase 19 — live-toggle the LAN listener when the user changes it.
+  //
+  // Without this, turning exposure OFF would leave :19480 bound until the
+  // next restart: the user would be told they had closed it while the socket
+  // was still accepting connections. A security toggle that only takes
+  // effect on restart is worse than no toggle, because it is believed.
+  if (before.device.exposeMobileApi !== next.device.exposeMobileApi) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mobileApi = _lazy___services_mobile_api_server;
+      if (next.device.exposeMobileApi) {
+        void mobileApi.startMobileApiServer();
+        console.log('[Backend] Mobile API exposed on the local network (user-enabled)');
+      } else {
+        mobileApi.stopMobileApiServer();
+        console.log('[Backend] Mobile API listener closed (user-disabled)');
+      }
+    } catch (err) {
+      console.warn('[Backend] Mobile API reconfigure failed:', err);
+    }
+  }
+
   // Phase 9 — live-restart mDNS when device settings change.
   if (before.device.advertise !== next.device.advertise ||
       before.device.deviceName !== next.device.deviceName) {
@@ -3046,6 +3077,10 @@ app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
   const { getPlanAtCommit } = _lazy___services_plan_history_service;
   const projectPath = req.query.project as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  if (!isSafeGitRef(req.params.commitHash)) {
+    res.status(400).json({ error: 'Invalid commit identifier' });
+    return;
+  }
   const state = getPlanAtCommit(projectPath, req.params.planSlug, req.params.commitHash);
   if (!state) { res.status(404).json({ error: 'Plan or commit not found' }); return; }
   res.json(state);
@@ -3059,6 +3094,10 @@ app.get('/api/plan-history/:planSlug/diff', (req, res) => {
   const head = req.query.head as string | undefined;
   if (!projectPath || !base || !head) {
     res.status(400).json({ error: 'project, base, and head query params required' });
+    return;
+  }
+  if (!isSafeGitRef(base) || !isSafeGitRef(head)) {
+    res.status(400).json({ error: 'Invalid commit identifier' });
     return;
   }
   const diff = diffPlanBetweenCommits(projectPath, req.params.planSlug, base, head);

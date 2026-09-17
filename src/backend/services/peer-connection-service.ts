@@ -86,15 +86,31 @@ export async function startPeerManager(): Promise<void> {
   const settings = getSettings();
   const deviceName = settings.device.deviceName || undefined;
 
-  // Start the mobile API server (0.0.0.0, LAN-accessible)
+  // Start the mobile API server ONLY when the user has asked for it.
+  //
+  // This used to run unconditionally, so :19480 bound 0.0.0.0 — every
+  // interface — on every launch, whatever the settings said. Only mDNS was
+  // gated, which meant the machine was reachable on any network it joined
+  // and merely not announcing itself. That is the LAN entry point behind the
+  // whole peer finding set (Phase 19, A3 / 1.4).
+  //
+  // Discovery and exposure are separate switches now: advertising without a
+  // listener is inert, and a listener without advertising is still reachable
+  // by anyone who knows the address. The listener is the one that matters.
   let mobilePort = 0;
-  try {
-    mobilePort = await startMobileApiServer();
-  } catch (err) {
-    console.warn('[PeerManager] Mobile API server failed to start:', err);
+  if (settings.device.exposeMobileApi) {
+    try {
+      mobilePort = await startMobileApiServer();
+      console.log('[PeerManager] Mobile API exposed on the local network (user-enabled)');
+    } catch (err) {
+      console.warn('[PeerManager] Mobile API server failed to start:', err);
+    }
+  } else {
+    console.log('[PeerManager] Mobile API NOT exposed — enable it in Settings → Devices to pair a phone');
   }
 
-  // Start mDNS if advertising is enabled, passing the mobile API port
+  // Advertise over mDNS only if separately enabled. Advertising a port we
+  // never bound would be worse than useless, so pass whatever we actually got.
   if (settings.device.advertise) {
     startMdns(deviceName, undefined, mobilePort);
   }

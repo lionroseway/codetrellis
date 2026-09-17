@@ -136,17 +136,21 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     return;
   }
 
-  // Debug: peer connection details including channel states
-  if (req.method === 'GET' && url.pathname === '/api/mobile/debug/peers') {
-    handleDebugPeers(res);
-    return;
-  }
-
-  // Debug: force-send a test snapshot to all connected peers
-  if (req.method === 'POST' && url.pathname === '/api/mobile/debug/test-send') {
-    handleTestSend(res);
-    return;
-  }
+  // DEBUG ROUTES REMOVED (Phase 19, finding 13).
+  //
+  // `/api/mobile/debug/peers` disclosed peer connection details and
+  // `/api/mobile/debug/test-send` broadcast a message to every connected
+  // peer — both unauthenticated, on the server that binds 0.0.0.0.
+  //
+  // The review asked for these to be removed from production bundles rather
+  // than gated on NODE_ENV, on the grounds that a runtime flag is one
+  // misconfiguration away from shipping. Deleting them outright is the
+  // strongest form of that, and costs nothing: `/api/peers/connections` on
+  // the Express API carries the same data behind the capability token, and
+  // the test-send helper has no callers anywhere in this repo or in mobile/.
+  //
+  // If a LAN-side debug hook is ever needed again, it must sit behind the
+  // pairing credential, not on the open surface.
 
   // 404
   res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -228,43 +232,7 @@ function handleReconnectAnswer(req: http.IncomingMessage, res: http.ServerRespon
   });
 }
 
-function handleDebugPeers(res: http.ServerResponse): void {
-  try {
-    const peers = getPeerConnections();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ peers }, null, 2));
-  } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: String(err) }));
-  }
-}
 
-function handleTestSend(res: http.ServerResponse): void {
-  try {
-    const testSnapshot = {
-      type: 'snapshot',
-      snapshot: {
-        agents: [],
-        plans: [],
-        channelEvents: [],
-        presence: [],
-        audio: { active: false },
-        ts: Date.now(),
-      },
-      ts: Date.now(),
-      sourceInstanceId: getThisInstanceId(),
-    };
-    const sent = broadcastToAllPeers(
-      DATA_CHANNELS.UI,
-      JSON.stringify(testSnapshot),
-    );
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ sent, message: `Broadcast to ${sent} peers` }));
-  } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: String(err) }));
-  }
-}
 
 function handleStatus(res: http.ServerResponse): void {
   try {

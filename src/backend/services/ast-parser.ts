@@ -173,10 +173,42 @@ function dispatchParser(filePath: string): { plugin: ParserPlugin; parser: any }
   return { plugin, parser };
 }
 
+/**
+ * Largest source file we will hand to tree-sitter.
+ *
+ * Phase 19, finding 24. There was already a cap on CALLSITE extraction, but
+ * it applied AFTER the parse — so a pathological file still went through
+ * tree-sitter first, and the quadratic behaviour that made it pathological
+ * had already happened. Capping the parse is the part that actually bounds
+ * the work.
+ *
+ * 2 MiB is far above anything hand-written: the largest source file in this
+ * repository is a fraction of it, and generated bundles (the 500KB xterm
+ * bundle, minified vendor output) still fit. A file bigger than this is
+ * machine-generated, and its symbols are not worth a stalled backend.
+ *
+ * Skipping is the correct behaviour rather than truncating: half a parse
+ * produces confidently wrong symbols and edges, which is worse than none.
+ */
+const MAX_PARSE_BYTES = 2 * 1024 * 1024;
+
 function parseSource(filePath: string, content: string): ParsedFile | null {
   const dispatch = dispatchParser(filePath);
   if (!dispatch) return null;
   const { plugin, parser } = dispatch;
+
+  // Budget the PARSE, not just what happens afterwards. The backend runs
+  // tree-sitter synchronously in the Express process, so an unbounded parse
+  // is an unbounded stall for every request, not just for this scan.
+  const byteLength = Buffer.byteLength(content, 'utf-8');
+  if (byteLength > MAX_PARSE_BYTES) {
+    console.warn(
+      `[AST] Skipping ${filePath} — ${(byteLength / 1024 / 1024).toFixed(1)} MB exceeds the ` +
+        `${MAX_PARSE_BYTES / 1024 / 1024} MB parse budget. Symbols and edges for this file ` +
+        'will be absent; it is almost certainly generated.',
+    );
+    return null;
+  }
 
   let tree: any;
   try {
