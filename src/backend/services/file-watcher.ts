@@ -4,6 +4,7 @@ import * as _lazy___plan_progress_service from './plan-progress-service';
 import { watch, type FSWatcher } from 'chokidar';
 import path from 'node:path';
 import { parseFile, initParser } from './ast-parser';
+import { listPluginExtensions } from './parsers';
 import { storeParsedFile, getFileHash } from './database';
 import { broadcast } from '../server';
 import { checkFileDeviation } from './deviation-service';
@@ -11,6 +12,13 @@ import { checkDocFreshnessForFile } from './sensor-bridge-service';
 import { recordFileActivity } from './stuck-sensor-service';
 
 let watcher: FSWatcher | null = null;
+
+/**
+ * How long `startWatching` waits for chokidar's initial walk before
+ * returning anyway. Long enough for a big monorepo on a cold cache,
+ * short enough that a scan never appears to hang.
+ */
+const READY_TIMEOUT_MS = 10_000;
 
 /**
  * Cross-system recompute is intentionally **debounced**: agents
@@ -47,14 +55,15 @@ function scheduleCrossSystemRecompute(): void {
   }, CROSS_SYSTEM_DEBOUNCE_MS);
 }
 
-// Match the languages the AST parser actually supports — earlier this was
-// limited to the TS/JS family, which meant agent edits to .py / .rs / .php
-// / .java files never triggered a re-parse and the dependency graph went
-// stale. Keep this list in sync with ast-parser.ts grammar registrations.
-const PARSEABLE_EXTS = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-  '.py', '.rs', '.php', '.java',
-]);
+// Match the languages the AST parser actually supports. This was once a
+// hand-written list limited to the TS/JS family, which meant agent edits
+// to .py / .rs / .php / .java never triggered a re-parse and the
+// dependency graph went stale. It was extended by hand — and then went
+// stale again the moment Go was added (Phase 20), in the same way, for
+// the same reason. So it is now DERIVED from the parser registry:
+// registering a plugin in `parsers/index.ts` is all it takes, and there
+// is no second list to forget.
+const PARSEABLE_EXTS = new Set(listPluginExtensions());
 
 /**
  * Start watching a project directory for file changes.
@@ -76,6 +85,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
     '__pycache__', 'venv', 'env',
     'target',
     'vendor',
+    // Go's convention for fixture input that is deliberately not valid
+    // source — mirrors project-scanner's ALWAYS_IGNORED.
+    'testdata',
     'coverage', 'test-results', 'playwright-report', 'cypress',
   ]);
   const isIgnoredPath = (p: string): boolean => {
@@ -190,6 +202,39 @@ export async function startWatching(projectRoot: string): Promise<void> {
     // Debounced — let any in-flight rename (`unlink` followed by
     // `add` in the same tick) settle before recomputing.
     scheduleCrossSystemRecompute();
+  });
+
+  // Only now, with every handler attached, wait for chokidar's initial
+  // walk to finish before reporting the watcher as started.
+  //
+  // `startWatching` used to return immediately, and the scan endpoint
+  // didn't await it either, which left a silent window right after a
+  // scan where edits were simply not seen — the watcher had not
+  // finished registering files yet, so nothing fired and the graph
+  // quietly went stale. That is the one window where an agent is most
+  // likely to be writing, since a scan is what precedes handing it
+  // work. It had been showing up as flaky auto-refresh tests; it was
+  // never flake, and a larger fixture widened the race until it was
+  // deterministic.
+  //
+  // Bounded, because on a very large tree the walk is not instant and a
+  // scan must still return. Past the guard the watcher keeps warming up
+  // in the background — late is materially better than never.
+  const readyWatcher = watcher;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const done = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      resolve();
+    };
+    const guard = setTimeout(() => {
+      console.warn(`[Watcher] Initial walk still running after ${READY_TIMEOUT_MS}ms — continuing`);
+      done();
+    }, READY_TIMEOUT_MS);
+    guard.unref?.();
+    readyWatcher.once('ready', done);
   });
 
   console.log(`[Watcher] Watching ${projectRoot}`);

@@ -17,6 +17,9 @@ const ALWAYS_IGNORED = new Set([
   'target',
   // PHP / Go vendored deps
   'vendor',
+  // Go — `testdata` is the language's convention for fixture input that
+  // is deliberately not valid source. Parsing it produces pure noise.
+  'testdata',
 ]);
 
 const LANG_MAP: Record<string, string> = {

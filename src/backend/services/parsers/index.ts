@@ -5,6 +5,7 @@ import { pythonPlugin } from './python';
 import { rustPlugin } from './rust';
 import { phpPlugin } from './php';
 import { javaPlugin } from './java';
+import { goPlugin } from './go';
 
 /**
  * Registry of every language plugin CodeTrellis ingests.
@@ -23,6 +24,7 @@ export const PARSER_PLUGINS: ReadonlyArray<ParserPlugin> = [
   rustPlugin,
   phpPlugin,
   javaPlugin,
+  goPlugin,
 ];
 
 const EXTENSION_INDEX = (() => {

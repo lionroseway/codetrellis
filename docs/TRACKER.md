@@ -33,7 +33,7 @@ shared via the bridge abstraction.
 |---|---|---|---|
 | Data Model & Types | 100 | High | Plan, Task, Comment, PlanDocument, ProjectionData, Trellis snapshots all typed |
 | Database Persistence | 100 | Good | sql.js with file export — survives restarts |
-| AST Parsing (7 langs) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go and SQL pending. |
+| AST Parsing (8 langs) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java, **Go** — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go landed in Phase 20 (parser + module-path resolver + callsites); SQL is Phase 21 and is deliberately NOT a parser plugin. |
 | Multi-System Ingestion | 75 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve. Cross-system MVP shipped (HTTP TS↔Python). Remaining: systems DB + UI, SQL / subprocess / env matchers, server-side per-scope views. |
 | Cross-system edges | 35 | Medium | MVP shipped: TS/JS `fetch(...)` + `axios.*` ↔ Python FastAPI/Flask route matcher. New `callsites/<lang>.ts` plugin slot + `cross-system-service` matcher + dashed protocol-tinted graph edges. REST + MCP (`list_cross_system_edges`). **Apr 28**: edges now auto-refresh on file change (500 ms debounced recompute fired from the file-watcher), no longer need a manual re-scan. Pending: SQL ref tracker, subprocess, env-configured URLs, OpenAPI contracts. |
 | MCP Server | 100 | High | 30+ tools across architecture queries / plans / phases / tasks / spec docs / proposed-changes / templates / comments / sessions / drift / trellis snapshots. Skill resources (`codetrellis://skill[/quickstart|/power-user]`). |
@@ -73,6 +73,73 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Sep 17, 2026 — Phase 20: Go support
+
+Design: [PHASE-20-GO-SUPPORT.md](PHASE-20-GO-SUPPORT.md).
+
+Go was the worst-supported ecosystem in a specific way: `.go` was
+already in the scanner's `LANG_MAP` and `go.mod` was already a
+recognised manifest, so a Go repo scanned and drew every file as a node
+**with zero symbols and zero edges**. Confidently empty, with no error
+to read.
+
+**Shipped:**
+
+- **`parsers/go.ts`** — functions, methods, types, consts, vars.
+  Methods are named `(Receiver).Method` because Go codebases are full
+  of `Handle` / `String` / `Close` hanging off different types, and flat
+  names collide in symbol search. Exportedness (initial capital) is
+  captured as a modifier — it is Go's only visibility marker and the
+  architectural boundary that matters.
+- **`resolvers/go.ts`** — resolution by **module path**, not
+  containment, which is the opposite of every other resolver. The module
+  index is built from `ctx.systems` (`system-discovery` already parses
+  the `module` line), plus `replace` directives read per manifest —
+  those are how monorepos wire sibling modules, so skipping them loses
+  exactly the edges worth having. `go.work` needs no handling: its
+  `use` targets are themselves discovered modules.
+- **`callsites/go.ts`** — stdlib, stdlib 1.22 `"GET /path"`, chi, gin,
+  echo and gorilla. **Route prefixes are resolved**, both the
+  block-scoped kind (chi's `r.Route("/api", func(r){…})`) and the
+  variable-bound kind (`v1 := r.Group("/api/v1")`). Without that, a
+  grouped router — i.e. most production Go — reports the wrong URL,
+  which is worse than reporting none.
+- **`tree-sitter-go.wasm`** committed, plus
+  `resources/tree-sitter/README.md` recording provenance and sha256 for
+  all eight grammars. The `tree-sitter-wasms` build of Go does not load
+  under `web-tree-sitter@0.27`; the official `tree-sitter-go` package's
+  wasm does. An incompatible grammar is caught, logged and skipped at
+  load time, so it presents as a silently empty language —
+  `parsers/go.test.ts` loads the grammar directly under
+  `npm run test:unit` as the fast guard against exactly that.
+- **Fixture**: `services/billing` (chi routes behind a group, internal
+  packages, a `testdata/` trap) + `services/shared-go` reached through a
+  `replace` directive. Cross-system pairings went 4 → 6.
+
+**Two bugs found while testing, both pre-existing and both worse than
+the feature:**
+
+1. **The file-watcher's parseable-extension list didn't include `.go`** —
+   so Go edits would never have re-parsed and the graph would have gone
+   stale silently. This is the *second* time that hand-maintained list
+   went stale (the first was .py/.rs/.php/.java). It is now **derived
+   from the parser registry**, so it cannot drift again.
+2. **`startWatching` returned before chokidar's initial walk finished**,
+   and the scan endpoint didn't await it — leaving a silent window right
+   after a scan where edits were not seen at all. That is precisely when
+   an agent is most likely to be writing, since a scan is what precedes
+   handing it work. `startWatching` now resolves on `ready` (bounded by
+   a 10s guard) and the scan awaits it. This had been showing up as
+   "flaky" auto-refresh tests; it was not flake, it was a race, and a
+   bigger fixture widened it until it was deterministic.
+
+**Coverage**: `tests/e2e/go-support.test.ts` (8 tests: symbols, in-module
+resolution, `replace` sibling, stdlib/external non-resolution, testdata
+exclusion, prefix-resolved cross-system pairing, Go→Python outbound,
+watcher auto-refresh), `parsers/go.test.ts` (11), `callsites/go.test.ts`
+(prefix composition, all five frameworks, outbound).
+
 
 ### May 4, 2026 — Phase 15.D.2: inline code context (body-first @ authoring)
 
@@ -2254,7 +2321,7 @@ Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
 (Python/Rust/PHP/Java parsers + resolvers), graph scope filter, AST
 per-project scoping, /api/diff fix, EMFILE survival, animation perf.
 
-Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
+Remaining: ~~2.F (Go)~~ ✅ shipped Phase 20, 2.G (SQL ref-tracker — now specced as [Phase 21](PHASE-21-SQL-REF-TRACKER.md)), 3 (systems DB + MCP),
 4 (system-aware UI), 5 (cross-system links), 6 (external libs).
 
 ### Graph-quality blockers (Immediate Focus from previous tracker)

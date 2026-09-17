@@ -8,11 +8,13 @@ import type { CallsiteExtractor } from './base';
 import type { SupportedLanguage } from '../../../shared/types';
 import { typescriptCallsites, javascriptCallsites } from './typescript';
 import { pythonCallsites } from './python';
+import { goCallsites } from './go';
 
 export const CALLSITE_EXTRACTORS: ReadonlyArray<CallsiteExtractor> = [
   typescriptCallsites,
   javascriptCallsites,
   pythonCallsites,
+  goCallsites,
 ];
 
 const BY_LANGUAGE = (() => {

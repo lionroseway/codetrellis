@@ -5,6 +5,7 @@ import { pythonResolver } from './python';
 import { rustResolver } from './rust';
 import { phpResolver } from './php';
 import { javaResolver } from './java';
+import { goResolver } from './go';
 
 /**
  * Registry of every per-language resolver. To add a language: write
@@ -17,6 +18,7 @@ export const RESOLVER_PLUGINS: ReadonlyArray<ResolverPlugin> = [
   rustResolver,
   phpResolver,
   javaResolver,
+  goResolver,
 ];
 
 const RESOLVER_BY_LANGUAGE = (() => {

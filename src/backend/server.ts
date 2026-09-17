@@ -904,7 +904,12 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     }));
     setBaseline(captureSnapshot(fileData, depEdges), getGitHeadCommit(projectPath) || undefined);
 
-    startWatching(projectPath);
+    // Awaited: the scan response is the signal that CodeTrellis is
+    // live on this project, and a caller (or an agent that was just
+    // pointed at the repo) may start editing the moment it lands.
+    // Returning before the watcher is ready meant those first edits
+    // were silently dropped. `startWatching` bounds its own wait.
+    await startWatching(projectPath);
     startClaudeCodeWatcher(projectPath);
 
     // Repopulate plans from their on-disk YAML manifests when the DB has
