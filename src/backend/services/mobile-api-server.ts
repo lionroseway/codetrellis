@@ -242,6 +242,11 @@ function handleReconnect(req: http.IncomingMessage, res: http.ServerResponse): v
       ice: result.iceCandidates,
       fingerprint: result.fingerprint,
       pairingId: result.pairingId,
+      // Consumed with the answer, so a captured proof is worth one use.
+      answerNonce: result.answerNonce,
+      // Lets the phone verify it is talking to the desktop it paired with,
+      // without depending on a certificate that changes every restart.
+      offerMac: result.offerMac,
     });
   }).catch((err) => failBody(res, err));
 }
@@ -252,13 +257,14 @@ function handleReconnectAnswer(req: http.IncomingMessage, res: http.ServerRespon
     const answer = typeof data.answer === 'string' ? data.answer : '';
     const fingerprint = typeof data.fingerprint === 'string' ? data.fingerprint : '';
     const ice = Array.isArray(data.ice) ? (data.ice as string[]) : [];
+    const mac = typeof data.mac === 'string' ? data.mac : '';
 
     if (!pairingId || !answer) {
       sendJson(res, 400, { error: 'Missing pairingId or answer' });
       return;
     }
 
-    const success = await completeReconnection(pairingId, answer, ice, fingerprint);
+    const success = await completeReconnection(pairingId, answer, ice, fingerprint, mac);
     if (!success) {
       sendJson(res, 403, { error: 'Reconnection refused' });
       return;

@@ -21,6 +21,8 @@ import {
   resetChallenges,
   outstandingChallengeCount,
   deriveConfirmationCode,
+  computeReconnectAnswerMac,
+  computeReconnectOfferMac,
   CHALLENGE_TTL_MS,
   PeerAuthError,
 } from './peer-auth';
@@ -246,5 +248,70 @@ describe('the confirmation code', () => {
     for (let i = 0; i < 200; i++) {
       assert.match(deriveConfirmationCode(String(i), 'AA', 'BB'), /^\d{6}$/);
     }
+  });
+});
+
+describe('binding a certificate to the pairing, not to history', () => {
+  const PID = PAIRING_ID;
+
+  test('the same certificate signed with different secrets gives different proofs', () => {
+    const a = generateSharedSecret();
+    const b = generateSharedSecret();
+    assert.notEqual(
+      computeReconnectAnswerMac(a, PID, 'n', 'AA:BB'),
+      computeReconnectAnswerMac(b, PID, 'n', 'AA:BB'),
+    );
+  });
+
+  test('a proof is bound to the nonce, so it cannot be reused next time', () => {
+    const secret = generateSharedSecret();
+    assert.notEqual(
+      computeReconnectAnswerMac(secret, PID, 'nonce-1', 'AA:BB'),
+      computeReconnectAnswerMac(secret, PID, 'nonce-2', 'AA:BB'),
+    );
+  });
+
+  test('a proof is bound to the certificate it names', () => {
+    // The point of the whole mechanism: an observer of this plaintext
+    // exchange cannot swap in their own certificate, because the proof
+    // covers it.
+    const secret = generateSharedSecret();
+    assert.notEqual(
+      computeReconnectAnswerMac(secret, PID, 'n', 'AA:BB'),
+      computeReconnectAnswerMac(secret, PID, 'n', 'CC:DD'),
+    );
+  });
+
+  test('a proof is bound to the pairing, so one device cannot answer for another', () => {
+    const secret = generateSharedSecret();
+    assert.notEqual(
+      computeReconnectAnswerMac(secret, PID, 'n', 'AA:BB'),
+      computeReconnectAnswerMac(secret, OTHER_ID, 'n', 'AA:BB'),
+    );
+  });
+
+  test('offer and answer proofs are not interchangeable', () => {
+    // Domain separation. Without it, a captured offer proof would be a valid
+    // answer proof and the two directions would collapse into one.
+    const secret = generateSharedSecret();
+    assert.notEqual(
+      computeReconnectOfferMac(secret, PID, 'n', 'AA:BB'),
+      computeReconnectAnswerMac(secret, PID, 'n', 'AA:BB'),
+    );
+  });
+
+  test('fingerprint formatting does not change the proof', () => {
+    // The two codebases format fingerprints differently; the MAC must not
+    // notice, or every reconnect fails for a cosmetic reason.
+    const secret = generateSharedSecret();
+    assert.equal(
+      computeReconnectAnswerMac(secret, PID, 'n', 'AA:BB:CC:DD'),
+      computeReconnectAnswerMac(secret, PID, 'n', 'aabbccdd'),
+    );
+  });
+
+  test('a device with no secret cannot produce either proof', () => {
+    assert.throws(() => computeReconnectAnswerMac('', PID, 'n', 'AA'), PeerAuthError);
+    assert.throws(() => computeReconnectOfferMac('', PID, 'n', 'AA'), PeerAuthError);
   });
 });

@@ -33,6 +33,7 @@ import {
   touchPairedDevice,
   renamePairedDevice,
   linkInstanceId,
+  refreshDeviceFingerprint,
 } from './paired-device-service';
 import {
   initiatePairing,
@@ -58,7 +59,15 @@ import {
 } from './webrtc-service';
 import { getSettings } from './settings-service';
 import { extractSingleFingerprint, fingerprintsEqual } from '../../shared/lib/sdp-fingerprint';
-import { issueChallenge, verifyChallengeResponse, isUsableSecret } from './peer-auth';
+import {
+  issueChallenge,
+  verifyChallengeResponse,
+  isUsableSecret,
+  computeReconnectAnswerMac,
+  computeReconnectOfferMac,
+  macsEqual,
+} from './peer-auth';
+import { randomBytes } from 'node:crypto';
 // Phase 10 — multi-device services
 import { startStateSync, stopStateSync, isStateSyncRunning } from './state-sync-service';
 import { startRemoteTerminals, stopRemoteTerminals, isRemoteTerminalRunning } from './remote-terminal-service';
@@ -441,6 +450,8 @@ const reconnectOffers = new Map<string, {
   iceCandidates: string[];
   desktopFingerprint: string;
   createdAt: number;
+  /** Issued with the offer, consumed with the answer. Binds the two together. */
+  answerNonce: string;
 }>();
 
 // Clean up stale reconnect offers older than 60s, checked lazily
@@ -502,6 +513,8 @@ export async function startReconnection(
   iceCandidates: string[];
   fingerprint: string;
   pairingId: string;
+  answerNonce: string;
+  offerMac: string;
 } | null> {
   purgeStaleOffers();
 
@@ -539,14 +552,27 @@ export async function startReconnection(
   const { offer, iceCandidates, fingerprint: desktopFp } = await createOffer();
 
   // Store keyed by pairingId so completeReconnection() can find it
+  const answerNonce = randomBytes(16).toString('hex');
   reconnectOffers.set(devicePairingId, {
     offerSdp: offer,
     iceCandidates,
     desktopFingerprint: desktopFp,
     createdAt: Date.now(),
+    answerNonce,
   });
 
-  return { offer, iceCandidates, fingerprint: desktopFp, pairingId: devicePairingId };
+  return {
+    offer,
+    iceCandidates,
+    fingerprint: desktopFp,
+    pairingId: devicePairingId,
+    answerNonce,
+    // Prove this certificate is ours. The phone cannot recognise us by the
+    // fingerprint it stored at pairing — werift mints a fresh one on every
+    // process start, so restarting the desktop would otherwise make every
+    // paired device refuse it.
+    offerMac: computeReconnectOfferMac(paired.sharedSecret, devicePairingId, proof.nonce, desktopFp),
+  };
 }
 
 /**
@@ -558,6 +584,7 @@ export async function completeReconnection(
   answerSdp: string,
   answerIceCandidates: string[],
   mobileFingerprint: string,
+  answerMac = '',
 ): Promise<boolean> {
   const stored = reconnectOffers.get(pairingId);
   if (!stored) {
@@ -570,24 +597,30 @@ export async function completeReconnection(
   const paired = findByPairingId(pairingId);
   if (!paired) return false;
 
-  // ── IDENTITY CHECK (Phase 19, finding 2) ──────────────────────────────
+  // ── IDENTITY (Phase 19, finding 2) ────────────────────────────────────
   //
-  // There was NO comparison here at all. `mobileFingerprint` arrived in the
-  // request body and was passed straight through as the peer's identity, so
-  // any caller who knew a pairingId could claim to be that device. The
-  // reviewer connected with a different certificate, asserted the stored
-  // fingerprint, and watched all four channels open.
+  // There was NO check here at all. `mobileFingerprint` arrived in the request
+  // body and was passed straight through as the peer's identity, so any caller
+  // who knew a pairingId could claim to be that device. The reviewer connected
+  // with a different certificate, asserted the stored fingerprint, and watched
+  // all four channels open.
   //
-  // The body value is now IGNORED entirely — a self-asserted identity is
-  // not evidence. The fingerprint is taken from the answer SDP, which is
-  // parsed structurally so it commits to exactly one value (a regex returned
-  // whichever came first, which is what made the smuggling work).
+  // WHAT THE IDENTITY IS, AND WHAT IT IS NOT
   //
-  // Why that is sound as an identity: werift verifies the DTLS handshake
-  // against the fingerprint in the SDP it parses. So if the SDP declares
-  // exactly one fingerprint AND the handshake completes, the peer
-  // demonstrably holds that certificate. The structural parse is what makes
-  // "exactly one" true; without it the SDP could say two things at once.
+  // NOT the fingerprint stored at pairing. `react-native-webrtc` mints a new
+  // DTLS certificate for every `RTCPeerConnection`, so that value differs on
+  // every reconnect — `PairedDevice.fingerprint` says as much, "ephemeral,
+  // changes on app restart", and in practice it is per-connection. Comparing
+  // against it refuses the real phone every time, which is what it did the
+  // first time this ran on a device rather than against werift (which reuses
+  // one certificate per process and so hid the bug completely).
+  //
+  // The durable identity is the SHARED SECRET, already proved by the challenge
+  // that got this offer issued. On top of that, the phone signs the
+  // certificate it is about to use, so an observer of this plaintext exchange
+  // still cannot substitute an answer of their own: they cannot produce the
+  // MAC. The certificate is read from the SDP structurally, never from the
+  // body, so the SDP commits to exactly one value.
   let assertedFingerprint: string;
   try {
     assertedFingerprint = extractSingleFingerprint(answerSdp);
@@ -598,23 +631,31 @@ export async function completeReconnection(
     return false;
   }
 
-  if (!fingerprintsEqual(assertedFingerprint, paired.fingerprint)) {
+  if (mobileFingerprint && !fingerprintsEqual(mobileFingerprint, assertedFingerprint)) {
+    // A client disagreeing with itself. No honest one produces this.
+    console.warn('[PeerManager] Reconnect refused — claimed fingerprint disagrees with the certificate presented');
+    return false;
+  }
+
+  if (!isUsableSecret(paired.sharedSecret)) {
+    console.warn(`[PeerManager] Reconnect refused — "${paired.alias}" has no pairing secret`);
+    return false;
+  }
+
+  const expectedMac = computeReconnectAnswerMac(
+    paired.sharedSecret, pairingId, stored.answerNonce, assertedFingerprint,
+  );
+  if (!macsEqual(expectedMac, answerMac)) {
     console.warn(
-      `[PeerManager] Reconnect REFUSED — certificate does not match the paired device ` +
-        `"${paired.alias}" (expected ${paired.fingerprint.slice(0, 17)}…, got ${assertedFingerprint.slice(0, 17)}…)`,
+      `[PeerManager] Reconnect REFUSED — the answer for "${paired.alias}" is not signed by the paired device`,
     );
     return false;
   }
 
-  if (mobileFingerprint && !fingerprintsEqual(mobileFingerprint, assertedFingerprint)) {
-    // Not trusted as identity, but a mismatch between what the caller CLAIMS
-    // and what its certificate says is worth refusing and logging: no honest
-    // client produces it.
-    console.warn(
-      `[PeerManager] Reconnect refused — claimed fingerprint disagrees with the certificate presented`,
-    );
-    return false;
-  }
+  // The certificate is authenticated for THIS session. Remember it so mDNS
+  // can still associate an advertisement with this device; nothing
+  // authenticates against the stored value.
+  refreshDeviceFingerprint(pairingId, assertedFingerprint);
 
   try {
     await connectWithAnswer(

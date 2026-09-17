@@ -28,7 +28,12 @@ import { RTCPeerConnection, RTCSessionDescription } from 'werift';
 import { prepareFixture, startBackend, createClient } from '../harness';
 // The MOBILE mirrors, deliberately: this test plays the phone, so it should
 // compute what the phone computes.
-import { computeAnswerMac, computeChallengeMac, deriveConfirmationCode } from '../../mobile/lib/peer-auth';
+import {
+  computeAnswerMac,
+  computeChallengeMac,
+  computeReconnectAnswerMac,
+  deriveConfirmationCode,
+} from '../../mobile/lib/peer-auth';
 import { extractSingleFingerprint } from '../../mobile/lib/sdp-fingerprint';
 import { reconstructOfferSdp, ensureColonFingerprint } from '../../mobile/lib/sdp-minimal';
 
@@ -121,8 +126,19 @@ test.describe('Gate 4 — pair for real, then reconnect', () => {
     try {
       // The LAN listener has to be on for reconnect later.
       await client.raw('PUT', '/api/settings', { device: { exposeMobileApi: true } });
-      const settings = await client.raw('GET', '/api/settings').then((r) => r.json());
-      const mobilePort: number = settings.device.mobileApiPort;
+
+      // Read the port the listener ACTUALLY bound, not the one configured.
+      // `startMobileApiServer` auto-increments when 19480 is taken, so on a
+      // machine already running CodeTrellis the configured value points at
+      // somebody else's process — and this test then drives THAT, which is
+      // how it first failed: every request went to a dev server whose paired
+      // devices are different, and the refusals looked like a code bug.
+      let mobilePort = 0;
+      await expect.poll(async () => {
+        const status = await client.raw('GET', '/api/peers/status').then((r) => r.json());
+        mobilePort = status.mobileApiPort ?? 0;
+        return status.mobileApi === true && mobilePort > 0;
+      }, { timeout: 15_000, message: 'the mobile API never came up' }).toBe(true);
 
       // ── 1. Desktop opens the pairing window ────────────────────────
       const { qrPayload } = await client.raw('POST', '/api/pairing/initiate').then((r) => r.json());
@@ -324,24 +340,42 @@ test.describe('Gate 4 — pair for real, then reconnect', () => {
       expect(offer2.offer).toContain('v=0');
 
       const honestAnswer = phone.localDescription!.sdp;
-      const submitAnswer = (answer: string, fingerprint: string) =>
+      const submitAnswer = (answer: string, fingerprint: string, mac?: string) =>
         fetch(`${lan}/api/mobile/reconnect/answer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pairingId: paired.pairingId, answer, ice: [], fingerprint }),
+          body: JSON.stringify({
+            pairingId: paired.pairingId,
+            answer,
+            ice: [],
+            fingerprint,
+            mac: mac ?? computeReconnectAnswerMac(
+              paired.sharedSecret, paired.pairingId, offer2.answerNonce, fingerprint,
+            ),
+          }),
         });
 
-      // (i) a single, different certificate — refused by the comparison
+      // (i) an UNSIGNED answer — the shape an observer of this plaintext
+      //     exchange could inject. The certificate is irrelevant; what they
+      //     cannot produce is the proof.
       const foreignSdp = honestAnswer.replace(
         /a=fingerprint:sha-256 \S+/g,
         `a=fingerprint:sha-256 ${OTHER_FP}`,
       );
       expect(
-        (await submitAnswer(foreignSdp, OTHER_FP)).status,
-        'a certificate that is not the paired one must be refused',
+        (await submitAnswer(foreignSdp, OTHER_FP, '')).status,
+        'an answer with no proof must be refused',
       ).toBe(403);
 
-      // (ii) TWO fingerprints, the paired one first — the smuggling shape.
+      // (ii) SIGNED WITH THE WRONG SECRET.
+      expect(
+        (await submitAnswer(foreignSdp, OTHER_FP, computeReconnectAnswerMac(
+          'b'.repeat(64), paired.pairingId, offer2.answerNonce, OTHER_FP,
+        ))).status,
+        'a proof signed with the wrong secret must be refused',
+      ).toBe(403);
+
+      // (iii) TWO fingerprints — the smuggling shape.
       //      Refused by the parser, before any comparison happens.
       const smuggled = foreignSdp.replace(
         /^(t=0 0\r?\n)/m,
@@ -356,8 +390,8 @@ test.describe('Gate 4 — pair for real, then reconnect', () => {
         'a smuggled fingerprint must be refused',
       ).toBe(403);
 
-      // (iii) claiming the paired fingerprint in the BODY while the SDP says
-      //       otherwise — the body field used to be taken at face value.
+      // (iv) claiming one fingerprint in the BODY while the SDP says another —
+      //      the body field used to be taken at face value.
       expect(
         (await submitAnswer(foreignSdp, paired.phoneFingerprint)).status,
         'the body field must not override the SDP',

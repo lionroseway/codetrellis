@@ -257,6 +257,21 @@ test.describe('the minimal SDP the QR carries', () => {
     expect(() => mobileMinimal.extractSdpParams(mixedPorts, [])).toThrow(/ports/);
   });
 
+  test('the reconnect proofs agree in both directions', () => {
+    // Neither side can recognise the other by a stored fingerprint —
+    // react-native-webrtc mints a certificate per connection and werift one
+    // per process — so these MACs are what authenticate a reconnect. A
+    // divergence would lock every phone out of every desktop.
+    const secret = 'c'.repeat(64);
+    expect(mobileAuth.computeReconnectAnswerMac(secret, 'pid', 'n', FP_A))
+      .toBe(desktopAuth.computeReconnectAnswerMac(secret, 'pid', 'n', FP_A));
+    expect(mobileAuth.computeReconnectOfferMac(secret, 'pid', 'n', FP_A))
+      .toBe(desktopAuth.computeReconnectOfferMac(secret, 'pid', 'n', FP_A));
+    // And formatting differences between the codebases must not matter.
+    expect(mobileAuth.computeReconnectOfferMac(secret, 'pid', 'n', FP_A.toLowerCase().replace(/:/g, '')))
+      .toBe(desktopAuth.computeReconnectOfferMac(secret, 'pid', 'n', FP_A));
+  });
+
   test('the answer MAC agrees, so the code never has to be sent', () => {
     expect(mobileAuth.computeAnswerMac('640428', 'nonce-1', FP_A))
       .toBe(desktopAuth.computeAnswerMac('640428', 'nonce-1', FP_A));

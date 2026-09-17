@@ -95,21 +95,18 @@ async function exposeMobileApi(h: { client: ReturnType<typeof createClient> }): 
   });
   expect(res.ok, 'enabling the mobile API should succeed').toBe(true);
 
-  const after = (await h.client.raw('GET', '/api/settings').then((r) => r.json())) as {
-    device: { exposeMobileApi: boolean; mobileApiPort: number };
-  };
-  expect(after.device.exposeMobileApi).toBe(true);
-
-  // The listener starts asynchronously off the settings change; give it a beat.
-  const port = after.device.mobileApiPort;
-  for (let i = 0; i < 40; i++) {
-    try {
-      const probe = await fetch(`http://127.0.0.1:${port}/api/mobile/status`);
-      if (probe.ok) return port;
-    } catch { /* not up yet */ }
+  // Read the port the listener ACTUALLY bound, not the one configured.
+  // `startMobileApiServer` auto-increments when 19480 is taken, so on a
+  // machine already running CodeTrellis the configured value points at
+  // somebody else's process — and this helper would then hand every test a
+  // URL for a completely different backend.
+  for (let i = 0; i < 100; i++) {
+    const status = (await h.client.raw('GET', '/api/peers/status').then((r) => r.json())) as
+      { mobileApi: boolean; mobileApiPort: number };
+    if (status.mobileApi && status.mobileApiPort > 0) return status.mobileApiPort;
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error(`mobile API never came up on ${port}`);
+  throw new Error('mobile API never came up');
 }
 
 test.describe('1.2 — reconnect requires proof, not a known identifier', () => {

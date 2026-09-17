@@ -48,6 +48,8 @@ import { extractSingleFingerprint, fingerprintsEqual } from './sdp-fingerprint';
 import {
   computeAnswerMac,
   computeChallengeMac,
+  computeReconnectAnswerMac,
+  computeReconnectOfferMac,
   deriveConfirmationCode,
   isUsableSecret,
 } from './peer-auth';
@@ -176,11 +178,24 @@ export class WebRTCManager {
     // POST, not GET: the code used to travel as `?c=123456`, and a query
     // string is the worst place to keep a short-lived secret — access logs,
     // proxy records, browser history, `Referer`.
-    const res = await fetch(`${baseUrl}/offer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ c: code }),
-    });
+    //
+    // The fetch is wrapped because an unreachable host throws a native
+    // exception whose message is "UnexpectedException: Could not connect to
+    // the server. (at ExpoModulesCore/Promise.swift:56)" — which is what the
+    // user was shown when a pairing window had simply expired.
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/offer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ c: code }),
+      });
+    } catch {
+      throw new Error(
+        `Couldn't reach your desktop at ${host}:${port}. The pairing window may have expired — ` +
+        'start pairing again on the desktop, and check you are on the same Wi-Fi or VPN.',
+      );
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: 'Request failed' }));
       throw new Error(
@@ -619,24 +634,34 @@ export class WebRTCManager {
     const offerData = await offerRes.json();
     console.log(`[WebRTC] Got reconnect offer — pairingId=${offerData.pairingId?.slice(0, 8) ?? 'none'}`);
 
-    // ── PIN THE DESKTOP (Phase 19, finding 2, reverse direction) ──────────
+    // ── AUTHENTICATE THE DESKTOP (Phase 19, finding 2, reverse direction) ──
     //
-    // The desktop checks our certificate against the paired record. Nothing
-    // checked THEIRS: whatever answered on the address we dialled got to
-    // present an offer, and we completed the handshake with it. Anyone able
-    // to occupy that address — a stale DHCP lease, a hostile access point, a
-    // VPN exit — became our desktop.
+    // The desktop checks us. Nothing checked THEM: whatever answered on the
+    // address we dialled got to present an offer, and we completed the
+    // handshake with it. Anyone able to occupy that address — a stale DHCP
+    // lease, a hostile access point, a VPN exit — became our desktop.
     //
-    // Read structurally, not with a regex, for the same reason the desktop
-    // does: a first-match read lets a peer prepend the fingerprint we are
-    // looking for while handshaking with a different certificate.
+    // NOT by comparing against the fingerprint we stored at pairing. werift
+    // mints a fresh certificate on every process start, so that comparison
+    // refuses the real desktop the first time the user restarts it. Instead
+    // the desktop signs the certificate it is about to use with the shared
+    // secret, over the challenge nonce we were just issued — so a captured
+    // offer cannot be replayed at us either.
+    //
+    // The fingerprint is read structurally, not with a regex: a first-match
+    // read lets a peer prepend the value being checked while handshaking with
+    // a different certificate.
     let offeredFingerprint: string;
     try {
       offeredFingerprint = extractSingleFingerprint(String(offerData.offer ?? ''));
     } catch (err) {
       throw new Error(`offer SDP unusable: ${(err as Error).message}`);
     }
-    if (!fingerprintsEqual(offeredFingerprint, fingerprint)) {
+
+    const expectedOfferMac = computeReconnectOfferMac(
+      sharedSecret, pairingId, challenge.nonce, offeredFingerprint,
+    );
+    if (String(offerData.offerMac ?? '') !== expectedOfferMac) {
       throw new Error(
         'the machine answering on this address is not the desktop this device was paired with',
       );
@@ -707,6 +732,12 @@ export class WebRTCManager {
       fingerprint: actualFingerprint,
       answer: finalSdp,
       ice: iceCandidates,
+      // Sign the certificate we are about to use. The desktop cannot compare
+      // it against the one stored at pairing — react-native-webrtc mints a new
+      // certificate per connection — so this proof is what binds it to us.
+      mac: computeReconnectAnswerMac(
+        sharedSecret, pairingId, String(offerData.answerNonce ?? ''), actualFingerprint,
+      ),
     }, 10000);
 
     if (!answerRes.ok) {
