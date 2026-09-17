@@ -13,8 +13,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { PairedDevice } from '../../shared/types';
+import type { PairedDevice, PeerCapabilityName } from '../../shared/types';
 import { getSettingsDir } from './persistence';
+import { ALL_CAPABILITIES, DEFAULT_GRANTS } from './peer-capabilities';
+import { recordPeerAudit } from './peer-audit-service';
 
 // --- File path ---------------------------------------------------------------
 
@@ -138,6 +140,56 @@ export function renamePairedDevice(fingerprint: string, alias: string): boolean 
  * Associate an mDNS instance ID with a paired device (when a discovered
  * peer's fingerprint matches a stored paired device).
  */
+/**
+ * Set what a device is allowed to ask this desktop to do.
+ *
+ * Phase 19, finding 15. Granting `terminal` is granting command execution and
+ * the ability to read command output, so it is a decision the user makes per
+ * device, explicitly, after pairing — never something that rides along with
+ * pairing itself.
+ *
+ * Every change is written to the audit trail. A capability that was granted
+ * for an afternoon and revoked leaves no trace in the device record, and "was
+ * this phone ever allowed a shell?" is exactly the question asked later.
+ *
+ * Unknown capability names are dropped rather than stored: a typo that
+ * persisted would look like a grant in the settings UI and deny at runtime,
+ * which is the worst of both.
+ */
+export function setDeviceCapabilities(
+  fingerprint: string,
+  capabilities: string[],
+): PeerCapabilityName[] | null {
+  const device = ensureLoaded().find((d) => d.fingerprint === fingerprint);
+  if (!device) return null;
+
+  const valid = [...new Set(capabilities)].filter(
+    (c): c is PeerCapabilityName => (ALL_CAPABILITIES as readonly string[]).includes(c),
+  );
+
+  const before = device.capabilities ?? [...DEFAULT_GRANTS];
+  const added = valid.filter((c) => !before.includes(c));
+  const removed = before.filter((c) => !valid.includes(c));
+
+  device.capabilities = valid;
+  persist();
+
+  if (added.length || removed.length) {
+    recordPeerAudit({
+      kind: 'capability-change',
+      fingerprint,
+      alias: device.alias,
+      method: 'settings.deviceCapabilities',
+      detail: [
+        added.length ? `granted ${added.join(', ')}` : '',
+        removed.length ? `revoked ${removed.join(', ')}` : '',
+      ].filter(Boolean).join('; '),
+    });
+  }
+
+  return valid;
+}
+
 export function linkInstanceId(fingerprint: string, instanceId: string): void {
   const device = ensureLoaded().find((d) => d.fingerprint === fingerprint);
   if (device) {

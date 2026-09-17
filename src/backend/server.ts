@@ -98,6 +98,8 @@ import {
 } from './services/update-service';
 import { BUILD_INFO } from '../shared/build-info';
 import * as peerService from './services/peer-connection-service';
+import { setDeviceCapabilities } from './services/paired-device-service';
+import { listPeerAudit } from './services/peer-audit-service';
 
 const app = express();
 app.use(express.json());
@@ -3352,15 +3354,18 @@ app.post('/api/pairing/initiate', async (_req, res) => {
   }
 });
 
-// Poll: check pairing progress. Returns current state + confirm code
-// when the phone's answer has been received.
+// Poll: check pairing progress.
+//
+// Reports only WHETHER the phone has answered, never the confirmation code
+// itself (Phase 19, finding 1.2). The renderer already discarded the code it
+// was sent — the user has to read it off the phone and type it — so sending
+// it served no purpose and put the value the comparison depends on onto a
+// second surface.
 app.get('/api/pairing/status', (_req, res) => {
   try {
-    const active = peerService.isPairingActive();
-    const confirmCode = peerService.getPairingConfirmCode();
     res.json({
-      active,
-      confirmCode, // null until phone answers
+      active: peerService.isPairingActive(),
+      codeReady: peerService.getPairingConfirmCode() !== null,
     });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -3384,7 +3389,10 @@ app.post('/api/pairing/confirm', (req, res) => {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.json({ success: true, device: result.device });
+    // Redacted like every other device response (Phase 19, finding 15): the
+    // record `completePairing` returns carries the freshly-minted reconnect
+    // secret, and the renderer has no use for it.
+    res.json({ success: true, device: peerService.getDevice(result.device!.fingerprint) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -3412,10 +3420,42 @@ app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
 app.patch('/api/peers/devices/:fingerprint', (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
-    const { alias } = req.body as { alias?: string };
-    if (!alias) { res.status(400).json({ error: 'alias required' }); return; }
-    const renamed = peerService.renameDevice(req.params.fingerprint, alias);
-    res.json({ renamed });
+    const { alias, capabilities } = req.body as { alias?: string; capabilities?: string[] };
+
+    if (!alias && !Array.isArray(capabilities)) {
+      res.status(400).json({ error: 'alias or capabilities required' });
+      return;
+    }
+
+    const out: { renamed?: boolean; capabilities?: string[] } = {};
+    if (alias) out.renamed = peerService.renameDevice(req.params.fingerprint, alias);
+
+    // Phase 19, finding 15 — granting `terminal` grants command execution and
+    // the ability to read command output off this machine. It is a per-device
+    // decision the user makes here, deliberately, after pairing.
+    if (Array.isArray(capabilities)) {
+      const applied = setDeviceCapabilities(req.params.fingerprint, capabilities);
+      if (applied === null) { res.status(404).json({ error: 'device not found' }); return; }
+      out.capabilities = applied;
+    }
+
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
+ * What paired devices actually did (Phase 19, finding 15).
+ *
+ * Refusals, terminal access, and every change to what a device is allowed to
+ * do. Never the terminal output itself — see `peer-audit-service`.
+ */
+app.get('/api/peers/audit', (req, res) => {
+  try {
+    const fingerprint = typeof req.query.fingerprint === 'string' ? req.query.fingerprint : undefined;
+    const limit = Number(req.query.limit) || undefined;
+    res.json({ entries: listPeerAudit({ fingerprint, limit }) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

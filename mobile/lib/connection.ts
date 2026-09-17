@@ -14,7 +14,7 @@
 import { router } from 'expo-router';
 import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
-import { webrtc } from './webrtc';
+import { webrtc, isRepairRequired } from './webrtc';
 import { recordConnect, mergeCandidateAddresses } from './storage';
 import { useWorkspaceStore } from './store';
 import { handleRpcResponse, cancelAllPendingRpc, rpc } from './rpc';
@@ -268,16 +268,22 @@ class ConnectionManager {
     // Actually initiate the WebRTC reconnection.
     // The desktop's mobile API server is on a dedicated port (default 19480),
     // separate from the desktop UI server.
-    // Auth: pairingId (preferred) or fingerprint (fallback for pre-upgrade clients).
-    // Address: try every known candidate (live mDNS hit, stored LAN + Tailscale)
-    // so a pairing made on the LAN also connects over a VPN without re-pairing.
+    //
+    // Auth: a challenge-response over the secret agreed at pairing. The
+    // fingerprint is no longer an alternative credential — it is what we PIN
+    // the desktop's offer against, so whatever answers on this address has to
+    // be the machine we paired with (Phase 19, findings 1.2 and 2).
+    //
+    // Address: try every known candidate (live mDNS hit, stored LAN +
+    // Tailscale) so a pairing made on the LAN also connects over a VPN.
     const candidates = this.resolveCandidates(target);
     if (candidates.length > 0) {
       await webrtc.reconnectToDesktop(
         candidates,
         target.pairingId,
         target.mobileApiPort,
-        target.fingerprint, // fallback for silent pairingId upgrade
+        target.fingerprint,
+        target.sharedSecret,
       );
     } else {
       console.warn('[Connection] No reachable address for desktop — cannot reconnect');
@@ -541,6 +547,7 @@ class ConnectionManager {
           target.pairingId,
           target.mobileApiPort,
           target.fingerprint,
+          target.sharedSecret,
         );
         // Success path: the 'connected' state handler resets counters, restarts
         // the heartbeat, and cancels any pending reconnect.
@@ -548,6 +555,14 @@ class ConnectionManager {
       } catch (err) {
         console.log(`[Connection] Reconnect attempt ${this.reconnectAttempts} failed: ${err instanceof Error ? err.message : String(err)}`);
         this.reconnecting = false;
+        if (isRepairRequired(err)) {
+          // Retrying cannot fix this — the desktop has nothing to check us
+          // against. Stop, and let the user see a terminal failure rather than
+          // an app that looks like it is still trying.
+          this.gaveUp = true;
+          this.emitStateChange('failed', target.fingerprint);
+          return;
+        }
         this.scheduleReconnect(); // try again with longer backoff
       }
     }, delay);

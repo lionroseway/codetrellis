@@ -21,7 +21,60 @@ import {
   Zap,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
-import type { AppSettings, PowerStatus, PowerTriggers } from '@shared/types';
+import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
+
+// --- Per-device access (Phase 19, finding 15) -------------------------------
+
+interface PairedDeviceRow {
+  fingerprint: string;
+  alias: string;
+  deviceType: string;
+  pairedAt: string;
+  lastConnected: string | null;
+  /** Absent on records written before capabilities existed — treated as the default. */
+  capabilities?: PeerCapabilityName[];
+  /** Whether a usable reconnect secret exists. The secret itself never leaves the backend. */
+  hasSecret?: boolean;
+}
+
+interface PeerAuditRow {
+  at: string;
+  kind: string;
+  method: string;
+  detail?: string;
+}
+
+/**
+ * What a newly-paired device gets. Mirrors `DEFAULT_GRANTS` in
+ * `services/peer-capabilities.ts` — deliberately without `terminal` or
+ * `settings`.
+ */
+const DEFAULT_DEVICE_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
+
+const DEVICE_CAPABILITIES: Array<{
+  name: PeerCapabilityName;
+  label: string;
+  hint: string;
+  /** Rendered in amber: granting it has consequences beyond reading data. */
+  sensitive?: boolean;
+}> = [
+  { name: 'read', label: 'View plans and graph', hint: 'Plans, items, docs, channels, the dependency graph.' },
+  { name: 'write', label: 'Edit plans and docs', hint: 'Create, update and delete plans, items, docs and comments.' },
+  { name: 'project', label: 'Open and close projects', hint: 'Switch which project this desktop is working on.' },
+  { name: 'files', label: 'Read file contents', hint: 'Open source files and browse folders on this machine.' },
+  {
+    name: 'terminal',
+    label: 'Run commands and read terminal output',
+    hint: 'Create terminals, type into them, and read scrollback and live output. This is command execution on this machine.',
+    sensitive: true,
+  },
+  {
+    name: 'settings',
+    label: 'Change desktop settings',
+    hint: 'Includes exposing this machine on the network — a device with this can widen its own reach.',
+    sensitive: true,
+  },
+];
 
 /**
  * Settings panel — Phase 13 §D.
@@ -619,10 +672,10 @@ function DevicesSection({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [deviceAlias, setDeviceAlias] = useState('');
-  const [pairedDevices, setPairedDevices] = useState<Array<{
-    fingerprint: string; alias: string; deviceType: string;
-    pairedAt: string; lastConnected: string | null;
-  }>>([]);
+  const [pairedDevices, setPairedDevices] = useState<PairedDeviceRow[]>([]);
+  /** Which device's access panel is expanded, if any. */
+  const [openAccess, setOpenAccess] = useState<string | null>(null);
+  const [auditEntries, setAuditEntries] = useState<PeerAuditRow[]>([]);
 
   // Fetch paired devices on mount and after pairing changes
   useEffect(() => {
@@ -631,6 +684,61 @@ function DevicesSection({
       .then(data => setPairedDevices(Array.isArray(data) ? data : (data.devices ?? data)))
       .catch(() => {});
   }, [pairingState]);
+
+  /**
+   * Change what one device is allowed to ask this desktop to do
+   * (Phase 19, finding 15).
+   *
+   * Applied optimistically and then reconciled with what the backend actually
+   * stored — it drops names it does not recognise, and a UI showing a grant
+   * the backend rejected is worse than one that flickers.
+   */
+  const setCapability = useCallback(async (
+    device: PairedDeviceRow,
+    capability: PeerCapabilityName,
+    enabled: boolean,
+  ) => {
+    const current = device.capabilities ?? DEFAULT_DEVICE_CAPABILITIES;
+    const next = enabled
+      ? [...new Set([...current, capability])]
+      : current.filter(c => c !== capability);
+
+    setPairedDevices(prev => prev.map(d =>
+      d.fingerprint === device.fingerprint ? { ...d, capabilities: next } : d,
+    ));
+
+    try {
+      const res = await fetch(`/api/peers/devices/${encodeURIComponent(device.fingerprint)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capabilities: next }),
+      });
+      const body = await res.json();
+      if (Array.isArray(body.capabilities)) {
+        setPairedDevices(prev => prev.map(d =>
+          d.fingerprint === device.fingerprint ? { ...d, capabilities: body.capabilities } : d,
+        ));
+      }
+    } catch {
+      // Put it back rather than showing a grant that was never stored.
+      setPairedDevices(prev => prev.map(d =>
+        d.fingerprint === device.fingerprint ? { ...d, capabilities: current } : d,
+      ));
+    }
+  }, []);
+
+  const toggleAccessPanel = useCallback((fingerprint: string) => {
+    setOpenAccess(prev => {
+      const next = prev === fingerprint ? null : fingerprint;
+      if (next) {
+        fetch(`/api/peers/audit?fingerprint=${encodeURIComponent(next)}&limit=25`)
+          .then(r => r.ok ? r.json() : { entries: [] })
+          .then(data => setAuditEntries(data.entries ?? []))
+          .catch(() => setAuditEntries([]));
+      }
+      return next;
+    });
+  }, []);
 
   // Countdown timer (active during QR display and waiting)
   useEffect(() => {
@@ -656,21 +764,20 @@ function DevicesSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairingState]);
 
-  // Poll for phone connection — when the phone posts its answer,
-  // the server derives a confirmation code. We don't show it to the
-  // user — instead they must TYPE the code from their phone's screen.
-  // Poll from BOTH showing-qr and waiting-phone states.
+  // Poll for phone connection. The desktop reports only that the phone has
+  // answered — never the code — because the user has to read that off the
+  // phone's screen and type it here. A code that appeared on both screens
+  // would be confirming nothing.
   useEffect(() => {
     if (pairingState === 'showing-qr' || pairingState === 'waiting-phone') {
       pollRef.current = setInterval(async () => {
         try {
           const res = await fetch('/api/pairing/status');
           if (!res.ok) return;
-          const { active, confirmCode: code } = await res.json();
-          if (code) {
-            // Phone connected — transition to code entry
-            // (don't store the code client-side; verification is server-side)
-            setConfirmCode(''); // Clear for user input
+          const { active, codeReady } = await res.json();
+          if (codeReady) {
+            // Phone connected — transition to code entry.
+            setConfirmCode(''); // Empty: the user types what their phone shows.
             setPairingError(null);
             setPairingState('confirming');
           } else if (!active) {
@@ -1061,8 +1168,8 @@ function DevicesSection({
           <Field label="Paired devices">
             <div className="space-y-2">
               {pairedDevices.map(d => (
+                <div key={d.fingerprint}>
                 <div
-                  key={d.fingerprint}
                   className="flex items-center justify-between bg-white/[0.02] border border-white/[0.06] rounded-md px-3 py-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -1075,12 +1182,75 @@ function DevicesSection({
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleUnpair(d.fingerprint)}
-                    className="text-[10px] text-red-400/70 hover:text-red-400 shrink-0 ml-2 transition-colors"
-                  >
-                    Unpair
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <button
+                      onClick={() => toggleAccessPanel(d.fingerprint)}
+                      className="text-[10px] text-foreground-muted hover:text-foreground transition-colors"
+                    >
+                      {openAccess === d.fingerprint ? 'Hide access' : 'Access'}
+                    </button>
+                    <button
+                      onClick={() => handleUnpair(d.fingerprint)}
+                      className="text-[10px] text-red-400/70 hover:text-red-400 transition-colors"
+                    >
+                      Unpair
+                    </button>
+                  </div>
+                </div>
+
+                {/* --- Per-device access (Phase 19, finding 15) ---
+                    Pairing a phone lets it read your plans. It does NOT let it
+                    run commands or change the settings that control network
+                    exposure — those are granted here, per device, deliberately. */}
+                {openAccess === d.fingerprint && (
+                  <div className="bg-white/[0.01] border border-white/[0.06] border-t-0 rounded-b-md px-3 py-2 -mt-2">
+                    <p className="text-[10px] text-foreground-subtle mb-2">
+                      What &ldquo;{d.alias || 'this device'}&rdquo; may ask this machine to do.
+                    </p>
+                    <div className="space-y-1.5">
+                      {DEVICE_CAPABILITIES.map(cap => {
+                        const held = (d.capabilities ?? DEFAULT_DEVICE_CAPABILITIES).includes(cap.name);
+                        return (
+                          <label key={cap.name} className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={held}
+                              onChange={e => setCapability(d, cap.name, e.target.checked)}
+                              className="mt-0.5 accent-accent"
+                            />
+                            <span className="min-w-0">
+                              <span className={`text-[11px] ${cap.sensitive ? 'text-amber-300' : 'text-foreground'}`}>
+                                {cap.label}
+                              </span>
+                              <span className="block text-[10px] text-foreground-subtle">{cap.hint}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-white/[0.06]">
+                      <p className="text-[10px] text-foreground-muted mb-1">Recent access</p>
+                      {auditEntries.length === 0 ? (
+                        <p className="text-[10px] text-foreground-subtle">
+                          Nothing recorded. Refused calls, terminal access and permission
+                          changes are kept here — the terminal output itself never is.
+                        </p>
+                      ) : (
+                        <ul className="space-y-0.5 max-h-[120px] overflow-y-auto">
+                          {auditEntries.map((e, i) => (
+                            <li key={i} className="text-[10px] text-foreground-subtle font-mono truncate">
+                              <span className={e.kind === 'refused' ? 'text-red-400/80' : 'text-foreground-muted'}>
+                                {e.kind}
+                              </span>
+                              {' '}{e.method}{e.detail ? ` — ${e.detail}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
                 </div>
               ))}
             </div>

@@ -26,6 +26,9 @@ import {
   type PairingServerResult,
 } from './pairing-server';
 import { upsertPairedDevice } from './paired-device-service';
+import { sendToPeer, onConnectionStateChange } from './webrtc-service';
+import { DATA_CHANNELS } from '../../shared/types';
+import { DEFAULT_GRANTS } from './peer-capabilities';
 
 // --- Active pairing state ----------------------------------------------------
 
@@ -40,6 +43,13 @@ interface ActivePairing {
   answer: PairingAnswer | null;
   /** Confirmation code (set after answer received). */
   confirmCode: string | null;
+  /**
+   * Secret for authenticating later reconnects.
+   *
+   * Handed to the phone over the DTLS `control` channel at confirm time, not
+   * through the pairing server — see `peer-auth.ts` for why.
+   */
+  sharedSecret: string;
 }
 
 let activePairing: ActivePairing | null = null;
@@ -93,6 +103,7 @@ export async function initiatePairing(
     offerSdp,
     answer: null,
     confirmCode: null,
+    sharedSecret: server.sharedSecret,
   };
 
   // Wrap the answer promise to store the answer + derive confirm code
@@ -183,24 +194,101 @@ export function confirmPairing(
     return null;
   }
 
+  const now = new Date().toISOString();
   const device: PairedDevice = {
     fingerprint: activePairing.answer.fingerprint,
     pairingId: activePairing.server.pairingId,
     alias: deviceAlias,
     deviceType,
-    pairedAt: new Date().toISOString(),
+    pairedAt: now,
     lastConnected: null,
-    sharedSecret: '', // TODO: extract from DTLS handshake
+    // A REAL SECRET, not the `''` with a `// TODO` beside it that every record
+    // used to carry (Phase 19, finding 1.2). Reconnect now requires a proof
+    // computed with this; a `pairingId` on its own no longer gets in.
+    sharedSecret: activePairing.sharedSecret,
     instanceId: null,
+    // Pairing a phone does not hand it a shell or the settings that control
+    // network exposure — those are granted per device, afterwards (finding 17).
+    capabilities: [...DEFAULT_GRANTS],
+    confirmedAt: now,
   };
 
   upsertPairedDevice(device);
   console.log(`[Pairing] Confirmed — device "${deviceAlias}" (${device.fingerprint.slice(0, 12)}…)`);
 
+  // Hand the secret over the DTLS channel, never over the pairing server.
+  //
+  // This is the one moment it is transmitted, and it happens after the user
+  // has compared the two confirmation codes — so by now they have asserted
+  // that the connection carrying it reaches the device in their hand.
+  deliverPairingSecret(device);
+
   // Clean up
   activePairing = null;
 
   return device;
+}
+
+/**
+ * How long to keep trying to hand the secret to a phone that has confirmed
+ * but whose control channel has not opened yet.
+ */
+const SECRET_DELIVERY_WINDOW_MS = 60_000;
+
+/**
+ * Give the phone the secret it will need to reconnect.
+ *
+ * NOT A SINGLE ATTEMPT. Confirmation and channel-open are independent events:
+ * the user can type the code the instant it appears, while the DTLS handshake
+ * and SCTP negotiation are still finishing — and over a VPN that gap is
+ * seconds, not milliseconds. A one-shot send loses the race intermittently,
+ * and the failure is invisible until the phone tries to reconnect days later
+ * and is refused.
+ *
+ * `createChannel` re-emits `connected` every time a data channel opens, so
+ * that is the signal to retry on.
+ */
+function deliverPairingSecret(device: PairedDevice): void {
+  const payload = JSON.stringify({
+    type: 'pairing.secret',
+    pairingId: device.pairingId,
+    secret: device.sharedSecret,
+  });
+
+  if (sendToPeer(device.fingerprint, DATA_CHANNELS.CONTROL, payload)) {
+    console.log(`[Pairing] Delivered the reconnect secret to "${device.alias}"`);
+    return;
+  }
+
+  console.log(`[Pairing] Control channel not open yet — will hand "${device.alias}" its secret when it is`);
+
+  let settled = false;
+  const finish = (ok: boolean) => {
+    if (settled) return;
+    settled = true;
+    unsubscribe();
+    clearTimeout(timer);
+    if (ok) {
+      console.log(`[Pairing] Delivered the reconnect secret to "${device.alias}"`);
+    } else {
+      // The desktop's record is sound; the phone's is not. Say which, because
+      // "pair again" is the only fix and the user should hear it now.
+      console.warn(
+        `[Pairing] Never managed to deliver the reconnect secret to "${device.alias}" — ` +
+        'that device will have to pair again.',
+      );
+    }
+  };
+
+  const unsubscribe = onConnectionStateChange((fingerprint, state) => {
+    if (fingerprint !== device.fingerprint || state !== 'connected') return;
+    if (sendToPeer(device.fingerprint, DATA_CHANNELS.CONTROL, payload)) finish(true);
+  });
+
+  const timer = setTimeout(() => finish(false), SECRET_DELIVERY_WINDOW_MS);
+  if (typeof timer === 'object' && timer && 'unref' in timer) {
+    (timer as unknown as { unref: () => void }).unref();
+  }
 }
 
 /**

@@ -16,19 +16,51 @@
  *      from `hash(nonce + sorted_fingerprints)`.
  *   7. Server auto-closes after one successful exchange or 60 seconds.
  *
- * Only 2 endpoints. CORS enabled for any origin. No auth except the
- * pairing code. Server binds `0.0.0.0` so it's reachable from the LAN.
+ * Only 2 endpoints. The pairing code is the only credential, and the server
+ * binds `0.0.0.0` so it is reachable from the LAN — which is why the window is
+ * 60 seconds, wrong codes are counted, and bodies are capped (Phase 19,
+ * findings 19 and 1.2).
+ *
+ * WHAT THIS NO LONGER DOES
+ *
+ * It used to compute the confirmation code and send it to the phone, which
+ * displayed the number it was given. The user then compared the desktop's
+ * number against the desktop's number — a relay in the middle supplies both,
+ * so the comparison confirmed nothing. Each side derives it independently now;
+ * this server does not send it.
  */
 
 import http from 'node:http';
 import os from 'node:os';
-import { randomBytes, createHash, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { generateSharedSecret, deriveConfirmationCode } from './peer-auth';
+import { extractSingleFingerprint, fingerprintsEqual } from '../../shared/lib/sdp-fingerprint';
 
 // --- Constants ---------------------------------------------------------------
 
 const PAIRING_TIMEOUT_MS = 60_000;
 const CODE_LENGTH = 6;
 const NONCE_BYTES = 16;
+
+/**
+ * An answer SDP with inlined ICE runs to a few KB. 256 KB is generous and
+ * still bounds what an unauthenticated LAN caller can make the process buffer
+ * — the handler used to concatenate chunks with no limit at all.
+ */
+const MAX_BODY_BYTES = 256 * 1024;
+
+/** A client that has not finished its request by now is not pairing. */
+const SOCKET_TIMEOUT_MS = 15_000;
+
+/**
+ * Wrong pairing codes tolerated before the server closes.
+ *
+ * The code is six digits and the window is 60 seconds, so an unthrottled
+ * attacker on the LAN could cover a meaningful slice of the space. Five
+ * attempts makes guessing hopeless while leaving room for a genuine typo on
+ * the manual-entry path (finding 19).
+ */
+const MAX_CODE_ATTEMPTS = 5;
 
 // --- Types -------------------------------------------------------------------
 
@@ -55,6 +87,14 @@ export interface PairingServerResult {
   nonce: string;
   /** Stable pairing identity — survives app restarts. */
   pairingId: string;
+  /**
+   * Pairing secret for later reconnect authentication (hex).
+   *
+   * Generated here but NEVER served by this server: it goes to the phone over
+   * the DTLS-protected `control` channel once WebRTC is up. Anything this
+   * server sends is plaintext on the LAN. See `peer-auth.ts`.
+   */
+  sharedSecret: string;
   /** Promise that resolves when the phone posts a valid answer. */
   waitForAnswer: () => Promise<PairingAnswer>;
   /** Stop the server early (cancel). */
@@ -94,16 +134,57 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
   const code = generateCode();
   const nonce = randomBytes(NONCE_BYTES).toString('hex');
   const pairingId = randomUUID();
+  const sharedSecret = generateSharedSecret();
 
   return new Promise<PairingServerResult>((resolveStart, rejectStart) => {
     let answerResolve: ((answer: PairingAnswer) => void) | null = null;
     let answerReject: ((err: Error) => void) | null = null;
     let answered = false;
+    let codeAttempts = 0;
 
     const answerPromise = new Promise<PairingAnswer>((res, rej) => {
       answerResolve = res;
       answerReject = rej;
     });
+
+    /**
+     * Count a wrong pairing code, and close the window once there have been
+     * too many. Without this, the 60-second window is a free run at a
+     * six-digit space for anyone on the network (finding 19).
+     */
+    const noteBadCode = (): void => {
+      codeAttempts += 1;
+      if (codeAttempts >= MAX_CODE_ATTEMPTS) {
+        console.warn(`[PairingServer] ${codeAttempts} wrong pairing codes — closing the window`);
+        answerReject?.(new Error('Too many incorrect pairing codes'));
+        stopPairingServer();
+      }
+    };
+
+    /**
+     * Read a request body with a hard ceiling.
+     *
+     * The previous handler did `body += chunk` with no limit, on a server
+     * bound to every interface. `req.destroy()` rather than a 413 reply: a
+     * caller sending an oversized body is not going to read the response, and
+     * continuing to receive it is the thing being avoided.
+     */
+    const readBody = (req: http.IncomingMessage): Promise<string> =>
+      new Promise((resolve, reject) => {
+        let body = '';
+        let size = 0;
+        req.on('data', (chunk: Buffer | string) => {
+          size += Buffer.byteLength(chunk);
+          if (size > MAX_BODY_BYTES) {
+            reject(new Error('Request body too large'));
+            req.destroy();
+            return;
+          }
+          body += chunk;
+        });
+        req.on('end', () => resolve(body));
+        req.on('error', reject);
+      });
 
     const server = http.createServer((req, res) => {
       // CORS headers for all responses
@@ -124,6 +205,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
       if (req.method === 'GET' && url.pathname === '/offer') {
         const submittedCode = url.searchParams.get('c');
         if (submittedCode !== code) {
+          noteBadCode();
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid pairing code' }));
           return;
@@ -142,77 +224,105 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
 
       // POST /answer — phone sends its answer back
       if (req.method === 'POST' && url.pathname === '/answer') {
-        let body = '';
-        req.on('data', (chunk) => { body += chunk; });
-        req.on('end', () => {
+        readBody(req).then((body) => {
+          let data: Record<string, unknown>;
           try {
-            const data = JSON.parse(body);
-            // Validate pairing code
-            if (data.c !== code) {
-              res.writeHead(403, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Invalid pairing code' }));
-              return;
-            }
-            // Validate nonce
-            if (data.nonce !== nonce) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Nonce mismatch' }));
-              return;
-            }
-            // Validate required fields
-            if (!data.answer || !data.fingerprint) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Missing answer or fingerprint' }));
-              return;
-            }
-
-            if (answered) {
-              res.writeHead(409, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Already answered' }));
-              return;
-            }
-            answered = true;
-
-            // Derive the Bluetooth-style confirmation code that both
-            // sides will display. Uses sorted fingerprints so both
-            // sides get the same result regardless of who's the offerer.
-            const confirmCode = deriveConfirmationCode(
-              nonce,
-              opts.fingerprint,
-              data.fingerprint,
-            );
-
-            // Reply to the phone with the confirmation code + pairingId
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              accepted: true,
-              confirmCode,
-              pairingId,
-            }));
-
-            // Cancel the timeout — answer arrived, no longer waiting
-            if (activeTimeout) {
-              clearTimeout(activeTimeout);
-              activeTimeout = null;
-            }
-
-            // Resolve the answer promise
-            const answer: PairingAnswer = {
-              answerSdp: data.answer,
-              iceCandidates: data.ice ?? [],
-              fingerprint: data.fingerprint,
-              nonce: data.nonce,
-              pairingId,
-            };
-
-            answerResolve?.(answer);
-
-            // Auto-close the HTTP server after successful exchange
-            // (pairing state is preserved in pairing-service)
-            setTimeout(() => stopPairingServer(), 500);
+            data = JSON.parse(body);
           } catch {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            return;
+          }
+
+          // Validate pairing code
+          if (data.c !== code) {
+            noteBadCode();
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid pairing code' }));
+            return;
+          }
+          // Validate nonce
+          if (data.nonce !== nonce) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Nonce mismatch' }));
+            return;
+          }
+          // Validate required fields
+          if (typeof data.answer !== 'string' || typeof data.fingerprint !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing answer or fingerprint' }));
+            return;
+          }
+
+          if (answered) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Already answered' }));
+            return;
+          }
+
+          // THE IDENTITY COMES FROM THE SDP, NOT THE `fingerprint` FIELD
+          // (Phase 19, finding 2).
+          //
+          // The body field was taken at face value and became the paired
+          // device's stored identity — so whatever a caller claimed here is
+          // what every later reconnect would be checked against. It is now
+          // read structurally from the answer SDP, which the DTLS handshake
+          // is verified against, and the claimed value is only used to catch
+          // a client disagreeing with itself.
+          let sdpFingerprint: string;
+          try {
+            sdpFingerprint = extractSingleFingerprint(data.answer);
+          } catch (err) {
+            console.warn(`[PairingServer] Rejected answer — unusable SDP: ${(err as Error).message}`);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Answer SDP does not commit to a single certificate' }));
+            return;
+          }
+
+          if (!fingerprintsEqual(sdpFingerprint, data.fingerprint)) {
+            console.warn('[PairingServer] Rejected answer — claimed fingerprint disagrees with the SDP');
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Claimed fingerprint does not match the answer SDP' }));
+            return;
+          }
+
+          answered = true;
+
+          // NO CONFIRMATION CODE IN THIS RESPONSE (Phase 19, finding 1.2).
+          //
+          // It used to be computed here and sent back, and the phone showed
+          // whatever arrived. The user was then asked to compare the desktop's
+          // number with the desktop's number, which a relay in the middle
+          // would happily supply to both screens. The phone derives its own
+          // now, from the fingerprint in the offer SDP it actually received
+          // and its own certificate — so a relay makes the numbers differ.
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ accepted: true, pairingId }));
+
+          // Cancel the timeout — answer arrived, no longer waiting
+          if (activeTimeout) {
+            clearTimeout(activeTimeout);
+            activeTimeout = null;
+          }
+
+          const answer: PairingAnswer = {
+            answerSdp: data.answer,
+            iceCandidates: Array.isArray(data.ice) ? (data.ice as string[]) : [],
+            fingerprint: sdpFingerprint,
+            nonce: String(data.nonce),
+            pairingId,
+          };
+
+          answerResolve?.(answer);
+
+          // Auto-close the HTTP server after successful exchange
+          // (pairing state is preserved in pairing-service)
+          setTimeout(() => stopPairingServer(), 500);
+        }).catch((err: Error) => {
+          console.warn(`[PairingServer] Rejected answer body: ${err.message}`);
+          if (!res.headersSent) {
+            res.writeHead(413, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request body too large' }));
           }
         });
         return;
@@ -222,6 +332,12 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
     });
+
+    // A LAN-reachable server must not hold sockets open for a client that
+    // opens a connection and then says nothing.
+    server.setTimeout(SOCKET_TIMEOUT_MS, (socket) => socket.destroy());
+    server.headersTimeout = SOCKET_TIMEOUT_MS;
+    server.requestTimeout = SOCKET_TIMEOUT_MS;
 
     server.on('error', (err) => {
       console.error('[PairingServer] Error:', err);
@@ -259,6 +375,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
         port,
         nonce,
         pairingId,
+        sharedSecret,
         waitForAnswer: () => answerPromise,
         stop: () => stopPairingServer(),
       });
@@ -293,26 +410,12 @@ export function isPairingServerActive(): boolean {
 // --- Confirmation code -------------------------------------------------------
 
 /**
- * Derive a 6-digit Bluetooth-style confirmation code from the nonce
- * and both fingerprints. Both sides compute the same result because
- * fingerprints are sorted before hashing.
- *
- * This is NOT embedded in the QR — it's displayed AFTER WebRTC
- * connects, so the user can visually confirm both devices are
- * talking to each other (like Bluetooth Secure Simple Pairing).
+ * Re-exported so existing importers keep working. The implementation moved to
+ * `peer-auth.ts`, alongside the mobile mirror it has to agree with — keeping
+ * it here, in a file about an HTTP server, is how the two drifted into the
+ * desktop computing the code and the phone merely displaying it.
  */
-export function deriveConfirmationCode(
-  nonce: string,
-  fingerprintA: string,
-  fingerprintB: string,
-): string {
-  const sorted = [fingerprintA, fingerprintB].sort();
-  const hash = createHash('sha256')
-    .update(`${nonce}:${sorted[0]}:${sorted[1]}`)
-    .digest('hex');
-  const num = parseInt(hash.slice(0, 8), 16) % 1_000_000;
-  return num.toString().padStart(CODE_LENGTH, '0');
-}
+export { deriveConfirmationCode };
 
 // --- Helpers -----------------------------------------------------------------
 

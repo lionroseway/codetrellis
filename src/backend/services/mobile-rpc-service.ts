@@ -26,6 +26,9 @@
  */
 
 import { DATA_CHANNELS } from '../../shared/types';
+import { assertPeerMayCall, DEFAULT_GRANTS, PeerAuthorizationError } from './peer-capabilities';
+import { recordPeerAudit, terminalAuditDetail } from './peer-audit-service';
+import { getPairedDevice } from './paired-device-service';
 import { readFileWithin, isWithin } from './confined-fs';
 import { listTrustedRoots } from './trusted-roots';
 import {
@@ -229,10 +232,64 @@ export function requestMobileScreenshot(timeoutMs = 20_000): Promise<MobileImage
 async function handleRpc(fingerprint: string, req: RpcRequest): Promise<void> {
   const startedAt = Date.now();
   try {
+    // ── AUTHORISE BEFORE DISPATCHING (Phase 19, finding 17) ───────────
+    //
+    // There was no authorisation step at all: the router matched a method
+    // name and executed it. A connected peer could create terminals, write
+    // to them, open and close projects, change settings and delete plans.
+    // "Connected" was the only check — and the connection was reachable on
+    // the LAN by default (A3) with an identity nobody verified (2).
+    //
+    // Deny-by-default: a method absent from the matrix is refused, so a new
+    // RPC method that nobody classified fails closed rather than shipping
+    // open.
+    const device = getPairedDevice(fingerprint);
+    const capability = assertPeerMayCall(req.method, device?.capabilities ?? DEFAULT_GRANTS, {
+      confirmed: Boolean(device?.confirmedAt),
+      alias: device?.alias,
+    });
+
+    // ── AUDIT TERMINAL ACCESS (Phase 19, finding 15) ──────────────────
+    //
+    // The matrix says what a device MAY do; it cannot say what it DID. That
+    // is the question asked after a phone is lost or a pairing was made on a
+    // network the user now doubts. Terminal inventory, scrollback and live
+    // output are the calls that carry command output off the machine, so
+    // those are the ones written down — not ordinary reads, which would bury
+    // them under polling traffic.
+    //
+    // The output itself is NOT recorded. An audit trail that duplicates the
+    // sensitive data is a second place to steal it from.
+    if (capability === 'terminal') {
+      recordPeerAudit({
+        kind: 'terminal-access',
+        fingerprint,
+        alias: device?.alias ?? 'unknown device',
+        method: req.method,
+        detail: terminalAuditDetail(req.params ?? {}),
+      });
+    }
+
     const result = await routeMethod(req.method, req.params ?? {}, fingerprint);
     sendResponse(fingerprint, { result, id: req.id, rpc: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof PeerAuthorizationError) {
+      // Logged distinctly from an ordinary failure: a refused call is a
+      // security event, and the peer should be identifiable in the log
+      // without having to correlate timestamps.
+      console.warn(
+        `[MobileRPC][Authz] REFUSED peer=${fingerprint.slice(0, 12)}… method=${req.method} — ${message}`,
+      );
+      const refusedDevice = getPairedDevice(fingerprint);
+      recordPeerAudit({
+        kind: 'refused',
+        fingerprint,
+        alias: refusedDevice?.alias ?? 'unknown device',
+        method: req.method,
+        detail: message,
+      });
+    }
     // Lifecycle-tagged structured RPC failure log (Plan 9.1 backend half).
     // Without this, mobile-side "request timed out" toasts have no
     // server-side counterpart in logs — a class of bug becomes nearly

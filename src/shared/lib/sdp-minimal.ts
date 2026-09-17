@@ -1,3 +1,4 @@
+import { extractSingleFingerprint } from './sdp-fingerprint';
 /**
  * Minimal SDP extraction / reconstruction for zero-port QR pairing.
  *
@@ -41,11 +42,15 @@ export function extractSdpParams(
 ): MinimalSdpParams {
   const iu = sdp.match(/a=ice-ufrag:(\S+)/)?.[1];
   const ip = sdp.match(/a=ice-pwd:(\S+)/)?.[1];
-  const fp = sdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/)?.[1];
+  // STRUCTURAL, not a regex (Phase 19, finding 2). A regex returns the
+  // FIRST match anywhere in the document, so a peer could prepend a victim's
+  // fingerprint as an extra session-level attribute and have this function
+  // report an identity it does not hold. extractSingleFingerprint refuses an
+  // SDP that commits to more than one value rather than picking a winner.
+  const fp = extractSingleFingerprint(sdp);
 
   if (!iu) throw new Error('SDP missing ice-ufrag');
   if (!ip) throw new Error('SDP missing ice-pwd');
-  if (!fp) throw new Error('SDP missing fingerprint');
 
   // Find the best host (or srflx) candidate
   let candidateAddr = '';

@@ -57,6 +57,8 @@ import {
   connectedPeerCount,
 } from './webrtc-service';
 import { getSettings } from './settings-service';
+import { extractSingleFingerprint, fingerprintsEqual } from '../../shared/lib/sdp-fingerprint';
+import { issueChallenge, verifyChallengeResponse, isUsableSecret } from './peer-auth';
 // Phase 10 — multi-device services
 import { startStateSync, stopStateSync, isStateSyncRunning } from './state-sync-service';
 import { startRemoteTerminals, stopRemoteTerminals, isRemoteTerminalRunning } from './remote-terminal-service';
@@ -290,17 +292,37 @@ export { isPairingActive } from './pairing-service';
 // --- Public API: Paired Devices ----------------------------------------------
 
 /**
- * Get all paired devices.
+ * Every paired device, WITHOUT its reconnect secret.
+ *
+ * Phase 19, finding 15. This feeds the settings UI and an MCP tool, and the
+ * secret is the one field that must never leave the backend — it is the whole
+ * proof a device presents to reconnect. It was harmless while every record
+ * held `''`; now that the field carries a real key, serving the record whole
+ * would hand any agent with MCP access a permanent pairing credential.
+ *
+ * Callers that genuinely need the secret use `listPairedDevices()` directly.
  */
-export function getDevices(): PairedDevice[] {
-  return listPairedDevices();
+export function getDevices(): PublicPairedDevice[] {
+  return listPairedDevices().map(redactSecret);
+}
+
+/** A paired device as it is safe to show. */
+export type PublicPairedDevice = Omit<PairedDevice, 'sharedSecret'> & {
+  /** Whether a usable reconnect secret exists — not the secret itself. */
+  hasSecret: boolean;
+};
+
+function redactSecret(device: PairedDevice): PublicPairedDevice {
+  const { sharedSecret, ...rest } = device;
+  return { ...rest, hasSecret: isUsableSecret(sharedSecret) };
 }
 
 /**
- * Get a specific paired device.
+ * One paired device, without its reconnect secret. See `getDevices`.
  */
-export function getDevice(fingerprint: string): PairedDevice | undefined {
-  return getPairedDevice(fingerprint);
+export function getDevice(fingerprint: string): PublicPairedDevice | undefined {
+  const device = getPairedDevice(fingerprint);
+  return device ? redactSecret(device) : undefined;
 }
 
 /**
@@ -439,25 +461,43 @@ function findByPairingId(pairingId: string): PairedDevice | undefined {
 }
 
 /**
- * Find a paired device by its ephemeral DTLS fingerprint.
- * Used as a fallback for pre-pairingId mobile clients during upgrade.
+ * Issue a reconnect challenge.
+ *
+ * Deliberately answers for ANY pairingId, known or not. Replying only to
+ * devices that exist would make this an enumeration oracle on an endpoint
+ * bound to the LAN; an unknown id gets a well-formed nonce it cannot answer.
  */
-function findByFingerprint(fingerprint: string): PairedDevice | undefined {
-  return listPairedDevices().find((d) => d.fingerprint === fingerprint);
+export function issueReconnectChallenge(pairingId: string): { nonce: string; expiresAt: number } {
+  return issueChallenge(pairingId);
+}
+
+/** A device's answer to a reconnect challenge. */
+export interface ReconnectProof {
+  nonce: string;
+  expiresAt: number;
+  mac: string;
 }
 
 /**
  * Create a reconnection offer for a previously paired mobile device.
  *
- * Auth priority:
- *   1. `pairingId` — stable UUID agreed during pairing (preferred).
- *   2. `fingerprint` — ephemeral DTLS fingerprint (fallback for
- *      pre-pairingId mobile clients; enables silent upgrade).
+ * AUTHENTICATION (Phase 19, finding 1.2)
  *
- * Returns the SDP offer, ICE candidates, desktop fingerprint, and
- * the device's pairingId (so the mobile can store it on upgrade).
+ * This used to accept a `pairingId` — or, failing that, a bare `fingerprint`
+ * — and hand out an offer. Both are values the phone transmits in the clear
+ * on every attempt, so knowing either was sufficient to be treated as the
+ * paired device. The fingerprint fallback was worse still: it existed to
+ * silently upgrade older clients, which meant the weaker path stayed open
+ * indefinitely for everyone.
+ *
+ * The caller must now answer a challenge with the secret agreed at pairing.
+ * The fallback is gone; a device paired before secrets existed has to pair
+ * again, which is the intended cost of the change.
  */
-export async function startReconnection(pairingId?: string, fingerprint?: string): Promise<{
+export async function startReconnection(
+  pairingId: string,
+  proof: ReconnectProof,
+): Promise<{
   offer: string;
   iceCandidates: string[];
   fingerprint: string;
@@ -465,20 +505,30 @@ export async function startReconnection(pairingId?: string, fingerprint?: string
 } | null> {
   purgeStaleOffers();
 
-  // Look up by stable pairingId first, then fall back to fingerprint
-  let paired: PairedDevice | undefined;
-  if (pairingId) {
-    paired = findByPairingId(pairingId);
-  }
-  if (!paired && fingerprint) {
-    paired = findByFingerprint(fingerprint);
-    if (paired) {
-      console.log(`[PeerManager] Fingerprint fallback matched "${paired.alias}" — silent pairingId upgrade`);
-    }
-  }
+  const paired = pairingId ? findByPairingId(pairingId) : undefined;
 
   if (!paired) {
-    console.warn(`[PeerManager] Reconnect rejected — no match for pairingId=${pairingId?.slice(0, 8) ?? 'none'} fp=${fingerprint?.slice(0, 12) ?? 'none'}`);
+    console.warn(`[PeerManager] Reconnect rejected — no device for pairingId=${pairingId?.slice(0, 8) ?? 'none'}`);
+    return null;
+  }
+
+  if (!isUsableSecret(paired.sharedSecret)) {
+    console.warn(
+      `[PeerManager] Reconnect rejected — "${paired.alias}" was paired before reconnect ` +
+      'authentication existed and has no secret. It must be paired again.',
+    );
+    return null;
+  }
+
+  const verdict = verifyChallengeResponse({
+    pairingId,
+    nonce: proof.nonce,
+    expiresAt: proof.expiresAt,
+    mac: proof.mac,
+    secret: paired.sharedSecret,
+  });
+  if (!verdict.ok) {
+    console.warn(`[PeerManager] Reconnect REFUSED for "${paired.alias}" — ${verdict.reason}`);
     return null;
   }
 
@@ -520,12 +570,58 @@ export async function completeReconnection(
   const paired = findByPairingId(pairingId);
   if (!paired) return false;
 
+  // ── IDENTITY CHECK (Phase 19, finding 2) ──────────────────────────────
+  //
+  // There was NO comparison here at all. `mobileFingerprint` arrived in the
+  // request body and was passed straight through as the peer's identity, so
+  // any caller who knew a pairingId could claim to be that device. The
+  // reviewer connected with a different certificate, asserted the stored
+  // fingerprint, and watched all four channels open.
+  //
+  // The body value is now IGNORED entirely — a self-asserted identity is
+  // not evidence. The fingerprint is taken from the answer SDP, which is
+  // parsed structurally so it commits to exactly one value (a regex returned
+  // whichever came first, which is what made the smuggling work).
+  //
+  // Why that is sound as an identity: werift verifies the DTLS handshake
+  // against the fingerprint in the SDP it parses. So if the SDP declares
+  // exactly one fingerprint AND the handshake completes, the peer
+  // demonstrably holds that certificate. The structural parse is what makes
+  // "exactly one" true; without it the SDP could say two things at once.
+  let assertedFingerprint: string;
+  try {
+    assertedFingerprint = extractSingleFingerprint(answerSdp);
+  } catch (err) {
+    console.warn(
+      `[PeerManager] Reconnect refused — unusable answer SDP for pairingId=${pairingId.slice(0, 8)}…: ${(err as Error).message}`,
+    );
+    return false;
+  }
+
+  if (!fingerprintsEqual(assertedFingerprint, paired.fingerprint)) {
+    console.warn(
+      `[PeerManager] Reconnect REFUSED — certificate does not match the paired device ` +
+        `"${paired.alias}" (expected ${paired.fingerprint.slice(0, 17)}…, got ${assertedFingerprint.slice(0, 17)}…)`,
+    );
+    return false;
+  }
+
+  if (mobileFingerprint && !fingerprintsEqual(mobileFingerprint, assertedFingerprint)) {
+    // Not trusted as identity, but a mismatch between what the caller CLAIMS
+    // and what its certificate says is worth refusing and logging: no honest
+    // client produces it.
+    console.warn(
+      `[PeerManager] Reconnect refused — claimed fingerprint disagrees with the certificate presented`,
+    );
+    return false;
+  }
+
   try {
     await connectWithAnswer(
       stored.offerSdp,
       answerSdp,
       answerIceCandidates,
-      mobileFingerprint,
+      assertedFingerprint,
       paired.alias,
       paired.deviceType,
     );

@@ -31,6 +31,7 @@ import { connection } from '../lib/connection';
 import { registerForPush, sendPushTokenToDesktop } from '../lib/push';
 import { startDiscovery, stopDiscovery, getDiscoveredDesktops, onDiscoveryChange, type DiscoveredDesktop } from '../lib/discovery';
 import type { PairedDesktop, ConnectionState } from '../lib/types';
+import { isUsableSecret } from '../lib/peer-auth';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -178,6 +179,9 @@ export default function HomeScreen() {
     if (devices.length !== 1) return;
     const only = devices[0];
     if (reachable[only.fingerprint] !== true) return;
+    // A pairing with no secret will be refused every time — auto-connecting it
+    // would just spin. The card tells the user to pair again.
+    if (!isUsableSecret(only.sharedSecret)) return;
     autoConnectedRef.current = true;
     void handleConnect(only, true);
   }, [devices, reachable, connectionState, skipAutoConnect, handleConnect]);
@@ -199,6 +203,24 @@ export default function HomeScreen() {
     connection.disconnect();
     setConnectionState('disconnected');
     setConnectingFingerprint(null);
+  };
+
+  /**
+   * Explain why an old pairing cannot connect, and offer the only fix.
+   *
+   * Reconnect used to need nothing but a `pairingId`, so records written
+   * before this release carry no secret. They will be refused every time.
+   */
+  const promptRepair = (device: PairedDesktop) => {
+    Alert.alert(
+      'Pair this desktop again',
+      `"${device.alias}" was paired before CodeTrellis started verifying reconnections. ` +
+      'Scan its QR code again from Settings \u2192 Devices to restore the connection.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Pair', onPress: () => router.push('/pair') },
+      ],
+    );
   };
 
   const handleUnpair = (device: PairedDesktop) => {
@@ -224,6 +246,11 @@ export default function HomeScreen() {
 
   const renderDevice = ({ item }: { item: PairedDesktop }) => {
     const isConnected = connectedFingerprint === item.fingerprint;
+    // Paired before reconnect authentication existed (Phase 19, finding 1.2).
+    // The desktop will refuse it every time, and no amount of retrying helps —
+    // so say so on the card rather than leaving the user with a Connect button
+    // that silently never works.
+    const needsRepair = !isUsableSecret(item.sharedSecret) && !isConnected;
     // Only the row being connected to shows "Connecting…" (not every row).
     const isConnecting = connectingFingerprint === item.fingerprint && !isConnected;
     // 3-state: Live (WebRTC connected) → Available (reachable, not connected)
@@ -239,7 +266,11 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={styles.deviceCard}
-        onPress={() => isConnected ? router.push('/(tabs)') : handleConnect(item)}
+        onPress={() => {
+          if (isConnected) return router.push('/(tabs)');
+          if (needsRepair) return promptRepair(item);
+          handleConnect(item);
+        }}
         onLongPress={() => handleUnpair(item)}
         activeOpacity={0.7}
       >
@@ -257,8 +288,10 @@ export default function HomeScreen() {
             <Text style={styles.deviceAlias} numberOfLines={1}>
               {item.alias}
             </Text>
-            <Text style={styles.deviceMeta}>
-              {isConnected
+            <Text style={[styles.deviceMeta, needsRepair && styles.deviceMetaWarn]}>
+              {needsRepair
+                ? 'Pair again to reconnect'
+                : isConnected
                 ? 'Connected now'
                 : isAvailable
                   ? 'Running — tap Connect'
@@ -311,11 +344,11 @@ export default function HomeScreen() {
             <>
               <TouchableOpacity
                 style={[styles.actionButtonPrimary, isConnecting && styles.buttonDisabled]}
-                onPress={() => handleConnect(item)}
+                onPress={() => (needsRepair ? promptRepair(item) : handleConnect(item))}
                 disabled={isConnecting}
               >
                 <Text style={styles.actionButtonPrimaryText}>
-                  {isConnecting ? 'Connecting…' : 'Connect'}
+                  {isConnecting ? 'Connecting…' : needsRepair ? 'Pair again' : 'Connect'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -523,6 +556,9 @@ const styles = StyleSheet.create({
     color: '#fafafa',
     fontSize: 16,
     fontWeight: '600',
+  },
+  deviceMetaWarn: {
+    color: '#fbbf24',
   },
   deviceMeta: {
     color: '#71717a',

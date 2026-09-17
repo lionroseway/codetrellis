@@ -35,7 +35,7 @@
     "build:info": "node scripts/generate-build-info.js",
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",
     "test": "playwright test",
-    "test:unit": "node --import tsx --test src/backend/services/*.test.ts",
+    "test:unit": "node --import tsx --test 'src/**/*.test.ts'",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:harness": "playwright test --config=playwright.harness.config.ts",
@@ -123,7 +123,7 @@
   "build": {
     "appId": "dev.codetrellis.app",
     "productName": "CodeTrellis",
-    "copyright": "Copyright © 2026 CodeTrellis Contributors",
+    "copyright": "Copyright \u00a9 2026 CodeTrellis Contributors",
     "directories": {
       "output": "out/make",
       "buildResources": "resources"
