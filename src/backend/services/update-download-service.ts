@@ -27,6 +27,20 @@
  * the first — release downloads redirect, so checking once would check the
  * wrong thing.
  *
+ * WHERE THE DIGEST COMES FROM NOW
+ *
+ * A SIGNED MANIFEST, not the update API. `SHA256SUMS` is published with every
+ * release alongside a detached Ed25519 signature, and the public key ships in
+ * the app. That takes GitHub out of the trust chain: a digest served by the
+ * same place as the file proves the bytes arrived intact, not that they are
+ * ours. Anyone who took over the releases repo would publish a bad binary and
+ * a matching digest together.
+ *
+ * A release without a valid signed manifest is NOT downloaded. Falling back to
+ * the API's digest would mean the guarantee quietly depends on which path the
+ * update check happened to take, which is the kind of difference nobody
+ * notices until it matters.
+ *
  * WHAT IT WILL NOT DO
  *
  * Install. On macOS a DMG can only be revealed in Finder; the user drags it.
@@ -43,6 +57,7 @@ import path from 'node:path';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { getSettingsDir } from './persistence';
 import type { UpdateDownloadInfo } from './update-service';
+import { verifyManifestSignature, parseManifest, digestFor } from './release-signature';
 
 export type DownloadPhase =
   | 'idle'
@@ -236,21 +251,17 @@ export function startUpdateDownload(
   cancelled = false;
   inFlight = (async (): Promise<UpdateDownloadState> => {
     try {
-      // NO DIGEST, NO DOWNLOAD.
-      //
-      // Falling back to "fetch it anyway, unverified" would be worse than not
-      // fetching: the user would reasonably assume an in-app download had been
-      // checked. Without one we leave them on the browser path, where at least
-      // nothing implies verification.
-      if (!info.sha256 || !/^[0-9a-f]{64}$/i.test(info.sha256)) {
-        throw new Error(
-          'This release publishes no checksum, so it cannot be verified. ' +
-          'Use the download link instead.',
-        );
-      }
-
       const url = assertAllowedUrl(info.url);
       const filename = safeFilename(info.filename || path.basename(url.pathname));
+
+      // THE DIGEST COMES FROM THE SIGNED MANIFEST, NOT THE UPDATE API.
+      //
+      // Fetched from the same release, next to the installer, and signed with
+      // a key that lives on one machine and never in CI. If this fails the
+      // download does not happen at all — the user stays on the browser path,
+      // where nothing implies verification, rather than getting an in-app
+      // download that only looks checked.
+      const expectedSha256 = await fetchSignedDigest(url, filename);
 
       const dir = downloadDir();
       fs.mkdirSync(dir, { recursive: true });
@@ -274,7 +285,7 @@ export function startUpdateDownload(
 
       state = { ...state, phase: 'verifying' };
 
-      if (!digestsEqual(actual, info.sha256)) {
+      if (!digestsEqual(actual, expectedSha256)) {
         try { fs.rmSync(partial, { force: true }); } catch { /* */ }
         throw new Error(
           'Downloaded file does not match the published checksum. It has been deleted.',
@@ -301,6 +312,89 @@ export function startUpdateDownload(
   })();
 
   return inFlight;
+}
+
+/**
+ * Fetch `SHA256SUMS` + `SHA256SUMS.sig` from the same release and return the
+ * digest they publish for `filename`.
+ *
+ * Throws unless the signature checks out AND the manifest names this file. A
+ * manifest that verifies but omits the artifact is not a pass: it would mean
+ * signing something, then downloading something else.
+ */
+async function fetchSignedDigest(assetUrl: URL, filename: string): Promise<string> {
+  // Release assets share a directory, so the manifest sits next to the
+  // installer. Derived from the ALREADY-VALIDATED asset URL rather than
+  // composed from anything the update API said.
+  const base = assetUrl.toString().replace(/\/[^/]*$/, '');
+  const manifestUrl = assertAllowedUrl(`${base}/SHA256SUMS`);
+  const signatureUrl = assertAllowedUrl(`${base}/SHA256SUMS.sig`);
+
+  let manifest: Buffer;
+  let signature: string;
+  try {
+    [manifest, signature] = await Promise.all([
+      fetchSmall(manifestUrl),
+      fetchSmall(signatureUrl).then((b) => b.toString('utf-8')),
+    ]);
+  } catch {
+    throw new Error(
+      'This release does not publish a signed checksum manifest, so the download ' +
+      'cannot be verified. Use the download link instead.',
+    );
+  }
+
+  if (!verifyManifestSignature(manifest, signature)) {
+    throw new Error(
+      'The release checksum manifest is not signed by CodeTrellis. Refusing to download.',
+    );
+  }
+
+  const digest = digestFor(parseManifest(manifest.toString('utf-8')), filename);
+  if (!digest) {
+    throw new Error(`The signed manifest does not list ${filename}. Refusing to download.`);
+  }
+  return digest;
+}
+
+/** Fetch a small text asset (manifest / signature). Capped hard — these are bytes, not files. */
+function fetchSmall(url: URL, hops = 0): Promise<Buffer> {
+  const MAX_SMALL = 64 * 1024;
+  return new Promise((resolve, reject) => {
+    if (hops > MAX_REDIRECTS) return reject(new Error('Too many redirects'));
+    const req = https.get(
+      url,
+      { timeout: REQUEST_TIMEOUT_MS, headers: { 'user-agent': 'CodeTrellis' } },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        if (status >= 300 && status < 400 && res.headers.location) {
+          res.resume();
+          let next: URL;
+          try {
+            next = assertAllowedUrl(new URL(res.headers.location, url).toString());
+          } catch (err) {
+            return reject(err);
+          }
+          return fetchSmall(next, hops + 1).then(resolve, reject);
+        }
+        if (status !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${status}`));
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on('data', (c: Buffer) => {
+          size += c.length;
+          if (size > MAX_SMALL) { res.destroy(); return reject(new Error('Manifest too large')); }
+          chunks.push(c);
+        });
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', reject);
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('Timed out')));
+    req.on('error', reject);
+  });
 }
 
 export function cancelUpdateDownload(): UpdateDownloadState {

@@ -101,21 +101,10 @@ describe('digest comparison', () => {
   });
 });
 
-describe('a release with no checksum is not downloaded at all', () => {
-  test('refuses rather than fetching unverified bytes', async () => {
-    // Fetching anyway would be WORSE than not fetching: an in-app download
-    // implies it was checked. Without a digest the user stays on the browser
-    // path, where nothing implies that.
-    for (const sha256 of [undefined, '', 'not-a-digest', 'abc123']) {
-      const result = await svc.startUpdateDownload('1.0.0', {
-        url: GOOD, filename: 'x.dmg', sha256,
-      } as never);
-      assert.equal(result.phase, 'error', `sha256=${String(sha256)}`);
-      assert.match(result.error ?? '', /checksum/i);
-    }
-  });
-
-  test('and nothing is written to disk', async () => {
+describe('nothing is written when the release cannot be verified', () => {
+  test('nothing lands on disk', async () => {
+    // GOOD points at a release that does not exist, so the manifest fetch
+    // fails — which must abort before any installer bytes are written.
     await svc.startUpdateDownload('1.0.0', { url: GOOD, filename: 'x.dmg' } as never);
     const dir = path.join(tmp, 'updates');
     const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];

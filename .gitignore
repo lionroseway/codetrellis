@@ -66,3 +66,8 @@ tests/_tmp/
 # ci.yml enforces this — a tracked file under docs/private/ fails the build.
 # ---------------------------------------------------------------------------
 docs/private/
+
+# Release-manifest signing key (private half). The public half is committed at
+# src/backend/services/release-public-key.ts on purpose — see
+# scripts/generate-signing-key.js.
+scripts/release-signing-key.pem
