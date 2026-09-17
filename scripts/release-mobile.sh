@@ -63,6 +63,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Resolve --path against the directory the USER ran this from, before the cd
+# into mobile/ below. Without this, a perfectly good `--path mobile/x.ipa`
+# becomes `mobile/mobile/x.ipa` and the submit fails claiming the file does not
+# exist — which reads like a build problem rather than a path one.
+if [[ -n "$ARTIFACT_PATH" ]]; then
+  if [[ "$ARTIFACT_PATH" != /* ]]; then
+    ARTIFACT_PATH="$(cd "$(dirname "$ARTIFACT_PATH")" && pwd)/$(basename "$ARTIFACT_PATH")"
+  fi
+  if [[ ! -f "$ARTIFACT_PATH" ]]; then
+    printf '\033[1;31m[release-mobile]\033[0m %s\n' "No such artifact: ${ARTIFACT_PATH}" >&2
+    exit 1
+  fi
+fi
+
 log() { printf '\033[1;36m[release-mobile]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[release-mobile]\033[0m %s\n' "$*" >&2; }
 
