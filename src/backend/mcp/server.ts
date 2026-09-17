@@ -80,6 +80,7 @@ import { register as registerChannelTools } from './tools/channel-tools';
 import { register as registerSystemDocsTools } from './tools/system-docs-tools';
 import { register as registerGovernanceTools } from './tools/governance-tools';
 import { register as registerBudgetTools } from './tools/budget-tools';
+import { register as registerIntakeTools } from './tools/intake-tools';
 import { registerContributionTools } from './tools/contribution-tools';
 import { registerAudioTools } from './tools/audio-tools';
 import { registerPeerTools } from './tools/peer-tools';
@@ -363,6 +364,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerSystemDocsTools(mcpServer, deps);
   registerGovernanceTools(mcpServer, deps);
   registerBudgetTools(mcpServer, deps);
+  registerIntakeTools(mcpServer, deps);
   registerContributionTools(mcpServer);
   registerAudioTools(mcpServer);
   registerPeerTools(mcpServer);

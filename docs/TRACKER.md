@@ -74,6 +74,52 @@ shared via the bridge abstraction.
 
 ## 2. Recently Shipped
 
+### Sep 17, 2026 — Phase 24: SDLC intake
+
+Design: [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) (reconciled).
+Backend, MCP tools and the `from-ticket` template shipped; the UI chip is
+the remaining piece.
+
+**The principle, restated because it is the whole design**: we do not
+build integrations. A developer's agent already holds both the tracker's
+MCP server and ours, so CodeTrellis exposes the *contract* and the agent
+does the integration. That keeps the Jira credential off this process
+(Phase 19's whole point), works unchanged for Linear / ADO / GitHub
+Projects / a wiki, and keeps the "no data leaves your machine" promise on
+the README true. **There is no HTTP client anywhere in this phase** —
+which is also why its tests mock nothing.
+
+**Shipped:**
+
+- **`create_plan_from_external`** — an epic tree the agent already
+  fetched becomes plan → items → sub-items, each carrying its ticket key.
+  Depth capped at 3; past the cap a child becomes a *sibling* rather than
+  being dropped, because losing a story to someone's filing habits is
+  worse than showing it one level up.
+- **`plan_external_refs`** — an epic maps to a plan, not an item. A
+  separate table rather than a nullable column, because
+  `external_refs.item_uid` is NOT NULL and the reconciler only adds
+  columns. Storing a plan uid in a column named `item_uid` would have
+  been the dishonest shortcut.
+- **`external_key`** on both levels: write-back matches on the key and
+  re-import is idempotent on it.
+- **`get_external_sync_state` / `mark_external_synced`** — the write-back
+  contract. **Reading never advances the watermark**; only marking does.
+  An agent that read the list and then failed to write would otherwise
+  lose those transitions silently.
+- **Acceptance criteria** land as a markdown checklist in the item body,
+  in the requester's words. Items have no acceptance field, and the body
+  renderer already shows checkboxes — so this uses what exists rather
+  than adding a field.
+- **`from-ticket` plan template** — the manual path, and the shape the
+  agent path produces: an intake page recording what the ticket says AND
+  what the graph says it touches, plus a Clarify phase before Deliver.
+
+**Coverage**: 5 harness tests + 12 unit tests, including that ticket text
+is stored inert — it arrives via an agent from a system many people can
+write to, so it is data, never instruction.
+
+
 ### Sep 17, 2026 — Phase 23: time and cost budgets
 
 Design: [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) (reconciled).

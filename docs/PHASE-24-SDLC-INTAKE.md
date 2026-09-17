@@ -1,7 +1,9 @@
 # Phase 24 — SDLC intake (Jira, Linear, issues)
 
 > Drafted: 2026-09-17
-> Status: designed, not built
+> Status: **built** 2026-09-17. Backend, MCP tools and the `from-ticket`
+> template shipped; the UI ("3 tickets need updating" chip) is the
+> remaining piece.
 
 ---
 
@@ -50,9 +52,18 @@ write-back state.
 
 ### A. External refs on plans, not just items
 
-Today a ref hangs off an item. An epic maps to a *plan*. Add plan-level
-refs with the same service and inference, so a plan knows its ticket.
-Small change, unlocks everything below.
+Today a ref hangs off an item. An epic maps to a *plan*.
+
+Shipped as a separate `plan_external_refs` table rather than a nullable
+column, because `external_refs.item_uid` is `NOT NULL` and the schema
+reconciler only adds columns — it cannot relax a constraint. A separate
+table is honest about that, where storing a plan uid in a column named
+`item_uid` would not be.
+
+Both levels also gained an `external_key` column. The URL already
+encodes the key, but write-back matches on it and re-import needs it to
+be idempotent, and re-deriving it from a URL at every comparison would
+make it a derived value in two places.
 
 ### B. `create_plan_from_external` — hierarchy in one call
 
@@ -73,21 +84,34 @@ Extend to accept a structured tree the agent has already fetched:
 ```
 
 Produces plan → items → sub-items, each carrying its ticket key as an
-external ref. The agent does the fetching; we do the structuring. Depth
-should be capped (3 is plenty: epic → story → task) with anything
-deeper flattened, because ticket hierarchies can be pathological.
+external ref. The agent does the fetching; we do the structuring.
+
+Depth is capped at 3 (epic → story → task). Past the cap a child becomes
+a **sibling** of the node that would have held it — same depth, same
+parent — rather than being dropped: losing a story because someone filed
+it under an extra layer would be worse than showing it one level up.
+
+One implementation note: the MCP input schema declares the tree to a
+fixed depth rather than using a recursive `z.lazy()`, because JSON Schema
+generation from a recursive Zod type is not reliably supported across MCP
+clients. Since the service caps depth anyway, nothing is lost by saying
+so explicitly.
 
 ### C. Acceptance criteria become checkable
 
 A ticket's acceptance criteria arrive as prose and currently die as
-prose. Land them in the item's acceptance field so
-`plan-changes-service` can report against them, and so the verification
-panel is answering *the BA's* question rather than a restatement of the
-developer's.
+prose.
 
-Where criteria name files or symbols, run them through the same
-extraction `import_external` already does, so `@`-chips and targets
-appear automatically.
+Items have no dedicated acceptance field — the model puts acceptance in a
+spec doc or a phase — so rather than add one, criteria land as a
+markdown checklist appended to the item body, where the body renderer
+already shows checkboxes. The requester's wording is preserved verbatim:
+this is the list they will check against, and a helpfully-reworded
+criterion is one nobody agreed to.
+
+Still to do: run criteria that name files or symbols through the same
+extraction `import_external` does, so `@`-chips and targets appear
+automatically.
 
 ### D. `get_external_sync_state` — the write-back contract
 
@@ -139,7 +163,18 @@ Neither is possible without the hierarchy and the targets together.
 
 - **No polling.** We never reach out to Jira. If nothing asks, nothing
   syncs. Stale is the expected state and the UI should say when it last
-  synced rather than implying live.
+  synced rather than implying live. There is no HTTP client anywhere in
+  this phase, which is also why its tests mock nothing — there is
+  nothing to mock.
+
+- **Reading never advances the watermark.** `get_external_sync_state` is
+  pure; only `mark_external_synced` moves it. An agent that read the list
+  and then failed to write would otherwise lose those transitions
+  silently, and nothing would ever tell anyone.
+
+- **The suggested transition is advisory.** Every tracker names its own
+  workflow states. The agent can see the real transition names; we
+  cannot, so we suggest and it decides.
 - **No inbound webhooks.** Same reasoning as Phase 19's "remote surfaces
   are off by default" — an inbound endpoint is new attack surface for a
   convenience nobody asked for.

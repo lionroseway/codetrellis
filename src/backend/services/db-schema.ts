@@ -435,12 +435,48 @@ export const SCHEMA_EXTERNAL_REFS = `
     url TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '',
     metadata TEXT DEFAULT NULL,
+    external_key TEXT,
     author TEXT NOT NULL DEFAULT 'human',
     author_type TEXT NOT NULL DEFAULT 'human',
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_external_refs_item ON external_refs(item_uid);
   CREATE INDEX IF NOT EXISTS idx_external_refs_kind ON external_refs(kind);
+
+  -- Phase 24 — the ticket key (PROJ-412, ENG-88) as its own column.
+  -- The URL already encodes it, but write-back needs to match on the key
+  -- and re-import needs it to be idempotent, and re-parsing a URL at
+  -- every comparison would make the key a derived value in two places.
+  -- Nullable, so the reconciler adds it with no migration.
+
+  -- Plan-level external refs. An epic maps to a PLAN, not to an item,
+  -- and external_refs.item_uid is NOT NULL — a constraint the reconciler
+  -- cannot relax. A separate table is honest about that rather than
+  -- storing a plan uid in a column named item_uid.
+  CREATE TABLE IF NOT EXISTS plan_external_refs (
+    uid          TEXT PRIMARY KEY,
+    plan_uid     TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'url',
+    url          TEXT NOT NULL,
+    title        TEXT NOT NULL DEFAULT '',
+    external_key TEXT,
+    metadata     TEXT DEFAULT NULL,
+    author       TEXT NOT NULL DEFAULT 'human',
+    author_type  TEXT NOT NULL DEFAULT 'human',
+    created_at   INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_plan_external_refs_plan ON plan_external_refs(plan_uid);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_external_refs_key ON plan_external_refs(plan_uid, external_key);
+
+  -- The write-back watermark. CodeTrellis never talks to Jira: the
+  -- agent holds that credential and does the writing. All we owe it is
+  -- "what changed since you last synced", which is this one timestamp.
+  CREATE TABLE IF NOT EXISTS external_sync_state (
+    plan_uid       TEXT PRIMARY KEY,
+    last_synced_at INTEGER NOT NULL,
+    synced_by      TEXT,
+    note           TEXT
+  );
 `;
 
 /**

@@ -122,6 +122,12 @@ export function createExternalRef(input: {
   title?: string;
   kind?: ExternalRefKind;
   metadata?: Record<string, unknown> | null;
+  /**
+   * Phase 24 — the ticket key (`PROJ-412`). Stored as its own column so
+   * write-back can match on it and re-import can be idempotent, rather
+   * than re-deriving it from the URL at every comparison.
+   */
+  externalKey?: string | null;
   author?: string;
   authorType?: string;
 }): ExternalRef {
@@ -132,8 +138,8 @@ export function createExternalRef(input: {
   const now = Date.now();
 
   d.run(
-    `INSERT INTO external_refs (uid, item_uid, kind, url, title, metadata, author, author_type, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO external_refs (uid, item_uid, kind, url, title, metadata, external_key, author, author_type, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       uid,
       input.itemUid,
@@ -141,6 +147,7 @@ export function createExternalRef(input: {
       input.url,
       title,
       input.metadata ? JSON.stringify(input.metadata) : null,
+      input.externalKey ?? null,
       input.author ?? 'human',
       input.authorType ?? 'human',
       now,
