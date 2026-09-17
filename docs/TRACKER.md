@@ -52,7 +52,7 @@ shared via the bridge abstraction.
 | Architecture Diffing | 90 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope |
 | Inspector + Code Viewer | 100 | High | Cluster/file/symbol routing + Prism syntax highlighting + git gutter + drift coloring + selection-to-task |
 | Graph Visualization | 75 | Medium | Glassmorphic nodes, curved edges, cluster discovery, selection emphasis, per-system scope filter, files-view no longer hides files silently, regular edges no longer animated (perf fix). **Missing: node-level drift ring, semantic zoom, mode visual distinctness, system-aware clustering, server-side per-scope views.** |
-| Real-time Activity Visualization | 60 | Medium | recently-changed pulse + edge drift; node drift not yet wired |
+| Real-time Activity Visualization | 70 | Medium | recently-changed pulse + edge drift; node drift not yet wired. **Phase 22** made the agent Timeline legible — turn grouping, plain-English rows, a live in-scope badge in `ConnectedAgents`. |
 | Toast Notifications | 100 | Good | Wired to plans, tasks, deviations, conflicts, sessions, plan-doc events |
 | Deviation Detection | 75 | Medium | Service + MCP tools + file-watcher hook; needs more detection types and graph surfacing |
 | Conflict Detection | 70 | Medium | File-level conflict on claim_task with broadcast |
@@ -73,6 +73,79 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Sep 17, 2026 — Phase 22: agent activity clarity
+
+Design: [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md)
+(reconciled — one design call changed).
+
+The data was already good; the reading of it was bad. Every MCP tool call
+has been broadcast with `{tool, args, phase, durationMs, sessionId,
+agentType, agentModel}` since Phase 12 — and the Timeline rendered it as
+`JSON.stringify(payload).slice(0, 80)`, because `formatPayload` only knew
+the shapes the Claude Code JSONL watcher produces. A user was being asked
+to infer what an agent was doing from truncated JSON. Nobody does that.
+
+**Shipped** — four pure modules under `src/frontend/lib/` plus the
+components that render them. No new tables, no new MCP tools, no new
+broadcast types.
+
+- **`tool-phrasing.ts`** — every event becomes a sentence.
+  `update_item {"uid":"itm_4f…","status":"in_progress"}` reads as
+  *Started "Add refresh-token rotation"*. Unknown tools degrade to a
+  readable name rather than raw JSON, so a tool shipped without phrasing
+  looks plain instead of broken.
+- **`agent-turns.ts`** — consecutive calls from one session inside 30s
+  become one turn. Turns are grouped **per session**, because concurrent
+  agents interleave and merging them would attribute one agent's work to
+  another — a bug this codebase has actually had. Headline priority:
+  error, then a question to the human, then the last mutation, then the
+  reads. Mutations describe intent; the reads around them are only how
+  the agent got there.
+- **`scope-check.ts`** — the live "is it touching what I asked?" check,
+  surfaced in `ConnectedAgents` as an amber warning listing files that no
+  in-flight item claims. The drift machinery already computed this but
+  framed it as an after-the-fact report; the same fact framed as *right
+  now* is what makes it worth watching.
+- **AgentPanel Timeline** now renders turn cards, collapsed, expandable
+  to the individual phrased rows, each of which discloses its raw
+  payload. Nothing is dropped — a complete log is what makes the Timeline
+  worth anything in a post-mortem. The idle state finally says something
+  ("Last activity 4 minutes ago — …") instead of rendering nothing, which
+  was indistinguishable from the app being broken.
+
+**Changed from the design**: the scope check is **project-level, not
+per-agent**. Agents write code with their own file tools, not through
+MCP, so the file-watcher sees a change without knowing who made it. A
+per-agent attribution would have been a guess wearing a badge; the
+popover says plainly that the check spans the project.
+
+**Coverage**: 29 unit tests. Keeping the logic pure rather than inlining
+it into components is what makes "does this read as a sentence" and "did
+two agents get mixed up" testable at all.
+
+### Sep 17, 2026 — Harness: a leaked backend per test
+
+Found while running the full suite repeatedly for Phases 20–22, and it
+explains a lot of history.
+
+`startBackend` spawns `npx` → `tsx` → `node`, and teardown signalled only
+the direct child. `npx` does not forward SIGTERM, so **every test left a
+live backend** — holding its data dir, its chokidar watchers and its
+ports. Nothing failed, which is exactly why it survived: the suite simply
+got slower as it went. A full run left ~190 backend processes alive and
+the machine at a load average of 100+ on 4 cores.
+
+That load is almost certainly the real cause of the "timing-sensitive
+tests are flaky" note in §7 and the two retries configured in
+`playwright.harness.config.ts`. They were not flaky; they were starved.
+
+Fix: spawn into its own process group (`detached`, non-Windows) and
+signal the group on teardown, with a fallback to the direct child and a
+bounded wait after SIGKILL so a stuck handle cannot hang teardown.
+Verified: a 7-test run now leaves zero backends behind, where it
+previously left seven.
+
 
 ### Sep 17, 2026 — Phase 21: SQL schema + ref-tracker
 

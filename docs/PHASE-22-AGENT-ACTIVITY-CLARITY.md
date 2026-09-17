@@ -1,7 +1,8 @@
 # Phase 22 — Agent activity clarity
 
 > Drafted: 2026-09-17
-> Status: designed, not built
+> Status: **built** 2026-09-17, with one design call changed — marked
+> **[changed]** below.
 > Blocks: [Phase 23](PHASE-23-BUDGETS.md) — budgets attribute time to
 > the turn grouping introduced here.
 
@@ -77,9 +78,23 @@ crash.
 The raw JSON stays available behind a disclosure. Power users and
 bug reports need it.
 
-## 4. Change C — a live, in-scope status line per agent
+## 4. Change C — a live, in-scope status line **[changed]**
 
 This is the one that changes behaviour rather than comfort.
+
+**[changed]: it is project-level, not per-agent.** The plan said "per
+connected agent". Implementation found that we cannot honestly attribute
+a file change to an agent: agents write code with their own file tools,
+not through MCP, so the file-watcher sees the change without knowing who
+made it. Only the MCP tool calls carry a `sessionId`.
+
+Claiming per-agent attribution would have meant guessing, and a guess
+here is exactly the kind that looks authoritative. So the check is
+scoped to the project and the popover says so in as many words. With a
+single agent connected — the common case — the two are the same thing.
+
+Recovering true per-agent attribution would need the agent to tell us,
+which is a protocol change, not a presentation one.
 
 `ConnectedAgents` currently answers "how many agents are connected".
 The question a user actually has is **"what is it doing right now, and
@@ -115,27 +130,37 @@ quiet because the machine slept can say so.
 ## 6. Scope discipline
 
 This phase is **presentation only**. No new tables, no new MCP tools, no
-new broadcast types. If a change here needs a schema migration, it has
-escaped its scope — move it to Phase 23, which is where new storage
-legitimately belongs.
+new broadcast types. Held: the whole phase is four pure modules under
+`src/frontend/lib/` plus the components that render them.
 
-The one exception worth allowing: persisting turn boundaries if
-recomputing them on every render proves too slow on a long session.
-Measure first.
+Making the logic pure rather than inlining it into components was the
+other implementation call worth recording. `groupIntoTurns`,
+`phraseEvent` and `checkScope` are ordinary functions over data, so the
+behaviour that matters — "does this read as a sentence", "did two agents
+get mixed up", "does a directory target cover its files" — is covered by
+fast unit tests instead of being locked inside a React tree where it
+would silently regress.
 
 ## 7. Tests
 
-Mostly harness-level, driving the scripted MCP agent from
-`tests/harness/`:
+Unit-level, because the modules are pure — 29 tests across
+`agent-turns.test.ts` and `scope-check.test.ts`:
 
 1. Calls within the window group into one turn; a gap splits them.
 2. Concurrent agents never cross-attribute (this was a real bug once —
-   see `inferAgentFromSession`'s comment — so it deserves a standing
-   test).
-3. A mutating call outranks reads in the turn headline.
-4. An agent editing a file outside the claimed item's `fileSpecs`
-   produces the amber state; editing an in-scope file produces green.
-5. An unknown tool name renders rather than throwing.
+   see `inferAgentFromSession`'s comment — so it has a standing test).
+3. A mutating call outranks reads in the turn headline; an error
+   outranks a mutation; a question to the human outranks both.
+4. A changed file outside every in-flight item's `fileSpecs` produces
+   the amber state; one inside produces green.
+5. An unknown tool name renders readably rather than throwing or
+   falling back to raw JSON.
+6. Restraint: no recent changes, nothing in flight, or an in-flight item
+   that declared no targets each produce **no verdict** rather than a
+   green one. A badge that cries wolf gets ignored, and then the one
+   time it is right nobody looks.
+7. A directory target covers files beneath it but not a same-prefix
+   sibling (`auth` must not cover `authentication.ts`).
 
 ## 8. Done when
 

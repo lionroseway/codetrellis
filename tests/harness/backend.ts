@@ -87,6 +87,20 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
       cwd: REPO_ROOT,
       env,
       stdio: opts.verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+      // Own process group, so teardown can signal the whole tree.
+      //
+      // This spawns `npx`, which spawns `tsx`, which spawns the actual
+      // `node` backend. Signalling only the direct child left the
+      // backend running — one live backend leaked PER TEST, each still
+      // holding its data dir, its chokidar watchers and its ports.
+      //
+      // The symptom was not a failure, which is why it survived: the
+      // suite just got slower and slower as load climbed, and the
+      // timing-sensitive tests started "flaking". A full run left ~190
+      // backends alive and the machine at a load average of 100+ on 4
+      // cores. Windows has no process groups in this sense, so
+      // `killChild` falls back there.
+      detached: process.platform !== 'win32',
     },
   );
 
@@ -163,26 +177,45 @@ async function waitForReady(
   return { ok: false, reason: `timeout after ${timeoutMs}ms waiting for ${url}` };
 }
 
+/**
+ * Signal the child's whole process group, falling back to the direct
+ * child where groups aren't available.
+ *
+ * The group is the point: `npx` → `tsx` → `node`, and only the last of
+ * those is the backend holding ports and watchers.
+ */
+function signalTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid == null) return;
+  try {
+    // Negative pid = the process group led by that pid.
+    if (process.platform !== 'win32') process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    // The group may already be gone; try the direct child before
+    // giving up, so a partially-dead tree still gets cleaned.
+    try {
+      child.kill(signal);
+    } catch {
+      /* already dead */
+    }
+  }
+}
+
 async function killChild(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   return new Promise((resolve) => {
     const killTimer = setTimeout(() => {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* already dead */
-      }
+      signalTree(child, 'SIGKILL');
+      // Do not wait on 'exit' forever after a SIGKILL — if the handle
+      // never fires we would hang teardown, which is how a leak becomes
+      // a hung suite.
+      setTimeout(resolve, 500);
     }, 5000);
     child.once('exit', () => {
       clearTimeout(killTimer);
       resolve();
     });
-    try {
-      child.kill('SIGTERM');
-    } catch {
-      clearTimeout(killTimer);
-      resolve();
-    }
+    signalTree(child, 'SIGTERM');
   });
 }
 

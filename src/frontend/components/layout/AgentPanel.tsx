@@ -1,26 +1,123 @@
-import { useState } from 'react';
-import { FileEdit, Search, ClipboardList, Circle, XCircle, ShieldCheck, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import {
+  FileEdit, Search, Circle, X, ChevronRight, ChevronDown,
+  AlertTriangle, HelpCircle, Pencil, Eye, Plug,
+} from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
+import { groupIntoTurns, formatDuration, formatRelative, type AgentTurn } from '../../lib/agent-turns';
+import { phraseEvent, rawPayloadText, type EventIntent } from '../../lib/tool-phrasing';
+import type { AgentEvent } from '@shared/types';
 
 type Tab = 'plan' | 'timeline' | 'changes';
 
-const EVENT_ICON_MAP: Record<string, typeof FileEdit> = {
-  file_changed: FileEdit, architecture_query: Search, plan_reported: ClipboardList,
-  session_start: Circle, session_end: XCircle, conformity_check: ShieldCheck,
+/**
+ * Phase 22 — the Timeline renders TURNS, not raw tool calls.
+ *
+ * An agent reads three files, greps, edits two and runs a test: one
+ * intention, seven rows. The old view rendered all seven as raw payload
+ * JSON and left the user to infer meaning. Nobody does that inference.
+ *
+ * Grouping is a view concern only — every underlying event is kept and
+ * reachable through the disclosure, because a complete log is what makes
+ * the Timeline worth anything in a post-mortem.
+ */
+
+const INTENT_ICON: Record<EventIntent, typeof FileEdit> = {
+  read: Eye,
+  write: Pencil,
+  ask: HelpCircle,
+  session: Plug,
+  error: AlertTriangle,
 };
 
-function formatPayload(payload: Record<string, unknown>): string {
-  if (payload.action === 'read') return `Read ${payload.file}`;
-  if (payload.action === 'write') return `Write ${payload.file}`;
-  if (payload.action === 'edit') return `Edit ${payload.file}`;
-  if (payload.action === 'bash') return `$ ${payload.command}`;
-  if (payload.tool === 'Glob') return `Glob: ${payload.pattern}`;
-  if (payload.tool === 'Grep') return `Grep: ${payload.pattern}`;
-  if (payload.text) return String(payload.text).substring(0, 100);
-  if (payload.message) return String(payload.message).substring(0, 100);
-  if (payload.sessionId) return `Session: ${String(payload.sessionId).substring(0, 12)}...`;
-  return JSON.stringify(payload).substring(0, 80);
+const INTENT_COLOR: Record<EventIntent, string> = {
+  read: 'text-foreground-subtle',
+  write: 'text-accent',
+  ask: 'text-warning',
+  session: 'text-foreground-subtle',
+  error: 'text-danger',
+};
+
+/** One event row inside an expanded turn. */
+function EventRow({ event }: { event: AgentEvent }) {
+  const [showRaw, setShowRaw] = useState(false);
+  const phrased = phraseEvent(event);
+  const Icon = INTENT_ICON[phrased.intent] ?? Circle;
+
+  return (
+    <div className="pl-6 pr-2">
+      <button
+        onClick={() => setShowRaw((v) => !v)}
+        className="w-full flex items-start gap-2 py-0.5 text-left hover:bg-surface-hover rounded transition-colors"
+        title={phrased.tool ?? undefined}
+      >
+        <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-50">
+          {new Date(event.timestamp).toLocaleTimeString()}
+        </span>
+        <Icon size={10} className={`shrink-0 mt-0.5 ${INTENT_COLOR[phrased.intent]}`} />
+        <span className="text-foreground-muted truncate flex-1">{phrased.text}</span>
+      </button>
+      {showRaw && (
+        <pre className="ml-6 my-1 p-2 rounded bg-surface text-[9px] text-foreground-subtle font-mono overflow-x-auto max-h-40">
+          {rawPayloadText(event)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/** One turn card. Collapsed by default — the summary is the point. */
+function TurnCard({ turn }: { turn: AgentTurn }) {
+  const [expanded, setExpanded] = useState(false);
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+
+  return (
+    <div className="rounded-md hover:bg-surface-hover transition-colors">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-start gap-2 py-1 px-2 text-left"
+      >
+        <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-50">
+          {new Date(turn.startedAt).toLocaleTimeString()}
+        </span>
+        <Chevron size={11} className="text-foreground-subtle shrink-0 mt-0.5" />
+        <span className="flex-1 min-w-0">
+          <span
+            className={`block truncate ${
+              turn.hasError ? 'text-danger' : turn.mutating ? 'text-foreground' : 'text-foreground-muted'
+            }`}
+          >
+            {turn.summary}
+          </span>
+          {(turn.files.length > 0 || turn.agentType) && (
+            <span className="block text-[9px] text-foreground-subtle truncate mt-0.5">
+              {turn.agentType && <span>{turn.agentType}</span>}
+              {turn.agentType && turn.files.length > 0 && <span> · </span>}
+              {turn.files.length > 0 && (
+                <span className="font-mono">
+                  {turn.files.slice(0, 3).join(', ')}
+                  {turn.files.length > 3 && ` +${turn.files.length - 3}`}
+                </span>
+              )}
+            </span>
+          )}
+        </span>
+        {turn.durationMs >= 1000 && (
+          <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-60">
+            {formatDuration(turn.durationMs)}
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div className="pb-1">
+          {turn.events.map((event) => (
+            <EventRow key={event.id} event={event} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AgentPanel() {
@@ -32,6 +129,10 @@ export function AgentPanel() {
   const currentPlan = useAgentStore((s) => s.currentPlan);
   const status = useAgentStore((s) => s.status);
 
+  // Newest first for display; the grouper works oldest-first.
+  const turns = useMemo(() => groupIntoTurns(events.slice(-400)).reverse(), [events]);
+  const lastTurn = turns[0] ?? null;
+
   const fileChanges = events.filter(
     (e) => e.type === 'file_changed' && (e.payload.action === 'write' || e.payload.action === 'edit')
   );
@@ -40,7 +141,7 @@ export function AgentPanel() {
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'plan', label: 'Plan' },
-    { key: 'timeline', label: 'Timeline', count: events.length },
+    { key: 'timeline', label: 'Timeline', count: turns.length },
     { key: 'changes', label: 'Changes', count: fileChanges.length },
   ];
 
@@ -103,25 +204,26 @@ export function AgentPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
-            {events.length === 0 ? (
+            {turns.length === 0 ? (
               <div className="text-foreground-subtle py-6 text-center">
                 No agent events yet
               </div>
             ) : (
-              <div className="space-y-px">
-                {events.slice(-100).reverse().map((event) => {
-                  const Icon = EVENT_ICON_MAP[event.type] || Circle;
-                  return (
-                    <div key={event.id} className="flex items-start gap-2 py-1 px-2 hover:bg-surface-hover rounded-md transition-colors">
-                      <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-50">
-                        {new Date(event.timestamp).toLocaleTimeString()}
-                      </span>
-                      <Icon size={11} className="text-foreground-subtle shrink-0 mt-0.5" />
-                      <span className="text-foreground-muted truncate">{formatPayload(event.payload)}</span>
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                {/* An idle panel used to show nothing, which is
+                    indistinguishable from the app being broken. Say when
+                    the last thing happened and what it was. */}
+                {status !== 'active' && lastTurn && (
+                  <div className="mb-2 px-2 py-1.5 rounded-md bg-surface text-[10px] text-foreground-subtle">
+                    Last activity {formatRelative(lastTurn.endedAt)} — {lastTurn.summary}
+                  </div>
+                )}
+                <div className="space-y-px">
+                  {turns.map((turn) => (
+                    <TurnCard key={turn.id} turn={turn} />
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
