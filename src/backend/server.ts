@@ -98,6 +98,8 @@ import {
 } from './services/update-service';
 import { BUILD_INFO } from '../shared/build-info';
 import * as peerService from './services/peer-connection-service';
+import { setDeviceCapabilities } from './services/paired-device-service';
+import { listPeerAudit } from './services/peer-audit-service';
 
 const app = express();
 app.use(express.json());
@@ -3415,10 +3417,42 @@ app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
 app.patch('/api/peers/devices/:fingerprint', (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
-    const { alias } = req.body as { alias?: string };
-    if (!alias) { res.status(400).json({ error: 'alias required' }); return; }
-    const renamed = peerService.renameDevice(req.params.fingerprint, alias);
-    res.json({ renamed });
+    const { alias, capabilities } = req.body as { alias?: string; capabilities?: string[] };
+
+    if (!alias && !Array.isArray(capabilities)) {
+      res.status(400).json({ error: 'alias or capabilities required' });
+      return;
+    }
+
+    const out: { renamed?: boolean; capabilities?: string[] } = {};
+    if (alias) out.renamed = peerService.renameDevice(req.params.fingerprint, alias);
+
+    // Phase 19, finding 15 — granting `terminal` grants command execution and
+    // the ability to read command output off this machine. It is a per-device
+    // decision the user makes here, deliberately, after pairing.
+    if (Array.isArray(capabilities)) {
+      const applied = setDeviceCapabilities(req.params.fingerprint, capabilities);
+      if (applied === null) { res.status(404).json({ error: 'device not found' }); return; }
+      out.capabilities = applied;
+    }
+
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
+ * What paired devices actually did (Phase 19, finding 15).
+ *
+ * Refusals, terminal access, and every change to what a device is allowed to
+ * do. Never the terminal output itself — see `peer-audit-service`.
+ */
+app.get('/api/peers/audit', (req, res) => {
+  try {
+    const fingerprint = typeof req.query.fingerprint === 'string' ? req.query.fingerprint : undefined;
+    const limit = Number(req.query.limit) || undefined;
+    res.json({ entries: listPeerAudit({ fingerprint, limit }) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

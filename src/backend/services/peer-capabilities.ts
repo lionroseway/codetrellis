@@ -43,6 +43,11 @@ export type PeerCapability =
   | 'settings'  // change desktop settings — includes network exposure
   | 'terminal'; // create and drive terminals — COMMAND EXECUTION
 
+/** Every capability name, for validating what the settings UI sends. */
+export const ALL_CAPABILITIES: readonly PeerCapability[] = Object.freeze([
+  'read', 'write', 'project', 'files', 'settings', 'terminal',
+]);
+
 /**
  * Every RPC method the router handles, mapped to the capability it needs.
  *

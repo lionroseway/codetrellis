@@ -292,17 +292,37 @@ export { isPairingActive } from './pairing-service';
 // --- Public API: Paired Devices ----------------------------------------------
 
 /**
- * Get all paired devices.
+ * Every paired device, WITHOUT its reconnect secret.
+ *
+ * Phase 19, finding 15. This feeds the settings UI and an MCP tool, and the
+ * secret is the one field that must never leave the backend — it is the whole
+ * proof a device presents to reconnect. It was harmless while every record
+ * held `''`; now that the field carries a real key, serving the record whole
+ * would hand any agent with MCP access a permanent pairing credential.
+ *
+ * Callers that genuinely need the secret use `listPairedDevices()` directly.
  */
-export function getDevices(): PairedDevice[] {
-  return listPairedDevices();
+export function getDevices(): PublicPairedDevice[] {
+  return listPairedDevices().map(redactSecret);
+}
+
+/** A paired device as it is safe to show. */
+export type PublicPairedDevice = Omit<PairedDevice, 'sharedSecret'> & {
+  /** Whether a usable reconnect secret exists — not the secret itself. */
+  hasSecret: boolean;
+};
+
+function redactSecret(device: PairedDevice): PublicPairedDevice {
+  const { sharedSecret, ...rest } = device;
+  return { ...rest, hasSecret: isUsableSecret(sharedSecret) };
 }
 
 /**
- * Get a specific paired device.
+ * One paired device, without its reconnect secret. See `getDevices`.
  */
-export function getDevice(fingerprint: string): PairedDevice | undefined {
-  return getPairedDevice(fingerprint);
+export function getDevice(fingerprint: string): PublicPairedDevice | undefined {
+  const device = getPairedDevice(fingerprint);
+  return device ? redactSecret(device) : undefined;
 }
 
 /**
