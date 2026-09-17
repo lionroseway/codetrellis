@@ -25,8 +25,8 @@
 #   ./scripts/release-mobile.sh --submit-only --path out/CodeTrellis.ipa
 #
 # Prereqs:
-#   - eas-cli logged in       (`npx eas-cli whoami` → an account with access
-#                              to the `ailar` org)
+#   - eas-cli logged in       (`npx eas-cli@latest whoami` → an account with
+#                              access to the `ailar` org)
 #   - clean working tree      (a release must be reproducible from its commit)
 #   - fastlane, for a LOCAL iOS build   (`brew install fastlane`)
 #   - Xcode + CocoaPods, for a local iOS build
@@ -105,11 +105,27 @@ cd "$MOBILE_DIR"
 
 command -v npx >/dev/null || { err "npx not found"; exit 1; }
 
-if ! npx eas-cli whoami >/dev/null 2>&1; then
-  err "Not logged in to EAS. Run:  npx eas-cli login"
+# --- Resolve the EAS command ------------------------------------------------
+#
+# NOT plain `npx eas-cli`. Unpinned, npx resolves it through a path that fails
+# on this machine with a bare "npm error Invalid Version:" and no other clue —
+# which reads exactly like a broken login. `eas-cli` is not a dependency of the
+# mobile project (it is a tool, not a library), so there is nothing local to
+# resolve against; a global install is used when present, and an explicitly
+# tagged npx otherwise.
+if command -v eas >/dev/null 2>&1; then
+  EAS=(eas)
+else
+  EAS=(npx eas-cli@latest)
+fi
+log "Using: ${EAS[*]}"
+
+if ! "${EAS[@]}" whoami >/dev/null 2>&1; then
+  err "Not logged in to EAS. Run:  ${EAS[*]} login"
+  err "The account needs access to the 'ailar' organisation."
   exit 1
 fi
-log "EAS account: $(npx eas-cli whoami 2>/dev/null | tail -1)"
+log "EAS account: $("${EAS[@]}" whoami 2>/dev/null | tail -1)"
 
 # A local iOS build shells out to fastlane for signing and archiving. Without
 # it the build fails several minutes in, with an error that does not obviously
@@ -128,7 +144,7 @@ fi
 if [[ "$SUBMIT_ONLY" -eq 0 ]]; then
   if [[ "$HOSTED" -eq 1 ]]; then
     log "Building on EAS hosted builders (queued, rate-limited)…"
-    npx eas-cli build --profile production --platform "$PLATFORM" --non-interactive
+    "${EAS[@]}" build --profile production --platform "$PLATFORM" --non-interactive
     log "Hosted build submitted. When it finishes, submit with:"
     log "  ./scripts/release-mobile.sh --submit-only --platform ${PLATFORM}"
     exit 0
@@ -141,7 +157,7 @@ if [[ "$SUBMIT_ONLY" -eq 0 ]]; then
   rm -f "$ARTIFACT_PATH"
 
   log "Building locally (no queue). This takes a while — Xcode does the work."
-  npx eas-cli build \
+  "${EAS[@]}" build \
     --profile production \
     --platform "$PLATFORM" \
     --local \
@@ -168,10 +184,10 @@ fi
 
 log "Submitting to App Store Connect → TestFlight…"
 if [[ -n "$ARTIFACT_PATH" ]]; then
-  npx eas-cli submit --platform ios --path "$ARTIFACT_PATH" --non-interactive
+  "${EAS[@]}" submit --platform ios --path "$ARTIFACT_PATH" --non-interactive
 else
   # No local artifact: submit the most recent finished build on EAS.
-  npx eas-cli submit --platform ios --latest --non-interactive
+  "${EAS[@]}" submit --platform ios --latest --non-interactive
 fi
 
 log "Submitted. Apple processes the build before it appears in TestFlight —"
