@@ -49,7 +49,7 @@ shared via the bridge abstraction.
 | Agent skill / instructions resource | 100 | High | Phase 12 §E. Three MCP resources: `codetrellis://skill` (project-tailored summary listing current plans + connected agents), `…/quickstart` (first-time flow), `…/power-user` (deep usage incl. phase + template guidance). Markdown so any MCP-capable agent can ingest. |
 | Multi-agent visibility (TopBar) | 100 | High | Phase 12 §D2 + Apr 28 wire-level fix. `ConnectedAgents` widget replaces the single-agent pill; popover shows every active MCP session (type, model, active plan, last seen) and refreshes live on session events. `register_session` / `set_active_plan` keyed off the caller's transport sessionId so multiple simultaneous agents stay attributed. **As of Apr 28** the underlying MCP server now genuinely supports multiple concurrent agents — `mcp/server.ts` factors tool registration into `setupMcpServerInstance()` and the `/sse` handler builds a fresh server per agent connection. Verified by `tests/e2e/multi-agent.test.ts` (concurrent + sequential `claim_task` contention both green). |
 | Three Trellis States | 85 | Medium | Snapshots + projection + baseline pin/auto/branch — modes don't yet read as visually unmistakable |
-| Architecture Diffing | 90 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope |
+| Architecture Diffing | 95 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope. **Phase 25**: any two points can now be compared (live / baseline / checkpoint / commit), and `plan-review-service` scores a diff against the plan that asked for it — including unclaimed file changes and unplanned edges. |
 | Inspector + Code Viewer | 100 | High | Cluster/file/symbol routing + Prism syntax highlighting + git gutter + drift coloring + selection-to-task |
 | Graph Visualization | 75 | Medium | Glassmorphic nodes, curved edges, cluster discovery, selection emphasis, per-system scope filter, files-view no longer hides files silently, regular edges no longer animated (perf fix). **Missing: node-level drift ring, semantic zoom, mode visual distinctness, system-aware clustering, server-side per-scope views.** |
 | Real-time Activity Visualization | 70 | Medium | recently-changed pulse + edge drift; node drift not yet wired. **Phase 22** made the agent Timeline legible — turn grouping, plain-English rows, a live in-scope badge in `ConnectedAgents`. |
@@ -73,6 +73,55 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Sep 17, 2026 — Phase 25 (part): snapshot selection + plan review
+
+Design: [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md)
+(reconciled). Two of the four pieces shipped; plan→PR authoring and
+play-forward are explicitly **not built** and the doc says where they
+stand.
+
+**Snapshot selection.** `diff-engine.computeDiff` could only ever compare
+against the module-level baseline, so `diffSnapshots(before, after)` was
+extracted and `computeDiff` now delegates — one implementation rather
+than two that can disagree. `snapshot-compare-service` resolves any of
+`live` / `baseline` / `checkpoint:<id>` / `commit:<ref>` and diffs any
+two. REST `GET /api/comparands` + `/api/compare`; MCP `list_comparands`
++ `compare_snapshots`.
+
+Two things the building taught, both now in the doc:
+
+- **A commit contributes its file list only.** `git ls-tree -r` gives
+  exact per-file blob hashes, but a commit's *edges* would mean checking
+  the tree out and re-parsing it. So a commit comparand reports
+  `edgesKnown: false`, zeroes the edge fields, and says why — reporting
+  "no edges changed" for a comparison that never looked at edges would
+  read as a finding rather than an absence.
+- **`scanProject` re-pins the baseline on every run**, so `baseline →
+  live` is empty immediately after a scan. That is exactly why an
+  explicit comparand picker is the point of this phase rather than a
+  convenience on top of it, and it is probably part of why Diff mode has
+  never read as distinct (graph blocker #1): the chrome could not state
+  what it was showing because the comparands were implicit.
+
+**Plan review.** `plan-review-service` answers "does this diff do what
+the plan said?" — items landed / partial / untouched, plus the two
+findings a textual diff cannot give a reviewer:
+
+- **files that changed with no item claiming them**, the thing everyone
+  misses on a forty-file agent PR; and
+- **dependencies that appeared with no item planning them**. A new
+  cross-module coupling is one import line in a diff and a structural
+  change in the architecture.
+
+`renderReviewMarkdown` produces a block an agent can post as a PR comment
+with its own GitHub credentials — CodeTrellis holds none, same as Phase
+24 — and that markdown form is what reaches reviewers who do not have the
+app. Edge findings are suppressed when the comparison could not see
+edges, for the same reason as above.
+
+**Coverage**: 6 harness tests.
+
 
 ### Sep 17, 2026 — Phase 24: SDLC intake
 

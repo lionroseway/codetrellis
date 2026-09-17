@@ -44,6 +44,8 @@ import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
+import { compareSnapshots, listComparands } from './services/snapshot-compare-service';
+import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import * as commentService from './services/comment-service';
 import * as sessionService from './services/session-service';
 import * as taskAttachmentsService from './services/task-attachments-service';
@@ -2519,6 +2521,44 @@ app.get('/api/plans/:uid/changes', (req, res) => {
   } else {
     res.json(listProposedChanges(req.params.uid));
   }
+});
+
+// --- Comparison + review (Phase 25) ---
+//
+// Any two points, not just "live vs the pinned baseline". Making the
+// comparands explicit is most of what makes Diff mode legible: the
+// chrome can finally state what it is showing.
+app.get('/api/comparands', (req, res) => {
+  const projectPath = req.query.project as string;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  res.json(listComparands(projectPath));
+});
+
+app.get('/api/compare', (req, res) => {
+  const projectPath = req.query.project as string;
+  const before = (req.query.before as string) || 'baseline';
+  const after = (req.query.after as string) || 'live';
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const result = compareSnapshots(before, after, projectPath);
+  if (!result.ok) { res.status(404).json(result); return; }
+  res.json(result.result);
+});
+
+app.get('/api/plans/:uid/review', (req, res) => {
+  const projectPath = req.query.project as string;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const result = reviewPlan({
+    planUid: req.params.uid,
+    projectPath,
+    before: req.query.before as string | undefined,
+    after: req.query.after as string | undefined,
+  });
+  if (!result.ok) { res.status(404).json(result); return; }
+  if (req.query.format === 'markdown') {
+    res.type('text/markdown').send(renderReviewMarkdown(result.review));
+    return;
+  }
+  res.json(result.review);
 });
 
 // --- Budgets (Phase 23) ---

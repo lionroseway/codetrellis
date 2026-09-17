@@ -81,6 +81,7 @@ import { register as registerSystemDocsTools } from './tools/system-docs-tools';
 import { register as registerGovernanceTools } from './tools/governance-tools';
 import { register as registerBudgetTools } from './tools/budget-tools';
 import { register as registerIntakeTools } from './tools/intake-tools';
+import { register as registerReviewTools } from './tools/review-tools';
 import { registerContributionTools } from './tools/contribution-tools';
 import { registerAudioTools } from './tools/audio-tools';
 import { registerPeerTools } from './tools/peer-tools';
@@ -365,6 +366,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerGovernanceTools(mcpServer, deps);
   registerBudgetTools(mcpServer, deps);
   registerIntakeTools(mcpServer, deps);
+  registerReviewTools(mcpServer, deps);
   registerContributionTools(mcpServer);
   registerAudioTools(mcpServer);
   registerPeerTools(mcpServer);

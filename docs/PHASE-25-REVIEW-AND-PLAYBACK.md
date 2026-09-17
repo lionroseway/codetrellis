@@ -1,7 +1,9 @@
 # Phase 25 — Review, snapshot selection, and play-forward
 
 > Drafted: 2026-09-17
-> Status: designed, not built
+> Status: **partly built** 2026-09-17 — snapshot selection and PR→plan
+> review shipped (backend, MCP, REST). Plan→PR authoring and
+> play-forward are **not built**; see §6 for where they stand.
 > Consumes: Phases 20–24. Best done last.
 
 ---
@@ -44,9 +46,16 @@ prepare the branch and commit locally, then either hand the agent a
 the compare URL in the browser with the body pre-filled. Both work;
 neither makes us a credential store.
 
-## 3. PR → plan review
+## 3. PR → plan review — **built**
 
 The underrated half, and the one with no competition.
+
+Shipped as `services/plan-review-service.ts`, with
+`GET /api/plans/:uid/review` (`?format=markdown`) and the MCP tool
+`review_plan`. The markdown form is what gets this in front of people
+who do not have the app, which is most reviewers most of the time — an
+agent can post it to a PR with its own GitHub credentials. CodeTrellis
+holds none, for the same reason as Phase 24.
 
 Given a branch, a PR, or any two commits, answer **"does this diff do
 what the plan said?"**:
@@ -74,10 +83,33 @@ agent can post as a PR comment via `copy_plan_as_prompt`'s sibling.
 The markdown form is what gets this in front of people who don't have
 the app.
 
-## 4. Snapshot selection
+## 4. Snapshot selection — **built**
 
-Make the comparison endpoints general. Let the user pick **any two
-points** and diff architecture between them:
+Shipped as `services/snapshot-compare-service.ts`, with
+`GET /api/comparands`, `GET /api/compare`, and the MCP tools
+`list_comparands` / `compare_snapshots`.
+
+`diff-engine.computeDiff` could only ever compare against the
+module-level baseline, so the two-snapshot diff was extracted as
+`diffSnapshots(before, after)` and `computeDiff` now delegates — one
+implementation rather than two that can disagree.
+
+Two things learned in the building, both worth recording:
+
+- **A git commit contributes its file list only.** `git ls-tree -r`
+  gives every path with its blob hash, so added / removed / modified
+  files are exact — but knowing a commit's *edges* would mean checking
+  the tree out and re-parsing it. So a commit comparand reports
+  `edgesKnown: false`, the edge fields are zeroed, and the result
+  carries a note saying why. Reporting "no edges changed" for a
+  comparison that never looked at edges would read as a finding rather
+  than an absence.
+- **`scanProject` re-pins the baseline every time it runs**, so
+  `baseline → live` is empty immediately after a scan. That is precisely
+  why an explicit comparand picker is the point of this phase rather
+  than a convenience on top of it.
+
+Let the user pick **any two points** and diff architecture between them:
 
 - the pinned baseline
 - any named checkpoint (`capture_checkpoint` already stores these)
@@ -118,14 +150,21 @@ positions once across the whole sequence so nodes don't jump between
 frames — a stable layout is the difference between "time-lapse" and
 "seizure". Cap the frame count and sample when the range is large.
 
-## 6. Order within the phase
+## 6. Order within the phase — where it stands
 
-1. **Snapshot selection** — smallest, and the other two use it.
-2. **PR → plan review** — the differentiated one; ship it before the
-   authoring half.
-3. **Plan → PR** — pleasant, but it is table stakes rather than a reason
-   to choose us.
-4. **Play-forward** — last; it is the reward, not the foundation.
+1. ~~**Snapshot selection**~~ ✅ built — smallest, and the other two use it.
+2. ~~**PR → plan review**~~ ✅ built — the differentiated one.
+3. **Plan → PR** — not built. Deliberately after the review half,
+   because it is table stakes rather than a reason to choose us. The
+   pieces are all present (`git-commit-service` already composes
+   attributed commits, `plan-file-service` already serialises the plan,
+   and `renderReviewMarkdown` already produces the body); what remains
+   is the branch/commit orchestration and a `get_pr_draft` payload for
+   the agent to open the PR with.
+4. **Play-forward** — not built. It is the reward, not the foundation,
+   and it is the one piece here that is mostly frontend: a transport
+   bar over the snapshot sequence plus a stable layout precomputed
+   across all frames so nodes do not jump between them.
 
 ## 7. Tests
 
