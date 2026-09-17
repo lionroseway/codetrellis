@@ -7,6 +7,7 @@ import { useUiStore } from './stores/ui-store';
 import { usePlanStore } from './stores/plan-store';
 import { Sidebar } from './components/layout/Sidebar';
 import { MainCanvas } from './components/layout/MainCanvas';
+import { CodeWorkspace } from './components/layout/CodeWorkspace';
 import { InspectorPanel } from './components/layout/InspectorPanel';
 import { PlanPanel } from './components/layout/PlanPanel';
 import { StatusBar } from './components/layout/StatusBar';
@@ -236,6 +237,14 @@ export function App() {
                 <MainCanvas />
               </Allotment.Pane>
             </Allotment>
+          </div>
+        )}
+
+        {/* Code-first surface — Phase 26. A full takeover, so the graph
+            behind it is not rendering while the user reads code. */}
+        {workspaceMode === 'code' && (
+          <div className="absolute inset-0 z-30 bg-background">
+            <CodeWorkspace />
           </div>
         )}
 

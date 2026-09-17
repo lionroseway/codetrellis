@@ -74,6 +74,44 @@ shared via the bridge abstraction.
 
 ## 2. Recently Shipped
 
+### Sep 17, 2026 — Phase 26: the code-first surface
+
+Design: [PHASE-26-CODE-FIRST-SURFACE.md](PHASE-26-CODE-FIRST-SURFACE.md).
+
+**The reframe**: the graph is the most expensive thing the renderer does
+and the part some users will never want — while every signal it draws is
+already per-file or per-line. So a code-first view is not a lesser
+fallback; it is the same information, cheaper to render, for people who
+think in files. All four layers landed.
+
+- **Plan overlay** (`plan-overlay-service` + `/api/file/overlay`).
+  `FileSpec.edits[]` has carried `lineRange` and `symbol` since Phase 15
+  §M2 and **nothing had ever drawn it**. Three anchor shapes, plus a
+  fourth outcome that matters as much: an edit naming lines the file no
+  longer has is reported **unanchored**, never clamped. A marker in the
+  wrong place is worse than no marker, because a reader believes it.
+- **Diff editor** on CodeMirror 6 (`/api/file/at` + `CodeDiffView`).
+  A checkpoint and the baseline store content *hashes*, not blobs, so
+  they say so rather than falling back to the live file — which would
+  diff a file against itself and render as "no changes".
+- **Fast-forward** (`playback-service` + `PlaybackBar`). Discrete frames,
+  never interpolated: between two recorded points a file either has a
+  state or it does not, and a tween of source code would be fiction.
+  Edge counts are **omitted** for commit frames rather than reported as
+  zero.
+- **Code-first mode** (`CodeWorkspace`, `workspaceMode: 'code'`, ⌘⇧C).
+  A peer of the graph — when active the graph does not mount, so its
+  layout cost is not paid at all.
+
+**The dependency, measured.** CodeMirror added ~6 MB to `node_modules`
+and took the main bundle 1,707 → 2,417 kB. Paying ~710 kB on every launch
+for an editor most users open rarely would contradict this phase's own
+argument, so the diff view is lazily imported: it builds as its own
+763 kB chunk and the main bundle returns to its previous size.
+
+**Coverage**: 19 harness tests + 24 unit tests.
+
+
 ### Sep 17, 2026 — Phase 27 (part): Ruby, and a guard so this cannot recur
 
 Design: [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md).

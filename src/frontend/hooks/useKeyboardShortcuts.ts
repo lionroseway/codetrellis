@@ -11,6 +11,7 @@ import { useTerminalStore } from '../stores/terminal-store';
  * - Cmd+J: Toggle agent panel
  * - Cmd+\: Toggle split view (workspace + graph)
  * - Cmd+`: Toggle terminal panel
+ * - Cmd+Shift+C: Toggle the code-first surface (Phase 26)
  * - Escape: Deselect node
  */
 export function useKeyboardShortcuts() {
@@ -56,6 +57,14 @@ export function useKeyboardShortcuts() {
       if (meta && e.key === '`') {
         e.preventDefault();
         useTerminalStore.getState().togglePanel();
+      }
+
+      // Cmd+Shift+C — the code-first surface. A peer of the graph, so
+      // it gets a shortcut of its own rather than living in a menu.
+      if (meta && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+        e.preventDefault();
+        const ui = useUiStore.getState();
+        ui.setWorkspaceMode(ui.workspaceMode === 'code' ? 'graph' : 'code');
       }
 
       if (e.key === 'Escape') {

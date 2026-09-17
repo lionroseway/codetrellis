@@ -48,6 +48,7 @@ import { compareSnapshots, listComparands, readFileAt } from './services/snapsho
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
+import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
 import * as sessionService from './services/session-service';
 import * as taskAttachmentsService from './services/task-attachments-service';
@@ -2523,6 +2524,26 @@ app.get('/api/plans/:uid/changes', (req, res) => {
   } else {
     res.json(listProposedChanges(req.params.uid));
   }
+});
+
+// --- Fast-forward (Phase 26, layer C) ---
+//
+// An ordered sequence of points plus the delta between each consecutive
+// pair. Discrete by design: between two frames a file either has a
+// recorded state or it does not, and a tween of source code would be
+// fiction.
+app.get('/api/playback', (req, res) => {
+  const projectPath = req.query.project as string;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+
+  const limitRaw = Number(req.query.limit);
+  res.json(
+    buildPlaybackSequence({
+      projectPath,
+      limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+      includeCheckpoints: req.query.checkpoints !== '0',
+    }),
+  );
 });
 
 // --- File at a point in time (Phase 26, the diff editor's backing call) ---

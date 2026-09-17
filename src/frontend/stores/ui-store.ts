@@ -26,7 +26,11 @@ export interface SelectedNodeMeta {
  * to the graph without losing the active plan, and we can still pop
  * the workspace open when a plan is selected from the graph.
  */
-export type WorkspaceMode = 'graph' | 'plan' | 'docs';
+/**
+ * Phase 26 — `code` is a peer of `graph`, not a panel inside it. When it
+ * is active the graph does not mount, so its layout cost is not paid.
+ */
+export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code';
 
 interface UiState {
   sidebarVisible: boolean;
