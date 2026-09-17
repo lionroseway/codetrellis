@@ -42,3 +42,8 @@ yarn-error.*
 
 expo-env.d.ts
 # @end expo-cli
+# Release artifacts from scripts/release-mobile.sh (`eas build --local`).
+# Hundreds of megabytes each, and the clean-tree check that guards a release
+# would otherwise fail on the output of the previous one.
+/build-*.ipa
+/build-*.aab

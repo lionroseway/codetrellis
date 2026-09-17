@@ -25,7 +25,7 @@ import {
   type PairingAnswer,
   type PairingServerResult,
 } from './pairing-server';
-import { upsertPairedDevice } from './paired-device-service';
+import { upsertPairedDevice, touchPairedDevice } from './paired-device-service';
 import { stripColonFingerprint } from '../../shared/lib/sdp-minimal';
 import { sendToPeer, onConnectionStateChange } from './webrtc-service';
 import { DATA_CHANNELS } from '../../shared/types';
@@ -270,6 +270,7 @@ function deliverPairingSecret(device: PairedDevice): void {
 
   if (sendToPeer(device.fingerprint, DATA_CHANNELS.CONTROL, payload)) {
     console.log(`[Pairing] Delivered the reconnect secret to "${device.alias}"`);
+    touchPairedDevice(device.fingerprint);
     return;
   }
 
@@ -283,6 +284,13 @@ function deliverPairingSecret(device: PairedDevice): void {
     clearTimeout(timer);
     if (ok) {
       console.log(`[Pairing] Delivered the reconnect secret to "${device.alias}"`);
+      // Delivering it over the data channel IS a successful conversation with
+      // this device, so record it. Without this the pairing path never set
+      // `lastConnected` — `touchPairedDevice` only fires on a connection state
+      // change, and during pairing that change happens BEFORE the device is
+      // stored. Every freshly paired phone then read "Never connected"
+      // forever, which is the opposite of what just happened.
+      touchPairedDevice(device.fingerprint);
     } else {
       // The desktop's record is sound; the phone's is not. Say which, because
       // "pair again" is the only fix and the user should hear it now.

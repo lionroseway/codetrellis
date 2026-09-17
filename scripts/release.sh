@@ -144,6 +144,24 @@ if [[ ${#upload_files[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# --- Sign the manifest (Phase 19, finding 23) ---
+#
+# The app verifies a download against a sha256. Until this existed that digest
+# came from the GitHub API — which put GitHub in the trust chain: anyone who
+# took over the releases repo would publish a bad binary AND a matching digest,
+# and every check would pass.
+#
+# SHA256SUMS is signed with a key that lives on the release machine and never
+# in CI. The public half ships inside the app, so a running copy can check a
+# download without asking a server whose answer it would have to trust.
+#
+# The file list comes from `upload_files` rather than a second set of globs
+# here, so the manifest cannot describe a different set than the release
+# actually contains.
+log "Signing the release manifest…"
+node "${REPO_ROOT}/scripts/sign-release-manifest.js" "$OUT_DIR" "${upload_files[@]}"
+upload_files+=("${OUT_DIR}/SHA256SUMS" "${OUT_DIR}/SHA256SUMS.sig")
+
 log "Will upload ${#upload_files[@]} files:"
 for f in "${upload_files[@]}"; do
   printf '    %s (%s)\n' "$(basename "$f")" "$(du -h "$f" | cut -f1)"

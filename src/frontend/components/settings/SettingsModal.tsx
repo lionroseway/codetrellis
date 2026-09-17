@@ -107,8 +107,15 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'about', label: 'About', Icon: Info },
 ];
 
-export function SettingsModal({ onClose }: { onClose: () => void }) {
-  const [section, setSection] = useState<Section>('identity');
+export function SettingsModal({
+  onClose,
+  initialSection = 'identity',
+}: {
+  onClose: () => void;
+  /** Which pane to land on. Lets callers deep-link, e.g. "Pair new device". */
+  initialSection?: Section;
+}) {
+  const [section, setSection] = useState<Section>(initialSection);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [boundPort, setBoundPort] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);

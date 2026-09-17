@@ -96,6 +96,11 @@ import {
   checkForUpdate,
   startUpdatePolling,
 } from './services/update-service';
+import {
+  startUpdateDownload,
+  getUpdateDownloadState,
+  cancelUpdateDownload,
+} from './services/update-download-service';
 import { BUILD_INFO } from '../shared/build-info';
 import * as peerService from './services/peer-connection-service';
 import { setDeviceCapabilities } from './services/paired-device-service';
@@ -2930,6 +2935,37 @@ app.get('/api/build-info', (_req, res) => {
  */
 app.get('/api/updates/status', (_req, res) => {
   res.json(getUpdateState());
+});
+
+/**
+ * Download the available update and verify it against the published checksum
+ * (Phase 19, finding 23).
+ *
+ * The URL and digest come from the update state we already fetched, NOT from
+ * the request. A caller cannot name what gets downloaded — that would hand the
+ * renderer, and anything that reaches it, an arbitrary-fetch primitive.
+ */
+app.post('/api/updates/download', async (_req, res) => {
+  try {
+    const current = getUpdateState();
+    const download = current.result?.download;
+    if (!current.result?.available || !download) {
+      res.status(409).json({ error: 'No update is available to download' });
+      return;
+    }
+    const outcome = await startUpdateDownload(current.result.latest, download);
+    res.status(outcome.phase === 'error' ? 502 : 200).json(outcome);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/updates/download/status', (_req, res) => {
+  res.json(getUpdateDownloadState());
+});
+
+app.post('/api/updates/download/cancel', (_req, res) => {
+  res.json(cancelUpdateDownload());
 });
 
 /**

@@ -41,8 +41,8 @@
   --color-node-interface-bg: rgba(46, 26, 74, 0.3);
   --color-node-interface-border: rgba(167, 139, 250, 0.4);
 
-  --font-family-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-family-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  --font-family-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, monospace;
 
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
