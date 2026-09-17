@@ -149,6 +149,21 @@ which works in dev and fails when packaged costs a release. CodeMirror is
 pure JS with no native binding, so the risk is far lower — but the
 packaged build is still the only thing that proves it.
 
+**Measured cost, and what it forced.** Installing the packages added
+~6 MB to `node_modules` and, once wired in, took the main bundle from
+1,707 kB to 2,417 kB — about **710 kB** for an editor most users open
+rarely. Paying that on every launch would contradict this phase's own
+argument, so the diff view is **lazily imported**: it builds as its own
+746 kB chunk, the main bundle returns to its previous size, and a user
+who never opens a diff never downloads it. Applying the phase's thesis to
+our own dependency was the consistent move, not a clever one.
+
+**A language with no CodeMirror package is not an error.** Ruby is the
+live example — we parse it, `@codemirror/lang-ruby` does not exist on the
+6.x line — and the honest result is an unhighlighted diff, which is still
+a perfectly readable diff. Falling back to a *wrong* grammar would colour
+Ruby as JavaScript, which is worse than plain text.
+
 Prism stays for the read-only inspector preview. Replacing a working
 component to have one fewer library is not worth a regression; CodeMirror
 earns its place where the diff and the overlay need it.

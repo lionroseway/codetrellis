@@ -4,6 +4,7 @@ import { getDb, getDependencyEdges, getAllFileHashes } from './database';
 import { getBaseline, diffSnapshots, captureSnapshot, type GraphSnapshot, type ArchDiff } from './diff-engine';
 import { getSnapshot, listSnapshots } from './trellis-service';
 import path from 'node:path';
+import fs from 'node:fs';
 
 /**
  * Snapshot selection and comparison — Phase 25.
@@ -248,3 +249,83 @@ export function compareSnapshots(
 
 /** Unused import guard — `getDb` is kept for future per-scope queries. */
 void getDb;
+
+// ── Reading a single file at a comparand ─────────────────────────────
+
+export interface FileAtResult {
+  ok: boolean;
+  /** File contents at that point. Null when the file did not exist. */
+  content: string | null;
+  /** Why contents are unavailable, when they are. */
+  unavailable?: string;
+  label: string;
+}
+
+/**
+ * Read one file as of a comparand — the backing call for the diff editor.
+ *
+ * The three cases are genuinely different, and the third is the one that
+ * matters:
+ *
+ *   - **live** — read the working tree.
+ *   - **commit:<ref>** — `git show <ref>:<path>`. A file that did not
+ *     exist then returns `content: null`, which the diff renders as
+ *     wholly added.
+ *   - **checkpoint / baseline** — **contents are not available.** Trellis
+ *     snapshots and the baseline store paths, content *hashes* and edge
+ *     lists, not blobs. They can say WHICH files changed, never HOW.
+ *
+ * That third case must say so rather than falling back to the live file,
+ * which would diff a file against itself and render as "no changes" —
+ * a confident, wrong answer where the honest one is "cannot".
+ */
+export function readFileAt(
+  spec: string,
+  projectPath: string,
+  relativePath: string,
+): FileAtResult {
+  if (spec === 'live') {
+    try {
+      const abs = path.resolve(projectPath, relativePath);
+      return { ok: true, content: fs.readFileSync(abs, 'utf-8'), label: 'Live' };
+    } catch {
+      return { ok: true, content: null, label: 'Live' };
+    }
+  }
+
+  if (spec.startsWith('commit:')) {
+    const ref = spec.slice('commit:'.length);
+    assertSafeGitRef(ref, 'file comparand');
+    try {
+      const content = execFileSync('git', ['show', `${ref}:${relativePath}`], {
+        cwd: projectPath,
+        encoding: 'utf-8',
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      return { ok: true, content, label: `Commit ${ref}` };
+    } catch {
+      // `git show` fails both for "no such ref" and "file not in that
+      // tree". The second is ordinary — a file added since — so it is
+      // reported as absent rather than as an error.
+      return { ok: true, content: null, label: `Commit ${ref}` };
+    }
+  }
+
+  if (spec === 'baseline' || spec.startsWith('checkpoint:')) {
+    return {
+      ok: false,
+      content: null,
+      label: spec === 'baseline' ? 'Baseline' : spec,
+      unavailable:
+        'Snapshots store content hashes, not file contents, so this point can say which files ' +
+        'changed but not how. Compare against a commit or the working tree to see a diff.',
+    };
+  }
+
+  return { ok: false, content: null, label: spec, unavailable: `Unknown comparand "${spec}"` };
+}
+
+/** Whether a comparand can supply file CONTENTS, as opposed to a file list. */
+export function canSupplyContent(spec: string): boolean {
+  return spec === 'live' || spec.startsWith('commit:');
+}

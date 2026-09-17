@@ -44,7 +44,7 @@ import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
-import { compareSnapshots, listComparands } from './services/snapshot-compare-service';
+import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
@@ -2522,6 +2522,41 @@ app.get('/api/plans/:uid/changes', (req, res) => {
     res.json(summarizeChanges(req.params.uid));
   } else {
     res.json(listProposedChanges(req.params.uid));
+  }
+});
+
+// --- File at a point in time (Phase 26, the diff editor's backing call) ---
+//
+// A checkpoint and the baseline store content HASHES, not blobs, so they
+// can say which files changed but never how. This says so rather than
+// falling back to the live file, which would diff a file against itself
+// and render as "no changes" — a confident wrong answer where the honest
+// one is "cannot".
+app.get('/api/file/at', (req, res) => {
+  const projectPath = req.query.project as string;
+  const relativePath = req.query.path as string;
+  const at = (req.query.at as string) || 'live';
+  if (!projectPath || !relativePath) {
+    res.status(400).json({ error: 'project and path query params required' });
+    return;
+  }
+
+  // The path is project-RELATIVE and resolved against an opened project,
+  // so a caller cannot nominate a root or escape one (Phase 19, Gate 2.2).
+  const owningRoot = listTrustedRoots().find((r) => isWithin(r, projectPath) || r === projectPath);
+  if (!owningRoot) {
+    res.status(403).json({ error: 'Refusing to read from a project that is not open' });
+    return;
+  }
+  if (relativePath.includes('..')) {
+    res.status(400).json({ error: 'Relative path must not traverse upwards' });
+    return;
+  }
+
+  try {
+    res.json(readFileAt(at, owningRoot, relativePath));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not read file' });
   }
 });
 
