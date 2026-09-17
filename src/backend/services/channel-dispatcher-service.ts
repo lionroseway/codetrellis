@@ -23,6 +23,13 @@
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy___plan_service from './plan-service';
 import { listChannelEvents } from './channel-event-service';
+import { getSettings } from './settings-service';
+import {
+  resolveWebhookTarget,
+  postWebhookJson,
+  WebhookBlocked,
+  type ApprovedTarget,
+} from './webhook-egress';
 import { matchChannelRoutingRules, listChannelRoutingRules } from './project-config-service';
 import { getPlan } from './plan-service';
 import { pushForChannelEvent } from './push-notification-service';
@@ -129,6 +136,39 @@ async function fireRule(rule: ChannelRoutingRule, event: ChannelEvent, projectRo
 async function fireWebhook(rule: ChannelRoutingRule, event: ChannelEvent): Promise<void> {
   if (rule.notify.target !== 'webhook') return;
   const url = rule.notify.url;
+
+  // WHERE DID THIS URL COME FROM? (Phase 19, finding 20)
+  //
+  // `<projectRoot>/.codetrellis/config.json` — a file in the REPOSITORY. So
+  // cloning a repo and opening it was enough to make this process POST plan
+  // and channel data to an address that repo's author chose, with headers
+  // they chose, from inside the developer's network. The valuable targets are
+  // the ones only that machine can reach.
+  //
+  // `resolveWebhookTarget` refuses anything that is not https, to an approved
+  // host, resolving entirely to public addresses — and returns ONE pinned
+  // address so the send cannot resolve again and get a different answer.
+  let target: ApprovedTarget;
+  try {
+    const webhookSettings = getSettings().webhooks;
+    target = await resolveWebhookTarget(url, webhookSettings.allowedHosts, {
+      allowLoopback: webhookSettings.allowLoopback,
+    });
+  } catch (err) {
+    if (err instanceof WebhookBlocked) {
+      console.warn(`[ChannelDispatcher] webhook blocked — ${err.message}`);
+      // Tell the user. A webhook that silently never fires is indistinguishable
+      // from a broken one, and the fix (approve the host) is theirs to make.
+      broadcastFn?.('channel-webhook-blocked', {
+        ruleId: rule.id ?? null,
+        url,
+        reason: err.message,
+      });
+      return;
+    }
+    throw err;
+  }
+
   const payload = {
     rule: { id: rule.id, description: rule.description },
     event: {
@@ -152,31 +192,26 @@ async function fireWebhook(rule: ChannelRoutingRule, event: ChannelEvent): Promi
     'content-type': 'application/json',
     ...(rule.notify.headers ?? {}),
   };
+  const body = JSON.stringify(payload);
 
   // Retry once on 5xx; client errors are not retried.
   const maxAttempts = 2;
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5_000);
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        if (res.ok) return;
-        if (res.status < 500) {
-          // Client error — don't retry.
-          console.warn(`[ChannelDispatcher] webhook ${url} returned ${res.status} (no retry)`);
-          return;
-        }
-        lastErr = new Error(`HTTP ${res.status}`);
-      } finally {
-        clearTimeout(timeout);
+      const res = await postWebhookJson(target, headers, body, 5_000);
+      if (res.redirected) {
+        // A redirect names a destination the user never approved. Following
+        // it would re-open every check above, so it is a failure, not a hop.
+        console.warn(`[ChannelDispatcher] webhook ${url} redirected (${res.status}) — refusing to follow`);
+        return;
       }
+      if (res.status >= 200 && res.status < 300) return;
+      if (res.status < 500) {
+        console.warn(`[ChannelDispatcher] webhook ${url} returned ${res.status} (no retry)`);
+        return;
+      }
+      lastErr = new Error(`HTTP ${res.status}`);
     } catch (err) {
       lastErr = err;
     }

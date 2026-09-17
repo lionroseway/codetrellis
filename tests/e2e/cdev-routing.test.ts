@@ -35,6 +35,17 @@ test.describe('CDev Phase 2.4 — channel routing dispatcher', () => {
     const listener = await startWebhookListener((req) => received.push(req));
     try {
       await h.client.scanProject(h.fixture.projectPath);
+
+      // Phase 19, finding 20 — a webhook URL comes from a file IN THE
+      // REPOSITORY, so by default nothing is delivered anywhere. Delivering to
+      // this test's listener means asking for exactly what a developer running
+      // a local receiver would ask for: approve the host, and opt in to
+      // loopback. Without both, the dispatcher refuses — which is the subject
+      // of `webhook-ssrf.test.ts`.
+      const listenerHost = new URL(listener.url).hostname;
+      await h.client.raw('PUT', '/api/settings', {
+        webhooks: { allowedHosts: [listenerHost], allowLoopback: true },
+      });
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
 
       // 1. Configure a routing rule targeting our listener.
