@@ -67,11 +67,20 @@ export interface PairingAnswerRequest {
  */
 export interface PairingAnswerResponse {
   accepted: boolean;
-  /** Bluetooth-style 6-digit confirmation code (same on both sides). */
-  confirmCode: string;
   /** Stable pairing identity — same on both sides, survives restarts. */
   pairingId: string;
 }
+
+/*
+ * NO `confirmCode` HERE ANY MORE (Phase 19, finding 1.2).
+ *
+ * The desktop used to compute the confirmation code and send it back, and this
+ * app displayed whatever arrived — so the user compared the desktop's number
+ * against the desktop's number. A relay terminating both legs supplies both
+ * screens, and the ceremony confirmed nothing. Each device derives its own now
+ * from the certificate it actually observed; see `deriveConfirmationCode` in
+ * `peer-auth.ts`.
+ */
 
 // --- Connection --------------------------------------------------------------
 
@@ -87,7 +96,13 @@ export interface PairedDesktop {
   pairingId: string;
   /** User-chosen alias ("Work iMac", "Laptop"). */
   alias: string;
-  /** Shared secret for auto-reconnect (hex-encoded). */
+  /**
+   * Secret for authenticating reconnects (hex).
+   *
+   * Handed over by the desktop on the DTLS `control` channel at pairing time.
+   * Records written before Phase 19 hold `''`, which cannot authenticate
+   * anything — those desktops have to be paired again.
+   */
   sharedSecret: string;
   /** When the pairing was completed (ISO). */
   pairedAt: string;

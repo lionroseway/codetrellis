@@ -56,6 +56,16 @@ export default function PairScreen() {
   const [manualHost, setManualHost] = useState('');
   const [manualPort, setManualPort] = useState('');
   const [manualCode, setManualCode] = useState('');
+  /**
+   * The reconnect secret, once the desktop hands it over on the control
+   * channel — which it does when the user confirms the code there.
+   *
+   * Empty means we cannot save a usable pairing yet: without it every future
+   * reconnect is refused (Phase 19, finding 1.2), and a pairing that looks
+   * saved but can never reconnect is worse than one that visibly failed.
+   */
+  const [sharedSecret, setSharedSecret] = useState('');
+  const [secretTimedOut, setSecretTimedOut] = useState(false);
   const scannedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -134,10 +144,11 @@ export default function PairScreen() {
         timeoutRef.current = null;
       }
 
-      // Go straight to connected — the confirmation code is shown
-      // for the user to enter on the desktop. WebRTC connects in
-      // the background; pairing is saved based on the HTTP exchange.
+      // Show the code. The desktop hands over the reconnect secret once the
+      // user types it there, so the save step waits on that rather than
+      // completing on the HTTP exchange alone.
       setState('connected');
+      awaitSecret(result2);
 
     } catch (err) {
       console.error('[Pair] Error:', err);
@@ -147,8 +158,23 @@ export default function PairScreen() {
     }
   };
 
+  /** Wait for the desktop's confirmation to deliver the reconnect secret. */
+  const awaitSecret = (result: PairingResult) => {
+    setSharedSecret('');
+    setSecretTimedOut(false);
+    result.awaitSecret().then((secret) => {
+      if (secret) setSharedSecret(secret);
+      else setSecretTimedOut(true);
+    });
+  };
+
   const handleSavePairing = async () => {
     if (!pairingResult) return;
+    if (!sharedSecret) {
+      // Belt and braces — the button is disabled without it.
+      setError('Confirm the code on your desktop first.');
+      return;
+    }
 
     const deviceAlias = alias.trim() || 'Desktop';
 
@@ -157,7 +183,7 @@ export default function PairScreen() {
         fingerprint: pairingResult.desktopFingerprint,
         pairingId: pairingResult.pairingId,
         alias: deviceAlias,
-        sharedSecret: '',
+        sharedSecret,
         pairedAt: new Date().toISOString(),
         lastConnected: new Date().toISOString(),
         lastKnownAddress: pairingResult.desktopAddress,
@@ -212,6 +238,7 @@ export default function PairScreen() {
       }
 
       setState('connected');
+      awaitSecret(result2);
     } catch (err) {
       console.error('[Pair] Manual connect error:', err);
       setState('error');
@@ -231,6 +258,8 @@ export default function PairScreen() {
     setPairingResult(null);
     setError(null);
     setAlias('');
+    setSharedSecret('');
+    setSecretTimedOut(false);
     setManualHost('');
     setManualPort('');
     setManualCode('');
@@ -413,9 +442,25 @@ export default function PairScreen() {
             placeholderTextColor="#52525b"
           />
 
+          {/* The desktop sends the reconnect secret when the user confirms
+              there, so waiting for it IS waiting for confirmation. Saving
+              without it would store a pairing that can never reconnect. */}
+          {!sharedSecret && !secretTimedOut && (
+            <View style={styles.waitingRow}>
+              <ActivityIndicator size="small" color="#3b82f6" />
+              <Text style={styles.waitingText}>Waiting for confirmation on desktop…</Text>
+            </View>
+          )}
+          {secretTimedOut && (
+            <Text style={styles.waitingError}>
+              The desktop never confirmed. Start pairing again from Settings → Devices.
+            </Text>
+          )}
+
           <TouchableOpacity
-            style={styles.confirmButton}
+            style={[styles.confirmButton, !sharedSecret && styles.confirmButtonDisabled]}
             onPress={handleSavePairing}
+            disabled={!sharedSecret}
           >
             <Text style={styles.confirmButtonText}>Save Pairing</Text>
           </TouchableOpacity>
@@ -649,10 +694,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
+  confirmButtonDisabled: {
+    backgroundColor: '#3f3f46',
+  },
   confirmButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  waitingError: {
+    color: '#f87171',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 12,
   },
 
   // Error

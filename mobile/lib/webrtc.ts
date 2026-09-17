@@ -43,6 +43,9 @@ function getWebRTC() {
   return _webrtcModule;
 }
 
+import { extractSingleFingerprint, fingerprintsEqual } from './sdp-fingerprint';
+import { computeChallengeMac, deriveConfirmationCode, isUsableSecret } from './peer-auth';
+
 // --- Constants ---------------------------------------------------------------
 
 const STUN_SERVERS = [
@@ -80,6 +83,39 @@ export interface PairingResult {
   candidateAddresses: string[];
   /** Stable pairing identity — survives restarts on both sides. */
   pairingId: string;
+  /**
+   * Resolves with the reconnect secret once the desktop hands it over, or with
+   * `''` if it never does.
+   *
+   * A promise rather than a value because the two devices are waiting on each
+   * other: the desktop sends the secret when the USER confirms, and the user
+   * cannot confirm until this screen has shown them the code. Returning the
+   * secret directly would deadlock the pairing it is part of.
+   *
+   * It arrives over the DTLS `control` channel, never through the pairing HTTP
+   * server — that server is plaintext on the LAN, so a secret sent through it
+   * is a secret any eavesdropper also holds (Phase 19, finding 1.2).
+   */
+  awaitSecret: () => Promise<string>;
+}
+
+/**
+ * A pairing that predates Phase 19 and cannot be repaired by retrying.
+ *
+ * Distinguished from ordinary connection failures so the connection manager
+ * stops instead of backing off forever against a desktop that will refuse it
+ * every time.
+ */
+export function repairRequired(): Error {
+  const err = new Error(
+    'This desktop was paired before reconnect authentication existed. Pair it again from Settings → Devices.',
+  );
+  err.name = 'RepairRequired';
+  return err;
+}
+
+export function isRepairRequired(err: unknown): boolean {
+  return err instanceof Error && err.name === 'RepairRequired';
 }
 
 // --- WebRTC Manager ----------------------------------------------------------
@@ -199,6 +235,30 @@ export class WebRTCManager {
     // so ondatachannel events from the desktop aren't missed.
     this.setupConnectionMonitoring(pc);
 
+    // ── PIN THE DESKTOP BEFORE TALKING TO IT ────────────────────────────
+    //
+    // `offerData.fingerprint` is a field the server chose to send. The value
+    // that matters is the one inside the SDP, because that is what the DTLS
+    // handshake is verified against — and it is read structurally so the SDP
+    // cannot commit to two things at once (Phase 19, finding 2).
+    //
+    // A disagreement between the two is refused rather than resolved: no
+    // honest desktop produces one.
+    let desktopFingerprint: string;
+    try {
+      desktopFingerprint = extractSingleFingerprint(String(offerData.offer ?? ''));
+    } catch (err) {
+      throw new Error(
+        `The desktop's pairing offer is malformed (${(err as Error).message}). ` +
+        'Cancel pairing on the desktop and try again.',
+      );
+    }
+    if (offerData.fingerprint && !fingerprintsEqual(desktopFingerprint, offerData.fingerprint)) {
+      throw new Error(
+        'The desktop announced one certificate and offered another. Pairing refused.',
+      );
+    }
+
     await pc.setRemoteDescription(
       new RTCSessionDescription({ type: 'offer', sdp: offerData.offer }),
     );
@@ -231,14 +291,37 @@ export class WebRTCManager {
     console.log(`[WebRTC] Gathered ${iceCandidates.length} ICE candidates`);
 
     // 5. Extract our fingerprint from the final local description SDP
-    // (includes gathered ICE candidates inlined)
+    // (includes gathered ICE candidates inlined). Structural, like everywhere
+    // else — if our own answer somehow carried two, the desktop would refuse
+    // it anyway and a regex would hide which one we meant.
     const finalSdp = pc.localDescription?.sdp ?? answer.sdp ?? '';
-    const fpMatch = finalSdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/);
-    const ourFingerprint = fpMatch?.[1] ?? '';
-
-    if (!ourFingerprint) {
-      throw new Error('Failed to extract our fingerprint from answer SDP');
+    let ourFingerprint: string;
+    try {
+      ourFingerprint = extractSingleFingerprint(finalSdp);
+    } catch (err) {
+      throw new Error(`Failed to read our own fingerprint from the answer SDP: ${(err as Error).message}`);
     }
+
+    // 5b. Derive the confirmation code OURSELVES (Phase 19, finding 1.2).
+    //
+    // It used to arrive in the desktop's reply and we showed whatever we were
+    // given. So the user compared the desktop's number against the desktop's
+    // number — a relay terminating both legs supplies both screens, and the
+    // check confirmed nothing. Derived from the certificate we actually saw
+    // and our own, a relay makes the two screens disagree.
+    const confirmCode = deriveConfirmationCode(
+      String(offerData.nonce ?? ''),
+      desktopFingerprint,
+      ourFingerprint,
+    );
+
+    // 5c. Start listening for the pairing secret before we post the answer.
+    //
+    // The desktop sends it over the `control` channel the moment the user
+    // confirms, and that can land before this function's HTTP round-trip
+    // finishes. Subscribing afterwards would be a race we would lose
+    // intermittently and debug as "sometimes reconnect doesn't work".
+    const secretPromise = this.awaitPairingSecret();
 
     // 6. Post our answer back to the temp server
     console.log(`[WebRTC] Posting answer to ${baseUrl}/answer (SDP length=${finalSdp.length})`);
@@ -261,9 +344,8 @@ export class WebRTCManager {
 
     const answerResult: PairingAnswerResponse = await answerRes.json();
 
-    console.log(
-      `[WebRTC] Answer accepted — confirmCode=${answerResult.confirmCode} pairingId=${answerResult.pairingId?.slice(0, 8)}…`,
-    );
+    console.log(`[WebRTC] Answer accepted — pairingId=${answerResult.pairingId?.slice(0, 8)}…`);
+
 
     // The host that actually answered (parsed from the winning baseUrl).
     const winningHost = baseUrl.replace(/^https?:\/\//, '').split(':')[0] || qrPayload.h;
@@ -273,12 +355,54 @@ export class WebRTCManager {
     const candidateAddresses = [...new Set([winningHost, ...advertised])].filter(Boolean);
 
     return {
-      confirmCode: answerResult.confirmCode,
-      desktopFingerprint: ensureColonFingerprint(offerData.fingerprint),
+      confirmCode,
+      // The certificate we actually saw, not the field the server sent.
+      desktopFingerprint: ensureColonFingerprint(desktopFingerprint),
       desktopAddress: winningHost,
       candidateAddresses,
       pairingId: answerResult.pairingId,
+      // Already in flight — see `secretPromise` above. Subscribing after the
+      // HTTP round-trip would be a race we would lose intermittently and then
+      // debug as "sometimes reconnect doesn't work".
+      awaitSecret: () => secretPromise,
     };
+  }
+
+  /**
+   * Wait for the desktop to hand over the pairing secret on the `control`
+   * channel.
+   *
+   * Resolves to `''` if it never arrives — the caller decides what that means.
+   * It is not an exception because the common cause is the user simply not
+   * confirming on the desktop, which is a normal thing to do.
+   */
+  private awaitPairingSecret(timeoutMs = 120_000): Promise<string> {
+    return new Promise<string>((resolve) => {
+      let done = false;
+      const finish = (secret: string) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(secret);
+      };
+
+      const timer = setTimeout(() => finish(''), timeoutMs);
+
+      const unsubscribe = this.onMessage((channel, data) => {
+        if (channel !== DATA_CHANNELS.CONTROL) return;
+        try {
+          const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+          const msg = JSON.parse(text);
+          if (msg?.type === 'pairing.secret' && isUsableSecret(msg.secret)) {
+            console.log('[WebRTC] Pairing secret received');
+            finish(msg.secret as string);
+          }
+        } catch {
+          // Not our message.
+        }
+      });
+    });
   }
 
   /**
@@ -321,7 +445,15 @@ export class WebRTCManager {
     desktopAddress: string | string[],
     pairingId: string,
     mobileApiPort: number = 19480,
+    /**
+     * The desktop's DTLS fingerprint from pairing. This is now a PIN, not a
+     * credential: it used to be sent to the desktop as an alternative way of
+     * identifying ourselves, which authenticated nobody. We check the offer
+     * against it instead (Phase 19, finding 2, reverse direction).
+     */
     fingerprint?: string,
+    /** Secret agreed at pairing. Without it the desktop will refuse us. */
+    sharedSecret?: string,
   ): Promise<void> {
     this.cleanup();
     this.lastReconnectPairingId = null;
@@ -340,13 +472,22 @@ export class WebRTCManager {
       throw new Error('No desktop address to reconnect to');
     }
 
+    // Checked ONCE, before the sweep. A desktop paired before reconnect
+    // authentication existed has no secret to prove anything with, and no
+    // address will change that — retrying every candidate would just repeat
+    // the same message N times and then retry the lot on a backoff forever.
+    if (!isUsableSecret(sharedSecret) || !fingerprint) {
+      this.setState('failed');
+      throw repairRequired();
+    }
+
     this.setState('connecting');
 
     const errors: string[] = [];
     for (const address of candidates) {
       if (this.reconnectCanceled) break; // user hit Cancel / Disconnect
       try {
-        await this.attemptReconnect(address, pairingId, mobileApiPort, fingerprint);
+        await this.attemptReconnect(address, pairingId, mobileApiPort, fingerprint, sharedSecret);
         if (this.reconnectCanceled) { this.cleanup(); break; }
         this.lastReconnectAddress = address;
         return; // success — the 'connected' state handler takes over from here
@@ -377,30 +518,55 @@ export class WebRTCManager {
     desktopAddress: string,
     pairingId: string,
     mobileApiPort: number,
-    fingerprint?: string,
+    /** Pinned desktop certificate. Checked once by the caller, so required here. */
+    fingerprint: string,
+    /** Pairing secret. Checked once by the caller, so required here. */
+    sharedSecret: string,
   ): Promise<void> {
     const baseUrl = `http://${desktopAddress}:${mobileApiPort}`;
 
-    console.log(`[WebRTC] Requesting reconnect offer from ${baseUrl} (pairingId=${pairingId?.slice(0, 8) ?? 'none'}, fp=${fingerprint?.slice(0, 12) ?? 'none'})`);
+    console.log(`[WebRTC] Requesting reconnect offer from ${baseUrl} (pairingId=${pairingId?.slice(0, 8) ?? 'none'})`);
 
-    // 1. Request a reconnection offer — send pairingId (preferred) + fingerprint
-    //    (fallback). Bounded by an AbortController so an unreachable address
-    //    fails in a few seconds instead of hanging on the OS TCP timeout (which
-    //    would stall the whole candidate sweep).
-    const offerRes = await (async () => {
+    // Every request is bounded by an AbortController so an unreachable address
+    // fails in a few seconds instead of hanging on the OS TCP timeout, which
+    // would stall the whole candidate sweep.
+    const post = async (path: string, body: unknown, timeoutMs = 6000) => {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 6000);
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
-        return await fetch(`${baseUrl}/api/mobile/reconnect`, {
+        return await fetch(`${baseUrl}${path}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pairingId: pairingId || undefined, fingerprint: fingerprint || undefined }),
+          body: JSON.stringify(body),
           signal: ctrl.signal,
         });
       } finally {
         clearTimeout(timer);
       }
-    })();
+    };
+
+    // 1a. Ask for a challenge and answer it.
+    //
+    // The request used to be `{pairingId, fingerprint}` and nothing else —
+    // both values this device transmits in the clear on every attempt, so
+    // knowing either was enough to be handed an offer. We now prove we hold
+    // the secret agreed at pairing (finding 1.2).
+    const challengeRes = await post('/api/mobile/auth/challenge', { pairingId });
+    if (!challengeRes.ok) {
+      throw new Error(`challenge rejected: ${challengeRes.status}`);
+    }
+    const challenge = (await challengeRes.json()) as { nonce: string; expiresAt: number };
+    if (!challenge?.nonce || !challenge?.expiresAt) {
+      throw new Error('challenge malformed');
+    }
+
+    // 1b. Request the reconnection offer, with the proof.
+    const offerRes = await post('/api/mobile/reconnect', {
+      pairingId,
+      nonce: challenge.nonce,
+      expiresAt: challenge.expiresAt,
+      mac: computeChallengeMac(sharedSecret, pairingId, challenge.nonce, challenge.expiresAt),
+    });
 
     if (!offerRes.ok) {
       const body = await offerRes.json().catch(() => ({ error: 'Request failed' }));
@@ -408,7 +574,30 @@ export class WebRTCManager {
     }
 
     const offerData = await offerRes.json();
-    console.log(`[WebRTC] Got reconnect offer — desktop fp=${offerData.fingerprint?.slice(0, 16)}… pairingId=${offerData.pairingId?.slice(0, 8) ?? 'none'}`);
+    console.log(`[WebRTC] Got reconnect offer — pairingId=${offerData.pairingId?.slice(0, 8) ?? 'none'}`);
+
+    // ── PIN THE DESKTOP (Phase 19, finding 2, reverse direction) ──────────
+    //
+    // The desktop checks our certificate against the paired record. Nothing
+    // checked THEIRS: whatever answered on the address we dialled got to
+    // present an offer, and we completed the handshake with it. Anyone able
+    // to occupy that address — a stale DHCP lease, a hostile access point, a
+    // VPN exit — became our desktop.
+    //
+    // Read structurally, not with a regex, for the same reason the desktop
+    // does: a first-match read lets a peer prepend the fingerprint we are
+    // looking for while handshaking with a different certificate.
+    let offeredFingerprint: string;
+    try {
+      offeredFingerprint = extractSingleFingerprint(String(offerData.offer ?? ''));
+    } catch (err) {
+      throw new Error(`offer SDP unusable: ${(err as Error).message}`);
+    }
+    if (!fingerprintsEqual(offeredFingerprint, fingerprint)) {
+      throw new Error(
+        'the machine answering on this address is not the desktop this device was paired with',
+      );
+    }
 
     // Store the pairingId returned by the desktop (enables silent upgrade
     // for pre-pairingId clients — the connection manager reads this after connect)
@@ -464,23 +653,18 @@ export class WebRTCManager {
     // Use the final local description SDP (includes gathered ICE candidates
     // inlined) rather than the original answer.sdp (which has none).
     const finalSdp = pc.localDescription?.sdp ?? answer.sdp ?? '';
-    const fpMatch = finalSdp.match(/a=fingerprint:sha-256\s+([0-9A-Fa-f:]+)/);
-    const actualFingerprint = fpMatch?.[1] ?? '';
+    const actualFingerprint = extractSingleFingerprint(finalSdp);
 
     console.log(`[WebRTC] Reconnect answer: ${iceCandidates.length} ICE candidates gathered, SDP length=${finalSdp.length}`);
 
     // 4. Post answer back to desktop with pairingId for lookup
     console.log(`[WebRTC] Posting reconnect answer to ${baseUrl}`);
-    const answerRes = await fetch(`${baseUrl}/api/mobile/reconnect/answer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pairingId,
-        fingerprint: actualFingerprint,
-        answer: finalSdp,
-        ice: iceCandidates,
-      }),
-    });
+    const answerRes = await post('/api/mobile/reconnect/answer', {
+      pairingId,
+      fingerprint: actualFingerprint,
+      answer: finalSdp,
+      ice: iceCandidates,
+    }, 10000);
 
     if (!answerRes.ok) {
       const body = await answerRes.json().catch(() => ({ error: 'Answer rejected' }));
