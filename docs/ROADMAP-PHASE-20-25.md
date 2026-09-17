@@ -1,4 +1,4 @@
-# Roadmap — Phases 20–25
+# Roadmap — Phases 20–27
 
 > Drafted: 2026-09-17
 > Status: **20–24 built, 25 partly built** — all on 2026-09-17. Each
@@ -30,7 +30,27 @@ reasoning for it.
 | **22** | [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md) | Turn the tool-call log into a readable account of what an agent is doing | ✅ |
 | **23** | [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) | Time and cost per plan item — estimate, actual, forecast, and ceilings as governance | ✅ backend; UI surfaces remain |
 | **24** | [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) | Jira / Linear / issue intake into nested plans, without CodeTrellis holding a credential | ✅ backend; UI chip remains |
-| **25** | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot selection, and architecture play-forward | ◑ comparison + review built; plan→PR and play-forward not |
+| **25** | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot selection, and architecture play-forward | ◑ comparison + review built; play-forward moved to 26 |
+| **26** | [PHASE-26-CODE-FIRST-SURFACE.md](PHASE-26-CODE-FIRST-SURFACE.md) | Plan overlay on code, a real diff editor, fast-forward, and a mode where the graph never mounts | designed |
+| **27** | [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md) | Ruby (a live bug), C#, then Kotlin and Swift | designed |
+
+## Why 26 and 27 exist
+
+**26 came out of one observation**: the graph is the most expensive thing
+the renderer does, and it is also the part some users will never want —
+while every signal it draws is already per-file or per-line. A code-first
+view is therefore not a lesser fallback but the same information, cheaper
+to render, and more legible to people who think in files. Play-forward
+moved there from 25 for the same reason: scrubbing time over a diff is
+more useful than scrubbing it over a picture, because you can read what
+changed.
+
+**27 exists because Ruby is the Phase 20 bug, live.** `'ruby'` is in the
+`SupportedLanguage` union and `.rb` is in the scanner's `LANG_MAP`, but
+there is no parser — so a Rails repo renders as a constellation of empty
+nodes. That is the third instance of "a list that had to be kept in sync
+by hand fell out of sync", which is why 27 also adds a startup assertion
+rather than just another parser.
 
 ## What the work found
 
