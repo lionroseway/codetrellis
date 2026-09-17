@@ -57,7 +57,32 @@ export interface PairedDevice {
    * Populated when a discovered peer matches a paired device's fingerprint.
    */
   instanceId: string | null;
+  /**
+   * What this device is allowed to ask the desktop to do
+   * (Phase 19, finding 17).
+   *
+   * Absent on records written before capabilities existed; callers treat
+   * that as DEFAULT_GRANTS, which deliberately excludes `terminal` and
+   * `settings`. An old pairing therefore does NOT silently acquire a shell.
+   */
+  capabilities?: PeerCapabilityName[];
+  /**
+   * When the pairing ceremony was confirmed (ISO), if it was.
+   *
+   * Command-capable RPC is refused for an unconfirmed connection regardless
+   * of capabilities.
+   */
+  confirmedAt?: string | null;
 }
+
+/** Mirrors PeerCapability in services/peer-capabilities.ts. */
+export type PeerCapabilityName =
+  | 'read'
+  | 'write'
+  | 'project'
+  | 'files'
+  | 'settings'
+  | 'terminal';
 
 /**
  * Pairing QR payload v4 — single QR, Bluetooth-style flow.

@@ -26,6 +26,8 @@
  */
 
 import { DATA_CHANNELS } from '../../shared/types';
+import { assertPeerMayCall, DEFAULT_GRANTS, PeerAuthorizationError } from './peer-capabilities';
+import { getPairedDevice } from './paired-device-service';
 import { readFileWithin, isWithin } from './confined-fs';
 import { listTrustedRoots } from './trusted-roots';
 import {
@@ -229,10 +231,35 @@ export function requestMobileScreenshot(timeoutMs = 20_000): Promise<MobileImage
 async function handleRpc(fingerprint: string, req: RpcRequest): Promise<void> {
   const startedAt = Date.now();
   try {
+    // ── AUTHORISE BEFORE DISPATCHING (Phase 19, finding 17) ───────────
+    //
+    // There was no authorisation step at all: the router matched a method
+    // name and executed it. A connected peer could create terminals, write
+    // to them, open and close projects, change settings and delete plans.
+    // "Connected" was the only check — and the connection was reachable on
+    // the LAN by default (A3) with an identity nobody verified (2).
+    //
+    // Deny-by-default: a method absent from the matrix is refused, so a new
+    // RPC method that nobody classified fails closed rather than shipping
+    // open.
+    const device = getPairedDevice(fingerprint);
+    assertPeerMayCall(req.method, device?.capabilities ?? DEFAULT_GRANTS, {
+      confirmed: Boolean(device?.confirmedAt),
+      alias: device?.alias,
+    });
+
     const result = await routeMethod(req.method, req.params ?? {}, fingerprint);
     sendResponse(fingerprint, { result, id: req.id, rpc: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof PeerAuthorizationError) {
+      // Logged distinctly from an ordinary failure: a refused call is a
+      // security event, and the peer should be identifiable in the log
+      // without having to correlate timestamps.
+      console.warn(
+        `[MobileRPC][Authz] REFUSED peer=${fingerprint.slice(0, 12)}… method=${req.method} — ${message}`,
+      );
+    }
     // Lifecycle-tagged structured RPC failure log (Plan 9.1 backend half).
     // Without this, mobile-side "request timed out" toasts have no
     // server-side counterpart in logs — a class of bug becomes nearly
