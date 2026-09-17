@@ -29,6 +29,11 @@ import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
 import { isSafeGitRef } from './services/git-safety';
+import { readFileWithin, isWithin, isInside, ConfinementError } from './services/confined-fs';
+
+/** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
+const MAX_BROWSE_ENTRIES = 1000;
+import { resolveTrustedProjectRoot, listTrustedRoots, setActiveProjectRoot } from './services/trusted-roots';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -725,13 +730,47 @@ app.get('/api/fs/browse', (req, res) => {
   const dirPath = (req.query.path as string) || os.homedir();
   try {
     const resolved = path.resolve(dirPath);
-    const entries = fs.readdirSync(resolved, { withFileTypes: true });
+
+    // NOT confined to opened projects, and deliberately so (Phase 19,
+    // finding 5). This endpoint exists so the user can CHOOSE a project,
+    // which necessarily means looking outside the ones already open —
+    // confining it would make opening a new project impossible.
+    //
+    // What makes that acceptable now is Gate 1.1: the capability token means
+    // the caller is a local process that already has filesystem access, not
+    // a web page. What it must still not become is a convenient amplifier,
+    // so:
+    //
+    //   - browsing is limited to the user's own home directory. Nothing in
+    //     the folder picker needs /etc, /var or another user's home;
+    //   - directory symlinks are not followed out of it;
+    //   - the listing is capped, so a directory with a million entries
+    //     cannot be used to stall the backend.
+    const home = fs.realpathSync.native(os.homedir());
+    let canonical: string;
+    try {
+      canonical = fs.realpathSync.native(resolved);
+    } catch {
+      res.status(400).json({ error: `Cannot read: ${dirPath}` });
+      return;
+    }
+    if (!isInside(home, canonical)) {
+      res.status(403).json({
+        error: 'Browsing is limited to your home directory',
+      });
+      return;
+    }
+
+    const entries = fs.readdirSync(canonical, { withFileTypes: true });
     const dirs = entries
       .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-      .map((e) => ({ name: e.name, path: path.join(resolved, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map((e) => ({ name: e.name, path: path.join(canonical, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, MAX_BROWSE_ENTRIES);
 
-    res.json({ current: resolved, parent: path.dirname(resolved), dirs });
+    // `parent` never escapes home either, or the UI would offer a way out.
+    const parent = isInside(home, path.dirname(canonical)) ? path.dirname(canonical) : canonical;
+    res.json({ current: canonical, parent, dirs });
   } catch {
     res.status(400).json({ error: `Cannot read: ${dirPath}` });
   }
@@ -830,6 +869,9 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     }
 
     lastScannedProject = projectPath;
+    // Publish to trusted-roots, which cannot import this module (cycle).
+    // Anything deriving a project root from trusted state reads it there.
+    setActiveProjectRoot(projectPath);
 
     const systems = discoverSystems(projectPath);
     const aliasMap = buildAliasMap(systems);
@@ -985,7 +1027,35 @@ app.get('/api/file/content', (req, res) => {
     res.status(400).json({ error: 'path query param required' });
     return;
   }
-  if (!fs.existsSync(filePath)) {
+
+  // CONFINED TO OPENED PROJECTS (Phase 19, finding 5).
+  //
+  // This endpoint read ANY path on the machine. Unlike /api/fs/browse —
+  // which exists so the user can CHOOSE a project and therefore has to see
+  // outside one — there is no reason to read file CONTENT outside a project
+  // the user has opened. The viewer only ever displays files from the graph.
+  //
+  // The root is not taken from the request: it is whichever opened project
+  // contains the path. A caller cannot nominate one (Gate 2.2), and the read
+  // goes through the confined helper so a symlink cannot escape it (A2).
+  let contents: Buffer;
+  try {
+    // Which opened project owns this path? `isWithin` canonicalises both
+    // ends and refuses links, so a file reached through a symlink in a
+    // project does not count as being in it.
+    const owningRoot = listTrustedRoots().find((r) => isWithin(r, filePath));
+    if (!owningRoot) {
+      res.status(403).json({
+        error: 'Refusing to read a file outside every opened project',
+      });
+      return;
+    }
+    contents = readFileWithin(owningRoot, filePath, 'file/content');
+  } catch (err) {
+    if (err instanceof ConfinementError) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
     res.status(404).json({ error: 'File not found' });
     return;
   }
@@ -998,7 +1068,11 @@ app.get('/api/file/content', (req, res) => {
     }
     const MAX_BYTES = 256 * 1024;
     const truncated = stat.size > MAX_BYTES;
-    const buffer = fs.readFileSync(filePath);
+    // Use the buffer the CONFINED read produced. Reading again here would
+    // reopen the time-of-check/time-of-use gap that readFileWithin closed:
+    // a link swapped in between the two reads would be followed by the
+    // second one.
+    const buffer = contents;
     const content = (truncated ? buffer.subarray(0, MAX_BYTES) : buffer).toString('utf-8');
 
     const startParam = req.query.start ? parseInt(String(req.query.start), 10) : undefined;
@@ -3847,6 +3921,7 @@ export async function initializeBackend(): Promise<void> {
       const restore = recent.find((p) => p.path && fs.existsSync(p.path));
       if (restore) {
         lastScannedProject = restore.path;
+        setActiveProjectRoot(restore.path);
         console.log(`[Backend] Restored active project: ${restore.path}`);
       }
     }
