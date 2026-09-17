@@ -6,13 +6,13 @@ import {
   shell,
   powerMonitor,
   powerSaveBlocker,
+  session,
   type WebContents,
 } from 'electron';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
   initializeBackend,
-  startServer,
   app as expressApp,
   addBroadcastTarget,
 } from '../backend/server';
@@ -89,15 +89,26 @@ async function bootstrap(): Promise<boolean> {
     await initializeBackend();
     console.log('[Electron] Backend initialised in-process');
 
-    // Start the HTTP server on localhost only (for MCP agent connections).
-    // Mobile pairing uses bidirectional QR codes — no LAN HTTP needed.
-    try {
-      await startServer(undefined, undefined, true);
-      console.log('[Electron] HTTP server started on localhost (MCP only)');
-    } catch (httpErr) {
-      // Non-fatal — the app works via IPC even without the HTTP server.
-      console.warn('[Electron] HTTP server failed to start:', httpErr);
-    }
+    // THE PACKAGED APP DOES NOT BIND THE EXPRESS LISTENER (Phase 19).
+    //
+    // `startServer()` used to run here, with a comment saying it was "for
+    // MCP agent connections". It is not: `startMcpServer()` runs inside
+    // `initializeBackend()` above and has its own port (19432). Nothing in
+    // the packaged app consumed :3001 —
+    //
+    //   the renderer  talks IPC (electron-ipc-shim globally shims fetch)
+    //   MCP           has its own listener
+    //   mobile API    has its own listener, and is off by default
+    //   pairing       binds an ephemeral port per ceremony
+    //
+    // So the socket was open, unauthenticated until Gate 1.1, and unused.
+    // Not binding it is defence in depth: the capability token already
+    // closes the vulnerability, and this means a future regression in the
+    // CORS or token logic has nothing listening to regress against.
+    //
+    // Dev mode is unaffected — `src/backend/index.ts` still calls
+    // startServer, because in web mode the browser genuinely needs it.
+    console.log('[Electron] Backend running IPC-only — no TCP listener for the API');
 
     return true;
   } catch (err) {
@@ -121,6 +132,75 @@ function attachBroadcastForwarding(targetContents: WebContents): void {
   });
 }
 
+/**
+ * Hand a URL to the OS browser, but only if its scheme is one we trust.
+ *
+ * `shell.openExternal` will happily hand `file://`, `smb://` or a custom
+ * protocol to the operating system, which is how "open a link" becomes "run
+ * something". Only http and https leave this app.
+ */
+function openExternally(rawUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return; // not a URL — nothing to open
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    console.warn(`[Electron] Refused to open a non-http(s) URL: ${parsed.protocol}`);
+    return;
+  }
+  void shell.openExternal(parsed.toString());
+}
+
+/**
+ * Content-Security-Policy for the renderer.
+ *
+ * Applied as a response header rather than a meta tag so it covers every
+ * document the renderer loads, and cannot be removed by injected markup.
+ *
+ *   default-src 'self'     nothing loads from anywhere else by default
+ *   script-src  'self'     no inline script, no eval, no remote script —
+ *                          this is the directive that makes injected markup
+ *                          inert rather than merely ugly
+ *   style-src              'unsafe-inline' is required: the app is Tailwind
+ *                          + React inline styles. Inline STYLE cannot
+ *                          execute; it is a defacement risk, not an
+ *                          execution one, and removing it would mean
+ *                          rewriting the styling layer.
+ *   img-src     data:      icons and generated images are inlined
+ *   connect-src 'self'     XHR/WebSocket to our own origin only. In the
+ *                          packaged app the renderer uses IPC anyway, so
+ *                          this costs nothing and blocks exfiltration.
+ *   frame-src / object-src 'none' — no embedded browsing contexts at all
+ *   base-uri    'self'     stops injected <base> retargeting every relative URL
+ *   form-action 'none'     nothing in this app submits a form anywhere
+ */
+const RENDERER_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*",
+  "media-src 'self' blob: data:",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join('; ');
+
+function installContentSecurityPolicy(): void {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [RENDERER_CSP],
+      },
+    });
+  });
+}
+
 function createWindow(backendOk: boolean): void {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -136,6 +216,34 @@ function createWindow(backendOk: boolean): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  // ── Renderer containment (Phase 19, finding 16) ─────────────────────
+  //
+  // The reported `javascript:` payload was refuted — React 19 rewrites such
+  // URLs to a throwing value — but the hardening it prompted was missing
+  // entirely: there were no navigation guards, no window-open handler and no
+  // Content-Security-Policy anywhere in this app.
+  //
+  // The renderer displays content this app did not author: plan bodies, spec
+  // docs, agent output, channel messages, markdown from a scanned repo. Any
+  // of that can carry a link or an embed. Three containments:
+
+  // 1. NEVER NAVIGATE AWAY. The renderer is a single-page app; a top-level
+  //    navigation is always either a bug or an attack. An http(s) link gets
+  //    handed to the real browser, where it is somebody else's sandbox.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const current = mainWindow?.webContents.getURL() ?? '';
+    if (url === current) return;
+    event.preventDefault();
+    openExternally(url);
+  });
+
+  // 2. NO NEW WINDOWS. `window.open`, `target="_blank"` and friends all land
+  //    here. Denying is the default; safe schemes are re-routed outward.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openExternally(url);
+    return { action: 'deny' };
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
@@ -191,6 +299,9 @@ app.whenReady().then(async () => {
   // Boot the backend in-process. Don't gate the window on it — if
   // initialisation fails we still want to open the window with an
   // error banner rather than a dangling Dock icon.
+  // Before any window exists, so no document is ever served without it.
+  installContentSecurityPolicy();
+
   const backendOk = await bootstrap();
   createWindow(backendOk);
 
