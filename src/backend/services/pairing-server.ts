@@ -393,6 +393,11 @@ export function stopPairingServer(): void {
   }
   if (activeServer) {
     try {
+      // `close()` only stops NEW connections. A client using keep-alive — which
+      // `fetch` does by default — keeps its existing socket and carries on
+      // being served, so closing after too many wrong codes would not actually
+      // shut the window (Phase 19, finding 19). Drop the sockets too.
+      activeServer.closeAllConnections?.();
       activeServer.close();
     } catch { /* already closed */ }
     activeServer = null;

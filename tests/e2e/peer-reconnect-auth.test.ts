@@ -363,3 +363,53 @@ test.describe('1.2 — what an anonymous caller can consume is bounded', () => {
     }
   });
 });
+
+test.describe('19 — the pairing window is not a free run at a six-digit space', () => {
+  test('too many wrong codes closes the window', async () => {
+    // Six digits over sixty seconds, on a server bound to 0.0.0.0, with no
+    // limit at all: an attacker on the network could cover a meaningful slice
+    // of the space before the window expired on its own.
+    const fixture = prepareFixture('pairing-brute-force');
+    const backend = await startBackend({ dataDir: fixture.dataDir });
+    const client = createClient(backend.baseUrl, backend.capabilityToken);
+    try {
+      const { qrPayload } = await client.raw('POST', '/api/pairing/initiate').then((r) => r.json()) as
+        { qrPayload: { p: number; c: string } };
+      const base = `http://127.0.0.1:${qrPayload.p}`;
+
+      // The control: the real code works right now, so the failure below is
+      // the limiter and not the server having never been up.
+      const before = await fetch(`${base}/offer?c=${qrPayload.c}`);
+      expect(before.ok, 'precondition: the correct code must work to begin with').toBe(true);
+
+      // Guess. The real code is excluded so the loop cannot accidentally
+      // succeed and leave the window open.
+      let refusals = 0;
+      for (let i = 0; i < 8; i++) {
+        const guess = String((Number(qrPayload.c) + i + 1) % 1_000_000).padStart(6, '0');
+        try {
+          const res = await fetch(`${base}/offer?c=${guess}`);
+          if (!res.ok) refusals++;
+        } catch {
+          // The server closing the socket mid-sweep is the intended outcome.
+          refusals++;
+          break;
+        }
+      }
+      expect(refusals, 'precondition: the guesses really were wrong').toBeGreaterThan(0);
+
+      // And now the correct code is worth nothing, because the window is shut.
+      let stillOpen = false;
+      try {
+        stillOpen = (await fetch(`${base}/offer?c=${qrPayload.c}`)).ok;
+      } catch {
+        stillOpen = false;
+      }
+      expect(stillOpen, 'the pairing window must close after too many wrong codes').toBe(false);
+    } finally {
+      await client.raw('POST', '/api/pairing/cancel').catch(() => {});
+      await backend.stop();
+      fixture.cleanup();
+    }
+  });
+});

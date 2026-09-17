@@ -105,7 +105,13 @@ export async function startMobileApiServer(): Promise<number> {
  */
 export function stopMobileApiServer(): void {
   if (server) {
-    try { server.close(); } catch { /* already closed */ }
+    try {
+      // Same keep-alive caveat as the pairing server: `close()` alone leaves
+      // existing sockets being served, so a listener the user just turned OFF
+      // would keep answering whoever was already connected.
+      server.closeAllConnections?.();
+      server.close();
+    } catch { /* already closed */ }
     server = null;
     boundPort = 0;
     hits.clear();

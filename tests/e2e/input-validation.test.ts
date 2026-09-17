@@ -7,10 +7,12 @@
  * is the part that is easy to get wrong and impossible to see from the
  * validator's own tests.
  *
- * Findings covered here grow as the gates land. Currently: 10.
+ * Findings covered here grow as the gates land. Currently: 7, 10, 24.
  */
 
 import { test, expect } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { setupHarness, authFetch } from '../harness';
 
 test.describe('Finding 10 — git option injection', () => {
@@ -156,6 +158,63 @@ test.describe('Finding 7 — terminal history path traversal and read-side creat
       const created = fs.existsSync(path.join(terminalsDir, 'canary-written-by-a-read.log'));
       expect(created, 'reading a non-existent terminal must NOT create its log file').toBe(false);
       expect(fs.existsSync(canary), 'no stray file in the data dir either').toBe(false);
+    } finally {
+      await h.teardown();
+    }
+  });
+});
+
+test.describe('Finding 24 — the parse itself is budgeted', () => {
+  test('a file over the budget is skipped, not half-parsed', async () => {
+    // There was already a cap on CALLSITE extraction, but it applied AFTER
+    // the parse — so a pathological file went through tree-sitter first, and
+    // the quadratic behaviour that made it pathological had already happened.
+    //
+    // tree-sitter runs SYNCHRONOUSLY in the Express process, so an unbounded
+    // parse is an unbounded stall for every request, not just for this scan.
+    //
+    // The observable consequence of the budget is what this measures: an
+    // over-budget file contributes NO symbols. Timing would be the more
+    // direct measurement and a far worse test — it would pass or fail with
+    // the load on the machine.
+    const h = await setupHarness('finding-24-parse-budget');
+    try {
+      // Control: an ordinary file, so a missing symbol below cannot be the
+      // scanner simply not working.
+      fs.writeFileSync(
+        path.join(h.fixture.projectPath, 'ordinary.ts'),
+        'export function sentinelUnderBudget() { return 1; }\n',
+      );
+
+      // And one over the budget, with its own distinctive export.
+      const big = path.join(h.fixture.projectPath, 'generated.ts');
+      const line = (i: number) => `export function filler${String(i).padStart(9, '0')}() { return ${i}; }\n`;
+      let source = 'export function sentinelOverBudget() { return 1; }\n';
+      for (let i = 0; source.length < 2.5 * 1024 * 1024; i++) source += line(i);
+      fs.writeFileSync(big, source);
+      expect(fs.statSync(big).size, 'precondition: the file must exceed the 2 MiB budget')
+        .toBeGreaterThan(2 * 1024 * 1024);
+
+      const scan = await h.client.scanProject(h.fixture.projectPath);
+      expect(scan.fileCount, 'the scan must still produce a result').toBeGreaterThan(0);
+
+      const found = async (name: string) =>
+        (await h.client.searchSymbols(name) as Array<{ name?: string }>)
+          .some((sym) => sym.name === name);
+
+      expect(
+        await found('sentinelUnderBudget'),
+        'precondition: an ordinary file IS parsed, so the scanner works',
+      ).toBe(true);
+
+      expect(
+        await found('sentinelOverBudget'),
+        'an over-budget file must contribute no symbols — skipping beats half-parsing, ' +
+          'which produces confidently wrong symbols and edges',
+      ).toBe(false);
+
+      // And the backend is still answering, which is what the finding is about.
+      expect((await h.client.raw('GET', '/api/health')).ok).toBe(true);
     } finally {
       await h.teardown();
     }
