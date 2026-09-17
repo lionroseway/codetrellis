@@ -13,6 +13,8 @@
  */
 
 import fs from 'node:fs';
+import { isWithin } from './confined-fs';
+import { listTrustedRoots } from './trusted-roots';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -104,24 +106,36 @@ export function resolveReference(
     };
   }
 
-  // Absolute paths — check existence under user's home
-  const home = os.homedir();
-  if (reference.startsWith(home + path.sep)) {
+  // ABSOLUTE PATHS — no existence oracle, no absolute paths returned
+  // (Phase 19, finding 11).
+  //
+  // Two problems with what was here:
+  //
+  //   1. THE ANSWERS DIFFERED BY EXISTENCE. "not found on this machine"
+  //      versus "not accessible" told a caller whether ANY path under the
+  //      home directory existed — one probe per guess. That is the oracle.
+  //   2. `startsWith(home + sep)` is a text comparison, so a symlink under
+  //      home pointing anywhere satisfied it, and the ABSOLUTE PATH was
+  //      then handed back to the caller.
+  //
+  // Now: the reference must lie inside a project the user has opened, the
+  // answer is identical whether or not it exists, and no absolute path is
+  // returned — callers get the reference they gave us.
+  const owningRoot = listTrustedRoots().find((r) => isWithin(r, reference));
+  if (owningRoot) {
+    // `isWithin` already canonicalised and refused links, so existence here
+    // does not leak anything the project's own file tree does not.
     if (fs.existsSync(reference)) {
       return { reference, status: 'resolved', absolutePath: reference };
     }
-    return {
-      reference,
-      status: 'external',
-      reason: 'Referenced file not found on this machine',
-    };
   }
 
-  // Outside home — deny
+  // ONE answer for everything else — outside a project, missing, or
+  // unreadable are deliberately indistinguishable.
   return {
     reference,
     status: 'external',
-    reason: 'Referenced file not accessible from this workspace',
+    reason: 'Referenced file is not part of an open project on this machine',
   };
 }
 

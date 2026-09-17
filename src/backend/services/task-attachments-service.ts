@@ -14,6 +14,23 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { resolveWithin, writeFileWithin, isWithin, ConfinementError } from './confined-fs';
+import { resolveTrustedProjectRoot } from './trusted-roots';
+
+/**
+ * Largest inline attachment we will decode and store (Phase 19, finding 6).
+ *
+ * The upload arrives base64 in a JSON body. Without a cap, a caller decides
+ * how much of the user's disk to consume and how much memory the decode
+ * takes, and both happen before anything else validates the request.
+ */
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/** Content types we will persist as bytes. */
+const ALLOWED_ATTACHMENT_TYPES = new Set([
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml',
+  'video/mp4', 'video/webm', 'video/quicktime',
+]);
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,29 +89,39 @@ export function resolveAttachmentAbsPath(value: string, projectRoot?: string): s
   if (value.startsWith('userdata://')) {
     const userDataDir = process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
     const rel = value.replace(/^userdata:\/\//, '');
-    const abs = path.resolve(userDataDir, rel);
-    // Sanity — abs must still live under userDataDir (no `..` escape).
-    if (!abs.startsWith(path.resolve(userDataDir) + path.sep)) return null;
-    return abs;
+    // `startsWith` was the check here. It compares TEXT, so a symlink under
+    // the data dir pointing anywhere passed it (Phase 19, A2). resolveWithin
+    // canonicalises and refuses links.
+    try {
+      return resolveWithin(userDataDir, rel, 'attachment(userdata)');
+    } catch {
+      return null;
+    }
   }
   // Project-relative paths — `.codetrellis/...` (the bytes-uploaded
   // attachment dir) AND any other path inside the project (file_ref
   // attachments that just reference an existing project file).
   if (projectRoot && !path.isAbsolute(value)) {
-    const abs = path.resolve(projectRoot, value);
-    // Boundary check: prevent `..` traversal escaping the project.
-    const normRoot = path.resolve(projectRoot);
-    if (!abs.startsWith(normRoot + path.sep) && abs !== normRoot) return null;
-    return abs;
+    // Same substitution: text comparison cannot see through a link.
+    try {
+      return resolveWithin(projectRoot, value, 'attachment(project)');
+    } catch {
+      return null;
+    }
   }
   // Absolute paths: only serve if under the user's home dir (loose
   // boundary so external-but-user-owned files like ~/Desktop work).
   // No project-root override — outside-project absolute references
   // are user-explicit.
   if (path.isAbsolute(value)) {
-    const home = os.homedir();
-    if (value.startsWith(home + path.sep)) return value;
-    return null;
+    // A file_ref may legitimately point outside the project (~/Desktop and
+    // the like), but it must still be inside the user's own home and must
+    // not be reached through a link (Phase 19, finding 3).
+    try {
+      return resolveWithin(os.homedir(), value, 'attachment(absolute)');
+    } catch {
+      return null;
+    }
   }
   return null;
 }
@@ -148,13 +175,52 @@ export function addAttachment(input: AddAttachmentInput): TaskAttachment | PlanD
   // `userdata://...` URI the file-serving REST endpoint resolves back.
   const isInlineByteUpload = (input.kind === 'image' || input.kind === 'video') && input.dataBase64;
   if (isInlineByteUpload) {
-    const ext = guessExtensionFromContentType(input.contentType) || guessExtensionFromValue(input.value) || (input.kind === 'video' ? 'mp4' : 'png');
-    const { absDir, storedValuePrefix } = resolveAttachmentDir(input.targetUid, input.projectRoot);
-    fs.mkdirSync(absDir, { recursive: true });
-    const filename = `${uid}.${ext}`;
-    const absPath = path.join(absDir, filename);
+    // EVERYTHING IS VALIDATED BEFORE ANYTHING IS WRITTEN (Phase 19, finding 6).
+    //
+    // The old order wrote the file first and validated afterwards, so a
+    // request that was going to be rejected had already put bytes on disk —
+    // at a location derived from a caller-supplied `projectRoot`. The
+    // reviewer reproduced exactly that: marker bytes landed under an
+    // external root before the database operation failed.
+
+    // 1. Media type. Refusing unknown types stops the store being used as a
+    //    general-purpose drop for arbitrary content.
+    if (input.contentType && !ALLOWED_ATTACHMENT_TYPES.has(input.contentType.toLowerCase())) {
+      throw new Error(`Unsupported attachment content type: ${input.contentType}`);
+    }
+
+    // 2. Size, checked on the ENCODED length first so an oversized payload
+    //    is refused without allocating the decoded buffer.
+    const approxBytes = Math.floor((input.dataBase64!.length * 3) / 4);
+    if (approxBytes > MAX_ATTACHMENT_BYTES) {
+      throw new Error(
+        `Attachment exceeds the ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB limit`,
+      );
+    }
     const buf = Buffer.from(input.dataBase64!, 'base64');
-    fs.writeFileSync(absPath, buf);
+    if (buf.length > MAX_ATTACHMENT_BYTES) {
+      throw new Error(
+        `Attachment exceeds the ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB limit`,
+      );
+    }
+
+    // 3. The root is NOT taken from the request (Gate 2.2). A caller may
+    //    name a project, but only one this app has actually opened.
+    const trustedRoot = input.projectRoot
+      ? resolveTrustedProjectRoot(input.projectRoot, 'addAttachment(projectRoot)')
+      : undefined;
+
+    const ext = guessExtensionFromContentType(input.contentType) || guessExtensionFromValue(input.value) || (input.kind === 'video' ? 'mp4' : 'png');
+    const { absDir, storedValuePrefix } = resolveAttachmentDir(input.targetUid, trustedRoot);
+    const filename = `${uid}.${ext}`;
+
+    // 4. The write itself goes through the boundary: atomic, O_EXCL, no
+    //    following a link at the destination, containment re-checked
+    //    immediately before the write rather than trusted from above.
+    const containmentRoot = trustedRoot
+      ? path.join(trustedRoot, '.codetrellis', 'attachments')
+      : path.dirname(absDir);
+    writeFileWithin(containmentRoot, path.join(absDir, filename), buf, 'attachment');
     value = storedValuePrefix + filename;
   }
 

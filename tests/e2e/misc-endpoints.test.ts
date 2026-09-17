@@ -108,9 +108,32 @@ test.describe.serial('Miscellaneous endpoints', () => {
     expect(body.content.length).toBeGreaterThan(0);
   });
 
-  test('GET /api/file/content returns 404 for missing file', async () => {
-    const encodedPath = encodeURIComponent('/tmp/nonexistent-file-12345.ts');
-    const res = await h.client.raw('GET', `/api/file/content?path=${encodedPath}`);
+  test('GET /api/file/content refuses a path outside every opened project', async () => {
+    // Was asserted as 404. It is now 403, and that is the IMPROVEMENT rather
+    // than a regression (Phase 19, findings 5 and 11): answering 404 for a
+    // path outside the project tells the caller the file does not exist,
+    // and 200 would tell them it does — an existence oracle for any path on
+    // the machine. A uniform 403 for everything outside an opened project
+    // discloses nothing either way.
+    const outside = encodeURIComponent('/tmp/nonexistent-file-12345.ts');
+    const res = await h.client.raw('GET', `/api/file/content?path=${outside}`);
+    expect(res.status).toBe(403);
+
+    // The same answer for a path outside a project that DOES exist — the
+    // point is that the two are indistinguishable.
+    const existsOutside = encodeURIComponent('/etc/hosts');
+    const res2 = await h.client.raw('GET', `/api/file/content?path=${existsOutside}`);
+    expect(
+      res2.status,
+      'an existing file outside the project must answer exactly as a missing one does',
+    ).toBe(403);
+  });
+
+  test('GET /api/file/content returns 404 for a missing file INSIDE the project', async () => {
+    // Inside an opened project, 404 is correct and leaks nothing the caller
+    // could not already learn from the file tree.
+    const missing = encodeURIComponent(`${h.fixture.projectPath}/does-not-exist-12345.ts`);
+    const res = await h.client.raw('GET', `/api/file/content?path=${missing}`);
     expect(res.status).toBe(404);
   });
 
