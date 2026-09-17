@@ -152,29 +152,48 @@ test.describe('Gate 1.1 — transport authentication', () => {
 
       // ── foreign Origin ──────────────────────────────────────────────
       //
-      // Even holding a token, a foreign origin must not be granted read
-      // access. The request may execute; what must not happen is the browser
-      // being told it may expose the response.
+      // Withholding the ACAO header stops the browser handing the RESPONSE to
+      // the page. It does not stop the request running, and a state-changing
+      // call needs no response to be useful — creating a terminal and writing
+      // to it is entirely a side effect. So the request is refused outright,
+      // which is also what the upgrade path below already did.
       {
         const res = await fetch(target, {
           headers: { 'x-codetrellis-token': token, Origin: 'https://evil.example.com' },
         });
+        expect(res.status, 'a foreign origin must be refused, token or not').toBe(403);
         expect(
           res.headers.get('access-control-allow-origin'),
-          'a foreign origin must never be reflected in Access-Control-Allow-Origin',
+          'and never reflected in Access-Control-Allow-Origin',
         ).toBeNull();
       }
 
       // ── Origin: null ────────────────────────────────────────────────
       //
       // Sandboxed iframes and data: URLs send `Origin: null`. The old
-      // middleware treated a missing origin as permission to send `*`.
+      // middleware treated a missing origin as permission to send `*`. It
+      // cannot identify anything, so it is refused like any other stranger.
       {
         const res = await fetch(target, {
           headers: { 'x-codetrellis-token': token, Origin: 'null' },
         });
-        const acao = res.headers.get('access-control-allow-origin');
-        expect(acao, 'Origin: null must not be reflected or wildcarded').toBeNull();
+        expect(res.status, 'Origin: null must be refused').toBe(403);
+        expect(
+          res.headers.get('access-control-allow-origin'),
+          'Origin: null must not be reflected or wildcarded',
+        ).toBeNull();
+      }
+
+      // ── health stays reachable regardless ───────────────────────────
+      //
+      // A supervisor probing liveness has no Origin at all, but the port
+      // autodetection in `startServer` and anything else probing must not be
+      // caught by the Origin rule either.
+      {
+        const res = await fetch(`${base}/api/health`, {
+          headers: { Origin: 'https://evil.example.com' },
+        });
+        expect(res.status, 'liveness must stay public').toBe(200);
       }
 
       // ── no wildcard, ever ───────────────────────────────────────────
