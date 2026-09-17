@@ -379,7 +379,14 @@ test.describe('19 — the pairing window is not a free run at a six-digit space'
 
       // The control: the real code works right now, so the failure below is
       // the limiter and not the server having never been up.
-      const before = await fetch(`${base}/offer?c=${qrPayload.c}`);
+      const askForOffer = (c: string) =>
+        fetch(`${base}/offer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ c }),
+        });
+
+      const before = await askForOffer(qrPayload.c);
       expect(before.ok, 'precondition: the correct code must work to begin with').toBe(true);
 
       // Guess. The real code is excluded so the loop cannot accidentally
@@ -388,7 +395,7 @@ test.describe('19 — the pairing window is not a free run at a six-digit space'
       for (let i = 0; i < 8; i++) {
         const guess = String((Number(qrPayload.c) + i + 1) % 1_000_000).padStart(6, '0');
         try {
-          const res = await fetch(`${base}/offer?c=${guess}`);
+          const res = await askForOffer(guess);
           if (!res.ok) refusals++;
         } catch {
           // The server closing the socket mid-sweep is the intended outcome.
@@ -401,7 +408,9 @@ test.describe('19 — the pairing window is not a free run at a six-digit space'
       // And now the correct code is worth nothing, because the window is shut.
       let stillOpen = false;
       try {
-        stillOpen = (await fetch(`${base}/offer?c=${qrPayload.c}`)).ok;
+        // The limiter closes the whole server, so this fails at the socket —
+        // not because the offer was already claimed above.
+        stillOpen = (await askForOffer(qrPayload.c)).ok;
       } catch {
         stillOpen = false;
       }

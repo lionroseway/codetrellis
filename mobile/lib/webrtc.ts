@@ -168,9 +168,20 @@ export class WebRTCManager {
     const hosts = qrPayload.hs && qrPayload.hs.length ? qrPayload.hs : [qrPayload.h];
     console.log(`[WebRTC] Fetching offer — racing ${hosts.length} host(s): ${hosts.join(', ')}`);
 
+    // POST, not GET: the code used to travel as `?c=123456`, and a query
+    // string is the worst place to keep a short-lived secret — access logs,
+    // proxy records, browser history, `Referer` (Phase 19, finding 18).
+    //
+    // The desktop serves the offer EXACTLY ONCE, so all but one of these
+    // races is refused with a 409. That is expected — `Promise.any` below
+    // takes whichever succeeded.
     const tryHost = async (host: string) => {
       const baseUrl = `http://${host}:${qrPayload.p}`;
-      const res = await fetch(`${baseUrl}/offer?c=${encodeURIComponent(qrPayload.c)}`);
+      const res = await fetch(`${baseUrl}/offer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ c: qrPayload.c }),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Request failed' }));
         throw new Error(`offer ${host}: ${body.error || res.status}`);

@@ -129,7 +129,11 @@ test.describe('Gate 4 — pair for real, then reconnect', () => {
       const pairingBase = `http://127.0.0.1:${qrPayload.p}`;
 
       // ── 2. Phone fetches the offer ─────────────────────────────────
-      const offerData = await fetch(`${pairingBase}/offer?c=${qrPayload.c}`).then((r) => r.json());
+      const offerData = await fetch(`${pairingBase}/offer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ c: qrPayload.c }),
+      }).then((r) => r.json());
       expect(offerData.offer).toContain('v=0');
 
       // The phone pins the desktop by reading the SDP, not the field beside it.

@@ -9,7 +9,9 @@
  * Flow:
  *   1. Desktop calls `startPairingServer()` → opens HTTP on random port.
  *   2. QR contains `{v:4, h:<lan-ip>, p:<port>, c:<6-digit-code>}`.
- *   3. Phone scans QR → `GET /offer?c=<code>` → receives full SDP + ICE + nonce.
+ *   3. Phone scans QR → `POST /offer` with `{c}` → receives full SDP + ICE + nonce.
+ *      Served EXACTLY ONCE, so the first caller wins and the loser fails
+ *      immediately rather than reaching a confirmation step that cannot match.
  *   4. Phone creates answer → `POST /answer` with `{c, answer, ice, fingerprint, nonce}`.
  *   5. Desktop receives answer → resolves promise → both sides establish WebRTC.
  *   6. After WebRTC connects, both derive Bluetooth-style confirmation code
@@ -141,6 +143,17 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
     let answerReject: ((err: Error) => void) | null = null;
     let answered = false;
     let codeAttempts = 0;
+    /**
+     * Source address of the client that took the offer, or null if nobody has.
+     *
+     * Only the holder may post the answer. This is DEPTH, not a boundary: an
+     * attacker who can read the exchange can also complete it, which is the
+     * part that needs encryption rather than bookkeeping (finding 18, and see
+     * the pairing-v5 work). What it does stop is a caller that can INJECT but
+     * not read — one that learned the code some other way and skipped
+     * straight to posting an answer.
+     */
+    let offerClaimedBy: string | null = null;
 
     const answerPromise = new Promise<PairingAnswer>((res, rej) => {
       answerResolve = res;
@@ -201,24 +214,72 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
 
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
-      // GET /offer?c=<code> — phone fetches the desktop's offer
-      if (req.method === 'GET' && url.pathname === '/offer') {
-        const submittedCode = url.searchParams.get('c');
-        if (submittedCode !== code) {
-          noteBadCode();
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid pairing code' }));
-          return;
-        }
+      // POST /offer — phone fetches the desktop's offer
+      //
+      // A POST, not a GET, because the pairing code used to travel as
+      // `?c=123456` (Phase 19, finding 18). A query string is the worst place
+      // to put a short-lived secret: it is written to access logs, kept in
+      // proxy and history records, and forwarded in `Referer`. None of those
+      // are hypothetical on a corporate network with a transparent proxy.
+      if (req.method === 'POST' && url.pathname === '/offer') {
+        readBody(req).then((body) => {
+          let data: Record<string, unknown>;
+          try {
+            data = JSON.parse(body);
+          } catch {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            return;
+          }
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          offer: opts.offerSdp,
-          ice: opts.iceCandidates,
-          fingerprint: opts.fingerprint,
-          nonce,
-          pairingId,
-        }));
+          if (data.c !== code) {
+            noteBadCode();
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid pairing code' }));
+            return;
+          }
+
+          // SERVED EXACTLY ONCE (finding 18).
+          //
+          // Anyone who watched the exchange knows the code, so the code alone
+          // cannot decide who is allowed to pair. Making the offer one-shot
+          // turns that race into first-one-wins with a clear loser: if an
+          // attacker gets in first, the phone's own fetch fails immediately
+          // and the user sees pairing fail, instead of reaching the
+          // confirmation step and being asked to compare numbers that will
+          // not match.
+          //
+          // The phone races several addresses at once, so refusing the later
+          // ones is normal and expected — `Promise.any` on that side takes
+          // whichever succeeded.
+          //
+          // The same client may ask again: if its response was lost in
+          // transit, the QR it just scanned would otherwise be dead and the
+          // user would have to restart pairing on the desktop to find out
+          // why. A DIFFERENT client is refused.
+          const source = req.socket.remoteAddress ?? 'unknown';
+          if (offerClaimedBy !== null && offerClaimedBy !== source) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Offer already claimed' }));
+            return;
+          }
+          offerClaimedBy = source;
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            offer: opts.offerSdp,
+            ice: opts.iceCandidates,
+            fingerprint: opts.fingerprint,
+            nonce,
+            pairingId,
+          }));
+        }).catch((err: Error) => {
+          console.warn(`[PairingServer] Rejected offer request: ${err.message}`);
+          if (!res.headersSent) {
+            res.writeHead(413, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request body too large' }));
+          }
+        });
         return;
       }
 
@@ -257,6 +318,18 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
           if (answered) {
             res.writeHead(409, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Already answered' }));
+            return;
+          }
+
+          // Only the client that took the offer may answer it.
+          const source = req.socket.remoteAddress ?? 'unknown';
+          if (offerClaimedBy === null || source !== offerClaimedBy) {
+            console.warn(
+              `[PairingServer] Rejected answer from ${source} — the offer was ` +
+              `${offerClaimedBy === null ? 'never claimed' : 'claimed by another client'}`,
+            );
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Not the client that requested the offer' }));
             return;
           }
 
