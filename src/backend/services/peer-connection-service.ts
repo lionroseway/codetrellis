@@ -58,6 +58,7 @@ import {
 } from './webrtc-service';
 import { getSettings } from './settings-service';
 import { extractSingleFingerprint, fingerprintsEqual } from '../../shared/lib/sdp-fingerprint';
+import { issueChallenge, verifyChallengeResponse, isUsableSecret } from './peer-auth';
 // Phase 10 — multi-device services
 import { startStateSync, stopStateSync, isStateSyncRunning } from './state-sync-service';
 import { startRemoteTerminals, stopRemoteTerminals, isRemoteTerminalRunning } from './remote-terminal-service';
@@ -440,25 +441,43 @@ function findByPairingId(pairingId: string): PairedDevice | undefined {
 }
 
 /**
- * Find a paired device by its ephemeral DTLS fingerprint.
- * Used as a fallback for pre-pairingId mobile clients during upgrade.
+ * Issue a reconnect challenge.
+ *
+ * Deliberately answers for ANY pairingId, known or not. Replying only to
+ * devices that exist would make this an enumeration oracle on an endpoint
+ * bound to the LAN; an unknown id gets a well-formed nonce it cannot answer.
  */
-function findByFingerprint(fingerprint: string): PairedDevice | undefined {
-  return listPairedDevices().find((d) => d.fingerprint === fingerprint);
+export function issueReconnectChallenge(pairingId: string): { nonce: string; expiresAt: number } {
+  return issueChallenge(pairingId);
+}
+
+/** A device's answer to a reconnect challenge. */
+export interface ReconnectProof {
+  nonce: string;
+  expiresAt: number;
+  mac: string;
 }
 
 /**
  * Create a reconnection offer for a previously paired mobile device.
  *
- * Auth priority:
- *   1. `pairingId` — stable UUID agreed during pairing (preferred).
- *   2. `fingerprint` — ephemeral DTLS fingerprint (fallback for
- *      pre-pairingId mobile clients; enables silent upgrade).
+ * AUTHENTICATION (Phase 19, finding 1.2)
  *
- * Returns the SDP offer, ICE candidates, desktop fingerprint, and
- * the device's pairingId (so the mobile can store it on upgrade).
+ * This used to accept a `pairingId` — or, failing that, a bare `fingerprint`
+ * — and hand out an offer. Both are values the phone transmits in the clear
+ * on every attempt, so knowing either was sufficient to be treated as the
+ * paired device. The fingerprint fallback was worse still: it existed to
+ * silently upgrade older clients, which meant the weaker path stayed open
+ * indefinitely for everyone.
+ *
+ * The caller must now answer a challenge with the secret agreed at pairing.
+ * The fallback is gone; a device paired before secrets existed has to pair
+ * again, which is the intended cost of the change.
  */
-export async function startReconnection(pairingId?: string, fingerprint?: string): Promise<{
+export async function startReconnection(
+  pairingId: string,
+  proof: ReconnectProof,
+): Promise<{
   offer: string;
   iceCandidates: string[];
   fingerprint: string;
@@ -466,20 +485,30 @@ export async function startReconnection(pairingId?: string, fingerprint?: string
 } | null> {
   purgeStaleOffers();
 
-  // Look up by stable pairingId first, then fall back to fingerprint
-  let paired: PairedDevice | undefined;
-  if (pairingId) {
-    paired = findByPairingId(pairingId);
-  }
-  if (!paired && fingerprint) {
-    paired = findByFingerprint(fingerprint);
-    if (paired) {
-      console.log(`[PeerManager] Fingerprint fallback matched "${paired.alias}" — silent pairingId upgrade`);
-    }
-  }
+  const paired = pairingId ? findByPairingId(pairingId) : undefined;
 
   if (!paired) {
-    console.warn(`[PeerManager] Reconnect rejected — no match for pairingId=${pairingId?.slice(0, 8) ?? 'none'} fp=${fingerprint?.slice(0, 12) ?? 'none'}`);
+    console.warn(`[PeerManager] Reconnect rejected — no device for pairingId=${pairingId?.slice(0, 8) ?? 'none'}`);
+    return null;
+  }
+
+  if (!isUsableSecret(paired.sharedSecret)) {
+    console.warn(
+      `[PeerManager] Reconnect rejected — "${paired.alias}" was paired before reconnect ` +
+      'authentication existed and has no secret. It must be paired again.',
+    );
+    return null;
+  }
+
+  const verdict = verifyChallengeResponse({
+    pairingId,
+    nonce: proof.nonce,
+    expiresAt: proof.expiresAt,
+    mac: proof.mac,
+    secret: paired.sharedSecret,
+  });
+  if (!verdict.ok) {
+    console.warn(`[PeerManager] Reconnect REFUSED for "${paired.alias}" — ${verdict.reason}`);
     return null;
   }
 

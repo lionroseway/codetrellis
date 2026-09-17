@@ -656,21 +656,20 @@ function DevicesSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairingState]);
 
-  // Poll for phone connection — when the phone posts its answer,
-  // the server derives a confirmation code. We don't show it to the
-  // user — instead they must TYPE the code from their phone's screen.
-  // Poll from BOTH showing-qr and waiting-phone states.
+  // Poll for phone connection. The desktop reports only that the phone has
+  // answered — never the code — because the user has to read that off the
+  // phone's screen and type it here. A code that appeared on both screens
+  // would be confirming nothing.
   useEffect(() => {
     if (pairingState === 'showing-qr' || pairingState === 'waiting-phone') {
       pollRef.current = setInterval(async () => {
         try {
           const res = await fetch('/api/pairing/status');
           if (!res.ok) return;
-          const { active, confirmCode: code } = await res.json();
-          if (code) {
-            // Phone connected — transition to code entry
-            // (don't store the code client-side; verification is server-side)
-            setConfirmCode(''); // Clear for user input
+          const { active, codeReady } = await res.json();
+          if (codeReady) {
+            // Phone connected — transition to code entry.
+            setConfirmCode(''); // Empty: the user types what their phone shows.
             setPairingError(null);
             setPairingState('confirming');
           } else if (!active) {

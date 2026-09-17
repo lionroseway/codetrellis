@@ -26,6 +26,9 @@ import {
   type PairingServerResult,
 } from './pairing-server';
 import { upsertPairedDevice } from './paired-device-service';
+import { sendToPeer } from './webrtc-service';
+import { DATA_CHANNELS } from '../../shared/types';
+import { DEFAULT_GRANTS } from './peer-capabilities';
 
 // --- Active pairing state ----------------------------------------------------
 
@@ -40,6 +43,13 @@ interface ActivePairing {
   answer: PairingAnswer | null;
   /** Confirmation code (set after answer received). */
   confirmCode: string | null;
+  /**
+   * Secret for authenticating later reconnects.
+   *
+   * Handed to the phone over the DTLS `control` channel at confirm time, not
+   * through the pairing server — see `peer-auth.ts` for why.
+   */
+  sharedSecret: string;
 }
 
 let activePairing: ActivePairing | null = null;
@@ -93,6 +103,7 @@ export async function initiatePairing(
     offerSdp,
     answer: null,
     confirmCode: null,
+    sharedSecret: server.sharedSecret,
   };
 
   // Wrap the answer promise to store the answer + derive confirm code
@@ -183,19 +194,47 @@ export function confirmPairing(
     return null;
   }
 
+  const now = new Date().toISOString();
   const device: PairedDevice = {
     fingerprint: activePairing.answer.fingerprint,
     pairingId: activePairing.server.pairingId,
     alias: deviceAlias,
     deviceType,
-    pairedAt: new Date().toISOString(),
+    pairedAt: now,
     lastConnected: null,
-    sharedSecret: '', // TODO: extract from DTLS handshake
+    // A REAL SECRET, not the `''` with a `// TODO` beside it that every record
+    // used to carry (Phase 19, finding 1.2). Reconnect now requires a proof
+    // computed with this; a `pairingId` on its own no longer gets in.
+    sharedSecret: activePairing.sharedSecret,
     instanceId: null,
+    // Pairing a phone does not hand it a shell or the settings that control
+    // network exposure — those are granted per device, afterwards (finding 17).
+    capabilities: [...DEFAULT_GRANTS],
+    confirmedAt: now,
   };
 
   upsertPairedDevice(device);
   console.log(`[Pairing] Confirmed — device "${deviceAlias}" (${device.fingerprint.slice(0, 12)}…)`);
+
+  // Hand the secret over the DTLS channel, never over the pairing server.
+  //
+  // This is the one moment it is transmitted, and it happens after the user
+  // has compared the two confirmation codes — so by now they have asserted
+  // that the connection carrying it reaches the device in their hand.
+  const delivered = sendToPeer(
+    device.fingerprint,
+    DATA_CHANNELS.CONTROL,
+    JSON.stringify({ type: 'pairing.secret', pairingId: device.pairingId, secret: device.sharedSecret }),
+  );
+  if (!delivered) {
+    // Not fatal here — the desktop record is sound. But the phone cannot
+    // reconnect without it, so say so plainly rather than leaving the user to
+    // discover it the next time they open the app.
+    console.warn(
+      `[Pairing] Could not deliver the pairing secret to "${deviceAlias}" — ` +
+      'the control channel was not open. The phone will need to pair again.',
+    );
+  }
 
   // Clean up
   activePairing = null;

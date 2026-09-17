@@ -3352,15 +3352,18 @@ app.post('/api/pairing/initiate', async (_req, res) => {
   }
 });
 
-// Poll: check pairing progress. Returns current state + confirm code
-// when the phone's answer has been received.
+// Poll: check pairing progress.
+//
+// Reports only WHETHER the phone has answered, never the confirmation code
+// itself (Phase 19, finding 1.2). The renderer already discarded the code it
+// was sent — the user has to read it off the phone and type it — so sending
+// it served no purpose and put the value the comparison depends on onto a
+// second surface.
 app.get('/api/pairing/status', (_req, res) => {
   try {
-    const active = peerService.isPairingActive();
-    const confirmCode = peerService.getPairingConfirmCode();
     res.json({
-      active,
-      confirmCode, // null until phone answers
+      active: peerService.isPairingActive(),
+      codeReady: peerService.getPairingConfirmCode() !== null,
     });
   } catch (err) {
     res.status(500).json({ error: String(err) });
