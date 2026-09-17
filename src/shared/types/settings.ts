@@ -127,6 +127,45 @@ export interface PowerSettings {
   onlyWhenOnAC: boolean;
 }
 
+/**
+ * Where outbound channel webhooks are allowed to go.
+ *
+ * Phase 19, finding 20. A webhook URL comes from
+ * `<projectRoot>/.codetrellis/config.json` — a file in the REPOSITORY. So
+ * cloning a repo and opening it used to be enough to make this process send
+ * plan data to a URL that repo's author chose, from inside the developer's
+ * network. The valuable destinations are the ones only that machine can
+ * reach: cloud metadata on 169.254.169.254, an internal admin panel, another
+ * tool on 127.0.0.1.
+ *
+ * A URL in a cloned repository has no standing on its own; the user approves
+ * the host, once, here.
+ */
+export interface WebhookSettings {
+  /**
+   * Hostnames the user has approved as webhook destinations.
+   *
+   * Matched EXACTLY, case-insensitively. No wildcards — a wildcard is an
+   * approval for hosts the user has not seen. Empty by default, so a fresh
+   * install fires no webhooks at all until someone decides otherwise.
+   */
+  allowedHosts: string[];
+  /**
+   * Permit webhooks to LOOPBACK addresses (127.0.0.0/8, ::1) — and only
+   * loopback.
+   *
+   * A developer running a local webhook receiver is a real case, and refusing
+   * it outright would be the kind of rule people work around. But it stays off
+   * by default, and it does NOT extend to the rest of the private space: the
+   * LAN, and the cloud metadata service on 169.254.169.254, remain
+   * unreachable however this is set.
+   *
+   * With it on, the residual risk is exactly this: a repository you clone can
+   * reach a service on your own machine, on a host you have already approved.
+   */
+  allowLoopback: boolean;
+}
+
 export interface AppSettings {
   identity: IdentitySettings;
   mcp: McpSettings;
@@ -143,6 +182,11 @@ export interface AppSettings {
    * All toggles default `false` (no behavior change for existing users).
    */
   power: PowerSettings;
+  /**
+   * Phase 19, finding 20 — which hosts outbound channel webhooks may reach.
+   * Empty by default: webhook URLs arrive in repository files.
+   */
+  webhooks: WebhookSettings;
   /**
    * Phase 5.1 — true once the user completes the first-run wizard.
    * When false (or absent in older settings files), the frontend
@@ -207,6 +251,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     preventLidCloseSleep: false,
     onlyWhenOnAC: true,
+  },
+  // Empty: a webhook URL arrives in a repository file, so nothing is
+  // reachable until the user says so (Phase 19, finding 20).
+  webhooks: {
+    allowedHosts: [],
+    allowLoopback: false,
   },
   firstRunComplete: false,
   updatedAt: '',

@@ -72,9 +72,19 @@ export function setActiveProjectRoot(projectPath: string | null): void {
 export function listTrustedRoots(): string[] {
   const roots = new Set<string>();
   if (activeProjectRoot) roots.add(activeProjectRoot);
-  for (const p of listRecentProjects()) {
-    if (p?.path) roots.add(p.path);
+
+  // The recent-projects list lives in the database, which is not up during
+  // early startup. Failing here would 500 every confined endpoint rather than
+  // deny cleanly — and degrading to "the active project only" is STRICTER, not
+  // looser, so it is a safe fallback rather than a fail-open one.
+  try {
+    for (const p of listRecentProjects()) {
+      if (p?.path) roots.add(p.path);
+    }
+  } catch (err) {
+    console.warn('[TrustedRoots] Recent projects unavailable, using the active project only:', err);
   }
+
   return [...roots];
 }
 

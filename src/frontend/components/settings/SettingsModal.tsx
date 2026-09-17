@@ -460,6 +460,108 @@ function PlansSection({
         unaffected (they store paths, not bytes).
       </p>
 
+      <div className="mt-3 pt-3 border-t border-white/[0.06]">
+        <WebhookHostsField settings={settings} onChange={onChange} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * Where outbound channel webhooks may go (Phase 19, finding 20).
+ *
+ * Lives under Plans because that is where channel routing is configured, and
+ * the two are only meaningful together.
+ */
+function WebhookHostsField({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const hosts = settings.webhooks?.allowedHosts ?? [];
+
+  const add = () => {
+    const host = draft.trim().toLowerCase();
+    if (!host || hosts.includes(host)) { setDraft(''); return; }
+    onChange({ webhooks: { ...settings.webhooks, allowedHosts: [...hosts, host] } });
+    setDraft('');
+  };
+
+  const remove = (host: string) =>
+    onChange({ webhooks: { ...settings.webhooks, allowedHosts: hosts.filter((h) => h !== host) } });
+
+  return (
+    <>
+      <Field label="Approved webhook hosts">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+            placeholder="hooks.slack.com"
+            className="flex-1 bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+          />
+          <button
+            onClick={add}
+            disabled={!draft.trim()}
+            className="px-3 py-1.5 text-[11.5px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-40 transition-colors"
+          >
+            Approve
+          </button>
+        </div>
+      </Field>
+
+      {hosts.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {hosts.map((host) => (
+            <span
+              key={host}
+              className="inline-flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.08] rounded-md px-2 py-1 text-[11px] text-foreground"
+            >
+              {host}
+              <button
+                onClick={() => remove(host)}
+                className="text-foreground-subtle hover:text-red-400 transition-colors"
+                title={`Stop sending webhooks to ${host}`}
+              >
+                &times;
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] text-foreground-subtle">
+          No hosts approved, so no webhooks are sent.
+        </p>
+      )}
+
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.webhooks?.allowLoopback ?? false}
+          onChange={(e) => onChange({ webhooks: { ...settings.webhooks, allowLoopback: e.target.checked } })}
+          className="mt-0.5 accent-accent"
+        />
+        <span className="min-w-0">
+          <span className="text-[11px] text-amber-300">Allow webhooks to this machine (127.0.0.1)</span>
+          <span className="block text-[10px] text-foreground-subtle">
+            Only if you run a local webhook receiver. A project you clone can then reach a service
+            on your own machine, on a host you have approved. Your local network and cloud metadata
+            stay unreachable either way.
+          </span>
+        </span>
+      </label>
+
+      <p className="text-[10px] text-foreground-subtle leading-relaxed">
+        Channel routing rules live in <code className="font-mono">&lt;project&gt;/.codetrellis/config.json</code>,
+        which is part of the repository &mdash; so a project you clone can ask CodeTrellis to send
+        your plan data somewhere. Only hosts you list here are used. Matched exactly, over HTTPS,
+        and never to an address on your own machine or local network.
+      </p>
     </>
   );
 }

@@ -238,7 +238,19 @@ export function acceptContributions(
   branch: string,
   planSlug: string,
 ): AcceptResult {
-  const contribDir = path.join(projectRoot, '.codetrellis', 'contributions', branch);
+  // VALIDATE BEFORE BUILDING THE PATH (Phase 19, finding 12).
+  //
+  // The delete at the end of this function is confined, which was the part
+  // the review named — but the READS above it were not. A branch of
+  // `../../../elsewhere` made this enumerate that directory's `items/` and
+  // `attachments/`, copy what it found into the project, and only then be
+  // refused at the delete. Copying a file in is a read of it.
+  //
+  // The two sibling functions already validated here; this one did not, which
+  // is the usual shape of a partial fix.
+  const contribDir = path.join(
+    projectRoot, '.codetrellis', 'contributions', assertSafeBranchSegment(branch),
+  );
   const planItemsDir = path.join(projectRoot, '.codetrellis', 'plans', planSlug, 'items');
   const errors: string[] = [];
   let accepted = 0;

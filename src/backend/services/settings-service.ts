@@ -77,6 +77,14 @@ export function updateSettings(patch: DeepPartial<AppSettings>): AppSettings {
         ...((patch.power?.triggers as Partial<PowerTriggers> | undefined) ?? {}),
       },
     },
+    webhooks: {
+      ...current.webhooks,
+      ...(patch.webhooks ?? {}),
+      // Replace rather than merge: removing a host must actually remove it.
+      allowedHosts: Array.isArray(patch.webhooks?.allowedHosts)
+        ? (patch.webhooks.allowedHosts as string[])
+        : current.webhooks.allowedHosts,
+    },
     firstRunComplete: patch.firstRunComplete ?? current.firstRunComplete,
     updatedAt: new Date().toISOString(),
   };
@@ -85,6 +93,16 @@ export function updateSettings(patch: DeepPartial<AppSettings>): AppSettings {
   if (next.mcp.port < 1024 || next.mcp.port > 65535) {
     next.mcp.port = DEFAULT_SETTINGS.mcp.port;
   }
+
+  // The approved-host list is what stands between a cloned repository and an
+  // outbound request from inside the user's network (Phase 19, finding 20), so
+  // it is re-normalised on the way in rather than trusted from the caller.
+  next.webhooks.allowedHosts = [...new Set(
+    (next.webhooks.allowedHosts ?? [])
+      .filter((h): h is string => typeof h === 'string')
+      .map((h) => h.trim().toLowerCase())
+      .filter((h) => h.length > 0 && h.length <= 253 && !h.includes('*') && !h.includes('/')),
+  )];
 
   cached = next;
   saveSettings(next);
@@ -244,6 +262,23 @@ export function mergeWithDefaults(raw: any): AppSettings {
       onlyWhenOnAC: typeof raw?.power?.onlyWhenOnAC === 'boolean'
         ? raw.power.onlyWhenOnAC
         : DEFAULT_SETTINGS.power.onlyWhenOnAC,
+    },
+    webhooks: {
+      // Normalised hard, because this list is what stands between a cloned
+      // repository and an outbound request from inside the user's network
+      // (Phase 19, finding 20). Anything that is not a plain non-empty string
+      // is dropped rather than coerced.
+      allowedHosts: Array.isArray(raw?.webhooks?.allowedHosts)
+        ? [...new Set(
+            (raw.webhooks.allowedHosts as unknown[])
+              .filter((h): h is string => typeof h === 'string')
+              .map((h) => h.trim().toLowerCase())
+              .filter((h) => h.length > 0 && h.length <= 253 && !h.includes('*') && !h.includes('/')),
+          )]
+        : [...DEFAULT_SETTINGS.webhooks.allowedHosts],
+      allowLoopback: typeof raw?.webhooks?.allowLoopback === 'boolean'
+        ? raw.webhooks.allowLoopback
+        : DEFAULT_SETTINGS.webhooks.allowLoopback,
     },
     firstRunComplete: typeof raw?.firstRunComplete === 'boolean' ? raw.firstRunComplete : DEFAULT_SETTINGS.firstRunComplete,
     updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : '',
