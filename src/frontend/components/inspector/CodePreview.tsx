@@ -6,6 +6,10 @@ import { AddToTaskPopover } from './AddToTaskPopover';
 import { usePlanStore } from '../../stores/plan-store';
 import { useUiStore } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
+import {
+  indexMarkers, markerLabel, intentTint, isSpanStart,
+  type FileOverlay, type OverlayIndex, type OverlayMarker,
+} from '../../lib/plan-overlay';
 
 export type LineAnnotation = 'unchanged' | 'added' | 'modified';
 
@@ -36,6 +40,14 @@ interface Props {
   error: string | null;
   highlightLine?: number;
   onClose?: () => void;
+  /**
+   * Phase 26 — what the plan wants changed in this file, placed on the
+   * lines it applies to. Optional: the inspector can render code with no
+   * plan context at all, and should not look broken when it does.
+   */
+  overlay?: FileOverlay | null;
+  /** Open the plan item a marker belongs to. */
+  onOpenItem?: (itemUid: string, planUid: string) => void;
 }
 
 const PRISM_LANG: Record<string, string> = {
@@ -47,7 +59,7 @@ const PRISM_LANG: Record<string, string> = {
   plaintext: 'plain',
 };
 
-export function CodePreview({ content, error, highlightLine, onClose }: Props) {
+export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem }: Props) {
   if (error) {
     return (
       <div className="rounded-md border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-[10.5px] text-red-200">
@@ -63,22 +75,37 @@ export function CodePreview({ content, error, highlightLine, onClose }: Props) {
     );
   }
 
-  return <CodePreviewInner content={content} highlightLine={highlightLine} onClose={onClose} />;
+  return (
+    <CodePreviewInner
+      content={content}
+      highlightLine={highlightLine}
+      onClose={onClose}
+      overlay={overlay}
+      onOpenItem={onOpenItem}
+    />
+  );
 }
 
 function CodePreviewInner({
   content,
   highlightLine,
   onClose,
+  overlay,
+  onOpenItem,
 }: {
   content: FileContent;
   highlightLine?: number;
   onClose?: () => void;
+  overlay?: FileOverlay | null;
+  onOpenItem?: (itemUid: string, planUid: string) => void;
 }) {
   const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null);
   const [showPopover, setShowPopover] = useState(false);
 
   const language = useMemo(() => PRISM_LANG[content.language || 'plaintext'] || 'plain', [content.language]);
+  // Expanded once per overlay rather than searched per line — spans are
+  // small and every line renders anyway.
+  const overlayIndex: OverlayIndex = useMemo(() => indexMarkers(overlay?.markers ?? []), [overlay]);
   const lines = useMemo(() => content.content.split('\n'), [content.content]);
   const driftBorder = useMemo(() => driftBorderClass(content.drift?.status), [content.drift?.status]);
 
@@ -115,6 +142,11 @@ function CodePreviewInner({
         />
       )}
 
+      {/* Phase 26 — what the plan wants from this file as a whole, and
+          what it wanted from lines that no longer exist. Both belong
+          above the code rather than on any single line. */}
+      <PlanOverlayBanner overlay={overlay ?? null} onOpenItem={onOpenItem} />
+
       <div className="text-[11px] font-mono leading-snug max-h-[460px] overflow-auto">
         <Highlight code={content.content} language={language} theme={themes.nightOwl}>
           {({ className, style, tokens, getLineProps, getTokenProps }) => (
@@ -138,6 +170,8 @@ function CodePreviewInner({
                     getLineProps={getLineProps}
                     line={line}
                     getTokenProps={getTokenProps}
+                    planMarkers={overlayIndex.get(lineNum)}
+                    onOpenItem={onOpenItem}
                   />
                 );
               })}
@@ -344,6 +378,8 @@ function LineRow({
   getLineProps,
   line,
   getTokenProps,
+  planMarkers,
+  onOpenItem,
 }: {
   lineNum: number;
   annotation: LineAnnotation | undefined;
@@ -353,8 +389,12 @@ function LineRow({
   getLineProps: any;
   line: any[];
   getTokenProps: any;
+  planMarkers?: OverlayMarker[];
+  onOpenItem?: (itemUid: string, planUid: string) => void;
 }) {
   const lineProps = getLineProps({ line });
+  const marker = planMarkers && planMarkers.length > 0 ? planMarkers[0] : null;
+  const showLabel = marker ? isSpanStart(marker, lineNum) : false;
   const gutterClass = annotation === 'added'
     ? 'bg-emerald-500/20 text-emerald-200'
     : annotation === 'modified'
@@ -391,6 +431,77 @@ function LineRow({
           <span key={key} {...getTokenProps({ token })} />
         ))}
       </code>
+
+      {/* Phase 26 — the plan marker rail. The bar runs the whole span so
+          the extent is visible; the label sits only on the first line so
+          a twenty-line span does not repeat itself twenty times. */}
+      {marker && (
+        <span className="flex items-center shrink-0 pl-1 pr-2 max-w-[45%] gap-1.5">
+          <span className={`w-[2px] self-stretch rounded-full ${
+            marker.intent === 'remove' ? 'bg-rose-400/70'
+              : marker.intent === 'add' ? 'bg-emerald-400/70'
+              : 'bg-accent/70'
+          }`} />
+          {showLabel && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenItem?.(marker.itemUid, marker.planUid); }}
+              title={marker.instruction || marker.itemTitle}
+              className={`truncate text-[9.5px] hover:underline ${intentTint(marker.intent)}`}
+            >
+              {markerLabel(planMarkers ?? [])}
+            </button>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * File-level plan context: what the plan wants from this file without
+ * naming lines, and what it wanted from lines that are no longer there.
+ *
+ * The unanchored group is the one a reader most needs told about — it
+ * means the plan refers to a version of the file that no longer exists —
+ * so it is stated rather than silently dropped.
+ */
+function PlanOverlayBanner({
+  overlay,
+  onOpenItem,
+}: {
+  overlay: FileOverlay | null;
+  onOpenItem?: (itemUid: string, planUid: string) => void;
+}) {
+  if (!overlay) return null;
+  if (overlay.fileLevel.length === 0 && overlay.unanchored.length === 0) return null;
+
+  return (
+    <div className="mb-1.5 space-y-1">
+      {overlay.fileLevel.map((m, i) => (
+        <button
+          key={`f${i}`}
+          onClick={() => onOpenItem?.(m.itemUid, m.planUid)}
+          className="w-full flex items-start gap-1.5 rounded-md border border-accent/20 bg-accent/[0.05] px-2 py-1 text-left hover:bg-accent/[0.09] transition-colors"
+        >
+          <span className={`text-[10px] shrink-0 ${intentTint(m.intent)}`}>▸</span>
+          <span className="text-[10px] text-foreground-muted truncate">
+            <span className="text-foreground">{m.itemTitle}</span>
+            {m.instruction ? ` — ${m.instruction}` : ' wants this file'}
+          </span>
+        </button>
+      ))}
+
+      {overlay.unanchored.map((m, i) => (
+        <div
+          key={`u${i}`}
+          className="flex items-start gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/[0.05] px-2 py-1"
+        >
+          <AlertTriangle size={10} className="text-amber-300 shrink-0 mt-[2px]" />
+          <span className="text-[10px] text-amber-100/80">
+            <span className="text-amber-100">{m.itemTitle}</span> could not be placed: {m.reason}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

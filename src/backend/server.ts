@@ -47,6 +47,7 @@ import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands } from './services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { buildPrDraft } from './services/pr-draft-service';
+import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import * as commentService from './services/comment-service';
 import * as sessionService from './services/session-service';
 import * as taskAttachmentsService from './services/task-attachments-service';
@@ -2522,6 +2523,58 @@ app.get('/api/plans/:uid/changes', (req, res) => {
   } else {
     res.json(listProposedChanges(req.params.uid));
   }
+});
+
+// --- Plan overlay on code (Phase 26) ---
+//
+// FileSpec.edits[] has carried lineRange and symbol since Phase 15 §M2
+// and nothing ever drew it. This projects that intent onto a file's
+// lines so a developer reading code can see what is planned for it.
+app.get('/api/file/overlay', (req, res) => {
+  const filePath = req.query.path as string;
+  const projectPath = req.query.project as string;
+  if (!filePath || !projectPath) {
+    res.status(400).json({ error: 'path and project query params required' });
+    return;
+  }
+
+  // The plan uid, when given, only NARROWS the result — it never widens
+  // access, and the file itself is read through the same confined route
+  // the content endpoint uses.
+  const planUid = (req.query.plan as string) || null;
+
+  // Same confinement as /api/file/content (Phase 19, finding 5): the
+  // owning root is derived from the opened projects, never nominated by
+  // the caller, and the read goes through the confined helper so a
+  // symlink cannot escape it.
+  let lineCount = 0;
+  try {
+    const owningRoot = listTrustedRoots().find((r) => isWithin(r, filePath));
+    if (!owningRoot) {
+      res.status(403).json({ error: 'Refusing to read a file outside every opened project' });
+      return;
+    }
+    const contents = readFileWithin(owningRoot, filePath, 'file/overlay');
+    lineCount = contents.toString('utf-8').split('\n').length;
+  } catch (err) {
+    if (err instanceof ConfinementError) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  const plans = planService.listPlans(projectPath).map((p) => p.uid);
+  res.json(
+    buildFileOverlay({
+      absolutePath: filePath,
+      relativePath: relativeTo(projectPath, filePath),
+      lineCount,
+      planUid,
+      plans,
+    }),
+  );
 });
 
 // --- Comparison + review (Phase 25) ---
