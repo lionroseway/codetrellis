@@ -42,6 +42,12 @@ module.exports = {
   },
   dmg: {
     ...base.dmg,
+    // Left off DELIBERATELY. electron-builder can sign the disk image but
+    // cannot notarize or staple it — its notarize step runs against the .app
+    // before the DMG is assembled — and a signed-but-unstapled DMG still
+    // fails Gatekeeper for an offline user. scripts/notarize-dmg.sh does all
+    // three in one place, and verifies the result with spctl rather than
+    // trusting exit codes. release.sh runs it straight after this build.
     sign: false,
   },
 };

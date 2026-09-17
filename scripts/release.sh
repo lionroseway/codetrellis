@@ -93,6 +93,23 @@ if [[ "$SKIP_BUILD" -eq 0 ]]; then
   npm run package:mac:signed
 fi
 
+# --- Sign + notarize + staple the DMGs themselves --------------------------
+#
+# electron-builder notarizes the .app but leaves the disk image unsigned, so
+# Gatekeeper rejects the container the user actually double-clicks. Runs even
+# with --skip-build: the check is idempotent and skips anything already
+# stapled, so it costs nothing on a re-publish and catches a DMG that was
+# built before this step existed.
+#
+# VERSION-PINNED, like every other glob in this script. out/make accumulates
+# artifacts from previous releases, and an unpinned *.dmg here would spend a
+# notarization round trip on each of them — and, worse, fail the release on a
+# stale ad-hoc-signed DMG from an older build that has nothing to do with this
+# one. Only this version's disk images are this release's business.
+if [[ -n "$(ls "${OUT_DIR}"/CodeTrellis-${VERSION}-*.dmg 2>/dev/null)" ]]; then
+  "${REPO_ROOT}/scripts/notarize-dmg.sh" "${OUT_DIR}"/CodeTrellis-${VERSION}-*.dmg
+fi
+
 # --- Build Windows + Linux on CI (native runners) ---
 if [[ "$SKIP_BUILD" -eq 0 && "$MAC_ONLY" -eq 0 ]]; then
   log "Pushing HEAD so CI builds the exact same commit…"
