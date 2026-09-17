@@ -1,7 +1,11 @@
 # Roadmap — Phases 20–25
 
 > Drafted: 2026-09-17
-> Status: design agreed, implementation sequenced below
+> Status: **20–24 built, 25 partly built** — all on 2026-09-17. Each
+> phase doc has been reconciled with what actually shipped, and design
+> calls that changed during implementation are marked **[changed]** in
+> place. A doc that still describes the plan rather than the result is
+> worse than none.
 > Supersedes nothing. Sits alongside [TRACKER.md](TRACKER.md), which
 > remains the running record of what actually shipped.
 
@@ -19,14 +23,41 @@ reasoning for it.
 
 ## The six
 
-| Phase | Doc | One line |
-|---|---|---|
-| **20** | [PHASE-20-GO-SUPPORT.md](PHASE-20-GO-SUPPORT.md) | Go parser, resolver and callsites — Go is the server half of the cross-system story |
-| **21** | [PHASE-21-SQL-REF-TRACKER.md](PHASE-21-SQL-REF-TRACKER.md) | Schema extraction + a SQL ref-tracker, so the graph reaches the database |
-| **22** | [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md) | Turn the tool-call log into a readable account of what an agent is doing |
-| **23** | [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) | Time and cost per plan item — estimate, actual, forecast, and ceilings as governance |
-| **24** | [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) | Jira / Linear / issue intake into nested plans, without CodeTrellis holding a credential |
-| **25** | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot selection, and architecture play-forward |
+| Phase | Doc | One line | State |
+|---|---|---|---|
+| **20** | [PHASE-20-GO-SUPPORT.md](PHASE-20-GO-SUPPORT.md) | Go parser, resolver and callsites — Go is the server half of the cross-system story | ✅ |
+| **21** | [PHASE-21-SQL-REF-TRACKER.md](PHASE-21-SQL-REF-TRACKER.md) | Schema extraction + a SQL ref-tracker, so the graph reaches the database | ✅ |
+| **22** | [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md) | Turn the tool-call log into a readable account of what an agent is doing | ✅ |
+| **23** | [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) | Time and cost per plan item — estimate, actual, forecast, and ceilings as governance | ✅ backend; UI surfaces remain |
+| **24** | [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) | Jira / Linear / issue intake into nested plans, without CodeTrellis holding a credential | ✅ backend; UI chip remains |
+| **25** | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot selection, and architecture play-forward | ◑ comparison + review built; plan→PR and play-forward not |
+
+## What the work found
+
+Three bugs surfaced that were worse than the features being added, and
+all three shared a shape: **nothing failed, so nothing was noticed.**
+
+1. **The file-watcher's parseable-extension list had gone stale twice** —
+   first for `.py`/`.rs`/`.php`/`.java`, then for `.go`. Each time, edits
+   to a whole language silently stopped re-parsing and the graph went
+   quietly out of date. It now derives from `getParseableExtensions()`,
+   the one place that answers "can `parseFile` handle this".
+2. **`startWatching` returned before chokidar's initial walk finished**,
+   and the scan endpoint did not await it — leaving a window right after
+   every scan where edits were not seen at all. That is precisely when an
+   agent is most likely to be writing, since a scan is what precedes
+   handing it work.
+3. **The harness leaked a live backend per test.** It spawns
+   `npx → tsx → node` and signalled only the direct child. A full run
+   left ~190 backends alive and the machine at a load average of 100+ on
+   4 cores — which is almost certainly the real cause of the
+   "timing-sensitive tests are flaky" note in TRACKER §7 and the two
+   configured retries. They were not flaky; they were starved. The full
+   suite went from 40+ minutes to under 9.
+
+The pattern is worth naming, because it will recur: each was a piece of
+state that had to be kept in sync by hand, or a lifecycle that returned
+before it was ready. Neither kind announces itself.
 
 ---
 
