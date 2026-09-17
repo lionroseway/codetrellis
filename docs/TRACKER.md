@@ -120,7 +120,17 @@ with its own GitHub credentials — CodeTrellis holds none, same as Phase
 app. Edge findings are suppressed when the comparison could not see
 edges, for the same reason as above.
 
-**Coverage**: 6 harness tests.
+**PR draft.** `get_pr_draft` returns the title, body, head, base, tickets
+and warnings for a PR — and deliberately does **not** touch the
+repository. The design said "one action produces a branch, a commit and a
+PR"; building it made the better split obvious: CodeTrellis supplies what
+only it knows (the plan, the ticket lineage, the drift, the
+architectural delta), and the agent does the git, which is its native
+tool and which it can see better than we can. A test asserts the refs and
+HEAD are byte-identical before and after, because read-only is a promise
+worth proving.
+
+**Coverage**: 7 harness tests.
 
 
 ### Sep 17, 2026 — Phase 24: SDLC intake

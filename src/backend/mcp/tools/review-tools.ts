@@ -17,6 +17,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { compareSnapshots, listComparands } from '../../services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from '../../services/plan-review-service';
+import { buildPrDraft } from '../../services/pr-draft-service';
 
 const COMPARAND_HELP =
   'One of: "live" (working tree), "baseline" (the pinned baseline), "checkpoint:<id>", or ' +
@@ -102,6 +103,34 @@ export function register(server: McpServer, deps: ToolDeps): void {
       }
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(result.review, null, 2) }] };
+    },
+  );
+
+  // --- get_pr_draft ---
+
+  server.registerTool(
+    'get_pr_draft',
+    {
+      description:
+        'The title and body for a pull request describing this plan: what it set out to do, the tickets ' +
+        'it came from, and the review — what landed, what did not, and what changed that nobody asked ' +
+        'for. YOU do the git and open the PR with your own credentials; this supplies the part you ' +
+        'cannot write, because the plan, its ticket lineage and the architectural delta exist nowhere ' +
+        'else. Nothing here touches the repository. Check `warnings` before opening: they are the things ' +
+        'a reviewer will ask about.',
+      inputSchema: {
+        plan_uid: z.string(),
+        project_path: z.string(),
+        before: z.string().optional().describe(`Defaults to "baseline". ${COMPARAND_HELP}`),
+        after: z.string().optional().describe(`Defaults to "live". ${COMPARAND_HELP}`),
+      },
+    },
+    async ({ plan_uid, project_path, before, after }) => {
+      const result = buildPrDraft({ planUid: plan_uid, projectPath: project_path, before, after });
+      if (!result.ok) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result.draft, null, 2) }] };
     },
   );
 }

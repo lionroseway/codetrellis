@@ -212,4 +212,59 @@ test.describe('Comparison + review (Phase 25)', () => {
       await h.teardown();
     }
   });
+
+  test('the PR draft carries the plan, its tickets and the review — and touches nothing', async () => {
+    const h = await setupHarness('review-pr-draft');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+      const agent = await h.spawnAgent({ agentType: 'harness-review' });
+
+      // A plan that came from a ticket, so the draft has lineage to carry.
+      const created = JSON.parse(
+        (await agent.callTool('create_plan_from_external', {
+          title: 'Add invoice export',
+          description: 'Let users export invoices as CSV.',
+          external: { url: 'https://acme.atlassian.net/browse/PROJ-900' },
+          items: [{ title: 'Export endpoint' }],
+        })).text,
+      ) as { plan_uid: string };
+
+      // Read-only is a promise worth proving, not asserting: snapshot
+      // the refs before and after. A tool that silently branched or
+      // committed on a developer's working tree would be a poor trade
+      // for saving an agent three git commands it already knows.
+      const headsDir = path.join(h.fixture.projectPath, '.git', 'refs', 'heads');
+      const branchesBefore = fs.readdirSync(headsDir).sort();
+      const headBefore = fs.readFileSync(path.join(h.fixture.projectPath, '.git', 'HEAD'), 'utf-8');
+
+      const res = await h.client.raw(
+        'GET',
+        `/api/plans/${created.plan_uid}/pr-draft?project=${encodeURIComponent(h.fixture.projectPath)}`,
+      );
+      expect(res.ok).toBe(true);
+      const draft = (await res.json()) as {
+        title: string;
+        body: string;
+        base: string | null;
+        tickets: string[];
+        warnings: string[];
+      };
+
+      // The ticket leads the title, the way a reviewer expects.
+      expect(draft.title).toBe('PROJ-900: Add invoice export');
+      expect(draft.tickets).toContain('PROJ-900');
+      expect(draft.body).toContain('What this does');
+      expect(draft.body).toContain('Let users export invoices as CSV.');
+      expect(draft.body).toContain('PROJ-900');
+      // The review is part of the body — that is the half an agent
+      // cannot write for itself.
+      expect(draft.body).toContain('Plan review');
+      expect(Array.isArray(draft.warnings)).toBe(true);
+
+      expect(fs.readdirSync(headsDir).sort()).toEqual(branchesBefore);
+      expect(fs.readFileSync(path.join(h.fixture.projectPath, '.git', 'HEAD'), 'utf-8')).toBe(headBefore);
+    } finally {
+      await h.teardown();
+    }
+  });
 });

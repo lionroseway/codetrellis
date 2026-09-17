@@ -1,9 +1,10 @@
 # Phase 25 — Review, snapshot selection, and play-forward
 
 > Drafted: 2026-09-17
-> Status: **partly built** 2026-09-17 — snapshot selection and PR→plan
-> review shipped (backend, MCP, REST). Plan→PR authoring and
-> play-forward are **not built**; see §6 for where they stand.
+> Status: **partly built** 2026-09-17 — snapshot selection, PR→plan
+> review and the PR draft shipped (backend, MCP, REST). Play-forward is
+> **not built**; see §6. One design call changed — marked **[changed]**
+> in §2.
 > Consumes: Phases 20–24. Best done last.
 
 ---
@@ -21,14 +22,30 @@ All three of these are views over data the backend already computes:
 Almost nothing here is new computation. It is assembly, and that is why
 it lands last and cheap.
 
-## 2. Plan → PR
+## 2. Plan → PR — **built, read-only [changed]**
 
-The loop currently ends at "VerificationPanel says Ready to ship" and
-drops the user into a terminal. Close it.
+The loop ended at "VerificationPanel says Ready to ship" and dropped the
+user into a terminal. This closes it — but not the way the design said.
 
-One action produces: a branch, a commit composed by `git-commit-service`
-with its existing agent-attribution trailers, and a PR body generated
-from the plan:
+**[changed]: this produces a draft; it does not touch the repository.**
+The plan was "one action produces a branch, a commit and a PR". Building
+it made a better split obvious: **CodeTrellis supplies what only it
+knows, and the agent does the git.**
+
+An agent is already fluent with git — branching and committing are its
+native tools, and it can see the working tree we can only infer.
+Meanwhile the plan, the ticket lineage, the drift and the architectural
+delta exist nowhere else. So `get_pr_draft` returns the title, body,
+head, base, tickets and warnings, and the agent opens the PR with its own
+credentials.
+
+Silently branching and committing on a developer's working tree would
+have been a poor trade for saving an agent three commands it already
+knows — and a harness test asserts the refs and HEAD are byte-identical
+before and after, because read-only is a promise worth proving rather
+than asserting.
+
+The body is generated from the plan:
 
 - the plan's description
 - the satisfied / drifted table from `plan-changes-service`
@@ -154,13 +171,8 @@ frames — a stable layout is the difference between "time-lapse" and
 
 1. ~~**Snapshot selection**~~ ✅ built — smallest, and the other two use it.
 2. ~~**PR → plan review**~~ ✅ built — the differentiated one.
-3. **Plan → PR** — not built. Deliberately after the review half,
-   because it is table stakes rather than a reason to choose us. The
-   pieces are all present (`git-commit-service` already composes
-   attributed commits, `plan-file-service` already serialises the plan,
-   and `renderReviewMarkdown` already produces the body); what remains
-   is the branch/commit orchestration and a `get_pr_draft` payload for
-   the agent to open the PR with.
+3. ~~**Plan → PR**~~ ✅ built as `get_pr_draft`, read-only — see §2 for
+   why the mutating half was deliberately not built.
 4. **Play-forward** — not built. It is the reward, not the foundation,
    and it is the one piece here that is mostly frontend: a transport
    bar over the snapshot sequence plus a stable layout precomputed

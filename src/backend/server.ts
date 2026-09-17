@@ -46,6 +46,7 @@ import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands } from './services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
+import { buildPrDraft } from './services/pr-draft-service';
 import * as commentService from './services/comment-service';
 import * as sessionService from './services/session-service';
 import * as taskAttachmentsService from './services/task-attachments-service';
@@ -2542,6 +2543,22 @@ app.get('/api/compare', (req, res) => {
   const result = compareSnapshots(before, after, projectPath);
   if (!result.ok) { res.status(404).json(result); return; }
   res.json(result.result);
+});
+
+app.get('/api/plans/:uid/pr-draft', (req, res) => {
+  const projectPath = req.query.project as string;
+  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  // Read-only: this never touches the repository. The agent does the git
+  // and opens the PR with its own credentials; we supply the body it
+  // cannot write.
+  const result = buildPrDraft({
+    planUid: req.params.uid,
+    projectPath,
+    before: req.query.before as string | undefined,
+    after: req.query.after as string | undefined,
+  });
+  if (!result.ok) { res.status(404).json(result); return; }
+  res.json(result.draft);
 });
 
 app.get('/api/plans/:uid/review', (req, res) => {
