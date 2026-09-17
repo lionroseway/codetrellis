@@ -28,6 +28,7 @@ import { scanDirectory, countFiles, collectFilePaths } from './services/project-
 import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
+import { isSafeGitRef } from './services/git-safety';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -578,6 +579,13 @@ app.get('/api/git/branch-tip', (req, res) => {
   const branch = req.query.branch as string;
   if (!projectPath || !branch) {
     res.status(400).json({ error: 'path and branch query params required' });
+    return;
+  }
+  // `git rev-parse <branch>` reads any argument starting with `-` as a flag
+  // (Phase 19, finding 10). execFileSync stops shell injection, not option
+  // injection, and there is no `--` position that protects this operand.
+  if (!isSafeGitRef(branch)) {
+    res.status(400).json({ error: 'Invalid branch name' });
     return;
   }
 
@@ -3069,6 +3077,10 @@ app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
   const { getPlanAtCommit } = _lazy___services_plan_history_service;
   const projectPath = req.query.project as string | undefined;
   if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  if (!isSafeGitRef(req.params.commitHash)) {
+    res.status(400).json({ error: 'Invalid commit identifier' });
+    return;
+  }
   const state = getPlanAtCommit(projectPath, req.params.planSlug, req.params.commitHash);
   if (!state) { res.status(404).json({ error: 'Plan or commit not found' }); return; }
   res.json(state);
@@ -3082,6 +3094,10 @@ app.get('/api/plan-history/:planSlug/diff', (req, res) => {
   const head = req.query.head as string | undefined;
   if (!projectPath || !base || !head) {
     res.status(400).json({ error: 'project, base, and head query params required' });
+    return;
+  }
+  if (!isSafeGitRef(base) || !isSafeGitRef(head)) {
+    res.status(400).json({ error: 'Invalid commit identifier' });
     return;
   }
   const diff = diffPlanBetweenCommits(projectPath, req.params.planSlug, base, head);

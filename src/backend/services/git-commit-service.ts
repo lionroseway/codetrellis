@@ -21,7 +21,8 @@
  * commits work normally — the signature is on the human author.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { assertSafeGitPathArg } from './git-safety';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -109,8 +110,11 @@ export function commitManifestChanges(opts: CommitOptions): CommitResult {
 
   // Stage the requested paths. Use `git add --` so paths starting with
   // `-` aren't treated as flags.
-  const addArgs = ['add', '--', ...opts.paths.map((p) => quoteArg(p))].join(' ');
-  runGit(addArgs, opts.projectRoot);
+  // Each path validated, then passed as its own argv entry after `--`.
+  // Belt and braces: `--` stops git reading a leading dash as a flag, and
+  // the check catches the subcommands where `--` is not accepted.
+  const safePaths = opts.paths.map((p, i) => assertSafeGitPathArg(p, `commitPaths[${i}]`));
+  runGit(['add', '--', ...safePaths], opts.projectRoot);
 
   // Use --file to avoid shell-escaping the message body. We write the
   // message to a temp file inside the project's .git/ dir, commit
@@ -118,22 +122,34 @@ export function commitManifestChanges(opts: CommitOptions): CommitResult {
   const tmpMsgPath = path.join(opts.projectRoot, '.git', `cdev-commit-msg-${Date.now()}-${process.pid}.txt`);
   try {
     fs.writeFileSync(tmpMsgPath, message, 'utf-8');
-    const commitFlags = ['commit', '--file', quoteArg(tmpMsgPath)];
+    const commitFlags = ['commit', '--file', tmpMsgPath];
     if (opts.signed) commitFlags.push('-S');
-    runGit(commitFlags.join(' '), opts.projectRoot);
+    runGit(commitFlags, opts.projectRoot);
   } finally {
     try { fs.unlinkSync(tmpMsgPath); } catch { /* ignore */ }
   }
 
-  const sha = runGit('rev-parse HEAD', opts.projectRoot).trim();
+  const sha = runGit(['rev-parse', 'HEAD'], opts.projectRoot).trim();
   return { sha, message };
 }
 
 // --- internals --------------------------------------------------------------
 
-function runGit(argsLine: string, cwd: string): string {
+/**
+ * Run git with an explicit argv — NO SHELL.
+ *
+ * This used to be `execSync(`git ${argsLine}`)` with a hand-rolled
+ * `quoteArg` helper, justified by "the values we pass come from inside the
+ * application". That assumption is exactly the kind that stops being true
+ * quietly, and quoting is easy to get subtly wrong.
+ *
+ * With execFileSync there is no shell to quote FOR: each argument is handed
+ * to the process verbatim, so metacharacters are inert. Option injection is
+ * a separate concern and is handled by the validators in ./git-safety.
+ */
+function runGit(args: string[], cwd: string): string {
   try {
-    return execSync(`git ${argsLine}`, {
+    return execFileSync('git', args, {
       cwd,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -141,14 +157,6 @@ function runGit(argsLine: string, cwd: string): string {
   } catch (err: any) {
     const stderr = (err?.stderr ?? '').toString();
     const message = stderr.trim() || err?.message || 'git failed';
-    throw new Error(`git ${argsLine.split(' ')[0]} failed: ${message}`);
+    throw new Error(`git ${args[0]} failed: ${message}`);
   }
-}
-
-function quoteArg(value: string): string {
-  // Minimal shell-quoting for execSync paths. The values we pass come
-  // from inside the application (project root, file paths, tmp path)
-  // so we mainly need to handle spaces and shell metachars.
-  if (/^[A-Za-z0-9_./~\-+]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
