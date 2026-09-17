@@ -190,6 +190,21 @@ export function setDeviceCapabilities(
   return valid;
 }
 
+/**
+ * Record the certificate a device is currently using.
+ *
+ * The fingerprint is per-CONNECTION on iOS, not per-install, so the stored
+ * value is a recent observation rather than an identity. It is kept only so
+ * discovery can associate an mDNS advertisement with a paired device; nothing
+ * authenticates against it (see `computeReconnectAnswerMac`).
+ */
+export function refreshDeviceFingerprint(pairingId: string, fingerprint: string): void {
+  const device = ensureLoaded().find((d) => d.pairingId === pairingId);
+  if (!device || !fingerprint || device.fingerprint === fingerprint) return;
+  device.fingerprint = fingerprint;
+  persist();
+}
+
 export function linkInstanceId(fingerprint: string, instanceId: string): void {
   const device = ensureLoaded().find((d) => d.fingerprint === fingerprint);
   if (device) {

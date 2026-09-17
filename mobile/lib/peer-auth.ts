@@ -17,7 +17,7 @@
  *     ceremony confirms nothing.
  */
 
-import { hmacSha256Hex, sha256Hex } from './crypto';
+import { hmacSha256Hex, sha256Hex, toHex, utf8Bytes } from './crypto';
 
 /**
  * The exact bytes both sides sign.
@@ -45,6 +45,73 @@ export function computeChallengeMac(
 /** Whether a stored secret can actually be used. Older records hold `''`. */
 export function isUsableSecret(secret: string | undefined | null): secret is string {
   return typeof secret === 'string' && /^[0-9a-f]{64,}$/i.test(secret);
+}
+
+/**
+ * Prove to the desktop that we saw the QR, without sending the code.
+ *
+ * The pairing code used to travel in the `POST /answer` body verbatim, where
+ * anyone on the network read it off the wire (Phase 19, finding 18). We sign
+ * the session nonce and our own fingerprint with it instead.
+ *
+ * Mirrors `computeAnswerMac` on the desktop.
+ */
+export function computeAnswerMac(code: string, nonce: string, fingerprint: string): string {
+  return hmacSha256Hex(
+    toHex(utf8Bytes(String(code))),
+    ['ct-pair:v5', nonce, normaliseFp(fingerprint)].join('\n'),
+  );
+}
+
+/**
+ * Recompute the desktop's proof that the certificate in its offer is its own.
+ *
+ * Mirrors `computeReconnectOfferMac` on the desktop.
+ *
+ * We cannot recognise a desktop by the fingerprint stored at pairing: werift
+ * mints a fresh DTLS certificate on every process start, so restarting the
+ * desktop app would make us refuse it forever. The shared secret is the
+ * durable identity on both sides.
+ */
+export function computeReconnectOfferMac(
+  secretHex: string,
+  pairingId: string,
+  challengeNonce: string,
+  fingerprint: string,
+): string {
+  if (!isUsableSecret(secretHex)) {
+    throw new Error('This desktop was paired before reconnect authentication existed — pair again');
+  }
+  return hmacSha256Hex(
+    secretHex,
+    ['ct-reconnect-offer:v1', pairingId, challengeNonce, normaliseFp(fingerprint)].join('\n'),
+  );
+}
+
+/**
+ * Prove that the certificate in our reconnect answer is ours.
+ *
+ * Mirrors `computeReconnectAnswerMac` on the desktop.
+ *
+ * The desktop cannot simply compare our certificate against the one it stored
+ * at pairing: react-native-webrtc mints a NEW one for every
+ * RTCPeerConnection, so it differs on every reconnect. The durable identity is
+ * the shared secret, so we sign the certificate we are about to use and the
+ * desktop accepts the one this proof names.
+ */
+export function computeReconnectAnswerMac(
+  secretHex: string,
+  pairingId: string,
+  nonce: string,
+  fingerprint: string,
+): string {
+  if (!isUsableSecret(secretHex)) {
+    throw new Error('This desktop was paired before reconnect authentication existed — pair again');
+  }
+  return hmacSha256Hex(
+    secretHex,
+    ['ct-reconnect-answer:v1', pairingId, nonce, normaliseFp(fingerprint)].join('\n'),
+  );
 }
 
 /**

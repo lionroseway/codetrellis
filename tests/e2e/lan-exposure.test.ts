@@ -25,7 +25,36 @@
 
 import { test, expect } from '@playwright/test';
 import * as net from 'node:net';
-import { setupHarness } from '../harness';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { prepareFixture, startBackend, createClient, findFreePort } from '../harness';
+
+/**
+ * A backend whose mobile API port is unique to this test.
+ *
+ * The default is 19480 for everyone, so probing it proves nothing on a machine
+ * that is already running CodeTrellis — the socket check would see somebody
+ * else's listener and fail, or worse, pass for the wrong reason. The whole
+ * value of this file is the SOCKET assertion (the flag is not the control),
+ * so the port has to belong to this backend alone.
+ */
+async function backendWithOwnMobilePort(name: string) {
+  const fixture = prepareFixture(name);
+  const mobileApiPort = await findFreePort();
+
+  fs.mkdirSync(fixture.dataDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(fixture.dataDir, 'settings.json'),
+    JSON.stringify({ device: { mobileApiPort } }, null, 2),
+  );
+
+  const backend = await startBackend({ dataDir: fixture.dataDir });
+  return {
+    client: createClient(backend.baseUrl, backend.capabilityToken),
+    mobileApiPort,
+    teardown: async () => { await backend.stop(); fixture.cleanup(); },
+  };
+}
 
 /** Is anything accepting TCP connections on this port? */
 function isListening(port: number, host = '127.0.0.1', timeoutMs = 1500): Promise<boolean> {
@@ -43,7 +72,7 @@ function isListening(port: number, host = '127.0.0.1', timeoutMs = 1500): Promis
 
 test.describe('A3 — LAN exposure is off by default', () => {
   test('a fresh profile neither advertises nor binds the mobile API', async () => {
-    const h = await setupHarness('a3-lan-exposure-defaults');
+    const h = await backendWithOwnMobilePort('a3-lan-exposure-defaults');
     try {
       const settings = (await h.client.raw('GET', '/api/settings').then((r) => r.json())) as {
         device: { advertise: boolean; exposeMobileApi: boolean; mobileApiPort: number };
@@ -67,6 +96,7 @@ test.describe('A3 — LAN exposure is off by default', () => {
       // listener ignored the flag entirely. This is the assertion that
       // would have caught it.
       const port = settings.device.mobileApiPort;
+      expect(port, 'the seeded port must be the one in effect').toBe(h.mobileApiPort);
       expect(
         await isListening(port),
         `nothing must be listening on the mobile API port (${port}) by default — ` +
@@ -78,7 +108,7 @@ test.describe('A3 — LAN exposure is off by default', () => {
   });
 
   test('the two switches are independent', async () => {
-    const h = await setupHarness('a3-discovery-vs-exposure');
+    const h = await backendWithOwnMobilePort('a3-discovery-vs-exposure');
     try {
       // Turning on DISCOVERY must not open the listener. These used to be a
       // single switch, so a user enabling one silently got the other.
@@ -98,7 +128,7 @@ test.describe('A3 — LAN exposure is off by default', () => {
       ).toBe(false);
 
       expect(
-        await isListening(after.device.mobileApiPort),
+        await isListening(h.mobileApiPort),
         'enabling discovery must not open the mobile API socket',
       ).toBe(false);
     } finally {

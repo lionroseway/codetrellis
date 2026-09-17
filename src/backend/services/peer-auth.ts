@@ -116,6 +116,94 @@ export function macsEqual(a: string, b: string): boolean {
   }
 }
 
+/**
+ * The phone's proof that it saw the QR, for `POST /answer`.
+ *
+ * The pairing code used to travel in that request body verbatim, where anyone
+ * on the network read it off the wire (Phase 19, finding 18). The phone signs
+ * the session nonce and its own fingerprint with the code instead.
+ *
+ * Six digits is a weak key by any normal standard. It does not need to be
+ * strong: an observer who recovers it can only do so AFTER seeing this
+ * request, and by then the offer is claimed and the session is answered. The
+ * property being bought is that the code is not readable in flight, not that
+ * it resists offline attack.
+ *
+ * Mirrored in `mobile/lib/peer-auth.ts`.
+ */
+export function computeAnswerMac(code: string, nonce: string, fingerprint: string): string {
+  const normalised = String(fingerprint ?? '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  return createHmac('sha256', Buffer.from(String(code), 'utf-8'))
+    .update(['ct-pair:v5', nonce, normalised].join('\n'))
+    .digest('hex');
+}
+
+/**
+ * The desktop's proof that the certificate in its reconnect OFFER is its own.
+ *
+ * The mirror image of `computeReconnectAnswerMac`, and it exists for the same
+ * reason: the phone cannot recognise this machine by the fingerprint it stored
+ * at pairing, because werift mints a fresh DTLS certificate on every process
+ * start. Restarting the desktop used to make every paired phone refuse it —
+ * which is exactly what happened the first time this ran against a real device
+ * rather than inside one process.
+ *
+ * Signed over the CHALLENGE nonce the phone has just been issued, so a
+ * captured offer cannot be replayed at it later: the attacker would have to
+ * produce a MAC over a nonce they have never seen.
+ */
+export function computeReconnectOfferMac(
+  secretHex: string,
+  pairingId: string,
+  challengeNonce: string,
+  fingerprint: string,
+): string {
+  if (!isUsableSecret(secretHex)) {
+    throw new PeerAuthError('No usable pairing secret — the device must be paired again');
+  }
+  const normalised = String(fingerprint ?? '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  return createHmac('sha256', Buffer.from(secretHex, 'hex'))
+    .update(['ct-reconnect-offer:v1', pairingId, challengeNonce, normalised].join('\n'))
+    .digest('hex');
+}
+
+/**
+ * The phone's proof that the certificate in its reconnect ANSWER is its own.
+ *
+ * WHY THIS EXISTS RATHER THAN A FINGERPRINT COMPARISON
+ *
+ * The obvious check — does this answer's certificate equal the one stored at
+ * pairing — cannot work. `react-native-webrtc` mints a NEW DTLS certificate
+ * for every `RTCPeerConnection`, so the fingerprint differs on every single
+ * reconnect. (`PairedDevice.fingerprint` even says "ephemeral, changes on app
+ * restart"; in practice it is per-connection.) Comparing against it refuses
+ * the real phone every time, which is exactly what it did the first time this
+ * ran on a device.
+ *
+ * The durable identity is the shared secret. So the phone signs the
+ * certificate it is about to use, and the desktop accepts whatever
+ * certificate that proof names. An attacker who watched the plaintext
+ * exchange still cannot substitute their own answer, because they cannot
+ * produce this MAC.
+ *
+ * `nonce` is issued with the offer and consumed with the answer, so a proof
+ * captured from one reconnect is worth nothing on the next.
+ */
+export function computeReconnectAnswerMac(
+  secretHex: string,
+  pairingId: string,
+  nonce: string,
+  fingerprint: string,
+): string {
+  if (!isUsableSecret(secretHex)) {
+    throw new PeerAuthError('No usable pairing secret — the device must be paired again');
+  }
+  const normalised = String(fingerprint ?? '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  return createHmac('sha256', Buffer.from(secretHex, 'hex'))
+    .update(['ct-reconnect-answer:v1', pairingId, nonce, normalised].join('\n'))
+    .digest('hex');
+}
+
 // --- Challenge store ---------------------------------------------------------
 
 interface Challenge {

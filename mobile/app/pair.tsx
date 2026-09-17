@@ -65,6 +65,8 @@ export default function PairScreen() {
    * saved but can never reconnect is worse than one that visibly failed.
    */
   const [sharedSecret, setSharedSecret] = useState('');
+  /** Stable pairing identity. Delivered with the secret, not in the QR. */
+  const [pairingId, setPairingId] = useState('');
   const [secretTimedOut, setSecretTimedOut] = useState(false);
   const scannedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,22 +109,19 @@ export default function PairScreen() {
         throw new Error('QR code is not valid JSON — not a CodeTrellis pairing code');
       }
 
-      // Validate v4 structure
-      if (
-        payload.v !== 4 ||
-        !payload.h ||
-        !payload.p ||
-        !payload.c
-      ) {
+      // Validate v5 structure. Every field is required: the QR now carries
+      // the desktop's WebRTC parameters rather than a pointer to fetch them
+      // (Phase 19, finding 18), so a payload missing any of them cannot pair.
+      const missing = (['hs', 'p', 'c', 'iu', 'ip', 'fp', 'cp', 'mms', 'n'] as const)
+        .filter((k) => payload[k] === undefined || payload[k] === null);
+      if (payload.v !== 5 || !Array.isArray(payload.hs) || payload.hs.length === 0 || missing.length > 0) {
         throw new Error(
-          'Invalid QR code — not a CodeTrellis v4 pairing code. ' +
-          'Make sure your desktop is running the latest version.',
+          'This QR code is from an older version of CodeTrellis, or is not a pairing code. ' +
+          'Update the desktop app and try again.',
         );
       }
 
-      console.log(
-        `[Pair] Valid v4 QR — server=${payload.h}:${payload.p} code=${payload.c}`,
-      );
+      console.log(`[Pair] Valid v5 QR — ${payload.hs.length} address(es), port ${payload.p}`);
 
       setState('connecting');
 
@@ -158,13 +157,23 @@ export default function PairScreen() {
     }
   };
 
-  /** Wait for the desktop's confirmation to deliver the reconnect secret. */
+  /**
+   * Wait for the desktop's confirmation to deliver the reconnect secret.
+   *
+   * The pairing id arrives with it, on the DTLS channel rather than in the QR
+   * — one less thing to fit in a code the user has to scan.
+   */
   const awaitSecret = (result: PairingResult) => {
     setSharedSecret('');
+    setPairingId('');
     setSecretTimedOut(false);
-    result.awaitSecret().then((secret) => {
-      if (secret) setSharedSecret(secret);
-      else setSecretTimedOut(true);
+    result.awaitSecret().then(({ secret, pairingId }) => {
+      if (secret) {
+        setSharedSecret(secret);
+        setPairingId(pairingId);
+      } else {
+        setSecretTimedOut(true);
+      }
     });
   };
 
@@ -181,7 +190,7 @@ export default function PairScreen() {
     try {
       await upsertPairedDesktop({
         fingerprint: pairingResult.desktopFingerprint,
-        pairingId: pairingResult.pairingId,
+        pairingId,
         alias: deviceAlias,
         sharedSecret,
         pairedAt: new Date().toISOString(),
@@ -215,8 +224,7 @@ export default function PairScreen() {
       return;
     }
 
-    const payload: PairingQrPayload = { v: 4, h: host, p: port, c: code };
-    console.log(`[Pair] Manual connect — ${host}:${port} code=${code}`);
+    console.log(`[Pair] Manual connect — ${host}:${port}`);
 
     // Reuse the same flow as QR scanning
     scannedRef.current = true;
@@ -229,7 +237,11 @@ export default function PairScreen() {
         webrtc.disconnect();
       }, PAIRING_TIMEOUT_MS);
 
-      const result2 = await webrtc.pairWithDesktop(payload);
+      // The manual path fetches the offer over plaintext HTTP, so it leaks
+      // handshake metadata to anyone on the network in a way the QR path no
+      // longer does. It exists because simulators have no camera and some
+      // users cannot scan; the confirmation code still catches substitution.
+      const result2 = await webrtc.pairWithDesktopManual({ host, port, code });
       setPairingResult(result2);
 
       if (timeoutRef.current) {
