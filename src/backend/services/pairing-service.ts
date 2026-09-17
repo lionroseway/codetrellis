@@ -26,7 +26,7 @@ import {
   type PairingServerResult,
 } from './pairing-server';
 import { upsertPairedDevice } from './paired-device-service';
-import { sendToPeer } from './webrtc-service';
+import { sendToPeer, onConnectionStateChange } from './webrtc-service';
 import { DATA_CHANNELS } from '../../shared/types';
 import { DEFAULT_GRANTS } from './peer-capabilities';
 
@@ -221,25 +221,74 @@ export function confirmPairing(
   // This is the one moment it is transmitted, and it happens after the user
   // has compared the two confirmation codes — so by now they have asserted
   // that the connection carrying it reaches the device in their hand.
-  const delivered = sendToPeer(
-    device.fingerprint,
-    DATA_CHANNELS.CONTROL,
-    JSON.stringify({ type: 'pairing.secret', pairingId: device.pairingId, secret: device.sharedSecret }),
-  );
-  if (!delivered) {
-    // Not fatal here — the desktop record is sound. But the phone cannot
-    // reconnect without it, so say so plainly rather than leaving the user to
-    // discover it the next time they open the app.
-    console.warn(
-      `[Pairing] Could not deliver the pairing secret to "${deviceAlias}" — ` +
-      'the control channel was not open. The phone will need to pair again.',
-    );
-  }
+  deliverPairingSecret(device);
 
   // Clean up
   activePairing = null;
 
   return device;
+}
+
+/**
+ * How long to keep trying to hand the secret to a phone that has confirmed
+ * but whose control channel has not opened yet.
+ */
+const SECRET_DELIVERY_WINDOW_MS = 60_000;
+
+/**
+ * Give the phone the secret it will need to reconnect.
+ *
+ * NOT A SINGLE ATTEMPT. Confirmation and channel-open are independent events:
+ * the user can type the code the instant it appears, while the DTLS handshake
+ * and SCTP negotiation are still finishing — and over a VPN that gap is
+ * seconds, not milliseconds. A one-shot send loses the race intermittently,
+ * and the failure is invisible until the phone tries to reconnect days later
+ * and is refused.
+ *
+ * `createChannel` re-emits `connected` every time a data channel opens, so
+ * that is the signal to retry on.
+ */
+function deliverPairingSecret(device: PairedDevice): void {
+  const payload = JSON.stringify({
+    type: 'pairing.secret',
+    pairingId: device.pairingId,
+    secret: device.sharedSecret,
+  });
+
+  if (sendToPeer(device.fingerprint, DATA_CHANNELS.CONTROL, payload)) {
+    console.log(`[Pairing] Delivered the reconnect secret to "${device.alias}"`);
+    return;
+  }
+
+  console.log(`[Pairing] Control channel not open yet — will hand "${device.alias}" its secret when it is`);
+
+  let settled = false;
+  const finish = (ok: boolean) => {
+    if (settled) return;
+    settled = true;
+    unsubscribe();
+    clearTimeout(timer);
+    if (ok) {
+      console.log(`[Pairing] Delivered the reconnect secret to "${device.alias}"`);
+    } else {
+      // The desktop's record is sound; the phone's is not. Say which, because
+      // "pair again" is the only fix and the user should hear it now.
+      console.warn(
+        `[Pairing] Never managed to deliver the reconnect secret to "${device.alias}" — ` +
+        'that device will have to pair again.',
+      );
+    }
+  };
+
+  const unsubscribe = onConnectionStateChange((fingerprint, state) => {
+    if (fingerprint !== device.fingerprint || state !== 'connected') return;
+    if (sendToPeer(device.fingerprint, DATA_CHANNELS.CONTROL, payload)) finish(true);
+  });
+
+  const timer = setTimeout(() => finish(false), SECRET_DELIVERY_WINDOW_MS);
+  if (typeof timer === 'object' && timer && 'unref' in timer) {
+    (timer as unknown as { unref: () => void }).unref();
+  }
 }
 
 /**

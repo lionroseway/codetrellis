@@ -3389,7 +3389,10 @@ app.post('/api/pairing/confirm', (req, res) => {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.json({ success: true, device: result.device });
+    // Redacted like every other device response (Phase 19, finding 15): the
+    // record `completePairing` returns carries the freshly-minted reconnect
+    // secret, and the renderer has no use for it.
+    res.json({ success: true, device: peerService.getDevice(result.device!.fingerprint) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
