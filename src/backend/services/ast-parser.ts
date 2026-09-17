@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ParsedFile, SupportedLanguage } from '../../shared/types';
+import type { ParsedFile, ParsedSymbol, Callsite, SupportedLanguage } from '../../shared/types';
 import { createHash } from 'node:crypto';
-import { PARSER_PLUGINS, getPluginForFile, type ParserPlugin } from './parsers';
+import { PARSER_PLUGINS, getPluginForFile, listPluginExtensions, type ParserPlugin } from './parsers';
 import { getCallsiteExtractor } from './callsites';
+import { extractSqlSymbols, extractTableRefs, sqlRefsToCallsites, applyMigrationFold } from './sql';
+import { extractEmbeddedSql } from './sql/embedded';
 
 /**
  * Dynamically load `web-tree-sitter` — same pattern as sql.js in
@@ -192,7 +194,59 @@ function dispatchParser(filePath: string): { plugin: ParserPlugin; parser: any }
  */
 const MAX_PARSE_BYTES = 2 * 1024 * 1024;
 
+/**
+ * Build a ParsedFile for a `.sql` file.
+ *
+ * Symbols are its table / view / procedure definitions. Its own table
+ * *references* become `sql_query` callsites, so a view selecting from a
+ * table couples the two the same way application code does.
+ *
+ * The parse budget applies here too — a multi-megabyte `.sql` file is a
+ * data dump, not a schema, and tokenizing one stalls the backend for no
+ * architectural gain.
+ */
+function parseSqlSource(filePath: string, content: string): ParsedFile | null {
+  const byteLength = Buffer.byteLength(content, 'utf-8');
+  if (byteLength > MAX_PARSE_BYTES) {
+    console.warn(
+      `[AST] Skipping ${filePath} — ${(byteLength / 1024 / 1024).toFixed(1)} MB exceeds the ` +
+        `${MAX_PARSE_BYTES / 1024 / 1024} MB parse budget. Almost certainly a data dump.`,
+    );
+    return null;
+  }
+
+  const contentHash = createHash('md5').update(content).digest('hex');
+
+  let symbols: ParsedSymbol[] = [];
+  let callsites: Callsite[] = [];
+  try {
+    symbols = extractSqlSymbols(content);
+    callsites = sqlRefsToCallsites(extractTableRefs(content), 'sql-file');
+  } catch (err) {
+    console.warn(`[AST] SQL extraction failed for ${filePath}:`, err);
+  }
+
+  return {
+    path: filePath,
+    contentHash,
+    language: 'sql',
+    symbols,
+    imports: [],
+    exports: [],
+    callsites,
+  };
+}
+
 function parseSource(filePath: string, content: string): ParsedFile | null {
+  // SQL is handled before the tree-sitter dispatch because it is not a
+  // grammar-backed language here: it has no import graph, so no parser
+  // plugin and no resolver. `services/sql/` reads its DDL with a
+  // tokenizer instead. See docs/PHASE-21-SQL-REF-TRACKER.md for why a
+  // full SQL parser is the wrong tool for this job.
+  if (filePath.toLowerCase().endsWith('.sql')) {
+    return parseSqlSource(filePath, content);
+  }
+
   const dispatch = dispatchParser(filePath);
   if (!dispatch) return null;
   const { plugin, parser } = dispatch;
@@ -243,6 +297,17 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
     console.warn(`[AST] Callsite extraction failed for ${filePath}:`, err);
   }
 
+  // Embedded SQL is language-independent: the only thing that varies by
+  // host language is how a string literal is written, and one scanner
+  // handles every style. Doing it here rather than per-extractor means
+  // every language gets table references — including the ones with no
+  // callsite extractor of their own. See services/sql/embedded.ts.
+  try {
+    callsites = [...callsites, ...extractEmbeddedSql(content)];
+  } catch (err) {
+    console.warn(`[AST] Embedded SQL extraction failed for ${filePath}:`, err);
+  }
+
   return {
     path: filePath,
     contentHash,
@@ -265,6 +330,25 @@ export function computeFileHash(filePath: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Every file extension `parseFile` can produce a ParsedFile for.
+ *
+ * The single source of truth for "can this file be parsed", and the
+ * reason it exists: the file-watcher used to keep its own hand-written
+ * list, which went stale twice — once for .py/.rs/.php/.java, then again
+ * for .go in Phase 20. Each time, edits to those files silently stopped
+ * re-parsing and the graph went quietly out of date.
+ *
+ * Grammar-backed languages come from the parser registry. SQL is
+ * appended because it is deliberately NOT a parser plugin — it has no
+ * import graph, so `services/sql/` handles it ahead of the tree-sitter
+ * dispatch (see docs/PHASE-21-SQL-REF-TRACKER.md) — and a registry-only
+ * list would therefore miss it.
+ */
+export function getParseableExtensions(): string[] {
+  return [...listPluginExtensions(), '.sql'];
 }
 
 /**
@@ -352,6 +436,26 @@ export async function parseFiles(filePaths: string[]): Promise<ParsedFile[]> {
       await yieldToEventLoop();
     }
   }
+
+  // Folding migrations is a property of a DIRECTORY of .sql files, not
+  // of any one of them, so it can only happen once the batch is in hand:
+  // nothing parsing `002_create_legacy.sql` alone can know that
+  // `031_drop_legacy.sql` removes that table again.
+  const sqlFiles = results.filter((r) => r.language === 'sql');
+  if (sqlFiles.length > 1) {
+    try {
+      applyMigrationFold(sqlFiles, (p) => {
+        try {
+          return fs.readFileSync(p, 'utf-8');
+        } catch {
+          return null;
+        }
+      });
+    } catch (err) {
+      console.warn('[AST] Migration fold failed — leaving SQL symbols as parsed:', err);
+    }
+  }
+
   return results;
 }
 

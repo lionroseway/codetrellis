@@ -3,8 +3,7 @@ import * as _lazy___cross_system_service from './cross-system-service';
 import * as _lazy___plan_progress_service from './plan-progress-service';
 import { watch, type FSWatcher } from 'chokidar';
 import path from 'node:path';
-import { parseFile, initParser } from './ast-parser';
-import { listPluginExtensions } from './parsers';
+import { parseFile, initParser, getParseableExtensions } from './ast-parser';
 import { storeParsedFile, getFileHash } from './database';
 import { broadcast } from '../server';
 import { checkFileDeviation } from './deviation-service';
@@ -60,10 +59,9 @@ function scheduleCrossSystemRecompute(): void {
 // to .py / .rs / .php / .java never triggered a re-parse and the
 // dependency graph went stale. It was extended by hand — and then went
 // stale again the moment Go was added (Phase 20), in the same way, for
-// the same reason. So it is now DERIVED from the parser registry:
-// registering a plugin in `parsers/index.ts` is all it takes, and there
-// is no second list to forget.
-const PARSEABLE_EXTS = new Set(listPluginExtensions());
+// the same reason. So it now comes from `getParseableExtensions()`,
+// which is the one place that answers "can parseFile handle this".
+const PARSEABLE_EXTS = new Set(getParseableExtensions());
 
 /**
  * Start watching a project directory for file changes.

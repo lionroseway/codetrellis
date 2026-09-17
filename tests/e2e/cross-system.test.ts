@@ -39,6 +39,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setupHarness, waitFor, sleep } from '../harness';
 
+/**
+ * This suite is about the HTTP matcher, so every count is scoped to HTTP
+ * edges. Unscoped totals broke the moment SQL edges arrived (Phase 21)
+ * and would break again on the next protocol; the intent was always
+ * "the HTTP pairings are exactly these".
+ */
+const httpOnly = <T extends { protocol: string }>(edges: T[]): T[] =>
+  edges.filter((e) => e.protocol === 'http');
+
 test.describe('Cross-system HTTP matcher', () => {
   test.setTimeout(120_000);
 
@@ -47,25 +56,25 @@ test.describe('Cross-system HTTP matcher', () => {
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const resp = await h.client.getCrossSystem();
-      expect(resp.edges).toHaveLength(6);
-      expect(resp.stats?.edgeCount).toBe(6);
+      const http = httpOnly(resp.edges);
+      expect(http).toHaveLength(6);
       expect(resp.stats?.byProtocol?.http).toBe(6);
 
-      for (const edge of resp.edges) {
+      for (const edge of http) {
         expect(edge.protocol).toMatch(/^http/i);
         expect(edge.confidence).toBeGreaterThan(0);
       }
 
       // The four TS→Python edges still originate at api.ts and land on
       // a FastAPI route file.
-      const fromWeb = resp.edges.filter((e) =>
+      const fromWeb = http.filter((e) =>
         e.targetRelative.startsWith('services/api/app/routes/'),
       );
       for (const edge of fromWeb) {
         expect(edge.targetRelative).toMatch(/^services\/api\/app\/routes\/(users|orders)\.py$/);
       }
 
-      const labels = resp.edges.map((e) => e.label).sort();
+      const labels = http.map((e) => e.label).sort();
       expect(labels).toEqual([
         'GET /api/billing/invoices',
         'GET /api/orders',
@@ -83,7 +92,7 @@ test.describe('Cross-system HTTP matcher', () => {
     const h = await setupHarness('xs-remove-route');
     try {
       await h.client.scanProject(h.fixture.projectPath);
-      const before = await h.client.getCrossSystemEdges();
+      const before = httpOnly(await h.client.getCrossSystemEdges());
       expect(before).toHaveLength(6);
 
       // Strip the POST /api/orders decorator + handler from
@@ -115,7 +124,7 @@ test.describe('Cross-system HTTP matcher', () => {
       // transient mid-refresh values.
       const after = await waitFor(
         async () => {
-          const edges = await h.client.getCrossSystemEdges();
+          const edges = httpOnly(await h.client.getCrossSystemEdges());
           if (edges.length === 5 && !edges.find((e) => e.label === 'POST /api/orders')) {
             return edges;
           }
@@ -141,7 +150,7 @@ test.describe('Cross-system HTTP matcher', () => {
     const h = await setupHarness('xs-add-edge');
     try {
       await h.client.scanProject(h.fixture.projectPath);
-      const before = await h.client.getCrossSystemEdges();
+      const before = httpOnly(await h.client.getCrossSystemEdges());
       expect(before).toHaveLength(6);
 
       // Add a new fetch on the TS side.
@@ -183,7 +192,7 @@ def get_products() -> list[Order]:
       // before settling on the final 7-edge graph.
       const after = await waitFor(
         async () => {
-          const edges = await h.client.getCrossSystemEdges();
+          const edges = httpOnly(await h.client.getCrossSystemEdges());
           if (edges.length === 7 && edges.find((e) => e.label === 'GET /api/products')) {
             return edges;
           }

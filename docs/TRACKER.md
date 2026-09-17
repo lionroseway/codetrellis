@@ -33,7 +33,7 @@ shared via the bridge abstraction.
 |---|---|---|---|
 | Data Model & Types | 100 | High | Plan, Task, Comment, PlanDocument, ProjectionData, Trellis snapshots all typed |
 | Database Persistence | 100 | Good | sql.js with file export — survives restarts |
-| AST Parsing (8 langs) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java, **Go** — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go landed in Phase 20 (parser + module-path resolver + callsites); SQL is Phase 21 and is deliberately NOT a parser plugin. |
+| AST Parsing (8 langs + SQL) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java, **Go** — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go landed in Phase 20 (parser + module-path resolver + callsites). **SQL** (Phase 21) has symbols and references but deliberately no parser plugin, grammar or resolver — it has no import graph; see `services/sql/`. |
 | Multi-System Ingestion | 75 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve. Cross-system MVP shipped (HTTP TS↔Python). Remaining: systems DB + UI, SQL / subprocess / env matchers, server-side per-scope views. |
 | Cross-system edges | 35 | Medium | MVP shipped: TS/JS `fetch(...)` + `axios.*` ↔ Python FastAPI/Flask route matcher. New `callsites/<lang>.ts` plugin slot + `cross-system-service` matcher + dashed protocol-tinted graph edges. REST + MCP (`list_cross_system_edges`). **Apr 28**: edges now auto-refresh on file change (500 ms debounced recompute fired from the file-watcher), no longer need a manual re-scan. Pending: SQL ref tracker, subprocess, env-configured URLs, OpenAPI contracts. |
 | MCP Server | 100 | High | 30+ tools across architecture queries / plans / phases / tasks / spec docs / proposed-changes / templates / comments / sessions / drift / trellis snapshots. Skill resources (`codetrellis://skill[/quickstart|/power-user]`). |
@@ -73,6 +73,58 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Sep 17, 2026 — Phase 21: SQL schema + ref-tracker
+
+Design: [PHASE-21-SQL-REF-TRACKER.md](PHASE-21-SQL-REF-TRACKER.md)
+(reconciled with what shipped — three design calls changed and are
+marked in the doc).
+
+Closes multi-system sub-phase 2.G. The graph now reaches the database:
+`OrdersPage.tsx --http--> billing/main.go --sql--> 001_create_invoices.sql`
+is one traversable path across three languages and two coupling kinds.
+
+**Shipped:**
+
+- **`services/sql/tokenizer.ts`** — the piece everything else stands on.
+  Comments, string literals, quoted identifiers and dollar-quoting are
+  handled lexically, which is what stops `-- SELECT * FROM ghost_table`
+  and `'from fake_table'` becoming dependencies.
+- **`services/sql/refs.ts`** — table references with READ/WRITE
+  attribution, CTE aliases excluded, table functions and derived tables
+  ignored. `looksLikeSql` is structural rather than a prefix regex,
+  because `INSERT\s+INTO` matches the prose "insert into the form".
+- **`services/sql/schema.ts`** — DDL to table/view/proc symbols (columns
+  and indexes deliberately excluded), plus the **migration fold**: a
+  directory of numbered `.sql` files is replayed so a dropped table stops
+  existing and an `ALTER` does not claim to define a table. Runs as a
+  post-pass in `parseFiles`, because folding is a property of a directory
+  and no per-file parse can see it.
+- **`services/sql/embedded.ts`** — one scanner over string-literal
+  quoting styles, called from `parseSource` for **every** language rather
+  than per-extractor. Rust, PHP and Java get table references with no
+  per-language work.
+- **SQL matcher in `cross-system-service`** — pairs a table reference
+  with the `.sql` file that CREATEs it. Emits nothing on an unknown
+  table, nothing on an ambiguous one, nothing for a self-reference.
+
+**Library choice, measured not assumed.** `sqlglot` is the best SQL
+parser of the three evaluated and got all nine hard cases right, but it
+is Python and would mean shipping a Python runtime in Electron across
+five targets. `sql-parser-cst` is pure JS but is a *parser*, and rejected
+three of seven fragment forms that appear in ordinary code (`%s`,
+`${...}`, truncated). The tokenizer matches sqlglot's answers on every
+hard case because those cases are lexical, not grammatical. Full
+comparison table in the phase doc.
+
+**Coverage**: `tests/e2e/sql-refs.test.ts` (7), plus 56 unit tests across
+`tokenizer` / `refs` / `schema` / `embedded`.
+
+**Also**: `cross-system.test.ts` counts are now scoped by protocol. They
+were unscoped totals, which broke the moment a second protocol existed
+and would have broken again on the third; the intent was always "the
+HTTP pairings are exactly these".
+
 
 ### Sep 17, 2026 — Phase 20: Go support
 
@@ -2321,7 +2373,7 @@ Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
 (Python/Rust/PHP/Java parsers + resolvers), graph scope filter, AST
 per-project scoping, /api/diff fix, EMFILE survival, animation perf.
 
-Remaining: ~~2.F (Go)~~ ✅ shipped Phase 20, 2.G (SQL ref-tracker — now specced as [Phase 21](PHASE-21-SQL-REF-TRACKER.md)), 3 (systems DB + MCP),
+Remaining: ~~2.F (Go)~~ ✅ shipped Phase 20, ~~2.G (SQL ref-tracker)~~ ✅ shipped [Phase 21](PHASE-21-SQL-REF-TRACKER.md), 3 (systems DB + MCP),
 4 (system-aware UI), 5 (cross-system links), 6 (external libs).
 
 ### Graph-quality blockers (Immediate Focus from previous tracker)

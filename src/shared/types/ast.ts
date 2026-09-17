@@ -6,7 +6,15 @@ export type SupportedLanguage =
   | 'go'
   | 'java'
   | 'php'
-  | 'ruby';
+  | 'ruby'
+  /**
+   * SQL is not a parser-plugin language — it has no import graph, so it
+   * has no resolver and never appears in `parsers/index.ts`. It is here
+   * because a `.sql` file still produces symbols (its tables) and those
+   * have to be stored with a language tag like anything else. See
+   * `services/sql/` and docs/PHASE-21-SQL-REF-TRACKER.md.
+   */
+  | 'sql';
 
 export type SymbolKind =
   | 'function'

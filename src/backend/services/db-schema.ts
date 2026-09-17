@@ -54,6 +54,12 @@ export const SCHEMA_AST = `
   CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
   CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
 
+  -- Callsites are non-import couplings. The columns are generic "what was
+  -- referenced" slots shared across protocols, not HTTP-specific ones:
+  --   HTTP: method = GET/POST…,  url_pattern = /api/orders
+  --   SQL:  method = READ/WRITE, url_pattern = table name, sql_text = snippet
+  -- idx_callsites_url therefore serves both the route matcher and the
+  -- table matcher. See services/sql/index.ts.
   CREATE TABLE IF NOT EXISTS callsites (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
