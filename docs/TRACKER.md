@@ -2142,6 +2142,21 @@ darker); smooth transitions when expanding/collapsing.
 
 ## 7. Open Items (priority order)
 
+### Phases 20–25 — the product queue behind Phase 19
+
+Designed 2026-09-17. Sequencing and reasoning in
+[ROADMAP-PHASE-20-25.md](ROADMAP-PHASE-20-25.md); one doc per phase:
+
+| Phase | Doc | One line |
+|---|---|---|
+| 20 | [PHASE-20-GO-SUPPORT.md](PHASE-20-GO-SUPPORT.md) | Go parser / resolver / callsites — closes 2.F |
+| 21 | [PHASE-21-SQL-REF-TRACKER.md](PHASE-21-SQL-REF-TRACKER.md) | Schema symbols + SQL ref-tracker — closes 2.G |
+| 22 | [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md) | Turn grouping, plain-English rows, live in-scope badge |
+| 23 | [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) | Time + cost per item; ceilings as governance |
+| 24 | [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) | Jira / Linear intake into nested plans, no credential held |
+| 25 | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot picker, play-forward |
+
+
 ### 🐛 Bugs surfaced by user reports
 
 | Bug | Found by | Fix | Status |
