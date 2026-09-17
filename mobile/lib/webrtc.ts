@@ -16,10 +16,11 @@ import type {
   ConnectionState,
   PairingQrPayload,
   PairingOfferResponse,
-  PairingAnswerResponse,
+  PairingManualEntry,
 } from './types';
 import {
   ensureColonFingerprint,
+  reconstructOfferSdp,
 } from './sdp-minimal';
 
 // Lazy-load react-native-webrtc to avoid crashing Expo Go (which
@@ -44,7 +45,12 @@ function getWebRTC() {
 }
 
 import { extractSingleFingerprint, fingerprintsEqual } from './sdp-fingerprint';
-import { computeChallengeMac, deriveConfirmationCode, isUsableSecret } from './peer-auth';
+import {
+  computeAnswerMac,
+  computeChallengeMac,
+  deriveConfirmationCode,
+  isUsableSecret,
+} from './peer-auth';
 
 // --- Constants ---------------------------------------------------------------
 
@@ -81,11 +87,13 @@ export interface PairingResult {
    * over a VPN without re-pairing.
    */
   candidateAddresses: string[];
-  /** Stable pairing identity — survives restarts on both sides. */
-  pairingId: string;
   /**
-   * Resolves with the reconnect secret once the desktop hands it over, or with
-   * `''` if it never does.
+   * Resolves with the reconnect secret and pairing id once the desktop hands
+   * them over, or with empty strings if it never does.
+   *
+   * The pairing id comes down this channel rather than in the QR: it is one
+   * more thing the desktop tells the phone once the DTLS link exists, and
+   * keeping it out of the QR keeps the code scannable.
    *
    * A promise rather than a value because the two devices are waiting on each
    * other: the desktop sends the secret when the USER confirms, and the user
@@ -96,7 +104,7 @@ export interface PairingResult {
    * server — that server is plaintext on the LAN, so a secret sent through it
    * is a secret any eavesdropper also holds (Phase 19, finding 1.2).
    */
-  awaitSecret: () => Promise<string>;
+  awaitSecret: () => Promise<{ secret: string; pairingId: string }>;
 }
 
 /**
@@ -155,54 +163,32 @@ export class WebRTCManager {
    */
   /**
    * Fetch the desktop's offer from the temp pairing server.
-   * This is a pure HTTP call — works in Expo Go, no native modules needed.
-   * Useful for verifying the QR → HTTP pipeline independently of WebRTC.
+   *
+   * MANUAL-ENTRY PATH ONLY. The QR path carries the desktop's parameters in
+   * the QR and fetches nothing, because everything fetched here crosses the
+   * LAN in the clear (Phase 19, finding 18).
    */
-  async fetchOffer(qrPayload: PairingQrPayload): Promise<{
+  async fetchOffer(host: string, port: number, code: string): Promise<{
     offerData: PairingOfferResponse;
     baseUrl: string;
   }> {
-    // Try every address the desktop advertised (LAN + Tailscale/VPN) and use
-    // whichever answers first — so a QR works on the same network OR over a VPN
-    // without the phone knowing which it's on. Falls back to the single `h`.
-    const hosts = qrPayload.hs && qrPayload.hs.length ? qrPayload.hs : [qrPayload.h];
-    console.log(`[WebRTC] Fetching offer — racing ${hosts.length} host(s): ${hosts.join(', ')}`);
-
+    const baseUrl = `http://${host}:${port}`;
     // POST, not GET: the code used to travel as `?c=123456`, and a query
     // string is the worst place to keep a short-lived secret — access logs,
-    // proxy records, browser history, `Referer` (Phase 19, finding 18).
-    //
-    // The desktop serves the offer EXACTLY ONCE, so all but one of these
-    // races is refused with a 409. That is expected — `Promise.any` below
-    // takes whichever succeeded.
-    const tryHost = async (host: string) => {
-      const baseUrl = `http://${host}:${qrPayload.p}`;
-      const res = await fetch(`${baseUrl}/offer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ c: qrPayload.c }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(`offer ${host}: ${body.error || res.status}`);
-      }
-      return { offerData: (await res.json()) as PairingOfferResponse, baseUrl };
-    };
-
-    let winner: { offerData: PairingOfferResponse; baseUrl: string };
-    try {
-      winner = await Promise.any(hosts.map(tryHost));
-    } catch {
+    // proxy records, browser history, `Referer`.
+    const res = await fetch(`${baseUrl}/offer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ c: code }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: 'Request failed' }));
       throw new Error(
-        `Couldn't reach your desktop on any address (${hosts.join(', ')}). ` +
-        `Make sure you're on the same Wi-Fi or your VPN (e.g. Tailscale) is connected.`,
+        `Couldn't reach your desktop at ${host}:${port} (${body.error || res.status}). ` +
+        'Check the address and code, and that you are on the same network or VPN.',
       );
     }
-
-    console.log(
-      `[WebRTC] Got offer via ${winner.baseUrl} — fp=${winner.offerData.fingerprint.slice(0, 16)}…`,
-    );
-    return winner;
+    return { offerData: (await res.json()) as PairingOfferResponse, baseUrl };
   }
 
   /**
@@ -218,93 +204,145 @@ export class WebRTCManager {
     }
   }
 
-  async pairWithDesktop(qrPayload: PairingQrPayload): Promise<PairingResult> {
+  /**
+   * Pair from a scanned QR — the private path.
+   *
+   * NOTHING IS FETCHED (Phase 19, finding 18). The QR carries the desktop's
+   * ICE parameters and DTLS fingerprint, so the offer is rebuilt here. An
+   * observer on the network sees only our answer, which contains our own
+   * fingerprint and ICE credentials — values every DTLS handshake publishes
+   * and which are useless without our private key.
+   */
+  async pairWithDesktop(qr: PairingQrPayload): Promise<PairingResult> {
+    if (qr.v !== 5) {
+      throw new Error(
+        'This QR code is from an older version of CodeTrellis. Update the desktop app and try again.',
+      );
+    }
+
+    const offerSdp = reconstructOfferSdp({
+      iu: qr.iu,
+      ip: qr.ip,
+      fp: ensureColonFingerprint(qr.fp),
+      candidateAddrs: qr.hs,
+      candidatePort: qr.cp,
+      maxMessageSize: qr.mms,
+    });
+
+    return this.completePairing({
+      offerSdp,
+      remoteIce: [],
+      nonce: qr.n,
+      code: qr.c,
+      hosts: qr.hs,
+      port: qr.p,
+    });
+  }
+
+  /**
+   * Pair from a typed host, port and code — the fallback path.
+   *
+   * Fetches the offer over plaintext HTTP, so an observer on the network sees
+   * the handshake metadata. It exists because simulators have no camera and
+   * some users cannot scan. Still safe against an ACTIVE attacker: the
+   * confirmation code both devices derive will not match if anything was
+   * substituted.
+   */
+  async pairWithDesktopManual(entry: PairingManualEntry): Promise<PairingResult> {
+    const { offerData } = await this.fetchOffer(entry.host, entry.port, entry.code);
+    return this.completePairing({
+      offerSdp: offerData.offer,
+      remoteIce: Array.isArray(offerData.ice) ? offerData.ice : [],
+      nonce: offerData.nonce,
+      code: entry.code,
+      hosts: [entry.host],
+      port: entry.port,
+      declaredFingerprint: offerData.fingerprint,
+    });
+  }
+
+  /**
+   * The half both pairing paths share: answer the offer, derive the
+   * confirmation code, post the answer, wait for the secret.
+   */
+  private async completePairing(args: {
+    offerSdp: string;
+    remoteIce: string[];
+    nonce: string;
+    code: string;
+    hosts: string[];
+    port: number;
+    /** Only the manual path has a separately-declared fingerprint to cross-check. */
+    declaredFingerprint?: string;
+  }): Promise<PairingResult> {
     this.cleanup();
 
-    // Phase 1: HTTP exchange — works everywhere (including Expo Go)
-    const { offerData, baseUrl } = await this.fetchOffer(qrPayload);
-
-    // Phase 2: WebRTC — requires native module (dev build only)
     let webrtcMod: ReturnType<typeof getWebRTC>;
     try {
       webrtcMod = getWebRTC();
     } catch {
       throw new Error(
-        'Offer fetched successfully from desktop, but WebRTC is not available.\n\n' +
-        'WebRTC requires a development build (not Expo Go).\n' +
+        'WebRTC is not available.\n\n' +
+        'It requires a development build (not Expo Go).\n' +
         'Run: npx expo run:ios  or  npx expo run:android',
       );
     }
 
     const { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate } = webrtcMod!;
 
-    // 2. Create peer connection
-    const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
-    this.pc = pc;
-
-    // Set up connection monitoring BEFORE setting remote description,
-    // so ondatachannel events from the desktop aren't missed.
-    this.setupConnectionMonitoring(pc);
-
     // ── PIN THE DESKTOP BEFORE TALKING TO IT ────────────────────────────
     //
-    // `offerData.fingerprint` is a field the server chose to send. The value
-    // that matters is the one inside the SDP, because that is what the DTLS
-    // handshake is verified against — and it is read structurally so the SDP
-    // cannot commit to two things at once (Phase 19, finding 2).
+    // On the QR path this fingerprint came out of the QR, so it is
+    // out-of-band and cannot have been substituted. On the manual path it
+    // came over HTTP, and the confirmation code is what catches a swap.
     //
-    // A disagreement between the two is refused rather than resolved: no
-    // honest desktop produces one.
+    // Read structurally either way: a first-match regex would let a peer
+    // prepend the fingerprint being looked for while handshaking with a
+    // different certificate (Phase 19, finding 2).
     let desktopFingerprint: string;
     try {
-      desktopFingerprint = extractSingleFingerprint(String(offerData.offer ?? ''));
+      desktopFingerprint = extractSingleFingerprint(args.offerSdp);
     } catch (err) {
       throw new Error(
         `The desktop's pairing offer is malformed (${(err as Error).message}). ` +
         'Cancel pairing on the desktop and try again.',
       );
     }
-    if (offerData.fingerprint && !fingerprintsEqual(desktopFingerprint, offerData.fingerprint)) {
-      throw new Error(
-        'The desktop announced one certificate and offered another. Pairing refused.',
-      );
+    if (args.declaredFingerprint && !fingerprintsEqual(desktopFingerprint, args.declaredFingerprint)) {
+      throw new Error('The desktop announced one certificate and offered another. Pairing refused.');
     }
 
+    const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+    this.pc = pc;
+
+    // Set up monitoring BEFORE the remote description, so ondatachannel
+    // events from the desktop are not missed.
+    this.setupConnectionMonitoring(pc);
+
     await pc.setRemoteDescription(
-      new RTCSessionDescription({ type: 'offer', sdp: offerData.offer }),
+      new RTCSessionDescription({ type: 'offer', sdp: args.offerSdp }),
     );
 
-    // Add remote ICE candidates from the offer (if not already inlined in SDP)
-    if (offerData.ice && Array.isArray(offerData.ice)) {
-      console.log(`[WebRTC] Adding ${offerData.ice.length} remote ICE candidates from offer`);
-      for (const candidateJson of offerData.ice) {
-        try {
-          const candidate = typeof candidateJson === 'string'
-            ? JSON.parse(candidateJson)
-            : candidateJson;
-          if (candidate.candidate && RTCIceCandidate) {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          }
-        } catch (err) {
-          console.warn('[WebRTC] Failed to add remote ICE candidate:', err);
+    // The QR path inlines its candidates in the rebuilt SDP, so this list is
+    // empty there. The manual path may carry them separately.
+    for (const candidateJson of args.remoteIce) {
+      try {
+        const candidate = typeof candidateJson === 'string' ? JSON.parse(candidateJson) : candidateJson;
+        if (candidate.candidate && RTCIceCandidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
         }
+      } catch (err) {
+        console.warn('[WebRTC] Failed to add remote ICE candidate:', err);
       }
     }
 
-    // 3. Create answer
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
     console.log('[WebRTC] Answer created, gathering ICE candidates…');
-
-    // 4. Gather ICE candidates
     const iceCandidates = await this.gatherIceCandidates(pc);
     console.log(`[WebRTC] Gathered ${iceCandidates.length} ICE candidates`);
 
-    // 5. Extract our fingerprint from the final local description SDP
-    // (includes gathered ICE candidates inlined). Structural, like everywhere
-    // else — if our own answer somehow carried two, the desktop would refuse
-    // it anyway and a regex would hide which one we meant.
     const finalSdp = pc.localDescription?.sdp ?? answer.sdp ?? '';
     let ourFingerprint: string;
     try {
@@ -313,92 +351,86 @@ export class WebRTCManager {
       throw new Error(`Failed to read our own fingerprint from the answer SDP: ${(err as Error).message}`);
     }
 
-    // 5b. Derive the confirmation code OURSELVES (Phase 19, finding 1.2).
+    // Derive the confirmation code OURSELVES (Phase 19, finding 1.2).
     //
     // It used to arrive in the desktop's reply and we showed whatever we were
-    // given. So the user compared the desktop's number against the desktop's
-    // number — a relay terminating both legs supplies both screens, and the
-    // check confirmed nothing. Derived from the certificate we actually saw
-    // and our own, a relay makes the two screens disagree.
-    const confirmCode = deriveConfirmationCode(
-      String(offerData.nonce ?? ''),
-      desktopFingerprint,
-      ourFingerprint,
-    );
+    // given, so the user compared the desktop's number against the desktop's
+    // number. Derived from the certificate we actually saw and our own, a
+    // relay makes the two screens disagree.
+    const confirmCode = deriveConfirmationCode(args.nonce, desktopFingerprint, ourFingerprint);
 
-    // 5c. Start listening for the pairing secret before we post the answer.
-    //
-    // The desktop sends it over the `control` channel the moment the user
-    // confirms, and that can land before this function's HTTP round-trip
-    // finishes. Subscribing afterwards would be a race we would lose
-    // intermittently and debug as "sometimes reconnect doesn't work".
+    // Listen for the pairing secret BEFORE posting the answer: the desktop
+    // sends it the moment the user confirms, which can land before this
+    // function's HTTP round-trip finishes.
     const secretPromise = this.awaitPairingSecret();
 
-    // 6. Post our answer back to the temp server
-    console.log(`[WebRTC] Posting answer to ${baseUrl}/answer (SDP length=${finalSdp.length})`);
-    const answerRes = await fetch(`${baseUrl}/answer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        c: qrPayload.c,
-        answer: finalSdp,
-        ice: iceCandidates,
-        fingerprint: ourFingerprint,
-        nonce: offerData.nonce,
-      }),
-    });
-
-    if (!answerRes.ok) {
-      const body = await answerRes.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(`Failed to submit answer: ${body.error || answerRes.status}`);
+    // Post the answer, trying each advertised address — a pairing made on the
+    // LAN then also works over a VPN.
+    const errors: string[] = [];
+    let winningHost = '';
+    for (const host of args.hosts) {
+      const baseUrl = `http://${host}:${args.port}`;
+      try {
+        const res = await fetch(`${baseUrl}/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            answer: finalSdp,
+            ice: iceCandidates,
+            fingerprint: ourFingerprint,
+            nonce: args.nonce,
+            // The code is NOT sent. We prove we saw the QR instead
+            // (Phase 19, finding 18).
+            mac: computeAnswerMac(args.code, args.nonce, ourFingerprint),
+          }),
+        });
+        if (res.ok) { winningHost = host; break; }
+        const body = await res.json().catch(() => ({ error: res.status }));
+        errors.push(`${host}: ${body.error ?? res.status}`);
+      } catch (err) {
+        errors.push(`${host}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
 
-    const answerResult: PairingAnswerResponse = await answerRes.json();
+    if (!winningHost) {
+      throw new Error(
+        `Couldn't deliver the pairing answer (${errors.join(' | ')}). ` +
+        'Make sure you are on the same Wi-Fi as your desktop, or your VPN is connected.',
+      );
+    }
 
-    console.log(`[WebRTC] Answer accepted — pairingId=${answerResult.pairingId?.slice(0, 8)}…`);
+    console.log('[WebRTC] Answer accepted');
 
-
-    // The host that actually answered (parsed from the winning baseUrl).
-    const winningHost = baseUrl.replace(/^https?:\/\//, '').split(':')[0] || qrPayload.h;
-    // All advertised addresses, winner first so reconnect tries the working
-    // one before the rest (LAN pairing → still reconnects over a VPN later).
-    const advertised = qrPayload.hs && qrPayload.hs.length ? qrPayload.hs : [qrPayload.h];
-    const candidateAddresses = [...new Set([winningHost, ...advertised])].filter(Boolean);
+    const candidateAddresses = [...new Set([winningHost, ...args.hosts])].filter(Boolean);
 
     return {
       confirmCode,
-      // The certificate we actually saw, not the field the server sent.
       desktopFingerprint: ensureColonFingerprint(desktopFingerprint),
       desktopAddress: winningHost,
       candidateAddresses,
-      pairingId: answerResult.pairingId,
-      // Already in flight — see `secretPromise` above. Subscribing after the
-      // HTTP round-trip would be a race we would lose intermittently and then
-      // debug as "sometimes reconnect doesn't work".
       awaitSecret: () => secretPromise,
     };
   }
 
   /**
    * Wait for the desktop to hand over the pairing secret on the `control`
-   * channel.
+   * channel, along with the pairing id.
    *
-   * Resolves to `''` if it never arrives — the caller decides what that means.
-   * It is not an exception because the common cause is the user simply not
-   * confirming on the desktop, which is a normal thing to do.
+   * Resolves to empty strings if nothing arrives. That is not an exception:
+   * the common cause is the user simply not confirming on the desktop.
    */
-  private awaitPairingSecret(timeoutMs = 120_000): Promise<string> {
-    return new Promise<string>((resolve) => {
+  private awaitPairingSecret(timeoutMs = 120_000): Promise<{ secret: string; pairingId: string }> {
+    return new Promise((resolve) => {
       let done = false;
-      const finish = (secret: string) => {
+      const finish = (secret: string, pairingId: string) => {
         if (done) return;
         done = true;
         clearTimeout(timer);
         unsubscribe();
-        resolve(secret);
+        resolve({ secret, pairingId });
       };
 
-      const timer = setTimeout(() => finish(''), timeoutMs);
+      const timer = setTimeout(() => finish('', ''), timeoutMs);
 
       const unsubscribe = this.onMessage((channel, data) => {
         if (channel !== DATA_CHANNELS.CONTROL) return;
@@ -407,7 +439,7 @@ export class WebRTCManager {
           const msg = JSON.parse(text);
           if (msg?.type === 'pairing.secret' && isUsableSecret(msg.secret)) {
             console.log('[WebRTC] Pairing secret received');
-            finish(msg.secret as string);
+            finish(msg.secret as string, String(msg.pairingId ?? ''));
           }
         } catch {
           // Not our message.

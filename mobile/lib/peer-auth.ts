@@ -17,7 +17,7 @@
  *     ceremony confirms nothing.
  */
 
-import { hmacSha256Hex, sha256Hex } from './crypto';
+import { hmacSha256Hex, sha256Hex, toHex, utf8Bytes } from './crypto';
 
 /**
  * The exact bytes both sides sign.
@@ -45,6 +45,22 @@ export function computeChallengeMac(
 /** Whether a stored secret can actually be used. Older records hold `''`. */
 export function isUsableSecret(secret: string | undefined | null): secret is string {
   return typeof secret === 'string' && /^[0-9a-f]{64,}$/i.test(secret);
+}
+
+/**
+ * Prove to the desktop that we saw the QR, without sending the code.
+ *
+ * The pairing code used to travel in the `POST /answer` body verbatim, where
+ * anyone on the network read it off the wire (Phase 19, finding 18). We sign
+ * the session nonce and our own fingerprint with it instead.
+ *
+ * Mirrors `computeAnswerMac` on the desktop.
+ */
+export function computeAnswerMac(code: string, nonce: string, fingerprint: string): string {
+  return hmacSha256Hex(
+    toHex(utf8Bytes(String(code))),
+    ['ct-pair:v5', nonce, normaliseFp(fingerprint)].join('\n'),
+  );
 }
 
 /**

@@ -9,29 +9,60 @@
 // --- Pairing -----------------------------------------------------------------
 
 /**
- * QR payload v4 — single QR, Bluetooth-style flow.
+ * Pairing QR payload v5 — the desktop's parameters travel by QR.
  *
- * The QR points the phone to a temporary pairing micro-server
- * on the desktop. Full WebRTC SDP exchange happens over HTTP on
- * that temp server, not embedded in QR codes.
+ * Mirrors `PairingQrPayload` in the desktop's `src/shared/types/peer.ts`.
  *
- * ~50 bytes → tiny QR, very fast to scan.
+ * v4 put only a pointer here — host, port, code — and this app FETCHED the
+ * desktop's offer over plaintext HTTP, where anyone on the network could read
+ * it for the sixty seconds the window was open (Phase 19, finding 18).
+ *
+ * A QR is out-of-band: the user is looking at their own desktop's screen. So
+ * the parameters travel in it, including the fingerprint that authenticates
+ * the desktop, and this app rebuilds the offer locally. Nothing is fetched.
  */
 export interface PairingQrPayload {
-  /** Version of the QR payload format (4 = temp-server). */
-  v: 4;
-  /** Primary pairing server IPv4 address (back-compat). */
-  h: string;
-  /** All reachable IPv4 addresses (LAN + Tailscale/VPN) — phone tries each. */
-  hs?: string[];
-  /** Temporary pairing server port. */
+  v: 5;
+  /** Every address the desktop is reachable on, best first. */
+  hs: string[];
+  /** Temporary pairing server TCP port, where the answer is posted. */
   p: number;
-  /** 6-digit pairing code (authenticates requests to the temp server). */
+  /** 6-digit pairing code. Never sent as-is — see `mac` below. */
   c: string;
+  /** Desktop ICE ufrag. */
+  iu: string;
+  /** Desktop ICE pwd. */
+  ip: string;
+  /** Desktop DTLS fingerprint, hex without colons. */
+  fp: string;
+  /** UDP port the desktop's ICE candidates share. */
+  cp: number;
+  /** `a=max-message-size` from the real offer. */
+  mms: number;
+  /** Per-session random, salting the confirmation code. */
+  n: string;
 }
 
 /**
- * Response from `GET /offer?c=<code>` on the temp pairing server.
+ * Manual entry — what a user can reasonably type.
+ *
+ * Nobody types a 200-byte QR payload, so this keeps the v4 shape and fetches
+ * the offer over plaintext HTTP. It is the WEAKER path: an observer on the
+ * network sees the handshake metadata. Still safe against an active attacker,
+ * because the confirmation code each device derives will not match if anything
+ * was substituted.
+ */
+export interface PairingManualEntry {
+  host: string;
+  port: number;
+  code: string;
+}
+
+/**
+ * Response from `POST /offer` on the temp pairing server.
+ *
+ * Only the MANUAL-ENTRY path uses this. The QR path carries these parameters
+ * in the QR itself and fetches nothing (Phase 19, finding 18).
  */
 export interface PairingOfferResponse {
   /** Full WebRTC SDP offer. */
@@ -50,8 +81,6 @@ export interface PairingOfferResponse {
  * Body posted to `POST /answer` on the temp pairing server.
  */
 export interface PairingAnswerRequest {
-  /** 6-digit pairing code. */
-  c: string;
   /** Full WebRTC SDP answer. */
   answer: string;
   /** ICE candidates from the phone. */
@@ -60,6 +89,14 @@ export interface PairingAnswerRequest {
   fingerprint: string;
   /** Nonce echoed back (must match). */
   nonce: string;
+  /**
+   * Proof we saw the QR: HMAC over the nonce and our fingerprint, keyed by the
+   * pairing code.
+   *
+   * The code itself used to be in this body as `c`, where anyone on the
+   * network read it off the wire (Phase 19, finding 18).
+   */
+  mac: string;
 }
 
 /**

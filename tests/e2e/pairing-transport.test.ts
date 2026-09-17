@@ -1,20 +1,25 @@
 /**
  * Finding 18 — what the pairing server puts on the wire, and who may use it.
  *
- * The exchange still crosses the LAN as plaintext HTTP for 60 seconds. That is
- * the part `pairing-v5` is for. These tests cover what can be fixed WITHOUT
- * encryption:
+ * Two paths, and they are not equally exposed:
  *
- *   - the pairing code is no longer in a URL, where access logs, proxies,
- *     browser history and `Referer` all keep copies of it;
- *   - the offer is served to ONE client, so a race has a clear winner and the
- *     loser fails immediately instead of reaching a confirmation step whose
- *     numbers cannot match;
- *   - only the client that took the offer may answer it.
+ *   - **QR** carries the desktop's parameters, so the phone fetches NOTHING
+ *     and an observer on the network sees only the phone's answer. That
+ *     answer holds its fingerprint and ICE credentials, which every DTLS
+ *     handshake publishes and which are useless without the private key.
+ *   - **Manual entry** still fetches the offer over plaintext HTTP, because
+ *     nobody types a 250-byte payload. It leaks handshake metadata, and is
+ *     still safe against an ACTIVE attacker because the confirmation code
+ *     both devices derive independently will not match after a substitution.
+ *
+ * And the pairing code itself is now on neither path's wire: it left the URL,
+ * and it left the answer body.
  */
 
 import { test, expect } from '@playwright/test';
 import { prepareFixture, startBackend, createClient } from '../harness';
+// The MOBILE mirror deliberately: this test stands in for the phone.
+import { computeAnswerMac } from '../../mobile/lib/peer-auth';
 
 /** Boot a backend and open a pairing window. Returns the temp server's base URL. */
 async function pairingWindow(name: string) {
@@ -145,4 +150,60 @@ test.describe('18 — the offer goes to one client', () => {
    * encryption rather than bookkeeping. What the binding stops is a caller
    * that can inject but not read.
    */
+});
+
+test.describe('18 — the code never appears on the wire', () => {
+  test('the answer carries a proof, not the code', async () => {
+    const w = await pairingWindow('pairing-answer-mac');
+    try {
+      // Learn the nonce the way the manual path does. On the QR path it comes
+      // out of the QR and nothing is fetched at all.
+      const offer = await postJson(`${w.base}/offer`, { c: w.code })
+        .then((r) => r.json()) as { nonce: string };
+      const fp = 'AA:BB:CC:DD';
+
+      // What the phone used to send. Anyone watching the network read the
+      // pairing code straight out of this body.
+      const withCode = await postJson(`${w.base}/answer`, {
+        c: w.code, answer: 'v=0\r\n', ice: [], fingerprint: fp, nonce: offer.nonce,
+      });
+      expect(withCode.status, 'the raw code must no longer be accepted').toBe(400);
+
+      // A proof computed with the code gets past the code check. It fails
+      // afterwards on the SDP, which this fixture has no way to produce — and
+      // that is the right place for it to fail.
+      const withMac = await postJson(`${w.base}/answer`, {
+        answer: 'v=0\r\n',
+        ice: [],
+        fingerprint: fp,
+        nonce: offer.nonce,
+        mac: computeAnswerMac(w.code, offer.nonce, fp),
+      });
+      const body = await withMac.text();
+      expect(body, 'a correct proof must get past the code check').not.toContain('Invalid pairing code');
+      expect(body, 'and fail on the SDP instead').toContain('certificate');
+    } finally {
+      await w.teardown();
+    }
+  });
+
+  test('a proof computed with the wrong code is refused', async () => {
+    const w = await pairingWindow('pairing-answer-mac-wrong');
+    try {
+      const offer = await postJson(`${w.base}/offer`, { c: w.code })
+        .then((r) => r.json()) as { nonce: string };
+      const wrong = String((Number(w.code) + 7) % 1_000_000).padStart(6, '0');
+      const fp = 'AA:BB:CC:DD';
+      const res = await postJson(`${w.base}/answer`, {
+        answer: 'v=0\r\n',
+        ice: [],
+        fingerprint: fp,
+        nonce: offer.nonce,
+        mac: computeAnswerMac(wrong, offer.nonce, fp),
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      await w.teardown();
+    }
+  });
 });

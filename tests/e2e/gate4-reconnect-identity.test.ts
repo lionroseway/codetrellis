@@ -28,8 +28,9 @@ import { RTCPeerConnection, RTCSessionDescription } from 'werift';
 import { prepareFixture, startBackend, createClient } from '../harness';
 // The MOBILE mirrors, deliberately: this test plays the phone, so it should
 // compute what the phone computes.
-import { computeChallengeMac, deriveConfirmationCode } from '../../mobile/lib/peer-auth';
+import { computeAnswerMac, computeChallengeMac, deriveConfirmationCode } from '../../mobile/lib/peer-auth';
 import { extractSingleFingerprint } from '../../mobile/lib/sdp-fingerprint';
+import { reconstructOfferSdp, ensureColonFingerprint } from '../../mobile/lib/sdp-minimal';
 
 const OTHER_FP = '11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00';
 
@@ -125,32 +126,49 @@ test.describe('Gate 4 — pair for real, then reconnect', () => {
 
       // ── 1. Desktop opens the pairing window ────────────────────────
       const { qrPayload } = await client.raw('POST', '/api/pairing/initiate').then((r) => r.json());
-      expect(qrPayload.v).toBe(4);
+      expect(qrPayload.v).toBe(5);
       const pairingBase = `http://127.0.0.1:${qrPayload.p}`;
 
-      // ── 2. Phone fetches the offer ─────────────────────────────────
-      const offerData = await fetch(`${pairingBase}/offer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ c: qrPayload.c }),
-      }).then((r) => r.json());
-      expect(offerData.offer).toContain('v=0');
+      // The QR has to stay scannable. v4 was ~60 bytes and this is ~250; if it
+      // grows much further the code gets dense enough to be a support problem,
+      // which is exactly why v4 moved away from this shape in the first place.
+      expect(
+        JSON.stringify(qrPayload).length,
+        'the QR payload must stay within a comfortably scannable size',
+      ).toBeLessThan(400);
 
-      // The phone pins the desktop by reading the SDP, not the field beside it.
-      const desktopFingerprint = extractSingleFingerprint(offerData.offer);
-      expect(desktopFingerprint.replace(/:/g, '').toUpperCase())
-        .toBe(String(offerData.fingerprint).replace(/:/g, '').toUpperCase());
+      // ── 2. NOTHING IS FETCHED (finding 18) ─────────────────────────
+      //
+      // The phone rebuilds the desktop's offer from the QR alone. That is the
+      // whole point of v5: the pairing exchange crosses the LAN in the clear,
+      // so anything fetched over it is readable by anyone on that network —
+      // and substitutable. A QR is out-of-band.
+      const offerSdp = reconstructOfferSdp({
+        iu: qrPayload.iu,
+        ip: qrPayload.ip,
+        fp: ensureColonFingerprint(qrPayload.fp),
+        candidateAddrs: qrPayload.hs,
+        candidatePort: qrPayload.cp,
+        maxMessageSize: qrPayload.mms,
+      });
+
+      const desktopFingerprint = extractSingleFingerprint(offerSdp);
+      const offerData = { offer: offerSdp, nonce: qrPayload.n };
 
       // ── 3. Phone answers ───────────────────────────────────────────
       let controlOpen = false;
       let deliveredSecret = '';
+      let deliveredPairingId = '';
       phone.onDataChannel.subscribe((ch: any) => {
         if (ch.label === 'control') {
           ch.stateChanged.subscribe((s: string) => { if (s === 'open') controlOpen = true; });
           ch.onMessage.subscribe((data: string | Buffer) => {
             try {
               const msg = JSON.parse(String(data));
-              if (msg.type === 'pairing.secret') deliveredSecret = msg.secret;
+              if (msg.type === 'pairing.secret') {
+              deliveredSecret = msg.secret;
+              deliveredPairingId = msg.pairingId;
+            }
             } catch { /* not ours */ }
           });
         }
@@ -169,11 +187,12 @@ test.describe('Gate 4 — pair for real, then reconnect', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          c: qrPayload.c,
           answer: answerSdp,
           ice: [],
           fingerprint: phoneFingerprint,
           nonce: offerData.nonce,
+          // The code is NOT sent — we prove we saw the QR instead.
+          mac: computeAnswerMac(qrPayload.c, qrPayload.n, phoneFingerprint),
         }),
       }).then((r) => r.json());
 
@@ -208,8 +227,13 @@ test.describe('Gate 4 — pair for real, then reconnect', () => {
       await expect.poll(() => deliveredSecret, { timeout: 15_000, message: 'pairing secret never arrived' })
         .toMatch(/^[0-9a-f]{64}$/);
 
+      // The pairing id rides the same message rather than the QR, so it costs
+      // no scannability.
+      expect(deliveredPairingId, 'the pairing id must arrive with the secret')
+        .toBe(body.device.pairingId);
+
       const paired: PairedResult = {
-        pairingId: body.device.pairingId,
+        pairingId: deliveredPairingId,
         desktopFingerprint,
         phoneFingerprint,
         sharedSecret: deliveredSecret,

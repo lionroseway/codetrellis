@@ -116,6 +116,28 @@ export function macsEqual(a: string, b: string): boolean {
   }
 }
 
+/**
+ * The phone's proof that it saw the QR, for `POST /answer`.
+ *
+ * The pairing code used to travel in that request body verbatim, where anyone
+ * on the network read it off the wire (Phase 19, finding 18). The phone signs
+ * the session nonce and its own fingerprint with the code instead.
+ *
+ * Six digits is a weak key by any normal standard. It does not need to be
+ * strong: an observer who recovers it can only do so AFTER seeing this
+ * request, and by then the offer is claimed and the session is answered. The
+ * property being bought is that the code is not readable in flight, not that
+ * it resists offline attack.
+ *
+ * Mirrored in `mobile/lib/peer-auth.ts`.
+ */
+export function computeAnswerMac(code: string, nonce: string, fingerprint: string): string {
+  const normalised = String(fingerprint ?? '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  return createHmac('sha256', Buffer.from(String(code), 'utf-8'))
+    .update(['ct-pair:v5', nonce, normalised].join('\n'))
+    .digest('hex');
+}
+
 // --- Challenge store ---------------------------------------------------------
 
 interface Challenge {

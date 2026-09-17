@@ -85,28 +85,72 @@ export type PeerCapabilityName =
   | 'terminal';
 
 /**
- * Pairing QR payload v4 — single QR, Bluetooth-style flow.
+ * Pairing QR payload v5 — the desktop's parameters travel by QR.
  *
- * The QR just points the phone to a temporary pairing micro-server
- * that the desktop opens for ~60 seconds. Full WebRTC SDP exchange
- * happens over HTTP on the temp server, not embedded in QR codes.
+ * WHY v5 EXISTS (Phase 19, finding 18)
  *
- * After the WebRTC connection establishes, both devices derive
- * and show a matching confirmation code (like Bluetooth SSP).
+ * v4 put only a pointer in the QR — host, port, code — and the phone FETCHED
+ * the desktop's offer over plaintext HTTP. Everything it fetched was readable
+ * by anyone on the network for the sixty seconds the window was open.
  *
- * ~50 bytes → tiny QR, very fast to scan.
+ * A QR is a trusted out-of-band channel: the user is looking at their own
+ * desktop's screen. So the parameters go IN it, including the DTLS fingerprint
+ * that authenticates the desktop, and the phone rebuilds the offer locally.
+ * Nothing is fetched, so nothing is exposed and nothing can be substituted.
+ *
+ * The phone's ANSWER still crosses the wire. That is fine: it carries its own
+ * fingerprint and ICE credentials, which every DTLS handshake publishes and
+ * which are worth nothing without the matching private key.
+ *
+ * ~200 bytes, a version-9 QR at error correction L. v4 was ~60. That growth is
+ * why v4 moved AWAY from this shape, so the size is worth watching — see
+ * `sdp-minimal.ts`.
  */
 export interface PairingQrPayload {
-  /** Version of the QR payload format (4 = temp-server). */
-  v: 4;
-  /** Primary pairing server IPv4 address (back-compat). */
-  h: string;
-  /** All reachable IPv4 addresses (LAN + Tailscale/VPN) — phone tries each. */
-  hs?: string[];
-  /** Temporary pairing server port. */
+  /** Payload format version. */
+  v: 5;
+  /**
+   * Every address the desktop is reachable on (LAN, VPN), best first.
+   *
+   * Used for BOTH the ICE candidates and the address the answer is posted to,
+   * so the phone can try each — a pairing made at a desk then still connects
+   * over Tailscale.
+   */
+  hs: string[];
+  /** Temporary pairing server TCP port (where the answer is posted). */
   p: number;
-  /** 6-digit pairing code (authenticates requests to the temp server). */
+  /** 6-digit pairing code. Never sent as-is — see `PairingAnswerRequest.mac`. */
   c: string;
+  /** Desktop ICE ufrag. */
+  iu: string;
+  /** Desktop ICE pwd. */
+  ip: string;
+  /** Desktop DTLS fingerprint, hex without colons, for compactness. */
+  fp: string;
+  /** UDP port the desktop's ICE candidates share. */
+  cp: number;
+  /** `a=max-message-size` from the real offer. Extracted, never guessed. */
+  mms: number;
+  /** Per-session random. Salts the confirmation code both devices derive. */
+  n: string;
+}
+
+/**
+ * Manual-entry payload — what a user can reasonably type.
+ *
+ * The QR path above carries ~200 bytes; nobody is typing that. So manual entry
+ * keeps the v4 shape, fetching the offer over plaintext HTTP, and is the
+ * WEAKER of the two paths: an observer on the network sees the handshake
+ * metadata. It is still safe against an active attacker, because the
+ * confirmation code the two devices derive independently will not match if
+ * anything was substituted.
+ *
+ * It exists because simulators have no camera and some users cannot scan.
+ */
+export interface PairingManualEntry {
+  host: string;
+  port: number;
+  code: string;
 }
 
 // --- Connection --------------------------------------------------------------

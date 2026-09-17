@@ -26,6 +26,7 @@ import {
   type PairingServerResult,
 } from './pairing-server';
 import { upsertPairedDevice } from './paired-device-service';
+import { stripColonFingerprint } from '../../shared/lib/sdp-minimal';
 import { sendToPeer, onConnectionStateChange } from './webrtc-service';
 import { DATA_CHANNELS } from '../../shared/types';
 import { DEFAULT_GRANTS } from './peer-capabilities';
@@ -84,18 +85,30 @@ export async function initiatePairing(
     fingerprint,
   });
 
-  console.log(
-    `[Pairing] v4 initiated — code=${server.code} ` +
-    `addr=${server.address}:${server.port}`,
-  );
-
+  // The desktop's WebRTC parameters go IN the QR (Phase 19, finding 18).
+  //
+  // v4 put a pointer here and had the phone fetch the offer over plaintext
+  // HTTP, where anyone on the network could read it for the sixty seconds the
+  // window was open. A QR is out-of-band — the user is looking at their own
+  // screen — so the parameters, including the fingerprint that authenticates
+  // this machine, travel by it instead.
   const qrPayload: PairingQrPayload = {
-    v: 4,
-    h: server.address,          // primary (back-compat with older phones)
-    hs: server.addresses,       // all reachable hosts — phone tries each (LAN + Tailscale/VPN)
+    v: 5,
+    hs: server.addresses,       // every reachable host — LAN and VPN alike
     p: server.port,
     c: server.code,
+    iu: server.sdpParams.iu,
+    ip: server.sdpParams.ip,
+    fp: stripColonFingerprint(server.sdpParams.fp),
+    cp: server.sdpParams.candidatePort,
+    mms: server.sdpParams.maxMessageSize,
+    n: server.nonce,
   };
+
+  console.log(
+    `[Pairing] v5 initiated — code=${server.code} ` +
+    `addr=${server.address}:${server.port} qr=${JSON.stringify(qrPayload).length}B`,
+  );
 
   activePairing = {
     server,

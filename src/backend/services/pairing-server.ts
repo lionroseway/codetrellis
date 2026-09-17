@@ -37,6 +37,8 @@ import os from 'node:os';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { generateSharedSecret, deriveConfirmationCode } from './peer-auth';
 import { extractSingleFingerprint, fingerprintsEqual } from '../../shared/lib/sdp-fingerprint';
+import { extractSdpParams, stripColonFingerprint, type MinimalSdpParams } from '../../shared/lib/sdp-minimal';
+import { computeAnswerMac, macsEqual } from './peer-auth';
 
 // --- Constants ---------------------------------------------------------------
 
@@ -90,6 +92,13 @@ export interface PairingServerResult {
   /** Stable pairing identity — survives app restarts. */
   pairingId: string;
   /**
+   * The desktop's WebRTC parameters, for the QR.
+   *
+   * These go OUT OF BAND so the phone never has to fetch them over plaintext
+   * HTTP (Phase 19, finding 18).
+   */
+  sdpParams: MinimalSdpParams;
+  /**
    * Pairing secret for later reconnect authentication (hex).
    *
    * Generated here but NEVER served by this server: it goes to the phone over
@@ -137,6 +146,9 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
   const nonce = randomBytes(NONCE_BYTES).toString('hex');
   const pairingId = randomUUID();
   const sharedSecret = generateSharedSecret();
+
+  // Fail here, loudly, rather than shipping a QR the phone cannot use.
+  const sdpParams = extractSdpParams(opts.offerSdp, opts.iceCandidates);
 
   return new Promise<PairingServerResult>((resolveStart, rejectStart) => {
     let answerResolve: ((answer: PairingAnswer) => void) | null = null;
@@ -296,7 +308,22 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
           }
 
           // Validate pairing code
-          if (data.c !== code) {
+          // THE CODE IS NOT SENT (Phase 19, finding 18).
+          //
+          // It used to be in this body verbatim, so an observer on the network
+          // read it off the wire. The phone proves it saw the QR by signing
+          // the nonce and its own fingerprint with the code instead.
+          //
+          // Six digits is a weak key and an observer can recover it offline in
+          // milliseconds — but only AFTER this request, by which point the
+          // offer is claimed and the session is answered. What it buys is that
+          // the code is not simply readable in flight.
+          if (typeof data.fingerprint !== 'string' || typeof data.mac !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing fingerprint or mac' }));
+            return;
+          }
+          if (!macsEqual(computeAnswerMac(code, nonce, data.fingerprint), data.mac)) {
             noteBadCode();
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid pairing code' }));
@@ -321,13 +348,19 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
             return;
           }
 
-          // Only the client that took the offer may answer it.
+          // If someone took the offer, only they may answer it.
+          //
+          // On the QR path NOBODY takes it — the phone rebuilds the offer from
+          // the QR and fetches nothing, which is the point of v5. There the
+          // MAC above is the check, and it is the stronger of the two: it
+          // proves the sender saw the QR, where an address proves only that
+          // packets came from somewhere.
+          //
+          // The binding still applies to the manual-entry path, which does
+          // fetch.
           const source = req.socket.remoteAddress ?? 'unknown';
-          if (offerClaimedBy === null || source !== offerClaimedBy) {
-            console.warn(
-              `[PairingServer] Rejected answer from ${source} — the offer was ` +
-              `${offerClaimedBy === null ? 'never claimed' : 'claimed by another client'}`,
-            );
+          if (offerClaimedBy !== null && source !== offerClaimedBy) {
+            console.warn(`[PairingServer] Rejected answer from ${source} — the offer was claimed by another client`);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Not the client that requested the offer' }));
             return;
@@ -448,6 +481,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
         port,
         nonce,
         pairingId,
+        sdpParams,
         sharedSecret,
         waitForAnswer: () => answerPromise,
         stop: () => stopPairingServer(),

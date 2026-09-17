@@ -1,21 +1,39 @@
-import { extractSingleFingerprint } from './sdp-fingerprint';
 /**
- * Minimal SDP extraction / reconstruction for zero-port QR pairing.
+ * Minimal SDP extraction and reconstruction for QR-carried pairing.
  *
- * The pairing flow encodes only the essential WebRTC parameters in a
- * QR code (~190 bytes) instead of the full SDP (~600+ bytes). Both
- * sides reconstruct valid-but-minimal SDPs from these parameters.
+ * WHY THIS EXISTS (Phase 19, finding 18)
  *
- * Used by:
- *   - Desktop backend: extract params from werift's SDP for the offer QR
- *   - Desktop backend: reconstruct answer SDP from the scanned answer QR
+ * The pairing handshake crosses the LAN as plaintext HTTP. Anything the phone
+ * FETCHES over it is readable by anyone on that network for the sixty seconds
+ * the window is open, and anything it fetches is also something an attacker
+ * could have substituted.
  *
- * The mobile app has its own copy of the reconstruction logic
- * (`mobile/lib/sdp-minimal.ts`) because it's a standalone Expo project.
- * The two implementations MUST produce identical SDPs for the same input.
+ * A QR code is a trusted out-of-band channel: the user is looking at their own
+ * desktop's screen. So the desktop's connection parameters — including the
+ * DTLS fingerprint that authenticates it — travel by QR, and the phone
+ * rebuilds the offer locally. Nothing is fetched, so nothing is exposed.
+ *
+ * What still crosses the wire is the phone's ANSWER, which contains its own
+ * fingerprint and ICE credentials. Those are not secrets: every DTLS handshake
+ * publishes them, and holding them without the matching private key is worth
+ * nothing. An attacker who substitutes the answer pairs the desktop with
+ * themselves — and is caught, because the confirmation code each device
+ * derives then disagrees.
+ *
+ * This module is duplicated at `mobile/lib/sdp-minimal.ts`; the Expo project
+ * cannot import from this workspace. `mobile-desktop-parity.test.ts` runs both
+ * over the same inputs.
+ *
+ * HISTORY WORTH KNOWING
+ *
+ * This was the v3 pairing design. v4 replaced it with a fetch because the QR
+ * was getting large, and the files were left behind unused. The QR is bigger
+ * again now — around 200 bytes, a version-9 code at error correction L — which
+ * scans fine at the size the pairing dialog renders. The reason it was dropped
+ * is worth remembering, not repeating: keep an eye on the payload size.
  */
 
-// --- Types -------------------------------------------------------------------
+import { extractSingleFingerprint } from './sdp-fingerprint';
 
 export interface MinimalSdpParams {
   /** ICE ufrag. */
@@ -24,171 +42,163 @@ export interface MinimalSdpParams {
   ip: string;
   /** DTLS fingerprint (sha-256, with colons: "AA:BB:CC:..."). */
   fp: string;
-  /** Best ICE candidate address (LAN IPv4). */
-  candidateAddr: string;
-  /** Best ICE candidate port. */
+  /**
+   * Every address the peer is reachable on, not just one.
+   *
+   * A desktop on a LAN and a VPN has a candidate per interface, and dropping
+   * all but one is what would make a pairing work at a desk and fail over
+   * Tailscale — the exact case the address list exists to serve.
+   */
+  candidateAddrs: string[];
+  /**
+   * The UDP port the candidates share.
+   *
+   * werift gathers from a single socket, so every host candidate has the same
+   * port. Asserted during extraction rather than assumed.
+   */
   candidatePort: number;
+  /**
+   * `a=max-message-size` from the real offer.
+   *
+   * EXTRACTED, NOT GUESSED. The v3 template hardcoded 262144 while werift
+   * actually advertises 65536 — a four-fold disagreement that would surface
+   * only as large payloads (a UI snapshot, terminal scrollback) going missing
+   * on a link that otherwise looked healthy.
+   */
+  maxMessageSize: number;
 }
 
 // --- Extraction --------------------------------------------------------------
 
+/** Pull an ICE candidate line out of whatever shape it arrived in. */
+function candidateLine(raw: unknown): string {
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.candidate ?? raw;
+    } catch {
+      return raw;
+    }
+  }
+  return (raw as { candidate?: string })?.candidate ?? String(raw);
+}
+
+const CANDIDATE_RE =
+  /candidate:\S+\s+\d+\s+udp\s+\d+\s+([\d.]+)\s+(\d+)\s+typ\s+(host|srflx)/i;
+
 /**
- * Extract minimal SDP parameters from a full SDP string and its
- * gathered ICE candidates. Throws if essential fields are missing.
+ * Extract minimal SDP parameters from a full SDP and its gathered candidates.
+ * Throws if anything essential is missing or inconsistent.
  */
 export function extractSdpParams(
   sdp: string,
-  iceCandidates: string[],
+  iceCandidates: string[] = [],
 ): MinimalSdpParams {
   const iu = sdp.match(/a=ice-ufrag:(\S+)/)?.[1];
   const ip = sdp.match(/a=ice-pwd:(\S+)/)?.[1];
-  // STRUCTURAL, not a regex (Phase 19, finding 2). A regex returns the
-  // FIRST match anywhere in the document, so a peer could prepend a victim's
+  // STRUCTURAL, not a regex (Phase 19, finding 2). A regex returns the FIRST
+  // match anywhere in the document, so a peer could prepend a victim's
   // fingerprint as an extra session-level attribute and have this function
-  // report an identity it does not hold. extractSingleFingerprint refuses an
-  // SDP that commits to more than one value rather than picking a winner.
+  // report an identity it does not hold.
   const fp = extractSingleFingerprint(sdp);
 
   if (!iu) throw new Error('SDP missing ice-ufrag');
   if (!ip) throw new Error('SDP missing ice-pwd');
 
-  // Find the best host (or srflx) candidate
-  let candidateAddr = '';
-  let candidatePort = 0;
+  // Gather from both places candidates can appear: the separately-emitted
+  // list, and inlined in the SDP. A host candidate beats a reflexive one, but
+  // a reflexive one is better than nothing on a machine behind a NAT.
+  const hosts = new Map<string, number>();
+  const reflexive = new Map<string, number>();
 
-  for (const raw of iceCandidates) {
-    try {
-      // werift emits candidates as JSON-serialised RTCIceCandidate objects
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      const line: string = parsed.candidate ?? parsed;
+  const consider = (line: string) => {
+    const m = CANDIDATE_RE.exec(line);
+    if (!m) return;
+    const [, addr, port, typ] = m;
+    (typ.toLowerCase() === 'host' ? hosts : reflexive).set(addr, Number(port));
+  };
 
-      // ICE candidate line format:
-      // candidate:<foundation> <component> <transport> <priority> <addr> <port> typ <type> ...
-      const m = line.match(
-        /candidate:\S+\s+\d+\s+udp\s+\d+\s+([\d.]+)\s+(\d+)\s+typ\s+(host|srflx)/i,
-      );
-      if (m) {
-        const [, addr, port, typ] = m;
-        // Prefer host candidates; fall back to srflx
-        if (typ === 'host' || !candidateAddr) {
-          candidateAddr = addr;
-          candidatePort = Number(port);
-          if (typ === 'host') break; // host is best, stop looking
-        }
-      }
-    } catch {
-      // Skip unparseable candidates
-    }
-  }
+  for (const raw of iceCandidates) consider(candidateLine(raw));
+  for (const m of sdp.matchAll(/^a=candidate:.*$/gm)) consider(m[0]);
 
-  // Fallback: try extracting a candidate from the SDP itself
-  if (!candidateAddr) {
-    const sdpCandidate = sdp.match(
-      /a=candidate:\S+\s+\d+\s+udp\s+\d+\s+([\d.]+)\s+(\d+)\s+typ\s+(host|srflx)/i,
+  const chosen = hosts.size > 0 ? hosts : reflexive;
+  if (chosen.size === 0) throw new Error('No usable ICE candidate found');
+
+  const ports = new Set(chosen.values());
+  if (ports.size > 1) {
+    // Carrying one port per address would grow the QR and has never been
+    // needed — werift gathers from a single socket. If this ever throws, the
+    // payload needs a port list, not a silently-dropped candidate.
+    throw new Error(
+      `ICE candidates span ${ports.size} ports (${[...ports].join(', ')}); ` +
+      'the compact payload assumes one',
     );
-    if (sdpCandidate) {
-      candidateAddr = sdpCandidate[1];
-      candidatePort = Number(sdpCandidate[2]);
-    }
   }
 
-  if (!candidateAddr) {
-    throw new Error('No usable ICE candidate found');
-  }
+  const maxMessageSize = Number(sdp.match(/a=max-message-size:(\d+)/)?.[1] ?? 65536);
 
-  return { iu, ip, fp, candidateAddr, candidatePort };
+  return {
+    iu,
+    ip,
+    fp,
+    candidateAddrs: [...chosen.keys()],
+    candidatePort: [...ports][0],
+    maxMessageSize,
+  };
 }
 
 // --- Reconstruction ----------------------------------------------------------
 
-/**
- * Reconstruct a minimal-but-valid SDP offer from extracted parameters.
- * The offer uses `a=setup:actpass` (standard for the offerer).
- *
- * Includes the ICE candidate inline so WebRTC implementations (werift,
- * react-native-webrtc) pick it up from `setRemoteDescription` without
- * needing an explicit `addIceCandidate` call.
- */
+function buildSdp(params: MinimalSdpParams, setup: 'actpass' | 'active'): string {
+  const fp = ensureColonFingerprint(params.fp);
+  return [
+    'v=0',
+    'o=- 0 0 IN IP4 0.0.0.0',
+    's=-',
+    't=0 0',
+    'a=group:BUNDLE 0',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+    'c=IN IP4 0.0.0.0',
+    `a=ice-ufrag:${params.iu}`,
+    `a=ice-pwd:${params.ip}`,
+    'a=ice-options:trickle',
+    `a=fingerprint:sha-256 ${fp}`,
+    `a=setup:${setup}`,
+    'a=mid:0',
+    'a=sctp-port:5000',
+    `a=max-message-size:${params.maxMessageSize}`,
+    // One line per interface, so a pairing made at a desk still connects over
+    // a VPN. Priority descends with index purely so the order is stable.
+    ...params.candidateAddrs.map(
+      (addr, i) =>
+        `a=candidate:${i + 1} 1 udp ${2113937151 - i} ${addr} ${params.candidatePort} typ host generation 0`,
+    ),
+    // Without this the peer waits for candidates that will never arrive and
+    // pays a gathering timeout before it gives up.
+    'a=end-of-candidates',
+    '',
+  ].join('\r\n');
+}
+
+/** Rebuild the offerer's SDP. */
 export function reconstructOfferSdp(params: MinimalSdpParams): string {
-  const fp = ensureColonFingerprint(params.fp);
-  return [
-    'v=0',
-    'o=- 0 0 IN IP4 0.0.0.0',
-    's=-',
-    't=0 0',
-    'a=group:BUNDLE 0',
-    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
-    'c=IN IP4 0.0.0.0',
-    `a=ice-ufrag:${params.iu}`,
-    `a=ice-pwd:${params.ip}`,
-    `a=fingerprint:sha-256 ${fp}`,
-    'a=setup:actpass',
-    'a=mid:0',
-    'a=sctp-port:5000',
-    'a=max-message-size:262144',
-    `a=candidate:1 1 udp 2113937151 ${params.candidateAddr} ${params.candidatePort} typ host generation 0`,
-    '',
-  ].join('\r\n');
+  return buildSdp(params, 'actpass');
 }
 
-/**
- * Reconstruct a minimal-but-valid SDP answer from extracted parameters.
- * The answer uses `a=setup:active` (standard for the answerer).
- *
- * Includes the ICE candidate inline (see `reconstructOfferSdp` for why).
- */
+/** Rebuild the answerer's SDP. */
 export function reconstructAnswerSdp(params: MinimalSdpParams): string {
-  const fp = ensureColonFingerprint(params.fp);
-  return [
-    'v=0',
-    'o=- 0 0 IN IP4 0.0.0.0',
-    's=-',
-    't=0 0',
-    'a=group:BUNDLE 0',
-    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
-    'c=IN IP4 0.0.0.0',
-    `a=ice-ufrag:${params.iu}`,
-    `a=ice-pwd:${params.ip}`,
-    `a=fingerprint:sha-256 ${fp}`,
-    'a=setup:active',
-    'a=mid:0',
-    'a=sctp-port:5000',
-    'a=max-message-size:262144',
-    `a=candidate:1 1 udp 2113937151 ${params.candidateAddr} ${params.candidatePort} typ host generation 0`,
-    '',
-  ].join('\r\n');
-}
-
-/**
- * Format an ICE candidate init object from an address and port.
- * Returns a standard `RTCIceCandidateInit`-shaped object.
- */
-export function formatIceCandidate(
-  addr: string,
-  port: number,
-): { candidate: string; sdpMid: string; sdpMLineIndex: number } {
-  return {
-    candidate: `candidate:1 1 udp 2113937151 ${addr} ${port} typ host generation 0`,
-    sdpMid: '0',
-    sdpMLineIndex: 0,
-  };
+  return buildSdp(params, 'active');
 }
 
 // --- Fingerprint helpers -----------------------------------------------------
 
-/**
- * Strip colons from a sha-256 fingerprint for compact QR encoding.
- * "AA:BB:CC" → "AABBCC"
- */
+/** "AA:BB:CC" → "AABBCC", for compact QR encoding. */
 export function stripColonFingerprint(fp: string): string {
   return fp.replace(/:/g, '');
 }
 
-/**
- * Re-insert colons into a hex fingerprint.
- * "AABBCC" → "AA:BB:CC"
- */
+/** "AABBCC" → "AA:BB:CC". Leaves an already-colonised value alone. */
 export function ensureColonFingerprint(fp: string): string {
-  if (fp.includes(':')) return fp; // already has colons
+  if (fp.includes(':')) return fp;
   return fp.match(/.{1,2}/g)?.join(':') ?? fp;
 }

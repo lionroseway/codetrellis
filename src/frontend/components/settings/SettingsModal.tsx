@@ -914,7 +914,10 @@ function DevicesSection({
       const svg = generateQrSvg(payloadJson, 5, 2);
       setQrSvg(svg);
       setPairingCode(qrPayload.c);
-      setPairingHost(qrPayload.h);
+      // v5 dropped the single `h` in favour of the full address list, and
+      // reading the old field left this undefined — which silently hid the
+      // manual-entry details, the only route in for a phone that cannot scan.
+      setPairingHost(Array.isArray(qrPayload.hs) ? qrPayload.hs[0] : null);
       setPairingPort(qrPayload.p);
       setPairingState('showing-qr');
       // Polling starts immediately from showing-qr state

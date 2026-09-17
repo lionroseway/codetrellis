@@ -32,6 +32,8 @@ import * as desktopSdp from '../../src/shared/lib/sdp-fingerprint';
 import * as mobileCrypto from '../../mobile/lib/crypto';
 import * as mobileAuth from '../../mobile/lib/peer-auth';
 import * as mobileSdp from '../../mobile/lib/sdp-fingerprint';
+import * as desktopMinimal from '../../src/shared/lib/sdp-minimal';
+import * as mobileMinimal from '../../mobile/lib/sdp-minimal';
 
 const FP_A = 'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99';
 const FP_B = '11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00';
@@ -186,5 +188,80 @@ test.describe('the SDP fingerprint parser', () => {
     for (const [a, b] of pairs) {
       expect(mobileSdp.fingerprintsEqual(a, b)).toBe(desktopSdp.fingerprintsEqual(a, b));
     }
+  });
+});
+
+test.describe('the minimal SDP the QR carries', () => {
+  const REAL_OFFER = [
+    'v=0', 'o=- 61118042 0 IN IP4 0.0.0.0', 's=-', 't=0 0',
+    'a=group:BUNDLE 0', 'a=extmap-allow-mixed', 'a=msid-semantic:WMS *',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 0.0.0.0',
+    'a=candidate:0456f 1 udp 2116026367 10.0.0.184 58208 typ host generation 0 ufrag 85a4',
+    'a=candidate:80234 1 udp 1679818751 80.177.10.172 58208 typ srflx raddr 10.0.0.184 rport 58208',
+    'a=end-of-candidates', 'a=ice-ufrag:85a4', 'a=ice-pwd:01a55f6def2e0f80b1b60b',
+    'a=ice-options:trickle', `a=fingerprint:sha-256 ${FP_A}`, 'a=setup:actpass',
+    'a=mid:0', 'a=sctp-port:5000', 'a=max-message-size:65536', '',
+  ].join('\r\n');
+
+  test('both sides rebuild byte-identical SDPs', () => {
+    // A divergence here does not look like a bug. Both sides keep working
+    // alone, and the failure surfaces as a phone that scans a QR and then
+    // silently never connects.
+    const params = desktopMinimal.extractSdpParams(REAL_OFFER, []);
+    expect(mobileMinimal.reconstructOfferSdp(params)).toBe(desktopMinimal.reconstructOfferSdp(params));
+    expect(mobileMinimal.reconstructAnswerSdp(params)).toBe(desktopMinimal.reconstructAnswerSdp(params));
+  });
+
+  test('both sides extract the same parameters', () => {
+    expect(mobileMinimal.extractSdpParams(REAL_OFFER, []))
+      .toEqual(desktopMinimal.extractSdpParams(REAL_OFFER, []));
+  });
+
+  test('max-message-size is READ, not guessed', () => {
+    // The v3 template hardcoded 262144 while werift advertises 65536. A
+    // four-fold disagreement surfaces only as large payloads — a UI snapshot,
+    // terminal scrollback — going missing on a link that otherwise looks fine.
+    const params = desktopMinimal.extractSdpParams(REAL_OFFER, []);
+    expect(params.maxMessageSize).toBe(65536);
+    expect(desktopMinimal.reconstructOfferSdp(params)).toContain('a=max-message-size:65536');
+  });
+
+  test('every interface gets a candidate, so a LAN pairing still works over a VPN', () => {
+    const twoInterfaces = REAL_OFFER.replace(
+      'a=end-of-candidates',
+      'a=candidate:99999 1 udp 2116026367 100.101.102.103 58208 typ host generation 0\r\na=end-of-candidates',
+    );
+    const params = desktopMinimal.extractSdpParams(twoInterfaces, []);
+    expect(params.candidateAddrs).toEqual(['10.0.0.184', '100.101.102.103']);
+
+    const rebuilt = desktopMinimal.reconstructOfferSdp(params);
+    expect(rebuilt).toContain('10.0.0.184 58208 typ host');
+    expect(rebuilt).toContain('100.101.102.103 58208 typ host');
+  });
+
+  test('host candidates win over reflexive ones', () => {
+    const params = desktopMinimal.extractSdpParams(REAL_OFFER, []);
+    expect(params.candidateAddrs, 'the srflx address must not be carried when a host one exists')
+      .toEqual(['10.0.0.184']);
+  });
+
+  test('candidates on different ports are refused rather than silently dropped', () => {
+    // The compact payload carries ONE port. If that assumption ever breaks,
+    // it has to break loudly — dropping a candidate would look like an
+    // intermittent connection failure on one interface.
+    const mixedPorts = REAL_OFFER.replace(
+      'a=end-of-candidates',
+      'a=candidate:99999 1 udp 2116026367 100.101.102.103 40404 typ host generation 0\r\na=end-of-candidates',
+    );
+    expect(() => desktopMinimal.extractSdpParams(mixedPorts, [])).toThrow(/ports/);
+    expect(() => mobileMinimal.extractSdpParams(mixedPorts, [])).toThrow(/ports/);
+  });
+
+  test('the answer MAC agrees, so the code never has to be sent', () => {
+    expect(mobileAuth.computeAnswerMac('640428', 'nonce-1', FP_A))
+      .toBe(desktopAuth.computeAnswerMac('640428', 'nonce-1', FP_A));
+    // Colons and case differ between the two codebases; the MAC must not.
+    expect(mobileAuth.computeAnswerMac('640428', 'nonce-1', FP_A.toLowerCase().replace(/:/g, '')))
+      .toBe(desktopAuth.computeAnswerMac('640428', 'nonce-1', FP_A));
   });
 });
