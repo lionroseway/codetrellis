@@ -69,8 +69,10 @@ existing code disagrees, the existing code is what Phase 19 is fixing.
 - **MCP tools authorise per tool by capability**, not per connection.
 - **Remote surfaces are off by default** and require an explicit user
   action to enable. Discovery and API exposure are separate switches.
-- **Chromium sandboxing stays on in every distributed format.** A target
-  that disables it is not shipped.
+- **Chromium sandboxing stays on in every distributed format** that can
+  enforce it. AppImage is the known exception and IS distributed — see the
+  Tech Stack note below. Do not add another format that weakens the sandbox
+  without raising it explicitly.
 
 No release ships until the gates close and the acceptance suite passes on
 a tagged candidate and on packaged artifacts.
@@ -80,9 +82,16 @@ a tagged candidate and on packaged artifacts.
 - **Desktop runtime**: Electron (primary) — pinned `^33.4.11`; a major
   upgrade to a currently supported release is Phase 19 work. Embedded
   Express on `:3001`, Vite `^6` on `:5173` in dev. macOS arm64 + x64,
-  Windows x64, Linux .deb / .rpm. **AppImage is built but not
-  distributed** — the target disables the Chromium sandbox, and
-  sandboxing stays on in everything we ship. Session persistence and
+  Windows x64, Linux .deb / .rpm / AppImage. **AppImage IS distributed**,
+  and has been in every release since v0.1.11 — an earlier note here claimed
+  it was withheld, which was never true of the release script and misdescribed
+  what users had already downloaded. The caveat is real though: an AppImage
+  runs from a nosuid FUSE mount, so the setuid `chrome-sandbox` helper cannot
+  be used and Electron falls back to user namespaces where the kernel allows
+  it. `.deb` / `.rpm` keep the setuid helper (`after-install` chmods it) and
+  are the better Linux option where a choice exists. Confirming what this
+  AppImage actually does at runtime needs a Linux host and is still open.
+  Session persistence and
   power-aware sleep prevention are wired in.
 - **Mobile runtime**: Expo SDK 54 + React Native 0.81.5 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
@@ -372,7 +381,7 @@ update** — never 404, and never offer a download the user cannot run.
 | Checksums | `SHA256SUMS` + `SHA256SUMS.sig` | Signed manifest — the app verifies against this |
 | Windows installer | `CodeTrellis-Setup-X.Y.Z.exe` | NSIS, unsigned (SmartScreen warning) |
 | Windows portable | `CodeTrellis-Portable-X.Y.Z.exe` | No install needed |
-| Linux x64 | `CodeTrellis-X.Y.Z.AppImage` | `chmod +x` to run |
+| Linux x64 / arm64 | `CodeTrellis-X.Y.Z-x86_64.AppImage`, `CodeTrellis-X.Y.Z-arm64.AppImage` | `chmod +x` to run |
 | Linux x64 | `CodeTrellis-X.Y.Z.deb` / `.rpm` | Native installers |
 
 ### Mobile

@@ -198,9 +198,9 @@ trap 'rm -f "$NOTES_FILE"' EXIT
 cat > "$NOTES_FILE" <<EOF
 CodeTrellis ${VERSION} — installer downloads.
 
-> The source repository is currently private. We're collecting feedback
-> before the public source release — reach out via issues here or at
-> [codetrellis.dev](https://codetrellis.dev).
+> Source lives at [${SOURCE_REPO_SLUG}](https://github.com/${SOURCE_REPO_SLUG}).
+> Binaries are published here so download URLs stay stable and need no
+> authentication. Feedback via issues on either repo, or [codetrellis.dev](https://codetrellis.dev).
 
 ## Downloads
 
@@ -208,7 +208,7 @@ CodeTrellis ${VERSION} — installer downloads.
 - **macOS (Intel)** — \`CodeTrellis-${VERSION}-x64.dmg\` (signed + notarized)
 - **Windows installer (NSIS)** — \`CodeTrellis-Setup-${VERSION}.exe\`
 - **Windows portable** — \`CodeTrellis-Portable-${VERSION}.exe\`
-- **Linux AppImage** — \`CodeTrellis-${VERSION}.AppImage\` (portable, no install)
+- **Linux AppImage** — \`CodeTrellis-${VERSION}-x86_64.AppImage\` / \`CodeTrellis-${VERSION}-arm64.AppImage\` (portable, no install)
 - **Linux .deb** (Debian / Ubuntu) and **.rpm** (Fedora / RHEL) — also attached
 
 ## First-launch notes
@@ -219,7 +219,9 @@ CodeTrellis ${VERSION} — installer downloads.
   attributes), clear it once: \`xattr -cr /Applications/CodeTrellis.app\`.
 - **Windows** — not code-signed yet, so SmartScreen may warn once →
   "More info" → "Run anyway".
-- **Linux (AppImage)** — \`chmod +x CodeTrellis-${VERSION}.AppImage && ./CodeTrellis-${VERSION}.AppImage\`.
+- **Linux (AppImage)** — \`chmod +x CodeTrellis-${VERSION}-x86_64.AppImage && ./CodeTrellis-${VERSION}-x86_64.AppImage\`.
+  Prefer the \`.deb\` / \`.rpm\` where you have the choice: an AppImage runs from a
+  nosuid mount, so Chromium cannot use its setuid sandbox helper there.
 - **Linux (.deb)** — \`sudo apt install ./codetrellis_*.deb\` (or \`sudo dpkg -i\`).
 - **Linux (.rpm)** — \`sudo dnf install ./codetrellis-*.rpm\` (or \`sudo rpm -i\`).
 
