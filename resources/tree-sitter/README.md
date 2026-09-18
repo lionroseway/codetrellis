@@ -35,7 +35,7 @@ failure, so:
 | `tree-sitter-ruby.wasm` | `09a96427d7c72f0613ed470cd9812223fc4a91d6a9c025c0235cc6bd59ff96f4` | npm `tree-sitter-ruby@0.23.1`, the `tree-sitter-ruby.wasm` shipped in the package (Phase 27) |
 | `tree-sitter-c-sharp.wasm` | `6f69e1cae44e1c32c1eccc170dc5a9778fb94ff716f71113fe1f8c4299aa2f40` | npm `tree-sitter-c-sharp@0.23.5`, the `tree-sitter-c_sharp.wasm` shipped in the package (Phase 27). ABI 15. |
 | `tree-sitter-kotlin.wasm` | `7009d69453bc8735e438b2818a633efb21c88f99782769abba60dffedfab73f7` | npm `@tree-sitter-grammars/tree-sitter-kotlin@1.1.0`, the `tree-sitter-kotlin.wasm` shipped in the package (Phase 27). ABI 14. |
-| `tree-sitter-swift.wasm` | `d084eceba50e9a83319f5d171051b53179bd22b6ea6419014900c602d52cfa28` | **Third-party build** — npm `@repomix/tree-sitter-wasms@0.1.17`, `out/tree-sitter-swift.wasm`, built from `tree-sitter-swift@0.7.1` with `tree-sitter-cli@0.26.3`. ABI 14. See "The one third-party grammar" below. |
+| `tree-sitter-swift.wasm` | `24a6afb13db61ffd7d53dd848bbf684ec1c3aacea685a0857dcd1db673d28c7e` | Built from source — npm `tree-sitter-swift@0.7.1` (tarball sha1 `e7b41402dbc29fc3a8741793513e7a0f3e35cc55`, matching npm's `dist.shasum`), compiled with `tree-sitter-cli@0.27.0`. ABI 14. See "Swift is built from source" below. |
 | `tree-sitter-java.wasm` | `4fdeac4ca6ca089f06c6f7e562abcac1733cd465728cc7031ebb73c2019122c4` | unrecorded — predates this file |
 | `tree-sitter-javascript.wasm` | `5fb488d0cabb4775a594bab85682de5ad6ce83c0d6ac997a9f82dd084d571240` | unrecorded — predates this file |
 | `tree-sitter-php.wasm` | `d4df6a6ff08c87c3ec4f9cbb785fe09998a0cb570e03f57d7b19b3acfb146aa7` | unrecorded — predates this file |
@@ -45,39 +45,53 @@ failure, so:
 | `tree-sitter-typescript.wasm` | `778025db5a8be0e70f8ccc3671e486dfeddd048c25d9e8a70c26de2e1bf6f97d` | unrecorded — predates this file |
 | `tree-sitter.wasm` | `c03bccdc3b448a32848f5ae327e209c982bbb0840d43eec8bc2d5759544a1ed3` | the `web-tree-sitter` runtime (see `package.json` for the pinned version) |
 
-## The one third-party grammar
+## Swift is built from source
 
-Every grammar above except Swift comes from the grammar's **own npm
-package** — the maintainers' build, pinned to an exact immutable version,
-reproducible with one `npm pack`.
+Swift is the one grammar with no artifact of its own to take: no
+published `tree-sitter-swift` ships a wasm at any version, and there is
+no `@tree-sitter-grammars/tree-sitter-swift`. Until this build it
+shipped a third-party artifact from `@repomix/tree-sitter-wasms`. It is
+now compiled here from the maintainers' own source.
 
-Swift does not have one. No published `tree-sitter-swift` ships a wasm at
-any version, and there is no `@tree-sitter-grammars/tree-sitter-swift`.
-The committed file is built by `@repomix/tree-sitter-wasms`, a maintained
-fork of `Gregoor/tree-sitter-wasms`.
-
-This repository is public and these bytes ship inside a desktop app, so
-say it plainly rather than leaving it to be discovered:
-
-- **Bounded blast radius.** A tree-sitter grammar runs inside the wasm
-  sandbox and imports nothing but the tree-sitter runtime — no
-  filesystem, no network, no host calls. The worst a hostile grammar can
-  do is return a wrong parse tree or hang the parse loop. That is much
-  smaller than what an npm package with an install script can do.
-- **What the hash proves and does not.** The sha256 above means a
-  *change* to these bytes is visible in a diff. It does not prove the
-  bytes correspond to `tree-sitter-swift@0.7.1`'s declared source; that
-  rests on the publisher.
-- **The exit.** Build it locally once the toolchain exists and replace
-  the row. Swift is the only grammar here that needs that.
-
-Reproduce the current bytes:
+Reproduce it:
 
 ```bash
-npm pack @repomix/tree-sitter-wasms@0.1.17
-tar -xzf repomix-tree-sitter-wasms-0.1.17.tgz package/out/tree-sitter-swift.wasm
-sha256sum package/out/tree-sitter-swift.wasm
+npm pack tree-sitter-swift@0.7.1
+# tarball sha1 must be e7b41402dbc29fc3a8741793513e7a0f3e35cc55 — npm's dist.shasum
+tar -xzf tree-sitter-swift-0.7.1.tgz
+cd package && npx tree-sitter-cli@0.27.0 build --wasm .
+sha256sum tree-sitter-swift.wasm
 ```
+
+**This needs no Emscripten.** tree-sitter-cli 0.27 downloads a pinned
+wasi-sdk and binaryen into `~/.cache/tree-sitter` and builds with those,
+so the toolchain comes from the CLI version rather than from whatever
+the machine happens to have. The CLI's minor is deliberately matched to
+the pinned `web-tree-sitter` (0.27) — the runtime that loads it.
+`src/parser.c` declares ABI 14, the same ABI as the artifact this
+replaced.
+
+**The bytes are not reproducible across machines.** A different wasi-sdk
+or wasm-opt will compile the same source to a different sha256. The hash
+in the table pins what is *committed*, so a change to it is visible in a
+diff; the tarball sha1 above is what pins the *source*.
+
+What this bought, stated plainly: trust moved from the `@repomix`
+publisher to the `tree-sitter-swift` maintainers — the same people the
+other rows already trust. It was never a large exposure. A grammar runs
+inside the wasm sandbox and imports nothing but the tree-sitter runtime:
+no filesystem, no network, no host calls. The worst a hostile grammar
+can do is return a wrong parse tree or hang the parse loop, which is far
+less than an npm package with an install script.
+
+Verified before committing, because a bad grammar swap is silent — it
+presents as a language that produces no symbols, not as a crash:
+
+- The new wasm produces **symbol and import extraction identical** to the
+  artifact it replaced, over a sample covering class, struct, enum,
+  extension, protocol, actor, init, deinit, subscript and computed
+  properties. Identical sets, no parse errors, on both.
+- `parsers/jvm-and-apple.test.ts` passes under `npm run test:unit`.
 
 The seven "unrecorded" rows are honest: those files were committed
 before provenance was tracked, and guessing a version here would be
