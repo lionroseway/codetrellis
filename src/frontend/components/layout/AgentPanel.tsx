@@ -113,7 +113,7 @@ export function AgentPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
-            <AgentTurnList turns={turns} status={status} />
+            <AgentTurnList turns={turns} status={status} detectedPlan={currentPlan} />
           </div>
         )}
 

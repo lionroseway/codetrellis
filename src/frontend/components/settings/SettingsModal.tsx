@@ -586,6 +586,40 @@ interface SyncStatusData {
   remoteMachine: string | null;
 }
 
+/**
+ * Phase 29 §4.16 — what an import would actually bring.
+ *
+ * `/api/sync/peek` had no caller. Without it the Import button is a
+ * blind write: `importSync` REPLACES local settings with the bundle in
+ * the sync directory, and the panel could only say when that bundle
+ * was exported and from which machine — never what is in it. "Import
+ * from saif-mbp" and "overwrite your settings with a file you have not
+ * seen" were the same click.
+ *
+ * `/api/sync/status` already carries the machine and the timestamp, so
+ * peek is asked for exactly what status cannot answer: whether the
+ * bundle holds settings, and how many projects come with them.
+ */
+interface SyncPeekData {
+  available: boolean;
+  remoteMachine: string | null;
+  lastExportAt: string | null;
+  hasSettings: boolean;
+  hasRecentProjects: boolean;
+  recentProjectCount: number;
+}
+
+/** "settings and 12 projects" — never "settings and 0 projects". */
+export function describeBundle(peek: SyncPeekData): string {
+  const parts: string[] = [];
+  if (peek.hasSettings) parts.push('your settings');
+  if (peek.hasRecentProjects && peek.recentProjectCount > 0) {
+    parts.push(`${peek.recentProjectCount} project${peek.recentProjectCount === 1 ? '' : 's'}`);
+  }
+  if (parts.length === 0) return 'nothing this version knows how to read';
+  return parts.join(' and ');
+}
+
 function SyncSection({
   settings,
   onChange,
@@ -595,12 +629,14 @@ function SyncSection({
 }) {
   const [syncPath, setSyncPath] = useState(settings.data.personalSyncPath);
   const [syncStatus, setSyncStatus] = useState<SyncStatusData | null>(null);
+  const [peek, setPeek] = useState<SyncPeekData | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [resultMsg, setResultMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/sync/status').then((r) => r.json()).then(setSyncStatus).catch(() => {});
+    fetch('/api/sync/peek').then((r) => r.json()).then(setPeek).catch(() => {});
   }, [settings.data.personalSyncPath, settings.data.personalSyncMode]);
 
   const save = () => {
@@ -709,6 +745,17 @@ function SyncSection({
               </button>
             )}
           </div>
+
+          {/* Phase 29 §4.16 — say what Import would replace, before it
+              is clicked. Import overwrites local settings, so "what is
+              in the bundle" is the one thing the user needs and the
+              status endpoint cannot answer. */}
+          {syncStatus.lastImportAvailable && peek?.available && (
+            <p className="text-[10.5px] text-foreground-subtle leading-relaxed border-t border-white/[0.06] pt-2">
+              That bundle holds <span className="text-foreground-muted">{describeBundle(peek)}</span>.
+              {peek.hasSettings && ' Importing replaces your current settings with it.'}
+            </p>
+          )}
         </div>
       )}
 

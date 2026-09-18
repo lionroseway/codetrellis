@@ -772,17 +772,105 @@ goes green when it is removed.
 | `/api/sync/peek`, `/api/sensors/doc-check`, `/api/presence/cards`, `/api/logs/path`, `/api/audio/recent` | Unclassified. Carried to 4.16. |
 | `/api/cross-system` | Not a finding — `MainCanvas` calls it. Prefix artefact of pass 1. |
 
-### 4.16 ☐ Carried from 4.15
+### 4.16 ☑ Carried from 4.15
 
-Not worked, and named so the next run starts from a list:
-`/api/trellis/capture` (snapshots readable, not creatable),
-`/api/contributor-branch`, `/api/sync/peek`, `/api/sensors/doc-check`,
-`/api/presence/cards`, `/api/logs/path`, `/api/audio/recent`, plus
-wiring `RemotePeersPanel` and `WebcamQrScanner` once Phase 19 Gate 1.2
-settles the pairing protocol, and the decision on `AgentPanel`'s Plan
-tab — the only reader of `agent-store`'s `currentPlan`, which is the
-Claude Code session-JSONL plan heuristic, so that heuristic's output is
-invisible too.
+Nine items. Five surfaced, two ruled out, two still deferred for a
+reason that has not changed.
+
+#### Surfaced
+
+**`/api/sync/peek` — Import was a blind overwrite.** `importSync`
+*replaces* local settings with whatever is in the sync directory, and
+the panel could only say when that bundle was exported and from which
+machine. "Import from saif-mbp" and "overwrite your settings with a
+file you have not seen" were the same click. `/api/sync/status` already
+carried the machine and the timestamp, so peek is asked for exactly
+what status cannot answer — whether the bundle holds settings, and how
+many projects come with it. The panel now says so before the button.
+
+**`/api/presence/cards` — a bug, not a missing feature.** The presence
+store's own header called cards "in-memory only". That was true of the
+*client* and it was wrong: the backend keeps them and serves them here,
+and this endpoint had no caller. The store was filled by WebSocket
+pushes alone, so **a reload started it empty and every card on screen
+vanished** — including a `requireAck` card, which is an agent blocked
+on `await_ack`. Refreshing the window made the prompt disappear while
+the agent went on waiting for an answer the user could no longer give.
+`hydrate()` merges by id (a WS card can land mid-flight) and re-opens
+the pane only for something still unacked — reopening it for cards
+already dealt with would make a reload noisier than the session it
+restored.
+
+**`/api/audio/recent` — "30s buffered" is not evidence.** A muted
+microphone, the wrong input device and a working capture produce
+identical numbers on the bar. Agents read this buffer through
+`get_audio_context`, so "is there anything on it" is worth being able
+to answer. A Check button plays the last ten seconds — enough to tell
+speech from silence.
+
+**`/api/trellis/capture` — Diff mode had nothing of your own to diff
+against.** The consumer was already there: `MainCanvas` asks for
+`?plan=<uid>` and uses the newest snapshot, falling back to the generic
+baseline. Only agents could create one, so a user on Diff mode always
+got the baseline. A Checkpoint button next to the trellis mode selector
+fixes that with no new panel. Deliberately *not* merged with Pin: Pin
+anchors the baseline to a git commit and is about the repository; a
+checkpoint is a moment in a plan's life ("before the agent started")
+with no commit to name it by. The crowding in that overlay is a reason
+to be careful about a third control, not a reason to conflate two
+different ideas.
+
+**`/api/contributor-branch` — this one needed a guard before it could
+have a button.** The service checks out a new branch, rewrites
+`.codetrellis/`, then runs `git add .codetrellis/` and commits, and
+finally `checkout -` back. So **uncommitted manifest work was swept
+into the contributor branch's commit and vanished from the branch the
+user returned to.** Nothing was destroyed; it silently moved somewhere
+nobody asked for. That was survivable while an agent called this
+deliberately over MCP. It is not something to put behind a button, so
+`prepareContributorBranch` now refuses on a dirty `.codetrellis/` and
+names the files to deal with. The modal spells out all four steps,
+because this is the most invasive thing in the plan workspace — it
+changes the user's git state — and a one-line label would not be honest
+about that.
+
+**And the plan heuristic, which had no home at all.**
+`claude-code-watcher.ts` emits `plan_reported`, `useWebSocket` parses it
+into `agent-store.currentPlan`, and the only reader was `AgentPanel` —
+which nothing renders (§4.15). So a capability CLAUDE.md lists in the
+tech stack produced output that went nowhere, live, every session. It
+now appears above the turns in the Timeline, collapsed, labelled
+**detected from chat**: it answers what the agent *said* it would do
+next to what it *did*. The label matters — this is a heuristic read out
+of chat text, not a CodeTrellis plan, and if the two look alike the user
+will go hunting for it in the plan list.
+
+#### A chip removed while adding a feature
+
+The plan header had reached nine chips, and §3 is explicit that the
+failure mode of this phase is making a dense interface denser. Rather
+than add a tenth for the contributor branch, the two actions that
+*produce something for somebody else* — save as template (§4.10) and
+prepare a contributor branch — are grouped behind one **Share** menu.
+That is one chip fewer than before, and it names what they have in
+common.
+
+#### Ruled out
+
+| | Why |
+|---|---|
+| `/api/logs/path` | Redundant. `/api/logs/tail` returns the path alongside the content, and `LogsSection` already displays it from there. The path-only route is for a caller that does not want 64KB of log with it. |
+| `/api/sensors/doc-check` | A *trigger*, and a side-effecting one: it posts `doc_stale` channel events the whole team sees. The file-watcher path already does this continuously (§4.6 established the drift sensor is surfaced), so a button would add nothing but a way to notify colleagues by misclick. |
+
+#### Still deferred, same reason
+
+`RemotePeersPanel` and `WebcamQrScanner` stay unwired. **Gate 1.2 of
+Phase 19 changes the pairing and reconnect protocol** — CLAUDE.md says
+the next mobile release ships in lockstep and forces re-pairing for
+every existing user. Wiring a pairing UI against a protocol that is
+about to change is work done twice. They remain in
+`reachable.test.ts`'s allowlist with that reason, so they are visible
+rather than forgotten.
 
 ### 4.17 — add here
 
@@ -908,9 +996,10 @@ whole time.
 
 ### Status, 2026-09-18
 
-**4.1 – 4.15 are closed** — thirteen built, two ruled out with a reason
-(4.6 was already surfaced, 4.12 is deliberate). **4.16 is open** and
-listed rather than left to a future grep.
+**4.1 – 4.16 are closed.** Fourteen worked, and the items ruled out
+each carry a reason rather than a shrug (4.6 was already surfaced, 4.12
+is deliberate, and 4.16 rules out two endpoints and defers two
+components behind Gate 1.2).
 
 Three things qualify that:
 
@@ -928,8 +1017,11 @@ Three things qualify that:
    would have been the same kind of thing that failed here — a
    convention nobody re-checks.
 
-The handover list below has not grown. What is open is 4.16, which
-needs judgement rather than a developer machine.
+The handover list below has not grown, and nothing is open that does
+not need the dev machine — with one standing exception recorded in
+4.16: the two pairing components wait on Phase 19 Gate 1.2, which is a
+protocol change, not an audit item. `reachable.test.ts` keeps them
+visible until then.
 
 ### Known to need the dev machine
 

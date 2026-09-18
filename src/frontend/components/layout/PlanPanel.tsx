@@ -28,6 +28,10 @@ export function PlanPanel() {
 
   const events = useAgentStore((s) => s.events);
   const status = useAgentStore((s) => s.status);
+  // Phase 29 §4.16 — the chat-derived plan heuristic. Emitted live by
+  // the session watcher, parsed into the store, and rendered by nothing
+  // until now. See DetectedPlanBanner in AgentTurns.tsx.
+  const detectedPlan = useAgentStore((s) => s.currentPlan);
   const activePlan = usePlanStore((s) => s.activePlan);
   const comments = usePlanStore((s) => s.comments);
 
@@ -110,7 +114,7 @@ export function PlanPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
-            <AgentTurnList turns={turns} status={status} />
+            <AgentTurnList turns={turns} status={status} detectedPlan={detectedPlan} />
           </div>
         )}
 

@@ -172,3 +172,135 @@ test.describe('Surfaced REST routes (Phase 29 §4.15)', () => {
     }
   });
 });
+
+/**
+ * Phase 29 §4.16 — the endpoints wired in the second pass.
+ *
+ * `/api/contributor-branch` is the one with teeth. It checks out a new
+ * branch, rewrites `.codetrellis/`, commits, and returns you to where
+ * you were — so uncommitted manifest work was swept onto the
+ * contributor branch and vanished from the original. Survivable while
+ * an agent called it deliberately over MCP; not something to put behind
+ * a button. §4.16 added a precondition, and this is what proves it.
+ */
+test.describe('Phase 29 §4.16 routes', () => {
+  test.setTimeout(120_000);
+
+  test('contributor-branch refuses a dirty .codetrellis/, and says which files', async () => {
+    const h = await setupHarness('contrib-branch-dirty');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+      const plan = await h.client.createPlan({
+        title: 'Shareable plan', projectPath: h.fixture.projectPath,
+      });
+      const exported = await h.client.raw(
+        'POST',
+        `/api/plans/${plan.uid}/export?path=${encodeURIComponent(h.fixture.projectPath)}`,
+      );
+      expect(exported.ok).toBe(true);
+      const { planDir } = await exported.json() as { planDir: string };
+      const planSlug = planDir.split(path.sep).filter(Boolean).pop()!;
+
+      // Exporting wrote files and nothing committed them, so the
+      // manifest is dirty right now — which is exactly the state a user
+      // would be in after making a plan and reaching for this.
+      const refused = await h.client.raw('POST', '/api/contributor-branch', {
+        projectPath: h.fixture.projectPath,
+        planSlug,
+        branchName: 'contrib/should-not-exist',
+      });
+      expect(refused.ok).toBe(false);
+      const err = await refused.json() as { error: string };
+      expect(err.error).toMatch(/uncommitted/i);
+      // Naming the files is the difference between a refusal a user can
+      // act on and one they can only be annoyed by.
+      expect(err.error).toMatch(/\.codetrellis/);
+
+      // And it refused BEFORE touching git — no half-made branch.
+      const branches = await (await h.client.raw(
+        'GET', `/api/git/info?path=${encodeURIComponent(h.fixture.projectPath)}`,
+      )).json() as { branches: string[] };
+      expect(branches.branches).not.toContain('contrib/should-not-exist');
+
+      // Commit the manifest and the same call now succeeds — proving
+      // the guard is a precondition, not a blanket refusal. There is no
+      // REST route for this; committing the manifest is an MCP tool, so
+      // do it with git directly rather than invent an endpoint.
+      const { execFileSync } = await import('node:child_process');
+      const gitEnv = {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Harness', GIT_AUTHOR_EMAIL: 'h@codetrellis.local',
+        GIT_COMMITTER_NAME: 'Harness', GIT_COMMITTER_EMAIL: 'h@codetrellis.local',
+      };
+      execFileSync('git', ['add', '.codetrellis/'], { cwd: h.fixture.projectPath, env: gitEnv });
+      execFileSync('git', ['commit', '-m', 'plan manifest'], { cwd: h.fixture.projectPath, env: gitEnv });
+
+      const accepted = await h.client.raw('POST', '/api/contributor-branch', {
+        projectPath: h.fixture.projectPath,
+        planSlug,
+        branchName: 'contrib/ok',
+      });
+      expect(accepted.ok).toBe(true);
+      const result = await accepted.json() as { branch: string; commitHash: string };
+      expect(result.branch).toBe('contrib/ok');
+      expect(result.commitHash).toMatch(/^[a-f0-9]{40}$/);
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  test('sync peek describes the bundle without importing it', async () => {
+    const h = await setupHarness('sync-peek');
+    try {
+      // The Settings panel reads this to say what Import would replace,
+      // so it has to answer on an unconfigured machine too — that is
+      // the common case, and an error there would render as a broken
+      // panel rather than "nothing to import".
+      const res = await h.client.raw('GET', '/api/sync/peek');
+      expect(res.ok).toBe(true);
+      const peek = await res.json() as {
+        available: boolean; hasSettings: boolean; recentProjectCount: number;
+      };
+      expect(peek.available).toBe(false);
+      expect(peek.hasSettings).toBe(false);
+      expect(peek.recentProjectCount).toBe(0);
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  test('presence cards outlive the client that was shown them', async () => {
+    const h = await setupHarness('presence-cards');
+    try {
+      // A card with requireAck is an agent blocked on await_ack. The
+      // store was filled by WebSocket pushes alone, so a reload lost the
+      // card while the agent went on waiting for an answer the user
+      // could no longer give. `/api/presence/cards` is what the store
+      // now hydrates from — and it had no caller at all before §4.16.
+      //
+      // Posting goes through the real path: the `present` MCP tool,
+      // which is how a card is ever created.
+      const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
+      const posted = await agent.callTool('present', {
+        text: 'Ready to apply the migration?',
+        require_ack: true,
+      });
+      expect(posted.isError).not.toBe(true);
+
+      // A fresh GET is exactly what a reloaded client does.
+      const res = await h.client.raw('GET', '/api/presence/cards');
+      expect(res.ok).toBe(true);
+      const cards = await res.json() as Array<{ id: string; text: string; requireAck: boolean; acked: boolean }>;
+
+      expect(cards.length).toBeGreaterThan(0);
+      const card = cards.find((c) => c.text.includes('apply the migration'));
+      expect(card).toBeTruthy();
+      // The unacked-and-required combination is the one that matters:
+      // it is what makes the pane re-open itself on hydrate.
+      expect(card!.requireAck).toBe(true);
+      expect(card!.acked).toBe(false);
+    } finally {
+      await h.teardown();
+    }
+  });
+});

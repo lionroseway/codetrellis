@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   Circle, ChevronRight, ChevronDown,
-  AlertTriangle, HelpCircle, Pencil, Eye, Plug, FileEdit,
+  AlertTriangle, HelpCircle, Pencil, Eye, Plug, FileEdit, ListChecks,
 } from 'lucide-react';
 import {
   groupIntoTurns, formatDuration, formatRelative, type AgentTurn,
 } from '../../lib/agent-turns';
 import { phraseEvent, rawPayloadText, type EventIntent } from '../../lib/tool-phrasing';
-import type { AgentEvent } from '@shared/types';
+import type { AgentEvent, AgentPlan } from '@shared/types';
 
 /**
  * Phase 22 — the Timeline renders TURNS, not raw tool calls.
@@ -142,16 +142,71 @@ export function useAgentTurns(events: AgentEvent[]): AgentTurn[] {
   return useMemo(() => groupIntoTurns(events.slice(-400)).reverse(), [events]);
 }
 
+/**
+ * Phase 29 §4.16 — the plan the agent said it was going to follow.
+ *
+ * `claude-code-watcher.ts` tails the session JSONL and emits
+ * `plan_reported` when it detects one; `useWebSocket` parses it into
+ * `agent-store.currentPlan`. **Nothing rendered it.** The only reader
+ * was `AgentPanel`, which nothing renders either (§4.15) — so a
+ * capability CLAUDE.md lists among the tech stack produced output that
+ * went nowhere, live, on every session.
+ *
+ * It sits above the turns because it answers the other half of the same
+ * question: the turns are what the agent DID, this is what it SAID it
+ * would do. Collapsed by default — it is context, not the content.
+ *
+ * "Detected" is doing real work in that label. This is a heuristic read
+ * out of chat text, not a CodeTrellis plan, and the two must not look
+ * alike or the user will go looking for it in the plan list.
+ */
+function DetectedPlanBanner({ plan }: { plan: AgentPlan }) {
+  const [expanded, setExpanded] = useState(false);
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+  if (plan.steps.length === 0) return null;
+
+  return (
+    <div className="mb-2 rounded-md border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-surface-hover transition-colors"
+      >
+        <Chevron size={10} className="text-foreground-subtle shrink-0" />
+        <ListChecks size={10} className="text-foreground-subtle shrink-0" />
+        <span className="text-[10px] text-foreground-muted">
+          Agent described a plan
+        </span>
+        <span className="text-[10px] text-foreground-subtle">
+          {plan.steps.length} step{plan.steps.length === 1 ? '' : 's'}
+        </span>
+        <span className="flex-1" />
+        <span className="text-[9px] text-foreground-subtle opacity-70">detected from chat</span>
+      </button>
+      {expanded && (
+        <ol className="px-3 pb-2 pt-0.5 space-y-0.5 list-decimal list-inside">
+          {plan.steps.map((step, i) => (
+            <li key={i} className="text-[10.5px] text-foreground-muted leading-relaxed">
+              {step.description}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export function AgentTurnList({
   turns,
   status,
+  detectedPlan,
 }: {
   turns: AgentTurn[];
   status: string;
+  detectedPlan?: AgentPlan | null;
 }) {
   const lastTurn = turns[0] ?? null;
 
-  if (turns.length === 0) {
+  if (turns.length === 0 && !detectedPlan) {
     return (
       <div className="text-foreground-subtle py-6 text-center">No agent events yet</div>
     );
@@ -159,6 +214,7 @@ export function AgentTurnList({
 
   return (
     <>
+      {detectedPlan && <DetectedPlanBanner plan={detectedPlan} />}
       {/* An idle panel used to show nothing, which is indistinguishable
           from the app being broken. Say when the last thing happened and
           what it was. */}

@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Radio, X } from 'lucide-react';
+import { Mic, MicOff, Radio, X, Play } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 
 interface CaptureStatus {
@@ -166,6 +166,46 @@ export function AudioCaptureBar() {
     };
   }, []);
 
+  /**
+   * Phase 29 §4.16 — hear what the buffer actually holds.
+   *
+   * `/api/audio/recent` had no caller. Without it the bar reports
+   * "30s buffered · 12 chunks" and that is all a user can ever know:
+   * a muted microphone, the wrong input device, and a working capture
+   * produce the same two numbers. Agents read this buffer through
+   * `get_audio_context`, so "is there anything on it" is worth being
+   * able to answer before relying on it.
+   *
+   * Plays the last ten seconds rather than the whole buffer — enough to
+   * tell speech from silence, small enough to decode without thought.
+   */
+  const [previewing, setPreviewing] = useState(false);
+
+  const playRecent = useCallback(async () => {
+    setPreviewing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/audio/recent?seconds=10');
+      if (res.status === 404) {
+        setError('Nothing buffered yet');
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const snap = await res.json() as { audioBase64: string; mimeType: string };
+      const audio = new Audio(`data:${snap.mimeType};base64,${snap.audioBase64}`);
+      audio.onended = () => setPreviewing(false);
+      audio.onerror = () => {
+        setError('Could not play the buffered audio');
+        setPreviewing(false);
+      };
+      await audio.play();
+      return;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    setPreviewing(false);
+  }, []);
+
   const capturing = status?.capturing ?? false;
 
   // Hidden unless asked for — but never while the microphone is live.
@@ -204,6 +244,18 @@ export function AudioCaptureBar() {
           <span className="text-zinc-600"> · </span>
           {status.chunkCount} chunks
         </span>
+      )}
+
+      {(status?.chunkCount ?? 0) > 0 && (
+        <button
+          onClick={playRecent}
+          disabled={previewing}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 disabled:opacity-50"
+          title="Play the last 10 seconds — check the microphone is picking you up"
+        >
+          <Play size={9} />
+          {previewing ? 'Playing…' : 'Check'}
+        </button>
       )}
 
       {!capturing && (

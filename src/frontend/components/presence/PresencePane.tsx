@@ -130,6 +130,13 @@ export function PresencePane() {
   const setPosition = usePresenceStore((s) => s.setPosition);
   const ackCard = usePresenceStore((s) => s.ackCard);
 
+  // Phase 29 §4.16 — recover the cards the backend still holds. A card
+  // with requireAck is an agent blocked on await_ack; before this, a
+  // reload made that prompt vanish while the agent kept waiting.
+  useEffect(() => {
+    usePresenceStore.getState().hydrate();
+  }, []);
+
   const [speakingCardId, setSpeakingCardId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
