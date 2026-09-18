@@ -88,30 +88,30 @@ test.describe('Plan templates', () => {
       // is 0 — that's fine. We're checking phase + doc seeding here.
       expect(detail.title).toBe('Feature: Saved searches');
 
-      // Phase + doc counts are queryable via the file-export
-      // endpoint indirectly, but for a direct REST check we need
-      // to read the raw plan. We use the export-then-read pattern
-      // since the round-trip is already test-covered.
-      const exported = await h.client.exportPlan(plan.uid, h.fixture.projectPath);
-      const fs = await import('node:fs');
-      const path = await import('node:path');
-      const phaseFiles = fs.readdirSync(path.join(exported.planDir, 'phases')).filter((f) => f.endsWith('.yaml'));
-      const docFiles = fs.readdirSync(path.join(exported.planDir, 'docs')).filter((f) => f.endsWith('.md'));
-      expect(phaseFiles).toHaveLength(3);
-      expect(docFiles).toHaveLength(4);
+      // Read the phases and docs directly rather than by exporting
+      // and listing directories.
+      //
+      // These used to go through `exportPlan` and read `phases/` and
+      // `docs/`. Phase 29 §4.10 made a V1 template also project its
+      // rows into `plan_items` — without that the workspace rendered
+      // nothing for a template-created plan — and `exportPlan`
+      // switches to the V2 `items/` layout as soon as a plan has
+      // items. So the old path stopped finding the directories.
+      //
+      // Asking the API for phases and docs is what this test meant all
+      // along; the export was a detour, and a detour through a layout
+      // that can legitimately change.
+      const phases = await (await h.client.raw('GET', `/api/plans/${plan.uid}/phases`)).json() as unknown[];
+      const docs = await (await h.client.raw('GET', `/api/plans/${plan.uid}/docs`)).json() as Array<{ body: string }>;
+      expect(phases).toHaveLength(3);
+      expect(docs).toHaveLength(4);
 
       // Every doc body should have placeholder interpolation done —
       // no `{{feature}}` strings should remain.
-      for (const docFile of docFiles) {
-        const body = fs.readFileSync(path.join(exported.planDir, 'docs', docFile), 'utf-8');
-        expect(body).not.toContain('{{feature}}');
-        // The requirements doc starts with `# Requirements — <feature>`,
-        // so at least one doc should contain the substituted name.
+      for (const doc of docs) {
+        expect(doc.body).not.toContain('{{feature}}');
       }
-      const allDocBodies = docFiles
-        .map((f) => fs.readFileSync(path.join(exported.planDir, 'docs', f), 'utf-8'))
-        .join('\n---\n');
-      expect(allDocBodies).toContain('Saved searches');
+      expect(docs.map((d) => d.body).join('\n---\n')).toContain('Saved searches');
     } finally {
       await h.teardown();
     }
@@ -131,16 +131,61 @@ test.describe('Plan templates', () => {
 
       // Spot-check that one of the doc bodies has the substituted bug
       // name (proves placeholder runs through every string field).
-      const exported = await h.client.exportPlan(plan.uid, h.fixture.projectPath);
-      const fs = await import('node:fs');
-      const path = await import('node:path');
-      const reportFile = fs
-        .readdirSync(path.join(exported.planDir, 'docs'))
-        .find((f) => /bug.report/i.test(f));
-      expect(reportFile).toBeTruthy();
-      const reportBody = fs.readFileSync(path.join(exported.planDir, 'docs', reportFile!), 'utf-8');
-      expect(reportBody).toContain('Login button hangs on slow networks');
-      expect(reportBody).toContain('packages/web/src/UserList.tsx');
+      // Read straight from the API — see the note in the new-feature
+      // test on why this no longer goes via export.
+      const docs = await (await h.client.raw('GET', `/api/plans/${plan.uid}/docs`)).json() as Array<{ title: string; body: string }>;
+      const report = docs.find((d) => /bug.report/i.test(d.title));
+      expect(report).toBeTruthy();
+      expect(report!.body).toContain('Login button hangs on slow networks');
+      expect(report!.body).toContain('packages/web/src/UserList.tsx');
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  test('a V1 template produces a plan the workspace can render', async () => {
+    const h = await setupHarness('templates-v1-items');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+
+      // Every built-in is a V1 template: phases + docs, no `items`.
+      // Before Phase 29 §4.10 this produced 0 plan_items, 11 docs and
+      // 6 phases — and the V2 workspace renders plan_items and nothing
+      // else (no component reads planDocs at all), so the plan showed
+      // its empty state with all 17 pieces of content invisible.
+      //
+      // Latent until the picker gave built-in templates a desktop
+      // surface. This is the assertion that keeps it closed.
+      const plan = await h.client.createPlanFromTemplate({
+        templateId: 'mass-refactor',
+        projectPath: h.fixture.projectPath,
+      });
+
+      const itemsRes = await h.client.raw('GET', `/api/plans/${plan.uid}/items`);
+      expect(itemsRes.ok).toBe(true);
+      const items = await itemsRes.json() as Array<{
+        uid: string; kind: string; title: string; template: string | null;
+      }>;
+
+      // The migrator maps documents → Objects and phases → Actions
+      // (template='phase'), so both halves have to arrive.
+      expect(items.length).toBeGreaterThan(0);
+      expect(items.some((i) => i.kind === 'object')).toBe(true);
+      expect(items.some((i) => i.kind === 'action' && i.template === 'phase')).toBe(true);
+
+      // Nothing is lost on the way: one item per legacy row.
+      const docs = await (await h.client.raw('GET', `/api/plans/${plan.uid}/docs`)).json() as unknown[];
+      const phases = await (await h.client.raw('GET', `/api/plans/${plan.uid}/phases`)).json() as unknown[];
+      expect(items.filter((i) => i.kind === 'object').length).toBe(docs.length);
+      expect(items.filter((i) => i.template === 'phase').length).toBe(phases.length);
+
+      // Uids are preserved by the migrator, which is what keeps
+      // attachments and comments resolving — assert it rather than
+      // trusting the doc comment.
+      const docUids = new Set((docs as Array<{ uid: string }>).map((d) => d.uid));
+      for (const uid of docUids) {
+        expect(items.some((i) => i.uid === uid)).toBe(true);
+      }
     } finally {
       await h.teardown();
     }

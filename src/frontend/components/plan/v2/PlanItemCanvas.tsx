@@ -18,6 +18,7 @@ import { PlanGitContextChip } from './PlanGitContextChip';
 import { PlanBudgetChip } from './PlanBudgetChip';
 import { PlanTicketSyncChip } from './PlanTicketSyncChip';
 import { PlanSyncChip } from './PlanSyncChip';
+import { PlanVersionHistory } from './PlanVersionHistory';
 import { NextUpStrip } from './NextUpStrip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { PlanReviewPanel } from './PlanReviewPanel';
@@ -402,6 +403,7 @@ function PlanHomePage() {
   const [description, setDescription] = useState(plan?.description ?? '');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showPublishTemplate, setShowPublishTemplate] = useState(false);
+  const [showPlanHistory, setShowPlanHistory] = useState(false);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -497,6 +499,20 @@ function PlanHomePage() {
                   WebSocket hook has been listening for its events the
                   whole time. See PlanSyncChip. */}
               <PlanSyncChip plan={plan} />
+              {/* Phase 29 §4.8 — plan_versions has had a row per edit
+                  since Phase 3 and no reader. Its sibling
+                  plan_item_versions was already surfaced by
+                  PlanItemHistoryDrawer; this is the plan-level half.
+                  Distinct from the History rail in the shell header,
+                  which time-travels git commits. */}
+              <button
+                onClick={() => setShowPlanHistory(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] text-[12.5px] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-white/[0.04] transition-colors"
+                title="This plan's revision history — title, status and description over time"
+              >
+                <History size={11} />
+                Revisions
+              </button>
               {/* Phase 29 — PublishTemplateModal was written in Phase 13
                   and never imported by anything. Publishing only makes
                   sense once the plan has a shape worth reusing, so the
@@ -629,6 +645,14 @@ function PlanHomePage() {
         </div>
       </div>
       {showImportModal && <PlanImportModal onClose={() => setShowImportModal(false)} />}
+
+      {showPlanHistory && (
+        <PlanVersionHistory
+          planUid={plan.uid}
+          planTitle={plan.title}
+          onClose={() => setShowPlanHistory(false)}
+        />
+      )}
 
       {/* Phase 29 §4.10 — writes <project>/.codetrellis/templates/<id>/,
           which is exactly the bucket PlanTemplatePicker lists first. */}

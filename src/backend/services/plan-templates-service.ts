@@ -18,6 +18,7 @@ import { createPlanDocument } from './plan-documents-service';
 import { updateTask } from './plan-service';
 import { getTasksByPlan } from './plan-service';
 import * as planItemService from './plan-item-service';
+import { migratePlan } from './plan-migrate-service';
 import { getTemplate, substitutePlaceholders } from './plan-templates';
 
 export interface ApplyTemplateInput {
@@ -256,12 +257,30 @@ function applyV1Template(
     if (d.key) docByKey.set(d.key, created);
   }
 
+  // 5. Project the legacy rows into `plan_items`.
+  //
+  // Measured, not assumed: before this call, `mass-refactor` produced
+  // 0 items, 11 docs and 6 phases. The V2 workspace renders `plan_items`
+  // and nothing else — no component reads `planDocs` at all — so every
+  // one of those 17 pieces of content was invisible and the plan showed
+  // the "this plan is empty" state. Phase 29 §4.10 gave built-in
+  // templates a desktop surface, which is what turned that from a
+  // latent mismatch into something a user would hit on their first
+  // click.
+  //
+  // This reuses Phase 15's migrator rather than mapping phases and docs
+  // to items a second time here. Two implementations of "what a V1 plan
+  // looks like as items" would be exactly the drift this phase keeps
+  // finding, and that one is idempotent, preserves uids, and is already
+  // covered by `scripts/smoke-plan-migrate.ts`.
+  migratePlan(plan.uid, { dryRun: false, author, authorType });
+
   return {
     plan,
     phases,
     docs,
     tasks: getTasksByPlan(plan.uid),
-    items: [],
+    items: planItemService.listAllItems(plan.uid),
     version: 1,
   };
 }

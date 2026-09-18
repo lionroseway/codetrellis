@@ -38,10 +38,22 @@ export function countBlocked(items: PlanItem[]): number {
   ).length;
 }
 
+/**
+ * The endpoint answers with a PlanItem for a V2 plan and a legacy Task
+ * for a V1 one, and those name the same thing differently — `title` vs
+ * `description`. A V1 plan with a description and no items renders this
+ * strip (it is not "empty"), so reading `title` alone would print
+ * "Next up: untitled" for every legacy plan.
+ */
+export function labelOf(next: { title?: string; description?: string }): string {
+  const label = next.title?.trim() || next.description?.trim();
+  return label || 'untitled';
+}
+
 export function NextUpStrip({ planUid }: { planUid: string }) {
   const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
   const selectItem = usePlanItemsStore((s) => s.selectItem);
-  const [next, setNext] = useState<PlanItem | null>(null);
+  const [next, setNext] = useState<(Partial<PlanItem> & { description?: string }) | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   const items = useMemo(() => Object.values(itemsByUid), [itemsByUid]);
@@ -50,7 +62,7 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
     try {
       const res = await fetch(`/api/plans/${planUid}/next-task`);
       if (!res.ok) return;
-      const data = await res.json() as PlanItem | { none: true };
+      const data = await res.json() as (Partial<PlanItem> & { description?: string }) | { none: true };
       setNext('none' in data ? null : data);
     } catch {
       setNext(null);
@@ -88,7 +100,7 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
 
   return (
     <button
-      onClick={() => selectItem(next.uid)}
+      onClick={() => { if (next.uid) selectItem(next.uid); }}
       className="w-full flex items-center gap-2 px-3.5 py-2 rounded-lg border border-accent/20 bg-accent/[0.05] hover:bg-accent/[0.09] hover:border-accent/35 text-left transition-colors group"
     >
       <Zap size={12} className="text-accent shrink-0" />
@@ -96,7 +108,7 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
         Next up
       </span>
       <span className="text-[12.5px] text-foreground truncate">
-        {next.title || 'untitled'}
+        {labelOf(next)}
       </span>
       {blocked > 0 && (
         <span className="text-[11px] text-foreground-subtle shrink-0">

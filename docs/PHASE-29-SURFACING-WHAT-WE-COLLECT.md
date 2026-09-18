@@ -372,18 +372,19 @@ and REST only.
 
 - *Shipped as one piece with 4.13* — `components/plan/v2/PlanReviewPanel.tsx`.
 
-### 4.8 ☐ Plan / item / document version history
+### 4.8 ☑ Plan / item / document version history — **sized wrong; see §5**
 
 `plan_versions`, `plan_item_versions` and `plan_document_versions` — three
 tables of history with no timeline to read them.
 
-This is the largest latent **feature** in the register rather than a
-polish item.
+Filed as the largest latent **feature** in the register. It was not,
+and the estimate was wrong because it counted three tables without
+checking what each one was for. One was already surfaced, one is
+history of a model the product replaced, and only the third needed
+building. §5 has the sizing and the design decisions.
 
-- *Effort*: large.
-- **Wanted** (answered 2026-09-18). Sized and designed in §6 rather than
-  smuggled in as a chip, because it is the one item here that is a
-  feature rather than a wiring job.
+- *Effort*: **small**, not large. **Done** — `PlanVersionHistory.tsx`,
+  reached from a **Revisions** chip in the plan header.
 
 ### 4.9 ☑ Manifest conflicts
 
@@ -478,6 +479,15 @@ Shipped:
   Built-ins were the only thing tested and also the only thing that was
   ever reachable. Verified to fail on a planted defect (project dir
   dropped from `collectTemplates`).
+
+**This item was wrong until §5 fixed it.** Giving built-in templates a
+desktop surface exposed that `applyV1Template` created zero
+`plan_items`, so a plan made from any built-in opened on its "this plan
+is empty" state with all of its content in tables nothing renders.
+Measured at 0 items / 11 docs / 6 phases for `mass-refactor`. See §5 —
+it is recorded there because it is not a *surfacing* gap, it is the
+template applier and the renderer disagreeing about what a plan is made
+of.
 
 **Open product decision — not taken here.** There are now two template
 systems and they overlap:
@@ -628,11 +638,154 @@ to fail against the old V1-only implementation.
 
 - *Deliberate?* **Answered: no.** **Done.**
 
-### 4.15 — add here
+### 4.15 ☐ Re-run of §2, 2026-09-18 — **the write is missing, not the read**
+
+Run at the end of this phase, on 174 endpoints. Both passes, union
+taken, each hit confirmed by hand as §2 requires. It turned up a second
+batch, and it has a shape the first run could not have seen:
+
+**For several features the view is surfaced and the action is not.**
+
+| Surfaced | Not surfaced |
+|---|---|
+| `GET /api/contributions` (`ContributionPanel`) | `POST /api/contributions/accept`, `/promote` |
+| `GET /api/trellis/snapshots`, `/:id`, `/:id/diff` (`MainCanvas`) | `POST /api/trellis/capture` |
+| `/api/audio/status`, `/start`, `/chunk` (`AudioCaptureBar`) | `GET /api/audio/recent` |
+| item and task reads | `POST /api/items/:uid/claim`, `/plans/:uid/tasks/:taskUid/claim` |
+
+You can look at trellis snapshots but not take one. You can see
+contributions but not accept one. That is a different failure from
+"this whole feature is MCP-only", and neither §2 pass distinguishes
+them — both match on a path stem or a last segment, and
+`/api/contributions` matching the frontend marks the whole family as
+seen. **Add a third check: for each surfaced `GET`, is its sibling
+write surfaced too?**
+
+Still to classify (some are very likely deliberate — `/api/health` is
+a liveness probe, `/api/peers/push-tokens` is registered by the mobile
+client, `/api/git/head` duplicates data `/api/git/status` already
+returns):
+
+`/api/contributor-branch`, `/api/presence/cards`,
+`/api/sensors/doc-check`, `/api/sync/peek`, `/api/pantry/resolve`,
+`/api/logs/path`, `/api/channels/:eventUid/thread`,
+`/api/plans/:uid/docs/by-type/:docType`, `/api/health`,
+`/api/peers/push-tokens`, `/api/git/head`, `/api/cross-system`
+(prefix artefact — `MainCanvas` calls it).
+
+**Not worked in this phase.** These are newly identified and have had
+no deliberate-or-not pass, which §2 says is the step the audit cannot
+do for you. Recorded here so the next run starts from a list rather
+than a fresh grep.
 
 Re-run §2 after any phase that adds a service or an endpoint.
 
-## 5. Done when
+## 5. Version history — what it actually was
+
+4.8 was filed as the one real feature in this register and sized
+"large". That estimate counted three tables named `*_versions` and
+assumed three jobs. Checking what each was for turned it into a small
+one:
+
+| Table | State | What happened |
+|---|---|---|
+| `plan_item_versions` | **Already surfaced** | `PlanItemHistoryDrawer` (Phase 15 §15.D) lists versions and events and restores through `POST /api/items/:uid/restore-version/:version`. Reachable from the History button on any item. The register never checked. |
+| `plan_versions` | **Built here** | `PlanVersionHistory.tsx`, from a **Revisions** chip in the plan header. |
+| `plan_document_versions` | **Dead model** | See below. |
+
+The lesson is the same one §2 keeps relearning: **an endpoint with no
+caller is a candidate, not a finding.** Three tables looked like three
+gaps; one was already done and one had nothing left to be history *of*.
+
+### `plan_document_versions` — history of something the product replaced
+
+`PlanItem` "replaces `PlanDocument` + `PlanPhase` + `Task` for Phase
+15+", and that migration is complete in practice:
+
+- No component reads `planDocs`. The store has full CRUD for plan
+  documents — `fetchPlanDocs`, `createPlanDoc`, `updatePlanDoc`,
+  `deletePlanDoc` — and **nothing calls any of it.**
+- No MCP tool creates a plan document.
+- The one remaining live producer was `applyV1Template`, and it now
+  projects its rows into `plan_items` immediately (see below).
+
+So a version viewer for plan documents would be the second floor of a
+building with no first floor. Recorded rather than built. If plan
+documents ever come back as a first-class thing, their history is
+waiting; until then, items carry it.
+
+### The thing this turned up: V1 templates rendered as empty plans
+
+Not a version-history problem, but found chasing one, and it made
+§4.10 wrong until it was fixed.
+
+Every built-in template is V1 — `phases` + `docs`, no `items`.
+`applyV1Template` created tasks, phases and documents and **zero**
+`plan_items`. The V2 workspace renders `plan_items` and nothing else.
+Measured: `mass-refactor` produced **0 items, 11 docs, 6 phases** — so
+the plan opened on its "this plan is empty" state with all seventeen
+pieces of content invisible.
+
+That was latent for as long as templates were MCP-only. §4.10 gave
+built-in templates a desktop surface, which turned it into the first
+thing a user would hit.
+
+The fix calls Phase 15's `migratePlan(planUid, { dryRun: false })`
+rather than mapping phases and docs to items a second time inside the
+template service. Two implementations of "what a V1 plan looks like as
+items" is the drift this phase exists to find; the migrator is
+idempotent, preserves uids so attachments and comments still resolve,
+and already has a smoke script.
+
+One consequence worth stating: `exportPlan` switches to the V2
+`items/` layout as soon as a plan has items, so template-created plans
+now export in that layout. Two existing tests read `docs/` off an
+export to check placeholder substitution and broke. They were rewritten
+to ask the API for phases and docs directly — which is what they meant
+to assert — rather than routing through an export layout that can
+legitimately change.
+
+### One column, two shapes
+
+Writing the reader immediately turned up a producer disagreement, which
+is what a reader is for.
+
+`updatePlan` has always written the bare plan object as a snapshot.
+`createPlan` wrote `{ plan, tasks }` for v1. One column, two shapes,
+and nothing checking they agreed — because until now nothing read the
+column at all.
+
+It only becomes visible once something diffs consecutive snapshots:
+v2 against v1 compared a plan to a wrapper, so `before.title` was
+`undefined` and **a plan's first edit reported every tracked field as
+changed from nothing**.
+
+Fixed on both sides, and both halves are needed:
+
+- `createPlan` now writes the bare plan, so the two writers agree from
+  here on.
+- `parseSnapshot` unwraps `{ plan }` when it sees it, because rows in
+  databases people already have still carry the wrapper. Fixing only
+  the writer would leave every existing plan's first edit rendering
+  wrongly.
+
+The e2e test asserts v1's snapshot has no `plan` key, which is what
+holds the two writers together.
+
+### Why plan history is read-only
+
+Items have a restore endpoint. Plans do not. This shows what changed
+and when, and stops there. Adding rollback would mean either a Restore
+button that silently does nothing, or writing plan mutation logic in a
+drawer instead of in the service that owns it. Both are worse than the
+honest answer, and a restore endpoint for plans is its own change.
+
+What the drawer adds over a bare list is the diff. A `changeSummary`
+reading `"title, status updated"` names the fields that moved but not
+what they moved to — and the snapshots have had the answer in them the
+whole time.
+
+## 6. Done when
 
 - Every item is ticked or ruled out with a reason.
 - **What remains needs a developer machine and nothing else.** The point
@@ -642,6 +795,28 @@ Re-run §2 after any phase that adds a service or an endpoint.
 - No surface added here is louder than `StatusBar`.
 - The §2 audit is part of what gets run when a phase adds an endpoint, so
   this register does not silently refill.
+
+### Status, 2026-09-18
+
+**4.1 – 4.14 are closed** — twelve built, two ruled out with a reason
+(4.6 was already surfaced, 4.12 is deliberate). Nothing from the
+original register is open.
+
+Two things qualify that, and neither is hand-waving:
+
+1. **4.15 is a fresh batch**, from re-running §2 at the end of the
+   phase. It is unworked and deliberately so: those endpoints have had
+   no deliberate-or-not pass, which is the one step §2 says the audit
+   cannot do for you. It is a list rather than a grep, which is what
+   this section asks for.
+2. **The register refilled, which is the system working.** The bullet
+   above asks that it not refill *silently*. It did not: the re-run is
+   recorded, with the blind spot that hid this batch named (a surfaced
+   `GET` marks its whole path family as seen, so a missing sibling
+   write is invisible to both passes).
+
+So the handover list below is still the whole of what needs the dev
+machine, and it has not grown.
 
 ### Known to need the dev machine
 

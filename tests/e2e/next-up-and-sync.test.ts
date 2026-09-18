@@ -138,6 +138,10 @@ test.describe('Next up + shared/local', () => {
       // V1 tasks carry `description`, not `title` — proving the
       // fallback returned a Task and not a PlanItem.
       expect((next as unknown as { description: string }).description).toBe('Legacy task one');
+      // And the strip has to cope with that shape: a V1 plan with a
+      // description but no items is not "empty", so it renders, and
+      // reading `title` alone would print "untitled".
+      expect((next as unknown as { title?: string }).title).toBeUndefined();
     } finally {
       await h.teardown();
     }

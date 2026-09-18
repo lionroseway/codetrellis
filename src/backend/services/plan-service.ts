@@ -124,11 +124,22 @@ export function createPlan(
     scope: [],
   };
 
-  // Version 1
+  // Version 1.
+  //
+  // The snapshot is the bare plan, matching what `updatePlan` writes
+  // for every subsequent version. It used to be `{ plan, tasks }` —
+  // one column, two shapes, nothing checking they agreed. Phase 29
+  // §4.8 gave `plan_versions` a reader that diffs each snapshot
+  // against the one before it, and v2-against-v1 compared a bare plan
+  // to a wrapper, so every tracked field looked like it had changed
+  // from nothing on a plan's first edit.
+  //
+  // Rows written before this still carry the wrapper, so the reader
+  // unwraps it rather than relying on this fix alone.
   db.run(
     `INSERT INTO plan_versions (plan_uid, version, snapshot, change_summary, author, created_at)
      VALUES (?, 1, ?, 'Plan created', ?, ?)`,
-    [uid, JSON.stringify({ plan, tasks }), author, now]
+    [uid, JSON.stringify(plan), author, now]
   );
 
   markDirty();
