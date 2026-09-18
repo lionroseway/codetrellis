@@ -98,13 +98,28 @@ export function buildPlaybackSequence(params: {
       if (c.kind === 'checkpoint') return params.includeCheckpoints !== false;
       return false;
     })
-    .map((c) => ({ ...c, timestamp: times.get(c.spec) ?? null }));
+    // A commit's time comes from git; a checkpoint carries its own.
+    .map((c) => ({ ...c, timestamp: times.get(c.spec) ?? c.timestamp ?? null }));
 
   // `listComparands` returns commits newest-first; playback runs the
   // other way.
   points.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
 
-  const ordered = [...points.slice(-limit), { spec: 'live', label: 'Live (working tree)', kind: 'live', timestamp: null }];
+  // Trim COMMITS to the limit, not the sequence. Slicing the whole list threw
+  // away whatever sorted earliest, and checkpoints sorted earliest precisely
+  // because they had no timestamp — so `includeCheckpoints` defaulted to true
+  // and produced no checkpoint frames on any repo with `limit` commits, with
+  // nothing said about the ones dropped.
+  const commits = points.filter((p) => p.kind === 'commit');
+  const keptCommits = new Set(commits.slice(-limit).map((p) => p.spec));
+  const kept = points.filter((p) => p.kind !== 'commit' || keptCommits.has(p.spec));
+  if (commits.length > keptCommits.size) {
+    notes.push(
+      `Showing the ${keptCommits.size} most recent commits of ${commits.length}; raise \`limit\` for more.`,
+    );
+  }
+
+  const ordered = [...kept, { spec: 'live', label: 'Live (working tree)', kind: 'live', timestamp: null }];
 
   const frames: PlaybackFrame[] = [];
   let previous: ReturnType<typeof resolveComparand> = null;

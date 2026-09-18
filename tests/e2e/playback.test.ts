@@ -76,7 +76,18 @@ test.describe('Fast-forward (Phase 26)', () => {
       expect(seq.frames.length).toBeGreaterThanOrEqual(3);
 
       // "Fast-forward" only means anything if forward is later.
-      const times = seq.frames.map((f) => f.timestamp).filter((t): t is number => t !== null);
+      //
+      // Only `live` is allowed to have no timestamp — it is the present. This
+      // used to filter out every null before comparing, which removed exactly
+      // the frames that were mis-ordered: checkpoints carried no time, sorted
+      // to epoch 0, and landed in front of commits from months earlier. The
+      // assertion passed throughout.
+      const historical = seq.frames.filter((f) => f.spec !== 'live');
+      expect(
+        historical.every((f) => f.timestamp !== null),
+        'every frame but live must carry a time: ' + JSON.stringify(historical.map((f) => [f.spec, f.timestamp])),
+      ).toBe(true);
+      const times = historical.map((f) => f.timestamp as number);
       const sorted = [...times].sort((a, b) => a - b);
       expect(times).toEqual(sorted);
 
@@ -164,6 +175,41 @@ test.describe('Fast-forward (Phase 26)', () => {
       const seq = await playback(h, '&limit=3');
       // limit commits, plus the live frame.
       expect(seq.frames.length).toBeLessThanOrEqual(4);
+    } finally {
+      await h.teardown();
+    }
+  });
+});
+
+test.describe('Checkpoints in the sequence (M1)', () => {
+  test.setTimeout(120_000);
+
+  test('a checkpoint is placed by its own time, not at the beginning', async () => {
+    const h = await setupHarness('playback-checkpoint-order');
+    try {
+      commitChange(h.fixture.projectPath, 'packages/shared/src/types.ts', '\nexport type A = 1;\n', 'second');
+      await h.client.scanProject(h.fixture.projectPath);
+
+      // Capture a checkpoint NOW — later than every commit in the fixture.
+      const cap = await h.client.raw('POST', '/api/trellis/capture', {
+        projectPath: h.fixture.projectPath,
+        name: 'after the commits',
+      });
+      expect(cap.ok).toBe(true);
+
+      const seq = await playback(h);
+      const checkpoint = seq.frames.find((f) => f.spec.startsWith('checkpoint:'));
+
+      // includeCheckpoints defaults to true, and on a repo with enough commits
+      // the checkpoint used to be trimmed off the front and never appear.
+      expect(checkpoint, 'the checkpoint appears in the sequence').toBeTruthy();
+      expect(checkpoint!.timestamp, 'it carries its own createdAt').not.toBeNull();
+
+      // It was taken after the commits, so it belongs after them.
+      const commits = seq.frames.filter((f) => f.spec.startsWith('commit:'));
+      for (const c of commits) {
+        expect(checkpoint!.timestamp!).toBeGreaterThanOrEqual(c.timestamp!);
+      }
     } finally {
       await h.teardown();
     }

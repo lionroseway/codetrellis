@@ -1,4 +1,6 @@
 import { listAllItems } from './plan-item-service';
+import { projectRelative } from './trusted-roots';
+import path from 'node:path';
 import { compareSnapshots, type ComparisonResult } from './snapshot-compare-service';
 import { formatCost } from './pricing';
 import { getBudgetReport } from './budget-service';
@@ -68,8 +70,23 @@ function covers(target: string, changed: string): boolean {
   return c.startsWith(t.endsWith('/') ? t : `${t}/`);
 }
 
-function targetsOf(item: PlanItem): string[] {
-  return (item.fileSpecs ?? []).map((f) => f.path).filter(Boolean);
+/**
+ * An item's declared file targets, project-relative.
+ *
+ * The UI writes ABSOLUTE paths into fileSpecs — `/api/scan` returns a file tree
+ * built with `path.join(dirPath, entry.name)`, and the mention picker passes
+ * that straight through — while a changed file is project-relative. `normalise`
+ * only strips a leading slash, so `/Users/me/proj/src/a.ts` became
+ * `users/me/proj/src/a.ts` and could never equal `src/a.ts`. Every target
+ * declared through the standard route read as untouched, and the absolute path
+ * (with the developer's home directory in it) was then printed verbatim into
+ * the PR description.
+ */
+function targetsOf(item: PlanItem, projectPath: string): string[] {
+  return (item.fileSpecs ?? [])
+    .map((f) => f.path)
+    .filter(Boolean)
+    .map((t) => (path.isAbsolute(t) ? projectRelative(projectPath, t) || t : t));
 }
 
 function edgeKey(source: string, target: string): string {
@@ -108,7 +125,7 @@ export function reviewPlan(params: {
   const items = listAllItems(params.planUid);
 
   const reviewed: ReviewedItem[] = items.map((item) => {
-    const targets = targetsOf(item);
+    const targets = targetsOf(item, params.projectPath);
     if (targets.length === 0) {
       return {
         uid: item.uid,
@@ -134,7 +151,7 @@ export function reviewPlan(params: {
   });
 
   // Every declared target across the plan, for the unclaimed check.
-  const allTargets = items.flatMap(targetsOf);
+  const allTargets = items.flatMap((i) => targetsOf(i, params.projectPath));
   const unclaimedChanges = changedFiles.filter((f) => !allTargets.some((t) => covers(t, f)));
 
   // Planned connections, in both directions.

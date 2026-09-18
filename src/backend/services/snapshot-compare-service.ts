@@ -237,7 +237,19 @@ export function resolveComparand(spec: string, projectPath: string): ResolvedCom
 
   if (spec.startsWith('commit:')) {
     const ref = spec.slice('commit:'.length);
-    const snapshot = commitSnapshot(projectPath, ref);
+    // `commitSnapshot` calls `assertSafeGitRef`, which THROWS. This function's
+    // contract is to return null for anything that does not resolve, and every
+    // caller branches on the result rather than catching — `compareSnapshots`,
+    // the /api/compare route, `review.get` over peer RPC, the review tools. So
+    // a ref like `--upload-pack=…` produced a 500 "Internal server error" where
+    // the neighbouring `commit:deadbeef` produced a clean 404 with a reason.
+    // Refusing input is not an internal error, and saying so is more useful.
+    let snapshot: GraphSnapshot | null;
+    try {
+      snapshot = commitSnapshot(projectPath, ref);
+    } catch {
+      return null;
+    }
     if (!snapshot) return null;
     return { spec, label: `Commit ${ref}`, snapshot, edgesKnown: false };
   }
@@ -246,15 +258,27 @@ export function resolveComparand(spec: string, projectPath: string): ResolvedCom
 }
 
 /** Everything a picker needs to offer. */
-export function listComparands(projectPath: string): Array<{ spec: string; label: string; kind: string }> {
-  const out: Array<{ spec: string; label: string; kind: string }> = [
+export function listComparands(
+  projectPath: string,
+): Array<{ spec: string; label: string; kind: string; timestamp?: number }> {
+  const out: Array<{ spec: string; label: string; kind: string; timestamp?: number }> = [
     { spec: 'live', label: 'Live (working tree)', kind: 'live' },
   ];
 
   if (getBaseline()) out.push({ spec: 'baseline', label: 'Baseline', kind: 'baseline' });
 
   for (const snap of listSnapshots()) {
-    out.push({ spec: `checkpoint:${snap.id}`, label: snap.name, kind: 'checkpoint' });
+    // `createdAt` is on the row already and was simply not carried. Without it
+    // playback had no time for a checkpoint, sorted every one to epoch 0, and
+    // then trimmed them off the front — so a checkpoint taken minutes ago was
+    // presented as predating commits from months earlier, and on any repo with
+    // `limit` commits it vanished from the sequence entirely.
+    out.push({
+      spec: `checkpoint:${snap.id}`,
+      label: snap.name,
+      kind: 'checkpoint',
+      timestamp: snap.createdAt,
+    });
   }
 
   // Recent commits, so the common case needs no typing.

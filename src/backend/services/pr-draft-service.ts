@@ -97,7 +97,18 @@ export function buildPrDraft(params: {
   const plan = getPlan(params.planUid);
   if (!plan) return { ok: false, error: `Plan ${params.planUid} not found` };
 
-  if (params.before) assertSafeGitRef(params.before.replace(/^commit:/, ''), 'PR draft base');
+  // Only a commit spec carries a git ref. SAFE_REF forbids colons by design,
+  // so validating every `before` rejected `checkpoint:1` and `baseline` — the
+  // two comparands that are not refs at all — and threw out of a function whose
+  // every other failure returns { ok: false }. "Copy PR description" was a
+  // silent no-op against a checkpoint, with a 500 behind it.
+  if (params.before?.startsWith('commit:')) {
+    try {
+      assertSafeGitRef(params.before.slice('commit:'.length), 'PR draft base');
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
 
   const items = listAllItems(params.planUid);
   const planRefs = getPlanExternalRefs(params.planUid);
