@@ -396,14 +396,38 @@ authoring feature, MCP-only.
 - *Effort*: medium.
 - *Deliberate?* **Answered: no.** To be surfaced.
 
-### 4.11 ☐ Update download progress
+### 4.11 ☑ Update download — **not a small item after all**
 
-`/api/updates/download`, `/api/updates/download/status` and
-`/api/updates/download/cancel`. The UI can check for an update but cannot
-show the download or cancel it.
+Filed as "progress in the existing update affordance". It is not that.
 
-- *Shape*: progress in the existing update affordance.
-- *Effort*: small.
+`update-download-service.ts` is **Phase 19, finding 23**. It fetches the
+bytes itself, pins the host on *every* redirect hop, and verifies the
+file against `SHA256SUMS` plus a detached Ed25519 signature whose public
+key ships in the app — deliberately taking GitHub out of the trust chain,
+because a digest served by the same place as the file proves the bytes
+arrived intact, not that they are ours. A release without a valid signed
+manifest is refused outright rather than falling back to the API's digest.
+
+**Nothing ever called it.** Settings offered a bare browser link, so
+every update this application has ever shipped was applied **unverified**
+while the app carried a complete verified path it never mentioned. That
+is a security control that shipped without a way to invoke it — not a
+missing progress bar.
+
+- *Shipped*: `components/settings/VerifiedUpdateDownload.tsx` replacing
+  the link, plus an `updates:reveal` IPC so the flow can end where the
+  service intends (it does not install; on macOS a DMG is revealed and
+  the user drags it).
+- *Security note*: the reveal IPC takes **no path**. The main process
+  reads it from the download service's state, which only ever holds one
+  after verification — a renderer-supplied path would have made it an
+  arbitrary "open anything in Finder" primitive.
+- *Copy discipline*: verification proves **these are the bytes the
+  release published**, not that they are trustworthy. The UI says
+  "verified against the signed manifest", never "safe".
+- *The browser link stays*, labelled unverified. A release without a
+  signed manifest is refused by design and that refusal must not become
+  a dead end.
 
 ### 4.12 ⊘ `symbols.parent_symbol_id`
 

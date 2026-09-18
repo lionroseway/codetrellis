@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
+import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
 
 // --- Per-device access (Phase 19, finding 15) -------------------------------
@@ -1686,28 +1687,26 @@ function UpdatesSection() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Phase 29 — this used to be a bare browser link, which meant
+              every update this app has ever shipped was applied
+              unverified while it carried a complete verified download
+              path (Phase 19, finding 23) that nothing invoked. */}
+          <VerifiedUpdateDownload
+            latestVersion={result.latest}
+            browserUrl={result.download.url}
+            filename={result.download.filename}
+          />
+          {result.releaseNotes?.url && (
             <a
-              href={result.download.url}
+              href={result.releaseNotes.url}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium rounded-lg bg-accent/20 border border-accent/50 text-accent hover:bg-accent/30 transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
             >
-              <Download size={12} />
-              Download {result.download.filename}
+              Release notes
+              <ExternalLink size={11} />
             </a>
-            {result.releaseNotes?.url && (
-              <a
-                href={result.releaseNotes.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
-              >
-                Release notes
-                <ExternalLink size={11} />
-              </a>
-            )}
-          </div>
+          )}
           {result.download.size !== undefined && (
             <div className="text-[10px] text-foreground-subtle font-mono pl-12">
               {formatBytes(result.download.size)}

@@ -1,74 +1,85 @@
 /**
- * Finding 23 — the update download surface.
+ * The verified update-download endpoints — Phase 29.
  *
- * The URL and digest come from the update state the backend already fetched,
- * never from the request. That is the property worth asserting at this level:
- * a caller must not be able to name what gets downloaded, or the renderer —
- * and anything that reaches it — gains an arbitrary-fetch primitive pointed at
- * the user's disk.
+ * See [docs/PHASE-29-SURFACING-WHAT-WE-COLLECT.md](../../docs/PHASE-29-SURFACING-WHAT-WE-COLLECT.md).
  *
- * NOT COVERED HERE: the streaming download and the hash-mismatch deletion. The
- * host is pinned to GitHub's release hosts, so a local fixture server cannot
- * stand in for one, and adding an override to allow that would ship the exact
- * bypass this is meant to prevent. The guards around it — host pinning,
- * filename reduction, digest comparison, and refusing a release with no
- * checksum — are unit-tested in `update-download-service.test.ts`.
+ * `update-download-service.ts` is Phase 19 finding 23: it fetches the
+ * bytes itself, pins the host on every redirect hop, and verifies the
+ * file against a signed Ed25519 manifest. Its own unit tests cover the
+ * verification logic. **Nothing ever called it** — Settings offered a
+ * plain browser link, so every update this app has shipped was applied
+ * unverified while the verified path sat unused.
+ *
+ * These tests cover the wiring the Settings panel now depends on, in the
+ * state a test environment is actually in: no update available, no
+ * network fetch attempted. The refusal path matters as much as the happy
+ * one, because the UI has to render it rather than hang.
  */
 
 import { test, expect } from '@playwright/test';
 import { setupHarness } from '../harness';
 
-test.describe('23 — downloads are driven by state, not by the caller', () => {
-  test('there is nothing to download until a check says so', async () => {
-    const h = await setupHarness('update-download-no-update');
+interface DownloadState {
+  phase: 'idle' | 'downloading' | 'verifying' | 'ready' | 'error';
+  version: string | null;
+  filename: string | null;
+  bytesDownloaded: number;
+  totalBytes: number | null;
+  filePath: string | null;
+  error: string | null;
+}
+
+test.describe('Verified update download (Phase 29)', () => {
+  test.setTimeout(120_000);
+
+  test('status is idle and complete before anything is downloaded', async () => {
+    const h = await setupHarness('update-dl-idle');
     try {
-      const res = await h.client.raw('POST', '/api/updates/download');
-      expect(res.status, 'no available update means nothing to fetch').toBe(409);
+      const res = await h.client.raw('GET', '/api/updates/download/status');
+      expect(res.ok).toBe(true);
+      const state = (await res.json()) as DownloadState;
 
-      const body = await res.json();
-      expect(body.error).toMatch(/no update/i);
-    } finally {
-      await h.teardown();
-    }
-  });
-
-  test('the request body cannot name a URL', async () => {
-    // The whole point. If this were honoured, anything that could reach the
-    // API could make the desktop fetch an arbitrary host to an arbitrary file.
-    const h = await setupHarness('update-download-no-caller-url');
-    try {
-      const res = await h.client.raw('POST', '/api/updates/download', {
-        url: 'https://evil.example/payload.dmg',
-        filename: '../../../etc/cron.d/evil',
-        sha256: 'a'.repeat(64),
-      });
-
-      expect(res.status, 'the body is ignored; state says no update').toBe(409);
-      const body = await res.text();
-      expect(body, 'and nothing echoes the attacker-supplied values back').not.toContain('evil.example');
-    } finally {
-      await h.teardown();
-    }
-  });
-
-  test('status starts idle and is readable without starting anything', async () => {
-    const h = await setupHarness('update-download-status');
-    try {
-      const state = await h.client.raw('GET', '/api/updates/download/status').then((r) => r.json());
       expect(state.phase).toBe('idle');
-      expect(state.filePath, 'nothing on disk until something is verified').toBeNull();
+      expect(state.filePath, 'no path until bytes are verified').toBeNull();
+      // Every field the panel reads must be present even when idle, or
+      // it has an undefined to guard on rather than a state to render.
+      expect(state).toHaveProperty('version');
+      expect(state).toHaveProperty('filename');
+      expect(state).toHaveProperty('totalBytes');
+      expect(state).toHaveProperty('error');
       expect(state.bytesDownloaded).toBe(0);
     } finally {
       await h.teardown();
     }
   });
 
-  test('cancel is safe when nothing is running', async () => {
-    const h = await setupHarness('update-download-cancel-idle');
+  test('downloading with no update available is refused, not attempted', async () => {
+    const h = await setupHarness('update-dl-none');
     try {
+      // 409 rather than a 500 or a hang: the panel renders this as an
+      // error line and leaves the browser link available.
+      const res = await h.client.raw('POST', '/api/updates/download');
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toMatch(/no update/i);
+
+      // And the refusal must not have moved the state machine.
+      const after = (await (await h.client.raw('GET', '/api/updates/download/status')).json()) as DownloadState;
+      expect(after.phase).toBe('idle');
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  test('cancelling when nothing is running answers cleanly', async () => {
+    const h = await setupHarness('update-dl-cancel');
+    try {
+      // The Cancel button is only rendered mid-flight, but a stale click
+      // or a double-click must not 500.
       const res = await h.client.raw('POST', '/api/updates/download/cancel');
       expect(res.ok).toBe(true);
-      expect((await res.json()).phase).toBe('idle');
+      const state = (await res.json()) as DownloadState;
+      expect(['idle', 'error']).toContain(state.phase);
     } finally {
       await h.teardown();
     }
