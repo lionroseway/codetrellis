@@ -31,8 +31,8 @@ reasoning for it.
 | **23** | [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) | Time and cost per plan item — estimate, actual, forecast, and ceilings as governance | ✅ backend; UI surfaces remain |
 | **24** | [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) | Jira / Linear / issue intake into nested plans, without CodeTrellis holding a credential | ✅ backend; UI chip remains |
 | **25** | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot selection, and architecture play-forward | ◑ comparison + review built; play-forward moved to 26 |
-| **26** | [PHASE-26-CODE-FIRST-SURFACE.md](PHASE-26-CODE-FIRST-SURFACE.md) | Plan overlay on code, a real diff editor, fast-forward, and a mode where the graph never mounts | designed |
-| **27** | [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md) | Ruby (a live bug), C#, then Kotlin and Swift | designed |
+| **26** | [PHASE-26-CODE-FIRST-SURFACE.md](PHASE-26-CODE-FIRST-SURFACE.md) | Plan overlay on code, a real diff editor, fast-forward, and a mode where the graph never mounts | ✅ all four layers |
+| **27** | [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md) | Ruby (a live bug), C#, Kotlin and Swift | ✅ parsers + resolvers; callsite extractors remain |
 
 ## Why 26 and 27 exist
 
@@ -52,10 +52,18 @@ nodes. That is the third instance of "a list that had to be kept in sync
 by hand fell out of sync", which is why 27 also adds a startup assertion
 rather than just another parser.
 
+**What 27 turned out to cost: much less than planned.** Its design
+document blocked Kotlin and Swift behind an Emscripten build toolchain,
+on the strength of checking `tree-sitter-kotlin@0.3.8` and finding no
+wasm. `@tree-sitter-grammars/tree-sitter-kotlin@1.1.0` — the maintained
+package, a different scope — ships one. All four languages landed in one
+pass. The lesson generalises past grammars: **a blocker discovered by
+checking one name is not a blocker yet.**
+
 ## What the work found
 
-Three bugs surfaced that were worse than the features being added, and
-all three shared a shape: **nothing failed, so nothing was noticed.**
+Five bugs surfaced that were worse than the features being added, and
+all five shared a shape: **nothing failed, so nothing was noticed.**
 
 1. **The file-watcher's parseable-extension list had gone stale twice** —
    first for `.py`/`.rs`/`.php`/`.java`, then for `.go`. Each time, edits
@@ -75,9 +83,36 @@ all three shared a shape: **nothing failed, so nothing was noticed.**
    configured retries. They were not flaky; they were starved. The full
    suite went from 40+ minutes to under 9.
 
-The pattern is worth naming, because it will recur: each was a piece of
-state that had to be kept in sync by hand, or a lifecycle that returned
-before it was ready. Neither kind announces itself.
+4. **Nested symbols were written and never read** (found in 27).
+   `insertSymbol` recurses and fills `symbols.parent_symbol_id`, but
+   `getFileSymbols`, both per-file symbol counts and the MCP plan-item
+   lookup all filter on `parent_symbol_id IS NULL`. Only free-text search
+   and the global row count see children — so a nested member was
+   findable in search, absent from its own file, and uncounted. Java was
+   the live casualty: its methods were nested *and* unqualified, so they
+   were invisible per-file and collided with each other in search. The
+   flat qualified form is now the contract (`flattenSymbols`), with a
+   test.
+5. **The syntax highlighter claimed six languages it did not have**
+   (found in 27). `prism-react-renderer` bundles a cut-down Prism;
+   `CodePreview`'s map named `java`, `php`, `ruby`, `bash`, `toml` and
+   `scss`, none of which are in it. A missing grammar renders as one
+   plain token with no error, so Java and PHP had been unhighlighted
+   while the code said otherwise. Every tag is now resolved against the
+   live registry, with a test.
+
+The pattern is worth naming, because it keeps recurring: each was a piece
+of state that had to be kept in sync by hand, or a lifecycle that
+returned before it was ready. Neither kind announces itself.
+
+Five instances is no longer a coincidence, and the counter-move is
+consistent across all five: **derive the second list from the first, or
+assert they agree in a test.** `getParseableExtensions()`,
+`findUnparsedLanguages()`, `flattenSymbols()` and
+`unhighlightablePrismTags()` are all the same move. Any new pairing of
+"a list of languages" with "a list of things that handle them" should
+arrive with one of those, not with a comment asking the next person to
+remember.
 
 ---
 

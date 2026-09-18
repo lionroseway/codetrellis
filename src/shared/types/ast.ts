@@ -7,6 +7,9 @@ export type SupportedLanguage =
   | 'java'
   | 'php'
   | 'ruby'
+  | 'csharp'
+  | 'kotlin'
+  | 'swift'
   /**
    * SQL is not a parser-plugin language — it has no import graph, so it
    * has no resolver and never appears in `parsers/index.ts`. It is here

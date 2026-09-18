@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolverPlugin, ResolveContext } from './base';
+import { pickRepresentativeFile } from './base';
 import type { DiscoveredSystem } from '../../../shared/types';
 
 /**
@@ -44,34 +45,6 @@ interface ModuleEntry {
 // `replace` parsing is keyed by go.mod path + mtime so an edited
 // manifest is picked up on the next scan without a restart.
 const replaceCache = new Map<string, { mtimeMs: number; entries: ModuleEntry[] }>();
-
-/**
- * Directory listing derived from `knownFiles`. Keyed by the Set itself
- * so it is rebuilt once per scan rather than once per import — a big
- * Go monorepo resolves tens of thousands of imports against the same
- * file set.
- */
-const dirIndexCache = new WeakMap<Set<string>, Map<string, string[]>>();
-
-function getDirIndex(knownFiles: Set<string>): Map<string, string[]> {
-  const cached = dirIndexCache.get(knownFiles);
-  if (cached) return cached;
-
-  const index = new Map<string, string[]>();
-  for (const file of knownFiles) {
-    if (!file.endsWith('.go')) continue;
-    const dir = path.dirname(file);
-    const bucket = index.get(dir);
-    if (bucket) bucket.push(file);
-    else index.set(dir, [file]);
-  }
-  // Deterministic order — the representative file for a package must
-  // not depend on filesystem iteration order.
-  for (const bucket of index.values()) bucket.sort();
-
-  dirIndexCache.set(knownFiles, index);
-  return index;
-}
 
 /**
  * `replace github.com/org/x => ../x` and the grouped `replace ( … )`
@@ -145,17 +118,16 @@ function isStdlib(importPath: string): boolean {
  * Go imports a directory. Pick one file to carry the edge: prefer a
  * file named after the package directory (the dominant convention),
  * then any non-test file.
+ *
+ * The directory index this walks is shared with the other
+ * directory-importing languages — see `pickRepresentativeFile`.
  */
 function pickPackageFile(dir: string, knownFiles: Set<string>): string | null {
-  const files = getDirIndex(knownFiles).get(dir);
-  if (!files || files.length === 0) return null;
-
-  const base = path.basename(dir);
-  const preferred = path.join(dir, `${base}.go`);
-  if (files.includes(preferred)) return preferred;
-
-  const nonTest = files.find((f) => !f.endsWith('_test.go'));
-  return nonTest ?? files[0];
+  return pickRepresentativeFile(dir, knownFiles, {
+    extensions: ['.go'],
+    prefer: path.basename(dir),
+    deprioritize: (file) => file.endsWith('_test.go'),
+  });
 }
 
 function resolve(ctx: ResolveContext): string | null {

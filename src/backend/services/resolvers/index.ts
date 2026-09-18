@@ -7,6 +7,9 @@ import { phpResolver } from './php';
 import { javaResolver } from './java';
 import { goResolver } from './go';
 import { rubyResolver } from './ruby';
+import { csharpResolver } from './csharp';
+import { kotlinResolver } from './kotlin';
+import { swiftResolver } from './swift';
 
 /**
  * Registry of every per-language resolver. To add a language: write
@@ -21,6 +24,9 @@ export const RESOLVER_PLUGINS: ReadonlyArray<ResolverPlugin> = [
   javaResolver,
   goResolver,
   rubyResolver,
+  csharpResolver,
+  kotlinResolver,
+  swiftResolver,
 ];
 
 const RESOLVER_BY_LANGUAGE = (() => {

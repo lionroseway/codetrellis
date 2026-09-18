@@ -99,9 +99,24 @@ a tagged candidate and on packaged artifacts.
   ReactFlow 11 (custom nodes/edges), Zustand 5, react-markdown +
   remark-gfm.
 - **AST**: web-tree-sitter (WASM) — runs synchronously in the
-  Express process. 7 languages: TS / TSX / JS / JSX / Python / Rust /
-  PHP / Java. Plugin slots for parsers / resolvers / callsites
-  per language.
+  Express process. 11 language tags: TS / TSX / JS / JSX / Python /
+  Rust / PHP / Java / Go (Phase 20) / Ruby / C# / Kotlin / Swift
+  (Phase 27), plus SQL, which has no import graph and is handled by
+  `services/sql/` rather than a tree-sitter plugin. Plugin slots for
+  parsers / resolvers / callsites per language.
+  **A parser plugin emits a FLAT symbol list with qualified member
+  names** (`Type.member`, Go's `(Ledger).Post`, Ruby's `Invoice#post`).
+  Nested symbols are written to `symbols.parent_symbol_id` and then
+  filtered out by every per-file reader, so a nested member is findable
+  in search and invisible everywhere else — use `flattenSymbols` in
+  `parsers/base.ts`.
+  Callsite extractors exist for TS, Python and Go only; the other
+  languages contribute symbols and import edges but do not yet appear
+  on the cross-system map.
+  Grammar `.wasm` files are committed under `resources/tree-sitter/`
+  with their sha256 and exact source recorded in the README there —
+  **every new grammar gets a row**, and one of them (Swift) is a
+  third-party build, which that README explains.
 - **Database**: **native SQLite via `better-sqlite3`** (disk-backed, WAL),
   behind a sql.js-shaped facade in `services/database.ts` — the codebase
   still reads as sql.js at the call sites, but storage is native and

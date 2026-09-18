@@ -645,7 +645,15 @@ export function resolveImports(
           isRelative,
         })
       : null;
-    if (resolvedPath) {
+    // A file does not depend on itself. Phase 27 made this reachable:
+    // the languages that import a *container* rather than a file (a C#
+    // namespace, a Kotlin package, a Swift module, a Go package) resolve
+    // to a representative file in that container, and when the importer
+    // names its own container the representative can be the importer. A
+    // self-edge is meaningless in a file dependency graph and renders as
+    // a loop on the node, so it is dropped here rather than in each
+    // resolver — a plugin cannot forget a check it does not have to make.
+    if (resolvedPath && resolvedPath !== importerPath) {
       d.run(`UPDATE imports SET resolved_path = ? WHERE id = ?`, [resolvedPath, importId]);
       resolved++;
     }

@@ -22,9 +22,12 @@ session-JSONL watcher for richer chat-derived signals.
   ReactFlow 11 (custom nodes/edges), Zustand 5, react-markdown +
   remark-gfm.
 - **AST**: web-tree-sitter (WASM) — runs synchronously in the
-  Express process. 7 languages: TS / TSX / JS / JSX / Python / Rust /
-  PHP / Java. Plugin slots for parsers / resolvers / callsites
-  per language.
+  Express process. TS / TSX / JS / JSX / Python / Rust / PHP / Java /
+  Go / Ruby / C# / Kotlin / Swift, plus SQL (no import graph, handled
+  by `services/sql/`). Plugin slots for parsers / resolvers / callsites
+  per language; a plugin emits a FLAT symbol list with qualified member
+  names. See CLAUDE.md, which is the current one — the rest of this
+  file predates Phases 20–27 and several entries below are stale.
 - **Database**: sql.js (in-memory, persisted to disk via export +
   autosave). FTS not yet enabled.
 - **Agent comms**: Local MCP server (SSE on :19432) — every tool call

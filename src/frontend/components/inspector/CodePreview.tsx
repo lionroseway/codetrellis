@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Plus, AlertTriangle, ShieldCheck, Hourglass, MinusCircle, ChevronDown, Check } from 'lucide-react';
 import { AddToTaskPopover } from './AddToTaskPopover';
+import { resolvePrismLanguage } from '../../lib/prism-lang';
 import { usePlanStore } from '../../stores/plan-store';
 import { useUiStore } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
@@ -50,15 +51,6 @@ interface Props {
   onOpenItem?: (itemUid: string, planUid: string) => void;
 }
 
-const PRISM_LANG: Record<string, string> = {
-  typescript: 'tsx', tsx: 'tsx', javascript: 'jsx', jsx: 'jsx',
-  json: 'json', css: 'css', scss: 'scss', markup: 'markup',
-  python: 'python', rust: 'rust', go: 'go', java: 'java',
-  php: 'php', ruby: 'ruby', bash: 'bash', markdown: 'markdown',
-  yaml: 'yaml', toml: 'toml', sql: 'sql',
-  plaintext: 'plain',
-};
-
 export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem }: Props) {
   if (error) {
     return (
@@ -102,7 +94,7 @@ function CodePreviewInner({
   const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null);
   const [showPopover, setShowPopover] = useState(false);
 
-  const language = useMemo(() => PRISM_LANG[content.language || 'plaintext'] || 'plain', [content.language]);
+  const language = useMemo(() => resolvePrismLanguage(content.language), [content.language]);
   // Expanded once per overlay rather than searched per line — spans are
   // small and every line renders anyway.
   const overlayIndex: OverlayIndex = useMemo(() => indexMarkers(overlay?.markers ?? []), [overlay]);

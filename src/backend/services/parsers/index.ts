@@ -7,6 +7,9 @@ import { phpPlugin } from './php';
 import { javaPlugin } from './java';
 import { goPlugin } from './go';
 import { rubyPlugin } from './ruby';
+import { csharpPlugin } from './csharp';
+import { kotlinPlugin } from './kotlin';
+import { swiftPlugin } from './swift';
 
 /**
  * Registry of every language plugin CodeTrellis ingests.
@@ -27,6 +30,9 @@ export const PARSER_PLUGINS: ReadonlyArray<ParserPlugin> = [
   javaPlugin,
   goPlugin,
   rubyPlugin,
+  csharpPlugin,
+  kotlinPlugin,
+  swiftPlugin,
 ];
 
 const EXTENSION_INDEX = (() => {

@@ -1165,6 +1165,7 @@ function detectLanguage(filePath: string): string {
     '.py': 'python', '.rs': 'rust', '.go': 'go', '.java': 'java',
     '.php': 'php', '.rb': 'ruby', '.sh': 'bash', '.md': 'markdown',
     '.yml': 'yaml', '.yaml': 'yaml', '.toml': 'toml', '.sql': 'sql',
+    '.cs': 'csharp', '.kt': 'kotlin', '.kts': 'kotlin', '.swift': 'swift',
   };
   return map[ext] || 'plaintext';
 }

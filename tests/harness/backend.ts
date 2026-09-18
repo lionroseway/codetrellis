@@ -202,21 +202,52 @@ function signalTree(child: ChildProcess, signal: NodeJS.Signals): void {
 }
 
 async function killChild(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  return new Promise((resolve) => {
-    const killTimer = setTimeout(() => {
-      signalTree(child, 'SIGKILL');
-      // Do not wait on 'exit' forever after a SIGKILL — if the handle
-      // never fires we would hang teardown, which is how a leak becomes
-      // a hung suite.
-      setTimeout(resolve, 500);
-    }, 5000);
-    child.once('exit', () => {
-      clearTimeout(killTimer);
-      resolve();
+  if (child.exitCode === null && child.signalCode === null) {
+    await new Promise<void>((resolve) => {
+      const killTimer = setTimeout(() => {
+        signalTree(child, 'SIGKILL');
+        // Do not wait on 'exit' forever after a SIGKILL — if the handle
+        // never fires we would hang teardown, which is how a leak becomes
+        // a hung suite.
+        setTimeout(resolve, 500);
+      }, 5000);
+      child.once('exit', () => {
+        clearTimeout(killTimer);
+        resolve();
+      });
+      signalTree(child, 'SIGTERM');
     });
-    signalTree(child, 'SIGTERM');
-  });
+  }
+  // `exit` on the direct child is NOT the tree being gone. We spawn
+  // `npx → tsx → node`, and the npx wrapper reliably exits before the
+  // node process underneath it has finished — which matters because the
+  // backend's data dir lives INSIDE the fixture tmp dir, so a backend
+  // still flushing its SQLite WAL is writing into the directory the
+  // caller is about to delete. That is the ENOTEMPTY that presents as a
+  // flaky test with a teardown stack trace and nothing to do with the
+  // test. Wait for the group itself.
+  await waitForGroupExit(child);
+}
+
+/**
+ * Poll until the child's process GROUP is gone. `kill(-pid, 0)` sends no
+ * signal — it only asks whether the group still exists — and throws
+ * ESRCH once it does not.
+ */
+async function waitForGroupExit(child: ChildProcess, timeoutMs = 3000): Promise<void> {
+  if (child.pid == null || process.platform === 'win32') return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-child.pid, 0);
+    } catch {
+      return; // ESRCH — the group is gone.
+    }
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  // Still alive after the deadline: make one last hard attempt rather
+  // than leaving a backend behind, then let the caller proceed.
+  signalTree(child, 'SIGKILL');
 }
 
 function sleep(ms: number): Promise<void> {
