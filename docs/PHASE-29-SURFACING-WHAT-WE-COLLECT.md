@@ -1118,11 +1118,19 @@ visible until then.
 
 ### Known to need the dev machine
 
-Carried here so the handover list is explicit rather than reconstructed:
+Carried here so the handover list is explicit rather than reconstructed.
+**Worked on the dev machine, 2026-09-18** — outcomes below.
 
-| | Why it cannot be done here |
+| | Outcome |
 |---|---|
-| Swift grammar rebuild | Needs Emscripten or Docker to replace the one third-party `.wasm` — see `resources/tree-sitter/README.md`. |
-| AppImage sandbox check | Needs a Linux host to confirm what the distributed AppImage does at runtime. |
-| Packaged-build verification | CI builds the web bundle and the harness runs under Node; only a packaged build proves the Electron + better-sqlite3 pairing. |
-| `npm run lint` | No `eslint.config.*` is tracked, so the command fails repo-wide. Not on this register — it is a house-style decision, flagged and deliberately not taken. |
+| Swift grammar rebuild | **Done.** Rebuilt from `tree-sitter-swift@0.7.1` with `tree-sitter-cli@0.27.0`; no Emscripten and no Docker needed — the CLI fetches its own wasi-sdk. Symbol and import extraction is identical to the artifact it replaced. `resources/tree-sitter/README.md` rewritten; all thirteen hashes re-verified. |
+| AppImage sandbox check | **Answered from source; runtime confirmation still open.** It needed no Linux host: `src/electron/main.ts` passes `--no-sandbox` whenever `APPIMAGE` is set, so the AppImage ships with the sandbox **off** — there is no "fallback to user namespaces", which is what CLAUDE.md claimed. Recorded there, with the `.deb`/`.rpm` contrast and the narrowed open question. |
+| Packaged-build verification | **Done.** `npm ci` + `npm run package:mac` on Node 26.9.0, then launched with a scratch `CODETRELLIS_DATA_DIR`: reaches "Backend initialised", writes `data.db` (WAL, `quick_check` ok, 28 tables), and loads all twelve grammars **including the newly built Swift one**. That also settles the "app boot under investigation" note left on 08f2a9d. |
+| `npm run lint` | **Decided and committed.** Flat config in `eslint.config.mjs`; eslint was not even a dependency before. Error/warn split documented in the config. Clearing it removed 78 stale disable directives and 56 dead imports, and found three real defects (a self-assignment, a markdown escape eaten by a template literal, a write-only `dirty` flag). |
+| Mobile `plan-review.tsx` | **Partly proven.** A dev client now builds and runs: `expo run:ios` compiles clean (0 errors), installs on an iPhone 17 simulator, bundles 1569 modules and reaches mDNS discovery. So the screen compiles into a real binary and the app boots — which it had never been shown to do. Its four RPC methods (`review.get`, `review.prDraft`, `review.comparands`, `plan.nextItem`) are all registered in `mobile-rpc-service`. **The walkthrough itself is still unproven**: verdict counts, item list, compare-point switching and Copy PR description need taps against a paired desktop running this branch, and driving the simulator needs device access that was not granted in that session. |
+
+One note for whoever picks the mobile item up: `pod install` fails on a
+non-interactive shell with `Encoding::CompatibilityError` out of
+CocoaPods' `unicode_normalize`. It is a locale problem, not a
+dependency one — `export LANG=en_US.UTF-8` before `expo run:ios` and it
+builds.

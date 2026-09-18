@@ -91,7 +91,7 @@ a tagged candidate and on packaged artifacts.
   fallback** — see "The AppImage sandbox" below. `.deb` / `.rpm` keep
   the sandbox and are the better Linux option where there is a choice.
   Session persistence and power-aware sleep prevention are wired in.
-- **Mobile runtime**: Expo SDK 54 + React Native 0.81.5 companion app
+- **Mobile runtime**: Expo SDK 57 + React Native 0.86.3 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),
   ReactFlow 11 (custom nodes/edges), Zustand 5, react-markdown +
