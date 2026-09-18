@@ -795,10 +795,21 @@ app.get('/api/recent-projects', (_req, res) => {
   res.json({ projects: listRecentProjects() });
 });
 
+/**
+ * NOT CONFINED, deliberately — and this is the distinction that matters.
+ *
+ * Confinement protects a path that is USED as a path: opened, walked, or
+ * made the working directory of a command. Here the string is only a KEY
+ * into the recent-projects list. Nothing is read, written or executed.
+ *
+ * Confining it would add no security and would actively break the case a
+ * user most wants: removing a stale entry whose directory has been
+ * deleted. `resolveTrustedProjectRoot` requires a path to canonicalise,
+ * so a project you removed from disk could never be removed from the
+ * list. The first sweep did exactly that, and the harness caught it.
+ */
 app.delete('/api/recent-projects', (req, res) => {
-  const { projectPath: rawProjectPath } = req.body || {};
-  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
-  if (!projectPath) return;
+  const { projectPath } = req.body || {};
   if (!projectPath || typeof projectPath !== 'string') {
     res.status(400).json({ error: 'projectPath is required' });
     return;
@@ -807,10 +818,9 @@ app.delete('/api/recent-projects', (req, res) => {
   res.json({ ok: true });
 });
 
+/** Not confined, for the same reason as DELETE above: a list key. */
 app.post('/api/recent-projects/pin', (req, res) => {
-  const { projectPath: rawProjectPath, pinned } = req.body || {};
-  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
-  if (!projectPath) return;
+  const { projectPath, pinned } = req.body || {};
   if (!projectPath || typeof projectPath !== 'string') {
     res.status(400).json({ error: 'projectPath is required' });
     return;

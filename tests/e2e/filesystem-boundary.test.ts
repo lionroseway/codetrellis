@@ -141,6 +141,13 @@ test.describe('Gate 2 — the filesystem boundary holds at the API', () => {
     const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-attach-'));
 
     try {
+      // The project must be OPENED before a confined endpoint will
+      // answer: a root is never caller-nominated (Phase 19). Without
+      // this the PRECONDITION below — the legitimate in-project case
+      // that proves the check is not simply refusing everything — fails
+      // on a 403 and the test proves nothing.
+      await h.client.scanProject(h.fixture.projectPath);
+
       // A root the app has never opened. The reviewer reproduced marker
       // bytes landing under exactly this shape of path before the database
       // operation failed — the write preceded validation.

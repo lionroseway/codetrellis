@@ -57,7 +57,15 @@ const READERS = [
  * opened-project list would make it impossible to open anything. Its
  * control is the capability token every local transport requires.
  */
-const EXEMPT_ROUTES = ["app.post('/api/project/scan'"];
+const EXEMPT_ROUTES = [
+  "app.post('/api/project/scan'",
+  // A list key, not a path. Confinement protects a value that is USED as
+  // a path — opened, walked, or made a command's working directory.
+  // These only index the recent-projects list, and confining them breaks
+  // removing a stale entry whose directory has been deleted.
+  "app.delete('/api/recent-projects'",
+  "app.post('/api/recent-projects/pin'",
+];
 
 describe('project-root confinement', () => {
   test('req.query.project is read only inside the two confining helpers', () => {
