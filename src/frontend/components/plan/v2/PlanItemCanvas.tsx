@@ -3,7 +3,7 @@ import {
   ChevronRight, FileText, Zap, Folder, Copy, History,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User,
   AlertTriangle, MessageSquare, HelpCircle, Activity, Hash,
-  X, Import,
+  X, Import, Layers,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { usePlanStore } from '../../../stores/plan-store';
@@ -26,6 +26,7 @@ import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
 import { PlanTemplateChooser } from './PlanTemplateChooser';
 import { PlanImportModal } from './PlanImportModal';
+import { PublishTemplateModal } from '../PublishTemplateModal';
 import { CodebaseOrientation } from './CodebaseOrientation';
 import { PlanCompletionSummary } from './PlanCompletionSummary';
 import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
@@ -398,6 +399,7 @@ function PlanHomePage() {
   const [title, setTitle] = useState(plan?.title ?? '');
   const [description, setDescription] = useState(plan?.description ?? '');
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPublishTemplate, setShowPublishTemplate] = useState(false);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -488,6 +490,20 @@ function PlanHomePage() {
               {/* Phase 29 — Phase 24's sync watermark had no REST endpoint
                   at all, let alone a surface. See PlanTicketSyncChip. */}
               <PlanTicketSyncChip plan={plan} />
+              {/* Phase 29 — PublishTemplateModal was written in Phase 13
+                  and never imported by anything. Publishing only makes
+                  sense once the plan has a shape worth reusing, so the
+                  chip appears when the plan is no longer empty. */}
+              {!isEmpty && plan.projectPath && (
+                <button
+                  onClick={() => setShowPublishTemplate(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] text-[12.5px] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-white/[0.04] transition-colors"
+                  title="Save this plan's shape as a reusable template"
+                >
+                  <Layers size={11} />
+                  Save as template
+                </button>
+              )}
             </div>
           </div>
 
@@ -601,6 +617,18 @@ function PlanHomePage() {
         </div>
       </div>
       {showImportModal && <PlanImportModal onClose={() => setShowImportModal(false)} />}
+
+      {/* Phase 29 §4.10 — writes <project>/.codetrellis/templates/<id>/,
+          which is exactly the bucket PlanTemplatePicker lists first. */}
+      {showPublishTemplate && plan.projectPath && (
+        <PublishTemplateModal
+          planUid={plan.uid}
+          planTitle={plan.title}
+          projectRoot={plan.projectPath}
+          onClose={() => setShowPublishTemplate(false)}
+          onPublished={() => setShowPublishTemplate(false)}
+        />
+      )}
     </div>
   );
 }

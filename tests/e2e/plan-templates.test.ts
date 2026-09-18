@@ -7,6 +7,14 @@
  * surface — no automated check that adding a new template doesn't
  * break list rendering, that placeholders interpolate correctly, or
  * that `applyTemplate` produces the expected phase + doc count.
+ *
+ * Phase 29 §4.10 adds the disk round trip. Built-ins were the only
+ * thing covered here, and they are also the only thing that was ever
+ * reachable — `source: 'project'` and `source: 'user'` templates load
+ * from `.codetrellis/templates/` and, until the desktop picker
+ * existed, nothing but MCP could see them. The round trip below is
+ * exactly what the picker does: publish a plan, list with a project
+ * root, create from what comes back.
  */
 
 import { test, expect } from '@playwright/test';
@@ -133,6 +141,82 @@ test.describe('Plan templates', () => {
       const reportBody = fs.readFileSync(path.join(exported.planDir, 'docs', reportFile!), 'utf-8');
       expect(reportBody).toContain('Login button hangs on slow networks');
       expect(reportBody).toContain('packages/web/src/UserList.tsx');
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  test('publish → list → create round trip for a project-local template', async () => {
+    const h = await setupHarness('templates-project-roundtrip');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+
+      // 1. A plan with a shape worth reusing. Publishing takes the V2
+      //    item path when any item exists, which is the path the
+      //    desktop "Save as template" chip hits.
+      const source = await h.client.createPlan({
+        title: 'Service extraction',
+        description: 'Pull a bounded context out into its own service.',
+        projectPath: h.fixture.projectPath,
+      });
+      for (const title of ['Map the boundary', 'Move the code', 'Cut over']) {
+        const res = await h.client.raw('POST', `/api/plans/${source.uid}/items`, {
+          kind: 'action',
+          title,
+        });
+        expect(res.ok).toBe(true);
+      }
+
+      // 2. Publish it into <project>/.codetrellis/templates/.
+      const pubRes = await h.client.raw(
+        'POST',
+        `/api/plans/${source.uid}/publish-as-template`,
+        {
+          projectRoot: h.fixture.projectPath,
+          templateId: 'service-extraction',
+          label: 'Service extraction',
+          shortDescription: 'Pull a bounded context into its own service',
+        },
+      );
+      expect(pubRes.ok).toBe(true);
+      const published = await pubRes.json() as { templateDir: string; files: string[] };
+      expect(published.files.length).toBeGreaterThan(0);
+
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      expect(fs.existsSync(path.join(published.templateDir, 'template.yaml'))).toBe(true);
+
+      // 3. It has to come back from the list — and only when a project
+      //    root is passed. Without one, disk templates for that project
+      //    are not in scope, which is why the picker sends `?project=`.
+      const withProject = await h.client.listTemplates(h.fixture.projectPath);
+      const found = withProject.find((t) => t.id === 'service-extraction');
+      expect(found).toBeTruthy();
+      expect(found!.source).toBe('project');
+      expect(found!.label).toBe('Service extraction');
+
+      const withoutProject = await h.client.listTemplates();
+      expect(withoutProject.find((t) => t.id === 'service-extraction')).toBeUndefined();
+
+      // Built-ins must survive the merge — a disk template is additive,
+      // not a replacement for the list.
+      expect(withProject.some((t) => t.id === 'bug-fix' && t.source === 'builtin')).toBe(true);
+
+      // 4. Create from it, the way the picker does.
+      const created = await h.client.createPlanFromTemplate({
+        templateId: 'service-extraction',
+        projectPath: h.fixture.projectPath,
+        title: 'Extract billing',
+      });
+      expect(created.uid).not.toBe(source.uid);
+      expect(created.title).toBe('Extract billing');
+
+      const itemsRes = await h.client.raw('GET', `/api/plans/${created.uid}/items`);
+      expect(itemsRes.ok).toBe(true);
+      const items = await itemsRes.json() as Array<{ title: string }>;
+      expect(items.map((i) => i.title).sort()).toEqual(
+        ['Cut over', 'Map the boundary', 'Move the code'],
+      );
     } finally {
       await h.teardown();
     }
