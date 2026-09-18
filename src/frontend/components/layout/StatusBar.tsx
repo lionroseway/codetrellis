@@ -3,6 +3,7 @@ import { Activity, Database, Cpu, Copy, Check, SquareTerminal } from 'lucide-rea
 import { useProjectStore } from '../../stores/project-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { useTerminalStore } from '../../stores/terminal-store';
+import { CoverageChip } from './CoverageChip';
 
 export function StatusBar() {
   const scanStatus = useProjectStore((s) => s.scanStatus);
@@ -60,6 +61,10 @@ export function StatusBar() {
         <SquareTerminal size={11} />
         Terminal
       </button>
+
+      {/* Phase 29 — what the scan could not resolve. Renders nothing
+          until there is a scan to describe; see CoverageChip. */}
+      <CoverageChip />
 
       <button onClick={handleCopyMcpConfig} className="flex items-center gap-1 hover:text-foreground transition-all" title="Copy MCP config">
         <Database size={9} />

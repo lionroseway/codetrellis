@@ -34,6 +34,7 @@ import { readFileWithin, isWithin, isInside, ConfinementError } from './services
 /** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
 const MAX_BROWSE_ENTRIES = 1000;
 import { resolveTrustedProjectRoot, listTrustedRoots, setActiveProjectRoot } from './services/trusted-roots';
+import { getCoverageReport } from './services/coverage-service';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -3021,6 +3022,23 @@ app.post('/api/sessions/:sessionId/assign-plan', (req, res) => {
 // Database stats
 app.get('/api/stats', (_req, res) => {
   res.json(getDbStats());
+});
+
+/**
+ * Coverage — what the scan could not resolve, and why (Phase 29).
+ *
+ * `/api/stats` has carried `importCount` and `resolvedImports` since
+ * long before this, and nothing ever read them. This endpoint exists
+ * because a bare total is not an answer: the REASON for each gap is a
+ * property of the language, so the split has to come from the query.
+ * See services/coverage-service.ts.
+ */
+app.get('/api/coverage', (_req, res) => {
+  try {
+    res.json(getCoverageReport());
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 // Architecture summary (Phase 17.A — Codebase Orientation)

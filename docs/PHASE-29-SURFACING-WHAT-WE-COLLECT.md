@@ -92,7 +92,7 @@ The failure mode is obvious and it is worse than the gap being fixed:
 
 Status: ☐ not started · ◑ in progress · ☑ done · ⊘ ruled out
 
-### 4.1 ☐ Coverage: what we could not resolve — **do this first**
+### 4.1 ☑ Coverage: what links inside the project, and what does not
 
 **Already computed and served.** `/api/stats` returns `importCount` and
 `resolvedImports`. `/api/cross-system` returns `callsiteCount`,
@@ -111,11 +111,42 @@ right, and each renders identically to "this code is not coupled".
 **"We could not tell" and "there is nothing there" are currently the
 same picture.**
 
-- *Shape*: a `StatusBar` chip — "58 imports · 41 resolved" — opening a
-  panel that breaks the gap down **by language with the reason**, so
-  Swift reads as expected behaviour and not as a failure.
-- *Effort*: small. Wiring two existing endpoints plus one panel.
+- *Shipped*: `StatusBar` chip (`32/71 linked`) opening a panel that
+  breaks it down by language **with the reason**, plus a cross-system
+  section. `services/coverage-service.ts`, `/api/coverage`,
+  `frontend/lib/coverage.ts`, `components/layout/CoverageChip.tsx`.
 - *Deliberate?* No. The stats were built for a UI that never read them.
+
+**[changed] It needed a new endpoint, and the framing was wrong first
+time.** Two corrections worth carrying forward:
+
+1. *Wiring the existing endpoints was not enough.* `/api/stats` gives
+   totals only, and a bare total is not an answer — "41 of 58" invites
+   "is that bad?" and cannot reply. The REASON for a gap is a property of
+   the language, so the split had to come from a new query.
+   `/api/coverage` exists for that.
+2. *"Unresolved" was the wrong word, and the numbers proved it.* The
+   first cut led with `resolved / total`, which reads **45%** on the
+   fixture and looks like a badly broken scan. Nothing is broken: C#
+   imports `System`, Go imports `net/http`, Python imports its standard
+   library. Those were never going to resolve to a file in the scan —
+   external **by definition**, not failures. Calling them unresolved was
+   exactly the over-claim §3 forbids, committed by the person who wrote
+   §3.
+
+   It now reports how many imports link to a file *inside this project*
+   and describes the rest as pointing outside it. Same number, truthful
+   framing, and the ratio becomes genuinely interesting — roughly "how
+   self-contained is this codebase" — rather than a score.
+
+   The e2e test records this: it asserts that **every** language has some
+   outward-pointing import, so if that ever stops being true somebody
+   re-reads the framing.
+
+   We deliberately do **not** claim to know which outward imports are a
+   standard library and which are something we failed to read. The
+   resolver returns null either way and nothing records the difference.
+   Asserting it would repeat the same mistake one level down.
 
 ### 4.2 ☐ Near-miss callsites
 
