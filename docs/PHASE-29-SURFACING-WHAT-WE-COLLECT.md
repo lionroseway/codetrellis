@@ -212,7 +212,7 @@ The fixture now contains a deliberate near miss — the Kotlin client calls
 e2e asserts both that it is suggested and that it **never becomes an
 edge**.
 
-### 4.3 ☐ Budget burn-down (Phase 23)
+### 4.3 ☑ Budget burn-down (Phase 23)
 
 `item_time_entries` and `plan_budgets` are built, tested, and reachable
 only through MCP. No burn-down in the plan header, no forecast, no
@@ -223,12 +223,38 @@ Note the posture already set in `db-schema.ts`: **a ceiling is advisory.**
 worse than honest advice." The UI must not imply enforcement it cannot
 deliver.
 
-- *Shape*: a chip in the plan header; spent/estimated, forecast on hover.
-  Warning colour at the 80% mark the schema already tracks
-  (`notified_at`), never an alarm.
-- *Effort*: small–medium.
+- *Shipped*: `components/plan/v2/PlanBudgetChip.tsx`, beside the git
+  context chip, plus `frontend/lib/budget-format.ts` for the logic.
 - *Deliberate?* No — the phase shipped backend-first and the UI was never
   built.
+
+**Three things that had to survive contact with the UI**, each a place
+where the obvious implementation says something false:
+
+1. **An unknown cost is not zero.** `spentCostUsd` is null when no agent
+   on the plan ever reported a model. Rendering "$0.00" would report a
+   plan as free when its cost is simply invisible to us. It reads "not
+   reported", and the popover says why.
+2. **An unknown cost cannot breach a cost ceiling.** With a cost budget
+   and no priced spend there is nothing to compare, so the state is
+   `none` — not `ok`, which would claim the plan is comfortably inside a
+   budget nobody has measured it against.
+3. **An early forecast is not a forecast.** The service returns null
+   below 10% completion on purpose. The popover says it is too early
+   rather than rendering a blank the reader has to interpret.
+
+**No enforcement, said out loud.** `db-schema.ts` sets the posture where
+the table is defined — *"we have no mechanism to halt an agent, and
+pretending otherwise would be worse than honest advice."* So there is no
+stop control, no enforce toggle, and the popover states in words that
+passing a ceiling changes nothing by itself.
+
+**A drift guard.** The chip computes state from a report it already has
+rather than making a second call for a string, so `stateOf` duplicates
+`budgetState`. A unit test asserts the two agree across nine cases and
+that the 80% warn boundary is the same number on both sides — otherwise
+the chip turns amber at a different point from where the service fires
+its one-time warning.
 
 ### 4.4 ☐ External sync state (Phase 24)
 

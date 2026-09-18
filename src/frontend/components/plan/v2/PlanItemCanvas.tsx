@@ -15,6 +15,7 @@ import { useSlashMenu } from './SlashMenu';
 import { useMentionPicker } from './MentionPicker';
 import { BodyRenderer } from './BodyRenderer';
 import { PlanGitContextChip } from './PlanGitContextChip';
+import { PlanBudgetChip } from './PlanBudgetChip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { ContextRail } from './ContextRail';
 import { TargetsStrip } from './TargetsStrip';
@@ -479,6 +480,9 @@ function PlanHomePage() {
                 {plan.completedTaskCount ?? 0}/{plan.taskCount ?? 0} actions
               </span>
               <PlanGitContextChip plan={plan} />
+              {/* Phase 29 — Phase 23 built all of this and shipped it
+                  MCP-only. See PlanBudgetChip. */}
+              <PlanBudgetChip plan={plan} />
             </div>
           </div>
 
