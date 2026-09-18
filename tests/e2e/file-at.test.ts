@@ -149,6 +149,26 @@ test.describe('File at a point in time (Phase 26)', () => {
     }
   });
 
+  // The '..' test above passed while this one did not exist, which is how the
+  // hole survived: `path.resolve(root, '/etc/passwd')` discards the base and the
+  // result contains no '..', so a traversal-only check never sees it.
+  test('an ABSOLUTE path is refused, not resolved against the root', async () => {
+    const h = await setupHarness('file-at-absolute');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+      const res = await h.client.raw(
+        'GET',
+        `/api/file/at?project=${encodeURIComponent(h.fixture.projectPath)}` +
+          `&path=${encodeURIComponent('/etc/passwd')}&at=live`,
+      );
+      expect(res.status).toBe(403);
+      // and above all: it must not have served the file
+      expect(JSON.stringify(res.body ?? {})).not.toMatch(/root:/);
+    } finally {
+      await h.teardown();
+    }
+  });
+
   test('a project that is not open is refused', async () => {
     const h = await setupHarness('file-at-closed');
     try {

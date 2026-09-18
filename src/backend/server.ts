@@ -2704,8 +2704,10 @@ app.get('/api/file/at', (req, res) => {
     return;
   }
 
-  // The path is project-RELATIVE and resolved against an opened project,
-  // so a caller cannot nominate a root or escape one (Phase 19, Gate 2.2).
+  // The path is project-RELATIVE and read through the confined helper, so a
+  // caller cannot nominate a root (checked here) or escape one (checked there).
+  // The '..' test below is a cheap early refusal, NOT the containment control —
+  // it does not see an absolute path or a symlink. `readFileAt` is what confines.
   const owningRoot = listTrustedRoots().find((r) => isWithin(r, projectPath) || r === projectPath);
   if (!owningRoot) {
     res.status(403).json({ error: 'Refusing to read from a project that is not open' });
@@ -2719,6 +2721,10 @@ app.get('/api/file/at', (req, res) => {
   try {
     res.json(readFileAt(at, owningRoot, relativePath));
   } catch (err) {
+    if (err instanceof ConfinementError) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
     res.status(400).json({ error: err instanceof Error ? err.message : 'Could not read file' });
   }
 });

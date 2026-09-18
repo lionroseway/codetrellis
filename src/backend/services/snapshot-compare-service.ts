@@ -4,7 +4,7 @@ import { getDb, getDependencyEdges, getAllFileHashes } from './database';
 import { getBaseline, diffSnapshots, captureSnapshot, type GraphSnapshot, type ArchDiff } from './diff-engine';
 import { getSnapshot, listSnapshots } from './trellis-service';
 import path from 'node:path';
-import fs from 'node:fs';
+import { readTextWithin, ConfinementError } from './confined-fs';
 
 /**
  * Snapshot selection and comparison — Phase 25.
@@ -286,9 +286,19 @@ export function readFileAt(
 ): FileAtResult {
   if (spec === 'live') {
     try {
-      const abs = path.resolve(projectPath, relativePath);
-      return { ok: true, content: fs.readFileSync(abs, 'utf-8'), label: 'Live' };
-    } catch {
+      // Through the confined helper, not path.resolve + readFileSync.
+      // `path.resolve(root, '/etc/passwd')` returns '/etc/passwd' — an
+      // absolute second argument discards the base — and that string contains
+      // no '..', so the caller's traversal check did not see it. Lexical
+      // checks also miss a symlink under the root, which is exactly why
+      // CLAUDE.md requires this helper for sensitive reads.
+      return { ok: true, content: readTextWithin(projectPath, relativePath, 'file/at'), label: 'Live' };
+    } catch (err) {
+      // A refusal is not the same as an absent file. ENOENT legitimately
+      // means 'added since', and the diff renders it that way; a
+      // ConfinementError must reach the caller as a refusal instead of
+      // being flattened into 'this file is empty'.
+      if (err instanceof ConfinementError) throw err;
       return { ok: true, content: null, label: 'Live' };
     }
   }
