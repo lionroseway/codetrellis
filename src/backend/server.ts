@@ -2641,25 +2641,50 @@ app.get('/api/file/overlay', (req, res) => {
 // Any two points, not just "live vs the pinned baseline". Making the
 // comparands explicit is most of what makes Diff mode legible: the
 // chrome can finally state what it is showing.
+/**
+ * CONFINED TO OPENED PROJECTS (Phase 19).
+ *
+ * These four handlers — comparands, compare, review, pr-draft — became
+ * reachable from the UI in Phase 29, so their project path is resolved
+ * against the opened-project roots rather than trusted as given. The
+ * rule is written as "never accept projectRoot from a request BODY",
+ * but the intent is that a root is never caller-nominated, and a query
+ * parameter is exactly as caller-nominated as a body field.
+ *
+ * It matters most for `listComparands`, which uses the path as the
+ * working directory of a `git log`, so an unvalidated value selects the
+ * repository a command runs in.
+ */
+function requireProjectRoot(req: express.Request, res: express.Response): string | null {
+  try {
+    return resolveTrustedProjectRoot(req.query.project, 'project');
+  } catch (err) {
+    res.status(err instanceof ConfinementError ? 403 : 400).json({
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 app.get('/api/comparands', (req, res) => {
-  const projectPath = req.query.project as string;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   res.json(listComparands(projectPath));
 });
 
 app.get('/api/compare', (req, res) => {
-  const projectPath = req.query.project as string;
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const before = (req.query.before as string) || 'baseline';
   const after = (req.query.after as string) || 'live';
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
   const result = compareSnapshots(before, after, projectPath);
   if (!result.ok) { res.status(404).json(result); return; }
   res.json(result.result);
 });
 
 app.get('/api/plans/:uid/pr-draft', (req, res) => {
-  const projectPath = req.query.project as string;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   // Read-only: this never touches the repository. The agent does the git
   // and opens the PR with its own credentials; we supply the body it
   // cannot write.
@@ -2674,8 +2699,8 @@ app.get('/api/plans/:uid/pr-draft', (req, res) => {
 });
 
 app.get('/api/plans/:uid/review', (req, res) => {
-  const projectPath = req.query.project as string;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const result = reviewPlan({
     planUid: req.params.uid,
     projectPath,
