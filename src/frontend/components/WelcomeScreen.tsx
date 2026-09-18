@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FolderOpen, GitBranch, Cpu, Eye, ArrowRight, Pin, PinOff, X, Clock } from 'lucide-react';
 import { getAPI } from '../bridge';
 import { useProjectStore } from '../stores/project-store';
+import { ActiveAgentProjects, useActiveAgentProjects } from './ActiveAgentProjects';
 
 interface RecentProject {
   path: string;
@@ -50,6 +51,9 @@ const steps = [
 export function WelcomeScreen() {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [loadingRecents, setLoadingRecents] = useState(true);
+  // Phase 29 — projects an agent is ALREADY working in. See
+  // ActiveAgentProjects; /api/auto-detect has always known this.
+  const activeSessions = useActiveAgentProjects();
 
   useEffect(() => {
     fetch('/api/recent-projects')
@@ -116,7 +120,12 @@ export function WelcomeScreen() {
     }).catch(() => {});
   };
 
-  const hasRecents = recents.length > 0;
+  // A project an agent is live in appears in the section above, which
+  // says strictly more than a recents row and offers the same action.
+  // Listing it twice would be clutter, so the live one wins.
+  const livePaths = new Set(activeSessions.map((s) => s.projectPath));
+  const visibleRecents = recents.filter((p) => !livePaths.has(p.path));
+  const hasRecents = visibleRecents.length > 0;
 
   return (
     <div className="w-full h-full relative overflow-hidden">
@@ -146,6 +155,8 @@ export function WelcomeScreen() {
           Visualize your codebase architecture and monitor<br />AI coding agents in real-time
         </p>
 
+        <ActiveAgentProjects sessions={activeSessions} onOpen={openAtPath} />
+
         {hasRecents && (
           <div className="w-full max-w-lg mb-6">
             <div className="flex items-center justify-between mb-2 px-1">
@@ -161,7 +172,7 @@ export function WelcomeScreen() {
               </button>
             </div>
             <div className="space-y-1">
-              {recents.map((project) => (
+              {visibleRecents.map((project) => (
                 <RecentProjectRow
                   key={project.path}
                   project={project}
@@ -175,7 +186,7 @@ export function WelcomeScreen() {
         )}
 
         {/* Steps — full presentation when no recents, compact list when recents exist */}
-        {!hasRecents && !loadingRecents && (
+        {!hasRecents && activeSessions.length === 0 && !loadingRecents && (
           <div className="w-full max-w-lg space-y-2.5 mb-8">
             {steps.map((step, i) => (
               <div

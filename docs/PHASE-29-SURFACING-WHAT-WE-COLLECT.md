@@ -213,7 +213,7 @@ signal exists as data and appears nowhere.
 - *Effort*: small.
 - *Deliberate?* No.
 
-### 4.5 ☐ `/api/auto-detect` — open what the agent is already working on
+### 4.5 ☑ `/api/auto-detect` — open what the agent is already working on
 
 Scans `~/.claude/sessions` and returns each active session's project path
 and branch. Read-only, already working, never called.
@@ -222,11 +222,35 @@ Opening CodeTrellis to "Claude Code is working in `~/foo` on `bar` —
 open it?" is the kind of thing that makes a tool feel like it is paying
 attention. This is the highest polish-per-hour item in the register.
 
-- *Shape*: a suggestion on `WelcomeScreen` / `GettingStarted`, dismissible,
-  absent when there is nothing to suggest.
-- *Effort*: small.
+- *Shipped*: `components/ActiveAgentProjects.tsx`, above Recent projects
+  on `WelcomeScreen`. A live pulse, the project name, its branch, its
+  path, and a click to open it.
 - *Deliberate?* Unlikely — more probably it predates the current
   onboarding screens.
+
+**[changed] No dismiss button.** The register sketched one and it is not
+needed: this screen only exists while no project is open, so opening
+*anything* dismisses it — which is the action the suggestion is asking
+for anyway. A dismiss control would have added persisted state to remove
+a row that the next click removes.
+
+**It polls, every 5s.** An agent starting *while* this screen is open is
+arguably the commonest case — a developer launches the agent and then
+goes looking for the visualiser — and a one-shot fetch would show an
+empty screen through exactly the moment the suggestion is most useful.
+
+**A live project is filtered out of Recent projects.** The live row says
+strictly more and offers the same action; listing it twice is clutter.
+The empty-state pitch is also suppressed when a suggestion is present,
+because an onboarding explainer above a live signal reads as if nothing
+is happening.
+
+The e2e is mostly about **liveness**: a suggestion to open a project
+because "an agent is working there" is worse than no suggestion if the
+agent exited an hour ago. Five tests — a live pid is reported with its
+branch, a dead pid is not, a vanished directory is skipped, two sessions
+in one directory are reported once, and one malformed file does not take
+the endpoint down.
 
 ### 4.6 ☐ Doc drift sensor
 
