@@ -33,7 +33,6 @@ type Tab = 'plan' | 'timeline' | 'changes';
 
 export function AgentPanel() {
   const visible = useUiStore((s) => s.agentPanelVisible);
-  const height = useUiStore((s) => s.agentPanelHeight);
   const [activeTab, setActiveTab] = useState<Tab>('timeline');
 
   const events = useAgentStore((s) => s.events);

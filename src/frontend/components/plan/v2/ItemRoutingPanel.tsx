@@ -24,7 +24,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
-import type { PlanItem, Skill, ClaimPolicy, ExecutionConfig, CascadeMode, ItemConstraints } from '@shared/types';
+import type { PlanItem, Skill, ClaimPolicy, ExecutionConfig, ItemConstraints } from '@shared/types';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
 
@@ -631,7 +631,7 @@ function ConstraintsEditor({
 
 function ExecConfigEditor({
   config,
-  isLocal,
+  
   onUpdate,
 }: {
   config: ExecutionConfig | null;

@@ -28,7 +28,7 @@
 import * as _lazy___audio_buffer_service from './audio-buffer-service';
 import { compare as jsonPatchCompare, applyPatch } from 'fast-json-patch';
 import type {
-  DataChannelName,
+  
   PeerConnectionState,
 } from '../../shared/types';
 import { DATA_CHANNELS } from '../../shared/types';

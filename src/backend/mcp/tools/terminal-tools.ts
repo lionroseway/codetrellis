@@ -54,7 +54,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         focus: z.boolean().optional().describe('Focus this terminal tab in the UI before writing. Default false.'),
       },
     },
-    async ({ session_id, input, focus }, extra: any) => {
+    async ({ session_id, input, focus }, _extra: any) => {
       // ── Self-write guard ──────────────────────────────────────────
       // If the caller registered with a host_terminal_id, block writes
       // to that terminal to prevent the agent from typing into its own

@@ -145,7 +145,7 @@ export function extractSchemaStatements(sql: string): SchemaStatement[] {
 
       // `ALTER TABLE x RENAME TO y` is the one ALTER that changes which
       // tables exist, so the fold has to see it.
-      let k = name.next;
+      const k = name.next;
       if (isWord(tokens[k], 'RENAME') && isWord(tokens[k + 1], 'TO')) {
         const target = readName(tokens, k + 2);
         if (target) {

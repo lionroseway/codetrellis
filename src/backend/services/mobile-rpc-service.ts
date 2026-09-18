@@ -1356,7 +1356,7 @@ function buildGraphScene(mode: string, planUid?: string, granularity: 'cluster' 
       const mark = (relPath: string, state: NodeState, ghostOk: boolean) => {
         const key = keyFn(relPath);
         let c = clusters.get(key);
-        if (!c && ghostOk) { c = ensure(key); c.fileCount = c.fileCount; }
+        if (!c && ghostOk) { c = ensure(key); }
         if (c) c.state = state;
       };
       for (const g of proj.ghostFiles) { ensure(keyFn(g.path)).state = 'planned_add'; }

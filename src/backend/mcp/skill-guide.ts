@@ -216,7 +216,7 @@ edges.
 | Tool | What it does |
 |------|-------------|
 | \`add_item(plan_uid, kind, ...)\` | Create an Object or Action |
-| \`bulk_add_items(plan_uid, items[])\` | Create many items with \_temp\_uid parent refs |
+| \`bulk_add_items(plan_uid, items[])\` | Create many items with \`_temp_uid\` parent refs |
 | \`get_item(uid)\` | Lightweight single-row fetch |
 | \`read_item_full(uid)\` | Full context bundle: item + parent + children + attachments + comments + versions |
 | \`update_item(uid, ...)\` | Update any field; auto-versioned |

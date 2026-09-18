@@ -841,7 +841,6 @@ function applyTreeLayout(nodes: Node[], edges: Edge[]): GraphData {
   g.setGraph({ rankdir: 'TB', nodesep: 50, ranksep: 70, marginx: 40, marginy: 40 });
 
   for (const node of nodes) {
-    const isHub = (node.data as any)?.isHub || (node.data as any)?.isFocused;
     g.setNode(node.id, {
       ...getNodeDimensions((node.data || {}) as GraphNodeVisualData),
     });
@@ -1092,7 +1091,6 @@ function buildEdgeChangeMap(
   const map = new Map<string, 'planned_add' | 'planned_remove' | 'added' | 'removed' | 'unexpected'>();
 
   const plannedAddSet = new Set((projectionData?.newEdges || []).map((e) => `${e.from}->${e.to}`));
-  const plannedRemoveSet = new Set((projectionData?.removedEdges || []).map((e) => `${e.from}->${e.to}`));
 
   // Live appearances: split into "planned & realized" vs "unexpected drift"
   for (const edge of diffData?.addedEdges || []) {

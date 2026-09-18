@@ -158,7 +158,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
     }
   },
 
-  async onEventStatusChanged(uid, _status) {
+  async onEventStatusChanged(_uid, _status) {
     const planUid = get().activePlanUid;
     if (!planUid) return;
     // Cheap refresh — the panel's "what needs attention" filter is

@@ -232,7 +232,6 @@ export function startPointerWatcher(
       if (onChange) {
         onChange(key, event, filePath);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { broadcast } = _lazy____server;
         broadcast('external-pointers-changed', {
           projectRoot: key,

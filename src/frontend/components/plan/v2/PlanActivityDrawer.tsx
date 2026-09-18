@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Activity, MessageSquare, AlertTriangle, HelpCircle, CheckCircle2, Loader2, Ban,
+  Activity, CheckCircle2, Loader2, 
   Pencil, Plus, Move, Trash2, RotateCcw, Hash, ListPlus, Zap, Users,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';

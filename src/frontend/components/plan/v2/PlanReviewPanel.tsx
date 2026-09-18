@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ClipboardCheck, RefreshCw, ChevronRight, CheckCircle2, CircleDashed,
-  CircleSlash, AlertTriangle, Copy, Check, GitPullRequest, Loader2,
+  CircleSlash, AlertTriangle, Check, GitPullRequest, Loader2,
 } from 'lucide-react';
 import { useProjectStore } from '../../../stores/project-store';
 

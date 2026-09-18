@@ -37,7 +37,7 @@ import os from 'node:os';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { generateSharedSecret, deriveConfirmationCode } from './peer-auth';
 import { extractSingleFingerprint, fingerprintsEqual } from '../../shared/lib/sdp-fingerprint';
-import { extractSdpParams, stripColonFingerprint, type MinimalSdpParams } from '../../shared/lib/sdp-minimal';
+import { extractSdpParams, type MinimalSdpParams } from '../../shared/lib/sdp-minimal';
 import { computeAnswerMac, macsEqual } from './peer-auth';
 
 // --- Constants ---------------------------------------------------------------
@@ -561,9 +561,3 @@ export function getAllAddresses(): string[] {
   return out.sort((a, b) => rank(a) - rank(b));
 }
 
-/**
- * First reachable IPv4 address (back-compat). Falls back to 127.0.0.1.
- */
-function getLocalIpAddress(): string {
-  return getAllAddresses()[0] ?? '127.0.0.1';
-}

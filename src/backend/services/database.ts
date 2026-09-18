@@ -30,7 +30,6 @@ import {
  * Loaded via require (computed-free) + marked external in
  * electron.vite.config so the native .node binary isn't bundled.
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const BetterSqlite3: any = require('better-sqlite3');
 
 let bdb: any = null;

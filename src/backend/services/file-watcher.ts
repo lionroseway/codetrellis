@@ -42,7 +42,6 @@ function scheduleCrossSystemRecompute(): void {
       // Lazy-require to avoid an import cycle. cross-system-service
       // → database → server → file-watcher → cross-system-service
       // would otherwise be a load-time loop.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { recomputeCrossSystemEdges } = _lazy___cross_system_service;
       recomputeCrossSystemEdges();
       try {

@@ -202,7 +202,6 @@ export function checkDocFreshnessForFile(relativePath: string, projectRoot: stri
     if (!cfg.docs.enabled || !cfg.docs.channelEvents) return;
 
     // Lazy-require to avoid circular dep at load time.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { findDocsByReferencedFile, getFreshness } = _lazy___system_docs_service;
 
     const matchingDocs: Array<{ uid: string; slug: string; title: string; plans: string[] }> =
@@ -251,7 +250,6 @@ export function checkAllDocsAndBridge(projectRoot: string): { staleCount: number
     const cfg = getEffectiveSensorConfig(projectRoot);
     if (!cfg.docs.enabled || !cfg.docs.channelEvents) return { staleCount: 0, eventsSurfaced: 0 };
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { checkAllDocsFreshness, getSystemDoc } = _lazy___system_docs_service;
     const staleReports = checkAllDocsFreshness(projectRoot);
     let eventsSurfaced = 0;

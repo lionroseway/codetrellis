@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { resolveWithin, readTextWithin, writeFileWithin } from './confined-fs';
+import { resolveWithin, writeFileWithin } from './confined-fs';
 import fs from 'node:fs';
 import path from 'node:path';
 

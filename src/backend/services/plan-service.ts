@@ -44,7 +44,6 @@ function deriveAffectedFiles(fileSpecs: FileSpec[] | undefined, existing: string
  */
 function notifyMutation(planUid: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { scheduleWriteThrough } = _lazy___plan_file_service;
     scheduleWriteThrough(planUid);
   } catch { /* auto-sync not available — fine, manual export still works */ }
@@ -70,7 +69,6 @@ export function createPlan(
   // plan's home repo. Stable across clones (same URL means same repo
   // regardless of local path). Falls back to null when the project
   // isn't a git repo or has no origin.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getNormalisedOriginUrl } = _lazy___git_identity;
   const homeRepo: string | null = normalizedPath ? (getNormalisedOriginUrl(normalizedPath) ?? null) : null;
 
@@ -295,7 +293,6 @@ export function deletePlan(planUid: string): void {
  * later imported into one). Stores the normalised form.
  */
 export function setPlanHomeRepo(planUid: string, homeRepoUrl: string | null): void {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised = homeRepoUrl ? normaliseRepoUrl(homeRepoUrl) : null;
   const now = Date.now();
@@ -314,7 +311,6 @@ export function setPlanHomeRepo(planUid: string, homeRepoUrl: string | null): vo
  * scope array.
  */
 export function addPlanScope(planUid: string, repoUrl: string): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) throw new Error('addPlanScope: repoUrl must be a non-empty URL');
@@ -344,7 +340,6 @@ export function addPlanScope(planUid: string, repoUrl: string): string[] {
  * scope. Returns the updated scope array.
  */
 export function removePlanScope(planUid: string, repoUrl: string): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) throw new Error('removePlanScope: repoUrl must be a non-empty URL');
@@ -374,7 +369,6 @@ export function removePlanScope(planUid: string, repoUrl: string): string[] {
  * Pure read; doesn't materialise full task lists for performance.
  */
 export function listPlansByRepoUrl(repoUrl: string): Plan[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) return [];

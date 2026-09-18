@@ -1,4 +1,4 @@
-import type { ResolverPlugin, ResolveContext } from './base';
+import type { ResolverPlugin } from './base';
 import type { SupportedLanguage } from '../../../shared/types';
 import { typescriptResolver } from './typescript';
 import { pythonResolver } from './python';

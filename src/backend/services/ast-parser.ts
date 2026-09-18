@@ -24,13 +24,11 @@ function loadWebTreeSitter(): any {
     // `<resources>/web-tree-sitter/`.
     const packaged = path.join(resourcesPath, 'web-tree-sitter', 'web-tree-sitter.cjs');
     if (fs.existsSync(packaged)) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require(packaged);
     }
   }
   // Computed string keeps Vite from statically resolving + bundling.
   const wtsName = 'web-tree' + '-sitter';
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require(wtsName);
 }
 

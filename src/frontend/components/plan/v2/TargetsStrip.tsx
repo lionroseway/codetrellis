@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { FileText, Folder, Hash, ArrowRight, X, Plus } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { FileSymbolExpander } from './FileSymbolExpander';
-import type { PlanItem, FileSpec, SymbolSpec, PlanItemEdge } from '@shared/types';
+import type { PlanItem } from '@shared/types';
 
 /**
  * Phase 15 §15.D.2 — Targets Strip.

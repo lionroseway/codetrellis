@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, FileText, Zap, Folder, Copy, History,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User,
-  AlertTriangle, MessageSquare, HelpCircle, Activity, Hash,
+  AlertTriangle, MessageSquare, HelpCircle, Activity, 
   X, Import, GitPullRequest,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
@@ -470,7 +470,7 @@ function PlanHomePage() {
     if (!plan) return;
     setTitle(plan.title ?? '');
     setDescription(plan.description ?? '');
-  }, [plan?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [plan?.uid]);
 
   const saveTitle = (next: string) => {
     setTitle(next);
@@ -853,7 +853,7 @@ function BodyEditor({ item }: { item: PlanItem }) {
     setTitle(item.title);
     setBody(item.body ?? '');
     setEditingBody(!(item.body ?? '').trim());
-  }, [item.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item.uid]);
 
   // When the body arrives from fetchItemFull (hydration returns
   // summaries without body; the full item lands async and we must
@@ -863,7 +863,7 @@ function BodyEditor({ item }: { item: PlanItem }) {
       setBody(item.body ?? '');
       setEditingBody(!(item.body ?? '').trim());
     }
-  }, [item.body]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item.body]);
 
   // Debounced autosave for title.
   const saveTitle = (next: string) => {

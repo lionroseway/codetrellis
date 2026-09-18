@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { removeWithin, resolveWithin, ConfinementError } from './confined-fs';
+import { removeWithin, ConfinementError } from './confined-fs';
 
 /**
  * Branch names become directory names under `.codetrellis/contributions/`.

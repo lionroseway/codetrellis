@@ -27,7 +27,7 @@ const psr4Cache = new Map<string, Psr4Mapping[]>();
 
 function readPsr4(composerPath: string): Psr4Mapping[] {
   if (psr4Cache.has(composerPath)) return psr4Cache.get(composerPath)!;
-  let mappings: Psr4Mapping[] = [];
+  const mappings: Psr4Mapping[] = [];
   try {
     const pkg = JSON.parse(fs.readFileSync(composerPath, 'utf-8'));
     const dir = path.dirname(composerPath);

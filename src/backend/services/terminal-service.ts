@@ -13,8 +13,6 @@
  * into a running terminal. Used by the 17.B "Explain with agent" flow.
  */
 
-import os from 'node:os';
-import path from 'node:path';
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import { appendHistory, closeTerminalHistory } from './terminal-history-service';
 
@@ -370,10 +368,12 @@ export function readTerminalOutput(id: string, lines?: number, raw = false): str
   if (raw) {
     text = buf;
   } else {
+    /* eslint-disable no-control-regex -- stripping ANSI and control bytes is exactly what this does */
     text = buf.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
       .replace(/\x1b\].*?\x07/g, '')     // OSC sequences
       .replace(/\x1b[()][A-Z0-9]/g, '')  // character set selects
       .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, ''); // control chars (keep \n \r)
+    /* eslint-enable no-control-regex */
   }
   const allLines = text.split('\n');
   const maxLines = lines ?? 50;

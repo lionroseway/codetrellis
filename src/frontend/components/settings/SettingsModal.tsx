@@ -982,11 +982,6 @@ function DevicesSection({
     }
   }, []);
 
-  // Transition from showing QR to waiting
-  const handleQrShown = useCallback(() => {
-    setPairingState('waiting-phone');
-  }, []);
-
   // --- Step 2: User enters the code from their phone to confirm ---
   const handleConfirmPairing = useCallback(async () => {
     if (!confirmCode || confirmCode.length !== 6) {

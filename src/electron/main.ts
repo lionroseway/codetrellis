@@ -58,7 +58,7 @@ if (process.platform === 'linux' && process.env.APPIMAGE) {
 // electron-vite injects this env var when running `electron-vite dev`.
 // In production builds it's undefined; we load index.html from the
 // packaged `out/renderer/` directory instead.
-declare const __dirname: string; // eslint-disable-line @typescript-eslint/no-unused-vars
+declare const __dirname: string;
 
 process.on('uncaughtException', (err) => {
   console.error('[Electron] Uncaught exception:', err);

@@ -9,8 +9,6 @@
  * existing templates.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
 import type { Plan, PlanDocument, PlanItem, PlanPhase, Task } from '../../shared/types';
 import { createPlan } from './plan-service';
 import { createPhase } from './plan-phases-service';
@@ -118,7 +116,7 @@ function applyV2Template(
       const kind = t.kind === 'object' ? 'object' : 'action';
 
       // Resolve bodyPath if body is in a separate file
-      let body = t.body ?? '';
+      const body = t.body ?? '';
       if (t.bodyPath && input.projectPath) {
         // bodyPath is relative to the template directory. Since we
         // don't have the template dir here, we rely on the body having

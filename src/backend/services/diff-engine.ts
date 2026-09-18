@@ -1,5 +1,3 @@
-import { getDependencyEdges, getDbStats } from './database';
-
 export interface GraphSnapshot {
   timestamp: number;
   files: Map<string, { hash: string; symbolCount: number }>;

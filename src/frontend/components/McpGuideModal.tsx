@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Copy, Check, Plug, Terminal, Settings, ExternalLink } from 'lucide-react';
+import { X, Copy, Check, Plug, Terminal, ExternalLink } from 'lucide-react';
 
 const STEPS = [
   {

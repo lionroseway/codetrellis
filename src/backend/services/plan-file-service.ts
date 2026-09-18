@@ -338,7 +338,6 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   // require() at runtime to avoid an import cycle with channel-event-file-service
   // (which imports makePlanSlug from this module).
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { discoverChannelEventFiles, importChannelEvent } = _lazy___channel_event_file_service;
     for (const filePath of discoverChannelEventFiles(planDir)) {
       try {
@@ -500,7 +499,7 @@ function upsertItem(
   planUid: string,
   parentUid: string | null,
   raw: any,
-  warnings: string[],
+  _warnings: string[],
 ): PlanItem | null {
   const uid = String(raw.uid);
   const existing = planItemService.getItem(uid);
@@ -823,7 +822,6 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
       // Best-effort broadcast (server module may not be imported yet
       // in tests).
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { broadcast } = _lazy____server;
         broadcast('plan-exported', { planUid, planDir: result.planDir, source: 'auto-sync', files: result.files.length });
       } catch { /* ignore */ }
@@ -894,7 +892,6 @@ export function startPlanFileWatcher(projectRoot: string): void {
         const content = fs.readFileSync(filePath, 'utf-8');
         if (hasGitConflictMarkers(content)) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { broadcast } = _lazy____server;
             broadcast('plan-file-conflict', { filePath, planDir });
           } catch { /* ignore */ }
@@ -911,14 +908,12 @@ export function startPlanFileWatcher(projectRoot: string): void {
     // don't depend on plan/items siblings and shouldn't trigger a whole
     // plan re-import. CDev Phase 1.3.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { isChannelEventFile, importChannelEvent } = _lazy___channel_event_file_service;
       if (isChannelEventFile(filePath)) {
         if (event === 'unlink') return; // deletion handled separately if ever needed
         const imported = importChannelEvent(filePath, planDir);
         if (imported) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { broadcast } = _lazy____server;
             broadcast('channel-event-imported', {
               uid: imported.uid,
@@ -942,7 +937,6 @@ export function startPlanFileWatcher(projectRoot: string): void {
     try {
       const result = importPlan(planDir);
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { broadcast } = _lazy____server;
         broadcast('plan-imported', {
           planUid: result.plan.uid,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Plus, X, FileText, Folder, Hash, ArrowRight, Link2, Image as ImageIcon, Video,
-  Code, Upload, FolderOpen, ChevronDown, ChevronRight, Box,
+  Code, ChevronDown, ChevronRight, 
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { PantryPlaceholder } from './PantryPlaceholder';
@@ -361,8 +361,8 @@ interface PickerMode {
 
 function AddMenu({
   isAction,
-  onTargetFile, onTargetFolder, onTargetSymbol, onTargetEdge,
-  onUrl, onPickImageOrVideo, onRefFile, onRefFolder, onCodeBlock, onTranscript,
+  onTargetFile, onTargetEdge,
+  onUrl, onPickImageOrVideo, onRefFile, onCodeBlock,
 }: {
   isAction: boolean;
   onTargetFile: () => void;
@@ -392,14 +392,6 @@ function AddMenu({
       <MenuItem icon={Link2} label="URL" hint="Paste a link" onClick={onUrl} />
       <MenuItem icon={ImageIcon} label="Image / video" hint="Upload from disk" onClick={onPickImageOrVideo} />
       <MenuItem icon={Code} label="Paste text" hint="Code snippet or transcript" onClick={onCodeBlock} />
-    </div>
-  );
-}
-
-function MenuHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-2.5 pt-1.5 text-[11px] uppercase tracking-wider text-foreground-subtle font-semibold">
-      {children}
     </div>
   );
 }

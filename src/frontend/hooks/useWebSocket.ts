@@ -757,7 +757,7 @@ function extractSteps(text: string): Array<{ description: string; status: 'pendi
   const steps: Array<{ description: string; status: 'pending'; files: string[] }> = [];
 
   for (const line of lines) {
-    const match = line.match(/^\s*\d+[\.\)]\s+(.+)/);
+    const match = line.match(/^\s*\d+[.)]\s+(.+)/);
     if (match) {
       steps.push({ description: match[1].trim(), status: 'pending', files: [] });
     }

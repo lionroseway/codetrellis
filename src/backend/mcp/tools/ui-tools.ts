@@ -221,7 +221,6 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ identity, mcp, plans, data, device, firstRunComplete }) => {
-      const before = deps.getSettings();
       const patch: any = {};
       if (identity) patch.identity = identity;
       if (mcp) patch.mcp = mcp;
@@ -235,7 +234,6 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // Phase 9 — live-restart mDNS when device settings change.
       if (device?.advertise !== undefined || device?.deviceName !== undefined) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const mdns = _lazy_______services_mdns_service;
           if (updated.device.advertise) {
             mdns.startMdns(updated.device.deviceName || undefined);

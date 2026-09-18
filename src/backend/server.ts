@@ -668,7 +668,6 @@ app.get('/api/git/info', (req, res) => {
 
   // Git status summary (untracked, modified, staged counts)
   let untracked = 0;
-  let modified = 0;
   try {
     // Quick scan — check if index exists
     const indexExists = fs.existsSync(path.join(gitDir, 'index'));
@@ -955,7 +954,6 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     // promise this behaviour; this is the implementation. One-time per
     // empty field — user-set values are preserved.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { maybeSeedIdentityFromGit } = _lazy___services_settings_service;
       if (maybeSeedIdentityFromGit(projectPath)) {
         console.log('[Scan] Seeded identity from git config for', projectPath);
@@ -964,7 +962,7 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
       console.warn('[Scan] Failed to seed identity from git:', err);
     }
 
-    const monorepoConfig = detectMonorepo(projectPath);
+    const _monorepoConfig = detectMonorepo(projectPath);
     const fileTree = scanDirectory(projectPath);
     const filePaths = collectFilePaths(fileTree);
 
@@ -1076,7 +1074,6 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { startPointerWatcher } = _lazy___services_external_pointer_service;
       startPointerWatcher(projectPath);
     } catch (err) {
@@ -1084,7 +1081,6 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { indexProjectDocs, startSystemDocsWatcher } = _lazy___services_system_docs_service;
       indexProjectDocs(projectPath);
       startSystemDocsWatcher(projectPath);
@@ -1669,7 +1665,6 @@ app.get('/api/project-config', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getProjectConfig } = _lazy___services_project_config_service;
     res.json(getProjectConfig(projectRoot));
   } catch (err) {
@@ -1686,11 +1681,8 @@ app.get('/api/plans/stitched', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { discoverPointers } = _lazy___services_external_pointer_service;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { findRecentProjectByOriginUrl } = _lazy___services_recent_projects_service;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getNormalisedOriginUrl } = _lazy___services_git_identity;
 
     const localPlans = planService.listPlans(projectRoot);
@@ -3245,7 +3237,6 @@ app.get('/api/mcp/config', (_req, res) => {
 // --- Logs API (Phase 13 follow-up) ---
 
 app.get('/api/logs/tail', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const maxBytes = req.query.maxBytes ? Math.min(Number(req.query.maxBytes), 1024 * 1024) : 64 * 1024;
   res.json({
     path: getCurrentLogPath(),
@@ -3427,7 +3418,6 @@ app.put('/api/settings', (req, res) => {
   // effect on restart is worse than no toggle, because it is believed.
   if (before.device.exposeMobileApi !== next.device.exposeMobileApi) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mobileApi = _lazy___services_mobile_api_server;
       if (next.device.exposeMobileApi) {
         void mobileApi.startMobileApiServer();
@@ -3445,7 +3435,6 @@ app.put('/api/settings', (req, res) => {
   if (before.device.advertise !== next.device.advertise ||
       before.device.deviceName !== next.device.deviceName) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mdns = _lazy___services_mdns_service;
       if (next.device.advertise) {
         mdns.startMdns(next.device.deviceName || undefined);
@@ -3524,21 +3513,17 @@ app.get('/api/identity/git-defaults', (req, res) => {
 // --- CDev Phase 5.3 — Personal sync REST surface ---
 
 app.get('/api/sync/status', (_req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getSyncStatus } = _lazy___services_personal_sync_service;
   res.json(getSyncStatus());
 });
 
 app.get('/api/sync/peek', (_req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { peekImport } = _lazy___services_personal_sync_service;
   res.json(peekImport());
 });
 
 app.post('/api/sync/export', (_req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { exportSync } = _lazy___services_personal_sync_service;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { listRecentProjects } = _lazy___services_recent_projects_service;
   const recentProjects = listRecentProjects().map((p: { path: string; lastOpenedAt: number }) => ({
     projectPath: p.path,
@@ -3548,7 +3533,6 @@ app.post('/api/sync/export', (_req, res) => {
 });
 
 app.post('/api/sync/import', (_req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { importSync } = _lazy___services_personal_sync_service;
   const result = importSync();
   if (result.settingsImported) {
@@ -3560,7 +3544,6 @@ app.post('/api/sync/import', (_req, res) => {
 // --- CDev Phase 6 — Team history, conflict resolution, freeze periods ---
 
 app.get('/api/team-activity', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getTeamActivity } = _lazy___services_git_activity_service;
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -3571,7 +3554,6 @@ app.get('/api/team-activity', (req, res) => {
 });
 
 app.get('/api/plan-history/:planSlug', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getPlanCommitHistory } = _lazy___services_git_activity_service;
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -3582,7 +3564,6 @@ app.get('/api/plan-history/:planSlug', (req, res) => {
 });
 
 app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getPlanAtCommit } = _lazy___services_plan_history_service;
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -3596,7 +3577,6 @@ app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
 });
 
 app.get('/api/plan-history/:planSlug/diff', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { diffPlanBetweenCommits } = _lazy___services_plan_history_service;
   const projectPath = optionalProjectRoot(req, res);
   if (projectPath === null) return;
@@ -3615,7 +3595,6 @@ app.get('/api/plan-history/:planSlug/diff', (req, res) => {
 });
 
 app.get('/api/plan-history/:planSlug/search', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { searchPlanHistory } = _lazy___services_git_activity_service;
   const projectPath = optionalProjectRoot(req, res);
   if (projectPath === null) return;
@@ -3632,7 +3611,6 @@ app.get('/api/plan-history/:planSlug/search', (req, res) => {
 });
 
 app.get('/api/conflicts', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { detectManifestConflicts } = _lazy___services_plan_conflict_service;
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -3640,7 +3618,6 @@ app.get('/api/conflicts', (req, res) => {
 });
 
 app.post('/api/conflicts/resolve', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { resolveFileConflict, resolveFileConflictBySide } = _lazy___services_plan_conflict_service;
   const { projectPath: rawProjectPath, filePath, mode, side, resolutions } = req.body;
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
@@ -3667,7 +3644,6 @@ app.post('/api/conflicts/resolve', (req, res) => {
 });
 
 app.get('/api/freeze', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getFreezeStatus } = _lazy___services_freeze_service;
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -3675,7 +3651,6 @@ app.get('/api/freeze', (req, res) => {
 });
 
 app.put('/api/freeze', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { setFreeze } = _lazy___services_freeze_service;
   const { projectPath: rawProjectPath, active, reason, until, allowedPlanUids } = req.body;
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
@@ -4122,7 +4097,6 @@ app.post('/api/contributor-branch', (req, res) => {
 // the same surface for agents; both pipe through the same service.
 
 app.get('/api/system-docs', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -4131,7 +4105,6 @@ app.get('/api/system-docs', (req, res) => {
 });
 
 app.get('/api/system-docs/:uid', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
   const doc = svc.getSystemDoc(req.params.uid);
   if (!doc) { res.status(404).json({ error: 'not found' }); return; }
@@ -4139,7 +4112,6 @@ app.get('/api/system-docs/:uid', (req, res) => {
 });
 
 app.post('/api/system-docs', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
   const { projectPath: rawProjectPath, title, body, owner, tags, references, slug } = req.body || {};
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
@@ -4164,7 +4136,6 @@ app.post('/api/system-docs', (req, res) => {
 });
 
 app.put('/api/system-docs/:uid', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
   try {
     const updated = svc.updateSystemDoc(req.params.uid, req.body || {});
@@ -4178,7 +4149,6 @@ app.put('/api/system-docs/:uid', (req, res) => {
 });
 
 app.delete('/api/system-docs/:uid', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
   const ok = svc.deleteSystemDoc(req.params.uid);
   if (ok) {
@@ -4189,7 +4159,6 @@ app.delete('/api/system-docs/:uid', (req, res) => {
 });
 
 app.post('/api/system-docs/:uid/verify', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
   const updated = svc.verifySystemDoc(req.params.uid);
   if (!updated) { res.status(404).json({ error: 'not found' }); return; }
@@ -4199,7 +4168,6 @@ app.post('/api/system-docs/:uid/verify', (req, res) => {
 });
 
 app.get('/api/system-docs/:uid/freshness', (req, res) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
   const report = svc.getFreshness(req.params.uid);
   if (!report) { res.status(404).json({ error: 'not found' }); return; }
@@ -4220,7 +4188,6 @@ app.get('/api/sensors/doc-check', (req, res) => {
     const project = optionalProjectRoot(req, res);
     if (project === null) return;
     if (!project) return res.status(400).json({ error: 'project query parameter is required' });
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { checkAllDocsAndBridge } = _lazy___services_sensor_bridge_service;
     const result = checkAllDocsAndBridge(project);
     return res.json(result);
@@ -4272,11 +4239,8 @@ export function getBoundBackendPort(): number {
  * shouldn't spawn watchers for all of them.
  */
 function rearmProjectWatchers(): void {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { listRecentProjects } = _lazy___services_recent_projects_service;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { startProjectConfigWatcher } = _lazy___services_project_config_service;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { startPointerWatcher } = _lazy___services_external_pointer_service;
 
   const recents = listRecentProjects() as Array<{ path: string; pinned: boolean }>;
@@ -4302,7 +4266,6 @@ function rearmProjectWatchers(): void {
         // best-effort — pointers are only useful for cross-repo plans
       }
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { indexProjectDocs, startSystemDocsWatcher } = _lazy___services_system_docs_service;
         indexProjectDocs(proj.path);
         startSystemDocsWatcher(proj.path);
@@ -4350,7 +4313,6 @@ export async function initializeBackend(): Promise<void> {
   // stale-event sweep for minAgeMs rules; post-time dispatch is called
   // directly from the MCP / REST handlers that create channel events.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { startChannelDispatcher } = _lazy___services_channel_dispatcher_service;
     startChannelDispatcher(broadcast);
   } catch (err) {
@@ -4360,7 +4322,6 @@ export async function initializeBackend(): Promise<void> {
   // Phase 4.2 — sensor bridge: converts detection events (deviations,
   // doc staleness, stuck) into channel events. Needs the broadcast fn.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { initSensorBridge } = _lazy___services_sensor_bridge_service;
     initSensorBridge(broadcast);
   } catch (err) {

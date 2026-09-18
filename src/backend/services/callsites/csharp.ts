@@ -50,7 +50,7 @@ const CLASS_RE = /\b(?:class|record)\s+(\w+)/;
 const HTTP_ATTR_RE = /\[\s*Http(Get|Post|Put|Patch|Delete|Head|Options)\s*(?:\(\s*"([^"]*)"\s*\))?\s*\]/g;
 
 /** The action method that an attribute sits above. */
-const METHOD_DECL_RE = /\b(?:public|internal|protected|private)\s+[\w<>,\[\]\?\s]*?\b(\w+)\s*\(/;
+const METHOD_DECL_RE = /\b(?:public|internal|protected|private)\s+[\w<>,[\]?\s]*?\b(\w+)\s*\(/;
 
 /** `app.MapGet("/api/orders", …)`, `group.MapDelete("/{id}", …)`. */
 const MAP_VERB_RE = /(\w+)\s*\.\s*Map(Get|Post|Put|Patch|Delete|Head|Options)\s*\(\s*"([^"]*)"/g;

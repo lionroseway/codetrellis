@@ -171,7 +171,7 @@ function parseJsonlEntry(line: string): AgentEvent | null {
 function isPlanLike(text: string): boolean {
   // Simple heuristic: text contains numbered steps or bullet points with action verbs
   const lines = text.split('\n').filter((l) => l.trim());
-  const numberedLines = lines.filter((l) => /^\s*\d+[\.\)]\s/.test(l));
+  const numberedLines = lines.filter((l) => /^\s*\d+[.)]\s/.test(l));
   if (numberedLines.length >= 3) return true;
 
   const hasHeaders = lines.some((l) => l.startsWith('##') || l.startsWith('**'));

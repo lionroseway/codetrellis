@@ -1,7 +1,5 @@
-import { getDb, getDependencyEdges, getFileSymbols } from './database';
+import { getDb, getDependencyEdges } from './database';
 import { markDirty } from './persistence';
-import { scanDirectory, collectFilePaths } from './project-scanner';
-import { parseFiles } from './ast-parser';
 import fs from 'node:fs';
 import path from 'node:path';
 

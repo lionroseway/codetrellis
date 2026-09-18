@@ -95,11 +95,10 @@ const MAX_MCP_CONNECTIONS = 20;
 
 // ── Module-level state ──────────────────────────────────────────────
 
-let connectedServers = new Map<string, McpServer>();
+const connectedServers = new Map<string, McpServer>();
 let httpServer: http.Server | null = null;
 let boundPort: number = DEFAULT_MCP_PORT;
-let connectedTransports = new Map<string, SSEServerTransport>();
-let transportToAgent = new Map<string, string>();
+const connectedTransports = new Map<string, SSEServerTransport>();
 
 let toolEventCounter = 0;
 
@@ -169,7 +168,6 @@ function broadcastToolEvent(payload: ToolEventPayload): void {
   // Phase 4.4 — feed the stuck sensor. Fire-and-forget; the sensor
   // handles its own error containment.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { recordToolCall } = _lazy____services_stuck_sensor_service;
     recordToolCall({
       tool: payload.tool,
@@ -574,7 +572,6 @@ export async function startMcpServer(): Promise<void> {
         boundPort = candidate;
         console.log(`[MCP] Server running on http://127.0.0.1:${boundPort}${candidate !== requestedPort ? ` (requested ${requestedPort}, autodetected)` : ''}`);
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { broadcast: bc } = _lazy____server;
           bc('mcp-port-changed', { port: boundPort, requested: requestedPort });
         } catch { /* server module may not yet be registered for broadcast in tests */ }

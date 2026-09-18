@@ -9,10 +9,10 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  getNodesBounds,
-  getViewportForBounds,
+  
+  
   type Node,
-  type Edge,
+  
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
@@ -689,16 +689,6 @@ export function MainCanvas() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
-
-  const selectedCommitLabel = useMemo(() => {
-    if (baselineMode === 'auto') return 'Track HEAD';
-    if (!baselineCommitHash) return 'Pin current HEAD';
-    const matchingCommit = recentCommits.find((commit) => commit.commitHash === baselineCommitHash);
-    if (matchingCommit) {
-      return `${matchingCommit.shortCommitHash} · ${matchingCommit.subject}`;
-    }
-    return baselineShortCommitHash ? `${baselineShortCommitHash} · pinned` : 'Pinned baseline';
-  }, [baselineMode, baselineCommitHash, baselineShortCommitHash, recentCommits]);
 
   useEffect(() => {
     setNodes((prev) => preserveNodePositions(prev, displayGraphData?.nodes ?? []));
