@@ -48,6 +48,34 @@ for the full path alone reports false positives. The loop above checks
 both spellings; the first version of this audit did not and wrongly
 listed `/api/project/scan` as dead.
 
+**Mind the `:params` — this one bit.** `cut -d: -f1` turns
+`/api/plans/:uid/budget` into `/api/plans/`, which matches almost
+anything in the frontend. **Every parameterised endpoint was silently
+excluded from the first run of this audit**, and that is how the
+register initially missed `/api/plans/:uid/budget`,
+`/api/plans/:uid/review`, `/api/plans/:uid/pr-draft`,
+`/api/plans/:uid/next-task` and `/api/plans/:uid/file-status` — five
+endpoints, two of them built in Phase 25. A check that passes for the
+wrong reason, which is the exact bug class this whole run keeps finding,
+committed inside the tool built to find it.
+
+The second pass matches the endpoint's **last literal segment** instead:
+
+```bash
+while read -r ep; do
+  last=$(echo "$ep" | tr '/' '\n' | grep -v '^:' | grep -v '^$' | grep -v '^api$' | tail -1)
+  grep -rqiE "[\"'\`/]$last[\"'\`?/)]" src/frontend/ || echo "$ep"
+done < /tmp/eps.txt
+```
+
+**Neither version is trustworthy on its own.** The second over-reports
+(`claim` and `unlink` appear in the frontend for unrelated reasons) and
+under-reports (a segment mentioned only in a *comment* counts as a use —
+including, comically, the comments written by this phase). So:
+
+> **Run both, take the union, and confirm each hit by hand.** The audit
+> narrows 172 endpoints to about 30 candidates; it does not decide.
+
 **Tables with no reader.** Crude but a useful starting point — cross-check
 by hand, since the UI reaches tables through endpoints, not names:
 
@@ -317,7 +345,28 @@ product change — expandable file symbol lists, per-file counts that jump —
 and belongs in its own phase, not here. Recorded so the next reader knows
 it is a decision and not an oversight.
 
-### 4.13 — add here
+### 4.13 ☐ Phase 25 has no interface at all
+
+Found by the corrected audit in §2, not the first one.
+`/api/plans/:uid/review` and `/api/plans/:uid/pr-draft` join
+`/api/comparands` and `/api/compare` (4.7): **the entire Phase 25 review
+surface is MCP and REST only.** Plan↔PR review, the rendered review
+markdown and the PR draft are all built, tested and unreachable from the
+application.
+
+- *Effort*: medium, and it should be sized as one piece with 4.7 rather
+  than four separate wirings.
+
+### 4.14 ☐ `next-task` and `file-status`
+
+`/api/plans/:uid/next-task` answers "what should be worked on next" and
+`/api/plans/:uid/file-status` gives a file's standing against a plan.
+Both are plausibly agent-first by design — but "what's next" is also the
+question a human opening a plan asks.
+
+- *Deliberate?* **Ask.**
+
+### 4.15 — add here
 
 Re-run §2 after any phase that adds a service or an endpoint.
 
