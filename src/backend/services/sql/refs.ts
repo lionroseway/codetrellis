@@ -37,6 +37,22 @@ export interface TableRef {
  * which is what keeps `FROM orders WHERE …` from reading `WHERE` as a
  * second table.
  */
+/**
+ * What may legitimately follow a table reference in a FROM clause.
+ *
+ * Narrower than CLAUSE_END, which exists to end a name and therefore contains
+ * conjunctions like AND/OR that never follow a table. That difference is what
+ * separates `FROM orders o JOIN …` from "from the archive and send it": both
+ * have a word then a CLAUSE_END word, but only one of them is SQL.
+ */
+const AFTER_TABLE = new Set([
+  'WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER',
+  'NATURAL', 'LATERAL', 'ON', 'USING', 'GROUP', 'ORDER', 'HAVING', 'LIMIT',
+  'OFFSET', 'FETCH', 'WINDOW', 'UNION', 'INTERSECT', 'EXCEPT', 'RETURNING',
+  'FOR', 'SET', 'VALUES', 'INTO', 'FROM', 'FORCE', 'USE', 'IGNORE', 'FINAL',
+  'FILTER', 'FIRST', 'FOLLOWING', 'FORMAT', 'OPTION', 'FORCESEEK',
+]);
+
 const CLAUSE_END = new Set([
   'WHERE', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'OFFSET', 'FETCH', 'WINDOW',
   'UNION', 'INTERSECT', 'EXCEPT', 'SET', 'VALUES', 'ON', 'USING', 'SELECT',
@@ -241,8 +257,21 @@ export function extractTableRefs(sql: string): TableRef[] {
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
+    // A statement end clears any pending verb. Without this a DELETE in one
+    // statement reached across the ';' into the next one's FROM.
+    if (t.value === ';') { pendingDelete = false; continue; }
     if (t.type !== 'word') continue;
     const w = t.value.toUpperCase();
+
+    // `ON DELETE CASCADE` / `ON UPDATE` are the referential actions of a
+    // constraint, not a verb. Without this, the DELETE inside an ALTER TABLE
+    // set `pendingDelete` and it was never cleared at the statement end, so
+    // the FROM of the NEXT statement was read as a write. Ubiquitous in DDL:
+    // one foreign key with ON DELETE CASCADE mislabelled everything after it.
+    if (w === 'ON') {
+      pendingDelete = false;
+      continue;
+    }
 
     if (w === 'DELETE') {
       pendingDelete = true;
@@ -339,9 +368,49 @@ export function looksLikeSql(text: string): boolean {
 
   switch (w(0)) {
     case 'SELECT': {
-      // Require a FROM. `SELECT 1` is valid SQL but names no table, so
-      // it is of no interest to a ref-tracker either way.
-      return tokens.some((t, i) => i > 0 && t.type === 'word' && t.value.toUpperCase() === 'FROM');
+      // Require a FROM, and require what follows it to look like a table
+      // reference rather than a sentence. `SELECT 1` is valid SQL but names no
+      // table, so it is of no interest to a ref-tracker either way.
+      //
+      // Presence of the word FROM alone is not enough: "Select all invoices
+      // from customers with overdue balances" is UI copy, and it used to
+      // produce a cross-system edge to a table called `customers` — a
+      // fabricated coupling in the graph, which is worse than a missed one
+      // because someone will act on it. The DELETE and TRUNCATE branches
+      // already apply this discipline; SELECT did not.
+      const from = tokens.findIndex(
+        (t, i) => i > 0 && t.type === 'word' && t.value.toUpperCase() === 'FROM',
+      );
+      if (from === -1) return false;
+      const after = afterName(from + 1);
+      if (after === -1) return false;
+
+      /** End of fragment, statement end, a list comma, or a paren. */
+      const structural = (i: number): boolean =>
+        i >= tokens.length || tokens[i].value === ';' || tokens[i].value === ','
+        || tokens[i].value === '(' || tokens[i].value === ')';
+
+      const wordAt = (i: number): string =>
+        tokens[i]?.type === 'word' ? tokens[i].value.toUpperCase() : '';
+
+      const acceptable = (i: number): boolean => {
+        if (structural(i)) return true;
+        const kw = wordAt(i);
+        // WITH is in both languages: after a table it is only the T-SQL hint
+        // `FROM t WITH (NOLOCK)`, while English uses it constantly
+        // ("from customers with overdue balances"). Require the paren.
+        if (kw === 'WITH') return tokens[i + 1]?.value === '(';
+        return AFTER_TABLE.has(kw);
+      };
+
+      if (acceptable(after)) return true;
+
+      // `FROM orders o` / `FROM orders AS o` — an alias, then the same test.
+      let k = after;
+      if (wordAt(k) === 'AS') k += 1;
+      if (tokens[k]?.type === 'word' && !CLAUSE_END.has(wordAt(k))) k += 1;
+      else return false;
+      return acceptable(k);
     }
 
     case 'INSERT':

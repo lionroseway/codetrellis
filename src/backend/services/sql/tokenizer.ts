@@ -236,10 +236,20 @@ export function tokenize(sql: string): Token[] {
       continue;
     }
     if ((ch === ':' || ch === '@') && isWordStart(sql[i + 1] ?? '')) {
-      const m = new RegExp(`^\\${ch}\\w+`).exec(sql.slice(i))!;
-      push('param', m[0], i);
-      i += m[0].length;
-      continue;
+      // The guard and the pattern have to agree, and they did not: isWordStart
+      // accepts '#' (MySQL/T-SQL identifiers) while \w does not, so ':#' passed
+      // the guard, matched nothing, and the non-null assertion turned that into
+      // a TypeError that took the whole file's SQL callsites with it. Ruby makes
+      // this ordinary rather than exotic — "notifier:#{id}" contains ':#'.
+      //
+      // Falling through to punct rather than tightening the guard, because the
+      // bug class is the two disagreeing; this way they are allowed to.
+      const m = new RegExp(`^\\${ch}\\w+`).exec(sql.slice(i));
+      if (m) {
+        push('param', m[0], i);
+        i += m[0].length;
+        continue;
+      }
     }
 
     if (/\d/.test(ch)) {

@@ -281,6 +281,26 @@ export interface FoldedTable {
  * Scope is capped on purpose: CREATE, ALTER, RENAME and DROP. Anything
  * else leaves the table as it is.
  */
+/**
+ * Fold key: schema-qualified, lower-cased.
+ *
+ * Keying on the bare name made `billing.orders` and `analytics.orders` the same
+ * table, so the second CREATE was folded away as a duplicate of the first and
+ * one of the two vanished from the graph entirely.
+ */
+function foldKey(schema: string | null | undefined, name: string): string {
+  // Unqualified tables keep their bare key, so this is only a change for the
+  // schema-qualified case that was actually broken.
+  return schema ? `${schema.toLowerCase()}.${name.toLowerCase()}` : name.toLowerCase();
+}
+
+/** The same key from a written name, which may or may not carry its schema. */
+function foldKeyOfWritten(written: string): string {
+  const parts = written.split('.');
+  const bare = parts.pop() ?? '';
+  return foldKey(parts.length ? parts.join('.') : null, bare);
+}
+
 export function foldMigrations(files: Array<{ path: string; sql: string }>): Map<string, FoldedTable> {
   const live = new Map<string, FoldedTable>();
 
@@ -292,8 +312,8 @@ export function foldMigrations(files: Array<{ path: string; sql: string }>): Map
           // A re-CREATE (`CREATE OR REPLACE VIEW`) keeps the original
           // definer — the first file to introduce it is the one a reader
           // should open.
-          if (!live.has(stmt.name)) {
-            live.set(stmt.name, {
+          if (!live.has(foldKey(stmt.schema, stmt.name))) {
+            live.set(foldKey(stmt.schema, stmt.name), {
               name: stmt.name,
               raw: stmt.raw,
               kind: stmt.kind,
@@ -307,7 +327,7 @@ export function foldMigrations(files: Array<{ path: string; sql: string }>): Map
         }
 
         case 'alter': {
-          const existing = live.get(stmt.name);
+          const existing = live.get(foldKey(stmt.schema, stmt.name));
           if (existing && !existing.alteredIn.includes(file.path)) {
             existing.alteredIn.push(file.path);
           }
@@ -315,16 +335,17 @@ export function foldMigrations(files: Array<{ path: string; sql: string }>): Map
         }
 
         case 'rename': {
-          const existing = live.get(stmt.name);
+          const existing = live.get(foldKey(stmt.schema, stmt.name));
           if (existing && stmt.renameTo) {
-            live.delete(stmt.name);
-            live.set(stmt.renameTo, { ...existing, name: stmt.renameTo, raw: stmt.renameTo });
+            live.delete(foldKey(stmt.schema, stmt.name));
+            // A rename keeps the schema it was in.
+            live.set(foldKey(stmt.schema, stmt.renameTo), { ...existing, name: stmt.renameTo, raw: stmt.renameTo });
           }
           break;
         }
 
         case 'drop':
-          live.delete(stmt.name);
+          live.delete(foldKey(stmt.schema, stmt.name));
           break;
       }
     }
@@ -344,7 +365,11 @@ export function foldMigrations(files: Array<{ path: string; sql: string }>): Map
 export function looksLikeMigrationsDir(fileNames: string[]): boolean {
   const sqlFiles = fileNames.filter((f) => f.toLowerCase().endsWith('.sql'));
   if (sqlFiles.length < 2) return false;
-  const numbered = sqlFiles.filter((f) => /^(\d{3,}|\d{8,})[._-]/.test(f.replace(/^.*\//, '')));
+  // [\\/] not / — these paths come from path.join, so on Windows they are
+  // `C:\\repo\\db\\migrations\\001_a.sql` and a forward-slash-only strip left the
+  // whole path in place, so nothing matched the numeric prefix and the fold
+  // never ran. Dropped tables then stayed in the graph forever, on Windows only.
+  const numbered = sqlFiles.filter((f) => /^(\d{3,}|\d{8,})[._-]/.test(f.replace(/^.*[\\/]/, '')));
   return numbered.length >= Math.ceil(sqlFiles.length / 2);
 }
 
@@ -354,7 +379,7 @@ export function looksLikeMigrationsDir(fileNames: string[]): boolean {
  */
 export function sortMigrations<T extends { path: string }>(files: T[]): T[] {
   const keyOf = (p: string): [number, string] => {
-    const base = p.replace(/^.*\//, '');
+    const base = p.replace(/^.*[\\/]/, '');
     const m = /^(\d+)/.exec(base);
     return [m ? Number(m[1]) : Number.MAX_SAFE_INTEGER, base];
   };
@@ -410,8 +435,7 @@ export function applyMigrationFold(
 
     for (const file of ordered) {
       file.symbols = file.symbols.filter((sym) => {
-        const bare = sym.name.split('.').pop()!.toLowerCase();
-        const survivor = live.get(bare);
+        const survivor = live.get(foldKeyOfWritten(sym.name));
         // Procedures are not folded (they have no create/drop lifecycle
         // worth tracking here), so they always survive.
         if (!survivor) return sym.modifiers.includes('proc');

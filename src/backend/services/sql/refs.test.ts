@@ -179,3 +179,49 @@ describe('looksLikeSql', () => {
     }
   });
 });
+
+describe('prose is not SQL (M15)', () => {
+  test('a sentence that starts with SELECT and contains FROM is rejected', () => {
+    // This fabricated a cross-system edge to a table called `customers`. A
+    // made-up coupling is worse than a missed one: someone acts on it.
+    assert.equal(looksLikeSql('Select all invoices from customers with overdue balances'), false);
+    assert.equal(looksLikeSql('Select the report from the archive and send it'), false);
+    assert.equal(looksLikeSql('Select a template from the gallery to begin'), false);
+  });
+
+  test('real SELECTs still pass, including the shapes that nearly broke', () => {
+    assert.equal(looksLikeSql('SELECT * FROM customers'), true);
+    // An alias is what distinguishes this from prose, and what a naive
+    // structural check rejects.
+    assert.equal(looksLikeSql('SELECT o.id FROM orders o JOIN users u ON u.id = o.user_id'), true);
+    assert.equal(looksLikeSql('SELECT a FROM t AS x WHERE 1'), true);
+    assert.equal(looksLikeSql('SELECT a FROM a, b'), true);
+    assert.equal(looksLikeSql('SELECT id FROM billing.orders WHERE x = 1'), true);
+    // WITH is the one keyword in both languages; after a table it is the
+    // T-SQL hint form only.
+    assert.equal(looksLikeSql('SELECT a FROM t WITH (NOLOCK)'), true);
+  });
+});
+
+describe('DELETE as a verb vs as a referential action (M16)', () => {
+  test('ON DELETE CASCADE does not turn a later FROM into a write', () => {
+    const sql = [
+      'ALTER TABLE payments ADD CONSTRAINT fk FOREIGN KEY (invoice_id)',
+      '  REFERENCES invoices(id) ON DELETE CASCADE;',
+      'UPDATE invoice_totals SET total = 1 FROM payments p WHERE p.invoice_id = invoice_totals.id;',
+    ].join('\n');
+    const refs = extractTableRefs(sql);
+    const payments = refs.find((x) => x.table === 'payments');
+    assert.equal(payments?.op, 'read', 'payments is read by the UPDATE, not written');
+  });
+
+  test('a statement boundary clears a pending DELETE', () => {
+    const refs = extractTableRefs('DELETE FROM a; SELECT * FROM b;');
+    assert.equal(refs.find((x) => x.table === 'a')?.op, 'write');
+    assert.equal(refs.find((x) => x.table === 'b')?.op, 'read');
+  });
+
+  test('an actual DELETE still writes', () => {
+    assert.equal(extractTableRefs('DELETE FROM orders WHERE id = 1')[0].op, 'write');
+  });
+});

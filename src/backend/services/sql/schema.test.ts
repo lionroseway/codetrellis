@@ -156,3 +156,38 @@ describe('migration directory detection and ordering', () => {
     assert.deepEqual(sorted.map((f) => f.path), ['db/2_two.sql', 'db/9_nine.sql', 'db/10_ten.sql']);
   });
 });
+
+describe('migration paths on Windows (M17)', () => {
+  test('a migrations directory is recognised with backslash separators', () => {
+    // These paths come from path.join, so on Windows they use backslashes. A
+    // forward-slash-only basename strip left the whole path in place, nothing
+    // matched the numeric prefix, and the fold silently never ran — so dropped
+    // tables stayed in the graph, on Windows only.
+    assert.ok(looksLikeMigrationsDir([
+      'C:\\repo\\db\\migrations\\001_create_invoices.sql',
+      'C:\\repo\\db\\migrations\\002_create_payments.sql',
+    ]));
+  });
+
+  test('numeric ordering works with backslash separators', () => {
+    const sorted = sortMigrations([
+      { path: 'C:\\m\\010_b.sql' },
+      { path: 'C:\\m\\9_a.sql' },
+    ]);
+    assert.deepEqual(sorted.map((f) => f.path), ['C:\\m\\9_a.sql', 'C:\\m\\010_b.sql']);
+  });
+});
+
+describe('same table name in two schemas (M19)', () => {
+  test('billing.orders and analytics.orders are not the same table', () => {
+    // Keyed by bare name, the second CREATE folded away as a duplicate of the
+    // first and one of the two disappeared from the graph entirely.
+    const live = foldMigrations([
+      { path: 'db/migrations/001_a.sql', sql: 'CREATE TABLE billing.orders (id INT);' },
+      { path: 'db/migrations/002_b.sql', sql: 'CREATE TABLE analytics.orders (id INT);' },
+    ]);
+    assert.equal(live.size, 2, 'both tables survive the fold');
+    assert.ok(live.has('billing.orders'));
+    assert.ok(live.has('analytics.orders'));
+  });
+});
