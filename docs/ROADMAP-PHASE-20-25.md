@@ -1,4 +1,4 @@
-# Roadmap — Phases 20–28
+# Roadmap — Phases 20–29
 
 > Drafted: 2026-09-17
 > Status: **20–24 built, 25 partly built** — all on 2026-09-17. Each
@@ -34,6 +34,7 @@ reasoning for it.
 | **26** | [PHASE-26-CODE-FIRST-SURFACE.md](PHASE-26-CODE-FIRST-SURFACE.md) | Plan overlay on code, a real diff editor, fast-forward, and a mode where the graph never mounts | ✅ all four layers |
 | **27** | [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md) | Ruby (a live bug), C#, Kotlin and Swift | ✅ parsers + resolvers |
 | **28** | [PHASE-28-CALLSITE-EXPANSION.md](PHASE-28-CALLSITE-EXPANSION.md) | Callsite extractors for those four, so they reach the cross-system map | ✅ |
+| **29** | [PHASE-29-SURFACING-WHAT-WE-COLLECT.md](PHASE-29-SURFACING-WHAT-WE-COLLECT.md) | Surface what the backend already computes and no interface reads — a living register | ◑ |
 
 ## Why 26 and 27 exist
 
@@ -52,6 +53,15 @@ there is no parser — so a Rails repo renders as a constellation of empty
 nodes. That is the third instance of "a list that had to be kept in sync
 by hand fell out of sync", which is why 27 also adds a startup assertion
 rather than just another parser.
+
+**29 is the same audit pointed at the last hop.** Phases 20–28 kept
+finding two things that had to agree with nothing checking that they did.
+29 points that at the interface: the backend computes something, stores
+it, serves it, and no part of the UI reads it. 26 of 172 endpoints have
+no frontend caller — including the two that already carry the import- and
+callsite-coverage numbers. A number that is correct and invisible is
+worth what a number never computed is worth, and costs more, because it
+looks done.
 
 **28 exists because 27 was half a language.** A language in the symbol
 graph but not on the cross-system map draws as a cluster of files
