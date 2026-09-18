@@ -106,7 +106,12 @@ export default function PlanReviewScreen() {
   const [review, setReview] = useState<PlanReview | null>(null);
   const [next, setNext] = useState<NextItem | null>(null);
   const [comparands, setComparands] = useState<Comparand[]>([]);
-  const [before, setBefore] = useState('baseline');
+  // 'baseline' only resolves when a baseline snapshot has been captured —
+  // `listComparands` omits it otherwise, so it was a default that failed on
+  // any project without one, and the error state replaces the very switcher
+  // that could have changed it. The desktop panel defaults to commit:HEAD,
+  // which always resolves; match it.
+  const [before, setBefore] = useState('commit:HEAD');
   const [after, setAfter] = useState('live');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
