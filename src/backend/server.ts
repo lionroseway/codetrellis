@@ -177,8 +177,17 @@ app.use(localAuthMiddleware);
  * falsy.
  */
 function requireProjectRoot(req: express.Request, res: express.Response): string | null {
+  const raw = req.query.project;
+  // "You sent no parameter" is a client error, not a refusal. Collapsing
+  // both onto 403 would have told a caller who simply forgot the
+  // parameter that they were denied, and it broke two existing tests
+  // that (correctly) distinguish the two.
+  if (raw === undefined || raw === null || raw === '') {
+    res.status(400).json({ error: 'project query param required' });
+    return null;
+  }
   try {
-    return resolveTrustedProjectRoot(req.query.project, 'project');
+    return resolveTrustedProjectRoot(raw, 'project');
   } catch (err) {
     res.status(err instanceof ConfinementError ? 403 : 400).json({
       error: err instanceof Error ? err.message : String(err),

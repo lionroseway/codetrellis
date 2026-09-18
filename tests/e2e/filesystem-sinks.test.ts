@@ -34,6 +34,14 @@ test.describe('21a / 21b — a template cannot read outside its own directory', 
     const h = await setupHarness('sink-template-bodypath');
     const secret = plantSecret();
     try {
+      // The project must be OPENED before these endpoints will answer:
+      // a project root is never caller-nominated (Phase 19), so an
+      // unopened path is refused before the check under test can run.
+      // Without this the assertion below would pass on a 403 and prove
+      // nothing about template path containment.
+      await h.client.scanProject(h.fixture.projectPath);
+
+
       // A template is a directory of YAML plus markdown, and it can be
       // INSTALLED FROM ANYWHERE — a shared folder, a downloaded bundle. So
       // its own YAML is attacker-controlled in the case that matters, and
@@ -247,6 +255,14 @@ test.describe('11 — reference resolution is not an existence oracle', () => {
     const h = await setupHarness('sink-existence-oracle');
     const secret = plantSecret();
     try {
+      // The project must be OPENED before these endpoints will answer:
+      // a project root is never caller-nominated (Phase 19), so an
+      // unopened path is refused before the check under test can run.
+      // Without this the assertion below would pass on a 403 and prove
+      // nothing about the existence oracle.
+      await h.client.scanProject(h.fixture.projectPath);
+
+
       const ask = async (ref: string) => {
         const res = await h.client.raw(
           'GET',

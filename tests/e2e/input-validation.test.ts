@@ -19,6 +19,13 @@ test.describe('Finding 10 — git option injection', () => {
   test('git-ref routes reject arguments that git would read as flags', async () => {
     const h = await setupHarness('finding-10-git-option-injection');
     try {
+      // The project must be OPENED before these endpoints will answer:
+      // a project root is never caller-nominated (Phase 19), so an
+      // unopened path is refused before the check under test can run.
+      // Without this the assertion below would pass on a 403 and prove
+      // nothing about git-ref validation.
+      await h.client.scanProject(h.fixture.projectPath);
+
       const project = encodeURIComponent(h.fixture.projectPath);
 
       // git parses ANY argument starting with `-` as an option. Using
