@@ -9,12 +9,20 @@ import type { SupportedLanguage } from '../../../shared/types';
 import { typescriptCallsites, javascriptCallsites } from './typescript';
 import { pythonCallsites } from './python';
 import { goCallsites } from './go';
+import { csharpCallsites } from './csharp';
+import { kotlinCallsites } from './kotlin';
+import { swiftCallsites } from './swift';
+import { rubyCallsites } from './ruby';
 
 export const CALLSITE_EXTRACTORS: ReadonlyArray<CallsiteExtractor> = [
   typescriptCallsites,
   javascriptCallsites,
   pythonCallsites,
   goCallsites,
+  csharpCallsites,
+  kotlinCallsites,
+  swiftCallsites,
+  rubyCallsites,
 ];
 
 const BY_LANGUAGE = (() => {

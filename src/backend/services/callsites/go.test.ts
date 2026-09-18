@@ -139,6 +139,18 @@ req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/api/orders", 
 
   test('non-route strings are not treated as calls', () => {
     assert.equal(callsOf(`http.Get("not-a-path")`).length, 0);
-    assert.equal(callsOf(`http.Get("https://example.com/status")`).length, 0);
+  });
+
+  test('an absolute URL is a call even without /api/ in the path', () => {
+    // Phase 28 changed this. It used to require `/api/` before
+    // reporting an absolute URL, which dropped `http://billing/ledger`
+    // — real internal coupling, and exactly the edge this product
+    // exists to draw. The noise it was guarding against is bounded:
+    // the matcher only creates an edge when the call pairs with a route
+    // found in the same scan, so a call to a genuinely external host
+    // stores a callsite and draws nothing.
+    const calls = callsOf(`http.Get("https://example.com/status")`);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].urlPattern, '/status');
   });
 });

@@ -304,12 +304,12 @@ Cost: 34 kB on a chunk that is already lazy-loaded.
 
 ### Still open after this phase
 
-- **Callsite extractors** for Ruby, C#, Kotlin and Swift — the work that
-  puts these services on the cross-system map. Shapes are known and
-  decorator-like in three of the four: ASP.NET `[HttpGet("/api/orders")]`
-  and `HttpClient`; Ktor/Spring routing; `URLSession`; `Net::HTTP` /
-  `HTTParty` plus the `config/routes.rb` DSL (closer to chi's grouped
-  router than to FastAPI's decorators).
+- ~~**Callsite extractors** for Ruby, C#, Kotlin and Swift~~ — **done in
+  [Phase 28](PHASE-28-CALLSITE-EXPANSION.md)**. The shapes guessed at
+  here were right, and the one that mattered most was the one not
+  guessed at: Rails declares its API with `resources`, never with
+  explicit verbs, so an extractor reading only `get`/`post` lines finds
+  nothing at all in a real routes file.
 - **Rails convention-based resolution.** Autoloading resolves nothing
   explicitly — `User` just works — so a Rails app's real dependency graph
   is implied by naming, not by `require`. Today a Rails repo gets

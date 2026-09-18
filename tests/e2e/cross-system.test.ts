@@ -48,25 +48,52 @@ import { setupHarness, waitFor, sleep } from '../harness';
 const httpOnly = <T extends { protocol: string }>(edges: T[]): T[] =>
   edges.filter((e) => e.protocol === 'http');
 
+/**
+ * Every HTTP pairing the fixture should produce, sorted.
+ *
+ * Phase 28 added callsite extractors for Ruby, C#, Kotlin and Swift, so
+ * the fixture now contains a chain that crosses four languages —
+ * Swift → Kotlin → C# → Python — plus Ruby → Python, on top of the
+ * original TS → Python and Go → Python pairings.
+ *
+ * The list is exact on purpose: this suite is the guard that says the
+ * matcher pairs *these* and nothing else. The *counts* in the mutation
+ * tests below are deliberately NOT hard-coded — see the note there.
+ */
+const EXPECTED_LABELS = [
+  'DELETE /api/jobs/:id',       // Swift  → Kotlin
+  'GET /api/billing/invoices',  // TS     → Go
+  'GET /api/jobs',              // Swift  → Kotlin
+  'GET /api/ledger',            // Kotlin → C#
+  'GET /api/orders',            // TS     → Python
+  'GET /api/orders',            // Go     → Python
+  'GET /api/orders',            // C#     → Python
+  'GET /api/users',             // TS     → Python
+  'GET /api/users',             // Ruby   → Python
+  'POST /api/orders',           // TS     → Python
+  'POST /api/users',            // TS     → Python
+  'POST /api/users',            // Ruby   → Python
+];
+
 test.describe('Cross-system HTTP matcher', () => {
   test.setTimeout(120_000);
 
-  test('baseline scan reports exactly 6 HTTP edges with correct labels', async () => {
+  test('baseline scan reports exactly the expected HTTP edges', async () => {
     const h = await setupHarness('xs-baseline');
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const resp = await h.client.getCrossSystem();
       const http = httpOnly(resp.edges);
-      expect(http).toHaveLength(6);
-      expect(resp.stats?.byProtocol?.http).toBe(6);
+      expect(http).toHaveLength(EXPECTED_LABELS.length);
+      expect(resp.stats?.byProtocol?.http).toBe(EXPECTED_LABELS.length);
 
       for (const edge of http) {
         expect(edge.protocol).toMatch(/^http/i);
         expect(edge.confidence).toBeGreaterThan(0);
       }
 
-      // The four TS→Python edges still originate at api.ts and land on
-      // a FastAPI route file.
+      // Everything landing on the FastAPI service lands on a route
+      // module — the callers are now TS, Go, Ruby and C#.
       const fromWeb = http.filter((e) =>
         e.targetRelative.startsWith('services/api/app/routes/'),
       );
@@ -74,15 +101,7 @@ test.describe('Cross-system HTTP matcher', () => {
         expect(edge.targetRelative).toMatch(/^services\/api\/app\/routes\/(users|orders)\.py$/);
       }
 
-      const labels = http.map((e) => e.label).sort();
-      expect(labels).toEqual([
-        'GET /api/billing/invoices',
-        'GET /api/orders',
-        'GET /api/orders',   // one from the web app, one from the Go client
-        'GET /api/users',
-        'POST /api/orders',
-        'POST /api/users',
-      ]);
+      expect(http.map((e) => e.label).sort()).toEqual(EXPECTED_LABELS);
     } finally {
       await h.teardown();
     }
@@ -93,7 +112,13 @@ test.describe('Cross-system HTTP matcher', () => {
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const before = httpOnly(await h.client.getCrossSystemEdges());
-      expect(before).toHaveLength(6);
+      expect(before).toHaveLength(EXPECTED_LABELS.length);
+      // Counted relative to the baseline rather than hard-coded. This
+      // test has now broken three times purely because the fixture
+      // grew — Phase 20 added two edges, Phase 28 six — and each time
+      // the failure said nothing about the matcher, which is what the
+      // test is for.
+      const expectedAfter = before.length - 1;
 
       // Strip the POST /api/orders decorator + handler from
       // services/api/app/routes/orders.py — leaves the GET intact.
@@ -125,7 +150,7 @@ test.describe('Cross-system HTTP matcher', () => {
       const after = await waitFor(
         async () => {
           const edges = httpOnly(await h.client.getCrossSystemEdges());
-          if (edges.length === 5 && !edges.find((e) => e.label === 'POST /api/orders')) {
+          if (edges.length === expectedAfter && !edges.find((e) => e.label === 'POST /api/orders')) {
             return edges;
           }
           return null;
@@ -133,11 +158,11 @@ test.describe('Cross-system HTTP matcher', () => {
         {
           timeoutMs: 15_000,
           intervalMs: 200,
-          description: 'cross-system edges to auto-refresh to exactly 5 (POST orders gone)',
+          description: `cross-system edges to auto-refresh to exactly ${expectedAfter} (POST orders gone)`,
         },
       );
 
-      expect(after).toHaveLength(5);
+      expect(after).toHaveLength(expectedAfter);
       expect(after.find((e) => e.label === 'POST /api/orders')).toBeUndefined();
       // The GET /api/orders edge should remain.
       expect(after.find((e) => e.label === 'GET /api/orders')).toBeDefined();
@@ -151,7 +176,8 @@ test.describe('Cross-system HTTP matcher', () => {
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const before = httpOnly(await h.client.getCrossSystemEdges());
-      expect(before).toHaveLength(6);
+      expect(before).toHaveLength(EXPECTED_LABELS.length);
+      const expectedAfter = before.length + 1;
 
       // Add a new fetch on the TS side.
       const apiTs = path.join(h.fixture.projectPath, 'packages/web/src/api.ts');
@@ -193,7 +219,7 @@ def get_products() -> list[Order]:
       const after = await waitFor(
         async () => {
           const edges = httpOnly(await h.client.getCrossSystemEdges());
-          if (edges.length === 7 && edges.find((e) => e.label === 'GET /api/products')) {
+          if (edges.length === expectedAfter && edges.find((e) => e.label === 'GET /api/products')) {
             return edges;
           }
           return null;
@@ -201,11 +227,11 @@ def get_products() -> list[Order]:
         {
           timeoutMs: 15_000,
           intervalMs: 200,
-          description: 'cross-system edges to settle at 7 with the new GET /api/products',
+          description: `cross-system edges to settle at ${expectedAfter} with the new GET /api/products`,
         },
       );
 
-      expect(after).toHaveLength(7);
+      expect(after).toHaveLength(expectedAfter);
       expect(after.find((e) => e.label === 'GET /api/products')).toBeDefined();
     } finally {
       await h.teardown();

@@ -1,5 +1,9 @@
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
+import {
+  VERB_SET, lineOf, joinPath, normalizeRoute, normalizeUrl,
+  isLikelyApiPath, countBraces, stripLineComment, type BlockPrefix,
+} from './shared';
 
 /**
  * Go callsite extractor — Phase 20.
@@ -37,9 +41,6 @@ import type { Callsite } from '../../../shared/types';
  * same failure mode we'd have without it.
  */
 
-const HTTP_VERBS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
-const VERB_SET = new Set<string>(HTTP_VERBS);
-
 /** `v1 := r.Group("/api/v1")`, `g := e.Group("/api")`. */
 const GROUP_RE = /(\w+)\s*:?=\s*(\w+)\s*\.\s*Group\s*\(\s*"([^"]*)"/;
 
@@ -76,12 +77,6 @@ export const goCallsites: CallsiteExtractor = {
 
 // ── Inbound ─────────────────────────────────────────────────────────
 
-interface BlockPrefix {
-  /** Brace depth at which this prefix stops applying. */
-  depth: number;
-  prefix: string;
-}
-
 function extractRoutes(content: string): Callsite[] {
   const lines = content.split('\n');
   const out: Callsite[] = [];
@@ -105,7 +100,7 @@ function extractRoutes(content: string): Callsite[] {
   let depth = 0;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = stripComment(lines[i]);
+    const line = stripLineComment(lines[i], '//');
     const lineNo = i + 1;
 
     while (blockStack.length > 0 && depth < blockStack[blockStack.length - 1].depth) {
@@ -236,75 +231,3 @@ function extractOutbound(content: string): Callsite[] {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function stripComment(line: string): string {
-  const idx = line.indexOf('//');
-  if (idx === -1) return line;
-  // Don't cut inside a string literal — `"http://x"` contains `//`.
-  const before = line.slice(0, idx);
-  const quotes = (before.match(/"/g) || []).length;
-  return quotes % 2 === 0 ? before : line;
-}
-
-function countBraces(line: string): number {
-  let delta = 0;
-  let inString = false;
-  let prev = '';
-  for (const ch of line) {
-    if (ch === '"' && prev !== '\\') inString = !inString;
-    else if (!inString && ch === '{') delta++;
-    else if (!inString && ch === '}') delta--;
-    prev = ch;
-  }
-  return delta;
-}
-
-function joinPath(prefix: string, literal: string): string {
-  if (!prefix) return literal;
-  if (!literal || literal === '/') return prefix;
-  const left = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
-  const right = literal.startsWith('/') ? literal : '/' + literal;
-  return left + right;
-}
-
-function isLikelyApiPath(s: string): boolean {
-  if (!s) return false;
-  if (s.startsWith('/')) return true;
-  if (/^https?:\/\//.test(s) && /\/api\//.test(s)) return true;
-  // `fmt.Sprintf("%s/api/users", base)` — the literal starts with the
-  // verb placeholder, so look for an api-shaped tail.
-  if (/^%[sv]\//.test(s) && /\/api\//.test(s)) return true;
-  return false;
-}
-
-/**
- * Canonical parameter form across every language is `:id` (see the TS
- * and Python extractors), so both Go styles collapse to it: chi and
- * stdlib use `{id}`, gin and echo use `:userID`.
- */
-function normalizeRoute(url: string): string {
-  let p = url;
-  p = p.replace(/\{[^}]*\}/g, ':id');
-  p = p.replace(/:[A-Za-z_]\w*/g, ':id');
-  p = p.replace(/\*+$/, '');
-  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
-  return p || '/';
-}
-
-function normalizeUrl(url: string): string {
-  let p = url.replace(/^https?:\/\/[^/]+/, '');
-  p = p.replace(/^%[sv]/, '');
-  p = p.replace(/\{[^}]*\}/g, ':id');
-  p = p.replace(/%[sdv]/g, ':id');
-  const q = p.indexOf('?');
-  if (q >= 0) p = p.slice(0, q);
-  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
-  return p;
-}
-
-function lineOf(content: string, charIndex: number): number {
-  let line = 1;
-  for (let i = 0; i < charIndex && i < content.length; i++) {
-    if (content.charCodeAt(i) === 10) line++;
-  }
-  return line;
-}

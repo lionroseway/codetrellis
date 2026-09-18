@@ -1,4 +1,4 @@
-# Roadmap — Phases 20–27
+# Roadmap — Phases 20–28
 
 > Drafted: 2026-09-17
 > Status: **20–24 built, 25 partly built** — all on 2026-09-17. Each
@@ -32,7 +32,8 @@ reasoning for it.
 | **24** | [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) | Jira / Linear / issue intake into nested plans, without CodeTrellis holding a credential | ✅ backend; UI chip remains |
 | **25** | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot selection, and architecture play-forward | ◑ comparison + review built; play-forward moved to 26 |
 | **26** | [PHASE-26-CODE-FIRST-SURFACE.md](PHASE-26-CODE-FIRST-SURFACE.md) | Plan overlay on code, a real diff editor, fast-forward, and a mode where the graph never mounts | ✅ all four layers |
-| **27** | [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md) | Ruby (a live bug), C#, Kotlin and Swift | ✅ parsers + resolvers; callsite extractors remain |
+| **27** | [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md) | Ruby (a live bug), C#, Kotlin and Swift | ✅ parsers + resolvers |
+| **28** | [PHASE-28-CALLSITE-EXPANSION.md](PHASE-28-CALLSITE-EXPANSION.md) | Callsite extractors for those four, so they reach the cross-system map | ✅ |
 
 ## Why 26 and 27 exist
 
@@ -51,6 +52,13 @@ there is no parser — so a Rails repo renders as a constellation of empty
 nodes. That is the third instance of "a list that had to be kept in sync
 by hand fell out of sync", which is why 27 also adds a startup assertion
 rather than just another parser.
+
+**28 exists because 27 was half a language.** A language in the symbol
+graph but not on the cross-system map draws as a cluster of files
+connected to nothing else in the repo — an isolated service, when really
+it is an unread one. The product claim is "we map your microservices";
+after 27 that was true for TS, Python and Go and false for the four
+languages added the same week.
 
 **What 27 turned out to cost: much less than planned.** Its design
 document blocked Kotlin and Swift behind an Emscripten build toolchain,

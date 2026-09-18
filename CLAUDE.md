@@ -110,9 +110,16 @@ a tagged candidate and on packaged artifacts.
   filtered out by every per-file reader, so a nested member is findable
   in search and invisible everywhere else — use `flattenSymbols` in
   `parsers/base.ts`.
-  Callsite extractors exist for TS, Python and Go only; the other
-  languages contribute symbols and import edges but do not yet appear
-  on the cross-system map.
+  Callsite extractors (Phase 28) cover TS / JS, Python, Go, C#, Kotlin,
+  Swift and Ruby — so all of those reach the cross-system map. Rust,
+  PHP and Java contribute symbols and import edges but no HTTP
+  callsites yet. SQL needs no per-language work: `services/sql/embedded.ts`
+  scans string literals in every language.
+  **Route and URL normalisation is the matching contract, not a
+  formatting choice.** `cross-system-service` pairs by exact string
+  equality on `METHOD path` with no fuzzy fallback, so two languages
+  that normalise differently never pair — use the helpers in
+  `callsites/shared.ts`, never a local copy.
   Grammar `.wasm` files are committed under `resources/tree-sitter/`
   with their sha256 and exact source recorded in the README there —
   **every new grammar gets a row**, and one of them (Swift) is a
