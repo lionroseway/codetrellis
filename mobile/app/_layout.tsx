@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Stack, router } from 'expo-router';
+import { Stack, router, ThemeProvider, DarkTheme } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import SplashScreen from '../components/SplashScreen';
@@ -14,6 +14,21 @@ import AnimatedBackground from '../components/AnimatedBackground';
 import AppDrawer from '../components/AppDrawer';
 import { initPrefs } from '../lib/prefs';
 import { onNotificationTap, getInitialNotification, routeForNotification } from '../lib/push';
+
+/**
+ * Navigation paints `theme.colors.background` over everything, and its
+ * default is light (`rgb(242,242,242)`) — which is what buried the
+ * living-graph background: the container below it is dark navy and the
+ * screens above it are transparent, so the only thing anyone saw was
+ * navigation's own grey. Stock `DarkTheme` does not fix it either; its
+ * background is an opaque `rgb(1,1,1)`, which would hide the grid just
+ * as effectively. Take DarkTheme for the text/card/border colours and make
+ * the background transparent, so `AnimatedBackground` shows through.
+ */
+const TRELLIS_THEME = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: 'transparent' },
+};
 
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
@@ -37,6 +52,7 @@ export default function RootLayout() {
       {/* Global living-graph background — sits behind every screen (screens
           render transparent over it). Terminal/WebView screens stay opaque. */}
       <AnimatedBackground />
+      <ThemeProvider value={TRELLIS_THEME}>
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: '#0a0c18' },
@@ -194,6 +210,7 @@ export default function RootLayout() {
           options={{ headerShown: false }}
         />
       </Stack>
+      </ThemeProvider>
 
       {/* Global navigation side panel — overlays every screen, opened from the
           ☰ in the tab header. */}
