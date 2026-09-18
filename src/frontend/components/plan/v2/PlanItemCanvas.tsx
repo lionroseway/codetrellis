@@ -18,6 +18,7 @@ import { PlanGitContextChip } from './PlanGitContextChip';
 import { PlanBudgetChip } from './PlanBudgetChip';
 import { PlanTicketSyncChip } from './PlanTicketSyncChip';
 import { PlanDiffPanel } from './PlanDiffPanel';
+import { PlanReviewPanel } from './PlanReviewPanel';
 import { ContextRail } from './ContextRail';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
@@ -514,6 +515,14 @@ function PlanHomePage() {
           {/* Plan diff — what's planned vs what's landed. Shown
               when there's something to diff (any Action with intent). */}
           <PlanDiffPanel planUid={plan.uid} />
+
+          {/* Phase 29 — Phase 25's whole review surface (comparands,
+              compare, review, pr-draft) was REST + MCP only. Sits below
+              the diff panel because it answers a different question:
+              that one asks whether the code matches the plan's declared
+              intent, this one asks what changed between two points and
+              which of it any item claimed. */}
+          <PlanReviewPanel planUid={plan.uid} />
 
           {/* Phase 17.M — Completion retrospective. Auto-shown when
               every action is done/skipped or plan status is 'completed'. */}

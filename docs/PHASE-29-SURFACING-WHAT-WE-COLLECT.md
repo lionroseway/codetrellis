@@ -355,15 +355,13 @@ The error was reading "endpoint with no frontend caller" as "capability
 with no surface". §2 warns that the audit narrows candidates and does not
 decide; this is what happens when that warning is not followed.
 
-### 4.7 ☐ Snapshot comparison (Phase 25)
+### 4.7 ☑ Snapshot comparison (Phase 25) — shipped with 4.13
 
 `/api/comparands` and `/api/compare` — pick two points in the project's
 history and diff the architecture between them. Built in Phase 25, MCP
 and REST only.
 
-- *Shape*: a comparand picker feeding the existing `CodeDiffView`, which
-  Phase 26 already built.
-- *Effort*: medium. The viewer exists; the picker does not.
+- *Shipped as one piece with 4.13* — `components/plan/v2/PlanReviewPanel.tsx`.
 
 ### 4.8 ☐ Plan / item / document version history
 
@@ -437,7 +435,7 @@ product change — expandable file symbol lists, per-file counts that jump —
 and belongs in its own phase, not here. Recorded so the next reader knows
 it is a decision and not an oversight.
 
-### 4.13 ☐ Phase 25 has no interface at all
+### 4.13 ☑ Phase 25 has no interface at all
 
 Found by the corrected audit in §2, not the first one.
 `/api/plans/:uid/review` and `/api/plans/:uid/pr-draft` join
@@ -446,8 +444,31 @@ surface is MCP and REST only.** Plan↔PR review, the rendered review
 markdown and the PR draft are all built, tested and unreachable from the
 application.
 
-- *Effort*: medium, and it should be sized as one piece with 4.7 rather
-  than four separate wirings.
+- *Shipped*: `components/plan/v2/PlanReviewPanel.tsx`, below
+  `PlanDiffPanel` in the plan workspace, reading all four endpoints.
+
+**Two panels, two questions — both worth having.** `PlanDiffPanel`
+(Phase 15) reads the plan's own declared intent and asks *"is the code
+doing what the plan said?"*. This one compares two **points in time**
+and asks *"between these two, what changed, and which of it did any item
+claim?"*. The second finds work nobody planned, which is why
+`unclaimedChanges` is the headline rather than a footnote.
+
+**The default `before` is `commit:HEAD`, not `baseline`.** `scanProject`
+re-pins the baseline on every run, so baseline→live is empty immediately
+after a scan — which reads as "nothing changed" at exactly the moment a
+user opens the panel. Recorded in PHASE-25 and PHASE-26 already; this is
+the third place it has mattered.
+
+**Copy, not "open a PR".** `buildPrDraft` never touches the repository —
+the agent does the git and opens the PR with its own credentials. An
+"open PR" button would be an affordance for something this process
+cannot do, the same over-claim as a sync button on the ticket chip. The
+e2e asserts the repository HEAD is unchanged after building a draft.
+
+**A no-targets item is not an untouched item.** An item that declared no
+file targets cannot be checked against a diff, so it reads "no targets
+declared" rather than being reported as work that did not happen.
 
 ### 4.14 ☐ `next-task` and `file-status`
 
