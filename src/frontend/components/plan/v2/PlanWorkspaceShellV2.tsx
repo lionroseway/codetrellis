@@ -16,6 +16,7 @@ import { HandoffButton } from './HandoffButton';
 import { DriftBadge } from './DriftIndicator';
 import { PlanReadinessRing } from './PlanReadinessRing';
 import { FreezeBar } from './FreezeBar';
+import { ManifestConflictBar } from './ManifestConflictBar';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -215,6 +216,13 @@ export function PlanWorkspaceShellV2() {
 
       {/* Phase 6.5 — Freeze bar */}
       <FreezeBar planUid={plan.uid} />
+
+      {/* Phase 29 §4.9 — Phase 6.4 built conflict detection AND
+          resolution and neither client ever called either endpoint.
+          Sits below the freeze bar: a freeze is a policy you chose, a
+          conflict is the plan files being unreadable until it is
+          settled, so it reads last and louder. */}
+      <ManifestConflictBar />
 
       {/* Three regions */}
       <div className="flex-1 min-h-0">

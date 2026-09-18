@@ -3649,10 +3649,20 @@ app.post('/api/conflicts/resolve', (req, res) => {
     res.status(400).json({ error: 'projectPath, filePath, and mode required' });
     return;
   }
-  if (mode === 'by_side') {
-    res.json(resolveFileConflictBySide(projectPath, filePath, side));
-  } else {
-    res.json(resolveFileConflict(projectPath, filePath, resolutions ?? []));
+  // Both service entry points confine `filePath` and throw on a
+  // violation. Without this catch that surfaces as a 500, which reads
+  // as a server fault rather than a refusal — and Phase 29 §4.9 gives
+  // this endpoint a UI, so the status is now something a user sees.
+  try {
+    if (mode === 'by_side') {
+      res.json(resolveFileConflictBySide(projectPath, filePath, side));
+    } else {
+      res.json(resolveFileConflict(projectPath, filePath, resolutions ?? []));
+    }
+  } catch (err) {
+    res.status(err instanceof ConfinementError ? 403 : 400).json({
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 });
 

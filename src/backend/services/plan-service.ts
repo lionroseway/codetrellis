@@ -4,7 +4,10 @@ import * as _lazy___git_identity from './git-identity';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
-import type { Plan, Task, PlanVersion, CreatePlanInput, PlanStatus, FileSpec } from '../../shared/types';
+// Direct, not lazy: plan-item-service does not import this module, so
+// there is no cycle to break.
+import * as planItemService from './plan-item-service';
+import type { Plan, Task, PlanItem, PlanVersion, CreatePlanInput, PlanStatus, FileSpec } from '../../shared/types';
 
 /**
  * Compute `affectedFiles` from `fileSpecs`. Phase 14 §A treats
@@ -639,7 +642,27 @@ export function claimTask(taskUid: string, agentId: string, agentType: string, m
   return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
 }
 
-export function getNextTask(planUid: string, phaseUid?: string | null): Task | null {
+/**
+ * The next thing to work on: the first pending item whose dependencies
+ * are all done.
+ *
+ * **This reads `plan_items` first and `tasks` only as a fallback.**
+ * Those are two separate tables with two separate writers — `tasks` is
+ * V1, `plan_items` is the V2 model the workspace has written since
+ * Phase 15 — and this function used to read only `tasks`. Which meant
+ * it returned "nothing next" for every plan authored in the current
+ * UI, because such a plan has no rows in `tasks` at all. Nothing
+ * noticed, because nothing called it: no MCP tool exposes it and
+ * neither client called the REST route (Phase 29 §4.14). It was
+ * answering the right question against the wrong table.
+ *
+ * A V1 plan keeps its old answer exactly — the fallback runs only when
+ * the plan has no V2 items.
+ */
+export function getNextTask(planUid: string, phaseUid?: string | null): Task | PlanItem | null {
+  const items = planItemService.listAllItems(planUid);
+  if (items.length > 0) return nextPlanItem(items, phaseUid);
+
   const tasks = getTasksByPlan(planUid);
   const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.uid));
 
@@ -647,6 +670,30 @@ export function getNextTask(planUid: string, phaseUid?: string | null): Task | n
     if (task.status !== 'pending') continue;
     if (phaseUid !== undefined && task.phaseUid !== phaseUid) continue;
     if (task.dependencies.every((d) => done.has(d))) return task;
+  }
+  return null;
+}
+
+/**
+ * V2 selection. Objects carry no status, so only Actions are
+ * candidates. `listAllItems` is already ordered by sortOrder, which is
+ * the order the tree renders — so "first ready" here means the same
+ * thing the user sees top-to-bottom.
+ *
+ * `phaseUid` has no V2 equivalent: phases became ordinary parent items.
+ * Passing one filters by parent instead, which is the same intent in
+ * the new model.
+ */
+function nextPlanItem(items: PlanItem[], parentUid?: string | null): PlanItem | null {
+  const done = new Set(
+    items.filter((i) => i.status === 'done' || i.status === 'skipped').map((i) => i.uid),
+  );
+
+  for (const item of items) {
+    if (item.kind !== 'action') continue;
+    if (item.status !== 'pending') continue;
+    if (parentUid !== undefined && item.parentUid !== parentUid) continue;
+    if ((item.dependencies ?? []).every((d) => done.has(d))) return item;
   }
   return null;
 }

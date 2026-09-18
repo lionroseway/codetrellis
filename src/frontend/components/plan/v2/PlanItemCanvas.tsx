@@ -17,6 +17,8 @@ import { BodyRenderer } from './BodyRenderer';
 import { PlanGitContextChip } from './PlanGitContextChip';
 import { PlanBudgetChip } from './PlanBudgetChip';
 import { PlanTicketSyncChip } from './PlanTicketSyncChip';
+import { PlanSyncChip } from './PlanSyncChip';
+import { NextUpStrip } from './NextUpStrip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { PlanReviewPanel } from './PlanReviewPanel';
 import { ContextRail } from './ContextRail';
@@ -490,6 +492,11 @@ function PlanHomePage() {
               {/* Phase 29 — Phase 24's sync watermark had no REST endpoint
                   at all, let alone a surface. See PlanTicketSyncChip. */}
               <PlanTicketSyncChip plan={plan} />
+              {/* Phase 29 §4.14 — shared-vs-local. Three endpoints
+                  implemented this toggle and none had a caller; the
+                  WebSocket hook has been listening for its events the
+                  whole time. See PlanSyncChip. */}
+              <PlanSyncChip plan={plan} />
               {/* Phase 29 — PublishTemplateModal was written in Phase 13
                   and never imported by anything. Publishing only makes
                   sense once the plan has a shape worth reusing, so the
@@ -509,6 +516,11 @@ function PlanHomePage() {
 
           {/* Progress summary — shows task breakdown when there are actions */}
           <PlanProgressSummary items={Object.values(itemsByUid)} />
+
+          {/* Phase 29 §4.14 — which pending Action is actually
+              unblocked. The tree shows status; it cannot show
+              readiness. See NextUpStrip. */}
+          {!isEmpty && <NextUpStrip planUid={plan.uid} />}
 
           {/* Body — click-to-edit. Read mode shows the chip-aware
               renderer; edit mode opens a textarea with the slash

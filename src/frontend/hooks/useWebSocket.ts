@@ -187,7 +187,10 @@ export function useWebSocket() {
             useToastStore.getState().addToast({
               type: 'warning',
               title: 'Plan file has merge conflicts',
-              message: `Resolve in your editor: ${payload?.filePath || 'unknown file'}`,
+              // Phase 29 §4.9 — until the conflict bar existed the only
+              // honest advice was "go to your editor". Now the plan
+              // workspace can resolve it, so point there instead.
+              message: `${payload?.filePath || 'A plan file'} — resolve it from the bar at the top of the plan workspace.`,
               duration: 12000,
             });
           }

@@ -84,6 +84,15 @@ grep -oE "CREATE TABLE IF NOT EXISTS [a-z_]+" src/backend/services/db-schema.ts 
   | awk '{print $NF}' | sort
 ```
 
+**Mind the other client.** Both loops grep `src/frontend/` only, so
+"unsurfaced" here means *unsurfaced on desktop*. `mobile/` is a full
+second client and it is ahead of desktop in places — §4.10 was filed as
+"MCP-only" when mobile had shipped a templates screen two phases
+earlier. Before calling something unsurfaced, grep `mobile/` too; the
+answer changes what the item is (a missing feature vs. desktop lagging
+its own mobile companion) and often tells you what the surface should
+look like, because one already exists.
+
 **Some of this is deliberate.** Agents are a first-class consumer of this
 product; an MCP-only surface can be a design choice rather than an
 omission. Every item below says which it is believed to be, and an item
@@ -376,23 +385,117 @@ polish item.
   smuggled in as a chip, because it is the one item here that is a
   feature rather than a wiring job.
 
-### 4.9 ☐ Manifest conflicts
+### 4.9 ☑ Manifest conflicts
 
 `/api/conflicts` and `/api/conflicts/resolve` — detection *and* a resolve
 path, both unreferenced by the UI.
 
-- *Effort*: medium.
-- *Deliberate?* **Answered: no.** To be surfaced.
+Shipped as `components/plan/v2/ManifestConflictBar.tsx`, mounted under
+`FreezeBar` in the plan workspace and shaped after it for the same
+reason: project-level state, absent almost always, blocking when
+present. It renders **nothing at all** unless `hasConflicts` — no
+placeholder, no "0 conflicts" chip. Red rather than amber, because
+unlike a freeze this is not a policy the user chose.
 
-### 4.10 ☐ Plan templates
+It surfaces both resolution paths, because they answer different
+questions: per-field for a manifest where the two sides disagree about
+`status` and `owner` independently, whole-side for everything else. The
+service can only parse fields for YAML and JSON with both sides
+parsing, so `fields: null` is rendered as a sentence explaining that,
+rather than an empty list that would read as "no differences".
+
+`useWebSocket`'s `plan-file-conflict` toast said *"Resolve in your
+editor"* — the only honest advice at the time. It now points at the bar.
+
+Two things found while wiring it, both about a control being asserted
+rather than held:
+
+- The comment above `resolveFileConflict` claimed field-level and
+  whole-side resolution "both call in here for their path".
+  `resolveFileConflictBySide` does not — it goes straight to
+  `git checkout`. It now confines its own path, and the comment says
+  what is actually true.
+- **Measured, not assumed**: `git checkout -- ../outside/x` fails with
+  "is outside repository", so the by-side path was never exploitable.
+  What was wrong was the *shape* of the answer — a refusal came back as
+  a 200 carrying `resolved: false`, and the field-level path's
+  `ConfinementError` escaped the route as a 500. Both now refuse with
+  403. That only started mattering when this endpoint got a UI that has
+  to tell "refused" from "failed".
+
+`tests/e2e/manifest-conflicts.test.ts` drives a **real** merge conflict
+rather than a file with markers pasted in — `detectManifestConflicts`
+returns early unless `.git/MERGE_HEAD` exists and git reports the file
+as unmerged, so a fabricated conflict would skip the code that actually
+runs. Verified to fail with the confinement removed.
+
+- *Effort*: medium. **Done.**
+
+### 4.10 ☑ Plan templates
 
 `/api/plan-templates`, `/api/plans/from-template`, and
 `/api/plans/:uid/publish-as-template`. Supports built-ins plus project-local
 and user-global templates from `.codetrellis/templates/`. A complete
 authoring feature, MCP-only.
 
-- *Effort*: medium.
-- *Deliberate?* **Answered: no.** To be surfaced.
+Filed as "MCP-only". That was half right and the half it got wrong is
+the interesting half: **mobile shipped this in Phase 22**
+(`mobile/app/plan-templates.tsx` — list, placeholders, create, plus
+plan-file import). The gap was desktop-only, and both ends of it were
+already scaffolded and left dangling:
+
+- `PlanListView` had a `<Layers>` button whose entire behaviour was a
+  toast reading *"Template picker coming soon — use MCP
+  create_plan_from_template for now."*
+- `PublishTemplateModal.tsx` was **written in Phase 13 and never
+  imported by anything** — a complete, working component with no mount
+  point. Its own success toast says *"Available in 'From template' next
+  time"*, referring to a picker that did not exist.
+
+So this was one loop with both ends cut, not two separate gaps.
+
+**What was genuinely unreachable is not the built-ins.** It is
+`source: 'project'` and `source: 'user'` — templates loaded off disk
+from `<project>/.codetrellis/templates/` and `~/.codetrellis/templates/`.
+A team could publish one over MCP and then have no way to see it. That
+is why the picker groups by source and says where each group lives: a
+project template is a team convention that travels in git, and it reads
+differently from a built-in.
+
+Shipped:
+
+- `components/plan/PlanTemplatePicker.tsx` — modal off the existing
+  `<Layers>` button. Groups project → yours → built-in, each with a
+  one-line note on where it comes from. Selecting expands title +
+  placeholder fields inline; creating opens the new plan.
+- `PublishTemplateModal` mounted as a **Save as template** chip in the
+  plan header, next to the budget and sync chips. Gated on
+  `!isEmpty` — publishing a plan with no shape produces a template with
+  nothing in it, so the chip stays quiet until there is something worth
+  reusing.
+- `tests/e2e/plan-templates.test.ts` — the publish → list → create round
+  trip, which is precisely what the UI does and what nothing covered.
+  Built-ins were the only thing tested and also the only thing that was
+  ever reachable. Verified to fail on a planted defect (project dir
+  dropped from `collectTemplates`).
+
+**Open product decision — not taken here.** There are now two template
+systems and they overlap:
+
+| | Built-in ids |
+|---|---|
+| `PlanTemplateChooser` (Phase 17.E, client-side, fills the open empty plan) | `refactor`, `new-feature`, `bug-fix`, `dependency-upgrade`, `api-change`, `performance` |
+| `plan-templates.ts` (backend, creates a plan) | `from-ticket`, `mass-refactor`, `new-feature`, `bug-fix`, `library-migration`, `perf-pass` |
+
+Only `new-feature` and `bug-fix` share an id, and they are different
+content. The UI still cannot offer `from-ticket` (Phase 24's Jira intake
+shape) and agents still cannot see `api-change`. Merging them means
+choosing which set of six a user who already relies on the chooser
+loses — that is a product call, not a wiring one, so it is recorded
+here rather than made. They do different things (*fill* a plan vs
+*create* one), so coexisting is defensible in the meantime.
+
+- *Effort*: medium. **Done.**
 
 ### 4.11 ☑ Update download — **not a small item after all**
 
@@ -470,14 +573,60 @@ e2e asserts the repository HEAD is unchanged after building a draft.
 file targets cannot be checked against a diff, so it reads "no targets
 declared" rather than being reported as work that did not happen.
 
-### 4.14 ☐ `next-task` and `file-status`
+### 4.14 ☑ `next-task` and `file-status` — **one was stale, not unsurfaced**
 
-`/api/plans/:uid/next-task` answers "what should be worked on next" and
-`/api/plans/:uid/file-status` gives a file's standing against a plan.
-Both looked plausibly agent-first by design — but "what's next" is also
-the question a human opening a plan asks.
+Filed as two endpoints missing a UI. They turned out to be different
+problems, and the register's own description of the second was wrong.
 
-- *Deliberate?* **Answered: no.** To be surfaced.
+**`/api/plans/:uid/next-task` was answering against the wrong table.**
+It called `getNextTask`, which read the V1 `tasks` table. The workspace
+has written the V2 `plan_items` table since Phase 15, and they are
+separate tables with separate writers — so the endpoint returned
+`{ none: true }` for **every plan authored in the current UI**. Nothing
+caught it because nothing called it: no MCP tool exposes it and neither
+client hit the route. Surfacing it unchanged would have shipped a
+widget permanently reading "nothing to do" — a surface that looks
+broken, which §3 exists to prevent.
+
+`getNextTask` now reads `plan_items` when the plan has any and falls
+back to `tasks` when it does not, so a V1 plan keeps its old answer
+exactly. Objects are not candidates (they carry no status); `phaseUid`
+maps to `parentUid`, because phases became ordinary parent items.
+
+Surfaced as `NextUpStrip.tsx`, under the progress summary. What it adds
+over the tree is the one thing a status column cannot show: which
+pending Action is *unblocked*. Five pending actions where four wait on
+each other look identical in a tree. It distinguishes "nothing pending"
+(renders nothing — the completion summary already speaks) from
+"nothing **ready**" (amber, with the count waiting). Selection stays on
+the server rather than being recomputed in the client, because two
+implementations of "what is next" drifting apart is the exact bug class
+this phase keeps finding.
+
+**`/api/plans/:uid/file-status` does not give "a file's standing
+against a plan".** It reports whether the *plan* is on disk —
+`{ linked, planDir }`. It is one third of what `plan-file-service`
+calls *the Shared → Local toggle*: a plan either has a directory under
+`<project>/.codetrellis/plans/<slug>/`, which goes into git and reaches
+the team, or it lives only in the local database. All three endpoints
+of that toggle — `file-status`, `export`, `unlink` — had no caller
+between them, while `useWebSocket` sat holding handlers for
+`plan-exported` and `plan-unlinked`, waiting for events nothing could
+cause.
+
+Surfaced as `PlanSyncChip.tsx` in the plan header: **Shared** or
+**Local**, click to toggle. Those are the service's own words and they
+name the consequence rather than the mechanism — "Exported" would
+describe the button, "Shared" describes what changes for the user. The
+chip renders nothing when the status is unknown, rather than showing
+"Local" on a guess about where someone's work lives.
+
+`tests/e2e/next-up-and-sync.test.ts` covers V2 selection, the
+dependency rule, the V1 fallback, and the export/unlink round trip
+including that the plan survives unlinking. The V2 tests were verified
+to fail against the old V1-only implementation.
+
+- *Deliberate?* **Answered: no.** **Done.**
 
 ### 4.15 — add here
 
