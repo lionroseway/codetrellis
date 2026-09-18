@@ -267,16 +267,36 @@ that the 80% warn boundary is the same number on both sides — otherwise
 the chip turns amber at a different point from where the service fires
 its one-time warning.
 
-### 4.4 ☐ External sync state (Phase 24)
+### 4.4 ☑ External sync state (Phase 24)
 
 `external_sync_state`, `external_refs` and `plan_external_refs` know which
 linked tickets have drifted from the plan. The "3 tickets need updating"
 signal exists as data and appears nowhere.
 
-- *Shape*: a chip on the plan header, opening a list with per-ticket
-  last-synced state.
-- *Effort*: small.
+- *Shipped*: `components/plan/v2/PlanTicketSyncChip.tsx`, beside the
+  budget chip, plus a new `GET /api/plans/:uid/external-sync`.
 - *Deliberate?* No.
+
+**[changed] There was no REST endpoint to wire.** The register assumed
+this was a wiring job; `getSyncState` existed but was reachable only
+through the `get_external_sync_state` MCP tool, so the endpoint had to be
+added first.
+
+**No "sync now" button, and there never will be.** CodeTrellis holds no
+tracker credential — that is the settled Phase 24 posture, and the agent
+holding the Jira or Linear MCP does the writing. A sync control would be
+an affordance for something this process cannot do. The popover says so
+and points the reader at their agent.
+
+The suggested transition is advisory for the same reason the service
+gives where it computes it: every tracker has its own workflow, and
+guessing transition names here would be inventing one we cannot see. It
+renders as "probably wants", never as an instruction.
+
+**Never synced is not a backlog.** A null watermark means everything with
+a ticket key counts as changed, which is the correct first run. The chip
+reads "not synced yet" rather than reporting a drift count that would
+look like accumulated debt.
 
 ### 4.5 ☑ `/api/auto-detect` — open what the agent is already working on
 
@@ -317,14 +337,23 @@ branch, a dead pid is not, a vanished directory is skipped, two sessions
 in one directory are reported once, and one malformed file does not take
 the endpoint down.
 
-### 4.6 ☐ Doc drift sensor
+### 4.6 ⊘ Doc drift sensor — **already surfaced; this item was wrong**
 
-`/api/sensors/doc-check` reports whether system docs have drifted from the
-code they describe. That is a clarity feature outright, and it is
-invisible.
+Ruled out on inspection, and worth recording as a **mistake in the
+register rather than a gap in the product**.
 
-- *Shape*: a per-doc marker in `SystemDocsPanel`, which already exists.
-- *Effort*: small.
+Doc drift *is* visible: `SystemDocsPanel` renders a `FreshnessDot` per
+doc, the detail view shows `changedReferencedFiles`, and
+`/api/system-docs/:uid/freshness` is called for it.
+
+`/api/sensors/doc-check` is a different thing — the **sensor bridge**,
+which posts channel events for stale docs. It returns
+`{ staleCount, eventsSurfaced }`, not a report to display. It is a
+background action, and nothing in the UI should be calling it.
+
+The error was reading "endpoint with no frontend caller" as "capability
+with no surface". §2 warns that the audit narrows candidates and does not
+decide; this is what happens when that warning is not followed.
 
 ### 4.7 ☐ Snapshot comparison (Phase 25)
 

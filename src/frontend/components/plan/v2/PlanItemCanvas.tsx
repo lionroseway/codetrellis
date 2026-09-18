@@ -16,6 +16,7 @@ import { useMentionPicker } from './MentionPicker';
 import { BodyRenderer } from './BodyRenderer';
 import { PlanGitContextChip } from './PlanGitContextChip';
 import { PlanBudgetChip } from './PlanBudgetChip';
+import { PlanTicketSyncChip } from './PlanTicketSyncChip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { ContextRail } from './ContextRail';
 import { TargetsStrip } from './TargetsStrip';
@@ -483,6 +484,9 @@ function PlanHomePage() {
               {/* Phase 29 — Phase 23 built all of this and shipped it
                   MCP-only. See PlanBudgetChip. */}
               <PlanBudgetChip plan={plan} />
+              {/* Phase 29 — Phase 24's sync watermark had no REST endpoint
+                  at all, let alone a surface. See PlanTicketSyncChip. */}
+              <PlanTicketSyncChip plan={plan} />
             </div>
           </div>
 

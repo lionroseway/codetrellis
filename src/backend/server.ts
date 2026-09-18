@@ -35,6 +35,7 @@ import { readFileWithin, isWithin, isInside, ConfinementError } from './services
 const MAX_BROWSE_ENTRIES = 1000;
 import { resolveTrustedProjectRoot, listTrustedRoots, setActiveProjectRoot } from './services/trusted-roots';
 import { getCoverageReport } from './services/coverage-service';
+import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -2710,6 +2711,22 @@ app.put('/api/plans/:uid/budget', (req, res) => {
   });
   broadcast('plan-budget-changed', { planUid: req.params.uid, budget });
   res.json(budgetService.getBudgetReport(req.params.uid));
+});
+
+/**
+ * External ticket sync state (Phase 29, surfacing Phase 24).
+ *
+ * `getSyncState` has existed since Phase 24 and was reachable only
+ * through the `get_external_sync_state` MCP tool — so the "3 tickets
+ * need updating" signal existed as data and appeared nowhere. The plan
+ * uid comes from the route, never the body.
+ */
+app.get('/api/plans/:uid/external-sync', (req, res) => {
+  try {
+    res.json(externalIntakeService.getSyncState(req.params.uid));
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 app.get('/api/plans/:uid/budget/check', (req, res) => {
