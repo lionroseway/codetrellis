@@ -137,6 +137,78 @@ app.use(express.json());
  */
 app.use(localAuthMiddleware);
 
+/**
+ * CONFINED TO OPENED PROJECTS (Phase 19).
+ *
+ * A project root is **never caller-nominated**. The rule in CLAUDE.md is
+ * worded "never accept `projectRoot` / `projectPath` from a request
+ * body" — but a query parameter is exactly as caller-nominated as a body
+ * field. The wording was narrower than the rule, and twenty-six handlers
+ * read `req.query.project` and passed it straight on.
+ *
+ * It is not theoretical. Several of those paths become a process working
+ * directory: `listComparands` runs `git log` in one, so the value
+ * selects the repository a command executes in. That compounds with the
+ * standing Phase 19 position that **loopback is not an authorisation
+ * boundary** — any page in any browser on the machine can reach this
+ * server.
+ *
+ * `resolveTrustedProjectRoot` canonicalises the candidate and requires
+ * it to be one of the opened projects, so a symlink or a `..` cannot
+ * walk out of one.
+ *
+ * ## Why these are the only two readers
+ *
+ * Fixing twenty-six call sites leaves a twenty-seventh to be written
+ * next month. `server-confinement.test.ts` asserts that
+ * `req.query.project` appears **nowhere else in this file**, so a new
+ * handler cannot quietly read it raw. That is the same move as
+ * `getParseableExtensions()` and `flattenSymbols()` elsewhere in this
+ * codebase: derive it or assert it, rather than asking the next person
+ * to remember.
+ *
+ * ## `null` and `undefined` are different answers
+ *
+ * Both helpers respond on refusal and return `null` — the caller must
+ * stop. `optionalProjectRoot` returns `undefined` when the caller
+ * supplied nothing, which is a legitimate state for the few endpoints
+ * that run before a project is open (the first-run wizard reading git
+ * identity, for one). Callers therefore compare with `=== null`, never
+ * falsy.
+ */
+function requireProjectRoot(req: express.Request, res: express.Response): string | null {
+  try {
+    return resolveTrustedProjectRoot(req.query.project, 'project');
+  } catch (err) {
+    res.status(err instanceof ConfinementError ? 403 : 400).json({
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * The same check where the parameter is optional.
+ *
+ * Absent stays absent — this never invents a root. Present is confined,
+ * so "optional" never comes to mean "unchecked".
+ */
+function optionalProjectRoot(
+  req: express.Request,
+  res: express.Response,
+): string | undefined | null {
+  const raw = req.query.project;
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  try {
+    return resolveTrustedProjectRoot(raw, 'project');
+  } catch (err) {
+    res.status(err instanceof ConfinementError ? 403 : 400).json({
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 const server = http.createServer(app);
 
 // WebSocket servers — use `noServer` mode so we can manually route
@@ -707,11 +779,8 @@ app.post('/api/recent-projects/pin', (req, res) => {
 // Used by the Getting Started checklist to reflect real backend state instead
 // of static brochure steps.
 app.get('/api/onboarding-state', (req, res) => {
-  const projectPath = req.query.project as string;
-  if (!projectPath) {
-    res.status(400).json({ error: 'project query param required' });
-    return;
-  }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
 
   sessionService.cleanStaleSessions();
   const sessions = sessionService.getActiveSessions();
@@ -731,11 +800,8 @@ app.get('/api/onboarding-state', (req, res) => {
 // focus the canvas on one system at a time instead of trying to
 // render a whole monorepo.
 app.get('/api/systems', (req, res) => {
-  const projectPath = req.query.project as string;
-  if (!projectPath) {
-    res.status(400).json({ error: 'project query param required' });
-    return;
-  }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const systems = discoverSystems(projectPath);
   res.json({ systems });
 });
@@ -1097,7 +1163,8 @@ app.get('/api/file/content', (req, res) => {
 
     const startParam = req.query.start ? parseInt(String(req.query.start), 10) : undefined;
     const endParam = req.query.end ? parseInt(String(req.query.end), 10) : undefined;
-    const projectPath = (req.query.project as string) || undefined;
+    const projectPath = optionalProjectRoot(req, res);
+    if (projectPath === null) return;
 
     const allLines = content.split('\n');
     const fullLineCount = allLines.length;
@@ -1350,11 +1417,8 @@ app.get('/api/diff', async (req, res) => {
     return;
   }
 
-  const projectPath = req.query.project as string;
-  if (!projectPath) {
-    res.json({ error: 'project query param required' });
-    return;
-  }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
 
   // Read current state from the DB instead of re-running a full
   // scan + parse + resolveImports on every poll. The file watcher
@@ -1484,7 +1548,8 @@ app.post('/api/baseline/capture', async (req, res) => {
 
 // List plans
 app.get('/api/plans', (req, res) => {
-  const projectPath = req.query.project as string | undefined;
+  const projectPath = optionalProjectRoot(req, res);
+  if (projectPath === null) return;
   const status = req.query.status as string | undefined;
   res.json(planService.listPlans(projectPath, status));
 });
@@ -1504,29 +1569,23 @@ app.post('/api/plans', (req, res) => {
 
 // Discover plan directories (must be before /:uid to avoid "discover" matching as uid)
 app.get('/api/plans/discover', (req, res) => {
-  const projectRoot = req.query.project as string | undefined;
-  if (!projectRoot) {
-    res.status(400).json({ error: 'project query param required' });
-    return;
-  }
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
   res.json(discoverPlanDirs(projectRoot));
 });
 
 // DB ↔ disk reconciliation
 app.get('/api/plans/reconcile', (req, res) => {
-  const projectRoot = req.query.project as string | undefined;
-  if (!projectRoot) {
-    res.status(400).json({ error: 'project query param required' });
-    return;
-  }
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
   res.json(reconcilePlanState(projectRoot));
 });
 
 // CDev Phase 3.6 — read the per-project config (just `repoRole` for
 // the UI today; more fields will land here as they're added).
 app.get('/api/project-config', (req, res) => {
-  const projectRoot = req.query.project as string | undefined;
-  if (!projectRoot) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getProjectConfig } = _lazy___services_project_config_service;
@@ -1542,11 +1601,8 @@ app.get('/api/project-config', (req, res) => {
 // project the user has on this machine. The frontend uses this to
 // render a "Plans from other repos" section.
 app.get('/api/plans/stitched', (req, res) => {
-  const projectRoot = req.query.project as string | undefined;
-  if (!projectRoot) {
-    res.status(400).json({ error: 'project query param required' });
-    return;
-  }
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { discoverPointers } = _lazy___services_external_pointer_service;
@@ -2536,8 +2592,8 @@ app.get('/api/plans/:uid/changes', (req, res) => {
 // recorded state or it does not, and a tween of source code would be
 // fiction.
 app.get('/api/playback', (req, res) => {
-  const projectPath = req.query.project as string;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
 
   const limitRaw = Number(req.query.limit);
   res.json(
@@ -2557,7 +2613,8 @@ app.get('/api/playback', (req, res) => {
 // and render as "no changes" — a confident wrong answer where the honest
 // one is "cannot".
 app.get('/api/file/at', (req, res) => {
-  const projectPath = req.query.project as string;
+  const projectPath = optionalProjectRoot(req, res);
+  if (projectPath === null) return;
   const relativePath = req.query.path as string;
   const at = (req.query.at as string) || 'live';
   if (!projectPath || !relativePath) {
@@ -2591,7 +2648,8 @@ app.get('/api/file/at', (req, res) => {
 // lines so a developer reading code can see what is planned for it.
 app.get('/api/file/overlay', (req, res) => {
   const filePath = req.query.path as string;
-  const projectPath = req.query.project as string;
+  const projectPath = optionalProjectRoot(req, res);
+  if (projectPath === null) return;
   if (!filePath || !projectPath) {
     res.status(400).json({ error: 'path and project query params required' });
     return;
@@ -2641,31 +2699,6 @@ app.get('/api/file/overlay', (req, res) => {
 // Any two points, not just "live vs the pinned baseline". Making the
 // comparands explicit is most of what makes Diff mode legible: the
 // chrome can finally state what it is showing.
-/**
- * CONFINED TO OPENED PROJECTS (Phase 19).
- *
- * These four handlers — comparands, compare, review, pr-draft — became
- * reachable from the UI in Phase 29, so their project path is resolved
- * against the opened-project roots rather than trusted as given. The
- * rule is written as "never accept projectRoot from a request BODY",
- * but the intent is that a root is never caller-nominated, and a query
- * parameter is exactly as caller-nominated as a body field.
- *
- * It matters most for `listComparands`, which uses the path as the
- * working directory of a `git log`, so an unvalidated value selects the
- * repository a command runs in.
- */
-function requireProjectRoot(req: express.Request, res: express.Response): string | null {
-  try {
-    return resolveTrustedProjectRoot(req.query.project, 'project');
-  } catch (err) {
-    res.status(err instanceof ConfinementError ? 403 : 400).json({
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return null;
-  }
-}
-
 app.get('/api/comparands', (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -2894,7 +2927,8 @@ app.get('/api/plan-templates', (req, res) => {
   // Phase 13 §C: include disk templates from <project>/.codetrellis/
   // templates/ + ~/.codetrellis/templates/ when a project path is
   // passed. No project = built-ins + user-global only.
-  const projectRoot = req.query.project as string | undefined;
+  const projectRoot = optionalProjectRoot(req, res);
+  if (projectRoot === null) return;
   res.json(listTemplates(projectRoot));
 });
 
@@ -3259,7 +3293,8 @@ app.post('/api/updates/check', async (_req, res) => {
  */
 app.get('/api/settings/first-run-check', (req, res) => {
   const settings = getSettings();
-  const projectPath = (req.query.project as string | undefined) || undefined;
+  const projectPath = optionalProjectRoot(req, res);
+  if (projectPath === null) return;
   const gitDefaults = readGitIdentity(projectPath);
   res.json({
     firstRunComplete: settings.firstRunComplete,
@@ -3380,7 +3415,8 @@ app.get('/api/power/status', (_req, res) => {
  * miss — never errors.
  */
 app.get('/api/identity/git-defaults', (req, res) => {
-  const projectPath = (req.query.project as string | undefined) || undefined;
+  const projectPath = optionalProjectRoot(req, res);
+  if (projectPath === null) return;
   res.json(readGitIdentity(projectPath));
 });
 
@@ -3425,8 +3461,8 @@ app.post('/api/sync/import', (_req, res) => {
 app.get('/api/team-activity', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getTeamActivity } = _lazy___services_git_activity_service;
-  const projectPath = req.query.project as string | undefined;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const since = req.query.since as string | undefined;
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
   const entries = getTeamActivity({ projectRoot: projectPath, since, limit });
@@ -3436,8 +3472,8 @@ app.get('/api/team-activity', (req, res) => {
 app.get('/api/plan-history/:planSlug', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getPlanCommitHistory } = _lazy___services_git_activity_service;
-  const projectPath = req.query.project as string | undefined;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
   const since = req.query.since as string | undefined;
   const commits = getPlanCommitHistory(projectPath, req.params.planSlug, { limit, since });
@@ -3447,8 +3483,8 @@ app.get('/api/plan-history/:planSlug', (req, res) => {
 app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getPlanAtCommit } = _lazy___services_plan_history_service;
-  const projectPath = req.query.project as string | undefined;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   if (!isSafeGitRef(req.params.commitHash)) {
     res.status(400).json({ error: 'Invalid commit identifier' });
     return;
@@ -3461,7 +3497,8 @@ app.get('/api/plan-history/:planSlug/at/:commitHash', (req, res) => {
 app.get('/api/plan-history/:planSlug/diff', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { diffPlanBetweenCommits } = _lazy___services_plan_history_service;
-  const projectPath = req.query.project as string | undefined;
+  const projectPath = optionalProjectRoot(req, res);
+  if (projectPath === null) return;
   const base = req.query.base as string | undefined;
   const head = req.query.head as string | undefined;
   if (!projectPath || !base || !head) {
@@ -3479,7 +3516,8 @@ app.get('/api/plan-history/:planSlug/diff', (req, res) => {
 app.get('/api/plan-history/:planSlug/search', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { searchPlanHistory } = _lazy___services_git_activity_service;
-  const projectPath = req.query.project as string | undefined;
+  const projectPath = optionalProjectRoot(req, res);
+  if (projectPath === null) return;
   const query = req.query.q as string | undefined;
   if (!projectPath || !query) {
     res.status(400).json({ error: 'project and q query params required' });
@@ -3495,8 +3533,8 @@ app.get('/api/plan-history/:planSlug/search', (req, res) => {
 app.get('/api/conflicts', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { detectManifestConflicts } = _lazy___services_plan_conflict_service;
-  const projectPath = req.query.project as string | undefined;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   res.json(detectManifestConflicts(projectPath));
 });
 
@@ -3518,8 +3556,8 @@ app.post('/api/conflicts/resolve', (req, res) => {
 app.get('/api/freeze', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getFreezeStatus } = _lazy___services_freeze_service;
-  const projectPath = req.query.project as string | undefined;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   res.json(getFreezeStatus(projectPath));
 });
 
@@ -3888,10 +3926,10 @@ app.delete('/api/peers/push-tokens/:fingerprint', (req, res) => {
 
 app.get('/api/pantry/resolve', (req, res) => {
   const { resolveReferences, scanPlanReferences } = _lazy___services_pantry_resolution_service;
-  const projectPath = req.query.project as string | undefined;
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const refs = req.query.refs as string | string[] | undefined;
   const planSlug = req.query.plan_slug as string | undefined;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
 
   if (refs) {
     const refArray = Array.isArray(refs) ? refs : [refs];
@@ -3906,9 +3944,9 @@ app.get('/api/pantry/resolve', (req, res) => {
 
 app.get('/api/contributions', (req, res) => {
   const { listContributions, listContributionsForBranch } = _lazy___services_contribution_service;
-  const projectPath = req.query.project as string | undefined;
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const branch = req.query.branch as string | undefined;
-  if (!projectPath) { res.status(400).json({ error: 'project query param required' }); return; }
   res.json(branch ? listContributionsForBranch(projectPath, branch) : listContributions(projectPath));
 });
 
@@ -3965,12 +4003,9 @@ app.post('/api/contributor-branch', (req, res) => {
 app.get('/api/system-docs', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
-  const projectPath = req.query.project as string | undefined;
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
   const search = req.query.search as string | undefined;
-  if (!projectPath) {
-    res.status(400).json({ error: 'project query param required' });
-    return;
-  }
   res.json(search ? svc.searchSystemDocs(projectPath, search) : svc.listSystemDocs(projectPath));
 });
 
@@ -4059,7 +4094,8 @@ app.get('/api/system-docs/:uid/freshness', (req, res) => {
  */
 app.get('/api/sensors/doc-check', (req, res) => {
   try {
-    const project = req.query.project as string | undefined;
+    const project = optionalProjectRoot(req, res);
+    if (project === null) return;
     if (!project) return res.status(400).json({ error: 'project query parameter is required' });
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { checkAllDocsAndBridge } = _lazy___services_sensor_bridge_service;

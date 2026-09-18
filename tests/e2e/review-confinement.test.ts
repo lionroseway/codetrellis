@@ -10,7 +10,14 @@
  * selects the repository a command runs in.
  *
  * Wiring a surface to an unvalidated root would have increased exposure,
- * so they were confined first. This is the test that says so.
+ * so they were confined first — and then the sweep went across all
+ * twenty-six handlers that took one, because fixing the four this phase
+ * happened to touch would have left the rest exactly as they were.
+ *
+ * `server-confinement.test.ts` is the structural half: it asserts the
+ * raw parameter is read nowhere but the two confining helpers, so a
+ * twenty-seventh handler cannot reintroduce the problem. This is the
+ * behavioural half.
  */
 
 import { test, expect } from '@playwright/test';
@@ -19,12 +26,28 @@ import path from 'node:path';
 import os from 'node:os';
 import { setupHarness } from '../harness';
 
-/** Every confined endpoint, with the query it needs beyond `project`. */
+/**
+ * A representative sample across the twenty-six swept handlers — the
+ * ones that read a project path and do something with it. Not every
+ * endpoint, but every *shape*: required and optional parameters, ones
+ * that shell out to git, ones that read the filesystem, and ones that
+ * only query the database.
+ */
 const ENDPOINTS = [
   { name: 'comparands', path: () => '/api/comparands' },
   { name: 'compare', path: () => '/api/compare?before=baseline&after=live' },
   { name: 'review', path: (uid: string) => `/api/plans/${uid}/review` },
   { name: 'pr-draft', path: (uid: string) => `/api/plans/${uid}/pr-draft` },
+  { name: 'onboarding-state', path: () => '/api/onboarding-state' },
+  { name: 'systems', path: () => '/api/systems' },
+  { name: 'diff', path: () => '/api/diff' },
+  { name: 'playback', path: () => '/api/playback' },
+  { name: 'team-activity', path: () => '/api/team-activity' },
+  { name: 'system-docs', path: () => '/api/system-docs' },
+  { name: 'contributions', path: () => '/api/contributions' },
+  { name: 'plan-templates', path: () => '/api/plan-templates' },
+  { name: 'conflicts', path: () => '/api/conflicts' },
+  { name: 'freeze', path: () => '/api/freeze' },
 ];
 
 test.describe('Review endpoints are confined (Phase 29 / 19)', () => {
