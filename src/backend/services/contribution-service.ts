@@ -448,10 +448,27 @@ export function prepareContributorBranch(
       fs.rmSync(contribDir, { recursive: true, force: true });
     }
 
-    // Stage and commit
+    // Stage and commit — WITH A PATHSPEC.
+    //
+    // Without `-- .codetrellis/` this commits the whole index, and the index
+    // survives `checkout -b`. So a user who had staged an unrelated source
+    // change — `git add src/app.ts` — got it committed onto the contributor
+    // branch, and then the `checkout -` below returned the worktree to the
+    // original branch's HEAD, silently reverting their edit. Their work
+    // existed only as a commit on a branch nobody told them about, and the
+    // branch they were told to hand to an outside collaborator carried
+    // unrelated in-progress source.
+    //
+    // The precondition above does not catch this: it is scoped to
+    // `.codetrellis/`, so a clean manifest with a dirty index passes it.
+    // Widening that check would have been the smaller fix but the weaker
+    // one — it refuses work that is none of its business, and still races
+    // anything staged while this runs. The pathspec makes the commit
+    // structurally incapable of carrying anything but the manifest, and
+    // leaves the user's staged work staged.
     runGitArgs(['add', '.codetrellis/'], projectRoot);
     const message = `[cdev] prepare contributor branch: ${planSlug}\n\nFiltered to ${cleanedItems.length} shared items for external collaboration.`;
-    runGitArgs(['commit', '-m', message, '--allow-empty'], projectRoot);
+    runGitArgs(['commit', '-m', message, '--allow-empty', '--', '.codetrellis/'], projectRoot);
 
     // Get the commit hash
     const sha = runGitArgs(['rev-parse', 'HEAD'], projectRoot).trim();

@@ -134,7 +134,8 @@ export function ContributorBranchModal({
             <AlertTriangle size={11} className="mt-0.5 shrink-0" />
             Commit or stash any manifest changes first — uncommitted work under{' '}
             <code className="font-mono">.codetrellis/</code> would end up on the new branch instead
-            of this one. This is refused rather than guessed at.
+            of this one. This is refused rather than guessed at. Anything you have staged
+            elsewhere is left where it is — the branch commit only ever carries the manifest.
           </p>
         </div>
 
