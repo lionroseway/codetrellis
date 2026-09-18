@@ -11,6 +11,7 @@ import { CodeWorkspace } from './components/layout/CodeWorkspace';
 import { InspectorPanel } from './components/layout/InspectorPanel';
 import { PlanPanel } from './components/layout/PlanPanel';
 import { StatusBar } from './components/layout/StatusBar';
+import { AudioCaptureBar } from './components/audio/AudioCaptureBar';
 import { MinimizedPlanChip } from './components/plan/MinimizedPlanChip';
 import { PlanWorkspaceShellV2 } from './components/plan/v2/PlanWorkspaceShellV2';
 import { SystemDocsPanel } from './components/system-docs/SystemDocsPanel';
@@ -263,6 +264,10 @@ export function App() {
         )}
       </div>
       <TerminalPanel />
+      {/* Phase 29 §4.15 — sits directly above the status bar, whose mic
+          button toggles it. Renders nothing unless toggled on or a
+          capture is running. */}
+      <AudioCaptureBar />
       <StatusBar />
       <FolderPickerModal />
       <McpGuideModal />

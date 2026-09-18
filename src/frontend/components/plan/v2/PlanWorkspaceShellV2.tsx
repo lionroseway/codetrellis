@@ -17,6 +17,7 @@ import { DriftBadge } from './DriftIndicator';
 import { PlanReadinessRing } from './PlanReadinessRing';
 import { FreezeBar } from './FreezeBar';
 import { ManifestConflictBar } from './ManifestConflictBar';
+import { ContributionPanel } from './ContributionPanel';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -223,6 +224,12 @@ export function PlanWorkspaceShellV2() {
           conflict is the plan files being unreadable until it is
           settled, so it reads last and louder. */}
       <ManifestConflictBar />
+
+      {/* Phase 29 §4.15 — Phase 7.2's contributor staging area. This
+          component existed and nothing imported it, which is why the
+          §2 audit thought /api/contributions was surfaced. It renders
+          nothing unless the current branch has staged contributions. */}
+      <ContributionPanel />
 
       {/* Three regions */}
       <div className="flex-1 min-h-0">

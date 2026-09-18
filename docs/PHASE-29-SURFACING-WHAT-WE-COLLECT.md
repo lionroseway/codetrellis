@@ -30,8 +30,10 @@ computed, and it costs more, because it looks done.
 Run these when adding to this register. They are cheap and they are what
 produced §4.
 
-**Endpoints the frontend never calls.** 26 of 172, at the time of
-writing:
+**Endpoints the frontend never calls.** 26 of 172 by this grep — **and
+that number is too low.** See the note on unrendered components below
+before trusting it; §4.15 found ten more that this pass reported as
+surfaced.
 
 ```bash
 grep -oE "app\.(get|post|put|patch|delete)\('/api/[^']+" src/backend/server.ts \
@@ -83,6 +85,20 @@ by hand, since the UI reaches tables through endpoints, not names:
 grep -oE "CREATE TABLE IF NOT EXISTS [a-z_]+" src/backend/services/db-schema.ts \
   | awk '{print $NF}' | sort
 ```
+
+**Mind what a grep can prove.** Both loops answer "does this path appear
+in a file under `src/frontend/`". That is not the same question as "can
+a user reach this". A component that nothing imports still contains its
+`fetch` calls, so its endpoints match — and §4.15 found **eight files
+with no exported symbol referenced anywhere**, between them making ten
+endpoints look surfaced that nobody could reach. One of them,
+`AgentPanel`, had a whole phase of work done inside it after it was
+already unreachable.
+
+No grep over endpoint paths can see this. `npm run test:unit` can:
+`src/frontend/components/reachable.test.ts` fails when a component is
+not referenced by anything. **Run it alongside the two loops above** —
+an endpoint is surfaced only if the file calling it is on screen.
 
 **Mind the other client.** Both loops grep `src/frontend/` only, so
 "unsurfaced" here means *unsurfaced on desktop*. `mobile/` is a full
@@ -638,47 +654,141 @@ to fail against the old V1-only implementation.
 
 - *Deliberate?* **Answered: no.** **Done.**
 
-### 4.15 ☐ Re-run of §2, 2026-09-18 — **the write is missing, not the read**
+### 4.15 ☑ Re-run of §2 — **the audit counted files, not surfaces**
 
-Run at the end of this phase, on 174 endpoints. Both passes, union
-taken, each hit confirmed by hand as §2 requires. It turned up a second
-batch, and it has a shape the first run could not have seen:
+Run at the end of the phase on 174 endpoints, both passes, union taken,
+each hit confirmed by hand. The first pass produced a list of
+candidates. Confirming them produced something bigger, and it
+invalidates a number this register has quoted since §1.
 
-**For several features the view is surfaced and the action is not.**
+**A component that nothing renders still makes its endpoints look
+surfaced.** Both §2 passes grep `src/frontend/` for a path. A file
+containing `fetch('/api/audio/status')` satisfies that grep whether or
+not anything imports the file. Eight files had no exported symbol
+referenced anywhere:
 
-| Surfaced | Not surfaced |
+| File | Verdict |
 |---|---|
-| `GET /api/contributions` (`ContributionPanel`) | `POST /api/contributions/accept`, `/promote` |
-| `GET /api/trellis/snapshots`, `/:id`, `/:id/diff` (`MainCanvas`) | `POST /api/trellis/capture` |
-| `/api/audio/status`, `/start`, `/chunk` (`AudioCaptureBar`) | `GET /api/audio/recent` |
-| item and task reads | `POST /api/items/:uid/claim`, `/plans/:uid/tasks/:taskUid/claim` |
+| `components/layout/AgentPanel.tsx` | Superseded — see below |
+| `components/plan/v2/TeamActivityPanel.tsx` | Never wired → **wired** |
+| `components/plan/v2/ContributionPanel.tsx` | Never wired → **wired** |
+| `components/plan/v2/PantryPlaceholder.tsx` | Never wired → **wired** |
+| `components/audio/AudioCaptureBar.tsx` | Never wired → **wired** |
+| `components/pairing/RemotePeersPanel.tsx` | Deferred — pairing is mid-change |
+| `components/settings/WebcamQrScanner.tsx` | Deferred — same |
+| `lib/spec-doc-types.tsx` | Dead with its model (plan documents, §5) |
 
-You can look at trellis snapshots but not take one. You can see
-contributions but not accept one. That is a different failure from
-"this whole feature is MCP-only", and neither §2 pass distinguishes
-them — both match on a path stem or a last segment, and
-`/api/contributions` matching the frontend marks the whole family as
-seen. **Add a third check: for each surfaced `GET`, is its sibling
-write surfaced too?**
+Ten endpoints the audit had counted as surfaced were reachable only
+through them: `/api/team-activity`, `/api/contributions`, the four
+`/api/audio/*` and the four `/api/peers/remote-*`. **So "26 of 172" in
+§2 was an undercount**, and not by a rounding error.
 
-Still to classify (some are very likely deliberate — `/api/health` is
-a liveness probe, `/api/peers/push-tokens` is registered by the mobile
-client, `/api/git/head` duplicates data `/api/git/status` already
-returns):
+#### The worst case: a dead file that keeps getting worked on
 
-`/api/contributor-branch`, `/api/presence/cards`,
-`/api/sensors/doc-check`, `/api/sync/peek`, `/api/pantry/resolve`,
-`/api/logs/path`, `/api/channels/:eventUid/thread`,
-`/api/plans/:uid/docs/by-type/:docType`, `/api/health`,
-`/api/peers/push-tokens`, `/api/git/head`, `/api/cross-system`
-(prefix artefact — `MainCanvas` calls it).
+`PlanPanel` replaced `AgentPanel` in the same slot — both read
+`agentPanelVisible`, both draw the same close button, and `PlanPanel`
+has two tabs more. Then **Phase 22 rewrote the agent Timeline to group
+tool calls into turns, and wrote that rewrite into `AgentPanel`.**
 
-**Not worked in this phase.** These are newly identified and have had
-no deliberate-or-not pass, which §2 says is the step the audit cannot
-do for you. Recorded here so the next run starts from a list rather
-than a fresh grep.
+So the flat raw-payload list Phase 22 existed to replace is what every
+user kept seeing, `agent-turns.test.ts` tested logic no interface ran,
+and `tool-phrasing.ts` phrased events nobody read. An improvement was
+made, tested, and shipped to nobody.
 
-Re-run §2 after any phase that adds a service or an endpoint.
+Fixed by extracting the turn view into `components/layout/AgentTurns.tsx`
+and rendering it from `PlanPanel`. The flat renderer
+(`EVENT_ICON_MAP` / `EVENT_ICON_COLOR` / `formatPayload`) is deleted —
+`tool-phrasing.ts` already says those things in words. `AgentPanel`
+now imports the shared component instead of keeping a copy, so a third
+divergence cannot start there.
+
+#### What was wired, and where
+
+- **Team activity** → a third tab in the existing activity drawer, not
+  a fifth toggle in the shell header. "Activity" and "Team Activity" as
+  two adjacent buttons is two things a user has to tell apart; as tabs
+  the distinction is visible at the point of choosing. They answer
+  different questions — Activity is this plan's `plan_events` from the
+  database, Team is the git history of `.codetrellis/` across the whole
+  project.
+- **Contributions** → the panel mounts in the plan workspace (it
+  renders nothing unless the branch has staged contributions) and now
+  carries **Accept**. A list of staged work with no way to take it is a
+  receipt, not a workflow. The wording says what accept does: it writes
+  YAML into `.codetrellis/plans/<slug>/items/` and the plan-file
+  watcher picks it up — it does not touch the database, so the toast
+  does not claim the items are in the plan. The plan slug comes from
+  `file-status`'s `planDir` rather than being re-derived in the client,
+  because a second implementation of the slug rule is the drift this
+  phase keeps finding.
+- **Pantry placeholder** → rendered when an attachment's media fails to
+  load, with the reason fetched from `/api/pantry/resolve` (also
+  unsurfaced). Until now an unresolvable reference rendered as a broken
+  image glyph, which is the worst available answer: an external
+  contributor cannot tell "you are not allowed to see this" — a normal
+  state of a shared plan — from "the app is broken".
+- **Audio capture** → hidden by default, opened by a mic button in the
+  status bar or Cmd/Ctrl+Shift+M. The bar had advertised that shortcut
+  in its own UI since Phase 8 and **nothing was bound to it**; it was
+  unreachable, so nobody could find out. The bar stays visible while
+  capture runs whatever the toggle says, because a live microphone the
+  user cannot see is not acceptable.
+
+#### The structural fix
+
+`src/frontend/components/reachable.test.ts` fails if any `.tsx` file has
+no exported name referenced elsewhere. Existing exceptions are listed
+with a reason each, and the allowlist is checked in both directions —
+a row for a file that is now wired is itself a failure, because a stale
+allowlist is how the next orphan hides.
+
+Writing it turned up two ways it could have passed for the wrong
+reason, both caught and fixed:
+
+- The test names its known orphans **by path**, and a path contains the
+  component's name — so allowlisting a component made it look
+  referenced *by being allowlisted*. Test files are excluded from the
+  referrer set.
+- `AgentTurns.tsx` explains in prose why `AgentPanel` is superseded, and
+  that mention alone made `AgentPanel` look wired. Comments are
+  stripped before matching. §2 had already recorded this exact hazard
+  for the endpoint audit; it recurred in the tool written to fix it.
+
+Verified by planting an unreferenced component: the guard names it and
+goes green when it is removed.
+
+#### Ruled out, with reasons
+
+| Endpoint | Why no surface |
+|---|---|
+| `/api/health` | Liveness probe. The mobile client uses it to find the desktop; a human has nothing to do with the answer. |
+| `/api/git/head` | Returns what `/api/git/status` already includes. Kept for agents that want only the hash. |
+| `/api/peers/push-tokens` | Registered by the mobile client for push. No desktop actor. |
+| `/api/channels/:eventUid/thread` | `ChannelPanel` already holds every event and groups threads client-side. Server-side threading is for agents that hold no list. |
+| `/api/plans/:uid/docs/by-type/:docType` | Plan documents are the model `PlanItem` replaced (§5). Dead with it, like `lib/spec-doc-types.tsx`. |
+| `/api/items/:uid/claim`, `/api/plans/:uid/tasks/:taskUid/claim` | Claiming is how an *agent* takes work and announces it. A human editing in the UI is not claiming. |
+| `/api/contributor-branch` | Real gap, but a different job from the panel: a team member preparing a filtered branch **for** a contractor, before any contribution exists. Needs its own flow — carried to 4.16. |
+| `/api/trellis/capture` | Real gap — snapshots are readable and not creatable. Carried to 4.16. |
+| `/api/sync/peek`, `/api/sensors/doc-check`, `/api/presence/cards`, `/api/logs/path`, `/api/audio/recent` | Unclassified. Carried to 4.16. |
+| `/api/cross-system` | Not a finding — `MainCanvas` calls it. Prefix artefact of pass 1. |
+
+### 4.16 ☐ Carried from 4.15
+
+Not worked, and named so the next run starts from a list:
+`/api/trellis/capture` (snapshots readable, not creatable),
+`/api/contributor-branch`, `/api/sync/peek`, `/api/sensors/doc-check`,
+`/api/presence/cards`, `/api/logs/path`, `/api/audio/recent`, plus
+wiring `RemotePeersPanel` and `WebcamQrScanner` once Phase 19 Gate 1.2
+settles the pairing protocol, and the decision on `AgentPanel`'s Plan
+tab — the only reader of `agent-store`'s `currentPlan`, which is the
+Claude Code session-JSONL plan heuristic, so that heuristic's output is
+invisible too.
+
+### 4.17 — add here
+
+Re-run §2 after any phase that adds a service or an endpoint. Run
+`npm run test:unit` too: the endpoint grep cannot see an unrendered
+component, and `reachable.test.ts` can.
 
 ## 5. Version history — what it actually was
 
@@ -798,25 +908,28 @@ whole time.
 
 ### Status, 2026-09-18
 
-**4.1 – 4.14 are closed** — twelve built, two ruled out with a reason
-(4.6 was already surfaced, 4.12 is deliberate). Nothing from the
-original register is open.
+**4.1 – 4.15 are closed** — thirteen built, two ruled out with a reason
+(4.6 was already surfaced, 4.12 is deliberate). **4.16 is open** and
+listed rather than left to a future grep.
 
-Two things qualify that, and neither is hand-waving:
+Three things qualify that:
 
-1. **4.15 is a fresh batch**, from re-running §2 at the end of the
-   phase. It is unworked and deliberately so: those endpoints have had
-   no deliberate-or-not pass, which is the one step §2 says the audit
-   cannot do for you. It is a list rather than a grep, which is what
-   this section asks for.
-2. **The register refilled, which is the system working.** The bullet
-   above asks that it not refill *silently*. It did not: the re-run is
-   recorded, with the blind spot that hid this batch named (a surfaced
-   `GET` marks its whole path family as seen, so a missing sibling
-   write is invisible to both passes).
+1. **The register refilled twice, which is the system working.** The
+   bullet above asks only that it not refill *silently*. Each re-run is
+   recorded with the blind spot that hid its batch: first that a
+   surfaced `GET` marks its whole path family as seen, then that an
+   unrendered component's `fetch` calls satisfy the grep anyway.
+2. **§2's headline number was wrong and is corrected in place.** "26 of
+   172" counted files, not surfaces. Leaving it would have left the
+   next person auditing against a figure this phase had already
+   disproved.
+3. **The second blind spot now has a test, not a warning.**
+   `reachable.test.ts` fails on an unrendered component. A note in §2
+   would have been the same kind of thing that failed here — a
+   convention nobody re-checks.
 
-So the handover list below is still the whole of what needs the dev
-machine, and it has not grown.
+The handover list below has not grown. What is open is 4.16, which
+needs judgement rather than a developer machine.
 
 ### Known to need the dev machine
 

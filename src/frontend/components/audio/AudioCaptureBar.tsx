@@ -1,6 +1,19 @@
 /**
  * AudioCaptureBar — Phase 8.1 / 8.2.
  *
+ * Phase 29 §4.15 — this was written and never imported, so the four
+ * `/api/audio/*` endpoints looked surfaced to the §2 audit (it greps
+ * for endpoint paths in `src/frontend/`, and this file contains them)
+ * while nothing could reach them. The Cmd/Ctrl+Shift+M hint it draws
+ * was not bound to anything either — advertised by a component nobody
+ * could see. Both are now true.
+ *
+ * It is hidden by default and shown from the mic button in the status
+ * bar or that shortcut, because starting a microphone is an explicit
+ * act and a permanent strip offering it is not. Once capture is
+ * running the bar stays up regardless: a live microphone the user
+ * cannot see is not acceptable.
+ *
  * A compact bar that lets the user toggle audio capture from their
  * microphone. When active, audio chunks stream to the backend's
  * rolling buffer. Agents can then call `get_audio_context` to receive
@@ -11,7 +24,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Radio } from 'lucide-react';
+import { Mic, MicOff, Radio, X } from 'lucide-react';
+import { useUiStore } from '../../stores/ui-store';
 
 interface CaptureStatus {
   capturing: boolean;
@@ -24,6 +38,7 @@ interface CaptureStatus {
 const CHUNK_INTERVAL_MS = 2000; // send a chunk every 2 seconds
 
 export function AudioCaptureBar() {
+  const visible = useUiStore((s) => s.audioBarVisible);
   const [status, setStatus] = useState<CaptureStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -153,6 +168,9 @@ export function AudioCaptureBar() {
 
   const capturing = status?.capturing ?? false;
 
+  // Hidden unless asked for — but never while the microphone is live.
+  if (!visible && !capturing) return null;
+
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 text-xs border-t ${
       capturing
@@ -201,6 +219,17 @@ export function AudioCaptureBar() {
           <MicOff size={9} />
           {error}
         </span>
+      )}
+
+      <div className="flex-1" />
+      {!capturing && (
+        <button
+          onClick={() => useUiStore.getState().toggleAudioBar()}
+          className="p-0.5 rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60"
+          title="Hide"
+        >
+          <X size={11} />
+        </button>
       )}
     </div>
   );

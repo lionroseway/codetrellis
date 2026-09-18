@@ -12,6 +12,7 @@ import { useTerminalStore } from '../stores/terminal-store';
  * - Cmd+\: Toggle split view (workspace + graph)
  * - Cmd+`: Toggle terminal panel
  * - Cmd+Shift+C: Toggle the code-first surface (Phase 26)
+ * - Cmd+Shift+M: Toggle the audio capture bar (Phase 29 §4.15)
  * - Escape: Deselect node
  */
 export function useKeyboardShortcuts() {
@@ -65,6 +66,14 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         const ui = useUiStore.getState();
         ui.setWorkspaceMode(ui.workspaceMode === 'code' ? 'graph' : 'code');
+      }
+
+      // Cmd+Shift+M — the audio capture bar. The bar has advertised
+      // this shortcut in its own UI since Phase 8, and nothing bound it;
+      // the bar was never rendered, so nobody could find out.
+      if (meta && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+        e.preventDefault();
+        useUiStore.getState().toggleAudioBar();
       }
 
       if (e.key === 'Escape') {

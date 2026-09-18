@@ -1,124 +1,35 @@
-import { useMemo, useState } from 'react';
-import {
-  FileEdit, Search, Circle, X, ChevronRight, ChevronDown,
-  AlertTriangle, HelpCircle, Pencil, Eye, Plug,
-} from 'lucide-react';
-import { useUiStore } from '../../stores/ui-store';
-import { useAgentStore } from '../../stores/agent-store';
-import { groupIntoTurns, formatDuration, formatRelative, type AgentTurn } from '../../lib/agent-turns';
-import { phraseEvent, rawPayloadText, type EventIntent } from '../../lib/tool-phrasing';
-import type { AgentEvent } from '@shared/types';
-
-type Tab = 'plan' | 'timeline' | 'changes';
-
 /**
- * Phase 22 — the Timeline renders TURNS, not raw tool calls.
+ * AgentPanel — SUPERSEDED. Nothing renders this.
  *
- * An agent reads three files, greps, edits two and runs a test: one
- * intention, seven rows. The old view rendered all seven as raw payload
- * JSON and left the user to infer meaning. Nobody does that inference.
+ * `PlanPanel` replaced it in the same slot: both read
+ * `agentPanelVisible` from the ui-store, both draw the same close
+ * button, and `PlanPanel` has two tabs more (Proposed, Comments).
  *
- * Grouping is a view concern only — every underlying event is kept and
- * reachable through the disclosure, because a complete log is what makes
- * the Timeline worth anything in a post-mortem.
+ * It matters because of what happened next. Phase 22 rewrote the
+ * Timeline to group tool calls into turns — and wrote that rewrite
+ * **here**, into the panel that had already been replaced. So the flat
+ * raw-payload list it was meant to fix is what users kept seeing, and
+ * `agent-turns.test.ts` tested logic no interface reached. Phase 29
+ * §4.15 moved the turn view into `AgentTurns.tsx` and wired it into
+ * `PlanPanel`.
+ *
+ * This file now imports that shared component rather than keeping its
+ * own copy, so a third divergence cannot start here.
+ *
+ * The one thing it still shows that `PlanPanel` does not is the Plan
+ * tab: `agent-store`'s `currentPlan`, the chat-derived plan heuristic
+ * from the Claude Code session-JSONL watcher. That reader is also the
+ * only one, so the heuristic's output is invisible too — recorded in
+ * §4.15 as its own decision rather than folded into this one.
  */
 
-const INTENT_ICON: Record<EventIntent, typeof FileEdit> = {
-  read: Eye,
-  write: Pencil,
-  ask: HelpCircle,
-  session: Plug,
-  error: AlertTriangle,
-};
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { useUiStore } from '../../stores/ui-store';
+import { useAgentStore } from '../../stores/agent-store';
+import { AgentTurnList, useAgentTurns } from './AgentTurns';
 
-const INTENT_COLOR: Record<EventIntent, string> = {
-  read: 'text-foreground-subtle',
-  write: 'text-accent',
-  ask: 'text-warning',
-  session: 'text-foreground-subtle',
-  error: 'text-danger',
-};
-
-/** One event row inside an expanded turn. */
-function EventRow({ event }: { event: AgentEvent }) {
-  const [showRaw, setShowRaw] = useState(false);
-  const phrased = phraseEvent(event);
-  const Icon = INTENT_ICON[phrased.intent] ?? Circle;
-
-  return (
-    <div className="pl-6 pr-2">
-      <button
-        onClick={() => setShowRaw((v) => !v)}
-        className="w-full flex items-start gap-2 py-0.5 text-left hover:bg-surface-hover rounded transition-colors"
-        title={phrased.tool ?? undefined}
-      >
-        <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-50">
-          {new Date(event.timestamp).toLocaleTimeString()}
-        </span>
-        <Icon size={10} className={`shrink-0 mt-0.5 ${INTENT_COLOR[phrased.intent]}`} />
-        <span className="text-foreground-muted truncate flex-1">{phrased.text}</span>
-      </button>
-      {showRaw && (
-        <pre className="ml-6 my-1 p-2 rounded bg-surface text-[9px] text-foreground-subtle font-mono overflow-x-auto max-h-40">
-          {rawPayloadText(event)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-/** One turn card. Collapsed by default — the summary is the point. */
-function TurnCard({ turn }: { turn: AgentTurn }) {
-  const [expanded, setExpanded] = useState(false);
-  const Chevron = expanded ? ChevronDown : ChevronRight;
-
-  return (
-    <div className="rounded-md hover:bg-surface-hover transition-colors">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-start gap-2 py-1 px-2 text-left"
-      >
-        <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-50">
-          {new Date(turn.startedAt).toLocaleTimeString()}
-        </span>
-        <Chevron size={11} className="text-foreground-subtle shrink-0 mt-0.5" />
-        <span className="flex-1 min-w-0">
-          <span
-            className={`block truncate ${
-              turn.hasError ? 'text-danger' : turn.mutating ? 'text-foreground' : 'text-foreground-muted'
-            }`}
-          >
-            {turn.summary}
-          </span>
-          {(turn.files.length > 0 || turn.agentType) && (
-            <span className="block text-[9px] text-foreground-subtle truncate mt-0.5">
-              {turn.agentType && <span>{turn.agentType}</span>}
-              {turn.agentType && turn.files.length > 0 && <span> · </span>}
-              {turn.files.length > 0 && (
-                <span className="font-mono">
-                  {turn.files.slice(0, 3).join(', ')}
-                  {turn.files.length > 3 && ` +${turn.files.length - 3}`}
-                </span>
-              )}
-            </span>
-          )}
-        </span>
-        {turn.durationMs >= 1000 && (
-          <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-60">
-            {formatDuration(turn.durationMs)}
-          </span>
-        )}
-      </button>
-      {expanded && (
-        <div className="pb-1">
-          {turn.events.map((event) => (
-            <EventRow key={event.id} event={event} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+type Tab = 'plan' | 'timeline' | 'changes';
 
 export function AgentPanel() {
   const visible = useUiStore((s) => s.agentPanelVisible);
@@ -129,9 +40,7 @@ export function AgentPanel() {
   const currentPlan = useAgentStore((s) => s.currentPlan);
   const status = useAgentStore((s) => s.status);
 
-  // Newest first for display; the grouper works oldest-first.
-  const turns = useMemo(() => groupIntoTurns(events.slice(-400)).reverse(), [events]);
-  const lastTurn = turns[0] ?? null;
+  const turns = useAgentTurns(events);
 
   const fileChanges = events.filter(
     (e) => e.type === 'file_changed' && (e.payload.action === 'write' || e.payload.action === 'edit')
@@ -204,27 +113,7 @@ export function AgentPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
-            {turns.length === 0 ? (
-              <div className="text-foreground-subtle py-6 text-center">
-                No agent events yet
-              </div>
-            ) : (
-              <>
-                {/* An idle panel used to show nothing, which is
-                    indistinguishable from the app being broken. Say when
-                    the last thing happened and what it was. */}
-                {status !== 'active' && lastTurn && (
-                  <div className="mb-2 px-2 py-1.5 rounded-md bg-surface text-[10px] text-foreground-subtle">
-                    Last activity {formatRelative(lastTurn.endedAt)} — {lastTurn.summary}
-                  </div>
-                )}
-                <div className="space-y-px">
-                  {turns.map((turn) => (
-                    <TurnCard key={turn.id} turn={turn} />
-                  ))}
-                </div>
-              </>
-            )}
+            <AgentTurnList turns={turns} status={status} />
           </div>
         )}
 

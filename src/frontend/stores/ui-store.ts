@@ -71,6 +71,17 @@ interface UiState {
   /** Phase 16.E — when true, workspace + graph render side-by-side (horizontal split). */
   splitView: boolean;
   toggleSplitView: () => void;
+  /**
+   * Phase 29 §4.15 — the audio capture bar.
+   *
+   * Hidden by default: capturing the microphone is a niche, explicit
+   * act, and a permanent "Start audio capture" strip would be exactly
+   * the kind of always-on chrome this phase is trying not to add. The
+   * bar itself keeps showing while a capture is running, whatever this
+   * says, because a live microphone must never be invisible.
+   */
+  audioBarVisible: boolean;
+  toggleAudioBar: () => void;
   setSplitView: (v: boolean) => void;
 
   toggleSidebar: () => void;
@@ -105,6 +116,8 @@ export const useUiStore = create<UiState>((set) => ({
   setLearnTrellisOpen: (open) => set({ learnTrellisOpen: open }),
   splitView: false,
   toggleSplitView: () => set((s) => ({ splitView: !s.splitView })),
+  audioBarVisible: false,
+  toggleAudioBar: () => set((s) => ({ audioBarVisible: !s.audioBarVisible })),
   setSplitView: (v) => set({ splitView: v }),
 
   workspaceMode: 'graph',

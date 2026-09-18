@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Activity, Database, Cpu, Copy, Check, SquareTerminal } from 'lucide-react';
+import { Activity, Database, Cpu, Copy, Check, SquareTerminal, Mic } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { useTerminalStore } from '../../stores/terminal-store';
 import { CoverageChip } from './CoverageChip';
+import { useUiStore } from '../../stores/ui-store';
 
 export function StatusBar() {
   const scanStatus = useProjectStore((s) => s.scanStatus);
@@ -11,6 +12,7 @@ export function StatusBar() {
   const agentStatus = useAgentStore((s) => s.status);
   const eventCount = useAgentStore((s) => s.events.length);
   const [copied, setCopied] = useState(false);
+  const audioBarVisible = useUiStore((s) => s.audioBarVisible);
 
   const handleCopyMcpConfig = async () => {
     try {
@@ -65,6 +67,20 @@ export function StatusBar() {
       {/* Phase 29 — what the scan could not resolve. Renders nothing
           until there is a scan to describe; see CoverageChip. */}
       <CoverageChip />
+
+      {/* Phase 29 §4.15 — the way in to the audio capture bar. The bar
+          itself is hidden by default, and a shortcut alone is not
+          discoverable: the component advertised Cmd/Ctrl+Shift+M for
+          three phases while being unreachable by any route. */}
+      <button
+        onClick={() => useUiStore.getState().toggleAudioBar()}
+        className={`flex items-center gap-1 transition-all ${
+          audioBarVisible ? 'text-accent' : 'hover:text-foreground'
+        }`}
+        title="Audio capture for agents (⌘/Ctrl+⇧+M)"
+      >
+        <Mic size={9} />
+      </button>
 
       <button onClick={handleCopyMcpConfig} className="flex items-center gap-1 hover:text-foreground transition-all" title="Copy MCP config">
         <Database size={9} />
