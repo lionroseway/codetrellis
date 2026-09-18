@@ -87,7 +87,18 @@ grep -oE "CREATE TABLE IF NOT EXISTS [a-z_]+" src/backend/services/db-schema.ts 
 **Some of this is deliberate.** Agents are a first-class consumer of this
 product; an MCP-only surface can be a design choice rather than an
 omission. Every item below says which it is believed to be, and an item
-whose answer is "ask" says so instead of assuming.
+whose answer was "ask" said so instead of assuming.
+
+**Answered, 2026-09-18.** All three "ask" items — plan templates (4.10),
+`next-task` / `file-status` (4.14) and manifest conflicts (4.9) — are
+**gaps, not design decisions**, and are to be surfaced. Version history
+(4.8) is wanted too. `subprocess` / `env_lookup` stay as they are for
+now, neither built nor deleted.
+
+**The goal is an empty register.** What remains at the end should be only
+the items that genuinely need a developer machine — the Swift grammar
+rebuild and anything requiring a packaged build — so that cleanup is a
+short, known list rather than an open question.
 
 ## 3. UX rules for this phase — these are the point
 
@@ -331,9 +342,12 @@ and REST only.
 tables of history with no timeline to read them.
 
 This is the largest latent **feature** in the register rather than a
-polish item, and it should be sized as one rather than smuggled in here.
+polish item.
 
-- *Effort*: large. Needs its own design.
+- *Effort*: large.
+- **Wanted** (answered 2026-09-18). Sized and designed in §6 rather than
+  smuggled in as a chip, because it is the one item here that is a
+  feature rather than a wiring job.
 
 ### 4.9 ☐ Manifest conflicts
 
@@ -341,8 +355,7 @@ polish item, and it should be sized as one rather than smuggled in here.
 path, both unreferenced by the UI.
 
 - *Effort*: medium.
-- *Deliberate?* **Ask.** Conflict resolution may be intentionally an
-  agent-driven flow.
+- *Deliberate?* **Answered: no.** To be surfaced.
 
 ### 4.10 ☐ Plan templates
 
@@ -352,7 +365,7 @@ and user-global templates from `.codetrellis/templates/`. A complete
 authoring feature, MCP-only.
 
 - *Effort*: medium.
-- *Deliberate?* **Ask.** Plausibly an agent-first feature by design.
+- *Deliberate?* **Answered: no.** To be surfaced.
 
 ### 4.11 ☐ Update download progress
 
@@ -387,10 +400,10 @@ application.
 
 `/api/plans/:uid/next-task` answers "what should be worked on next" and
 `/api/plans/:uid/file-status` gives a file's standing against a plan.
-Both are plausibly agent-first by design — but "what's next" is also the
-question a human opening a plan asks.
+Both looked plausibly agent-first by design — but "what's next" is also
+the question a human opening a plan asks.
 
-- *Deliberate?* **Ask.**
+- *Deliberate?* **Answered: no.** To be surfaced.
 
 ### 4.15 — add here
 
@@ -398,8 +411,22 @@ Re-run §2 after any phase that adds a service or an endpoint.
 
 ## 5. Done when
 
-- Every item is ticked, ruled out with a reason, or has an owner's answer
-  recorded against the "ask" ones.
+- Every item is ticked or ruled out with a reason.
+- **What remains needs a developer machine and nothing else.** The point
+  of working the list down here is that the eventual cleanup session is a
+  short known list — the Swift grammar rebuild, anything needing a
+  packaged build — rather than an open question.
 - No surface added here is louder than `StatusBar`.
 - The §2 audit is part of what gets run when a phase adds an endpoint, so
   this register does not silently refill.
+
+### Known to need the dev machine
+
+Carried here so the handover list is explicit rather than reconstructed:
+
+| | Why it cannot be done here |
+|---|---|
+| Swift grammar rebuild | Needs Emscripten or Docker to replace the one third-party `.wasm` — see `resources/tree-sitter/README.md`. |
+| AppImage sandbox check | Needs a Linux host to confirm what the distributed AppImage does at runtime. |
+| Packaged-build verification | CI builds the web bundle and the harness runs under Node; only a packaged build proves the Electron + better-sqlite3 pairing. |
+| `npm run lint` | No `eslint.config.*` is tracked, so the command fails repo-wide. Not on this register — it is a house-style decision, flagged and deliberately not taken. |
