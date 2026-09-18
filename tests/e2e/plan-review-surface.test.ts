@@ -83,6 +83,14 @@ test.describe('Plan review surface (Phase 29)', () => {
       // to report as unclaimed — the finding this panel exists for.
       const stray = path.join(h.fixture.projectPath, 'services/notifier/app.rb');
       fs.appendFileSync(stray, '\n# a change nobody planned\n');
+      // Re-scan: 'live' is the SCANNED state, not the disk — liveSnapshot reads
+      // file hashes out of the database. In the app the file-watcher closes that
+      // gap; in the harness there is no watcher, so an edit that is never scanned
+      // is invisible to the comparison. This test passed without it only because
+      // commit-vs-live used to report every file as modified, which put app.rb in
+      // the list for the wrong reason and would have kept passing if the plumbing
+      // under it broke entirely.
+      await h.client.scanProject(h.fixture.projectPath);
 
       const q = `project=${encodeURIComponent(h.fixture.projectPath)}&before=commit:HEAD&after=live`;
       const res = await h.client.raw('GET', `/api/plans/${encodeURIComponent(plan.uid)}/review?${q}`);

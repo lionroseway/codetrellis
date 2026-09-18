@@ -4,6 +4,8 @@ import { getDb, getDependencyEdges, getAllFileHashes } from './database';
 import { getBaseline, diffSnapshots, captureSnapshot, type GraphSnapshot, type ArchDiff } from './diff-engine';
 import { getSnapshot, listSnapshots } from './trellis-service';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { getParseableExtensions } from './ast-parser';
 import { readTextWithin, ConfinementError } from './confined-fs';
 
 /**
@@ -85,11 +87,87 @@ function checkpointSnapshot(id: number): GraphSnapshot | null {
 }
 
 /**
+ * Blob OID -> md5 of that blob's bytes.
+ *
+ * A git object id is content-addressed, so this is valid for the life of the
+ * process, across refs and across projects. Playback resolves twenty commits
+ * that mostly share their blobs, so the hit rate is high and this is what
+ * keeps the rehash below from being per-commit work.
+ */
+/**
+ * The extensions this product actually indexes — the same set the scanner
+ * gates on, taken from the registry rather than restated, because a
+ * hand-maintained copy of it has gone stale twice before.
+ */
+const PARSEABLE = new Set(getParseableExtensions().map((e) => e.toLowerCase()));
+
+const blobMd5 = new Map<string, string>();
+const BLOB_MD5_CACHE_MAX = 50_000;
+
+/**
+ * md5 the bytes of each blob, via one `git cat-file --batch` process.
+ *
+ * Not `git show` per path: that is a process per file, and a commit snapshot
+ * of this repo alone is ~500 of them.
+ */
+function md5Blobs(projectPath: string, oids: string[]): void {
+  const wanted = [...new Set(oids)].filter((o) => !blobMd5.has(o));
+  if (wanted.length === 0) return;
+
+  let buf: Buffer;
+  try {
+    buf = execFileSync('git', ['cat-file', '--batch'], {
+      cwd: projectPath,
+      input: wanted.join('\n') + '\n',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+  } catch {
+    return; // callers treat a missing hash as an unreadable blob
+  }
+
+  // Framing is `<oid> SP <type> SP <size> LF <size bytes> LF`, or
+  // `<oid> SP missing LF` for one git cannot read.
+  let i = 0;
+  while (i < buf.length) {
+    const nl = buf.indexOf(0x0a, i);
+    if (nl === -1) break;
+    const header = buf.subarray(i, nl).toString('utf-8');
+    i = nl + 1;
+    const parts = header.split(' ');
+    const size = parts.length >= 3 ? Number(parts[2]) : NaN;
+    if (!Number.isFinite(size)) continue; // "missing" — no payload follows
+    if (blobMd5.size < BLOB_MD5_CACHE_MAX) {
+      blobMd5.set(parts[0], createHash('md5').update(buf.subarray(i, i + size)).digest('hex'));
+    }
+    i += size + 1;
+  }
+}
+
+/**
  * A git commit, files only.
  *
- * `git ls-tree -r` gives every path with its blob hash, which is exactly
- * a content hash — so added / removed / modified files are exact. Edges
- * are not available; see `edgesKnown`.
+ * Two things here exist because the obvious implementation is wrong in a way
+ * that looks right, and did ship that way:
+ *
+ *  1. **The hash is re-computed, not taken from `git ls-tree`.** An ls-tree
+ *     hash is the blob OID — SHA-1 of `"blob <len>\0<content>"` — while every
+ *     other snapshot carries `files.content_hash`, which is an md5 of the
+ *     bytes. `diffSnapshots` compares the two with `!==`, so they never
+ *     matched and **every file present in both sides reported as modified**.
+ *     They are not even the same length. So the blobs are read and md5'd into
+ *     the same space as the database.
+ *  2. **The file set is filtered to what the scanner indexes.** `ls-tree`
+ *     lists every tracked blob — lockfiles, images, `.gitignore` — while a
+ *     live snapshot is built from the `files` table, which holds only indexed
+ *     source. Unfiltered, every tracked-but-unindexed file read as *removed*
+ *     going commit -> live. That is a separate bug from the hashes, and
+ *     fixing one does not fix the other.
+ *
+ * Caveat worth knowing: with `core.autocrlf` on, blob bytes differ from
+ * working-tree bytes, so a file can report modified on line endings alone.
+ * That is real history, not a bug here, but it will look like one.
+ *
+ * Edges are not available; see `edgesKnown`.
  */
 function commitSnapshot(projectPath: string, ref: string): GraphSnapshot | null {
   assertSafeGitRef(ref, 'snapshot comparand');
@@ -104,7 +182,7 @@ function commitSnapshot(projectPath: string, ref: string): GraphSnapshot | null 
     return null;
   }
 
-  const files = new Map<string, { hash: string; symbolCount: number }>();
+  const entries: Array<{ filePath: string; oid: string }> = [];
   for (const line of out.split('\n')) {
     // <mode> <type> <sha>\t<path>
     const tab = line.indexOf('\t');
@@ -112,7 +190,19 @@ function commitSnapshot(projectPath: string, ref: string): GraphSnapshot | null 
     const meta = line.slice(0, tab).split(/\s+/);
     const filePath = line.slice(tab + 1);
     if (meta[1] !== 'blob') continue;
-    files.set(filePath, { hash: meta[2], symbolCount: 0 });
+    if (!PARSEABLE.has(path.extname(filePath).toLowerCase())) continue;
+    entries.push({ filePath, oid: meta[2] });
+  }
+  if (entries.length === 0) return null;
+
+  md5Blobs(projectPath, entries.map((e) => e.oid));
+
+  const files = new Map<string, { hash: string; symbolCount: number }>();
+  for (const { filePath, oid } of entries) {
+    const hash = blobMd5.get(oid);
+    // An unreadable blob is left out rather than given its OID as a hash:
+    // a wrong-space hash is what caused the bug above.
+    if (hash) files.set(filePath, { hash, symbolCount: 0 });
   }
   if (files.size === 0) return null;
 
