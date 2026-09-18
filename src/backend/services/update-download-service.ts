@@ -113,6 +113,37 @@ let state: UpdateDownloadState = {
   error: null,
 };
 
+/**
+ * The artifact must be the one the offer named.
+ *
+ * `assertAllowedUrl` establishes that the host is ours. It does not establish
+ * that the FILE is the version being offered, and the two are different
+ * questions — this module's own header says the update endpoint is untrusted
+ * ("a compromised or spoofed update endpoint could name any host"), so it can
+ * equally name any file on an allowed host. Nothing stopped an offer for
+ * 0.1.15 from downloading the 0.1.9 artifact, which is a downgrade delivered
+ * through the update path with a valid signature over the wrong release.
+ *
+ * The digest check does not cover this. It fetches the manifest next to
+ * whatever URL was given, so a consistent-but-wrong release verifies happily:
+ * the signature proves the bytes match THAT manifest, not that the release is
+ * the one the user was offered.
+ *
+ * Checked against the URL and the filename rather than the manifest, because
+ * both are attacker-influenced and this is asking whether they AGREE with the
+ * offer the user accepted.
+ */
+function assertArtifactMatchesOffer(url: URL, filename: string, version: string): void {
+  const haystack = `${url.pathname} ${filename}`;
+  if (!haystack.includes(version)) {
+    throw new Error(
+      `Refusing the download: the offer is for ${version} but the artifact it names `
+      + `(${filename}) does not carry that version. This is what a downgrade or a `
+      + `swapped release looks like.`,
+    );
+  }
+}
+
 /** One at a time. See `startUpdateDownload`. */
 let inFlight: Promise<UpdateDownloadState> | null = null;
 let cancelled = false;
@@ -253,6 +284,7 @@ export function startUpdateDownload(
     try {
       const url = assertAllowedUrl(info.url);
       const filename = safeFilename(info.filename || path.basename(url.pathname));
+      assertArtifactMatchesOffer(url, filename, version);
 
       // THE DIGEST COMES FROM THE SIGNED MANIFEST, NOT THE UPDATE API.
       //

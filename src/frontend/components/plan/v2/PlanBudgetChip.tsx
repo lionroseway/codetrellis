@@ -70,6 +70,7 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
   const [minutesDraft, setMinutesDraft] = useState('');
   const [costDraft, setCostDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -103,15 +104,29 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
   }, [open]);
 
   const save = async () => {
+    // An empty box means "no ceiling"; anything unparseable is a typo, and the
+    // two must not arrive at the server as the same thing. JSON.stringify turns
+    // NaN into null, so `Number('ten')` used to read as "clear my budget" and
+    // silently removed one the user had set.
+    const parse = (draft: string): number | null | undefined => {
+      if (draft.trim() === '') return null;
+      const n = Number(draft);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    const minutes = parse(minutesDraft);
+    const costUsd = parse(costDraft);
+    if (minutes === undefined || costUsd === undefined) {
+      setSaveError('Enter a positive number, or leave it empty for no ceiling.');
+      return;
+    }
+    setSaveError('');
+
     setSaving(true);
     try {
       const res = await fetch(`/api/plans/${encodeURIComponent(plan.uid)}/budget`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          minutes: minutesDraft.trim() === '' ? null : Number(minutesDraft),
-          costUsd: costDraft.trim() === '' ? null : Number(costDraft),
-        }),
+        body: JSON.stringify({ minutes, costUsd }),
       });
       if (res.ok) setReport((await res.json()) as BudgetReport);
       setOpen(false);
@@ -236,6 +251,10 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
                 {saving ? '…' : 'Save'}
               </button>
             </div>
+
+            {saveError && (
+              <p className="mt-1.5 text-[10.5px] text-red-300 leading-snug">{saveError}</p>
+            )}
 
             {/* The posture db-schema.ts sets where the table is defined.
                 Said plainly, because an interface that implies

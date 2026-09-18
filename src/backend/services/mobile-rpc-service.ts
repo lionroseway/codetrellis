@@ -1087,7 +1087,14 @@ async function routeMethod(
     }
 
     case 'review.comparands': {
-      const projectPath = peerProjectRoot(params, { required: true })!;
+      // Scoped to the PLAN, like review.get and review.prDraft beside it.
+      // Without a planUid this fell back to the desktop's active project, so a
+      // phone reviewing a plan in project B was offered project A's commits —
+      // and picking one produced a comparison against a repository the plan has
+      // nothing to do with. The planUid is optional so existing callers that
+      // genuinely want the active project keep working.
+      const planUid = params.planUid as string | undefined;
+      const projectPath = planUid ? planProjectRoot(planUid) : peerProjectRoot(params, { required: true })!;
       return listComparands(projectPath);
     }
 

@@ -136,7 +136,13 @@ export function PlanTemplatePicker({ onClose }: { onClose: () => void }) {
     if (selectedId === t.id) { setSelectedId(null); return; }
     setSelectedId(t.id);
     setCreateError('');
-    setTitleDraft(t.defaultTitle ?? t.label);
+    // NOT the raw defaultTitle: every built-in carries un-substituted
+    // placeholders — `Feature: {{feature}}`, `{{ticket}}: {{summary}}` — and
+    // this draft is sent verbatim as the plan's title. Every plan created
+    // through this picker was named with template syntax. The raw form is
+    // still shown, as the input's placeholder, so the shape is visible while
+    // the user types.
+    setTitleDraft('');
     const init: Record<string, string> = {};
     for (const p of t.placeholders ?? []) init[p.key] = p.default ?? '';
     setValues(init);

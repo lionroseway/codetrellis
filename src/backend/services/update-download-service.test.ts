@@ -136,3 +136,42 @@ describe('state', () => {
     assert.equal(svc.getUpdateDownloadState().phase, 'error');
   });
 });
+
+describe('the artifact must be the release being offered (M29)', () => {
+  test('an offer for one version that names another version is refused', async () => {
+    // `assertAllowedUrl` proves the HOST is ours. It says nothing about the
+    // FILE, and this module's own header says the update endpoint is untrusted
+    // — so it can name any file on an allowed host. An offer for 0.1.15 that
+    // points at the 0.1.9 artifact is a downgrade delivered through the update
+    // path, and the digest check does not catch it: the manifest is fetched
+    // next to whatever URL was given, so a consistent-but-wrong release
+    // verifies happily.
+    const result = await svc.startUpdateDownload('0.1.15', {
+      url: 'https://github.com/lionroseway/codetrellis-releases/releases/download/v0.1.9/CodeTrellis-0.1.9-arm64.dmg',
+      filename: 'CodeTrellis-0.1.9-arm64.dmg',
+    } as never);
+    assert.equal(result.phase, 'error');
+    assert.match(result.error ?? '', /does not carry that version|downgrade/i);
+  });
+
+  test('nothing is written to disk when the artifact does not match', async () => {
+    await svc.startUpdateDownload('0.1.15', {
+      url: 'https://github.com/lionroseway/codetrellis-releases/releases/download/v0.1.9/CodeTrellis-0.1.9-arm64.dmg',
+      filename: 'CodeTrellis-0.1.9-arm64.dmg',
+    } as never);
+    const dir = path.join(tmp, 'updates');
+    const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+    assert.deepEqual(files, [], 'refused before any bytes are fetched');
+  });
+
+  test('a matching offer gets past this check', async () => {
+    // It fails later — the release does not exist — but it must fail on the
+    // manifest, not on the version binding, or the check is too strict to ship.
+    const result = await svc.startUpdateDownload('0.1.9', {
+      url: 'https://github.com/lionroseway/codetrellis-releases/releases/download/v0.1.9/CodeTrellis-0.1.9-arm64.dmg',
+      filename: 'CodeTrellis-0.1.9-arm64.dmg',
+    } as never);
+    assert.equal(result.phase, 'error');
+    assert.doesNotMatch(result.error ?? '', /does not carry that version/);
+  });
+});

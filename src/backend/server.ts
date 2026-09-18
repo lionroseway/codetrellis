@@ -2847,6 +2847,23 @@ app.get('/api/plans/:uid/budget', (req, res) => {
 
 app.put('/api/plans/:uid/budget', (req, res) => {
   const body = (req.body ?? {}) as { minutes?: number | null; costUsd?: number | null; exempt?: boolean };
+
+  // A ceiling is a positive number or an explicit null to clear it. Nothing
+  // else is a ceiling, and the difference matters: the chip's inputs are free
+  // text, `Number('')` and `Number('ten')` are NaN, and `JSON.stringify` turns
+  // NaN into null — so a typo arrived here indistinguishable from "clear my
+  // budget", and silently removed one the user had set. Undefined still means
+  // "leave it alone"; null still means "clear it".
+  const ceiling = (v: unknown, label: string): string | null =>
+    v === undefined || v === null || (typeof v === 'number' && Number.isFinite(v) && v > 0)
+      ? null
+      : `${label} must be a positive number, or null to clear it`;
+  const invalid = ceiling(body.minutes, 'minutes') ?? ceiling(body.costUsd, 'costUsd');
+  if (invalid) {
+    res.status(400).json({ error: invalid });
+    return;
+  }
+
   // The plan uid comes from the route, never from the body — the same
   // rule Phase 19 applies to project roots.
   const budget = budgetService.setBudget({

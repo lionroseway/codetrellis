@@ -76,7 +76,15 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
   const author = input.author ?? 'human';
   const authorType = input.authorType ?? 'human';
 
-  const title = (input.title ?? template.defaultTitle).replace('{name}', input.title ?? '');
+  // `defaultTitle` has already been through substitutePlaceholders, so its
+  // `{{key}}` placeholders are filled. `{name}` is the older single-brace form
+  // and is not, so it is replaced here — and when there is no title to put in
+  // it, the leftover punctuation goes too, or the plan is called
+  // "Mass refactor: " with nothing after the colon.
+  const title = (input.title ?? template.defaultTitle)
+    .replace('{name}', input.title ?? '')
+    .replace(/[:\-–—]\s*$/, '')
+    .trim();
   const description = input.description ?? template.defaultPlanDescription;
 
   // Detect V2 template format: has `items` array

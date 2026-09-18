@@ -97,6 +97,45 @@ export function nextItemLabel(next: NextItem): string {
   return (next.title ?? next.description ?? '').trim() || 'untitled';
 }
 
+/** The two points being compared. Rendered in both the loaded and error states. */
+function ComparePicker({
+  comparands, before, after, onBefore, onAfter,
+}: {
+  comparands: Comparand[];
+  before: string;
+  after: string;
+  onBefore: (spec: string) => void;
+  onAfter: (spec: string) => void;
+}) {
+  if (comparands.length <= 1) return null;
+  const row = (selected: string, onPick: (spec: string) => void, keyPrefix: string) => (
+    <View style={styles.chipRow}>
+      {comparands.map((c) => (
+        <TouchableOpacity
+          key={`${keyPrefix}-${c.spec}`}
+          style={[styles.chip, selected === c.spec && styles.chipActive]}
+          onPress={() => onPick(c.spec)}
+        >
+          <Text style={[styles.chipText, selected === c.spec && styles.chipTextActive]}>
+            {c.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+  return (
+    <>
+      <Text style={styles.sectionLabel}>COMPARING</Text>
+      <View style={styles.compareCard}>
+        <Text style={styles.compareHint}>From</Text>
+        {row(before, onBefore, 'b')}
+        <Text style={[styles.compareHint, { marginTop: 12 }]}>To</Text>
+        {row(after, onAfter, 'a')}
+      </View>
+    </>
+  );
+}
+
 export default function PlanReviewScreen() {
   const router = useRouter();
   const { planUid, planTitle } = useLocalSearchParams<{
@@ -125,7 +164,10 @@ export default function PlanReviewScreen() {
       const [rev, nxt, cmp] = await Promise.all([
         rpc<PlanReview>('review.get', { planUid, before, after }),
         rpc<NextItem>('plan.nextItem', { planUid }).catch(() => null),
-        rpc<Comparand[]>('review.comparands').catch(() => [] as Comparand[]),
+        // Scoped to this plan's project — the review beside it is, and an
+        // unscoped list offers commits from whatever the desktop happens to
+        // have open.
+        rpc<Comparand[]>('review.comparands', { planUid }).catch(() => [] as Comparand[]),
       ]);
       setReview(rev);
       setNext(nxt);
@@ -168,14 +210,26 @@ export default function PlanReviewScreen() {
   }
 
   if (error) {
+    // The picker stays. Replacing the whole tree with a message and a "Try
+    // again" that re-issues the SAME before/after made the error unrecoverable
+    // from inside the screen: the one control able to change the failing input
+    // was the one thing the error state removed. Comparands load independently
+    // of the review, so they are usually present even when the review failed.
     return (
-      <View style={styles.center}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Stack.Screen options={{ title: 'Review' }} />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); load(); }}>
           <Text style={styles.retryText}>Try again</Text>
         </TouchableOpacity>
-      </View>
+        <ComparePicker
+          comparands={comparands}
+          before={before}
+          after={after}
+          onBefore={setBefore}
+          onAfter={setAfter}
+        />
+      </ScrollView>
     );
   }
 
@@ -273,41 +327,13 @@ export default function PlanReviewScreen() {
 
       {/* 4 — what it is being compared against. The review is always
           against two points; moving them is what makes this a walk. */}
-      {comparands.length > 1 && (
-        <>
-          <Text style={styles.sectionLabel}>COMPARING</Text>
-          <View style={styles.compareCard}>
-            <Text style={styles.compareHint}>From</Text>
-            <View style={styles.chipRow}>
-              {comparands.map((c) => (
-                <TouchableOpacity
-                  key={`b-${c.spec}`}
-                  style={[styles.chip, before === c.spec && styles.chipActive]}
-                  onPress={() => setBefore(c.spec)}
-                >
-                  <Text style={[styles.chipText, before === c.spec && styles.chipTextActive]}>
-                    {c.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={[styles.compareHint, { marginTop: 12 }]}>To</Text>
-            <View style={styles.chipRow}>
-              {comparands.map((c) => (
-                <TouchableOpacity
-                  key={`a-${c.spec}`}
-                  style={[styles.chip, after === c.spec && styles.chipActive]}
-                  onPress={() => setAfter(c.spec)}
-                >
-                  <Text style={[styles.chipText, after === c.spec && styles.chipTextActive]}>
-                    {c.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </>
-      )}
+      <ComparePicker
+        comparands={comparands}
+        before={before}
+        after={after}
+        onBefore={setBefore}
+        onAfter={setAfter}
+      />
 
       {/* Actions. Copy, not "open a PR" — the desktop holds no GitHub
           credentials and neither does the phone. */}
