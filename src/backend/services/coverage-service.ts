@@ -174,12 +174,26 @@ export function findNearMisses(
 ): NearMiss[] {
   const out: NearMiss[] = [];
 
+  // Bucket the routes by the only two things a near miss can agree on — the
+  // method and the segment count — and split each pattern ONCE.
+  //
+  // This ran as a full cross product with a `split` per pair, inside an Express
+  // request, over every unpaired callsite in the database with no bound. The
+  // early exit only fires when misses are FOUND, so the worst case is the
+  // common one: a large project where few things nearly match does the most
+  // work. Bucketing makes it linear in the routes that could possibly pair.
+  const byShape = new Map<string, Array<{ route: UnpairedCallsite; segs: string[] }>>();
+  for (const route of routes) {
+    const segs = route.pattern.split('/');
+    const key = `${route.method} ${segs.length}`;
+    const bucket = byShape.get(key);
+    if (bucket) bucket.push({ route, segs });
+    else byShape.set(key, [{ route, segs }]);
+  }
+
   for (const call of calls) {
     const callSegs = call.pattern.split('/');
-    for (const route of routes) {
-      if (call.method !== route.method) continue;
-      const routeSegs = route.pattern.split('/');
-      if (routeSegs.length !== callSegs.length) continue;
+    for (const { route, segs: routeSegs } of byShape.get(`${call.method} ${callSegs.length}`) ?? []) {
 
       let differing = -1;
       let ok = true;

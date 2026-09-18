@@ -94,6 +94,27 @@ export function getPlanExternalRefs(planUid: string): PlanExternalRef[] {
 }
 
 /**
+ * The plan already carrying this external key, if any.
+ *
+ * `setPlanExternalRef` is idempotent on `(plan, key)`, which makes re-attaching
+ * a ticket to the SAME plan safe — but nothing asked whether some OTHER plan
+ * already represents that epic, so `create_plan_from_external` made a second
+ * one every time, against a tool description promising the opposite.
+ */
+export function findPlanByExternalKey(key: string): string | null {
+  if (!key) return null;
+  try {
+    const res = getDb().exec(
+      `SELECT plan_uid FROM plan_external_refs WHERE external_key = ? ORDER BY created_at ASC LIMIT 1`,
+      [key],
+    );
+    return (res[0]?.values?.[0]?.[0] as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Attach a ticket to a plan. Idempotent on `(plan, key)` so re-importing
  * an epic updates rather than duplicating.
  */

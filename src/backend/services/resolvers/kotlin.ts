@@ -72,7 +72,6 @@ function resolve(ctx: ResolveContext): string | null {
   if (isExternal(importSource)) return null;
 
   const containing = findContainingSystem(importerPath, systems);
-  if (!containing) return null;
 
   const segments = importSource.split('.').filter(Boolean);
   if (segments.length === 0) return null;
@@ -85,13 +84,36 @@ function resolve(ctx: ResolveContext): string | null {
   const packageSegments = looksLikeDeclaration ? segments.slice(0, -1) : segments;
   if (packageSegments.length === 0) return null;
 
-  for (const root of SOURCE_ROOTS) {
-    const dir = path.join(containing.rootPath, root, ...packageSegments);
-    const hit = pickRepresentativeFile(dir, knownFiles, {
-      extensions: EXTENSIONS,
-      prefer: looksLikeDeclaration ? last : null,
-    });
-    if (hit) return hit;
+  // The importer's own module first, then every other module, then the project
+  // root — the shape the Swift resolver already uses.
+  //
+  // Searching only the containing system meant no cross-module import ever
+  // resolved, and in a multi-module Gradle or Android build that is most of
+  // them: every module directory carries its own build.gradle(.kts), so
+  // system-discovery emits one system per module, and `:core` importing from
+  // `:data` looks outside its own system by definition. Returning null when
+  // there was no containing system at all was the same mistake in stronger
+  // form — a file outside every module resolved nothing rather than falling
+  // back to the project.
+  //
+  // Widening is safe because `pickRepresentativeFile` checks membership of
+  // `knownFiles`: a path that is not a scanned file is not a hit, so a wider
+  // search finds more real edges rather than inventing any.
+  const searchRoots = [
+    ...(containing ? [containing.rootPath] : []),
+    ...systems.map((sys) => sys.rootPath).filter((r) => r !== containing?.rootPath),
+    ctx.projectRoot,
+  ];
+
+  for (const base of searchRoots) {
+    for (const root of SOURCE_ROOTS) {
+      const dir = path.join(base, root, ...packageSegments);
+      const hit = pickRepresentativeFile(dir, knownFiles, {
+        extensions: EXTENSIONS,
+        prefer: looksLikeDeclaration ? last : null,
+      });
+      if (hit) return hit;
+    }
   }
 
   return null;

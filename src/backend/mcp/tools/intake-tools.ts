@@ -22,6 +22,7 @@ import {
   intakeBody,
   intakeKind,
   keyFromUrl,
+  findPlanByExternalKey,
   setPlanExternalRef,
   getPlanExternalRefs,
   getSyncState,
@@ -50,7 +51,14 @@ const leafSchema = z.object({
   acceptance: z.array(z.string()).optional(),
   kind: z.enum(['object', 'action']).optional(),
 });
-const midSchema = leafSchema.extend({ children: z.array(leafSchema).optional() });
+// Four levels, not three. A zod object STRIPS unknown keys, so a schema one
+// level shallower than the input does not level the extra depth — it deletes
+// it before `flattenIntake` ever sees it, and the sub-tasks vanish silently
+// while the description promises they are levelled. Jira's standard hierarchy
+// is Epic -> Story -> Task -> Sub-task, which is exactly the depth that was
+// being dropped.
+const deepSchema = leafSchema.extend({ children: z.array(leafSchema).optional() });
+const midSchema = leafSchema.extend({ children: z.array(deepSchema).optional() });
 const rootSchema = leafSchema.extend({ children: z.array(midSchema).optional() });
 
 export function register(server: McpServer, deps: ToolDeps): void {
@@ -62,10 +70,13 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Turn a ticket hierarchy you have already fetched (Jira epic + stories, a Linear project, a set of ' +
         'GitHub issues) into a CodeTrellis plan with nested items, each carrying its ticket key. YOU fetch ' +
-        'with your own tracker credentials; CodeTrellis never calls out. Re-importing the same epic updates ' +
-        'the plan rather than duplicating it. Acceptance criteria land as a checklist in each item body. ' +
-        `Depth is capped at ${MAX_INTAKE_DEPTH} (epic → story → task); anything deeper is levelled rather ` +
-        'than dropped.',
+        'with your own tracker credentials; CodeTrellis never calls out. Acceptance criteria land as a ' +
+        'checklist in each item body. ' +
+        `Plan depth is capped at ${MAX_INTAKE_DEPTH} (epic → story → task); a fourth level is accepted and ` +
+        'levelled into the third rather than dropped. ' +
+        'If a plan already carries this epic, the import is REFUSED and the existing plan is named — ' +
+        'updating an imported plan in place is not supported yet, and silently creating a second copy ' +
+        'of an epic is worse than saying so.',
       inputSchema: {
         title: z.string().describe('Plan title — usually the epic summary.'),
         description: z.string().optional(),
@@ -75,6 +86,32 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const author = authorFromExtra(deps, extra);
+
+      // The description used to promise that re-importing updates the plan.
+      // It never did: this handler called createPlan unconditionally, so a
+      // second import of the same epic produced a second plan with the same
+      // ticket keys on both, and the tracker-sync surface then had two plans
+      // claiming the same work.
+      //
+      // Refusing is not the same as implementing it. Updating in place needs a
+      // rule for tickets that have been REMOVED from the epic since, and for
+      // items a human has since edited — those are product decisions. What is
+      // safe to do now is stop making the duplicate and say which plan already
+      // holds it.
+      const epicKey = args.external?.key ?? (args.external?.url ? keyFromUrl(args.external.url) : null);
+      if (epicKey) {
+        const existing = findPlanByExternalKey(epicKey);
+        if (existing) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Plan ${existing} already carries ${epicKey}. Refusing to import a second copy. `
+                + `Open that plan, or delete it first if you want a clean re-import.`,
+            }],
+            isError: true,
+          };
+        }
+      }
 
       const plan = deps.planService.createPlan(
         { title: args.title, description: args.description ?? '', tasks: [] },
