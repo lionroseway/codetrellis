@@ -248,7 +248,14 @@ is now unblocked and can move in its own change.
   runtime: HTTP for web/dev, Electron IPC for desktop, WebRTC data
   channels for peer-routed calls.
 - All MCP tool calls broadcast on the `tool_call` / `tool_error`
-  channel with agent attribution; PlanPanel Timeline tab renders.
+  channel with agent attribution. **`PlanPanel` renders the Timeline**,
+  grouping events into turns via `components/layout/AgentTurns.tsx`.
+  `AgentPanel` is superseded and rendered by nothing — it shares the
+  `agentPanelVisible` slot `PlanPanel` took over. Phase 22 wrote its
+  turn-grouping rewrite into `AgentPanel` **after** that replacement, so
+  the improvement reached no user until Phase 29 §4.15 moved it out.
+  Put agent-activity work in `AgentTurns.tsx` or `PlanPanel`, never in
+  `AgentPanel`.
 - MCP tools group into 18 files under `src/backend/mcp/tools/` —
   one file per domain (plans, items, channels, peers, terminals,
   audio, mobile, system docs, git, governance, drift, architecture,
@@ -272,6 +279,22 @@ is now unblocked and can move in its own change.
 - `npm run package:linux` — Build Linux packages (AppImage, deb, rpm)
 - `npm run lint` — Run ESLint
 - `npm run typecheck` — Run TypeScript type checking
+- `npm run test:unit` — Pure-logic tests under Node's runner (~456, seconds)
+- `npm run test:harness` — Full E2E harness (~340 tests, ~17 min)
+
+**Run `test:unit` as well as the harness.** It is not just faster
+coverage of the same things — two of its tests are *structural guards*
+that the harness cannot express:
+
+- `src/frontend/components/reachable.test.ts` fails when a component
+  has no exported name referenced anywhere, i.e. nothing renders it.
+  Phase 29 §4.15 found **eight** such files, between them making ten
+  endpoints look surfaced while being unreachable.
+- `src/backend/server-confinement.test.ts` asserts no handler reads a
+  project root raw, in any of its three spellings.
+
+Both exist because the thing they check is invisible to a grep and to
+a green test suite.
 
 ### Mobile
 
