@@ -74,7 +74,18 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'plan.item.get': 'read',
   'plan.items': 'read',
   'plan.list': 'read',
+  'plan.nextItem': 'read',
   'plan.template.list': 'read',
+  // Phase 29 mobile review flow. All four are read-only by
+  // construction: review and pr-draft never touch the repository (the
+  // agent does the git and opens the PR with its own credentials), and
+  // comparands / compare only read snapshots. 'read' is therefore the
+  // right grant — giving them 'project' would hand a phone more than
+  // the flow needs.
+  'review.comparands': 'read',
+  'review.compare': 'read',
+  'review.get': 'read',
+  'review.prDraft': 'read',
   'power.status': 'read',
   'project.active': 'read',
   'project.list': 'read',

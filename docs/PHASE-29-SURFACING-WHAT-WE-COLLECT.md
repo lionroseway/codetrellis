@@ -100,6 +100,19 @@ No grep over endpoint paths can see this. `npm run test:unit` can:
 not referenced by anything. **Run it alongside the two loops above** —
 an endpoint is surfaced only if the file calling it is on screen.
 
+**And mind the bridge, not just the app.** `mobile/` reaching an
+endpoint is a two-step question: the desktop has to expose it as an RPC
+method *and* the phone has to call it. §4.17 found review, PR draft and
+compare missing from the **bridge** — not unsurfaced in the mobile UI,
+absent from the 63 methods `mobile-rpc-service.ts` exposes. Grepping
+`mobile/` would have said "not used" and hidden why. The list to diff
+is the router's `case` labels against what the app calls:
+
+```bash
+grep -oE "case '[a-zA-Z0-9._]+'" src/backend/services/mobile-rpc-service.ts \
+  | sed "s/case '//;s/'//" | sort -u
+```
+
 **Mind the other client.** Both loops grep `src/frontend/` only, so
 "unsurfaced" here means *unsurfaced on desktop*. `mobile/` is a full
 second client and it is ahead of desktop in places — §4.10 was filed as
@@ -872,7 +885,80 @@ about to change is work done twice. They remain in
 `reachable.test.ts`'s allowlist with that reason, so they are visible
 rather than forgotten.
 
-### 4.17 — add here
+### 4.17 ☑ The phone could not ask "did it do what it said?"
+
+Not from the endpoint audit — from being asked for a clean mobile flow
+for review, walk-down and the agent channel. Checking turned up that
+one of those three was a wrong assumption and the other two were not
+wired at all.
+
+**The channel was already there.** `plan-detail` → Discussion →
+`plan-channel.tsx`, with `channel.post`, `channel.resolve`,
+`channel.thread` and `input.respond` all in use. Mobile calls 54 of the
+63 RPC methods the desktop exposes, so mobile is not generally behind.
+
+**Review and walk-down were absent from the bridge entirely.** Not
+unsurfaced in the mobile UI — *not exposed*. None of `review`,
+`pr-draft`, `comparands`, `compare` or `next-task` was among the 63.
+Phase 25 built that surface REST + MCP only; §4.13 gave it a desktop
+panel; the phone was never part of either. So someone watching an agent
+from their phone could read the plan and talk to it, and had no way to
+ask the question you pick the phone up for.
+
+Bridged as five read-only methods — `review.get`, `review.prDraft`,
+`review.comparands`, `review.compare`, `plan.nextItem` — and one screen,
+`mobile/app/plan-review.tsx`, reached from a Review entry above
+Discussion on the plan. Four sections in the order the question is
+asked: the verdict (landed / partial / untouched, and the count of
+changed files no item claimed — that last one is the finding), what to
+pick up next, the item walkthrough, and the two points being compared,
+changeable. Changing the comparison is what makes it a walk rather than
+a snapshot.
+
+PR draft copies to the clipboard rather than posting. CodeTrellis holds
+no GitHub credentials on either device, which is the Phase 25 decision
+and the Phase 24 rule.
+
+`review.get` and `review.prDraft` take their root from **the plan**, not
+from the active project. Phase 19's rule does not stop at "do not take
+it from the wire" — it says where to take it from: the stored item,
+plan or opened-project record. It is also the only correct answer with
+several projects open, where whichever one is foregrounded on the
+desktop has nothing to do with the plan the phone is reviewing. The
+stored value is still resolved through `resolveTrustedProjectRoot`,
+because a plan row can outlive the project being opened.
+
+#### The security finding this turned up
+
+`mobile-rpc-service.ts` never had the Phase 19 project-root sweep.
+
+Ten call sites read `params.projectPath` straight off the wire and used
+it. `project.rescan` walked and parsed that directory. `plan.file.export`,
+`sysdoc.create` and `plan.template.create` **wrote into it**. So a paired
+phone could make the desktop read and write outside every opened
+project.
+
+Pairing is not the control. The device is authenticated by DTLS and
+checked against the capability matrix, and neither of those answers "is
+this a project the user opened" — which is exactly why the service
+audits terminal access: a pairing can outlive the user's trust in the
+device it was made with.
+
+All ten now go through `peerProjectRoot`, which delegates to the same
+`resolveTrustedProjectRoot` the REST handlers use, so there is one
+implementation of "is this an opened project" rather than two.
+`mobile-rpc-confinement.test.ts` is the structural half, matching
+`server-confinement.test.ts`: the raw parameter may be read nowhere but
+the confining helper, so an eleventh call site cannot quietly
+reintroduce it. Verified by planting one — the guard names the line.
+
+Two things made this cheap to get right, both already in the codebase:
+`peer-capabilities.ts` is **deny-by-default**, so the new methods failed
+closed until classified, and its test asserts the matrix and the router
+cannot drift — it went red the moment I added matrix entries without
+handlers, which is precisely when it should.
+
+### 4.18 — add here
 
 Re-run §2 after any phase that adds a service or an endpoint. Run
 `npm run test:unit` too: the endpoint grep cannot see an unrendered
@@ -996,10 +1082,17 @@ whole time.
 
 ### Status, 2026-09-18
 
-**4.1 – 4.16 are closed.** Fourteen worked, and the items ruled out
-each carry a reason rather than a shrug (4.6 was already surfaced, 4.12
-is deliberate, and 4.16 rules out two endpoints and defers two
-components behind Gate 1.2).
+**4.1 – 4.17 are closed.** Fifteen worked, and the items ruled out each
+carry a reason rather than a shrug (4.6 was already surfaced, 4.12 is
+deliberate, and 4.16 rules out two endpoints and defers two components
+behind Gate 1.2).
+
+4.17 did not come from the audit at all — it came from a question about
+mobile UX, and it found both a missing capability and **a Phase 19
+sweep that had never reached the peer RPC surface**. Worth noting on
+its own: three re-runs of §2 did not find that, because §2 only ever
+looks at endpoints and components. The bridge is a third thing, and it
+now has its own check in §2.
 
 Three things qualify that:
 

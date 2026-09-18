@@ -131,6 +131,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="plan-review"
+          options={{
+            title: 'Review',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
           name="project-browser"
           options={{
             title: 'Open Project',
