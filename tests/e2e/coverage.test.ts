@@ -33,6 +33,14 @@ interface CoverageReport {
     edges: number;
     unservedRoutes: number;
     unmatchedCalls: number;
+    nearMisses: Array<{
+      method: string;
+      callPattern: string;
+      routePattern: string;
+      callFile: string;
+      routeFile: string;
+      differingSegment: { position: number; inCall: string; inRoute: string };
+    }>;
   };
 }
 
@@ -120,19 +128,55 @@ test.describe('Scan coverage (Phase 29)', () => {
       expect(report.http.calls).toBeGreaterThan(0);
       expect(report.http.edges).toBeGreaterThan(0);
 
-      // Every fixture call pairs with a route, so nothing should be
-      // reported as unmatched. This is the guard on the label
-      // reconstruction: if it drifted from cross-system-service, this
-      // would silently become `calls` instead of 0.
+      // The guard on label reconstruction. `unservedRoutes` and
+      // `unmatchedCalls` are derived by rebuilding
+      // `cross_system_edges.label` from a callsite's method and pattern,
+      // which only works while this and cross-system-service agree on
+      // how that label is built. If they drift, everything reads as
+      // unpaired and nothing errors — so the invariant is asserted
+      // directly: calls that are not unmatched are exactly the edges.
       expect(
-        report.http.unmatchedCalls,
-        'every call in the fixture pairs, so none should read as unmatched',
-      ).toBe(0);
+        report.http.calls - report.http.unmatchedCalls,
+        'paired calls must equal the edges drawn',
+      ).toBe(report.http.edges);
 
       // Routes are the other way round: the fixture serves more
       // endpoints than it calls, which is the number worth surfacing.
       expect(report.http.unservedRoutes).toBeGreaterThan(0);
       expect(report.http.unservedRoutes).toBeLessThan(report.http.routes);
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  test('a near miss is suggested, and does not become an edge', async () => {
+    const h = await setupHarness('coverage-near-miss');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+      const report = (await (await h.client.raw('GET', '/api/coverage')).json()) as CoverageReport;
+
+      // The fixture's Kotlin client calls /api/ledger/42; the C# side
+      // serves /api/ledger/:id. 42 is a value and :id is a pattern, so
+      // the exact matcher cannot pair them — and should not, because we
+      // cannot prove 42 is an id rather than a path segment the route
+      // does not serve.
+      const miss = report.http.nearMisses.find((m) => m.callPattern === '/api/ledger/42');
+      expect(miss, 'the /api/ledger/42 near miss should be suggested').toBeTruthy();
+      expect(miss!.routePattern).toBe('/api/ledger/:id');
+      expect(miss!.method).toBe('GET');
+      expect(miss!.differingSegment.inCall).toBe('42');
+      expect(miss!.differingSegment.inRoute).toBe(':id');
+      // Both sides named, so the panel can point at them.
+      expect(miss!.callFile).toContain('scheduler');
+      expect(miss!.routeFile).toContain('reporting');
+
+      // And it must NOT have become an edge. A suggestion is not a line
+      // on the architecture diagram.
+      const edges = await h.client.getCrossSystemEdges();
+      expect(
+        edges.find((e) => e.label === 'GET /api/ledger/42'),
+        'a near miss must never be promoted to an edge',
+      ).toBeUndefined();
     } finally {
       await h.teardown();
     }

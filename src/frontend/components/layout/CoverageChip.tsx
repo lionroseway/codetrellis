@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ScanSearch, Check } from 'lucide-react';
+import { ScanSearch, Check, GitCompareArrows } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import {
   explainGap, internalPercent, describeHttpGap, sortByAttention,
@@ -47,11 +47,32 @@ import {
  *   - the percentage is shown but never framed as a score — it is
  *     roughly "how self-contained is this codebase", which is a fact
  *     about the project rather than a mark out of ten.
+ *
+ * ## Near misses are suggestions and must look like suggestions
+ *
+ * `/api/ledger/42` against a route serving `/api/ledger/:id` is almost
+ * certainly the same endpoint, and the matcher still refuses to pair
+ * them — correctly, because a wrong line on an architecture diagram is
+ * worse than a missing one. The panel shows them under a **dashed**
+ * rule, phrased as "looks like", with the one differing segment visible
+ * so the reader judges it rather than taking our word. Nothing in that
+ * block may use a colour that reads as confirmed.
  */
 
 interface CoverageReport {
   imports: { total: number; resolved: number; byLanguage: Array<{ language: string; imports: number; resolved: number }> };
-  http: { routes: number; calls: number; edges: number; unservedRoutes: number; unmatchedCalls: number };
+  http: {
+    routes: number; calls: number; edges: number;
+    unservedRoutes: number; unmatchedCalls: number;
+    nearMisses: Array<{
+      method: string;
+      callPattern: string;
+      routePattern: string;
+      callFile: string;
+      routeFile: string;
+      differingSegment: { position: number; inCall: string; inRoute: string };
+    }>;
+  };
 }
 
 const KIND_TINT: Record<GapKind, string> = {
@@ -212,6 +233,40 @@ export function CoverageChip() {
                   ? `${httpGap}. That is not necessarily wrong — a caller or a service can live outside this project.`
                   : `Every endpoint found here has a caller here, and every call has a service.`}
               </p>
+            </div>
+          )}
+
+          {/* Suggestions, not links. Styled deliberately unlike the
+              confirmed counts above: dashed rule, "looks like", and the
+              one differing segment called out so the reader can judge it
+              rather than take our word. Never a colour that reads as
+              confirmed. */}
+          {http.nearMisses.length > 0 && (
+            <div className="px-3 py-2 border-t border-dashed border-white/[0.10]">
+              <div className="flex items-center gap-1.5 text-foreground">
+                <GitCompareArrows size={10} className="text-foreground-subtle" />
+                <span>Looks like the same endpoint</span>
+              </div>
+              <p className="mt-0.5 mb-1.5 text-foreground-subtle/70 leading-snug">
+                Not linked in the graph — a path with a value in it cannot be
+                proved to match one with a parameter. Shown so you can judge it.
+              </p>
+              <ul className="space-y-1.5">
+                {http.nearMisses.map((m) => (
+                  <li key={`${m.method}${m.callPattern}${m.routePattern}`} className="font-mono text-[10px] leading-snug">
+                    <div className="text-foreground-subtle">
+                      <span className="text-foreground-subtle/60">{m.method}</span>{' '}
+                      <span className="text-foreground/80">{m.callPattern}</span>
+                    </div>
+                    <div className="text-foreground-subtle/60 pl-3">
+                      ↳ {m.routePattern}
+                    </div>
+                    <div className="pl-3 font-sans text-foreground-subtle/50">
+                      {m.callFile.split('/').pop()} → {m.routeFile.split('/').pop()}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>,

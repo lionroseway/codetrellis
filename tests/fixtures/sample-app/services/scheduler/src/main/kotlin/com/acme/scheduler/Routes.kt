@@ -23,4 +23,12 @@ fun Application.configureRouting() {
 
 class ReportingClient(private val client: HttpClient) {
     suspend fun ledger() = client.get("http://reporting.internal/api/ledger")
+
+    /**
+     * A NEAR MISS on purpose: the C# side serves this as
+     * `[HttpGet("{id}")]` → /api/ledger/:id, and 42 is a value, so the
+     * exact matcher cannot pair them. The coverage panel should suggest
+     * the pairing without drawing an edge for it.
+     */
+    suspend fun entry() = client.get("http://reporting.internal/api/ledger/42")
 }

@@ -148,7 +148,7 @@ time.** Two corrections worth carrying forward:
    resolver returns null either way and nothing records the difference.
    Asserting it would repeat the same mistake one level down.
 
-### 4.2 ☐ Near-miss callsites
+### 4.2 ☑ Near-miss callsites
 
 A call to `/api/ledger/42` cannot pair with a route declared
 `/api/ledger/:id` — 42 is a value, `:id` is a pattern. The matcher has no
@@ -160,11 +160,29 @@ But "we saw a call that looks like this route and could not confirm it"
 is exactly what a person wants to know, and it can be shown as a
 suggestion without becoming a line on the graph.
 
-- *Shape*: a section of the §4.1 panel. Never an edge, never a colour
-  that reads as confirmed.
-- *Effort*: medium — needs a scoring rule (segment count plus literal
-  prefix), deliberately not a fuzzy one.
-- *Ships with*: 4.1. Same surface.
+- *Shipped*: `findNearMisses` in `coverage-service.ts`, surfaced in the
+  §4.1 panel under a **dashed** rule with "looks like the same
+  endpoint", the differing segment shown, and both files named.
+
+**The rule is strict, not fuzzy — that is the whole design.** A pairing
+is suggested only when: same method, same segment count, every segment
+equal except exactly one, and at that position the **route** holds a
+parameter while the **call** holds a concrete value. Two differences, or
+a difference where neither side is a parameter, is two different
+endpoints. The asymmetry is deliberate: a call written `/api/x/:id`
+against a route serving `/api/x/current` is not the same shape.
+
+Eleven unit tests, seven of which assert cases it must **refuse** — that
+is where the risk is. A suggestion the reader has to double-check is
+worth less than no suggestion, and anything looser starts to undermine
+the exact matcher it sits beside.
+
+Capped at 25. A panel is not a report.
+
+The fixture now contains a deliberate near miss — the Kotlin client calls
+`/api/ledger/42` while the C# side serves `[HttpGet("{id}")]` — and the
+e2e asserts both that it is suggested and that it **never becomes an
+edge**.
 
 ### 4.3 ☐ Budget burn-down (Phase 23)
 
