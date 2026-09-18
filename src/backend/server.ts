@@ -176,24 +176,63 @@ app.use(localAuthMiddleware);
  * identity, for one). Callers therefore compare with `=== null`, never
  * falsy.
  */
-function requireProjectRoot(req: express.Request, res: express.Response): string | null {
-  const raw = req.query.project;
-  // "You sent no parameter" is a client error, not a refusal. Collapsing
-  // both onto 403 would have told a caller who simply forgot the
-  // parameter that they were denied, and it broke two existing tests
-  // that (correctly) distinguish the two.
-  if (raw === undefined || raw === null || raw === '') {
-    res.status(400).json({ error: 'project query param required' });
+function confineRoot(
+  candidate: unknown,
+  res: express.Response,
+  label = 'projectPath',
+): string | null {
+  if (candidate === undefined || candidate === null || candidate === '') {
+    res.status(400).json({ error: `${label} is required` });
     return null;
   }
   try {
-    return resolveTrustedProjectRoot(raw, 'project');
+    return resolveTrustedProjectRoot(candidate, label);
   } catch (err) {
     res.status(err instanceof ConfinementError ? 403 : 400).json({
       error: err instanceof Error ? err.message : String(err),
     });
     return null;
   }
+}
+
+/**
+ * The same check where a body-supplied root is genuinely optional.
+ *
+ * Attachments are the case: `resolveAttachmentDir` handles an undefined
+ * root explicitly — without one there is simply no per-project layer and
+ * the attachment lands in the user directory. Making it required would
+ * have broken adding an attachment outside a project, which is why the
+ * sweep classified each body site by whether it already guarded rather
+ * than assuming.
+ */
+function confineRootOptional(
+  candidate: unknown,
+  res: express.Response,
+  label = 'projectRoot',
+): string | undefined | null {
+  if (candidate === undefined || candidate === null || candidate === '') return undefined;
+  return confineRoot(candidate, res, label);
+}
+
+/**
+ * The same check for the handlers that spell the parameter `?path=`
+ * rather than `?project=` — the six `git/*` routes among them, which
+ * run git with it as `cwd`.
+ */
+function requireProjectPath(req: express.Request, res: express.Response): string | null {
+  return confineRoot(req.query.path, res, 'path');
+}
+
+function requireProjectRoot(req: express.Request, res: express.Response): string | null {
+  // "You sent no parameter" is a client error, not a refusal — see
+  // confineRoot, which keeps the two apart. Collapsing them onto 403
+  // told a caller who simply forgot the parameter that they were denied.
+  const raw = req.query.project;
+  if (raw === undefined || raw === null || raw === '') {
+    res.status(400).json({ error: 'project query param required' });
+    return null;
+  }
+  return confineRoot(raw, res, 'project');
 }
 
 /**
@@ -551,8 +590,8 @@ app.get('/api/health', (_req, res) => {
 
 // Get git branch for a path
 app.get('/api/git/branch', (req, res) => {
-  const projectPath = req.query.path as string;
-  if (!projectPath) { res.json({ branch: null }); return; }
+  const projectPath = requireProjectPath(req, res);
+  if (!projectPath) return;
 
   try {
     const headPath = path.join(projectPath, '.git', 'HEAD');
@@ -570,8 +609,8 @@ app.get('/api/git/branch', (req, res) => {
 
 // List git branches and worktrees for a project
 app.get('/api/git/info', (req, res) => {
-  const projectPath = req.query.path as string;
-  if (!projectPath) { res.json({ branches: [], worktrees: [], status: null }); return; }
+  const projectPath = requireProjectPath(req, res);
+  if (!projectPath) return;
 
   const gitDir = path.join(projectPath, '.git');
   if (!fs.existsSync(gitDir)) { res.json({ branches: [], worktrees: [], status: null }); return; }
@@ -643,11 +682,8 @@ app.get('/api/git/info', (req, res) => {
 });
 
 app.get('/api/git/status', (req, res) => {
-  const projectPath = req.query.path as string;
-  if (!projectPath) {
-    res.status(400).json({ error: 'path query param required' });
-    return;
-  }
+  const projectPath = requireProjectPath(req, res);
+  if (!projectPath) return;
 
   res.json(getGitWorkingTreeStatus(projectPath) || {
     staged: [],
@@ -664,11 +700,8 @@ app.get('/api/git/status', (req, res) => {
 });
 
 app.get('/api/git/head', (req, res) => {
-  const projectPath = req.query.path as string;
-  if (!projectPath) {
-    res.status(400).json({ error: 'path query param required' });
-    return;
-  }
+  const projectPath = requireProjectPath(req, res);
+  if (!projectPath) return;
 
   res.json(getGitHeadCommit(projectPath) || { commitHash: null, shortCommitHash: null });
 });
@@ -676,10 +709,11 @@ app.get('/api/git/head', (req, res) => {
 // Resolve a branch name to its tip commit. Used by the branch popover to set
 // the diff baseline to "branch X's HEAD" without checking it out.
 app.get('/api/git/branch-tip', (req, res) => {
-  const projectPath = req.query.path as string;
+  const projectPath = requireProjectPath(req, res);
+  if (!projectPath) return;
   const branch = req.query.branch as string;
-  if (!projectPath || !branch) {
-    res.status(400).json({ error: 'path and branch query params required' });
+  if (!branch) {
+    res.status(400).json({ error: 'branch query param required' });
     return;
   }
   // `git rev-parse <branch>` reads any argument starting with `-` as a flag
@@ -707,12 +741,9 @@ app.get('/api/git/branch-tip', (req, res) => {
 });
 
 app.get('/api/git/commits', (req, res) => {
-  const projectPath = req.query.path as string;
+  const projectPath = requireProjectPath(req, res);
+  if (!projectPath) return;
   const limitParam = Number(req.query.limit);
-  if (!projectPath) {
-    res.status(400).json({ error: 'path query param required' });
-    return;
-  }
 
   res.json({
     commits: getRecentGitCommits(projectPath, Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 20),
@@ -765,7 +796,9 @@ app.get('/api/recent-projects', (_req, res) => {
 });
 
 app.delete('/api/recent-projects', (req, res) => {
-  const { projectPath } = req.body || {};
+  const { projectPath: rawProjectPath } = req.body || {};
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || typeof projectPath !== 'string') {
     res.status(400).json({ error: 'projectPath is required' });
     return;
@@ -775,7 +808,9 @@ app.delete('/api/recent-projects', (req, res) => {
 });
 
 app.post('/api/recent-projects/pin', (req, res) => {
-  const { projectPath, pinned } = req.body || {};
+  const { projectPath: rawProjectPath, pinned } = req.body || {};
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || typeof projectPath !== 'string') {
     res.status(400).json({ error: 'projectPath is required' });
     return;
@@ -1054,7 +1089,31 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
 }
 
 app.post('/api/project/scan', async (req, res) => {
-  const { projectPath } = req.body;
+  // THE ONE EXEMPTION from root confinement, and deliberately so: this
+  // is the door through which a path BECOMES an opened project, so
+  // checking it against the opened-project list would make it
+  // impossible to open anything. Its control is the capability token
+  // every local transport requires (Phase 19) plus the fact that a
+  // human picked the folder.
+  //
+  // What it was missing is any validation at all — a non-string or a
+  // path that is not a directory reached the scanner and failed deep
+  // inside it.
+  const { projectPath } = req.body ?? {};
+  if (typeof projectPath !== 'string' || projectPath.trim() === '') {
+    res.status(400).json({ error: 'projectPath is required' });
+    return;
+  }
+  try {
+    const stat = fs.statSync(projectPath);
+    if (!stat.isDirectory()) {
+      res.status(400).json({ error: 'projectPath is not a directory' });
+      return;
+    }
+  } catch {
+    res.status(400).json({ error: 'projectPath does not exist' });
+    return;
+  }
   try {
     // The file tree is pure filesystem — compute it FIRST and
     // independently of the AST/DB pass. The explorer depends only on
@@ -1491,7 +1550,9 @@ app.get('/api/baseline', (_req, res) => {
 });
 
 app.post('/api/baseline/capture', async (req, res) => {
-  const { projectPath, commitHash } = req.body || {};
+  const { projectPath: rawProjectPath, commitHash } = req.body || {};
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || typeof projectPath !== 'string') {
     res.status(400).json({ error: 'projectPath is required' });
     return;
@@ -1565,7 +1626,9 @@ app.get('/api/plans', (req, res) => {
 
 // Create plan
 app.post('/api/plans', (req, res) => {
-  const { title, description, tasks, projectPath } = req.body;
+  const { title, description, tasks, projectPath: rawProjectPath } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!title || !projectPath) { res.status(400).json({ error: 'title and projectPath required' }); return; }
   // Phase 13 §E: prefer the configured identity (email) over the
   // legacy "user" role. `getAuthorKey` falls back to "human" if the
@@ -1862,7 +1925,11 @@ app.get('/api/tasks/:taskUid/attachments', (req, res) => {
 
 /** Add a task attachment (URL, file_ref, code_block, transcript, image-via-base64). */
 app.post('/api/tasks/:taskUid/attachments', (req, res) => {
-  const { kind, value, label, contentType, dataBase64, projectRoot } = req.body || {};
+  const { kind, value, label, contentType, dataBase64, projectRoot: rawProjectRoot } = req.body || {};
+  // Optional here: an attachment with no project root lands in the user
+  // directory rather than a per-project one. Absent stays absent.
+  const projectRoot = confineRootOptional(rawProjectRoot, res);
+  if (projectRoot === null) return;
   if (!kind || value == null) {
     res.status(400).json({ error: 'kind and value are required' });
     return;
@@ -2377,7 +2444,11 @@ app.get('/api/items/:uid/attachments', (req, res) => {
   res.json(taskAttachmentsService.listItemAttachments(req.params.uid));
 });
 app.post('/api/items/:uid/attachments', (req, res) => {
-  const { kind, value, label, contentType, dataBase64, projectRoot } = req.body || {};
+  const { kind, value, label, contentType, dataBase64, projectRoot: rawProjectRoot } = req.body || {};
+  // Optional here: an attachment with no project root lands in the user
+  // directory rather than a per-project one. Absent stays absent.
+  const projectRoot = confineRootOptional(rawProjectRoot, res);
+  if (projectRoot === null) return;
   if (!kind || value == null) { res.status(400).json({ error: 'kind and value are required' }); return; }
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
@@ -2809,11 +2880,14 @@ app.get('/api/plans/:uid/changes/:changeId', (req, res) => {
 // --- Plan File Sync API (Phase 13 §A) ---
 
 app.post('/api/plans/:uid/export', (req, res) => {
-  const projectRoot = (req.query.path as string) || (req.body && req.body.projectRoot);
-  if (!projectRoot) {
-    res.status(400).json({ error: 'projectRoot path required (?path=… or body.projectRoot)' });
-    return;
-  }
+  // The body form is the Phase 19 rule verbatim — a root must never
+  // come from a request body — so both spellings are confined.
+  const projectRoot = confineRoot(
+    (req.query.path as string) || (req.body && req.body.projectRoot),
+    res,
+    'path',
+  );
+  if (!projectRoot) return;
   try {
     const result = exportPlan(req.params.uid, projectRoot);
     broadcast('plan-exported', { planUid: req.params.uid, planDir: result.planDir, files: result.files.length });
@@ -2841,7 +2915,9 @@ app.post('/api/plans/import', (req, res) => {
 
 // Phase 17.I — Import plan from external source (GitHub issue, conversation, diff, session)
 app.post('/api/plans/import-external', (req, res) => {
-  const { source, projectPath, ...input } = req.body;
+  const { source, projectPath: rawProjectPath, ...input } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!source || !projectPath) {
     res.status(400).json({ error: 'source and projectPath required' });
     return;
@@ -2906,21 +2982,21 @@ app.post('/api/plans/import-external', (req, res) => {
 });
 
 app.get('/api/plans/:uid/file-status', (req, res) => {
-  const projectRoot = req.query.path as string | undefined;
-  if (!projectRoot) {
-    res.status(400).json({ error: 'path query param required' });
-    return;
-  }
+  const projectRoot = confineRoot(req.query.path, res, 'path');
+  if (!projectRoot) return;
   const planDir = getLinkedPlanDir(req.params.uid, projectRoot);
   res.json({ linked: planDir !== null, planDir });
 });
 
 app.post('/api/plans/:uid/unlink', (req, res) => {
-  const projectRoot = (req.query.path as string) || (req.body && req.body.projectRoot);
-  if (!projectRoot) {
-    res.status(400).json({ error: 'projectRoot required (?path=… or body.projectRoot)' });
-    return;
-  }
+  // The body form is the Phase 19 rule verbatim — a root must never
+  // come from a request body — so both spellings are confined.
+  const projectRoot = confineRoot(
+    (req.query.path as string) || (req.body && req.body.projectRoot),
+    res,
+    'path',
+  );
+  if (!projectRoot) return;
   try {
     const result = unlinkPlan(req.params.uid, projectRoot);
     broadcast('plan-unlinked', { planUid: req.params.uid });
@@ -2942,7 +3018,9 @@ app.get('/api/plan-templates', (req, res) => {
 });
 
 app.post('/api/plans/:uid/publish-as-template', (req, res) => {
-  const { projectRoot, templateId, label, shortDescription, longDescription, defaultTitle, defaultPlanDescription, placeholders } = req.body || {};
+  const { projectRoot: rawProjectRoot, templateId, label, shortDescription, longDescription, defaultTitle, defaultPlanDescription, placeholders } = req.body || {};
+  const projectRoot = confineRoot(rawProjectRoot, res, 'projectRoot');
+  if (!projectRoot) return;
   if (!projectRoot || !templateId) {
     res.status(400).json({ error: 'projectRoot + templateId required' });
     return;
@@ -2967,7 +3045,9 @@ app.post('/api/plans/:uid/publish-as-template', (req, res) => {
 });
 
 app.post('/api/plans/from-template', (req, res) => {
-  const { templateId, projectPath, title, description, author, authorType, placeholderValues } = req.body || {};
+  const { templateId, projectPath: rawProjectPath, title, description, author, authorType, placeholderValues } = req.body || {};
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!templateId || !projectPath) {
     res.status(400).json({ error: 'templateId and projectPath are required' });
     return;
@@ -2990,7 +3070,9 @@ app.post('/api/plans/from-template', (req, res) => {
 // --- Trellis Snapshots API ---
 
 app.post('/api/trellis/capture', (req, res) => {
-  const { projectPath, planUid, name } = req.body;
+  const { projectPath: rawProjectPath, planUid, name } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath) { res.status(400).json({ error: 'projectPath required' }); return; }
   const snapshot = captureCurrentTrellis(projectPath, planUid, name);
   broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name, snapshotType: snapshot.snapshotType } });
@@ -3550,7 +3632,9 @@ app.get('/api/conflicts', (req, res) => {
 app.post('/api/conflicts/resolve', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { resolveFileConflict, resolveFileConflictBySide } = _lazy___services_plan_conflict_service;
-  const { projectPath, filePath, mode, side, resolutions } = req.body;
+  const { projectPath: rawProjectPath, filePath, mode, side, resolutions } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || !filePath || !mode) {
     res.status(400).json({ error: 'projectPath, filePath, and mode required' });
     return;
@@ -3573,7 +3657,9 @@ app.get('/api/freeze', (req, res) => {
 app.put('/api/freeze', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { setFreeze } = _lazy___services_freeze_service;
-  const { projectPath, active, reason, until, allowedPlanUids } = req.body;
+  const { projectPath: rawProjectPath, active, reason, until, allowedPlanUids } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || active === undefined) {
     res.status(400).json({ error: 'projectPath and active required' });
     return;
@@ -3961,7 +4047,9 @@ app.get('/api/contributions', (req, res) => {
 
 app.post('/api/contributions/promote', (req, res) => {
   const { promoteItemToContribution } = _lazy___services_contribution_service;
-  const { projectPath, itemUid, title, kind, status, body, description, attachments } = req.body;
+  const { projectPath: rawProjectPath, itemUid, title, kind, status, body, description, attachments } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || !itemUid || !title || !kind) {
     res.status(400).json({ error: 'projectPath, itemUid, title, kind required' });
     return;
@@ -3976,7 +4064,9 @@ app.post('/api/contributions/promote', (req, res) => {
 
 app.post('/api/contributions/accept', (req, res) => {
   const { acceptContributions } = _lazy___services_contribution_service;
-  const { projectPath, branch, planSlug } = req.body;
+  const { projectPath: rawProjectPath, branch, planSlug } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || !branch || !planSlug) {
     res.status(400).json({ error: 'projectPath, branch, planSlug required' });
     return;
@@ -3991,7 +4081,9 @@ app.post('/api/contributions/accept', (req, res) => {
 
 app.post('/api/contributor-branch', (req, res) => {
   const { prepareContributorBranch } = _lazy___services_contribution_service;
-  const { projectPath, planSlug, branchName, includeItems } = req.body;
+  const { projectPath: rawProjectPath, planSlug, branchName, includeItems } = req.body;
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || !planSlug || !branchName) {
     res.status(400).json({ error: 'projectPath, planSlug, branchName required' });
     return;
@@ -4029,7 +4121,9 @@ app.get('/api/system-docs/:uid', (req, res) => {
 app.post('/api/system-docs', (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const svc = _lazy___services_system_docs_service;
-  const { projectPath, title, body, owner, tags, references, slug } = req.body || {};
+  const { projectPath: rawProjectPath, title, body, owner, tags, references, slug } = req.body || {};
+  const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
+  if (!projectPath) return;
   if (!projectPath || !title) {
     res.status(400).json({ error: 'projectPath and title are required' });
     return;

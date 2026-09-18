@@ -20,6 +20,22 @@
  * `findUnparsedLanguages()` and `flattenSymbols()` elsewhere in this
  * codebase: derive the second thing from the first, or assert they
  * agree. Never ask the next person to remember.
+ *
+ * ## The first version of this guard was too narrow
+ *
+ * It asserted only that `req.query.project` was not read raw — and the
+ * commit that added it claimed "the project root is never read raw",
+ * which was not true. A root reaches this server by **three** spellings:
+ *
+ *   `?project=`   twenty-six handlers
+ *   `?path=`      nine more, including every `git/*` route, which run
+ *                 git with it as `cwd`
+ *   request body  sixteen, which is the CLAUDE.md rule verbatim —
+ *                 "never accept projectRoot / projectPath from a
+ *                 request body"
+ *
+ * A guard that covers one spelling of three is worse than none, because
+ * it reads as settled. All three are asserted below.
  */
 
 import { test, describe } from 'node:test';
@@ -29,8 +45,19 @@ import path from 'node:path';
 
 const SERVER = path.resolve(import.meta.dirname, 'server.ts');
 
-/** The two functions allowed to touch the raw parameter. */
-const READERS = ['requireProjectRoot', 'optionalProjectRoot'];
+/** The functions allowed to touch a raw, caller-supplied root. */
+const READERS = [
+  'confineRoot', 'confineRootOptional',
+  'requireProjectRoot', 'optionalProjectRoot', 'requireProjectPath',
+];
+
+/**
+ * The one handler that legitimately takes an unconfined root: `scan` is
+ * how a path BECOMES an opened project, so checking it against the
+ * opened-project list would make it impossible to open anything. Its
+ * control is the capability token every local transport requires.
+ */
+const EXEMPT_ROUTES = ["app.post('/api/project/scan'"];
 
 describe('project-root confinement', () => {
   test('req.query.project is read only inside the two confining helpers', () => {
@@ -41,17 +68,40 @@ describe('project-root confinement', () => {
     // "inside a reader" from its declaration until the next top-level
     // closing brace.
     let insideReader = false;
+    let exemptDepth = 0;
     const offenders: Array<{ line: number; text: string }> = [];
 
     for (const [i, raw] of lines.entries()) {
       if (READERS.some((n) => raw.startsWith(`function ${n}(`))) insideReader = true;
       else if (insideReader && raw === '}') insideReader = false;
 
-      if (!raw.includes('req.query.project')) continue;
-      if (insideReader) continue;
-      // A mention in a comment is documentation, not a read.
       const code = raw.trim();
+      // A mention in a comment is documentation, not a read.
       if (code.startsWith('*') || code.startsWith('//')) continue;
+      if (insideReader) continue;
+      if (EXEMPT_ROUTES.some((r) => code.startsWith(r))) { exemptDepth = 1; continue; }
+      if (exemptDepth > 0) {
+        if (code === '});') exemptDepth = 0;
+        continue;
+      }
+
+      const readsQueryRoot = code.includes('req.query.project');
+      // `?path=` is a project root only where it is bound to one; the
+      // file-reading routes use the same parameter name for a file.
+      const readsPathRoot = /req\.query\.path/.test(code)
+        && /\b(projectPath|projectRoot)\b/.test(code);
+      // A body-supplied root is the rule stated verbatim in CLAUDE.md.
+      const readsBodyRoot = /req\.body/.test(code)
+        && /\b(projectPath|projectRoot)\b/.test(code)
+        && !/:\s*raw(ProjectPath|ProjectRoot)/.test(code);
+
+      if (!readsQueryRoot && !readsPathRoot && !readsBodyRoot) continue;
+
+      // A raw value passed straight INTO a confining call is confined.
+      // The call can span lines, so look at this line and the two above
+      // it for the function name.
+      const statement = [lines[i - 2], lines[i - 1], raw].join('\n');
+      if (READERS.some((fn) => statement.includes(`${fn}(`))) continue;
 
       offenders.push({ line: i + 1, text: code });
     }
@@ -59,8 +109,9 @@ describe('project-root confinement', () => {
     assert.deepEqual(
       offenders,
       [],
-      'A handler is reading the project path raw. Use requireProjectRoot / ' +
-      'optionalProjectRoot — see the note above them in server.ts.\n' +
+      'A handler is reading a project root raw. Use confineRoot / ' +
+      'confineRootOptional / requireProjectRoot / optionalProjectRoot / ' +
+      'requireProjectPath — see the note above them in server.ts.\n' +
       offenders.map((o) => `  server.ts:${o.line}  ${o.text}`).join('\n'),
     );
   });
@@ -75,10 +126,14 @@ describe('project-root confinement', () => {
       const start = source.indexOf(`function ${name}(`);
       assert.notEqual(start, -1, `${name} is missing`);
       const body = source.slice(start, source.indexOf('\n}', start));
-      assert.ok(
-        body.includes('resolveTrustedProjectRoot'),
-        `${name} no longer resolves through the trusted-root check`,
-      );
+      // Either it resolves directly, or it delegates to another reader
+      // that does — `confineRootOptional` is a thin wrapper over
+      // `confineRoot`, and requiring the call here would force the
+      // duplication this helper exists to avoid.
+      const confines =
+        body.includes('resolveTrustedProjectRoot') ||
+        READERS.some((other) => other !== name && body.includes(`${other}(`));
+      assert.ok(confines, `${name} no longer resolves through the trusted-root check`);
     }
   });
 
@@ -90,14 +145,20 @@ describe('project-root confinement', () => {
     const missing: string[] = [];
 
     for (const [i, raw] of lines.entries()) {
-      const call = raw.match(/const (\w+) = (require|optional)ProjectRoot\(req, res\);/);
+      const call = raw.match(
+        /const (\w+) = (requireProjectRoot|optionalProjectRoot|requireProjectPath|confineRoot|confineRootOptional)\(/,
+      );
       if (!call) continue;
-      const [, variable, kind] = call;
-      const next = (lines[i + 1] ?? '').trim();
-      const expected = kind === 'require'
-        ? `if (!${variable}) return;`
-        : `if (${variable} === null) return;`;
-      if (next !== expected) missing.push(`server.ts:${i + 2} expected \`${expected}\`, found \`${next}\``);
+      const [, variable, fn] = call;
+      // A multi-line call puts the guard after the closing paren.
+      let j = i;
+      while (j < lines.length && !lines[j].trimEnd().endsWith(';')) j++;
+      const next = (lines[j + 1] ?? '').trim();
+      const nullable = fn === 'optionalProjectRoot' || fn === 'confineRootOptional';
+      const expected = nullable
+        ? `if (${variable} === null) return;`
+        : `if (!${variable}) return;`;
+      if (next !== expected) missing.push(`server.ts:${j + 2} expected \`${expected}\`, found \`${next}\``);
     }
 
     assert.deepEqual(missing, [], `Refusal is not handled:\n${missing.join('\n')}`);
