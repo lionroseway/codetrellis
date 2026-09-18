@@ -19,6 +19,7 @@ import {
   getBudgetReport,
   setBudget,
   checkBudget,
+  getUnattributedTokenReports,
 } from '../../services/budget-service';
 import { formatCost, PRICING_VERSION } from '../../services/pricing';
 
@@ -70,8 +71,17 @@ function summarise(planUid: string) {
     // them; saying which one avoids a stale number reading as fresh.
     pricing_version: PRICING_VERSION,
     note: [
-      report.spentCostUsd === null
+      report.spentCostUsd === null && getUnattributedTokenReports() === 0
         ? 'No cost recorded: no agent on this plan reported a model we have prices for. Time is still measured.'
+        : null,
+      // Distinguishes 'nothing was spent' from 'spending was reported and we
+      // could not attribute it'. Those render identically as a zero, and only
+      // one of them means the plan was cheap.
+      getUnattributedTokenReports() > 0
+        ? 'Cost is incomplete: ' + getUnattributedTokenReports() + ' token report(s) could not be '
+          + 'matched to a turn, because the id they carry (the agent\u2019s own session) and the id turns '
+          + 'are keyed by (the MCP transport session) are different identifiers. Time is still '
+          + 'measured; treat cost as a floor, not a total.'
         : null,
       // `estimate_minutes` / `estimate_cost_usd` exist on plan_items and no
       // authoring path writes them, so estimate and overruns are structurally

@@ -19,6 +19,7 @@ import {
   noteItemFocus,
   listOpenTurns,
   resetBudgetState,
+  getUnattributedTokenReports,
   TURN_GAP_MS,
   type OpenTurn,
   type PlanBudget,
@@ -189,5 +190,34 @@ describe('durations', () => {
 
   test('a negative span is clamped rather than propagating', () => {
     assert.equal(minutesBetween(5000, 1000), 0);
+  });
+});
+
+describe('token reports that cannot be attributed (B4/M27)', () => {
+  beforeEach(() => resetBudgetState());
+
+  test('a report for a session with no open turn is counted, not silently dropped', () => {
+    // This is currently EVERY report. The watcher carries the agent's own
+    // session id; turns are keyed by the MCP transport's. Two namespaces minted
+    // by different processes, so they never meet — and the tokens just vanished,
+    // leaving cost reading as zero rather than as unknown.
+    recordTokens({ sessionId: 'claude-code-session-uuid', tokens: { inputTokens: 100, outputTokens: 50 } });
+    assert.equal(getUnattributedTokenReports(), 1);
+
+    recordTokens({ sessionId: 'another-unknown', tokens: { inputTokens: 10, outputTokens: 5 } });
+    assert.equal(getUnattributedTokenReports(), 2);
+  });
+
+  test('a report for a live turn is attributed and not counted', () => {
+    recordActivity({ sessionId: 'mcp-session', planUid: 'plan-1' });
+    recordTokens({ sessionId: 'mcp-session', tokens: { inputTokens: 100, outputTokens: 50 }, model: 'claude-opus-4' });
+    assert.equal(getUnattributedTokenReports(), 0, 'a matched report is not an unattributed one');
+  });
+
+  test('resetting clears the count', () => {
+    recordTokens({ sessionId: 'nobody', tokens: { inputTokens: 1 } });
+    assert.equal(getUnattributedTokenReports(), 1);
+    resetBudgetState();
+    assert.equal(getUnattributedTokenReports(), 0);
   });
 });

@@ -163,9 +163,39 @@ export function minutesBetween(startedAt: number, endedAt: number): number {
 
 const openTurns = new Map<string, OpenTurn>();
 
+/**
+ * Token reports that arrived for a session with no open turn.
+ *
+ * This is not a rare edge. The only producer of token data is the Claude Code
+ * JSONL watcher, which reports `entry.sessionId` — Claude Code's OWN session
+ * UUID, the one naming `~/.claude/projects/<enc>/<uuid>.jsonl`. The only
+ * producer of turns is `recordActivity`, keyed by the MCP transport's session
+ * id, which the SDK mints per SSE connection with `randomUUID()`. Two
+ * namespaces, minted by different processes, that can never coincide — so
+ * every token report is dropped and cost reads as zero rather than unknown.
+ *
+ * Counted rather than correlated, deliberately. A correlation needs either the
+ * agent to volunteer its own session id — which works for Claude Code and no
+ * other client, against the agent-agnostic premise — or a new project↔session
+ * linkage plus a rule for which turn wins when two agents share a project.
+ * Both are designs, and guessing one produces a confident wrong cost, which is
+ * the specific failure this module's own comments warn about ("an unknown cost
+ * is reported as null, never as zero").
+ *
+ * So the number is surfaced instead: a caller can tell "nothing was spent"
+ * from "spending was reported and we could not attribute it".
+ */
+let unattributedTokenReports = 0;
+
+/** How many token reports could not be matched to a turn. */
+export function getUnattributedTokenReports(): number {
+  return unattributedTokenReports;
+}
+
 /** Reset in-memory state. Tests and project switches. */
 export function resetBudgetState(): void {
   openTurns.clear();
+  unattributedTokenReports = 0;
 }
 
 /** The turns currently open, for diagnostics and tests. */
@@ -244,7 +274,12 @@ export function recordTokens(params: {
   model?: string | null;
 }): void {
   const turn = openTurns.get(params.sessionId);
-  if (!turn) return;
+  if (!turn) {
+    // See `unattributedTokenReports` above: this is currently EVERY report,
+    // because the two session-id namespaces cannot meet.
+    unattributedTokenReports += 1;
+    return;
+  }
   turn.tokens.inputTokens += params.tokens.inputTokens ?? 0;
   turn.tokens.outputTokens += params.tokens.outputTokens ?? 0;
   turn.tokens.cacheWriteTokens = (turn.tokens.cacheWriteTokens ?? 0) + (params.tokens.cacheWriteTokens ?? 0);
