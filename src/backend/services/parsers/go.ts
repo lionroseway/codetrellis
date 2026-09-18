@@ -127,7 +127,16 @@ function nodeToSymbols(node: SyntaxNode): ParsedSymbol[] {
     case 'var_declaration': {
       const out: ParsedSymbol[] = [];
       const extra = node.type === 'const_declaration' ? 'const' : 'var';
-      for (const spec of node.children) {
+      // tree-sitter-go nests a GROUPED var one level deeper than a grouped
+      // const: `var_declaration > var_spec_list > var_spec`, but
+      // `const_declaration > const_spec` directly. Walking children only, a
+      // `var ( … )` block yielded nothing at all — and a grouped var block is
+      // where Go puts package-level state, so it is exactly the declaration a
+      // reader most wants in the graph.
+      const specs = node.children.flatMap((c: SyntaxNode) =>
+        c.type.endsWith('_spec_list') ? c.children : [c],
+      );
+      for (const spec of specs) {
         if (!spec.type.endsWith('_spec')) continue;
         for (const name of specNames(spec)) {
           out.push({

@@ -81,6 +81,15 @@ const EXCEPT_RE = /\bexcept:\s*(?:\[([^\]]*)\]|%i\[([^\]]*)\]|:(\w+))/;
 /** `get '/api/orders', to: 'orders#index'` and Sinatra's `get '/x' do`. */
 const VERB_ROUTE_RE = /^\s*(get|post|put|patch|delete|head|options)\s+['"]([^'"]*)['"]/;
 
+/**
+ * Ruby's test conventions, which are strong enough to rely on: RSpec lives in
+ * `spec/` with `_spec.rb`, Minitest in `test/` with `_test.rb`.
+ */
+function isSpecFile(filePath: string): boolean {
+  const p = filePath.replace(/\\/g, '/');
+  return /(^|\/)(spec|test)\//.test(p) || /_(spec|test)\.rb$/.test(p);
+}
+
 /** `root to: 'home#index'`. */
 const ROOT_RE = /^\s*root\b/;
 
@@ -97,7 +106,16 @@ const CLIENT_RE =
 export const rubyCallsites: CallsiteExtractor = {
   language: 'ruby',
   extract(content, filePath) {
-    return [...extractRoutes(content, filePath), ...extractOutbound(content)];
+    // A request spec issues requests with exactly the syntax a router uses to
+    // declare them — `get '/api/orders'` is a route in routes.rb and a call in
+    // spec/requests/orders_spec.rb. Read as routes, every spec file appeared to
+    // SERVE the endpoints it exercises, so the graph showed the test suite as a
+    // second implementation of the API sitting alongside the real one.
+    //
+    // Outbound calls are still extracted here: a spec really does call the
+    // endpoint, and that is true of the file.
+    const routes = isSpecFile(filePath) ? [] : extractRoutes(content, filePath);
+    return [...routes, ...extractOutbound(content)];
   },
 };
 

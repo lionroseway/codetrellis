@@ -95,8 +95,16 @@ export function recomputeCrossSystemEdges(): { added: number } {
   const inserts: Array<{ source: CallsiteRow; target: CallsiteRow; label: string }> = [];
   for (const call of httpCalls) {
     if (!call.method || !call.urlPattern) continue;
-    const exact = routesByKey.get(`${call.method} ${call.urlPattern}`);
-    if (exact) {
+    // A route registered without a verb serves every verb. Go's
+    // `http.HandleFunc("/x", h)` is the common case and is emitted as `ANY`,
+    // which matched nothing at all before this: the route was extracted,
+    // stored, and then silently unpairable, so a stdlib Go service looked like
+    // it served endpoints nobody called next to calls nobody served.
+    const exact = [
+      ...(routesByKey.get(`${call.method} ${call.urlPattern}`) ?? []),
+      ...(routesByKey.get(`ANY ${call.urlPattern}`) ?? []),
+    ];
+    if (exact.length > 0) {
       for (const route of exact) {
         if (route.fileId === call.fileId) continue; // skip self-loops
         inserts.push({ source: call, target: route, label: `${call.method} ${call.urlPattern}` });

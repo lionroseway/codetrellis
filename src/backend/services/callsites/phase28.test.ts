@@ -26,7 +26,7 @@ import { kotlinCallsites } from './kotlin';
 import { swiftCallsites } from './swift';
 import { rubyCallsites } from './ruby';
 import { CALLSITE_EXTRACTORS, getCallsiteExtractor } from './index';
-import { normalizeRoute, normalizeUrl } from './shared';
+import { normalizeRoute, normalizeUrl, isLikelyApiPath } from './shared';
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
 
@@ -460,5 +460,38 @@ describe('normalisation is one contract, not seven', () => {
         assert.ok(c.line > 0, `${extractor.language}: ${c.context} has no line`);
       }
     }
+  });
+});
+
+describe('URL normalisation and route noise (M22, M23, M25)', () => {
+  test('Ruby interpolation normalises to the same shape as the route (M23)', () => {
+    // normalizeRoute's bare `{…}` rule ate the braces of `#{id}` and left the
+    // `#` stranded, so the call came out as `/api/orders/#:id` and no Ruby
+    // call with a path parameter could ever pair with its route.
+    assert.equal(normalizeUrl('http://billing/api/orders/#{id}'), '/api/orders/:id');
+    assert.equal(normalizeRoute('/api/orders/:id'), '/api/orders/:id');
+    assert.equal(normalizeUrl('http://billing/api/orders/#{id}'), normalizeRoute('/api/orders/:id'));
+  });
+
+  test('a bare origin is not an API call (M22)', () => {
+    // These normalise to "/" once the host is stripped, and the matcher keys on
+    // the path alone — so a font CDN paired with any service's root route.
+    assert.equal(isLikelyApiPath('https://status.example.com'), false);
+    assert.equal(isLikelyApiPath('https://fonts.googleapis.com/'), false);
+    // The Phase 28 loosening this protects is still intact: an internal host
+    // with a real path is exactly the edge the product exists to draw.
+    assert.equal(isLikelyApiPath('http://billing/ledger'), true);
+    assert.equal(isLikelyApiPath('https://api.example.com/v1/users'), true);
+  });
+
+  test('a request spec does not declare the routes it exercises (M25)', () => {
+    const spec = "RSpec.describe 'Orders API' do\n  it 'indexes' do\n    get '/api/orders'\n  end\nend";
+    const fromSpec = rubyCallsites.extract(spec, 'spec/requests/orders_spec.rb');
+    assert.equal(fromSpec.filter((x) => x.kind === 'http_route').length, 0);
+
+    // The same syntax in a router still is a route.
+    const routes = "Rails.application.routes.draw do\n  get '/api/orders', to: 'orders#index'\nend";
+    const fromRoutes = rubyCallsites.extract(routes, 'config/routes.rb');
+    assert.equal(fromRoutes.filter((x) => x.kind === 'http_route').length, 1);
   });
 });

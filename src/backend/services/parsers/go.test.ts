@@ -176,3 +176,29 @@ import "os"
     assert.equal(dot?.isNamespace, true);
   });
 });
+
+describe('grouped declarations (M20)', () => {
+  test('a grouped var block produces one symbol per name', () => {
+    // tree-sitter-go nests a grouped var one level deeper than a grouped
+    // const — var_declaration > var_spec_list > var_spec, against
+    // const_declaration > const_spec — so walking children only yielded
+    // nothing at all for `var ( … )`, which is where Go keeps package state.
+    const syms = goPlugin.extractSymbols(parse([
+      'package main',
+      '',
+      'var (',
+      '	DefaultTimeout = 30',
+      '	MaxRetries     = 3',
+      ')',
+    ].join('\n')));
+    const names = syms.map((s: ParsedSymbol) => s.name).sort();
+    assert.deepEqual(names, ['DefaultTimeout', 'MaxRetries']);
+  });
+
+  test('a grouped const block still works, and a single var too', () => {
+    const constSyms = goPlugin.extractSymbols(parse('package main\n\nconst (\n\tA = 1\n\tB = 2\n)'));
+    assert.deepEqual(constSyms.map((s: ParsedSymbol) => s.name).sort(), ['A', 'B']);
+    const single = goPlugin.extractSymbols(parse('package main\n\nvar Timeout = 30'));
+    assert.deepEqual(single.map((s: ParsedSymbol) => s.name), ['Timeout']);
+  });
+});

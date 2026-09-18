@@ -91,11 +91,15 @@ export function normalizeUrl(url: string): string {
   p = p.replace(/^(?:%[sv]|\\\([^)]*\)|#\{[^}]*\}|\$\{[^}]*\})/, '');
   const q = p.indexOf('?');
   if (q >= 0) p = p.slice(0, q);
-  p = normalizeRoute(p);
-  // Interpolated values elsewhere in the path are path parameters.
+  // Interpolated values elsewhere in the path are path parameters, and these
+  // MUST run before normalizeRoute. Its bare `{...}` rule matches the braces
+  // of Ruby's `#{id}` and leaves the `#` stranded, so the path came out as
+  // `/api/orders/#:id` and could never pair with the route `/api/orders/:id`.
+  // No Ruby call with a path parameter could be matched at all.
   p = p.replace(/%[sdv]/g, ':id');
   p = p.replace(/\\\([^)]*\)/g, ':id');
   p = p.replace(/#\{[^}]*\}/g, ':id');
+  p = normalizeRoute(p);
   if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
   return p;
 }
@@ -122,7 +126,17 @@ export function normalizeUrl(url: string): string {
 export function isLikelyApiPath(s: string): boolean {
   if (!s) return false;
   if (s.startsWith('/')) return true;
-  if (/^https?:\/\//.test(s)) return true;
+  if (/^https?:\/\//.test(s)) {
+    // ...but not a bare origin. `normalizeUrl` strips the host, so
+    // `https://status.example.com` and `https://fonts.googleapis.com/` both
+    // normalise to "/" — and the matcher keys on the path alone, so they pair
+    // with any route registered at the root, of any service. That is an edge
+    // between two things that have nothing to do with each other, drawn from a
+    // font CDN. A bare origin also carries no path to couple on, so there is
+    // nothing lost in dropping it.
+    const afterHost = s.replace(/^https?:\/\/[^/]+/, '');
+    return afterHost !== '' && afterHost !== '/';
+  }
   // The literal begins with an interpolated host: `%s/api/x`,
   // `\(base)/api/x`, `#{base}/api/x`, `${base}/api/x`.
   if (/^(?:%[sv]|\\\([^)]*\)|#\{[^}]*\}|\$\{[^}]*\})\//.test(s)) return true;
