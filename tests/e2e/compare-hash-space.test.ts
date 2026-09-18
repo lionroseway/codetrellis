@@ -21,6 +21,7 @@
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { setupHarness } from '../harness';
 
@@ -106,6 +107,41 @@ test.describe('Commit vs live comparands (hash space and population)', () => {
       // The same known residual as above — the unparseable fixture file.
       expect(result.diff.removedFiles).toEqual(['services/billing/testdata/broken.go']);
     } finally {
+      await h.teardown();
+    }
+  });
+});
+
+test.describe('A project opened through a symlink (M33)', () => {
+  test.setTimeout(120_000);
+
+  test('comparing HEAD to live still finds nothing on an untouched tree', async () => {
+    const h = await setupHarness('compare-symlinked-root');
+    // /tmp is a symlink on macOS, so this is not an exotic setup — it is what
+    // happens to anyone whose project lives under /tmp.
+    const link = path.join(fs.realpathSync(os.tmpdir()), `ct-symroot-${process.pid}`);
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(h.fixture.projectPath, link, 'dir');
+    try {
+      // Open it through the link: scan is exempt from confinement, so this is
+      // the path that gets STORED on every row.
+      await h.client.scanProject(link);
+
+      // Read it through the link too. The handler resolves it to the realpath,
+      // so the reader and the rows disagree — which used to make every file
+      // report as removed AND re-added.
+      const res = await h.client.raw(
+        'GET',
+        `/api/compare?project=${encodeURIComponent(link)}` +
+          `&before=${encodeURIComponent(`commit:${headSha(link)}`)}&after=live`,
+      );
+      const result = (await res.json()) as CompareResult;
+
+      expect(result.diff.summary.modified).toBe(0);
+      expect(result.diff.summary.added).toBe(0);
+      expect(result.diff.removedFiles).toEqual(['services/billing/testdata/broken.go']);
+    } finally {
+      fs.rmSync(link, { force: true });
       await h.teardown();
     }
   });

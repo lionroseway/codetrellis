@@ -33,7 +33,7 @@ import { readFileWithin, isWithin, isInside, ConfinementError } from './services
 
 /** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
 const MAX_BROWSE_ENTRIES = 1000;
-import { resolveTrustedProjectRoot, listTrustedRoots, setActiveProjectRoot } from './services/trusted-roots';
+import { resolveTrustedProjectRoot, listTrustedRoots, setActiveProjectRoot, projectRelative } from './services/trusted-roots';
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
@@ -1522,7 +1522,7 @@ export function readFilesSnapshot(projectPath: string): Array<{ path: string; ha
   `);
   if (!result[0]) return [];
   return result[0].values.map((row: any[]) => ({
-    path: row[0].startsWith(projectPath) ? path.relative(projectPath, row[0]) : (row[0] as string),
+    path: projectRelative(projectPath, row[0] as string) || (row[0] as string),
     hash: row[1] as string,
     symbolCount: (row[2] as number) || 0,
   }));

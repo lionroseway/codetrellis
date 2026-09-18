@@ -69,10 +69,20 @@ function summarise(planUid: string) {
     // Cost figures are only as current as the price table that produced
     // them; saying which one avoids a stale number reading as fresh.
     pricing_version: PRICING_VERSION,
-    note:
+    note: [
       report.spentCostUsd === null
         ? 'No cost recorded: no agent on this plan reported a model we have prices for. Time is still measured.'
-        : undefined,
+        : null,
+      // `estimate_minutes` / `estimate_cost_usd` exist on plan_items and no
+      // authoring path writes them, so estimate and overruns are structurally
+      // empty on every install. Saying so is the difference between 'this plan
+      // is within its estimate' and 'nobody set one' — which read identically
+      // before, and only one of them is true.
+      report.estimateMinutes === null && report.estimateCostUsd === null
+        ? 'No estimate recorded: nothing sets per-item estimates yet, so estimate is empty and '
+          + 'overruns cannot be computed. This is an absent input, not a plan that is on budget.'
+        : null,
+    ].filter(Boolean).join(' ') || undefined,
   };
 }
 
@@ -83,10 +93,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'get_budget',
     {
       description:
-        'Time and cost for a plan: what was estimated, what has actually been spent, a forecast to ' +
-        'completion, a per-agent split, and any items over their estimate. Time is measured for every ' +
-        'agent; cost only where the agent reports a model we have prices for — an unknown cost is ' +
-        'reported as null, never as zero.',
+        'Time and cost for a plan: what has actually been spent, a forecast to completion, and a ' +
+        'per-agent split. Time is measured for every agent; cost only where the agent reports a model ' +
+        'we have prices for — an unknown cost is reported as null, never as zero. Estimates and ' +
+        'overruns are reported only when a plan carries estimates, and nothing records them yet, so ' +
+        'today they are always absent — see the note on the response.',
       inputSchema: {
         plan_uid: z.string().describe('UID of the plan.'),
       },

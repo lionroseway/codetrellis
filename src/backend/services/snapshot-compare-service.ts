@@ -6,6 +6,7 @@ import { getSnapshot, listSnapshots } from './trellis-service';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { getParseableExtensions } from './ast-parser';
+import { projectRelative } from './trusted-roots';
 import { readTextWithin, ConfinementError } from './confined-fs';
 
 /**
@@ -64,7 +65,7 @@ export interface ComparisonResult {
 function liveSnapshot(projectPath: string): GraphSnapshot {
   const hashes = getAllFileHashes();
   const fileData = [...hashes.entries()].map(([absPath, hash]) => ({
-    path: absPath.startsWith('/') ? path.relative(projectPath, absPath) : absPath,
+    path: projectRelative(projectPath, absPath),
     hash,
     symbolCount: 0,
   }));
