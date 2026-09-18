@@ -79,20 +79,18 @@ a tagged candidate and on packaged artifacts.
 
 ## Tech Stack
 
-- **Desktop runtime**: Electron (primary) — pinned `^33.4.11`; a major
-  upgrade to a currently supported release is Phase 19 work. Embedded
-  Express on `:3001`, Vite `^6` on `:5173` in dev. macOS arm64 + x64,
-  Windows x64, Linux .deb / .rpm / AppImage. **AppImage IS distributed**,
-  and has been in every release since v0.1.11 — an earlier note here claimed
-  it was withheld, which was never true of the release script and misdescribed
-  what users had already downloaded. The caveat is real though: an AppImage
-  runs from a nosuid FUSE mount, so the setuid `chrome-sandbox` helper cannot
-  be used and Electron falls back to user namespaces where the kernel allows
-  it. `.deb` / `.rpm` keep the setuid helper (`after-install` chmods it) and
-  are the better Linux option where a choice exists. Confirming what this
-  AppImage actually does at runtime needs a Linux host and is still open.
-  Session persistence and
-  power-aware sleep prevention are wired in.
+- **Desktop runtime**: Electron (primary) — `^44.4.1`, paired with
+  `better-sqlite3@^13.0.3`. That upgrade has **landed**; the two move
+  together and the section below says why. Embedded Express on `:3001`,
+  Vite `^6` on `:5173` in dev. macOS arm64 + x64, Windows x64, Linux
+  .deb / .rpm / AppImage. **AppImage IS distributed**, and has been in
+  every release since v0.1.11 — an earlier note here claimed it was
+  withheld, which was never true of the release script and misdescribed
+  what users had already downloaded. **The AppImage ships with the
+  Chromium sandbox off, and that is our own doing rather than a
+  fallback** — see "The AppImage sandbox" below. `.deb` / `.rpm` keep
+  the sandbox and are the better Linux option where there is a choice.
+  Session persistence and power-aware sleep prevention are wired in.
 - **Mobile runtime**: Expo SDK 54 + React Native 0.81.5 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),
@@ -122,8 +120,10 @@ a tagged candidate and on packaged artifacts.
   `callsites/shared.ts`, never a local copy.
   Grammar `.wasm` files are committed under `resources/tree-sitter/`
   with their sha256 and exact source recorded in the README there —
-  **every new grammar gets a row**, and one of them (Swift) is a
-  third-party build, which that README explains.
+  **every new grammar gets a row**. Every grammar is now built from the
+  maintainers' own source or shipped by the grammar's own npm package;
+  Swift was the last third-party artifact and is compiled from source as
+  of Phase 29, which that README explains.
 - **Database**: **native SQLite via `better-sqlite3`** (disk-backed, WAL),
   behind a sql.js-shaped facade in `services/database.ts` — the codebase
   still reads as sql.js at the call sites, but storage is native and
@@ -143,6 +143,22 @@ a tagged candidate and on packaged artifacts.
   fails wholesale. It presented as 88 flaky tests and was one wrong-arch
   `.node` file. It is **not** a Node-version limit: 11.10.0 runs fine on
   Node 25 once rebuilt for the right arch.
+
+  **On v13 that failure mode is mostly gone, and `npm rebuild` is no
+  longer the reflex.** v13 ships per-platform prebuilds under
+  `node_modules/better-sqlite3/prebuilds/`, and there is no
+  `build/Release/*.node` to inspect — the `file` check above applies to
+  v11 only. This matters because **npm 11.19+ does not run install
+  scripts by default**: `npm ci` prints an `install-scripts` warning and
+  skips `better-sqlite3`'s `node-gyp rebuild` (and `node-pty`'s)
+  entirely. Both load anyway, from their prebuilds — verified on Node
+  26.9.0 / npm 11.19.1. So treat that warning as expected, and check
+  that the module *loads* rather than that a script ran:
+
+  ```
+  node -e "new (require('better-sqlite3'))(':memory:'); console.log('ok')"
+  node -e "require('node-pty'); console.log('ok')"
+  ```
 - **Peer transport**: WebRTC mesh — `werift` on desktop,
   `react-native-webrtc` on mobile. Four named data channels:
   `control` (JSON-RPC), `ui` (snapshots + JSON patches), `terminal`
@@ -213,11 +229,59 @@ ELECTRON_RUN_AS_NODE=1 \
   out/make/mac-arm64/CodeTrellis.app/Contents/MacOS/CodeTrellis probe.js
 ```
 
-### Node 26 is a follow-on, not part of this
+### The AppImage sandbox
 
-`.nvmrc` stays at 22. `better-sqlite3@11` cannot build on Node 26 at all,
-so the dev/CI Node was blocked behind this upgrade; with v13 in place it
-is now unblocked and can move in its own change.
+The AppImage runs **with no Chromium sandbox at all**, because we turn
+it off. `src/electron/main.ts` does:
+
+```ts
+if (process.platform === 'linux' && process.env.APPIMAGE) {
+  app.commandLine.appendSwitch('no-sandbox');
+}
+```
+
+So the earlier description here — that the setuid helper cannot be used
+from a nosuid FUSE mount and "Electron falls back to user namespaces
+where the kernel allows it" — was wrong in a way worth naming: there is
+no fallback, because the switch pre-empts it. Every AppImage user gets
+an unsandboxed renderer regardless of what their kernel would have
+allowed.
+
+`.deb` / `.rpm` are different, and better. electron-builder's stock
+`after-install` script probes for working user namespaces and only
+chmods `chrome-sandbox` to 4755 when they are unavailable, falling back
+to 0755 when they work; it also installs an AppArmor profile on
+Ubuntu 24+. Nothing in this repo configures that — it is the packager's
+default, which is why there is no `build/after-install.sh` to find.
+
+This is consistent with the security rule above ("AppImage is the known
+exception and IS distributed"), but the exception is broader than the
+rule implies, so two things are worth doing and neither is done:
+
+1. **The switch is unconditional.** electron-builder tests whether user
+   namespaces work; our code does not. Probing before disabling would
+   keep the sandbox for AppImage users on kernels that permit it. The
+   comment in `main.ts` justifies the blanket switch by Ubuntu 24.04's
+   AppArmor policy, which is a real problem but not a universal one.
+2. **Nobody has watched it run.** Everything above is read off the
+   source and off electron-builder's templates, which is enough to
+   describe what ships but not to confirm runtime behaviour. That still
+   needs a Linux host: launch the AppImage, confirm no sandbox is
+   reported, and check whether `unshare --user true` would have
+   succeeded on that kernel.
+
+### Node 26
+
+`.nvmrc` is **26**, and **production runs 26**. This was blocked behind
+the upgrade above — `better-sqlite3@11` cannot build on Node 26 at all —
+and moved once v13 landed.
+
+Build and verify on 26. A machine whose default `node` is something else
+(Homebrew's, say) will run both suites and package without complaint on
+the wrong version, which certifies a build nobody ships. `fnm` has 26
+installed here; `fnm exec --using=26 -- <cmd>` or putting
+`~/.local/share/fnm/node-versions/v26.9.0/installation/bin` first on
+`PATH` is enough.
 
 ## Directory layout
 
@@ -277,10 +341,18 @@ is now unblocked and can move in its own change.
 - `npm run package:mac` — Build macOS DMGs (arm64 + x64)
 - `npm run package:win` — Build Windows installers (Setup + Portable exe)
 - `npm run package:linux` — Build Linux packages (AppImage, deb, rpm)
-- `npm run lint` — Run ESLint
+- `npm run lint` — Run ESLint. Flat config in `eslint.config.mjs`;
+  it must exit **0 errors** (warnings are allowed and currently ~277).
+  The severity split is a decision and the config explains it inline:
+  error for what is almost always a defect, warn for what needs
+  judgement (`no-explicit-any`, `exhaustive-deps`) — as blocking errors
+  those would just collect inline disables. `no-require-imports` is off
+  for backend/electron, which are CommonJS, and on for the bundled
+  frontend.
 - `npm run typecheck` — Run TypeScript type checking
-- `npm run test:unit` — Pure-logic tests under Node's runner (~456, seconds)
-- `npm run test:harness` — Full E2E harness (~340 tests, ~17 min)
+- `npm run test:unit` — Pure-logic tests under Node's runner (461, ~2s)
+- `npm run test:harness` — Full E2E harness (328 passed + 16 skipped).
+  Budget ~17 min; it runs in ~6 min on an M-series dev machine.
 
 **Run `test:unit` as well as the harness.** It is not just faster
 coverage of the same things — two of its tests are *structural guards*
@@ -447,9 +519,10 @@ order of preference:
 
 Prefer `--local` for releases: identical config and credential handling
 to the hosted service, same reproducible output, but it runs on this Mac
-so there is no queue and no build quota. It needs `fastlane` for iOS
-(`brew install fastlane`) — the only missing piece on this machine;
-Xcode 26.4, CocoaPods and the Android SDK are all present.
+so there is no queue and no build quota. It needs `fastlane` for iOS,
+which **is now installed** (`/opt/homebrew/bin/fastlane`) — an earlier
+note here called it the one missing piece. Xcode, CocoaPods and the
+Android SDK are all present too, so nothing blocks a local build.
 
 Then `npx eas submit --platform ios` uses the submit block above.
 
