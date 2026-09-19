@@ -67,6 +67,21 @@ existing code disagrees, the existing code is what Phase 19 is fixing.
 - **Peer identity comes from the DTLS transport**, never from a
   fingerprint in a request body or in SDP text.
 - **MCP tools authorise per tool by capability**, not per connection.
+  Implemented in Phase 30: `services/mcp-capabilities.ts` holds a
+  deny-by-default `TOOL_CAPABILITIES` matrix over every registered tool,
+  enforced at the single interception in `mcp/server.ts`. `terminal`,
+  `settings` and `capture` are NOT granted by default. A new tool with no
+  matrix entry is refused, and the coverage test enumerates what the server
+  actually registers rather than comparing two hand-kept lists.
+  **`capture` is a seventh capability** — screen, clipboard and microphone —
+  added to the SHARED vocabulary in `peer-capabilities.ts` rather than an
+  MCP-only one, so both surfaces keep one name per concept.
+- **Path-taking MCP tools are confined to opened projects** by default
+  (`mcp.projectScope`). It validates membership and passes the caller's own
+  string through — it does NOT substitute the canonical root, because rows
+  are stored under the path the user opened and the two drift for anything
+  reached through a symlink. Not sandboxing: `open_project` still works and
+  is visible.
 - **Remote surfaces are off by default** and require an explicit user
   action to enable. Discovery and API exposure are separate switches.
 - **Chromium sandboxing stays on in every distributed format** that can
@@ -312,7 +327,12 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
   runtime: HTTP for web/dev, Electron IPC for desktop, WebRTC data
   channels for peer-routed calls.
 - All MCP tool calls broadcast on the `tool_call` / `tool_error`
-  channel with agent attribution. **`PlanPanel` renders the Timeline**,
+  channel with agent attribution — **true since Phase 30, and not before**.
+  The interception wrapped `registerTool` only, and three files still use the
+  deprecated `server.tool()` (peer, audio, contribution — 21 tools), so those
+  were absent from the Timeline, `write_remote_terminal` among them. Both
+  APIs are wrapped now; anything added there that covers one covers seven
+  eighths of the surface. **`PlanPanel` renders the Timeline**,
   grouping events into turns via `components/layout/AgentTurns.tsx`.
   `AgentPanel` is superseded and rendered by nothing — it shares the
   `agentPanelVisible` slot `PlanPanel` took over. Phase 22 wrote its

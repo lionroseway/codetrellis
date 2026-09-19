@@ -1,4 +1,6 @@
 import { type PeerCapability, DEFAULT_GRANTS } from './peer-capabilities';
+import { isTrustedProjectRoot } from './trusted-roots';
+import type { McpProjectScope } from '../../shared/types/settings';
 
 /**
  * What an MCP client is allowed to ask the desktop to do — Phase 30.
@@ -362,4 +364,55 @@ export function assertMcpMayCall(
 /** Every tool the matrix knows about — used by the coverage test. */
 export function listAuthorisedTools(): string[] {
   return Object.keys(TOOL_CAPABILITIES).sort();
+}
+
+/**
+ * Confine a path-taking tool to a project the user actually opened — M34.
+ *
+ * A DIFFERENT AXIS from the capability matrix above. Capabilities answer
+ * which tools may be called at all; this answers which projects those tools
+ * may reach. 38 tools take a caller-supplied `project_path` and ran git,
+ * read files and wrote plans in it with no check at all.
+ *
+ * VALIDATES, DOES NOT SUBSTITUTE — and that is deliberate.
+ * `resolveTrustedProjectRoot` returns the REALPATH, which is the right value
+ * for policing paths beneath a root and the wrong one to hand onward here:
+ * rows are stored under the path the user OPENED, and the two drift apart
+ * for any project reached through a symlink (on macOS, anything under
+ * /tmp). Substituting the canonical form would re-introduce exactly the bug
+ * M33 was raised for. So membership is checked and the caller's own string
+ * is passed through untouched — a pure narrowing, with no behaviour change
+ * for a legitimate call.
+ *
+ * `open_project` is not caught by this and must not be: it takes `path`
+ * rather than `project_path`, because opening is how a directory BECOMES a
+ * project. Nothing else needs an exemption, which is why there is no
+ * exemption list to rot.
+ *
+ * WHAT THIS BUYS, precisely. `open_project` broadcasts `ui-open-project`,
+ * which opens a tab and switches to it — it is VISIBLE. `get_budget` is not.
+ * Confining the rest gives the property "nothing reaches a path you did not
+ * watch get opened". That is weaker than isolation and much stronger than
+ * nothing, and it must not be described as sandboxing.
+ */
+export function assertMcpProjectInScope(
+  tool: string,
+  args: unknown,
+  scope: McpProjectScope,
+): void {
+  if (scope === 'anywhere') return;
+
+  const candidate = (args as { project_path?: unknown } | null | undefined)?.project_path;
+  // Absent or empty is not this function's business: the tool's own schema
+  // decides whether the argument was required.
+  if (typeof candidate !== 'string' || candidate.trim().length === 0) return;
+
+  if (!isTrustedProjectRoot(candidate)) {
+    throw new McpAuthorizationError(
+      `"${tool}" named a project that is not open: "${candidate}". Project roots come from the ` +
+        'projects this app has opened, not from the request. Open it first, or set MCP project ' +
+        'scope to "anywhere" in Settings → MCP Server.',
+      null,
+    );
+  }
 }

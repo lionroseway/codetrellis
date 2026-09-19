@@ -47,8 +47,7 @@ test.describe('CDev Phase 3.3 — cross-repo plan scope', () => {
 
       // Simulate a second repo on the same machine — a sibling tmp dir
       // with its own .git so addPlanScope's pointer_project_root has
-      // a real target. We don't need it to be scanned by the backend;
-      // the pointer write is a pure filesystem op.
+      // a real target.
       const scopedRoot = path.join(h.fixture.tmpDir, 'scoped-app');
       fs.mkdirSync(scopedRoot, { recursive: true });
       execSync('git init -q', { cwd: scopedRoot });
@@ -104,6 +103,19 @@ test.describe('CDev Phase 3.3 — cross-repo plan scope', () => {
       expect(typeof pointer.cachedAt).toBe('number');
 
       // 4. list_plan_pointers from the scoped repo surfaces the pointer.
+      //
+      // The scoped repo has to be OPEN for this — Phase 30 / M34 confines a
+      // tool naming a `project_path` to projects this app has opened, and
+      // `list_plan_pointers` scans that directory for pointer files. The
+      // comment above used to say the second repo need not be scanned,
+      // which was true and was the finding: an agent could name any
+      // directory on the machine and have it walked.
+      //
+      // Scopes are stored as repo URLs, not local paths, so there is no
+      // stored record to derive this root from — the user genuinely has both
+      // repos open when they work across them.
+      await h.client.scanProject(scopedRoot);
+
       const listPointersRes = await agent.callTool('list_plan_pointers', {
         project_path: scopedRoot,
       });

@@ -48,8 +48,9 @@ import { getDeviations, resolveDeviation, detectDeviations } from '../services/d
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
 import { getSettings, updateSettings } from '../services/settings-service';
-import { assertMcpMayCall, McpAuthorizationError } from '../services/mcp-capabilities';
+import { assertMcpMayCall, assertMcpProjectInScope, McpAuthorizationError } from '../services/mcp-capabilities';
 import { DEFAULT_GRANTS, type PeerCapability } from '../services/peer-capabilities';
+import type { McpProjectScope } from '../../shared/types/settings';
 import { tailLog, getCurrentLogPath, getLogDir } from '../services/logger';
 import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-system-service';
 import {
@@ -300,6 +301,15 @@ function buildToolDeps(sessionId: string): ToolDeps {
  * the agent to reconnect — a grant the user has just revoked must not
  * survive in a long-lived SSE session.
  */
+/** Which projects a path-taking tool may reach. Defaults to the safe one. */
+function mcpProjectScope(): McpProjectScope {
+  try {
+    return getSettings().mcp?.projectScope === 'anywhere' ? 'anywhere' : 'opened';
+  } catch {
+    return 'opened';
+  }
+}
+
 function grantedMcpCapabilities(): readonly PeerCapability[] {
   try {
     const configured = getSettings().mcp?.capabilities;
@@ -375,6 +385,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     // is visible in the Timeline rather than disappearing.
     try {
       assertMcpMayCall(name, grantedMcpCapabilities());
+      assertMcpProjectInScope(name, args, mcpProjectScope());
     } catch (err) {
       if (err instanceof McpAuthorizationError) {
         console.warn(`[MCP][Authz] REFUSED ${name} — ${err.message}`);

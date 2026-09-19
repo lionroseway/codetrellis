@@ -78,6 +78,48 @@ const DEVICE_CAPABILITIES: Array<{
 ];
 
 /**
+ * What an MCP client may do — Phase 30.
+ *
+ * Separate from `DEVICE_CAPABILITIES` because the surfaces differ in what
+ * they can reach, not because the vocabulary differs: both read the same
+ * seven names. `capture` is absent from the device list because no peer RPC
+ * method needs it yet, and showing a toggle that governs nothing would be
+ * worse than not showing it.
+ */
+const MCP_DEFAULT_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
+
+const MCP_CAPABILITIES: Array<{
+  name: PeerCapabilityName;
+  label: string;
+  hint: string;
+  /** Rendered in amber: granting it has consequences beyond reading data. */
+  sensitive?: boolean;
+}> = [
+  { name: 'read', label: 'Read plans, items and the graph', hint: 'Plans, items, docs, channels, dependencies, reviews.' },
+  { name: 'write', label: 'Change plans, and drive the UI', hint: 'Create and edit plans, items, docs and comments; move the graph; show prompts.' },
+  { name: 'project', label: 'Open, close and rescan projects', hint: 'Switch which project this desktop is working on.' },
+  { name: 'files', label: 'Read and write plan files', hint: 'Export plans to disk, import them back, browse plan documents.' },
+  {
+    name: 'capture',
+    label: 'Read your screen, clipboard and microphone',
+    hint: 'Screenshots, clipboard contents, and audio capture. Your clipboard routinely holds passwords.',
+    sensitive: true,
+  },
+  {
+    name: 'settings',
+    label: 'Change desktop settings',
+    hint: 'Includes writing .claude/settings.local.json to auto-approve every tool — an agent with this can widen its own reach.',
+    sensitive: true,
+  },
+  {
+    name: 'terminal',
+    label: 'Run commands',
+    hint: 'Create terminals, type into them, read scrollback, and drive terminals on paired devices. This is command execution on this machine.',
+    sensitive: true,
+  },
+];
+
+/**
  * Settings panel — Phase 13 §D.
  *
  * Sections:
@@ -380,6 +422,60 @@ function McpSection({
           Restart the server to try the configured port again.
         </div>
       )}
+
+      <div className="pt-1 border-t border-white/[0.06]">
+        <p className="text-[11px] text-foreground mb-1">What connected agents may do</p>
+        <p className="text-[10px] text-foreground-subtle leading-relaxed mb-2">
+          Applies to every MCP client on this machine — Claude Code, Codex, Cursor, Claude Desktop.
+          Running commands, reading your screen or clipboard, and changing settings are off until you
+          turn them on. An agent that is refused is told which of these to ask you for.
+        </p>
+        <div className="space-y-1.5">
+          {MCP_CAPABILITIES.map((cap) => {
+            const held = (settings.mcp.capabilities ?? MCP_DEFAULT_CAPABILITIES).includes(cap.name);
+            return (
+              <label key={cap.name} className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={held}
+                  onChange={(e) => {
+                    const current = settings.mcp.capabilities ?? MCP_DEFAULT_CAPABILITIES;
+                    const next = e.target.checked
+                      ? [...new Set([...current, cap.name])]
+                      : current.filter((c) => c !== cap.name);
+                    onChange({ mcp: { ...settings.mcp, capabilities: next } });
+                  }}
+                  className="mt-0.5 accent-accent"
+                />
+                <span className="min-w-0">
+                  <span className={`text-[11px] ${cap.sensitive ? 'text-amber-300' : 'text-foreground'}`}>
+                    {cap.label}
+                  </span>
+                  <span className="block text-[10px] text-foreground-subtle">{cap.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <Field label="Which projects agents can reach">
+        <select
+          value={settings.mcp.projectScope ?? 'opened'}
+          onChange={(e) =>
+            onChange({ mcp: { ...settings.mcp, projectScope: e.target.value as 'opened' | 'anywhere' } })
+          }
+          className="bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+        >
+          <option value="opened">Only projects I have opened</option>
+          <option value="anywhere">Any path the agent names</option>
+        </select>
+        <p className="mt-1 text-[10px] text-foreground-subtle leading-relaxed">
+          Tools that take a project path — reviews, git history, freezes, plan creation — are confined
+          to projects this app has opened. This is not a sandbox: an agent can still open a project
+          itself, but you will see the tab appear. Choose &quot;any path&quot; for a fully autonomous agent.
+        </p>
+      </Field>
 
       <Field label="Config snippet for your agent">
         <div className="flex items-start gap-2">

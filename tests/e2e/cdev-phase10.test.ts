@@ -76,6 +76,8 @@ test.describe('CDev Phase 10 — multi-device', () => {
     const h = await setupHarness('cdev-phase10-terminals');
     try {
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
+      // Phase 30: driving a terminal on a paired device is command execution, so it needs `terminal`.
+      await h.client.grantMcpCapabilities(['read', 'write', 'project', 'files', 'terminal']);
 
       const res = await agent.callTool('list_remote_terminals', {});
       expect(res.isError).not.toBe(true);
@@ -92,6 +94,8 @@ test.describe('CDev Phase 10 — multi-device', () => {
     const h = await setupHarness('cdev-phase10-audio');
     try {
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
+      // Phase 30: remote audio is the user's microphone, one device removed — `capture`.
+      await h.client.grantMcpCapabilities(['read', 'write', 'project', 'files', 'capture']);
 
       const res = await agent.callTool('get_remote_audio', {});
       expect(res.isError).not.toBe(true);

@@ -10,6 +10,16 @@
 export interface RestClient {
   baseUrl: string;
   scanProject(projectPath: string): Promise<ScanResult>;
+  /**
+   * Grant MCP clients a capability for the rest of this harness.
+   *
+   * Phase 30 authorises every MCP tool, and `terminal`, `settings` and
+   * `capture` are off by default. A test that exercises one of those tools
+   * has to say so — which is the point: the grant appears IN THE TEST, so
+   * reading it tells you the tool is privileged. Widening the defaults to
+   * keep the suite green would have deleted the phase.
+   */
+  grantMcpCapabilities(capabilities: string[]): Promise<void>;
   getStats(): Promise<DbStats>;
   getDependencyEdges(): Promise<unknown[]>;
   getCrossSystemEdges(): Promise<CrossSystemResponse['edges']>;
@@ -200,6 +210,11 @@ export function createClient(baseUrl: string, capabilityToken?: string): RestCli
   return {
     baseUrl,
     raw,
+    async grantMcpCapabilities(capabilities) {
+      const res = await raw('PUT', '/api/settings', { mcp: { capabilities } });
+      if (!res.ok) throw new Error(`grantMcpCapabilities failed: ${res.status}`);
+    },
+
     async scanProject(projectPath) {
       return (await json('POST', '/api/project/scan', { projectPath })) as ScanResult;
     },

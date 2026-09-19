@@ -155,3 +155,67 @@ describe('deny by default', () => {
     }
   });
 });
+
+describe('project scope — M34', () => {
+  // `setActiveProjectRoot` is how the backend tells trusted-roots what is
+  // open, so it is also how a test creates that condition.
+  let trusted: typeof import('./trusted-roots');
+  let scope: typeof import('./mcp-capabilities').assertMcpProjectInScope;
+  let opened: string;
+  let elsewhere: string;
+
+  before(async () => {
+    trusted = await import('./trusted-roots');
+    ({ assertMcpProjectInScope: scope } = await import('./mcp-capabilities'));
+    opened = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-opened-'));
+    elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-elsewhere-'));
+    trusted.setActiveProjectRoot(opened);
+  });
+
+  after(() => {
+    trusted.setActiveProjectRoot(null);
+    for (const d of [opened, elsewhere]) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  test('an opened project is allowed', () => {
+    assert.doesNotThrow(() => scope('review_plan', { project_path: opened }, 'opened'));
+  });
+
+  test('a project that was never opened is refused', () => {
+    // The finding: 38 tools took this straight from the request and ran git,
+    // read files and wrote plans in whatever it named.
+    assert.throws(
+      () => scope('review_plan', { project_path: elsewhere }, 'opened'),
+      McpAuthorizationError,
+    );
+  });
+
+  test('the refusal says how to proceed', () => {
+    try {
+      scope('get_pr_draft', { project_path: elsewhere }, 'opened');
+      assert.fail('expected a refusal');
+    } catch (err) {
+      assert.match((err as Error).message, /not open/);
+      assert.match((err as Error).message, /Settings → MCP Server/);
+    }
+  });
+
+  test('"anywhere" restores the old behaviour for an autonomous agent', () => {
+    assert.doesNotThrow(() => scope('review_plan', { project_path: elsewhere }, 'anywhere'));
+  });
+
+  test('a tool with no project_path is unaffected', () => {
+    // Most tools do not take one; the gate must not invent a requirement.
+    assert.doesNotThrow(() => scope('get_plan', { plan_uid: 'pln_1' }, 'opened'));
+    assert.doesNotThrow(() => scope('list_plans', {}, 'opened'));
+    assert.doesNotThrow(() => scope('terminal_list', undefined, 'opened'));
+  });
+
+  test('open_project is not caught by this, and must not be', () => {
+    // It takes `path`, not `project_path`, because opening is how a
+    // directory BECOMES a project. Confining it would make it impossible to
+    // open anything — and there is deliberately no exemption list, because
+    // the parameter name already draws the line.
+    assert.doesNotThrow(() => scope('open_project', { path: elsewhere }, 'opened'));
+  });
+});
