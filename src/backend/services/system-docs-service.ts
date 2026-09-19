@@ -22,7 +22,7 @@
 
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy____server from '../server';
-import { writeFileWithin, resolveWithin, ConfinementError } from './confined-fs';
+import { ConfinementError } from './confined-fs';
 
 /**
  * Slugs become filenames, so they are constrained to what is safe as one.
@@ -784,7 +784,6 @@ function gitChangedFiles(projectPath: string, fromSha: string, toSha: string): s
 
 function tryBroadcast(type: string, payload: Record<string, unknown>): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { broadcast } = _lazy____server;
     broadcast(type, payload);
   } catch { /* server not yet imported (test isolation) */ }

@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { resolveWithin, readTextWithin, writeFileWithin } from './confined-fs';
+import { resolveWithin, writeFileWithin } from './confined-fs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -147,8 +147,11 @@ export function resolveFileConflict(
   // The filesystem mutation had already happened — a later git failure does
   // not undo it, which is why "git will reject it anyway" was not a control.
   //
-  // Applies to field-level and whole-side resolution alike; both call in
-  // here for their path.
+  // Field-level and whole-side resolution each confine their own path —
+  // `resolveFileConflictBySide` does NOT route through this function, so
+  // it carries its own `resolveWithin` call rather than inheriting this
+  // one. An earlier version of this comment asserted that both came
+  // through here, which was never true.
   const fullPath = resolveWithin(projectRoot, filePath, 'resolveFileConflict(filePath)');
   if (!fs.existsSync(fullPath)) {
     return { resolved: false, error: `File not found: ${filePath}` };
@@ -235,6 +238,19 @@ export function resolveFileConflictBySide(
   filePath: string,
   side: 'ours' | 'theirs',
 ): { resolved: boolean; error?: string } {
+  // CONFINE BEFORE HANDING THE PATH TO GIT (Phase 19).
+  //
+  // Measured, not assumed: `git checkout -- ../outside/x` fails with
+  // "is outside repository", so this was never exploitable. But the
+  // control was git's rather than ours, and it produced the wrong
+  // shape of answer — a rejection came back as `resolved: false`,
+  // indistinguishable from a real failure. This is the same `filePath`
+  // the field-level path confines, reached by a different route, so
+  // confine it here and let both refuse identically.
+  resolveWithin(projectRoot, filePath, 'resolveFileConflictBySide(filePath)');
+  if (side !== 'ours' && side !== 'theirs') {
+    return { resolved: false, error: `Invalid side: ${String(side)}` };
+  }
   try {
     const flag = side === 'ours' ? '--ours' : '--theirs';
     runGitArgs(['checkout', flag, '--', filePath], projectRoot);
@@ -271,14 +287,28 @@ function classifyConflictFile(filePath: string): FileConflict['entityType'] {
 
 /**
  * Extract the content from one side of a conflict-marked file.
- * Handles standard git conflict markers:
+ *
  *   <<<<<<< HEAD (or ours)
  *   ... our content ...
+ *   ||||||| merged common ancestors     <- diff3 / zdiff3 only
+ *   ... the base, which belongs to NEITHER side ...
  *   =======
  *   ... their content ...
  *   >>>>>>> branch
+ *
+ * The base section is the part this used to get wrong. `merge.conflictStyle
+ * = diff3` (or `zdiff3`) is a common global git setting, and under it every
+ * conflict carries a third block. Without a case for `|||||||`, the marker
+ * line AND the whole base block were kept as part of "ours", so our side
+ * never parsed as YAML — which made `parseYamlConflictFields` return null
+ * for every conflicted manifest, so the field-level resolution UI told the
+ * user their file "could not be broken into fields" and the whole feature
+ * was unreachable for anyone with that setting.
+ *
+ * The base is deliberately DISCARDED rather than offered: it is the common
+ * ancestor, which is what neither person chose.
  */
-function extractConflictSide(content: string, side: 'ours' | 'theirs'): string | null {
+export function extractConflictSide(content: string, side: 'ours' | 'theirs'): string | null {
   const lines = content.split('\n');
   const result: string[] = [];
   let inConflict = false;
@@ -289,6 +319,12 @@ function extractConflictSide(content: string, side: 'ours' | 'theirs'): string |
     if (line.startsWith('<<<<<<<')) {
       inConflict = true;
       inOurSide = true;
+      inTheirSide = false;
+      continue;
+    }
+    if (line.startsWith('|||||||') && inConflict) {
+      // Base section begins: from here to `=======` belongs to nobody.
+      inOurSide = false;
       inTheirSide = false;
       continue;
     }

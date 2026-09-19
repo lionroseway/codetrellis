@@ -194,7 +194,6 @@ export function startMdns(deviceName?: string, fingerprint?: string, mobileApiPo
 
   try {
     if (!Bonjour) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('bonjour-service');
       Bonjour = mod.default ?? mod.Bonjour ?? mod;
     }

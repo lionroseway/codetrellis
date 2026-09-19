@@ -17,8 +17,6 @@ import { connection } from './connection';
 import type {
   BridgeToWebView,
   BridgeFromWebView,
-  WorkspaceSnapshot,
-  ConnectionState,
 } from './types';
 
 // --- Bridge ------------------------------------------------------------------

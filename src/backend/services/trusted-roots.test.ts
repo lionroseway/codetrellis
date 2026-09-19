@@ -139,3 +139,37 @@ describe('allowAbsent', () => {
     assert.throws(() => roots.resolveTrustedProjectRoot(neverOpened, 'projectRoot', { allowAbsent: true }));
   });
 });
+
+describe('projectRelative — opened path vs canonical path (M33)', () => {
+  test('a path stored under the symlinked root still relativises', () => {
+    // The shape that broke it: rows are written by `scan`, which is exempt from
+    // confinement and therefore stores whatever the user typed. Every confined
+    // reader then resolves the root to its realpath. On macOS /tmp is a symlink,
+    // so those two disagree for any project under /tmp — and path.relative
+    // between them produced '../../…', which matched nothing. Diff, compare,
+    // review and playback all reported every file removed AND re-added.
+    const real = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ct-real-'));
+    const link = path.join(fs.realpathSync(os.tmpdir()), `ct-link-${process.pid}`);
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(real, link, 'dir');
+    try {
+      // The user opened the SYMLINKED path, so that is what scan stored and
+      // what is registered as a trusted root. Readers resolve it to its
+      // realpath. That disagreement is the bug.
+      roots.setActiveProjectRoot(link);
+      const storedUnderLink = path.join(link, 'src', 'a.ts');
+
+      // Reader holds the canonical root; the row holds the opened one.
+      assert.equal(roots.projectRelative(real, storedUnderLink), path.join('src', 'a.ts'));
+      // And the reverse, which is the same disagreement the other way round.
+      assert.equal(roots.projectRelative(link, path.join(real, 'src', 'a.ts')), path.join('src', 'a.ts'));
+      // The ordinary case is untouched.
+      assert.equal(roots.projectRelative(real, path.join(real, 'src', 'a.ts')), path.join('src', 'a.ts'));
+      // A relative path is passed through, as before.
+      assert.equal(roots.projectRelative(real, 'src/a.ts'), 'src/a.ts');
+    } finally {
+      fs.rmSync(link, { force: true });
+      fs.rmSync(real, { recursive: true, force: true });
+    }
+  });
+});

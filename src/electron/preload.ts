@@ -103,6 +103,12 @@ const electronAPI = {
 
   // Reveal the current day's log file in Finder / Explorer.
   revealLogs: (): Promise<string> => ipcRenderer.invoke('logs:reveal'),
+  /**
+   * Reveal a verified update download. Takes no path — the main process
+   * reads it from the download service's state, so this cannot be used
+   * to reveal an arbitrary file. Resolves null when nothing is ready.
+   */
+  revealUpdateDownload: (): Promise<string | null> => ipcRenderer.invoke('updates:reveal'),
   getLogPath: (): Promise<string> => ipcRenderer.invoke('logs:get-path'),
 };
 

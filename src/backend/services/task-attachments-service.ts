@@ -14,7 +14,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { resolveWithin, writeFileWithin, isWithin, ConfinementError } from './confined-fs';
+import { resolveWithin, writeFileWithin } from './confined-fs';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 
 /**
@@ -31,7 +31,6 @@ const ALLOWED_ATTACHMENT_TYPES = new Set([
   'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml',
   'video/mp4', 'video/webm', 'video/quicktime',
 ]);
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getDb } from './database';

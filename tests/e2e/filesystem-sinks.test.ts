@@ -34,6 +34,14 @@ test.describe('21a / 21b — a template cannot read outside its own directory', 
     const h = await setupHarness('sink-template-bodypath');
     const secret = plantSecret();
     try {
+      // The project must be OPENED before these endpoints will answer:
+      // a project root is never caller-nominated (Phase 19), so an
+      // unopened path is refused before the check under test can run.
+      // Without this the assertion below would pass on a 403 and prove
+      // nothing about template path containment.
+      await h.client.scanProject(h.fixture.projectPath);
+
+
       // A template is a directory of YAML plus markdown, and it can be
       // INSTALLED FROM ANYWHERE — a shared folder, a downloaded bundle. So
       // its own YAML is attacker-controlled in the case that matters, and
@@ -94,6 +102,13 @@ test.describe('8 — a system-doc slug cannot traverse', () => {
     const h = await setupHarness('sink-sysdoc-slug');
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-sysdoc-'));
     try {
+      // The project must be OPENED before a confined endpoint will
+      // answer: a root is never caller-nominated (Phase 19). Without
+      // this the PRECONDITION below — the legitimate in-project case
+      // that proves the check is not simply refusing everything — fails
+      // on a 403 and the test proves nothing.
+      await h.client.scanProject(h.fixture.projectPath);
+
       const target = path.join(outside, 'planted.md');
       const escape = path.relative(h.fixture.projectPath, target);
 
@@ -130,6 +145,13 @@ test.describe('A1 — conflict resolution cannot write outside the project', () 
     const h = await setupHarness('sink-conflict-resolve');
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-conflict-'));
     try {
+      // The project must be OPENED before a confined endpoint will
+      // answer: a root is never caller-nominated (Phase 19). Without
+      // this the PRECONDITION below — the legitimate in-project case
+      // that proves the check is not simply refusing everything — fails
+      // on a 403 and the test proves nothing.
+      await h.client.scanProject(h.fixture.projectPath);
+
       // Real conflict markers, so the resolver has something to do. Whether
       // git would later reject the path is beside the point: the finding is
       // that the FILESYSTEM MUTATION had already happened, and a git failure
@@ -187,6 +209,13 @@ test.describe('12 — a branch name is not a safe path component', () => {
   test('a traversing branch neither reads from nor deletes outside the project', async () => {
     const h = await setupHarness('sink-contributions-accept');
     try {
+      // The project must be OPENED before a confined endpoint will
+      // answer: a root is never caller-nominated (Phase 19). Without
+      // this the PRECONDITION below — the legitimate in-project case
+      // that proves the check is not simply refusing everything — fails
+      // on a 403 and the test proves nothing.
+      await h.client.scanProject(h.fixture.projectPath);
+
       // `.codetrellis/contributions/<branch>` is built from a git branch name,
       // and git permits `/`. The value reaches a RECURSIVE DELETE — and,
       // before the delete, reads that copy whatever they find INTO the project.
@@ -247,6 +276,14 @@ test.describe('11 — reference resolution is not an existence oracle', () => {
     const h = await setupHarness('sink-existence-oracle');
     const secret = plantSecret();
     try {
+      // The project must be OPENED before these endpoints will answer:
+      // a project root is never caller-nominated (Phase 19), so an
+      // unopened path is refused before the check under test can run.
+      // Without this the assertion below would pass on a 403 and prove
+      // nothing about the existence oracle.
+      await h.client.scanProject(h.fixture.projectPath);
+
+
       const ask = async (ref: string) => {
         const res = await h.client.raw(
           'GET',
@@ -283,6 +320,13 @@ test.describe('3 — an attachment file_ref cannot read outside', () => {
     const h = await setupHarness('sink-attachment-ref');
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-attach-'));
     try {
+      // The project must be OPENED before a confined endpoint will
+      // answer: a root is never caller-nominated (Phase 19). Without
+      // this the PRECONDITION below — the legitimate in-project case
+      // that proves the check is not simply refusing everything — fails
+      // on a 403 and the test proves nothing.
+      await h.client.scanProject(h.fixture.projectPath);
+
       const plan = await h.client.createPlan({ title: 'Attachment plan', projectPath: h.fixture.projectPath });
       const item = await h.client.raw('POST', `/api/plans/${plan.uid}/items`, {
         kind: 'task',

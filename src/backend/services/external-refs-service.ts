@@ -85,9 +85,10 @@ function rowToRef(row: unknown[]): ExternalRef {
     url: row[3] as string,
     title: row[4] as string,
     metadata: row[5] ? JSON.parse(row[5] as string) : null,
-    author: row[6] as string,
-    authorType: row[7] as string,
-    createdAt: row[8] as number,
+    externalKey: (row[6] as string | null) ?? null,
+    author: row[7] as string,
+    authorType: row[8] as string,
+    createdAt: row[9] as number,
   };
 }
 
@@ -96,7 +97,7 @@ function rowToRef(row: unknown[]): ExternalRef {
 export function getExternalRefs(itemUid: string): ExternalRef[] {
   const d = getDb();
   const result = d.exec(
-    `SELECT uid, item_uid, kind, url, title, metadata, author, author_type, created_at
+    `SELECT uid, item_uid, kind, url, title, metadata, external_key, author, author_type, created_at
      FROM external_refs WHERE item_uid = ? ORDER BY created_at ASC`,
     [itemUid],
   );
@@ -106,7 +107,7 @@ export function getExternalRefs(itemUid: string): ExternalRef[] {
 export function getExternalRefsByPlan(planUid: string): ExternalRef[] {
   const d = getDb();
   const result = d.exec(
-    `SELECT r.uid, r.item_uid, r.kind, r.url, r.title, r.metadata, r.author, r.author_type, r.created_at
+    `SELECT r.uid, r.item_uid, r.kind, r.url, r.title, r.metadata, r.external_key, r.author, r.author_type, r.created_at
      FROM external_refs r
      JOIN plan_items i ON i.uid = r.item_uid
      WHERE i.plan_uid = ?
@@ -122,6 +123,12 @@ export function createExternalRef(input: {
   title?: string;
   kind?: ExternalRefKind;
   metadata?: Record<string, unknown> | null;
+  /**
+   * Phase 24 — the ticket key (`PROJ-412`). Stored as its own column so
+   * write-back can match on it and re-import can be idempotent, rather
+   * than re-deriving it from the URL at every comparison.
+   */
+  externalKey?: string | null;
   author?: string;
   authorType?: string;
 }): ExternalRef {
@@ -132,8 +139,8 @@ export function createExternalRef(input: {
   const now = Date.now();
 
   d.run(
-    `INSERT INTO external_refs (uid, item_uid, kind, url, title, metadata, author, author_type, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO external_refs (uid, item_uid, kind, url, title, metadata, external_key, author, author_type, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       uid,
       input.itemUid,
@@ -141,6 +148,7 @@ export function createExternalRef(input: {
       input.url,
       title,
       input.metadata ? JSON.stringify(input.metadata) : null,
+      input.externalKey ?? null,
       input.author ?? 'human',
       input.authorType ?? 'human',
       now,

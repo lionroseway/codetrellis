@@ -12,6 +12,7 @@
  */
 
 import type { DeviceSettings } from './peer';
+import type { PeerCapabilityName } from './peer';
 
 export interface IdentitySettings {
   /** Display name shown in attributions. */
@@ -33,7 +34,40 @@ export interface McpSettings {
    * failing. The actually-bound port is reported via `getMcpStatus()`.
    */
   autodetectOnCollision: boolean;
+  /**
+   * Phase 30 — what MCP clients may do, per tool, by capability.
+   *
+   * Absent means `DEFAULT_GRANTS`: read, write, project, files. `terminal`,
+   * `settings` and `capture` are off until the user turns them on, so
+   * connecting an agent does not by itself hand it a shell, your microphone,
+   * or the switch that exposes this desktop to the network.
+   *
+   * Per-INSTALLATION, not per-agent — one toggle covers every client on this
+   * machine. Per-agent grants need a pairing-style moment that MCP has no
+   * equivalent of; see the Phase 30 spec.
+   */
+  capabilities?: PeerCapabilityName[];
+  /**
+   * Phase 30 — which projects a path-taking MCP tool may reach.
+   *
+   *  - `'opened'` (default): a tool naming a `project_path` must name a
+   *    project that is open. Nothing reaches a path you did not watch get
+   *    opened.
+   *  - `'anywhere'`: today's behaviour, for a fully autonomous agent.
+   *
+   * A DIFFERENT AXIS from `capabilities`, which answer which tools may be
+   * called at all. This answers which projects those tools may reach.
+   *
+   * It is not sandboxing and must not be described as such: `open_project`
+   * broadcasts `ui-open-project`, which opens a tab and switches to it, so
+   * an agent can still widen its own scope — visibly. What `'opened'` buys
+   * is that nothing reaches a path the user did not see opened.
+   */
+  projectScope?: McpProjectScope;
 }
+
+/** See `McpSettings.projectScope`. */
+export type McpProjectScope = 'opened' | 'anywhere';
 
 export type DefaultPlanVisibility = 'shared' | 'local';
 
@@ -205,6 +239,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mcp: {
     port: 19432,
     autodetectOnCollision: true,
+    // Omitted rather than spelled out: absent means DEFAULT_GRANTS, and
+    // writing the list here would freeze a copy of it that could drift.
+    projectScope: 'opened',
   },
   plans: {
     defaultVisibility: 'shared',

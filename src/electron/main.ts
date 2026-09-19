@@ -20,6 +20,7 @@ import { setElectronScreenshotCapture } from '../backend/mcp/server';
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
+import { getUpdateDownloadState } from '../backend/services/update-download-service';
 import {
   startPowerService,
   setAcState,
@@ -57,7 +58,7 @@ if (process.platform === 'linux' && process.env.APPIMAGE) {
 // electron-vite injects this env var when running `electron-vite dev`.
 // In production builds it's undefined; we load index.html from the
 // packaged `out/renderer/` directory instead.
-declare const __dirname: string; // eslint-disable-line @typescript-eslint/no-unused-vars
+declare const __dirname: string;
 
 process.on('uncaughtException', (err) => {
   console.error('[Electron] Uncaught exception:', err);
@@ -505,6 +506,24 @@ ipcMain.handle('logs:reveal', async () => {
 });
 
 ipcMain.handle('logs:get-path', async () => getCurrentLogPath());
+
+/**
+ * Reveal a verified update download (Phase 29, surfacing Phase 19
+ * finding 23).
+ *
+ * The download service will not install — on macOS a DMG can only be
+ * revealed and the user drags it — so revealing is how that flow ends.
+ * The path is NOT taken from the renderer: it is read from the download
+ * service's own state, which only ever holds a path once the bytes have
+ * been verified against the signed manifest. A renderer-supplied path
+ * would make this an arbitrary "open anything in Finder" primitive.
+ */
+ipcMain.handle('updates:reveal', async () => {
+  const state = getUpdateDownloadState();
+  if (state.phase !== 'ready' || !state.filePath) return null;
+  shell.showItemInFolder(state.filePath);
+  return state.filePath;
+});
 
 // =============================================================
 // Terminal IPC — bidirectional PTY I/O

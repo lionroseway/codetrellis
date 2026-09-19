@@ -17,8 +17,8 @@
  * ✓ = required (red if missing), ○ = suggested (amber if missing)
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { Shield, CheckCircle2, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CheckCircle2, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { PlanItem, Plan } from '@shared/types';
@@ -202,7 +202,6 @@ export function PlanReadinessRing() {
   const requiredChecks = checks.filter((c) => c.level === 'required');
   const suggestedChecks = checks.filter((c) => c.level === 'suggested');
   const requiredPassed = requiredChecks.filter((c) => c.passed).length;
-  const suggestedPassed = suggestedChecks.filter((c) => c.passed).length;
   const allRequiredPassed = requiredPassed === requiredChecks.length;
   const totalPassed = checks.filter((c) => c.passed).length;
   const pct = Math.round((totalPassed / checks.length) * 100);

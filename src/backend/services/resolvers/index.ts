@@ -1,10 +1,15 @@
-import type { ResolverPlugin, ResolveContext } from './base';
+import type { ResolverPlugin } from './base';
 import type { SupportedLanguage } from '../../../shared/types';
 import { typescriptResolver } from './typescript';
 import { pythonResolver } from './python';
 import { rustResolver } from './rust';
 import { phpResolver } from './php';
 import { javaResolver } from './java';
+import { goResolver } from './go';
+import { rubyResolver } from './ruby';
+import { csharpResolver } from './csharp';
+import { kotlinResolver } from './kotlin';
+import { swiftResolver } from './swift';
 
 /**
  * Registry of every per-language resolver. To add a language: write
@@ -17,6 +22,11 @@ export const RESOLVER_PLUGINS: ReadonlyArray<ResolverPlugin> = [
   rustResolver,
   phpResolver,
   javaResolver,
+  goResolver,
+  rubyResolver,
+  csharpResolver,
+  kotlinResolver,
+  swiftResolver,
 ];
 
 const RESOLVER_BY_LANGUAGE = (() => {

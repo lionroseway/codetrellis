@@ -229,7 +229,7 @@ function extractDefault(s: string): string | null {
   const re = /\bDEFAULT\s+/i;
   const m = re.exec(s);
   if (!m) return null;
-  let i = m.index + m[0].length;
+  const i = m.index + m[0].length;
   // Skip leading whitespace already handled by re.
   if (i >= s.length) return null;
   const ch = s[i];

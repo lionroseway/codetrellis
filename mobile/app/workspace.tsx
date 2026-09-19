@@ -16,7 +16,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -150,7 +149,7 @@ export default function WorkspaceScreen() {
   // raw state is still used for the mount-time guard below (so a
   // user landing here cold without a connection still redirects).
   const connState = useDebouncedConnectionState();
-  const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(connection.snapshot);
+  const [, setSnapshot] = useState<WorkspaceSnapshot | null>(connection.snapshot);
 
   useEffect(() => {
     // If we land here without an active connection (e.g. persisted

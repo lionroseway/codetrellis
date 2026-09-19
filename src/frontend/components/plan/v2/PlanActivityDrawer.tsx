@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import {
-  Activity, MessageSquare, AlertTriangle, HelpCircle, CheckCircle2, Loader2, Ban,
-  Pencil, Plus, Move, Trash2, RotateCcw, Hash, ListPlus, Zap,
+  Activity, CheckCircle2, Loader2, 
+  Pencil, Plus, Move, Trash2, RotateCcw, Hash, ListPlus, Zap, Users,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { ExecutionDashboard } from './ExecutionDashboard';
+import { TeamActivityPanel } from './TeamActivityPanel';
 import type { PlanEvent, PlanEventType } from '@shared/types';
 
 const EVENT_META: Record<PlanEventType, { Icon: typeof Activity; tint: string; label: string }> = {
@@ -32,7 +33,19 @@ export function PlanActivityDrawer() {
   const selectItem = usePlanItemsStore((s) => s.selectItem);
   const open = usePlanItemsStore((s) => s.activityDrawerOpen);
   const toggle = usePlanItemsStore((s) => s.toggleActivityDrawer);
-  const [tab, setTab] = useState<'activity' | 'live'>('activity');
+  // Phase 29 §4.15 — "Team" joins the two tabs that were already here.
+  // TeamActivityPanel (Phase 6.1) was written and never rendered, and
+  // its header says "accessible from the plan workspace as a
+  // drawer/tab" — so this is where it was meant to go. A fifth toggle
+  // in the shell header reading "Team Activity" next to the existing
+  // "Activity" would have been two buttons a user has to tell apart;
+  // as a tab, the distinction is visible at the point of choosing.
+  //
+  // They really are different questions: Activity is this plan's
+  // `plan_events` from the database, Team is the git history of
+  // `.codetrellis/` across the whole project — who changed what, in
+  // commits, including plans this one knows nothing about.
+  const [tab, setTab] = useState<'activity' | 'live' | 'team'>('activity');
 
   if (!open) {
     // Collapsed — show a slim icon-only rail
@@ -76,6 +89,18 @@ export function PlanActivityDrawer() {
           <Zap size={11} />
           Live
         </button>
+        <button
+          onClick={() => setTab('team')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+            tab === 'team'
+              ? 'bg-white/[0.05] text-foreground font-medium'
+              : 'text-foreground-subtle hover:text-foreground-muted'
+          }`}
+          title="What the rest of the team changed in .codetrellis/, from git"
+        >
+          <Users size={11} />
+          Team
+        </button>
         <div className="flex-1" />
         <button
           onClick={toggle}
@@ -103,9 +128,13 @@ export function PlanActivityDrawer() {
             ))
           )}
         </div>
-      ) : (
+      ) : tab === 'live' ? (
         <div className="flex-1 overflow-y-auto">
           <ExecutionDashboard />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-hidden">
+          <TeamActivityPanel />
         </div>
       )}
     </div>

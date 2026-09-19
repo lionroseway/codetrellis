@@ -15,6 +15,7 @@
 
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
+import { lineOf, normalizeRoute, normalizeUrl, isLikelyApiPath } from './shared';
 
 // Examples we want to catch:
 //   @router.get("/users")
@@ -97,37 +98,4 @@ function* iterateRequests(content: string): Iterable<Callsite> {
       context: `requests.${verb.toLowerCase()}`,
     };
   }
-}
-
-function isLikelyApiPath(s: string): boolean {
-  if (!s) return false;
-  if (s.startsWith('/')) return true;
-  if (/^https?:\/\//.test(s) && /\/api\//.test(s)) return true;
-  return false;
-}
-
-function normalizeRoute(url: string): string {
-  // FastAPI uses `{user_id}`; normalise to `:id` so it pairs with the
-  // TS extractor's template-literal output.
-  let p = url;
-  p = p.replace(/\{[^}]+\}/g, ':id');
-  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
-  return p;
-}
-
-function normalizeUrl(url: string): string {
-  let p = url.replace(/^https?:\/\/[^/]+/, '');
-  p = p.replace(/\{[^}]+\}/g, ':id');
-  const q = p.indexOf('?');
-  if (q >= 0) p = p.slice(0, q);
-  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
-  return p;
-}
-
-function lineOf(content: string, charIndex: number): number {
-  let line = 1;
-  for (let i = 0; i < charIndex && i < content.length; i++) {
-    if (content.charCodeAt(i) === 10) line++;
-  }
-  return line;
 }

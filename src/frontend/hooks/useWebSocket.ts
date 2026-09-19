@@ -187,7 +187,10 @@ export function useWebSocket() {
             useToastStore.getState().addToast({
               type: 'warning',
               title: 'Plan file has merge conflicts',
-              message: `Resolve in your editor: ${payload?.filePath || 'unknown file'}`,
+              // Phase 29 §4.9 — until the conflict bar existed the only
+              // honest advice was "go to your editor". Now the plan
+              // workspace can resolve it, so point there instead.
+              message: `${payload?.filePath || 'A plan file'} — resolve it from the bar at the top of the plan workspace.`,
               duration: 12000,
             });
           }
@@ -754,7 +757,7 @@ function extractSteps(text: string): Array<{ description: string; status: 'pendi
   const steps: Array<{ description: string; status: 'pending'; files: string[] }> = [];
 
   for (const line of lines) {
-    const match = line.match(/^\s*\d+[\.\)]\s+(.+)/);
+    const match = line.match(/^\s*\d+[.)]\s+(.+)/);
     if (match) {
       steps.push({ description: match[1].trim(), status: 'pending', files: [] });
     }

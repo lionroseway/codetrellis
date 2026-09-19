@@ -7,9 +7,11 @@ import { useUiStore } from './stores/ui-store';
 import { usePlanStore } from './stores/plan-store';
 import { Sidebar } from './components/layout/Sidebar';
 import { MainCanvas } from './components/layout/MainCanvas';
+import { CodeWorkspace } from './components/layout/CodeWorkspace';
 import { InspectorPanel } from './components/layout/InspectorPanel';
 import { PlanPanel } from './components/layout/PlanPanel';
 import { StatusBar } from './components/layout/StatusBar';
+import { AudioCaptureBar } from './components/audio/AudioCaptureBar';
 import { MinimizedPlanChip } from './components/plan/MinimizedPlanChip';
 import { PlanWorkspaceShellV2 } from './components/plan/v2/PlanWorkspaceShellV2';
 import { SystemDocsPanel } from './components/system-docs/SystemDocsPanel';
@@ -208,7 +210,15 @@ export function App() {
           <Allotment.Pane>
             <Allotment vertical ref={verticalRef}>
               <Allotment.Pane>
-                <MainCanvas />
+                {/* Not mounted in code mode. The layer's claim is that the
+                    graph is not rendering while you read code, and an overlay
+                    does not achieve that: ReactFlow stays mounted behind it
+                    and the dagre + d3-force layout keeps running on every
+                    graph change. Gated HERE rather than by an early return
+                    inside MainCanvas, because hooks run before a return —
+                    the layout would still be computed, just thrown away.
+                    The Allotment stays mounted so pane sizes survive. */}
+                {workspaceMode !== 'code' && <MainCanvas />}
               </Allotment.Pane>
               <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100}>
                 <PlanPanel />
@@ -239,6 +249,26 @@ export function App() {
           </div>
         )}
 
+        {/* Code-first surface — Phase 26. The graph really is unmounted
+            behind this (see the pane above), and the sidebar stays beside it
+            rather than under it: this used to cover the whole body, including
+            the file tree, so the empty state said "Pick a file from the
+            sidebar" while covering the sidebar. With no file selected — which
+            is every fresh launch, since selectedNodeId is not persisted —
+            there was no way forward except leaving code mode. */}
+        {workspaceMode === 'code' && (
+          <div className="absolute inset-0 z-30 bg-background">
+            <Allotment>
+              <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
+                <Sidebar />
+              </Allotment.Pane>
+              <Allotment.Pane>
+                <CodeWorkspace />
+              </Allotment.Pane>
+            </Allotment>
+          </div>
+        )}
+
         {/* System Docs surface — full takeover when workspaceMode === 'docs'. */}
         {workspaceMode === 'docs' && (
           <div className="absolute inset-0 z-30 bg-background">
@@ -254,6 +284,10 @@ export function App() {
         )}
       </div>
       <TerminalPanel />
+      {/* Phase 29 §4.15 — sits directly above the status bar, whose mic
+          button toggles it. Renders nothing unless toggled on or a
+          capture is running. */}
+      <AudioCaptureBar />
       <StatusBar />
       <FolderPickerModal />
       <McpGuideModal />

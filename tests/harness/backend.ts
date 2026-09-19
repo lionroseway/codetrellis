@@ -87,6 +87,20 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
       cwd: REPO_ROOT,
       env,
       stdio: opts.verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+      // Own process group, so teardown can signal the whole tree.
+      //
+      // This spawns `npx`, which spawns `tsx`, which spawns the actual
+      // `node` backend. Signalling only the direct child left the
+      // backend running — one live backend leaked PER TEST, each still
+      // holding its data dir, its chokidar watchers and its ports.
+      //
+      // The symptom was not a failure, which is why it survived: the
+      // suite just got slower and slower as load climbed, and the
+      // timing-sensitive tests started "flaking". A full run left ~190
+      // backends alive and the machine at a load average of 100+ on 4
+      // cores. Windows has no process groups in this sense, so
+      // `killChild` falls back there.
+      detached: process.platform !== 'win32',
     },
   );
 
@@ -163,27 +177,77 @@ async function waitForReady(
   return { ok: false, reason: `timeout after ${timeoutMs}ms waiting for ${url}` };
 }
 
-async function killChild(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  return new Promise((resolve) => {
-    const killTimer = setTimeout(() => {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* already dead */
-      }
-    }, 5000);
-    child.once('exit', () => {
-      clearTimeout(killTimer);
-      resolve();
-    });
+/**
+ * Signal the child's whole process group, falling back to the direct
+ * child where groups aren't available.
+ *
+ * The group is the point: `npx` → `tsx` → `node`, and only the last of
+ * those is the backend holding ports and watchers.
+ */
+function signalTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid == null) return;
+  try {
+    // Negative pid = the process group led by that pid.
+    if (process.platform !== 'win32') process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    // The group may already be gone; try the direct child before
+    // giving up, so a partially-dead tree still gets cleaned.
     try {
-      child.kill('SIGTERM');
+      child.kill(signal);
     } catch {
-      clearTimeout(killTimer);
-      resolve();
+      /* already dead */
     }
-  });
+  }
+}
+
+async function killChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode === null && child.signalCode === null) {
+    await new Promise<void>((resolve) => {
+      const killTimer = setTimeout(() => {
+        signalTree(child, 'SIGKILL');
+        // Do not wait on 'exit' forever after a SIGKILL — if the handle
+        // never fires we would hang teardown, which is how a leak becomes
+        // a hung suite.
+        setTimeout(resolve, 500);
+      }, 5000);
+      child.once('exit', () => {
+        clearTimeout(killTimer);
+        resolve();
+      });
+      signalTree(child, 'SIGTERM');
+    });
+  }
+  // `exit` on the direct child is NOT the tree being gone. We spawn
+  // `npx → tsx → node`, and the npx wrapper reliably exits before the
+  // node process underneath it has finished — which matters because the
+  // backend's data dir lives INSIDE the fixture tmp dir, so a backend
+  // still flushing its SQLite WAL is writing into the directory the
+  // caller is about to delete. That is the ENOTEMPTY that presents as a
+  // flaky test with a teardown stack trace and nothing to do with the
+  // test. Wait for the group itself.
+  await waitForGroupExit(child);
+}
+
+/**
+ * Poll until the child's process GROUP is gone. `kill(-pid, 0)` sends no
+ * signal — it only asks whether the group still exists — and throws
+ * ESRCH once it does not.
+ */
+async function waitForGroupExit(child: ChildProcess, timeoutMs = 3000): Promise<void> {
+  if (child.pid == null || process.platform === 'win32') return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-child.pid, 0);
+    } catch {
+      return; // ESRCH — the group is gone.
+    }
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  // Still alive after the deadline: make one last hard attempt rather
+  // than leaving a backend behind, then let the caller proceed.
+  signalTree(child, 'SIGKILL');
 }
 
 function sleep(ms: number): Promise<void> {

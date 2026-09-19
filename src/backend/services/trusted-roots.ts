@@ -146,3 +146,43 @@ export function isTrustedProjectRoot(candidate: unknown): boolean {
     return false;
   }
 }
+
+/**
+ * Make a stored absolute path relative to a project root, tolerating the
+ * difference between the path the user OPENED and its canonical form.
+ *
+ * These drift apart by design. `scan` is exempt from confinement — it is how a
+ * path becomes a project — so rows are written under whatever the user typed,
+ * e.g. `/tmp/demo`. Every confined handler then resolves through
+ * `resolveTrustedProjectRoot`, which returns the REALPATH: `/private/tmp/demo`
+ * on macOS, because /tmp is a symlink. A plain `path.relative` between the two
+ * yields `../../tmp/demo/src/a.ts`, which matches nothing — so diff, compare,
+ * review and playback reported every file as removed AND re-added for any
+ * project opened through a symlink. On macOS that is anything under /tmp.
+ *
+ * Reconciled on the READ side deliberately. Canonicalising at scan time would
+ * be tidier and would silently orphan every row in every existing database
+ * until the user rescanned — that is a migration, not a bug fix.
+ */
+export function projectRelative(projectRoot: string, absPath: string): string {
+  if (!path.isAbsolute(absPath)) return absPath;
+
+  const canonical = (() => {
+    try { return canonicalRoot(projectRoot); } catch { return path.resolve(projectRoot); }
+  })();
+
+  // The canonical form, plus every opened path that resolves to it.
+  const aliases = [projectRoot, canonical];
+  for (const root of listTrustedRoots()) {
+    try {
+      if (canonicalRoot(root) === canonical) aliases.push(root);
+    } catch { /* a project that has gone from disk cannot contain anything */ }
+  }
+
+  for (const root of aliases) {
+    if (absPath === root) return '';
+    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+    if (absPath.startsWith(prefix)) return path.relative(root, absPath);
+  }
+  return path.relative(projectRoot, absPath);
+}

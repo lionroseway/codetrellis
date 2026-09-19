@@ -12,10 +12,10 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   History,
   GitCommit,
-  Clock,
+  
   Search,
-  ChevronDown,
-  ChevronUp,
+  
+  
   Diff,
   User,
   Bot,

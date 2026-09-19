@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
+import { noteItemFocus } from '../../services/budget-service';
 import { resultWithMeta, authorFromExtra } from '../helpers';
 
 // ── Reusable schemas ──────────────────────────────────────────────────
@@ -289,6 +290,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
         authorType: id.authorType,
       });
       if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      // Phase 23 — moving an item to in_progress is the other way an
+      // agent tells us what it is working on. Agents that set status
+      // directly never call claim_item, and their time would otherwise
+      // land on the plan with no item attached.
+      if (args.status === 'in_progress') {
+        try {
+          noteItemFocus(deps.sessionId, item.uid, item.planUid);
+        } catch { /* accounting must never break an update */ }
+      }
       const n = deps.broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: args });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta(item, n);
@@ -397,6 +407,13 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const comments = deps.commentService.listItemComments(args.uid);
       let n = 0;
       if (item) {
+        // Phase 23 — a claim is the moment we learn what this session's
+        // time is being spent on. Without it, time lands on the plan but
+        // not on any item, and "which item ate the budget" has no answer.
+        try {
+          noteItemFocus(deps.sessionId, item.uid, item.planUid);
+        } catch { /* accounting must never break a claim */ }
+
         n = deps.broadcast('plan-item-claimed', {
           planUid: item.planUid,
           itemUid: item.uid,

@@ -10,16 +10,16 @@
  * of the plan workspace). Listens to WebSocket events for live updates.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Activity,
   ChevronDown,
   ChevronRight,
   Cpu,
-  FileText,
+  
   Radio,
   Zap,
-  RefreshCw,
+  
 } from 'lucide-react';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
@@ -52,7 +52,6 @@ function ActiveTasks({ items }: { items: PlanItem[] }) {
 
 function ActiveTaskRow({ item }: { item: PlanItem }) {
   const selectItem = usePlanItemsStore((s) => s.selectItem);
-  const isAssigned = item.status === 'assigned';
   const isInProgress = item.status === 'in_progress';
 
   return (

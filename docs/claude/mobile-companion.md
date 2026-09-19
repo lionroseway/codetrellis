@@ -16,9 +16,9 @@ The CodeTrellis Companion is an Expo / React Native app that pairs with a deskto
 
 ## Stack
 
-- **Expo SDK 54.0.0**
+- **Expo SDK 57.0.23**
 - **Expo Router 6.0.23** with `typedRoutes: true` — file-based routing rooted at `mobile/app/`.
-- **React 19.1.0**, **React Native 0.81.5**
+- **React 19.2.3**, **React Native 0.86.3**
 - **Zustand 5** for state (`useWorkspaceStore` is the main one)
 - **react-native-webrtc 124** (via `@config-plugins/react-native-webrtc`) — peer transport
 - **react-native-zeroconf 0.14** — mDNS browser for `_codetrellis._tcp`
@@ -86,7 +86,7 @@ From `mobile/package.json`:
 | `npm run build:dev` | `eas build --profile development --platform all` | EAS dev client build |
 | `npm run build:preview` | `eas build --profile preview --platform all` | EAS internal-distribution build |
 | `npm run build:prod` | `eas build --profile production --platform all` | EAS production build |
-| `npm run lint` | `eslint . --ext .ts,.tsx` | Lint |
+| `npm run lint` | `eslint . --ext .ts,.tsx` | Lint — **currently broken**: no eslint config or dependency in `mobile/`, and `--ext` was removed in ESLint 9. The desktop got a flat config in Phase 29; this package did not. |
 | `npm run typecheck` | `tsc --noEmit` | Type check |
 
 ## Release flow

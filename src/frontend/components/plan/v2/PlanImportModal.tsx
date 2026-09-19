@@ -230,7 +230,7 @@ export function PlanImportModal({ onClose }: { onClose: () => void }) {
 /**
  * Quick client-side preview of what will be extracted.
  */
-function ImportPreview({ source, content, title }: { source: ImportSource; content: string; title: string }) {
+function ImportPreview({ source, content }: { source: ImportSource; content: string; title: string }) {
   // Simple client-side parsing for preview — mirrors the backend logic
   const items: Array<{ kind: string; title: string }> = [];
 

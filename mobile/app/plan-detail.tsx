@@ -397,6 +397,29 @@ export default function PlanDetailScreen() {
         <View style={[styles.progressFill, { width: `${pct}%` }]} />
       </View>
 
+      {/* Review entry point — Phase 29 mobile flow.
+          Sits above Discussion because it is the question you open the
+          phone to ask ("did it do what it said?"), and the usual answer
+          to a bad one is to go and say something, which Discussion is. */}
+      <TouchableOpacity
+        style={styles.reviewBtn}
+        activeOpacity={0.7}
+        onPress={() =>
+          router.push(
+            `/plan-review?planUid=${plan.uid}&planTitle=${encodeURIComponent(plan.title)}`,
+          )
+        }
+      >
+        <Text style={styles.discussionIcon}>{'\u{1F50D}'}</Text>
+        <View style={styles.discussionBody}>
+          <Text style={styles.discussionTitle}>Review</Text>
+          <Text style={styles.discussionSub}>
+            What landed vs what was planned · next up · PR description
+          </Text>
+        </View>
+        <Text style={styles.itemChevron}>&gt;</Text>
+      </TouchableOpacity>
+
       {/* Discussion entry point */}
       <TouchableOpacity
         style={styles.discussionBtn}
@@ -1017,6 +1040,16 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: '#3b82f640',
+  },
+  reviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#22c55e40',
   },
   discussionIcon: {
     fontSize: 20,

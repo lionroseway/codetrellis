@@ -88,7 +88,19 @@ export function prepareFixture(testName: string): PreparedFixture {
     if (cleanedUp) return;
     cleanedUp = true;
     if (fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      // `force: true` swallows ENOENT but NOT ENOTEMPTY, which is what
+      // this actually hits: teardown awaits `backend.stop()`, but the
+      // backend's own children (the tsx/node grandchild, chokidar's
+      // watch handles, a git subprocess) can still be releasing the
+      // tree when the walk reaches a directory, and the removal aborts
+      // with the *test* marked failed for a reason that has nothing to
+      // do with the test.
+      //
+      // `maxRetries` exists for exactly this. It was one intermittent
+      // failure a run until the fixture grew by a dozen files in Phase
+      // 27, which widened the window to six — the race was always
+      // there, size only made it visible.
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   };
 

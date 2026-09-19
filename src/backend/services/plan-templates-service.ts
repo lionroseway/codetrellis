@@ -9,8 +9,6 @@
  * existing templates.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
 import type { Plan, PlanDocument, PlanItem, PlanPhase, Task } from '../../shared/types';
 import { createPlan } from './plan-service';
 import { createPhase } from './plan-phases-service';
@@ -18,6 +16,7 @@ import { createPlanDocument } from './plan-documents-service';
 import { updateTask } from './plan-service';
 import { getTasksByPlan } from './plan-service';
 import * as planItemService from './plan-item-service';
+import { migratePlan } from './plan-migrate-service';
 import { getTemplate, substitutePlaceholders } from './plan-templates';
 
 export interface ApplyTemplateInput {
@@ -77,7 +76,15 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
   const author = input.author ?? 'human';
   const authorType = input.authorType ?? 'human';
 
-  const title = (input.title ?? template.defaultTitle).replace('{name}', input.title ?? '');
+  // `defaultTitle` has already been through substitutePlaceholders, so its
+  // `{{key}}` placeholders are filled. `{name}` is the older single-brace form
+  // and is not, so it is replaced here — and when there is no title to put in
+  // it, the leftover punctuation goes too, or the plan is called
+  // "Mass refactor: " with nothing after the colon.
+  const title = (input.title ?? template.defaultTitle)
+    .replace('{name}', input.title ?? '')
+    .replace(/[:\-–—]\s*$/, '')
+    .trim();
   const description = input.description ?? template.defaultPlanDescription;
 
   // Detect V2 template format: has `items` array
@@ -117,7 +124,7 @@ function applyV2Template(
       const kind = t.kind === 'object' ? 'object' : 'action';
 
       // Resolve bodyPath if body is in a separate file
-      let body = t.body ?? '';
+      const body = t.body ?? '';
       if (t.bodyPath && input.projectPath) {
         // bodyPath is relative to the template directory. Since we
         // don't have the template dir here, we rely on the body having
@@ -256,12 +263,30 @@ function applyV1Template(
     if (d.key) docByKey.set(d.key, created);
   }
 
+  // 5. Project the legacy rows into `plan_items`.
+  //
+  // Measured, not assumed: before this call, `mass-refactor` produced
+  // 0 items, 11 docs and 6 phases. The V2 workspace renders `plan_items`
+  // and nothing else — no component reads `planDocs` at all — so every
+  // one of those 17 pieces of content was invisible and the plan showed
+  // the "this plan is empty" state. Phase 29 §4.10 gave built-in
+  // templates a desktop surface, which is what turned that from a
+  // latent mismatch into something a user would hit on their first
+  // click.
+  //
+  // This reuses Phase 15's migrator rather than mapping phases and docs
+  // to items a second time here. Two implementations of "what a V1 plan
+  // looks like as items" would be exactly the drift this phase keeps
+  // finding, and that one is idempotent, preserves uids, and is already
+  // covered by `scripts/smoke-plan-migrate.ts`.
+  migratePlan(plan.uid, { dryRun: false, author, authorType });
+
   return {
     plan,
     phases,
     docs,
     tasks: getTasksByPlan(plan.uid),
-    items: [],
+    items: planItemService.listAllItems(plan.uid),
     version: 1,
   };
 }

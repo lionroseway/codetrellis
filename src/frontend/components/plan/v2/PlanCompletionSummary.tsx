@@ -27,7 +27,7 @@ import {
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
-import type { Plan, PlanItem } from '@shared/types';
+import type { PlanItem } from '@shared/types';
 
 function formatDuration(ms: number): string {
   const hours = Math.floor(ms / (1000 * 60 * 60));

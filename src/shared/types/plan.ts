@@ -750,6 +750,16 @@ export interface ExternalRef {
   title: string;
   /** Extra metadata (issue number, state, labels, etc.). JSON-safe. */
   metadata?: Record<string, unknown> | null;
+  /**
+   * Phase 24 — the ticket key (`PROJ-412`), where one could be parsed
+   * from the URL.
+   *
+   * Declared here so the compiler checks it. It was written to its own
+   * column and read back by nobody: the SELECTs did not list it, so
+   * `pr-draft-service` reached it through an `as { externalKey?: … }`
+   * cast that silenced the error and always produced `undefined`.
+   */
+  externalKey?: string | null;
   author: string;
   authorType: string;
   createdAt: number;

@@ -249,7 +249,6 @@ function createDeviation(
   // Lazy-require getPlan to resolve project root; the bridge
   // handles config checks and debouncing.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getPlan: getPlanLazy } = _lazy___plan_service;
     const plan = getPlanLazy(planUid);
     if (plan?.projectPath) {
@@ -307,7 +306,7 @@ export function resolveDeviation(deviationId: number, resolution: 'accepted' | '
 
     // Find or create a "Reconciled changes" action to house the accepted file
     const items = listAllItems(planUid).filter((i: PlanItem) => i.kind === 'action');
-    let reconciledItem = items.find((i) => i.title === RECONCILED_ITEM_TITLE);
+    const reconciledItem = items.find((i) => i.title === RECONCILED_ITEM_TITLE);
 
     if (reconciledItem) {
       // Append to its fileSpecs if not already present

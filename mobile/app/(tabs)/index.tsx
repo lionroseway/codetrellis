@@ -13,7 +13,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  RefreshControl,
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';

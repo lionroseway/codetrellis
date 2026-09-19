@@ -20,7 +20,7 @@ import type { PairingQrPayload, PairedDevice } from '../../shared/types';
 import {
   startPairingServer,
   stopPairingServer,
-  isPairingServerActive,
+  
   deriveConfirmationCode,
   type PairingAnswer,
   type PairingServerResult,

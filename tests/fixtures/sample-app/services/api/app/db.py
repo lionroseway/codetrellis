@@ -52,3 +52,31 @@ def add_order(user_id: int, amount: float) -> Order:
 
 def list_orders() -> list[Order]:
     return list(_orders.values())
+
+
+# --- Raw SQL, used by the Phase 21 ref-tracker fixture --------------------
+#
+# These are never executed (the fixture store is in-memory); they exist so
+# the SQL ref-tracker has realistic embedded queries to find, against the
+# tables declared in ../../schema.sql.
+
+LIST_ORDERS_SQL = """
+    SELECT o.id, o.amount, o.status
+    FROM orders o
+    JOIN users u ON u.id = o.user_id
+    WHERE u.id = %s
+"""
+
+INSERT_USER_SQL = "INSERT INTO users (email, name) VALUES (%s, %s)"
+
+
+def list_orders_for_user(cursor, user_id: int):
+    cursor.execute(LIST_ORDERS_SQL, (user_id,))
+    return cursor.fetchall()
+
+
+def create_user_row(cursor, email: str, name: str):
+    # "delete from the list" below is prose, not SQL — the extractor must
+    # not treat it as a reference.
+    cursor.execute(INSERT_USER_SQL, (email, name))  # delete from the list
+    return cursor.lastrowid
