@@ -12,6 +12,7 @@ const storageState = {
     {
       origin: 'http://localhost:5173',
       localStorage: [
+        { name: 'codetrellis:guide:seen', value: '1' },
         { name: 'codetrellis:learn-trellis:seen', value: '1' },
         { name: `codetrellis:gettingStarted:dismissed:${PROJECT_PATH}`, value: '1' },
       ],

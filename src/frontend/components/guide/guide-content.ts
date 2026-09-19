@@ -61,7 +61,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     points: [
       'It does not host the agent. Claude Code, Codex, Cursor and Claude Desktop all connect to it; it is the surface they work against.',
       'Plans live in your repository under .codetrellis/, so they travel with the code and review like code.',
-      'Nothing here needs a plan. Open a project and read the graph if that is all you want.',
+      'Nothing here needs a plan. Click + in the top bar to open any project on disk, leave it open, and code as normal — yours, an agent\'s, anyone\'s edits update the graph live. That is the lightest way to use it.',
     ],
     asks: [
       {
@@ -216,6 +216,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'Plans are written to .codetrellis/ in your repo, so they commit, branch and review like code.',
       'Anchoring an Action to real files is what makes review possible later. An Action with no targets can only be marked done on trust.',
       'Templates scaffold the common shapes — feature, bug fix, migration, performance pass.',
+      'Plans are not set in stone. Edit from the plan panel mid-flight, or ask the agent to revise it based on what you have both learned.',
+      'Export writes the plan to <project>/.codetrellis/plans/<slug>/ as YAML and markdown. Commit it, pull on another machine, and CodeTrellis reads it back.',
     ],
     asks: [
       {
@@ -224,6 +226,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
       {
         prompt: 'Suggest file and symbol anchors for the actions in this plan that do not have any.',
+      },
+      {
+        prompt: 'Scope crept — revise this plan to match what we have actually decided, and tell me what you changed.',
+        note: 'Plans are meant to be edited. A plan nobody updates stops describing the work.',
       },
     ],
     tools: ['create_plan', 'add_item', 'bulk_add_items', 'suggest_specs', 'list_plan_templates', 'create_plan_from_template'],
@@ -240,6 +246,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'Claiming is atomic, so two agents on the same plan do not collide.',
       'Blocked items say why, which beats an agent stalling silently.',
       'Handoff serialises a plan or item into a prompt you can paste into a fresh agent when context runs out.',
+      'Name the area in your prompt — "work the next task on the auth rework" — rather than leaving the agent to choose. It picks better work when you tell it where to look.',
+      'When an agent\'s context fills, or you switch machines, clear the chat and tell it to re-read the plan. The plan is the memory, so it picks up where the last one stopped.',
     ],
     asks: [
       {
@@ -248,6 +256,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         prompt: 'Give me a handoff prompt for this plan so I can continue in a new session.',
         note: 'For when an agent runs out of context mid-plan.',
+      },
+      {
+        prompt: 'Re-read the plan and tell me where we got to, then carry on from there.',
+        note: 'What to say after clearing a full context, or on a different machine.',
       },
     ],
     tools: ['get_next_item', 'claim_item', 'update_item_progress', 'set_item_blocked', 'approve_gate', 'copy_plan_as_prompt'],

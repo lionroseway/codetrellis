@@ -16,7 +16,22 @@ import { GUIDE_SECTIONS, GUIDE_GROUPS, type GuideSection } from './guide-content
  * That is deliberate. Describing a feature leaves the reader to work out
  * how to reach it; handing them the sentence turns reading into doing, and
  * it is how they find out the thing on the page is real.
+ *
+ * It also absorbed `LearnTrellis`, a nine-step first-run carousel. The
+ * content was good and the shape was not: a carousel is read once and then
+ * unreachable, and its copy had already gone stale ("the MCP server exposes
+ * 30+ tools" — it is 174). What it said that the guide did not now lives in
+ * the relevant topics.
  */
+
+/**
+ * Set once the guide has been shown unprompted, so it does not ambush
+ * someone on every launch. Named for the guide rather than the carousel it
+ * replaced; a profile that had seen the old one gets this once, which is
+ * right — it is not the same content.
+ */
+export const GUIDE_SEEN_KEY = 'codetrellis:guide:seen';
+
 export function GuideModal() {
   const [open, setOpen] = useState(false);
   const [activeId, setActiveId] = useState(GUIDE_SECTIONS[0].id);

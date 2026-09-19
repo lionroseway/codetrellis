@@ -18,7 +18,7 @@ import { SystemDocsPanel } from './components/system-docs/SystemDocsPanel';
 import { FolderPickerModal } from './components/FolderPickerModal';
 import { GuideModal } from './components/guide/GuideModal';
 import { GettingStarted } from './components/GettingStarted';
-import { LearnTrellis, LEARN_TRELLIS_SEEN_KEY } from './components/LearnTrellis';
+import { GUIDE_SEEN_KEY } from './components/guide/GuideModal';
 import { FirstRunWizard } from './components/FirstRunWizard';
 import { ToastContainer } from './components/Toast';
 import { PresencePane } from './components/presence/PresencePane';
@@ -115,18 +115,21 @@ export function App() {
   // the splash render doesn't flash the takeover before the layout
   // settles.
   useEffect(() => {
-    const seen = localStorage.getItem(LEARN_TRELLIS_SEEN_KEY) === '1';
+    const seen = localStorage.getItem(GUIDE_SEEN_KEY) === '1';
     if (seen) return;
     const tabs = useProjectStore.getState().tabs;
     if (tabs.length > 0) {
       // User already had a project open from a previous session —
       // don't ambush them with onboarding. Mark seen so it doesn't
       // surface unprompted later either.
-      localStorage.setItem(LEARN_TRELLIS_SEEN_KEY, '1');
+      localStorage.setItem(GUIDE_SEEN_KEY, '1');
       return;
     }
+    // First run opens the guide rather than a nine-step carousel. Same
+    // content, in a shape someone can come back to and search.
     const t = setTimeout(() => {
-      useUiStore.getState().setLearnTrellisOpen(true);
+      window.dispatchEvent(new CustomEvent('open-mcp-guide'));
+      localStorage.setItem(GUIDE_SEEN_KEY, '1');
     }, 250);
     return () => clearTimeout(t);
   }, []);
@@ -292,7 +295,6 @@ export function App() {
       <FolderPickerModal />
       <GuideModal />
       <GettingStarted />
-      <LearnTrellis />
       <PresencePane />
       <ToastContainer />
     </div>

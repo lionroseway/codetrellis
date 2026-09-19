@@ -59,15 +59,6 @@ interface UiState {
    */
   driftComparePlanUid: string | null;
 
-  /**
-   * Whether the Learn Trellis onboarding takeover is currently open.
-   * Auto-opens once on first launch (when the user has no projects
-   * and the localStorage seen-flag isn't set); also openable from
-   * the TopBar's "Learn" button. See `LearnTrellis.tsx`.
-   */
-  learnTrellisOpen: boolean;
-  setLearnTrellisOpen: (open: boolean) => void;
-
   /** Phase 16.E — when true, workspace + graph render side-by-side (horizontal split). */
   splitView: boolean;
   toggleSplitView: () => void;
@@ -112,8 +103,6 @@ export const useUiStore = create<UiState>((set) => ({
   planPanelExpanded: false,
   inspectorExpanded: false,
   driftComparePlanUid: null,
-  learnTrellisOpen: false,
-  setLearnTrellisOpen: (open) => set({ learnTrellisOpen: open }),
   splitView: false,
   toggleSplitView: () => set((s) => ({ splitView: !s.splitView })),
   audioBarVisible: false,

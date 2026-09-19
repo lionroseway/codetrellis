@@ -37,6 +37,10 @@ export async function gotoWithProject(
 
   if (skipOnboarding) {
     await page.addInitScript((pp: string) => {
+      // The guide auto-opens once on first run and covers the app, so a
+      // test that does not skip it cannot click anything. The old
+      // learn-trellis key is kept for profiles that predate the guide.
+      localStorage.setItem('codetrellis:guide:seen', '1');
       localStorage.setItem('codetrellis:learn-trellis:seen', '1');
       localStorage.setItem(`codetrellis:gettingStarted:dismissed:${pp}`, '1');
     }, projectPath);

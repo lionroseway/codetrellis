@@ -9,11 +9,29 @@ import type { ToolDeps } from '../types';
 const agentPresetEnum = z.enum(['shell', 'claude', 'codex', 'aider']);
 
 export function register(server: McpServer, deps: ToolDeps): void {
+/**
+ * Answer with the key the other tools ask for.
+ *
+ * `createTerminal` returns a session whose identifier is `id`, and every
+ * other terminal tool takes `session_id`. An agent reads the create
+ * response, passes back what it found, and gets "expected string, received
+ * undefined" — which is a self-inflicted trip in an API that otherwise
+ * reads fine.
+ *
+ * `session_id` is added rather than `id` renamed: anything already reading
+ * `id` keeps working, and the field the next tool wants is now the obvious
+ * one in the response.
+ */
+function withSessionId<T extends { id: string }>(session: T): T & { session_id: string } {
+  return { session_id: session.id, ...session };
+}
+
   server.registerTool(
     'terminal_create',
     {
       description:
-        'Create a new terminal session in CodeTrellis. Returns the session ID for use with terminal_write / terminal_read. ' +
+        'Create a new terminal session in CodeTrellis. Returns `session_id`, which is what terminal_write / '
+        + 'terminal_read / terminal_kill take. ' +
         'Preset "shell" opens a plain shell; "claude", "codex", "aider" open a shell and launch that agent after 500ms. ' +
         'Multiple terminals can run concurrently (up to 20). By default the new terminal is focused in the UI — ' +
         'set focus: false for background terminals that shouldn\'t steal the user\'s view.',
@@ -32,7 +50,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
           title,
         });
         deps.broadcast('terminal-created', { session, focus: focus !== false });
-        return { content: [{ type: 'text' as const, text: JSON.stringify(session, null, 2) }] };
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(withSessionId(session), null, 2) }],
+        };
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
@@ -133,7 +153,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (alive_only !== false) {
         sessions = sessions.filter((s) => s.alive);
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify(sessions, null, 2) }] };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(sessions.map(withSessionId), null, 2),
+        }],
+      };
     },
   );
 

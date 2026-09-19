@@ -447,7 +447,7 @@ export function TopBar() {
       />
 
       <button
-        onClick={() => useUiStore.getState().setLearnTrellisOpen(true)}
+        onClick={() => window.dispatchEvent(new CustomEvent('open-mcp-guide'))}
         className="flex items-center justify-center w-8 h-8 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
         title="Learn CodeTrellis"
         aria-label="Open onboarding tour"
