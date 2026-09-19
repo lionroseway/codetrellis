@@ -54,6 +54,7 @@ done
 
 log() { printf '\033[1;36m[release]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[release]\033[0m %s\n' "$*" >&2; }
+warn() { printf '\033[1;33m[release]\033[0m %s\n' "$*" >&2; }
 
 # --- Load signing/notarization creds (gitignored — never committed) ---
 if [[ -f "${REPO_ROOT}/scripts/release-env.sh" ]]; then
@@ -151,7 +152,8 @@ for f in \
   "${OUT_DIR}/CodeTrellis-Portable-${VERSION}.exe" \
   "${OUT_DIR}"/CodeTrellis-${VERSION}*.AppImage \
   "${OUT_DIR}"/codetrellis_${VERSION}_*.deb \
-  "${OUT_DIR}"/codetrellis-${VERSION}.*.rpm ; do
+  "${OUT_DIR}"/codetrellis-${VERSION}.*.rpm \
+  "${OUT_DIR}"/CodeTrellis-Companion-${VERSION}.apk ; do
   [[ -f "$f" ]] && upload_files+=("$f")
 done
 shopt -u nullglob
@@ -159,6 +161,29 @@ shopt -u nullglob
 if [[ ${#upload_files[@]} -eq 0 ]]; then
   err "No artefacts found in $OUT_DIR for ${VERSION}. Did the builds fail?"
   exit 1
+fi
+
+# --- The Android APK is a release asset, and it went missing once ---
+#
+# v0.1.12 and v0.1.13 shipped `CodeTrellis-Companion-<version>.apk` on the
+# releases repo — it is how the companion is distributed while there is no
+# Play listing. v0.1.14 was the first release cut by THIS script, which
+# knew nothing about it, so the APK silently stopped shipping and nothing
+# said a word.
+#
+# This script cannot build it: an APK needs the Android SDK and a Gradle
+# run, and mobile is not integrated here (see CLAUDE.md). What it CAN do is
+# refuse to be quiet about its absence, which is the part that failed.
+#
+# Not fatal on purpose — a desktop-only hotfix is legitimate, and
+# --mac-only exists. But it must be impossible to publish without the
+# omission being stated.
+if [[ ! -f "${OUT_DIR}/CodeTrellis-Companion-${VERSION}.apk" ]]; then
+  warn "No Android APK for ${VERSION} — this release will ship WITHOUT the companion."
+  warn "  v0.1.12 and v0.1.13 shipped one; v0.1.14 dropped it silently."
+  warn "  To include it, build first and re-run:"
+  warn "    cd mobile && npx eas-cli build --local --profile production-apk --platform android \\"
+  warn "      --output ${OUT_DIR}/CodeTrellis-Companion-${VERSION}.apk"
 fi
 
 # --- Sign the manifest (Phase 19, finding 23) ---
