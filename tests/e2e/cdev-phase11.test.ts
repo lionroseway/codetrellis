@@ -199,6 +199,10 @@ test.describe('CDev Phase 11 — Mobile companion', () => {
   test('posting a channel event through MCP succeeds with push service active', async () => {
     const h = await setupHarness('cdev-phase11-channel');
     try {
+      // Phase 30 / M34: a tool naming a `project_path` must name a project
+      // this app has OPENED. Scanning is how a directory becomes one — which
+      // is also what a user does before asking an agent to plan against it.
+      await h.client.scanProject(h.fixture.projectPath);
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
 
       // Create a plan first (needs project_path for the harness fixture)

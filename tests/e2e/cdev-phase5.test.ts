@@ -70,6 +70,9 @@ test.describe('CDev Phase 5 — personal continuity', () => {
     const h = await setupHarness('cdev-phase5-mcp-settings');
     try {
       await h.client.scanProject(h.fixture.projectPath);
+      // Phase 30: changing desktop settings is `settings` and is off by
+      // default — an agent must not be able to widen its own reach.
+      await h.client.grantMcpCapabilities(['read', 'write', 'project', 'files', 'settings']);
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
 
       // Set firstRunComplete via MCP (F2 regression).
