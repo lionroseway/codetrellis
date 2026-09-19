@@ -4,12 +4,16 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   extractSchemaStatements,
   extractSqlSymbols,
   foldMigrations,
   looksLikeMigrationsDir,
   sortMigrations,
+  applyMigrationFold,
 } from './schema';
 
 describe('DDL statements', () => {
@@ -189,5 +193,50 @@ describe('same table name in two schemas (M19)', () => {
     assert.equal(live.size, 2, 'both tables survive the fold');
     assert.ok(live.has('billing.orders'));
     assert.ok(live.has('analytics.orders'));
+  });
+});
+
+describe('an incremental batch must not resurrect a dropped table (M18)', () => {
+  test('the fold needs the whole directory, not the changed file', () => {
+    // An incremental scan passes only what changed. Editing the migration that
+    // CREATED a table, on its own, used to skip the fold — and storeParsedFile
+    // deletes and reinserts that file's rows, so the table a later migration
+    // had dropped came back and stayed until a full rescan.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-mig-'));
+    try {
+      fs.writeFileSync(path.join(dir, '001_create_legacy_notes.sql'), 'CREATE TABLE legacy_notes (id INT);');
+      fs.writeFileSync(path.join(dir, '031_drop_legacy_notes.sql'), 'DROP TABLE legacy_notes;');
+      const read = (f: string): string | null => {
+        try { return fs.readFileSync(f, 'utf-8'); } catch { return null; }
+      };
+      const changedFile = () => ([{
+        path: path.join(dir, '001_create_legacy_notes.sql'),
+        symbols: [{ name: 'legacy_notes', kind: 'table', startLine: 1, endLine: 1, modifiers: [], children: [] }],
+      }] as never as Array<{ path: string; symbols: Array<{ name: string }> }>);
+
+      // What an incremental scan used to pass: the changed file alone.
+      const alone = changedFile();
+      applyMigrationFold(alone as never, read);
+      assert.deepEqual(
+        alone[0].symbols.map((s2) => s2.name),
+        ['legacy_notes'],
+        'batch-only: the dropped table survives — this is the defect',
+      );
+
+      // What it passes now: the changed file plus its on-disk siblings, whose
+      // symbols are empty because the fold derives the live set from the TEXT.
+      const withSiblings = changedFile();
+      applyMigrationFold(
+        [...withSiblings, { path: path.join(dir, '031_drop_legacy_notes.sql'), symbols: [] }] as never,
+        read,
+      );
+      assert.deepEqual(
+        withSiblings[0].symbols.map((s2) => s2.name),
+        [],
+        'whole directory: the dropped table stays dropped',
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

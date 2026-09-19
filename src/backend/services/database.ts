@@ -459,6 +459,49 @@ export function searchSymbols(query: string): Array<{
 /**
  * Get all symbols for a file.
  */
+/**
+ * A file's symbols INCLUDING class members, each qualified by its parent.
+ *
+ * `getFileSymbols` filters `parent_symbol_id IS NULL`, which is right for a
+ * file tree — you want the top level, not every method. It is wrong for
+ * anchoring an edit to a symbol: the TypeScript, Python and PHP parsers store
+ * class members as nested children, so a plan declaring
+ * `edits: [{ symbol: 'save' }]` against `class Store { save() {} }` was told
+ * there is no such symbol. The languages whose parsers flatten members
+ * (Go, Ruby, C#, Kotlin, Swift) worked, which is why this looked like a
+ * missing feature rather than a bug in four languages.
+ *
+ * Members come back as `Parent.member` so the existing qualified-suffix match
+ * in `resolveSymbolSpan` has something to match on — the same shape the
+ * flattening parsers already emit.
+ */
+export function getFileSymbolsWithMembers(filePath: string): Array<{
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+  modifiers: string[];
+}> {
+  const d = getDb();
+  const results = d.exec(
+    `SELECT CASE WHEN p.name IS NOT NULL THEN p.name || '.' || s.name ELSE s.name END,
+            s.kind, s.start_line, s.end_line, s.modifiers
+     FROM symbols s
+     JOIN files f ON s.file_id = f.id
+     LEFT JOIN symbols p ON s.parent_symbol_id = p.id
+     WHERE f.path = ?
+     ORDER BY s.start_line`,
+    [filePath],
+  );
+  return (results[0]?.values ?? []).map((r: unknown[]) => ({
+    name: r[0] as string,
+    kind: r[1] as string,
+    startLine: r[2] as number,
+    endLine: r[3] as number,
+    modifiers: r[4] ? JSON.parse(r[4] as string) : [],
+  }));
+}
+
 export function getFileSymbols(filePath: string): Array<{
   name: string;
   kind: string;

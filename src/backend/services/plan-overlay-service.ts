@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { listAllItems } from './plan-item-service';
-import { getFileSymbols } from './database';
+import { getFileSymbolsWithMembers } from './database';
 import type { PlanItem, FileSpec, FileEdit } from '../../shared/types';
 
 /**
@@ -164,7 +164,9 @@ export function buildFileOverlay(params: {
   lookupSymbols?: SymbolLookup;
 }): FileOverlay {
   const lookupItems = params.lookupItems ?? listAllItems;
-  const lookupSymbols = params.lookupSymbols ?? getFileSymbols;
+  // Members included: an edit anchored to a method is the common case, and the
+  // top-level-only lookup made that impossible in TS, Python and PHP.
+  const lookupSymbols = params.lookupSymbols ?? getFileSymbolsWithMembers;
   const markers: OverlayMarker[] = [];
   const fileLevel: OverlayMarker[] = [];
   const unanchored: OverlayMarker[] = [];

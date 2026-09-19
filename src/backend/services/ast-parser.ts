@@ -457,9 +457,42 @@ export async function parseFiles(filePaths: string[]): Promise<ParsedFile[]> {
   // nothing parsing `002_create_legacy.sql` alone can know that
   // `031_drop_legacy.sql` removes that table again.
   const sqlFiles = results.filter((r) => r.language === 'sql');
-  if (sqlFiles.length > 1) {
+  if (sqlFiles.length > 0) {
     try {
-      applyMigrationFold(sqlFiles, (p) => {
+      // The fold needs the WHOLE migrations directory, not the files that
+      // happen to be in this batch.
+      //
+      // An incremental scan passes only what changed, so editing
+      // `003_create_legacy_notes.sql` on its own used to skip the fold
+      // entirely (the old guard was `length > 1`) — and `storeParsedFile`
+      // deletes and reinserts that file's rows, so the `legacy_notes` symbol
+      // that `031_drop_legacy_notes.sql` had folded away came back. A dropped
+      // table reappeared in the graph on the next edit to the migration that
+      // created it, and stayed until a full rescan.
+      //
+      // Siblings are read from disk with EMPTY symbol arrays: the fold derives
+      // the live set from the SQL text, and only needs real symbols for the
+      // files whose rows are being written. Their arrays are mutated and
+      // discarded, which is why this does not need them parsed.
+      const batchPaths = new Set(sqlFiles.map((f) => f.path));
+      const dirs = new Set(sqlFiles.map((f) => f.path.replace(/[\\/][^\\/]*$/, '')));
+      const siblings: Array<{ path: string; symbols: ParsedSymbol[]; language: string }> = [];
+      for (const dir of dirs) {
+        let entries: string[] = [];
+        try {
+          entries = fs.readdirSync(dir);
+        } catch {
+          continue; // the directory went away between parse and fold
+        }
+        for (const name of entries) {
+          if (!name.toLowerCase().endsWith('.sql')) continue;
+          const full = path.join(dir, name);
+          if (batchPaths.has(full)) continue;
+          siblings.push({ path: full, symbols: [], language: 'sql' });
+        }
+      }
+
+      applyMigrationFold([...sqlFiles, ...siblings], (p) => {
         try {
           return fs.readFileSync(p, 'utf-8');
         } catch {

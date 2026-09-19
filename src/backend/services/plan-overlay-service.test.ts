@@ -240,3 +240,65 @@ describe('restraint', () => {
     assert.equal(result.itemCount, 1);
   });
 });
+
+describe('an edit anchored to a class member (M13)', () => {
+  test('a method resolves through its qualified name', () => {
+    // TypeScript, Python and PHP store class members as NESTED symbols, and
+    // the overlay's default lookup filtered `parent_symbol_id IS NULL` — so a
+    // plan declaring `{ symbol: 'save' }` against `class Store { save() {} }`
+    // was told there is no such symbol. The languages whose parsers flatten
+    // members worked, which is why this read as a missing feature rather than
+    // a bug in four languages.
+    //
+    // The member arrives qualified, which is what the suffix match needs.
+    const overlay = buildFileOverlay({
+      absolutePath: '/repo/src/store.ts',
+      relativePath: 'src/store.ts',
+      lineCount: 40,
+      planUid: 'plan-1',
+      plans: ['plan-1'],
+      lookupItems: () => ([{
+        uid: 'item-1',
+        planUid: 'plan-1',
+        title: 'Persist on save',
+        kind: 'action',
+        status: 'pending',
+        fileSpecs: [{ path: 'src/store.ts', intent: 'modify', edits: [{ symbol: 'save', instruction: 'flush first' }] }],
+      }] as never),
+      lookupSymbols: () => ([
+        { name: 'Store', kind: 'class', startLine: 3, endLine: 30, modifiers: [] },
+        { name: 'Store.save', kind: 'method', startLine: 12, endLine: 18, modifiers: [] },
+      ]),
+    });
+
+    const anchored = overlay.markers.find((m) => m.startLine === 12);
+    assert.ok(anchored, 'the edit anchors to the method, not to the file: '
+      + JSON.stringify(overlay.markers.map((m) => [m.anchor, m.startLine])));
+    assert.equal(anchored!.endLine, 18);
+  });
+
+  test('a name that is only a suffix of another symbol does not match', () => {
+    const overlay = buildFileOverlay({
+      absolutePath: '/repo/src/store.ts',
+      relativePath: 'src/store.ts',
+      lineCount: 40,
+      planUid: 'plan-1',
+      plans: ['plan-1'],
+      lookupItems: () => ([{
+        uid: 'item-1',
+        planUid: 'plan-1',
+        title: 'Persist on save',
+        kind: 'action',
+        status: 'pending',
+        fileSpecs: [{ path: 'src/store.ts', intent: 'modify', edits: [{ symbol: 'save', instruction: 'x' }] }],
+      }] as never),
+      lookupSymbols: () => ([
+        { name: 'Store.saveAll', kind: 'method', startLine: 12, endLine: 18, modifiers: [] },
+      ]),
+    });
+    assert.ok(
+      !overlay.markers.some((m) => m.startLine === 12),
+      'saveAll is not save — a wider lookup must not become a looser match',
+    );
+  });
+});
