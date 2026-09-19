@@ -96,7 +96,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe('frontend render tree', () => {
-  test('every .tsx file has at least one export something else references', () => {
+  test('every .tsx file is reachable from an entry point', () => {
     const files = walk(FRONTEND);
     // Sanity: if the walk finds almost nothing, the test is passing
     // because it looked at an empty list.
@@ -120,33 +120,66 @@ describe('frontend render tree', () => {
       if (!isTest(f)) sources.set(f, stripComments(fs.readFileSync(f, 'utf-8')));
     }
 
-    const orphans: string[] = [];
+    // REACHABILITY, not mention.
+    //
+    // Asking "does any other file mention this name" is satisfied by two dead
+    // files importing each other: each vouches for the other and neither is on
+    // anyone's screen. That is not hypothetical — it is the shape a deleted
+    // feature leaves behind, because its components were written to reference
+    // each other.
+    //
+    // So walk out from the entry points instead and take the transitive
+    // closure. A file nothing in that closure imports is unreachable however
+    // many friends it has.
+    const reachable = new Set<string>();
+    const queue: string[] = [];
+    for (const f of sources.keys()) {
+      if (ENTRY_POINTS.has(path.basename(f))) { reachable.add(f); queue.push(f); }
+    }
+    assert.ok(queue.length > 0, 'no entry point was found — the walk would report everything as an orphan');
 
+    /** Resolve a relative import specifier to a file we walked. */
+    const resolveSpecifier = (fromFile: string, spec: string): string | null => {
+      if (!spec.startsWith('.')) return null; // a package, not our tree
+      const base = path.resolve(path.dirname(fromFile), spec);
+      for (const candidate of [
+        base,
+        `${base}.tsx`, `${base}.ts`,
+        path.join(base, 'index.tsx'), path.join(base, 'index.ts'),
+      ]) {
+        if (sources.has(candidate)) return candidate;
+      }
+      return null;
+    };
+
+    while (queue.length > 0) {
+      const current = queue.pop()!;
+      const src = sources.get(current) ?? '';
+      // `import … from 'x'`, `export … from 'x'`, and `import('x')`.
+      const specs = [...src.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((m2) => m2[1]);
+      for (const spec of specs) {
+        const target = resolveSpecifier(current, spec);
+        if (target && !reachable.has(target)) {
+          reachable.add(target);
+          queue.push(target);
+        }
+      }
+    }
+
+    const orphans: string[] = [];
     for (const file of files) {
       const rel = path.relative(FRONTEND, file).split(path.sep).join('/');
       if (ENTRY_POINTS.has(path.basename(file))) continue;
       if (isTest(file)) continue;
-
-      const names = exportedNames(fs.readFileSync(file, 'utf-8'));
-      if (names.length === 0) continue;
-
-      const referenced = names.some((name) => {
-        const pattern = new RegExp(`\\b${name}\\b`);
-        for (const [other, src] of sources) {
-          if (other === file) continue;
-          if (pattern.test(src)) return true;
-        }
-        return false;
-      });
-
-      if (!referenced) orphans.push(rel);
+      if (exportedNames(fs.readFileSync(file, 'utf-8')).length === 0) continue;
+      if (!reachable.has(file)) orphans.push(rel);
     }
 
     const unexpected = orphans.filter((o) => !(o in KNOWN_ORPHANS));
     assert.deepEqual(
       unexpected,
       [],
-      'These components are not referenced by anything, so nothing renders them. '
+      'These components are not reachable from App.tsx or main.tsx, so nothing renders them. '
       + 'Wire them up, delete them, or add a row to KNOWN_ORPHANS saying why they stay: '
       + unexpected.join(', '),
     );

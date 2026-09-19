@@ -85,3 +85,33 @@ test.describe('Verified update download (Phase 29)', () => {
     }
   });
 });
+
+test.describe('A caller cannot name the URL (Phase 19, finding 23)', () => {
+  test.setTimeout(120_000);
+
+  test('the request body is ignored, and nothing is echoed back', async () => {
+    // Restored: this existed on main and was dropped in the rewrite. The
+    // property is the whole point of the endpoint — if a caller-supplied URL
+    // were honoured, anything that could reach the API could make the desktop
+    // fetch an arbitrary host to an arbitrary path.
+    //
+    // Asserted HERE rather than against the service, because at the service
+    // level the rejected host legitimately appears in the refusal message.
+    // What must not happen is the REST surface accepting or reflecting it.
+    const h = await setupHarness('update-download-no-caller-url');
+    try {
+      const res = await h.client.raw('POST', '/api/updates/download', {
+        url: 'https://evil.example/payload.dmg',
+        filename: '../../../etc/cron.d/evil',
+        sha256: 'a'.repeat(64),
+      });
+
+      expect(res.status, 'the body is ignored; state says no update').toBe(409);
+      const body = await res.text();
+      expect(body, 'and nothing echoes the attacker-supplied values back').not.toContain('evil.example');
+      expect(body).not.toContain('cron.d');
+    } finally {
+      await h.teardown();
+    }
+  });
+});

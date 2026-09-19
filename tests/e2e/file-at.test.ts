@@ -162,8 +162,16 @@ test.describe('File at a point in time (Phase 26)', () => {
           `&path=${encodeURIComponent('/etc/passwd')}&at=live`,
       );
       expect(res.status).toBe(403);
-      // and above all: it must not have served the file
-      expect(JSON.stringify(res.body ?? {})).not.toMatch(/root:/);
+
+      // And above all: it must not have served the file.
+      //
+      // This assertion was vacuous when first written — `res.body` on a fetch
+      // Response is a ReadableStream, and `JSON.stringify` of one is "{}",
+      // which matches nothing. It would have passed while the endpoint happily
+      // returned /etc/passwd. Read the body.
+      const body = await res.text();
+      expect(body).not.toContain('root:');
+      expect(body).not.toContain('/bin/');
     } finally {
       await h.teardown();
     }
