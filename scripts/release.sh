@@ -269,4 +269,19 @@ if [[ "$MAC_ONLY" -eq 0 ]]; then
   gh release delete "$STAGING_TAG" --repo "$SOURCE_REPO_SLUG" --cleanup-tag --yes >/dev/null 2>&1 || true
 fi
 
+# --- The notes above are a floor, not release notes ---
+#
+# What this script publishes is a download page: the file list and the
+# first-launch tips, with no "what's new" in it at all. v0.1.14 shipped the
+# whole of Phase 19's security hardening — four gates, a re-pairing protocol
+# change and a dependency sweep — under the words "installer downloads", and
+# nobody reading the release could tell any of it had happened.
+#
+# Writing them is a separate step, on purpose: it needs the commit range read
+# and turned into outcomes, which is judgement rather than templating. Say so
+# here rather than letting a published release look finished.
+warn "The notes on ${TAG} are the generated download page, NOT release notes."
+warn "  Write the real ones — see .claude/skills/codetrellis-release-notes —"
+warn "  then: gh release edit ${TAG} --repo ${RELEASES_REPO_SLUG} --notes-file <file>"
+
 log "Done."
