@@ -16,7 +16,7 @@ import { MinimizedPlanChip } from './components/plan/MinimizedPlanChip';
 import { PlanWorkspaceShellV2 } from './components/plan/v2/PlanWorkspaceShellV2';
 import { SystemDocsPanel } from './components/system-docs/SystemDocsPanel';
 import { FolderPickerModal } from './components/FolderPickerModal';
-import { McpGuideModal } from './components/McpGuideModal';
+import { GuideModal } from './components/guide/GuideModal';
 import { GettingStarted } from './components/GettingStarted';
 import { LearnTrellis, LEARN_TRELLIS_SEEN_KEY } from './components/LearnTrellis';
 import { FirstRunWizard } from './components/FirstRunWizard';
@@ -290,7 +290,7 @@ export function App() {
       <AudioCaptureBar />
       <StatusBar />
       <FolderPickerModal />
-      <McpGuideModal />
+      <GuideModal />
       <GettingStarted />
       <LearnTrellis />
       <PresencePane />
