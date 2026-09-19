@@ -112,10 +112,19 @@ export function prepareFixture(testName: string): PreparedFixture {
  * template won't have one (it's stored in the parent repo), but if
  * someone ever does a `git init` inside the template by mistake we
  * don't want to copy the result.
+ *
+ * `.codetrellis` is skipped for the same reason and a sharper one: it is
+ * gitignored, so anything the app writes into the template while someone
+ * is using it — a system doc, an exported plan — is invisible to
+ * `git status` and rides into every fixture from then on. Three stray
+ * docs left by a demo run made `cdev-system-docs` fail three times over
+ * on "exactly one system doc", looking precisely like a regression in
+ * the code under test. A fixture must start from what is committed.
  */
 function copyDir(src: string, dst: string): void {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     if (entry.name === '.git' || entry.name === 'node_modules') continue;
+    if (entry.name === '.codetrellis') continue;
     const srcPath = path.join(src, entry.name);
     const dstPath = path.join(dst, entry.name);
     if (entry.isDirectory()) {

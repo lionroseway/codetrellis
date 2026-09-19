@@ -20,10 +20,17 @@
  *   npm run demo -- --scene=review        # one scene
  *   npm run demo -- --list                # what scenes exist
  *   npm run demo -- --project=/path/to/repo
+ *   npm run demo -- --port=19433 --api-port=3002   # a second instance
+ *   npm run demo -- --shots=/tmp/ct-shots          # one PNG per scene
  *
  * It needs the app running (packaged or `npm run dev`) with its MCP server
  * up, and the `capture` capability granted if you want it to screenshot.
  * Everything it changes on disk, it changes back.
+ *
+ * If another CodeTrellis is already running, the second one moves off
+ * :19432 and :3001 and logs the ports it took. Pass them, or you will
+ * authenticate with one process's token and talk to another — which
+ * presents as a 401 that looks like a product bug and is not.
  *
  * Every journey is catalogued in `docs/DEMO-JOURNEYS.md`, with what to
  * watch for, the fixtures it needs, and the rules for adding one. Two of
@@ -440,6 +447,11 @@ const SCENES: Scene[] = [
       await c.beat();
 
       if (!c.state.doc) c.flag('write_system_doc returned no uid');
+      // The doc is a file in the repo. Leaving it behind is not cosmetic:
+      // three stray copies under `.codetrellis/docs/` made a harness test
+      // that asserts "exactly one system doc" fail three runs in a row,
+      // looking exactly like a product regression.
+
       const fresh = c.state.doc ? await c.json('check_doc_freshness', { uid: c.state.doc }) : null;
       console.log('    freshness:', JSON.stringify(fresh).slice(0, 110));
       await c.shot('10-docs');
@@ -786,6 +798,10 @@ async function main() {
     }
     if (ctx.state.historyPlan) {
       await client.callTool('delete_plan', { plan_uid: ctx.state.historyPlan }).catch(() => {});
+    }
+    if (ctx.state.doc) {
+      await client.callTool('delete_system_doc', { uid: ctx.state.doc }).catch(() => {});
+      console.log('   deleted the demo system doc');
     }
     for (const extra of extraAgents) await extra.disconnect().catch(() => {});
     await client.callTool('dismiss_presence', {}).catch(() => {});
