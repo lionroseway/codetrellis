@@ -112,15 +112,25 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
 
   const start = async () => {
     setStarting(true);
-    try {
-      await fetch('/api/updates/download', { method: 'POST' });
-      // The POST resolves when the download finishes, but polling from
-      // the moment it starts is what makes progress visible.
-      await poll();
-    } finally {
-      setStarting(false);
-    }
-    if (!pollRef.current) pollRef.current = setInterval(poll, POLL_MS);
+
+    // Poll BEFORE the POST, and do not await it.
+    //
+    // `POST /api/updates/download` awaits the whole download and its
+    // verification before responding, so anything sequenced after it runs when
+    // the work is already over. The comment here used to say that polling from
+    // the moment it starts is what makes progress visible — which was right,
+    // and was not what the code did: the interval was installed after the
+    // await. For ~170MB the panel showed no bytes, no phase and no cancel for
+    // the entire download, which reads as a hung app.
+    pollRef.current ??= setInterval(poll, POLL_MS);
+    void fetch('/api/updates/download', { method: 'POST' }).catch(() => {
+      // A transport failure must not leave the button stuck: the poll below
+      // reports whatever the service actually thinks.
+    });
+
+    // One immediate poll so the first frame is not the idle state.
+    await poll();
+    setStarting(false);
   };
 
   const cancel = async () => {
