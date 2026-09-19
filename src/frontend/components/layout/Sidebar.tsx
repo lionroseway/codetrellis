@@ -100,7 +100,13 @@ function FileTreeItem({
       <button
         onClick={() => {
           if (isDir && hasChildren) setSidebarExpanded(!sidebarExpanded);
-          setSelectedNode(node.path);
+          // Pass the KIND. This sent a bare path for files and directories
+          // alike, so `selectedNodeKind` stayed null and every consumer had
+          // to guess — which the code surface did, by treating a directory
+          // as a file and rendering the backend's "Path is a directory" as
+          // an error. Selecting a directory in the tree is the way a user
+          // actually reaches that state; the graph is not.
+          setSelectedNode(node.path, isDir ? 'directory' : 'file');
           // Only toggle graph expand for files (focus mode), not directories
           if (!isDir) toggleGraphExpand(node.path);
         }}

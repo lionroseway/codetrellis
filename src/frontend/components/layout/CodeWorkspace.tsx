@@ -5,6 +5,7 @@ import { useUiStore } from '../../stores/ui-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
 import { PlaybackBar, type PlaybackFrame } from '../inspector/PlaybackBar';
 import type { FileOverlay } from '../../lib/plan-overlay';
+import { resolveSelectedFile } from '../../lib/selected-file';
 
 const CodeDiffView = lazy(() =>
   import('../inspector/CodeDiffView').then((m) => ({ default: m.CodeDiffView })),
@@ -37,31 +38,6 @@ export function CodeWorkspace() {
   const selectedNodeMeta = useUiStore((s) => s.selectedNodeMeta);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
 
-  /**
-   * A node id is not a path.
-   *
-   * `selectedNodeId` carries whatever the graph selected: a file path,
-   * but also `/abs/path/file.ts::function:foo` for a symbol and a
-   * directory path from the sidebar. This surface read all three as
-   * paths, so clicking a symbol in graph mode and switching to Code mode
-   * fetched a file that cannot exist and rendered "File not found" over
-   * an empty pane; a directory produced "Path is a directory". The
-   * inspector has routed on `kind` since it was written — this did not.
-   */
-  const selectedNode = useMemo(() => {
-    if (selectedNodeKind === 'symbol') return selectedNodeMeta.parentFilePath ?? null;
-    if (selectedNodeKind === 'directory' || selectedNodeKind === 'cluster') return null;
-    return selectedNodeId;
-  }, [selectedNodeId, selectedNodeKind, selectedNodeMeta]);
-
-  /** What to say instead of an error when the selection has no file. */
-  const nonFileSelection =
-    selectedNodeId && !selectedNode
-      ? selectedNodeKind === 'directory'
-        ? 'That is a directory. Pick a file inside it to read it.'
-        : 'That selection groups several files. Pick one of them to read it.'
-      : null;
-
   const [mode, setMode] = useState<Mode>('read');
   const [content, setContent] = useState<FileContent | null>(null);
   const [overlay, setOverlay] = useState<FileOverlay | null>(null);
@@ -71,6 +47,13 @@ export function CodeWorkspace() {
   const [notes, setNotes] = useState<string[]>([]);
   const [frameIndex, setFrameIndex] = useState(0);
   const [showTimeline, setShowTimeline] = useState(false);
+
+  // A node id is not a path — see `resolveSelectedFile`, which holds the
+  // rule for all four kinds because two of them used to be wrong here.
+  const { filePath: selectedNode, explanation: nonFileSelection } = useMemo(
+    () => resolveSelectedFile(selectedNodeId, selectedNodeKind, selectedNodeMeta),
+    [selectedNodeId, selectedNodeKind, selectedNodeMeta],
+  );
 
   const relativePath = useMemo(() => {
     if (!selectedNode || !root) return null;
