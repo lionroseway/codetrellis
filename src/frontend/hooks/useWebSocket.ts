@@ -461,24 +461,13 @@ export function useWebSocket() {
             const planUid = payload?.planUid as string | undefined;
             const itemUid = payload?.itemUid as string | undefined;
             if (planUid && itemUid) {
-              // F9 — previously the selection landed one item behind. Cause:
-              // the workspace shell, on first seeing a new plan, runs
-              // resetForPlan()/hydratePlan() which null the selection — and
-              // that effect could fire *after* selectItem() ran, wiping it.
-              // Fix: drive the same reset+hydrate here and await it, then
-              // apply the selection on the next frame so the shell's mount
-              // effect has already run and won't clear it.
+              // Shared with the code reader's overlay banner — see
+              // `lib/open-plan-item`. The ordering in there is what F9
+              // fixed; keeping one copy is how it stays fixed.
               (async () => {
                 try {
-                  await usePlanStore.getState().setActivePlan(planUid);
-                  const items = usePlanItemsStore.getState();
-                  if (items.activePlanUid !== planUid || Object.keys(items.itemsByUid).length === 0) {
-                    items.resetForPlan(planUid);
-                    await items.hydratePlan(planUid);
-                  }
-                  requestAnimationFrame(() => {
-                    usePlanItemsStore.getState().selectItem(itemUid);
-                  });
+                  const { openPlanItem } = await import('../lib/open-plan-item');
+                  await openPlanItem(planUid, itemUid);
                 } catch (err) {
                   console.error('[WS] select_item failed:', err);
                 }

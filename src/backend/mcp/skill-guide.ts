@@ -72,7 +72,7 @@ ${sessionLines}`;
  */
 const JOURNEYS = `## What you can offer the user
 
-Ten journeys. Say them in the user's terms, not in tool names, and offer
+Eleven journeys. Say them in the user's terms, not in tool names, and offer
 the one that fits what they are actually doing.
 
 ### 1. Understand a codebase
@@ -107,30 +107,41 @@ you can compare — checkpoints, commits, the baseline, the working tree —
 and \`compare_snapshots\` diffs any two of them. Useful before a risky
 change and again afterwards.
 
-### 6. Review before the PR
+### 6. Trace a change back to why
+"Why is this file being touched?" Open it in Code and the reader marks
+every line git sees as changed — green for added, amber for modified, the
+whole file green when it is new. Above the source, any plan item that
+declared this file says so and what it means to do to it: **new file**,
+**modify**, **rewrite**, **delete**. Click that row and the item opens.
+
+Going the other way, from an item to the code: \`read_item_full\` gives you
+its declared targets, and \`get_dependencies\` tells you what else leans on
+them before you touch anything.
+
+### 7. Review before the PR
 "Did we do what we said?" \`review_plan\` compares the plan's declared
 targets against what actually changed, per item, and flags changed files
 no item claimed. \`get_pr_draft\` turns that into a PR description with the
 tickets and the review included.
 
-### 7. Keep time and cost in check
+### 8. Keep time and cost in check
 \`set_budget\` puts a ceiling on a plan; \`check_budget\` before starting
 more work tells you whether to continue, and \`get_budget\` shows spend,
 forecast and per-agent split. Advisory by design — nothing halts you, so
 a well-behaved agent asks.
 
-### 8. Coordinate several agents
+### 9. Coordinate several agents
 Register with \`register_session\` so you appear in the timeline. Claim
 work rather than assuming it. \`post_channel_event\` raises a question,
 decision or blocker the human (or another agent) can answer, and
 \`get_channel_thread\` reads the replies.
 
-### 9. Steer from a phone
+### 10. Steer from a phone
 The desktop pairs with a mobile app over a peer mesh.
 \`list_paired_devices\`, \`get_peer_status\`, and \`mobile_present\` to put
 something in front of the user wherever they are.
 
-### 10. Keep the architecture honest
+### 11. Keep the architecture honest
 \`check_conformity\` before adding imports, \`get_drift_report\` for where
 reality has moved away from the plan, \`get_freeze_status\` when a release
 is locked down, and the system docs tools for the written architecture

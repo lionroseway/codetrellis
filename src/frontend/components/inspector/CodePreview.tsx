@@ -457,6 +457,30 @@ function LineRow({
  * means the plan refers to a version of the file that no longer exists —
  * so it is stated rather than silently dropped.
  */
+/**
+ * The intent, in a word a reader can act on.
+ *
+ * `intentTint` has always coloured the marker by intent; nothing ever said
+ * it. A file a plan intends to CREATE and one it intends to MODIFY looked
+ * identical apart from a green versus amber triangle.
+ */
+function intentWord(intent: string | null): string {
+  switch (intent) {
+    case 'add':
+    case 'create':
+      return 'new file';
+    case 'remove':
+    case 'delete':
+      return 'delete';
+    case 'replace':
+      return 'rewrite';
+    case 'modify':
+      return 'modify';
+    default:
+      return 'planned';
+  }
+}
+
 function PlanOverlayBanner({
   overlay,
   onOpenItem,
@@ -473,12 +497,24 @@ function PlanOverlayBanner({
         <button
           key={`f${i}`}
           onClick={() => onOpenItem?.(m.itemUid, m.planUid)}
-          className="w-full flex items-start gap-1.5 rounded-md border border-accent/20 bg-accent/[0.05] px-2 py-1 text-left hover:bg-accent/[0.09] transition-colors"
+          className="group w-full flex items-start gap-1.5 rounded-md border border-accent/20 bg-accent/[0.05] px-2 py-1 text-left hover:bg-accent/[0.09] transition-colors"
         >
           <span className={`text-[10px] shrink-0 ${intentTint(m.intent)}`}>▸</span>
-          <span className="text-[10px] text-foreground-muted truncate">
+          {/* Say the intent, do not just tint a triangle. "Is this a new
+              file or a change to an existing one" is the first question a
+              reader has, and the answer was encoded as the colour of a
+              4px glyph. */}
+          <span
+            className={`text-[9px] uppercase tracking-wider shrink-0 mt-[1px] ${intentTint(m.intent)}`}
+          >
+            {intentWord(m.intent)}
+          </span>
+          <span className="text-[10px] text-foreground-muted truncate flex-1">
             <span className="text-foreground">{m.itemTitle}</span>
             {m.instruction ? ` — ${m.instruction}` : ' wants this file'}
+          </span>
+          <span className="text-[9px] text-foreground-subtle shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            open item →
           </span>
         </button>
       ))}

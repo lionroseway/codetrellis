@@ -4720,11 +4720,42 @@ export function getGitWorkingTreeStatus(projectPath: string): {
   shortCommitHash: string | null;
 } | null {
   try {
+    // SCOPED to the project, and reported relative to it.
+    //
+    // `git status` answers for the whole REPOSITORY and prints paths
+    // relative to the repository root, whatever directory you run it in.
+    // When the opened project is a subdirectory of a larger repo — a
+    // package in a monorepo, or this repo's own test fixture — that meant
+    // two things went wrong at once: files from outside the project
+    // appeared in the explorer, and their paths were repo-relative while
+    // everything downstream treats them as project-relative. Clicking one
+    // asked for `<project>/<repo-relative-path>`, which does not exist,
+    // and the reader said "Failed to load source: File not found".
+    //
+    // `-- .` limits the answer to this subtree; `--show-prefix` gives the
+    // project's own path within the repo so it can be stripped back off.
+    let prefix = '';
+    try {
+      prefix = execFileSync('git', ['-C', projectPath, 'rev-parse', '--show-prefix'], {
+        encoding: 'utf8',
+      }).trim();
+    } catch {
+      // Not a repo, or an old git: fall through with no prefix. The
+      // pathspec below still scopes the listing.
+    }
+
     const output = execFileSync(
       'git',
-      ['-C', projectPath, 'status', '--porcelain=v1', '--untracked-files=all'],
+      ['-C', projectPath, 'status', '--porcelain=v1', '--untracked-files=all', '--', '.'],
       { encoding: 'utf8' },
     );
+
+    /** Repo-relative → project-relative. Null when it is outside the project. */
+    const toProjectRelative = (p: string): string | null => {
+      if (!prefix) return p;
+      if (!p.startsWith(prefix)) return null;
+      return p.slice(prefix.length);
+    };
 
     const staged = new Set<string>();
     const unstaged = new Set<string>();
@@ -4741,7 +4772,11 @@ export function getGitWorkingTreeStatus(projectPath: string): {
       const x = line[0];
       const y = line[1];
       const rawPath = line.slice(3).trim();
-      const filePath = rawPath.includes('->') ? rawPath.split('->').pop()?.trim() || rawPath : rawPath;
+      const repoPath = rawPath.includes('->') ? rawPath.split('->').pop()?.trim() || rawPath : rawPath;
+      // A rename can point out of the subtree even with the pathspec, so
+      // the membership check is not redundant.
+      const filePath = toProjectRelative(repoPath);
+      if (filePath === null) continue;
 
       if (x === '?' && y === '?') {
         untracked.add(filePath);

@@ -20,6 +20,7 @@ const CodeDiffView = lazy(() =>
   import('../inspector/CodeDiffView').then((m) => ({ default: m.CodeDiffView })),
 );
 import type { FileOverlay } from '../../lib/plan-overlay';
+import { revealPlanItem } from '../../lib/open-plan-item';
 
 interface SymbolInfo {
   name: string;
@@ -341,6 +342,7 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
               error={contentError}
               overlay={overlay}
               onClose={() => setShowCode(false)}
+              onOpenItem={(itemUid, planUid) => { void revealPlanItem(planUid, itemUid); }}
             />
           ) : root ? (
             <Suspense

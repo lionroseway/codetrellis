@@ -6,6 +6,7 @@ import { CodePreview, type FileContent } from '../inspector/CodePreview';
 import { PlaybackBar, type PlaybackFrame } from '../inspector/PlaybackBar';
 import type { FileOverlay } from '../../lib/plan-overlay';
 import { resolveSelectedFile } from '../../lib/selected-file';
+import { revealPlanItem } from '../../lib/open-plan-item';
 
 const CodeDiffView = lazy(() =>
   import('../inspector/CodeDiffView').then((m) => ({ default: m.CodeDiffView })),
@@ -223,7 +224,16 @@ export function CodeWorkspace() {
             against any point in the project's history.
           </div>
         ) : mode === 'read' ? (
-          <CodePreview content={content} error={error} overlay={overlay} />
+          <CodePreview
+            content={content}
+            error={error}
+            overlay={overlay}
+            // The banner has always been a button. Nothing ever gave it
+            // anything to do, so "Rework the ledger wants this file" had
+            // hover feedback and no behaviour — worse than not looking
+            // clickable at all.
+            onOpenItem={(itemUid, planUid) => { void revealPlanItem(planUid, itemUid); }}
+          />
         ) : (
           <Suspense
             fallback={<div className="text-[10.5px] text-foreground-subtle">Loading the diff editor…</div>}
