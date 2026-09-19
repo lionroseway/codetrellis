@@ -25,10 +25,12 @@
  * up, and the `capture` capability granted if you want it to screenshot.
  * Everything it changes on disk, it changes back.
  *
- * The journeys still to add — a human planning by hand, an agent blocked
- * and unblocked, two agents contending, the graph properly, upgrade — are
- * catalogued in `docs/DEMO-JOURNEYS.md`, along with the fixtures they need
- * and the rules for adding one.
+ * Every journey is catalogued in `docs/DEMO-JOURNEYS.md`, with what to
+ * watch for, the fixtures it needs, and the rules for adding one. Two of
+ * them live elsewhere and the catalogue says why: planning by hand is a
+ * browser spec (`e2e/plan/plan-by-hand.spec.ts`) because every step is a
+ * click, and the upgrade journey is a unit test because it needs a fresh
+ * boot, which a script driving a running app cannot arrange.
  */
 
 import fs from 'node:fs';

@@ -21,7 +21,14 @@ npm run demo -- --pace=slow       # long enough to read each card
 npm run demo -- --scene=review    # one scene
 npm run demo -- --list            # what exists
 npm run demo -- --project=/path   # against another codebase
+npm run demo -- --port=19433      # a second instance moved the MCP port
+npm run demo -- --shots=/tmp/ct   # save a screenshot per scene
 ```
+
+If another CodeTrellis is already running, the second one moves off
+:19432 and :3001 and says so in its log — pass `--port` and `--api-port`
+to match, or you will authenticate against one process and talk to
+another.
 
 Needs the app running (packaged or `npm run dev`). Scenes narrate
 themselves inside the window with a presence card, so watch the app, not
@@ -31,15 +38,20 @@ the terminal. Everything a journey changes on disk, it changes back.
 
 | | |
 |---|---|
-| **built** | in `scripts/demo.ts`, runs today |
-| **next** | agreed, not written |
-| **wanted** | worth having, not yet designed |
+| **built** | runs today — a demo scene, or a browser spec the demo points at |
+| **covered by the suite** | real, but needs something a script cannot arrange (a fresh boot) |
+| **manual** | needs hardware; the steps are written down instead |
+
+Everything in section B is now one of those three. What is left is named
+in the journey that owns it, not in a backlog here.
 
 ---
 
 ## A. The main loop — *built*
 
-One cross-cutting change through Go, C# and Ruby. This is `npm run demo`.
+One cross-cutting change through Go, C# and Ruby, then the journeys that
+are about the repository rather than the code. This is `npm run demo` —
+21 scenes.
 
 | Scene | Watch for |
 |---|---|
@@ -53,130 +65,163 @@ One cross-cutting change through Go, C# and Ruby. This is `npm run demo`.
 | `review` | **1 landed of 3** — the asymmetry is the whole point |
 | `pr` | ticket key in the title, review in the body |
 | `compare` | one file modified, not forty |
+| `graph` | depth changes, a file focuses to its symbols, scope narrows to one service |
+| `blocked` | the item goes visibly blocked with a reason, then resumes |
+| `agents` | the second agent gets a different item, and a double-claim is refused |
+| `docs` | a doc appears in Docs, freshness answers |
+| `drift` | drift as information, not a blocker — and it agrees with `review` |
+| `refusal` | the refusal names the capability and where to grant it |
+| `history` | comparands include commits; reviewing against one surfaces work the tree does not |
+| `scoping` | a package inside a monorepo shows none of its parent's churn |
+| `degrade` | no git and no commits both answer honestly |
+| `conflict` | a plan manifest conflict named per field, resolved without markers |
 | `finish` | the agent waits for a human |
 
----
-
-## B. Journeys to add
-
-### B1. A human plans it by hand — *next*
-
-Everything today is agent-driven, which is half the product. A person
-opens the Plans panel, writes a plan from a template, adds pages (notes,
-acceptance criteria), anchors actions to files with the mention picker,
-edits it mid-flight when scope changes, and exports it to the repo.
-
-**Watch for:** template placeholders actually substituted; a page and an
-action look different; the mention picker writes a path that review can
-later match; export lands under `.codetrellis/plans/<slug>/` and reads
-back.
-
-**Needs:** browser driving rather than MCP — the person is the actor. Add
-it to `e2e/review-regressions/` and call it from the demo.
-
-### B2. An agent gets blocked, and a human unblocks it — *next*
-
-The loop the product exists for. An agent claims an item, hits something
-it cannot decide, marks the item blocked with a reason, posts to the
-channel and stops. The human answers in the app. The agent picks it up and
-finishes.
-
-**Watch for:** the item visibly blocked rather than silently stalled; the
-channel event carries the item; answering it unblocks; the plan's
-progress reflects the pause and the resume.
-
-### B3. Two agents on one plan — *next*
-
-Contention. Both ask for the next item; one claims it; the other must get
-a different one, not the same one. One hands off mid-item and the other
-resumes from the handoff prompt.
-
-**Watch for:** no double-claim; the Timeline attributes each turn to the
-right agent; `get_next_item` respects dependencies and approval gates.
-
-### B4. Terminal, in and out — *next*
-
-Show the drawer, run something real (a test run that fails, then passes),
-read the output back, hide the drawer again. Today's scene creates a
-terminal and leaves it.
-
-**Watch for:** the drawer opens focused; output streams rather than
-arriving in one lump; hiding it does not kill the session; killing it
-does.
-
-### B5. Review after the fact — *next*
-
-Not the happy path: come back to a plan a day later, on a branch with
-other people's commits in it, and ask what landed. Compare against a
-commit rather than the working tree.
-
-**Watch for:** unclaimed changes surfaced (the work nobody planned);
-comparand picker offers commits, checkpoints and the baseline; the PR
-draft still makes sense when the plan is half done.
-
-### B6. The graph, properly — *wanted*
-
-Today the graph is opened and glanced at. It deserves its own journey:
-focus a file, expand to symbols, filter by system, switch Map/Tree, trace
-a cross-system edge from a caller to the route it hits, and read the near
-misses that did not pair.
-
-**Watch for:** focus mode actually shows the file's symbols; a
-cross-system edge is clickable to both ends; near misses explain why they
-did not pair.
-
-### B7. System docs and drift — *wanted*
-
-Write a doc describing a service, change the service, watch the doc go
-stale, verify it again.
-
-### B8. History and conflicts — *wanted*
-
-Two branches edit the same plan, merge, and resolve the conflict
-field-by-field rather than by hand-editing YAML. Read the plan as it stood
-at an earlier commit.
-
-### B9. Upgrade — *wanted*
-
-Open a database written by the previous release and watch the schema heal
-on boot. This is the one that nearly shipped broken; it should be a
-journey, not a memory.
-
-### B10. Refused, and recovering — *wanted*
-
-An agent asks for something it does not hold — a terminal, a screenshot,
-a project that is not open. The refusal names the capability, the human
-grants it in Settings, the agent proceeds.
-
-**Watch for:** the refusal is legible to a person; the Settings panel it
-names exists and the toggle takes effect without a reconnect.
-
-### B11. The phone — *wanted*
-
-Pair a device, review a plan from it, answer a blocked agent from it. Needs
-hardware, so it stays manual for now, but the steps should be written down.
+Two scenes need more than the backend: `terminal` needs the `terminal`
+capability granted in Settings → MCP Server, and `graph` needs the window
+open. Run headless and both flag themselves, saying which.
 
 ---
+
+## B. The journeys, and where each one lives
+
+### B1. A human plans it by hand — *built*
+
+`e2e/plan/plan-by-hand.spec.ts`. A browser journey, because the person is
+the actor: create a plan, give it a page and a task, anchor the task to a
+real file with the picker, change the scope mid-flight, share it to the
+repo, and read back what landed on disk.
+
+It is a browser spec rather than a demo scene for one reason: every step
+has to be a click. Three defects came out of writing it, and none was
+visible from inside a single-component spec — the plan's own page became
+unreachable once you opened an item, the Targets strip's "+" was gated on
+a prop no caller passed, and the strip rendered nothing at all in the
+state every new item is in.
+
+**Watch for:** the stored path is repo-relative, because an absolute one
+looks identical on screen and makes every later review say "missing".
+
+### B2. An agent gets blocked, and a human unblocks it — *built*
+
+Scene `blocked`. The item goes visibly blocked with a reason and then
+resumes, rather than stalling silently.
+
+### B3. Two agents on one plan — *built*
+
+Scene `agents`. Two connected MCP clients; the second is offered a
+different item, and a second claim on the first agent's item is refused.
+
+### B4. Terminal, in and out — *built*
+
+Scene `terminal`. Show the drawer, run something, read the output back,
+hide the drawer — and assert the session survives being hidden. Needs the
+`terminal` capability, which is not granted by default; the scene says so
+when it is missing rather than failing obscurely.
+
+### B5. Review after the fact — *built*
+
+Scene `history`, on a fixture with three commits and uncommitted work on
+top. The point is that the answer depends on what you compare against:
+against the working tree the plan shows nothing landed, and against the
+middle commit one item has landed and `src/notify.rb` surfaces as work
+nobody planned.
+
+**Watch for:** comparands are `commit:<short-sha>`, and the scene uses
+what the picker offered rather than inventing an identifier — a journey
+that guesses tests its own guess.
+
+### B6. The graph, properly — *built*
+
+Scene `graph`. Depth changes, a file focuses into its symbols, the scope
+narrows to one service. Needs the window open: `graph_snapshot` answers
+through the renderer, and says so when there is none.
+
+### B7. System docs and drift — *built*
+
+Scenes `docs` and `drift`. A doc is written and its freshness read; drift
+is reported as information. The two now agree with `review`, which they
+did not: the feed called every planned modify satisfied the moment the
+plan was written.
+
+### B8. History and conflicts — *built*
+
+Scene `conflict`, on a fixture left mid-merge with a conflicted plan
+manifest. The conflict is named field by field — title, status, owner —
+and resolving it leaves valid YAML rather than markers.
+
+Time-travelling a plan to an earlier commit (`get_plan_at_commit`,
+`diff_plan_between_commits`) is not yet in a scene. That is the remaining
+half of B8.
+
+### B9. Upgrade — *covered by the suite*
+
+`src/backend/services/ast-schema-drift.test.ts` builds a database with
+the pre-Phase-27 shape and asserts the app heals it. It stays a test
+rather than a journey because it needs a fresh boot, which a script
+driving a running app cannot arrange. This is the one that nearly
+shipped broken, so it is worth knowing where it lives.
+
+### B10. Refused, and recovering — *built*
+
+Scene `refusal`. An agent names a project that is not open; the refusal
+says so and names Settings → MCP Server. The scene asserts the refusal is
+legible to a person, not merely that it happened.
+
+### B11. The phone — *manual, steps written down*
+
+Needs two devices, so it cannot be scripted here. Walk it by hand before
+a release that touches pairing — Gate 1.2 of Phase 19 changes the pairing
+and reconnect protocol, so the next mobile release forces re-pairing for
+every existing user and this journey is how that gets checked.
+
+1. Desktop: Settings → Devices, turn on discovery **and** API exposure.
+   They are separate switches on purpose; confirm both are off by default
+   on a fresh profile.
+2. Desktop: show the pairing QR. Phone: scan it. Both should report the
+   peer by name, not by fingerprint.
+3. Phone: open the plan the desktop has open. Confirm the item tree, the
+   statuses and the progress match what is on the desktop screen.
+4. Desktop: have an agent block an item. The phone should show it
+   blocked, with the reason.
+5. Phone: answer in the channel. The desktop's badge should light and the
+   thread should carry the answer.
+6. Phone: open the terminal for a running session. Type something; output
+   should stream rather than arrive in one lump.
+7. Kill the desktop's network for ten seconds and restore it. Both ends
+   should reconnect without re-pairing.
+8. Desktop: unpair. The phone should lose access immediately, not at the
+   next poll.
+
+**Watch for:** identity comes from the DTLS transport. If any step works
+after a fingerprint is edited in a request body, that is the finding.
 
 ## C. Fixtures
 
-One fixture today: `tests/fixtures/sample-app` — nine languages, a
-cross-system map, SQL migrations. It is enough for A and most of B.
+`tests/fixtures/sample-app` — nine languages, a cross-system map, SQL
+migrations — is the committed one, and it carries the main loop.
 
-Journeys that need a different shape:
+The journeys that are *about* the repository need repositories, and those
+are built at run time by `scripts/demo-fixtures.ts`:
 
-| Fixture | For | Why |
+| Fixture | For | Shape |
 |---|---|---|
-| a repo with real history | B5, B8 | commits to compare against, and a plan that changes across them |
-| a monorepo package | — | a project that is a subdirectory of a larger repo, which is where `git status` scoping broke |
-| a directory with no git at all | B5 | the comparand picker has to degrade honestly |
-| a repo with no commits yet | B5 | `git init` and nothing committed is a real state the app tolerates |
-| something large | B6 | layout cost and scan time only show at scale |
+| `repoWithHistory()` | `history` | three commits, one of them someone else's, plus uncommitted work on top |
+| `monorepoPackage()` | `scoping` | `packages/checkout` inside a repo whose other packages have churn |
+| `noGitDirectory()` | `degrade` | a plain directory, no git at all |
+| `repoWithNoCommits()` | `degrade` | `git init` and nothing committed — day one of a project |
+| `repoWithPlanConflict()` | `conflict` | two branches left mid-merge on a conflicted plan manifest |
 
-Keep fixtures small and committed. The one that matters most is a repo
-with genuine history — several journeys currently have to fabricate it.
+They are built rather than committed because a fixture repo cannot live
+inside this one — a nested `.git` is either ignored or becomes a
+submodule, and neither is what a journey wants. Building them costs a few
+hundred milliseconds and puts the history in code, where it can be read,
+instead of in a tarball. `cleanupFixtures()` removes the lot, and the
+demo calls it however it exits.
 
----
+Still missing: something large. Layout cost and scan time only show at
+scale, and the `graph` scene currently proves correctness rather than
+performance.
 
 ## D. Rules for adding a journey
 
@@ -191,3 +236,10 @@ with genuine history — several journeys currently have to fabricate it.
   the archived-plan bug was found.
 - **Prefer the real surface.** Drive the UI where a person would, and MCP
   where an agent would. Which one you pick is part of what is being tested.
+- **Use what the product offers, not what you assume.** The `history`
+  journey passed a bare commit SHA and was refused; the picker's own
+  answer is `commit:<short-sha>`. A journey that invents an identifier is
+  testing its own guess.
+- **Two surfaces disagreeing is the finding.** The proposed-changes feed
+  said 3 of 3 satisfied while review said 1 landed of 3, on the same plan
+  in the same second. Neither number looks wrong alone. Print both.
