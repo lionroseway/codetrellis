@@ -73,14 +73,15 @@ test.describe('Commit vs live comparands (hash space and population)', () => {
       // pyproject.toml and the rest — because ls-tree lists every blob while
       // the live side lists only what the product indexes.
       //
-      // What remains is a THIRD issue, narrower than either of the above and
-      // deliberately pinned rather than absorbed: a file with an indexable
-      // extension that FAILS TO PARSE gets no row in `files`, so it is absent
-      // from the live side and reads as removed — though it is still on disk
-      // and was never removed at all. Any project with a syntax error in it
-      // will show this. Tracked separately; this assertion fails loudly if
-      // the residual ever grows beyond the fixture's deliberate one.
-      expect(result.diff.removedFiles).toEqual(['services/billing/testdata/broken.go']);
+      // The THIRD issue this used to pin — `services/billing/testdata/broken.go`,
+      // a file with an indexable extension that fails to parse, absent from
+      // `files` and therefore reading as removed while sitting on disk — is
+      // fixed (N1). The residual is gone rather than bounded: the live side
+      // now checks whether a file reported missing is actually missing.
+      //
+      // Nothing was removed between HEAD and an untouched working tree, so
+      // the honest answer is the empty one.
+      expect(result.diff.removedFiles).toEqual([]);
     } finally {
       await h.teardown();
     }
@@ -104,8 +105,9 @@ test.describe('Commit vs live comparands (hash space and population)', () => {
       expect(result.diff.summary.modified).toBe(1);
       expect(result.diff.modifiedFiles).toEqual([relative]);
       expect(result.diff.summary.added).toBe(0);
-      // The same known residual as above — the unparseable fixture file.
-      expect(result.diff.removedFiles).toEqual(['services/billing/testdata/broken.go']);
+      // One edit, nothing removed. The unparseable fixture file used to
+      // appear here too; see N1 in the test above.
+      expect(result.diff.removedFiles).toEqual([]);
     } finally {
       await h.teardown();
     }
@@ -139,7 +141,7 @@ test.describe('A project opened through a symlink (M33)', () => {
 
       expect(result.diff.summary.modified).toBe(0);
       expect(result.diff.summary.added).toBe(0);
-      expect(result.diff.removedFiles).toEqual(['services/billing/testdata/broken.go']);
+      expect(result.diff.removedFiles).toEqual([]);
     } finally {
       fs.rmSync(link, { force: true });
       await h.teardown();

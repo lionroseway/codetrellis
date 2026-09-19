@@ -120,6 +120,16 @@ test.describe('Plan review surface (Phase 29)', () => {
 
       const stray = path.join(h.fixture.projectPath, 'services/notifier/app.rb');
       fs.appendFileSync(stray, '\n# unplanned\n');
+      // Rescan, or the edit never reaches the diff: the live snapshot is
+      // built from the `files` table, not from the working tree.
+      //
+      // Without this the test passed for a reason that had nothing to do
+      // with its subject. The only unclaimed change in the comparison was
+      // `testdata/broken.go`, which appeared as REMOVED because it fails
+      // to parse and so has no row in `files` — a phantom removal, fixed
+      // as N1. The unplanned edit this test is about was invisible
+      // throughout, and closing that bug is what exposed it.
+      await h.client.scanProject(h.fixture.projectPath);
 
       const headBefore = await h.client.raw('GET', `/api/git/head?path=${encodeURIComponent(h.fixture.projectPath)}`);
       const shaBefore = (await headBefore.json()).commitHash;
