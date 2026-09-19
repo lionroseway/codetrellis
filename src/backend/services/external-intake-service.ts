@@ -67,6 +67,15 @@ export interface PlanExternalRef {
   url: string;
   title: string;
   externalKey: string | null;
+  /**
+   * Who attached this ticket.
+   *
+   * Written since the column existed and read back by no query, which
+   * made the attribution unfalsifiable — the MCP handler was passing no
+   * author at all and nothing anywhere could show it.
+   */
+  author: string;
+  authorType: string;
   createdAt: number;
 }
 
@@ -75,7 +84,7 @@ export interface PlanExternalRef {
 export function getPlanExternalRefs(planUid: string): PlanExternalRef[] {
   try {
     const res = getDb().exec(
-      `SELECT uid, plan_uid, kind, url, title, external_key, created_at
+      `SELECT uid, plan_uid, kind, url, title, external_key, author, author_type, created_at
        FROM plan_external_refs WHERE plan_uid = ? ORDER BY created_at ASC`,
       [planUid],
     );
@@ -86,11 +95,34 @@ export function getPlanExternalRefs(planUid: string): PlanExternalRef[] {
       url: r[3] as string,
       title: r[4] as string,
       externalKey: (r[5] as string | null) ?? null,
-      createdAt: r[6] as number,
+      author: r[6] as string,
+      authorType: r[7] as string,
+      createdAt: r[8] as number,
     }));
   } catch {
     return [];
   }
+}
+
+/**
+ * URL equality for idempotency, not for security.
+ *
+ * Trailing slash and case of the scheme/host are the differences a human
+ * pasting the same ticket twice actually produces. Anything beyond that
+ * — query order, default ports — is left alone deliberately: two URLs
+ * that differ there may well be two different things, and collapsing
+ * them would lose a ref rather than deduplicate one.
+ */
+function sameUrl(a: string, b: string): boolean {
+  const norm = (u: string): string => {
+    try {
+      const p = new URL(u);
+      return `${p.protocol.toLowerCase()}//${p.host.toLowerCase()}${p.pathname.replace(/\/+$/, '')}${p.search}`;
+    } catch {
+      return u.trim().replace(/\/+$/, '');
+    }
+  };
+  return norm(a) === norm(b);
 }
 
 /**
@@ -133,9 +165,22 @@ export function setPlanExternalRef(input: {
   const title = input.title?.trim() || key || input.url;
   const now = Date.now();
 
+  // Idempotent on the key where there is one, and on the URL where
+  // there is not.
+  //
+  // `keyFromUrl` recognises Jira, Linear and GitHub. The service claims
+  // to accept "Azure DevOps, GitHub Projects, Shortcut and a wiki page"
+  // too, and for all of those the key is null — so this lookup used to
+  // be skipped entirely and every call INSERTed. The unique index does
+  // not catch it either: SQLite treats NULLs as distinct, so three
+  // identical calls left three rows. `set_plan_external_ref` advertises
+  // "Idempotent on the ticket key, so calling it twice updates rather
+  // than duplicating", and for most of the trackers the docstring names
+  // that was false.
+  const refs = getPlanExternalRefs(input.planUid);
   const existing = key
-    ? getPlanExternalRefs(input.planUid).find((r) => r.externalKey === key)
-    : undefined;
+    ? refs.find((r) => r.externalKey === key)
+    : refs.find((r) => r.externalKey === null && sameUrl(r.url, input.url));
 
   if (existing) {
     db.run(`UPDATE plan_external_refs SET url = ?, title = ?, kind = ? WHERE uid = ?`, [
@@ -149,13 +194,18 @@ export function setPlanExternalRef(input: {
   }
 
   const uid = randomUUID();
+  const author = input.author ?? 'human';
+  const authorType = input.authorType ?? 'human';
   db.run(
     `INSERT INTO plan_external_refs (uid, plan_uid, kind, url, title, external_key, author, author_type, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uid, input.planUid, kind, input.url, title, key, input.author ?? 'human', input.authorType ?? 'human', now],
+    [uid, input.planUid, kind, input.url, title, key, author, authorType, now],
   );
   markDirty();
-  return { uid, planUid: input.planUid, kind, url: input.url, title, externalKey: key, createdAt: now };
+  return {
+    uid, planUid: input.planUid, kind, url: input.url, title,
+    externalKey: key, author, authorType, createdAt: now,
+  };
 }
 
 /**

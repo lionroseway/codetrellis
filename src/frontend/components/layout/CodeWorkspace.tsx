@@ -32,8 +32,35 @@ type Mode = 'read' | 'diff';
 
 export function CodeWorkspace() {
   const root = useProjectStore((s) => s.root);
-  const selectedNode = useUiStore((s) => s.selectedNodeId);
+  const selectedNodeId = useUiStore((s) => s.selectedNodeId);
+  const selectedNodeKind = useUiStore((s) => s.selectedNodeKind);
+  const selectedNodeMeta = useUiStore((s) => s.selectedNodeMeta);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+
+  /**
+   * A node id is not a path.
+   *
+   * `selectedNodeId` carries whatever the graph selected: a file path,
+   * but also `/abs/path/file.ts::function:foo` for a symbol and a
+   * directory path from the sidebar. This surface read all three as
+   * paths, so clicking a symbol in graph mode and switching to Code mode
+   * fetched a file that cannot exist and rendered "File not found" over
+   * an empty pane; a directory produced "Path is a directory". The
+   * inspector has routed on `kind` since it was written — this did not.
+   */
+  const selectedNode = useMemo(() => {
+    if (selectedNodeKind === 'symbol') return selectedNodeMeta.parentFilePath ?? null;
+    if (selectedNodeKind === 'directory' || selectedNodeKind === 'cluster') return null;
+    return selectedNodeId;
+  }, [selectedNodeId, selectedNodeKind, selectedNodeMeta]);
+
+  /** What to say instead of an error when the selection has no file. */
+  const nonFileSelection =
+    selectedNodeId && !selectedNode
+      ? selectedNodeKind === 'directory'
+        ? 'That is a directory. Pick a file inside it to read it.'
+        : 'That selection groups several files. Pick one of them to read it.'
+      : null;
 
   const [mode, setMode] = useState<Mode>('read');
   const [content, setContent] = useState<FileContent | null>(null);
@@ -77,6 +104,40 @@ export function CodeWorkspace() {
       .catch(() => setOverlay(null));
   }, [absPath, root]);
 
+  /**
+   * The comparand to diff against when the timeline is closed.
+   *
+   * It was hardcoded to `commit:HEAD`. In a directory that is not a git
+   * repository — or one freshly `git init`-ed with no commit, both of
+   * which the scanner accepts — `git show HEAD:<path>` fails, and
+   * `readFileAt` cannot tell "no such ref" from "file not in that tree",
+   * so it answers `content: null`. The diff view reads that as
+   * `addedWholesale` and renders the entire file as an insertion badged
+   * "added in this range".
+   *
+   * That is the confident wrong answer the compare module's header says
+   * it refuses to give. The honest one is that this project has no
+   * commits to compare against, so the default comes from the project's
+   * real comparand list and falls back to the baseline.
+   */
+  const [defaultBefore, setDefaultBefore] = useState<string>('baseline');
+
+  useEffect(() => {
+    if (!root) return;
+    let cancelled = false;
+    fetch(`/api/comparands?project=${encodeURIComponent(root)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Array<{ spec: string; kind: string }> | null) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : [];
+        const newestCommit = list.find((c) => c.kind === 'commit');
+        const baseline = list.find((c) => c.kind === 'baseline');
+        setDefaultBefore(newestCommit?.spec ?? baseline?.spec ?? 'live');
+      })
+      .catch(() => { if (!cancelled) setDefaultBefore('baseline'); });
+    return () => { cancelled = true; };
+  }, [root]);
+
   // The timeline is fetched only when it is opened — a repository's
   // history is not needed to read one file.
   useEffect(() => {
@@ -99,7 +160,9 @@ export function CodeWorkspace() {
    * last commit — not the baseline, which `scanProject` re-pins on every
    * run, making baseline → live empty right after a scan.
    */
-  const diffBefore = showTimeline && frames[frameIndex] ? frames[frameIndex].spec : 'commit:HEAD';
+  const diffBefore = showTimeline && frames[frameIndex]
+    ? frames[frameIndex].spec
+    : defaultBefore;
 
   if (!root) {
     return (
@@ -166,7 +229,12 @@ export function CodeWorkspace() {
       )}
 
       <div className="flex-1 overflow-auto p-3">
-        {!relativePath ? (
+        {nonFileSelection ? (
+          // Not an error. The selection is real, it just is not a file —
+          // saying "File not found" over an empty pane blamed the user's
+          // click on the filesystem.
+          <div className="text-[11px] text-foreground-subtle">{nonFileSelection}</div>
+        ) : !relativePath ? (
           <div className="text-[11px] text-foreground-subtle">
             Pick a file from the sidebar to read it, see what the plan wants from it, and diff it
             against any point in the project's history.

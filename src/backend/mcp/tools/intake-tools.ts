@@ -207,8 +207,19 @@ export function register(server: McpServer, deps: ToolDeps): void {
         title: z.string().optional(),
       },
     },
-    async ({ plan_uid, url, key, title }) => {
-      const ref = setPlanExternalRef({ planUid: plan_uid, url, key, title });
+    async ({ plan_uid, url, key, title }, extra: any) => {
+      // Every other write path in this file resolves the author first.
+      // This one did not, so the service defaulted to 'human' and the row
+      // claimed a person attached the ticket — an agent's epic was
+      // indistinguishable in the audit trail from the user doing it by
+      // hand, which is the opposite of the attribution the rest of the
+      // MCP layer maintains.
+      const author = authorFromExtra(deps, extra);
+      const ref = setPlanExternalRef({
+        planUid: plan_uid, url, key, title,
+        author: author.author,
+        authorType: author.authorType,
+      });
       return { content: [{ type: 'text' as const, text: JSON.stringify(ref, null, 2) }] };
     },
   );

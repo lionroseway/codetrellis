@@ -302,3 +302,65 @@ describe('an edit anchored to a class member (M13)', () => {
     );
   });
 });
+
+describe('the plan parameter narrows, it does not widen (m12)', () => {
+  test('a plan outside the project draws nothing', () => {
+    // The overlay is the surface whose entire value is that the marker is
+    // believed. With two projects open, `?plan=<uid in B>` against a file
+    // in A used to render B's item titles, instructions and intents over
+    // it — the parameter REPLACED the project's plan list instead of
+    // filtering it.
+    setItems([
+      {
+        title: "Another project's work",
+        fileSpecs: [
+          {
+            path: 'src/auth/session.ts',
+            action: 'modify',
+            edits: [{ lineRange: { start: 1, end: 5 }, instruction: 'do it' }],
+          },
+        ],
+      },
+    ]);
+
+    const contaminated = buildFileOverlay({
+      absolutePath: '/repo/src/auth/session.ts',
+      relativePath: 'src/auth/session.ts',
+      lineCount: 100,
+      plans: ['pln_1'],
+      planUid: 'pln_from_another_project',
+      lookupItems: () => items,
+      lookupSymbols: () => symbols,
+    });
+
+    assert.equal(contaminated.markers.length, 0);
+    assert.equal(contaminated.itemCount, 0);
+  });
+
+  test('a plan inside the project still narrows to it', () => {
+    setItems([
+      {
+        title: 'Rotate signing keys',
+        fileSpecs: [
+          {
+            path: 'src/auth/session.ts',
+            action: 'modify',
+            edits: [{ lineRange: { start: 1, end: 5 }, instruction: 'do it' }],
+          },
+        ],
+      },
+    ]);
+
+    const scoped = buildFileOverlay({
+      absolutePath: '/repo/src/auth/session.ts',
+      relativePath: 'src/auth/session.ts',
+      lineCount: 100,
+      plans: ['pln_1', 'pln_2'],
+      planUid: 'pln_1',
+      lookupItems: () => items,
+      lookupSymbols: () => symbols,
+    });
+
+    assert.ok(scoped.markers.length > 0, 'the plan that IS in the project still draws');
+  });
+});

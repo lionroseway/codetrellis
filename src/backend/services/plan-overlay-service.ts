@@ -172,7 +172,19 @@ export function buildFileOverlay(params: {
   const unanchored: OverlayMarker[] = [];
   const touchingItems = new Set<string>();
 
-  const planUids = params.planUid ? [params.planUid] : params.plans;
+  // INTERSECT, don't replace. `plans` is the only value derived from the
+  // opened project; `planUid` arrives from a query parameter. Taking the
+  // parameter alone let a plan belonging to project B draw its item
+  // titles, instructions and intents over a file in project A, and count
+  // them in `itemCount` — with the route comment directly above claiming
+  // the parameter "only NARROWS the result, it never widens access".
+  //
+  // Not an authentication break: the caller already holds the capability
+  // token. It is cross-project contamination of a surface whose entire
+  // value is that the marker is believed.
+  const planUids = params.planUid
+    ? params.plans.filter((p) => p === params.planUid)
+    : params.plans;
 
   for (const planUid of planUids) {
     let items: PlanItem[];

@@ -51,7 +51,14 @@ interface SyncState {
   planUid: string;
   lastSyncedAt: number | null;
   changed: SyncStateEntry[];
-  planRefs: Array<{ externalKey: string; url: string }>;
+  /**
+   * `externalKey` is `string | null` on the backend — `keyFromUrl` only
+   * recognises Jira, Linear and GitHub, and returns null for the Azure
+   * DevOps, Shortcut and wiki URLs the intake service also accepts.
+   * Declaring it non-null here did not make it so: it rendered an anchor
+   * with no text, which is a link the user can neither see nor click.
+   */
+  planRefs: Array<{ externalKey: string | null; url: string; title?: string | null }>;
 }
 
 function formatWhen(ts: number): string {
@@ -139,13 +146,17 @@ export function PlanTicketSyncChip({ plan }: { plan: Plan }) {
             <div className="mb-2 text-foreground-subtle">
               This plan came from{' '}
               {state.planRefs.map((r, i) => (
-                <span key={r.externalKey}>
+                // Keyed on the URL: the external key is null for several
+                // of the trackers this accepts, so several siblings
+                // shared `key={null}` and React reconciled them by
+                // position.
+                <span key={r.url}>
                   {i > 0 && ', '}
                   <a
                     href={r.url} target="_blank" rel="noreferrer"
                     className="text-accent hover:underline font-mono"
                   >
-                    {r.externalKey}
+                    {r.externalKey || r.title || r.url}
                   </a>
                 </span>
               ))}
