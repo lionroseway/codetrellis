@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Copy, Check, Sparkles, Plug } from 'lucide-react';
-import { GUIDE_SECTIONS, GUIDE_GROUPS, type GuideSection } from './guide-content';
+import { GUIDE_SECTIONS, GUIDE_GROUPS } from './guide-content';
 
 /**
  * The in-app guide — rail on the left, one topic at a time on the right.

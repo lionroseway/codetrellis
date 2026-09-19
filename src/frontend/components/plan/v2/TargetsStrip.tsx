@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { FileText, Folder, Hash, ArrowRight, X, Plus } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { FileSymbolExpander } from './FileSymbolExpander';
-import type { PlanItem } from '@shared/types';
+import { AnchorPicker, type AnchorSelection } from './AnchorPicker';
+import type { PlanItem, SymbolSpec } from '@shared/types';
 
 /**
  * Phase 15 §15.D.2 — Targets Strip.
@@ -24,9 +25,15 @@ import type { PlanItem } from '@shared/types';
  * AND via API shows once). Each target is a compact pill that can be
  * x'd to remove. For Actions, pills show the verb (add/modify/remove).
  *
- * If the item has zero targets, the strip renders a gentle "No targets"
- * placeholder + a single "+Add" button that opens the AnchorPicker
- * (delegated to the ContextRail's add flow via a callback).
+ * The "+" opens the AnchorPicker. It used to do that only when a caller
+ * passed `onAddClick`, and no caller ever did — so the button, its
+ * tooltip and the picker behind it were unreachable from every surface
+ * that renders this strip. The capability existed (the ContextRail's
+ * "Add context", further down the page), which is why nothing looked
+ * broken: the eye-level affordance was simply absent. The strip now owns
+ * the picker, and `onAddClick` stays as an override for a caller that
+ * wants its own flow rather than as the thing that switches the button
+ * on.
  *
  * Design: the strip is NOT the same as the ContextRail. The rail lives
  * lower on the page and shows full-detail rows with descriptions,
@@ -132,7 +139,44 @@ export function TargetsStrip({
   onAddClick?: () => void;
 }) {
   const updateItem = usePlanItemsStore((s) => s.updateItem);
+  const [picking, setPicking] = useState(false);
   const body = item.body ?? '';
+
+  /**
+   * Write a picked anchor onto the item.
+   *
+   * Paths are stored exactly as the picker reports them — project
+   * relative — because that is the shape review and the drift feed match
+   * on. Storing an absolute path here looks identical on screen and makes
+   * every later "did it land?" answer no.
+   */
+  const addTarget = useCallback((sel: AnchorSelection) => {
+    setPicking(false);
+    if (sel.kind === 'symbol') {
+      const existing = item.symbolSpecs ?? [];
+      if (existing.some((ss) => ss.name === sel.value && ss.filePath === sel.filePath)) return;
+      updateItem(item.uid, {
+        symbolSpecs: [
+          ...existing,
+          {
+            name: sel.value,
+            kind: (sel.symbolKind as SymbolSpec['kind']) ?? 'function',
+            action: 'modify',
+            filePath: sel.filePath,
+          },
+        ],
+      });
+      return;
+    }
+    const existing = item.fileSpecs ?? [];
+    if (existing.some((fs) => fs.path === sel.value)) return;
+    updateItem(item.uid, {
+      fileSpecs: [
+        ...existing,
+        { path: sel.value, action: 'modify', ...(sel.kind === 'folder' ? { isDir: true } : {}) },
+      ],
+    });
+  }, [item.uid, item.fileSpecs, item.symbolSpecs, updateItem]);
 
   const targets = useMemo(() => {
     const bodyTargets = extractBodyTargets(body);
@@ -185,10 +229,33 @@ export function TargetsStrip({
     }
   };
 
-  // Progressive disclosure: hide entirely when there are no targets.
-  // The user can add targets via @ mentions in the body or the ContextRail.
+  // Progressive disclosure, but not invisibility. This used to return
+  // null with no targets, which is exactly the state every newly created
+  // item is in — so the one place a person looks for "what code does this
+  // touch?" showed nothing, and offered no way to say. The docstring
+  // above has always described a placeholder and an add button here; now
+  // there is one. It stays a single dashed button, not a section, so the
+  // page is no busier than before for an item that has targets.
   if (targets.length === 0) {
-    return null;
+    return (
+      <div className="px-1 py-2">
+        <button
+          onClick={onAddClick ?? (() => setPicking(true))}
+          className="flex items-center gap-1.5 px-2 py-1 text-[11.5px] rounded-md border border-dashed border-white/[0.1] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
+          title="Add a file, symbol, or edge target"
+        >
+          <Plus size={11} /> Add a target
+        </button>
+        {picking && (
+          <AnchorPicker
+            planUid={item.planUid}
+            title="Add a target"
+            onPick={addTarget}
+            onClose={() => setPicking(false)}
+          />
+        )}
+      </div>
+    );
   }
 
   // Phase 17.D — File targets that can be expanded to show symbols
@@ -207,14 +274,22 @@ export function TargetsStrip({
         {targets.map((t) => (
           <TargetPillChip key={t.id} target={t} onRemove={t.source === 'api' ? () => removeTarget(t) : undefined} />
         ))}
-        {onAddClick && (
+        {(
           <button
-            onClick={onAddClick}
+            onClick={onAddClick ?? (() => setPicking(true))}
             className="flex items-center gap-1 px-2 py-1 text-[11.5px] rounded-md border border-dashed border-white/[0.1] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
             title="Add a file, symbol, or edge target"
           >
             <Plus size={11} />
           </button>
+        )}
+        {picking && (
+          <AnchorPicker
+            planUid={item.planUid}
+            title="Add a target"
+            onPick={addTarget}
+            onClose={() => setPicking(false)}
+          />
         )}
       </div>
       {/* Phase 17.D — Symbol expanders for file targets */}

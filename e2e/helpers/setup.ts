@@ -9,10 +9,40 @@
  * so we never have to touch the native folder picker.
  */
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { type Page, type APIRequestContext, expect } from '@playwright/test';
 
 export const API = 'http://localhost:3001/api';
 export const PROJECT_PATH = process.cwd();
+
+/**
+ * Every API call from a test needs the per-launch capability token.
+ *
+ * Phase 19's first rule is that loopback is not an authorisation
+ * boundary, so `/api/*` authenticates — including from a test. The
+ * helpers here did not send it, and the failure was quiet in exactly the
+ * wrong way: `cleanupPlans` checked `res.ok()` and skipped its work on a
+ * 401, so plans accumulated without complaint, while `seedPlan` failed
+ * its own expect and took every spec that seeds a plan down with it.
+ *
+ * Sending it from one place means a spec cannot forget, and a future
+ * endpoint that starts authenticating does not break the suite again.
+ */
+export function authHeaders(): Record<string, string> {
+  const dataDir = process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
+  try {
+    return {
+      'x-codetrellis-token': fs.readFileSync(path.join(dataDir, 'capability-token'), 'utf-8').trim(),
+    };
+  } catch {
+    // No token on disk: let the request go out unauthenticated so the
+    // failure says 401 rather than ENOENT, which is the more useful
+    // thing to read in a report.
+    return {};
+  }
+}
 
 // ─────────────────────────────────────────────────
 // Setup helpers
@@ -147,6 +177,7 @@ export async function seedPlan(
 
   // Create the plan
   const planRes = await request.post(`${API}/plans`, {
+    headers: authHeaders(),
     data: {
       title,
       description: 'Created by E2E test helper',
@@ -168,6 +199,7 @@ export async function seedPlan(
 
   for (const action of actions) {
     const itemRes = await request.post(`${API}/plans/${plan.uid}/items`, {
+      headers: authHeaders(),
       data: {
         kind: 'action',
         title: action.title,
@@ -206,13 +238,20 @@ export async function cleanupPlans(
   request: APIRequestContext,
   titlePattern: string,
 ) {
-  const res = await request.get(`${API}/plans`);
-  if (res.ok()) {
-    const plans = await res.json();
-    for (const p of plans) {
-      if (p.title.includes(titlePattern) && p.status !== 'archived') {
-        await request.delete(`${API}/plans/${p.uid}`);
-      }
+  const res = await request.get(`${API}/plans`, { headers: authHeaders() });
+  if (!res.ok()) {
+    // Say so rather than silently leaving the plans behind. A cleanup
+    // that no-ops looks identical to one that worked until the next run
+    // finds forty stale plans in the list.
+    console.warn(`[e2e] cleanupPlans could not list plans (${res.status()}) — nothing removed`);
+    return;
+  }
+  const body = await res.json();
+  const plans: Array<{ uid: string; title: string; status: string }> =
+    Array.isArray(body) ? body : (body?.plans ?? []);
+  for (const p of plans) {
+    if (p.title.includes(titlePattern) && p.status !== 'archived') {
+      await request.delete(`${API}/plans/${p.uid}`, { headers: authHeaders() });
     }
   }
 }
@@ -230,7 +269,7 @@ export async function seedAgentSession(request: APIRequestContext) {
   // check what's there. For a real agent session we'd need the MCP
   // transport, so browser tests typically verify the UI elements
   // are rendering correctly with whatever sessions exist.
-  const res = await request.get(`${API}/sessions`);
+  const res = await request.get(`${API}/sessions`, { headers: authHeaders() });
   return res.json();
 }
 

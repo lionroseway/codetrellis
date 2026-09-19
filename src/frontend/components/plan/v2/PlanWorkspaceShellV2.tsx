@@ -58,6 +58,8 @@ export function PlanWorkspaceShellV2() {
   const hydratePlan = usePlanItemsStore((s) => s.hydratePlan);
   const resetForPlan = usePlanItemsStore((s) => s.resetForPlan);
   const activeStorePlanUid = usePlanItemsStore((s) => s.activePlanUid);
+  const selectedItemUid = usePlanItemsStore((s) => s.selectedItemUid);
+  const selectItem = usePlanItemsStore((s) => s.selectItem);
 
   useEffect(() => {
     if (!plan) return;
@@ -140,7 +142,27 @@ export function PlanWorkspaceShellV2() {
         </button>
         <div className="h-5 w-px bg-white/[0.08]" />
         <ListChecks size={12} className="text-accent shrink-0" />
-        <h2 className="text-[13px] font-semibold text-foreground truncate flex-1 min-w-0" title={plan.title}>{plan.title}</h2>
+        {/*
+          The plan's name is the way back to the plan's own page.
+
+          Opening an item set `selectedItemUid` and nothing ever cleared
+          it: `selectItem(null)` had no caller in any component, and
+          `navigateBack` only one, in a WebSocket handler. So the plan
+          page — its description, its budget chip, its ticket chip, the
+          shared/local toggle and the revision history, all of which live
+          only there — became unreachable the moment you clicked a task,
+          for the rest of the session. Clicking the document's name to
+          get to the document is how every editor behaves; it just was
+          not wired.
+        */}
+        <button
+          onClick={() => selectItem(null)}
+          disabled={!selectedItemUid}
+          className="text-[13px] font-semibold text-foreground truncate flex-1 min-w-0 text-left rounded px-1 -mx-1 transition-colors enabled:hover:text-accent enabled:hover:bg-white/[0.04] disabled:cursor-default"
+          title={selectedItemUid ? `Back to ${plan.title}` : plan.title}
+        >
+          {plan.title}
+        </button>
         <span className="text-[11px] uppercase tracking-wider text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30">
           V2
         </span>

@@ -36,6 +36,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMcpClient, type ScriptedMcp } from '../tests/harness/mcp-client';
+import {
+  repoWithHistory, monorepoPackage, noGitDirectory, repoWithNoCommits,
+  repoWithPlanConflict, cleanupFixtures, fixtureRoot,
+} from './demo-fixtures';
 
 // ── options ──────────────────────────────────────────────────────────
 
@@ -54,6 +58,7 @@ const BEAT = { slow: 4200, normal: 2400, fast: 900 }[PACE] ?? 2400;
 const PROJECT = path.resolve(flag('project') ?? path.join(REPO, 'tests/fixtures/sample-app'));
 const DATA_DIR = flag('data-dir') ?? process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
 const MCP_PORT = Number(flag('port') ?? 19432);
+const API_PORT = Number(flag('api-port') ?? 3001);
 const ONLY = flag('scene');
 const SHOTS = flag('shots');
 
@@ -70,6 +75,12 @@ interface Ctx {
   edit(relative: string, mutate: (src: string) => string): void;
   /** A second (third…) connected agent, for contention journeys. */
   agent(name: string): Promise<ScriptedMcp>;
+  /**
+   * Read an HTTP endpoint the way the UI does — same token, same route.
+   * Some journeys are about what a panel is shown, and the panel does not
+   * go through MCP.
+   */
+  api(pathAndQuery: string): Promise<any>;
   /**
    * A call that SHOULD be refused. Same as `call`, but a refusal is the
    * pass and is not flagged — otherwise the refusal journey reports the
@@ -466,6 +477,175 @@ const SCENES: Scene[] = [
   },
 
   {
+    id: 'history',
+    title: 'Come back to it a day later, on a branch with other work in it',
+    watch: 'the comparand list offers commits, and review against one differs from review against the tree',
+    async run(c) {
+      const fixture = repoWithHistory();
+      await c.say(
+        'A repo with history',
+        'Three commits, one of them somebody else’s, and uncommitted work on top. "What landed?" now has more than one answer.',
+      );
+      await c.call('open_project', { project_path: fixture.path });
+      await c.beat();
+
+      const comparands = await c.json('list_comparands', { project_path: fixture.path });
+      const list: Array<{ id?: string; kind?: string; label?: string }> =
+        Array.isArray(comparands) ? comparands : (comparands?.comparands ?? []);
+      const kinds = new Set(list.map((x) => x.kind).filter(Boolean));
+      console.log(`    comparands: ${list.length} · kinds: ${[...kinds].join(', ') || 'none'}`);
+      if (!kinds.has('commit')) c.flag('the comparand picker offered no commits on a repo with three');
+      if (!kinds.has('live')) c.flag('the comparand picker did not offer the working tree');
+
+      const plan = await c.json('create_plan', {
+        title: 'Round money consistently (history)',
+        description: 'Planned before the branch moved on.',
+        project_path: fixture.path,
+      });
+      const planUid = plan?.uid ?? plan?.plan_uid ?? '';
+      if (!planUid) { c.flag('could not create a plan against the history fixture'); return; }
+      c.state.historyPlan = planUid;
+      c.state.historyRepo = fixture.path;
+
+      await c.call('create_item', {
+        plan_uid: planUid, kind: 'action', title: 'Round in the Go money package',
+        file_specs: [{ path: 'src/money.go', action: 'modify' }],
+      });
+      await c.call('create_item', {
+        plan_uid: planUid, kind: 'action', title: 'Round in the Python report',
+        file_specs: [{ path: 'src/report.py', action: 'modify' }],
+      });
+
+      await c.say(
+        'Against the working tree, then against a commit',
+        'The same plan, two questions. One asks what is different right now; the other asks what has happened since a point you choose.',
+      );
+
+      const live = await c.json('review_plan', {
+        plan_uid: planUid, project_path: fixture.path, before: 'baseline', after: 'live',
+      });
+      const older = fixture.commits[1].sha;
+      const sinceCommit = await c.json('review_plan', {
+        plan_uid: planUid, project_path: fixture.path, before: older, after: 'live',
+      });
+
+      const summarise = (r: any) => {
+        if (!r) return 'no answer';
+        const a = r.planAlignment ?? r.alignment ?? {};
+        const unclaimed = r.unclaimedChanges ?? r.unclaimed ?? [];
+        return `satisfied ${a.satisfied ?? '?'} · missing ${a.missing ?? '?'} · unclaimed ${Array.isArray(unclaimed) ? unclaimed.length : '?'}`;
+      };
+      console.log('    vs working tree :', summarise(live));
+      console.log(`    vs ${older.slice(0, 7)}      :`, summarise(sinceCommit));
+
+      if (JSON.stringify(live) === JSON.stringify(sinceCommit)) {
+        c.flag('reviewing against a commit gave exactly the working-tree answer — the comparand was ignored');
+      }
+
+      const unclaimed = sinceCommit?.unclaimedChanges ?? sinceCommit?.unclaimed ?? [];
+      const names = (Array.isArray(unclaimed) ? unclaimed : []).map((u: any) => u.path ?? u.file ?? u).join(', ');
+      console.log('    unclaimed since that commit:', names || 'none');
+      if (!names.includes('notify.rb')) {
+        c.flag('notify.rb landed after that commit and is in no plan item, but review did not surface it');
+      }
+      await c.shot('11-history');
+    },
+  },
+
+  {
+    id: 'scoping',
+    title: 'A package inside a bigger repo',
+    watch: 'the changes list shows the package’s own work, not the monorepo’s',
+    async run(c) {
+      const { repo, project } = monorepoPackage();
+      await c.say(
+        'Opening one package of a monorepo',
+        'Two sibling packages have uncommitted work. None of it belongs to the one you opened.',
+      );
+      await c.call('open_project', { project_path: project });
+      await c.beat();
+
+      const status = await c.api(`/api/git/status?projectPath=${encodeURIComponent(project)}`);
+      const files: string[] = (status?.files ?? status?.changes ?? []).map((f: any) => f.path ?? f.file ?? f);
+      console.log('    changed, as the panel sees it:', files.length ? files.join(', ') : 'none');
+      const leaked = files.filter((f) => f.includes('billing') || f.includes('tools/'));
+      if (leaked.length) c.flag(`the parent repo's files leaked into the package: ${leaked.join(', ')}`);
+      console.log('    (the repo root has 2 modified files; the package has 0)');
+      void repo;
+      await c.shot('12-scoping');
+    },
+  },
+
+  {
+    id: 'degrade',
+    title: 'No git, or no commits yet',
+    watch: 'both states answer honestly instead of erroring or inventing a comparand',
+    async run(c) {
+      const bare = noGitDirectory();
+      await c.say('A directory with no git in it', 'There is nothing to compare against. Saying so is the correct answer.');
+      await c.call('open_project', { project_path: bare });
+      const noGit = await c.json('list_comparands', { project_path: bare });
+      const noGitList: any[] = Array.isArray(noGit) ? noGit : (noGit?.comparands ?? []);
+      console.log('    no-git comparands:', noGitList.map((x) => x.kind ?? x.id).join(', ') || 'none');
+      if (noGitList.some((x) => x.kind === 'commit')) c.flag('commits were offered for a directory with no git');
+
+      const fresh = repoWithNoCommits();
+      await c.say('A repo on its first day', 'Initialised, nothing committed. Also a real state, and also not an error.');
+      await c.call('open_project', { project_path: fresh });
+      const noCommits = await c.json('list_comparands', { project_path: fresh });
+      const freshList: any[] = Array.isArray(noCommits) ? noCommits : (noCommits?.comparands ?? []);
+      console.log('    no-commits comparands:', freshList.map((x) => x.kind ?? x.id).join(', ') || 'none');
+      if (freshList.some((x) => x.kind === 'commit')) c.flag('commits were offered for a repo with no commits');
+      if (freshList.length === 0) c.flag('a fresh repo offered nothing at all — not even the working tree');
+      await c.beat();
+    },
+  },
+
+  {
+    id: 'conflict',
+    title: 'Two people planned on two branches',
+    watch: 'the conflict is named per field, and resolving it leaves valid YAML rather than markers',
+    async run(c) {
+      const fixture = repoWithPlanConflict();
+      await c.say(
+        'A plan that conflicts',
+        'Plans are files in the repo, so two branches planning at once conflict like any other file. Resolving that by hand-editing markers is what this avoids.',
+        'warning',
+      );
+      await c.call('open_project', { project_path: fixture.path });
+      await c.beat();
+
+      const found = await c.json('detect_conflicts', { project_path: fixture.path });
+      const conflicted: any[] = found?.files ?? found?.conflicts ?? (Array.isArray(found) ? found : []);
+      console.log('    conflicted manifests:', conflicted.length);
+      if (conflicted.length === 0) {
+        c.flag('a repo left mid-merge with a conflicted plan manifest reported no conflicts');
+        return;
+      }
+      console.log('    ', JSON.stringify(conflicted[0]).slice(0, 180));
+
+      await c.say('Taking one side', 'Whole-side is the blunt resolution; the per-field one is in the panel.');
+      const resolved = await c.call('resolve_conflict', {
+        project_path: fixture.path,
+        file_path: fixture.manifest,
+        mode: 'by_side',
+        side: 'theirs',
+      });
+      if (!resolved.ok) return;
+
+      const after = fs.readFileSync(path.join(fixture.path, fixture.manifest), 'utf-8');
+      if (/^<{7}|^={7}|^>{7}/m.test(after)) c.flag('conflict markers survived the resolution');
+      if (!/title:/.test(after)) c.flag('the resolved manifest lost its fields');
+      console.log('    resolved to:', after.split('\n').filter(Boolean).join(' · '));
+
+      const still = await c.json('detect_conflicts', { project_path: fixture.path });
+      const left: any[] = still?.files ?? still?.conflicts ?? (Array.isArray(still) ? still : []);
+      if (left.length !== 0) c.flag('the file still reports as conflicted after being resolved');
+      await c.shot('13-conflict');
+    },
+  },
+
+  {
     id: 'finish',
     title: 'Hand back to the human',
     watch: 'the card with a Got it button — the agent waits for you',
@@ -554,6 +734,18 @@ async function main() {
       extraAgents.push(extra);
       return extra;
     },
+    async api(pathAndQuery) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${API_PORT}${pathAndQuery}`, {
+          headers: { 'x-codetrellis-token': token },
+        });
+        if (!res.ok) { ctx.flag(`GET ${pathAndQuery} -> ${res.status}`); return null; }
+        return await res.json();
+      } catch (err) {
+        ctx.flag(`GET ${pathAndQuery} failed: ${err instanceof Error ? err.message : err}`);
+        return null;
+      }
+    },
   };
 
   const scenes = ONLY ? SCENES.filter((s) => s.id === ONLY) : SCENES;
@@ -581,10 +773,18 @@ async function main() {
       await client.callTool('delete_plan', { plan_uid: ctx.state.plan }).catch(() => {});
       console.log('   deleted the demo plan');
     }
+    if (ctx.state.historyPlan) {
+      await client.callTool('delete_plan', { plan_uid: ctx.state.historyPlan }).catch(() => {});
+    }
     for (const extra of extraAgents) await extra.disconnect().catch(() => {});
     await client.callTool('dismiss_presence', {}).catch(() => {});
+    // Some journeys open a throwaway repo. Put the user back where they
+    // started before the fixtures are deleted underneath the app.
+    await client.callTool('open_project', { project_path: PROJECT }).catch(() => {});
     await client.callTool('rescan_project', { project_path: PROJECT }).catch(() => {});
     await client.disconnect().catch(() => {});
+    if (fixtureRoot()) console.log('   removed the throwaway fixtures');
+    cleanupFixtures();
 
     console.log('\n' + '='.repeat(66));
     if (flagged.length === 0) console.log('Nothing looked wrong.');
@@ -598,6 +798,7 @@ async function main() {
 
 main().catch((err) => {
   for (const [abs, original] of edited) fs.writeFileSync(abs, original);
+  cleanupFixtures();
   console.error('\nDemo stopped:', err instanceof Error ? err.message : err);
   console.error('Any edited files were restored.\n');
   process.exit(1);
