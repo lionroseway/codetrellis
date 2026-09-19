@@ -194,9 +194,54 @@ export function getPlan(planUid: string): (Plan & { tasks: Task[] }) | null {
   const core = rowToPlanCore(r);
   return {
     ...core,
-    taskCount: tasks.length,
-    completedTaskCount: tasks.filter((t) => t.status === 'done').length,
+    // Same source as the list — see `countPlanActions`. Counting the
+    // legacy `tasks` array here meant the plan DETAIL disagreed with
+    // itself too: 0 actions beside an item tree that plainly had some.
+    ...countPlanActions(db, planUid),
     tasks,
+  };
+}
+
+/**
+ * How many ACTIONS a plan has, and how many are done.
+ *
+ * Counts `plan_items`, not `tasks`. `tasks` is the pre-V2 table and no
+ * modern write path touches it — `add_item` and `bulk_add_items` both go to
+ * `plan_items` — so counting it reported 0/0 for every plan an agent has
+ * ever created. That number is on the plan list, the plan chip, the
+ * minimised chip and two popovers, so "0/0 actions · 0%" was what the user
+ * saw for real, populated plans.
+ *
+ * F13 fixed the ONE surface that contradicted itself most visibly (the V2
+ * toolbar, by deriving from the live item tree) and left the stale field
+ * feeding everything else. Fixing it here fixes all of them, because they
+ * all read this.
+ *
+ * Legacy plans really do have `tasks` rows and no items, so those still
+ * count — `plan_items` wins when a plan has any, otherwise `tasks` does.
+ * Summing both would double-count anything that was ever migrated.
+ */
+function countPlanActions(db: ReturnType<typeof getDb>, planUid: string): {
+  taskCount: number;
+  completedTaskCount: number;
+} {
+  const items = db.exec(
+    `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END)
+     FROM plan_items WHERE plan_uid = ? AND kind = 'action'`,
+    [planUid],
+  );
+  const itemTotal = (items[0]?.values[0]?.[0] as number) || 0;
+  if (itemTotal > 0) {
+    return { taskCount: itemTotal, completedTaskCount: (items[0]?.values[0]?.[1] as number) || 0 };
+  }
+
+  const legacy = db.exec(
+    `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
+    [planUid],
+  );
+  return {
+    taskCount: (legacy[0]?.values[0]?.[0] as number) || 0,
+    completedTaskCount: (legacy[0]?.values[0]?.[1] as number) || 0,
   };
 }
 
@@ -214,15 +259,7 @@ export function listPlans(projectPath?: string, statusFilter?: string): Plan[] {
 
   return result[0].values.map((r: any[]) => {
     const core = rowToPlanCore(r);
-    const counts = db.exec(
-      `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
-      [r[0]]
-    );
-    return {
-      ...core,
-      taskCount: (counts[0]?.values[0]?.[0] as number) || 0,
-      completedTaskCount: (counts[0]?.values[0]?.[1] as number) || 0,
-    };
+    return { ...core, ...countPlanActions(db, r[0] as string) };
   });
 }
 
@@ -390,15 +427,7 @@ export function listPlansByRepoUrl(repoUrl: string): Plan[] {
 
   return result[0].values.map((r: any[]) => {
     const core = rowToPlanCore(r);
-    const counts = db.exec(
-      `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
-      [r[0]],
-    );
-    return {
-      ...core,
-      taskCount: (counts[0]?.values[0]?.[0] as number) || 0,
-      completedTaskCount: (counts[0]?.values[0]?.[1] as number) || 0,
-    };
+    return { ...core, ...countPlanActions(db, r[0] as string) };
   });
 }
 
