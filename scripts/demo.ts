@@ -68,6 +68,14 @@ interface Ctx {
   shot(label: string): Promise<void>;
   /** Edit a file; it is restored when the demo ends, however it ends. */
   edit(relative: string, mutate: (src: string) => string): void;
+  /** A second (third…) connected agent, for contention journeys. */
+  agent(name: string): Promise<ScriptedMcp>;
+  /**
+   * A call that SHOULD be refused. Same as `call`, but a refusal is the
+   * pass and is not flagged — otherwise the refusal journey reports the
+   * product working correctly as a defect.
+   */
+  refuse(tool: string, args?: Record<string, unknown>): Promise<{ ok: boolean; text: string }>;
   flag(message: string): void;
   state: Record<string, string>;
 }
@@ -82,6 +90,7 @@ interface Scene {
 
 const flagged: string[] = [];
 const edited = new Map<string, string>();
+const extraAgents: ScriptedMcp[] = [];
 
 // ── the scenes ───────────────────────────────────────────────────────
 
@@ -200,6 +209,17 @@ const SCENES: Scene[] = [
       const out = await c.call('terminal_read', { session_id: c.state.term, lines: 25 });
       console.log('    terminal:', out.text.split('\n').filter(Boolean).slice(-2).join(' | ').slice(0, 100));
       await c.shot('03-terminal');
+
+      // Show it, use it, put it away — the drawer is a place you visit,
+      // not somewhere you live.
+      await c.say('Putting it away', 'Hiding the drawer must not kill the session. Killing it should.');
+      await c.call('toggle_panel', { panel: 'terminal' });
+      await c.beat();
+      const alive = await c.json('terminal_list', { alive_only: true });
+      const stillThere = JSON.stringify(alive).includes(c.state.term);
+      console.log('    session survives hiding the drawer:', stillThere ? 'yes' : 'NO');
+      if (!stillThere) c.flag('hiding the terminal drawer killed the session');
+      await c.call('toggle_panel', { panel: 'terminal' });
     },
   },
 
@@ -293,6 +313,159 @@ const SCENES: Scene[] = [
   },
 
   {
+    id: 'graph',
+    title: 'Explore the graph properly',
+    watch: 'depth changes, a file focuses into its symbols, then the scope narrows to one service',
+    async run(c) {
+      await c.say('Reading the architecture', 'Clusters group what people talk about. Files show imports. Symbols open a file up.');
+      for (const depth of ['package', 'file', 'symbol'] as const) {
+        await c.call('graph_set_depth', { depth });
+        await c.beat();
+      }
+
+      await c.say('Focusing one file', 'Focus mode is where symbols appear — a file opened into its functions and types.');
+      const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
+      await c.call('graph_focus', { path: abs, highlight: true });
+      await c.beat(2);
+
+      const snap = await c.json('graph_snapshot');
+      const n = snap?.nodeCount ?? snap?.nodes?.length ?? 0;
+      console.log(`    graph_snapshot: ${n} nodes`);
+      if (n === 0) c.flag('graph_snapshot returned an empty graph while the canvas is drawing one');
+
+      await c.say('Narrowing the scope', 'One service at a time, when the whole estate is too much.');
+      await c.call('graph_set_scope', { scope_path: path.join(PROJECT, 'services') });
+      await c.beat();
+      await c.shot('07-graph-scoped');
+      await c.call('graph_set_scope', { scope_path: PROJECT });
+      await c.call('graph_set_depth', { depth: 'file' });
+    },
+  },
+
+  {
+    id: 'blocked',
+    title: 'An agent gets blocked, and a human unblocks it',
+    watch: 'the item goes visibly blocked with a reason, then resumes — not a silent stall',
+    async run(c) {
+      if (!c.state.cs) return;
+      await c.say('Hitting something it cannot decide', 'The reporter truncates. Changing it moves published totals.', 'warning');
+      await c.call('claim_item', { uid: c.state.cs });
+      await c.call('set_item_blocked', { uid: c.state.cs, reason: 'Needs sign-off: changing this moves published totals.' });
+      const ev = await c.json('post_channel_event', {
+        plan_uid: c.state.plan, item_uid: c.state.cs, event_type: 'stuck',
+        message: 'Blocked on the reporter — changing rounding here restates figures we have already published.',
+        attempted: ['matched the Go behaviour locally', 'checked the reporter tests'],
+      });
+      await c.beat(2);
+
+      const blocked = await c.json('get_item', { uid: c.state.cs });
+      const isBlocked = Boolean(blocked?.blockedReason ?? blocked?.blocked_reason);
+      console.log('    item reports blocked:', isBlocked ? 'yes' : 'NO');
+      if (!isBlocked) c.flag('set_item_blocked did not leave a visible reason on the item');
+      await c.shot('08-blocked');
+
+      await c.say('The human answers', 'Finance signed it off — half-up. Carry on.', 'success');
+      if (ev?.uid) await c.call('resolve_channel_event', { event_uid: ev.uid });
+      await c.call('set_item_blocked', { uid: c.state.cs, reason: '' });
+      const after = await c.json('get_item', { uid: c.state.cs });
+      const stillBlocked = Boolean(after?.blockedReason ?? after?.blocked_reason);
+      console.log('    unblocked:', stillBlocked ? 'NO — still blocked' : 'yes');
+      if (stillBlocked) c.flag('clearing the reason did not unblock the item');
+      await c.beat();
+    },
+  },
+
+  {
+    id: 'agents',
+    title: 'Two agents on one plan',
+    watch: 'the second agent gets a different item — not the one the first just claimed',
+    async run(c) {
+      if (!c.state.plan) return;
+      await c.say('A second agent connects', 'Both want work. Claiming is atomic, so they must not collide.');
+      const second = await c.agent('claude-code-2');
+
+      const askFirst = await c.json('get_next_item', { plan_uid: c.state.plan });
+      const firstUid = askFirst?.uid ?? '';
+      if (firstUid) await c.call('claim_item', { uid: firstUid });
+
+      const r = await second.callTool('get_next_item', { plan_uid: c.state.plan });
+      let secondUid = '';
+      try { secondUid = JSON.parse(r.text)?.uid ?? ''; } catch { /* may be empty */ }
+
+      console.log('    agent 1 claimed:', firstUid.slice(0, 8) || '(none)');
+      console.log('    agent 2 offered:', secondUid.slice(0, 8) || '(nothing left)');
+      if (firstUid && secondUid && firstUid === secondUid) {
+        c.flag('both agents were offered the same item — claiming is not exclusive');
+      }
+
+      const dup = await second.callTool('claim_item', { uid: firstUid });
+      const refused = dup.isError || /already|claimed/i.test(dup.text);
+      console.log('    second claim on the same item refused:', refused ? 'yes' : 'NO');
+      if (firstUid && !refused) c.flag('a claimed item was claimed again by another agent');
+      await c.beat();
+      await c.shot('09-two-agents');
+    },
+  },
+
+  {
+    id: 'docs',
+    title: 'Write the architecture down, and watch it go stale',
+    watch: 'a doc appears in Docs, then freshness reports it drifting once the code moves',
+    async run(c) {
+      await c.say('Writing a system doc', 'The written architecture lives with the code, and is checked against it.');
+      const doc = await c.json('write_system_doc', {
+        project_path: PROJECT,
+        title: 'Money rounding',
+        body: '# Money rounding\n\nAll services round half-up via `Amount.Add` in the Go money package.\n',
+      });
+      c.state.doc = doc?.uid ?? doc?.doc?.uid ?? '';
+      const listed = await c.json('list_system_docs', { project_path: PROJECT });
+      const count = Array.isArray(listed) ? listed.length : (listed?.docs?.length ?? 0);
+      console.log('    system docs:', count);
+      if (count === 0) c.flag('the doc was written but does not list');
+      await c.call('navigate_to', { target: 'graph' });
+      await c.beat();
+
+      if (!c.state.doc) c.flag('write_system_doc returned no uid');
+      const fresh = c.state.doc ? await c.json('check_doc_freshness', { uid: c.state.doc }) : null;
+      console.log('    freshness:', JSON.stringify(fresh).slice(0, 110));
+      await c.shot('10-docs');
+    },
+  },
+
+  {
+    id: 'drift',
+    title: 'Where reality moved away from the plan',
+    watch: 'drift reported as information, not as a blocker',
+    async run(c) {
+      if (!c.state.plan) return;
+      await c.say('Checking drift', 'Two items are still open and one file changed. That gap is the report.');
+      const drift = await c.json('get_drift_report', { plan_uid: c.state.plan });
+      console.log('    drift:', JSON.stringify(drift).slice(0, 160));
+      const dev = await c.json('detect_deviations', { plan_uid: c.state.plan });
+      console.log('    deviations:', JSON.stringify(dev).slice(0, 110));
+      await c.beat();
+    },
+  },
+
+  {
+    id: 'refusal',
+    title: 'An agent asks for something it does not hold',
+    watch: 'the refusal names the capability and where to grant it',
+    async run(c) {
+      await c.say('Asking for a project that is not open', 'Path-taking tools are confined to projects you opened.', 'warning');
+      const r = await c.refuse('review_plan', { plan_uid: c.state.plan || 'x', project_path: '/etc' });
+      if (r.ok) c.flag('/etc was accepted as a project path');
+      else {
+        const legible = /not open/i.test(r.text) && /Settings/i.test(r.text);
+        console.log('    refusal is actionable:', legible ? 'yes' : 'NO');
+        if (!legible) c.flag('the refusal does not say how to proceed');
+      }
+      await c.beat();
+    },
+  },
+
+  {
     id: 'finish',
     title: 'Hand back to the human',
     watch: 'the card with a Got it button — the agent waits for you',
@@ -348,6 +521,10 @@ async function main() {
       if (r.isError) ctx.flag(`${tool}: ${r.text.split('\n')[0].slice(0, 140)}`);
       return { ok: !r.isError, text: r.text };
     },
+    async refuse(tool, args = {}) {
+      const r = await client.callTool(tool, args);
+      return { ok: !r.isError, text: r.text };
+    },
     async json(tool, args = {}) {
       const r = await ctx.call(tool, args);
       try { return JSON.parse(r.text); } catch { return null; }
@@ -369,6 +546,13 @@ async function main() {
       const abs = path.join(PROJECT, relative);
       if (!edited.has(abs)) edited.set(abs, fs.readFileSync(abs, 'utf-8'));
       fs.writeFileSync(abs, mutate(edited.get(abs)!));
+    },
+    async agent(name) {
+      const extra = createMcpClient({ mcpPort: MCP_PORT, capabilityToken: token, clientName: name });
+      await extra.connect();
+      await extra.callTool('register_session', { agent_type: name, model: 'demo' });
+      extraAgents.push(extra);
+      return extra;
     },
   };
 
@@ -397,6 +581,7 @@ async function main() {
       await client.callTool('delete_plan', { plan_uid: ctx.state.plan }).catch(() => {});
       console.log('   deleted the demo plan');
     }
+    for (const extra of extraAgents) await extra.disconnect().catch(() => {});
     await client.callTool('dismiss_presence', {}).catch(() => {});
     await client.callTool('rescan_project', { project_path: PROJECT }).catch(() => {});
     await client.disconnect().catch(() => {});
