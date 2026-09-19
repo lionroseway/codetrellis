@@ -7,7 +7,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { getParseableExtensions } from './ast-parser';
 import { projectRelative } from './trusted-roots';
-import { readTextWithin, ConfinementError } from './confined-fs';
+import { readTextWithin, resolveWithin, ConfinementError } from './confined-fs';
+import fs from 'node:fs';
 
 /**
  * Snapshot selection and comparison — Phase 25.
@@ -326,6 +327,48 @@ export function compareSnapshots(
   const edgesComparable = before.edgesKnown && after.edgesKnown;
 
   const notes: string[] = [];
+
+  // A file that FAILED TO PARSE is absent from the index and present on
+  // disk, and a commit→live diff called that "removed".
+  //
+  // The commit side is built from `git ls-tree` and filtered by
+  // extension; the live side is built from the `files` table, which only
+  // holds what parsed. So any file with an indexable extension and a
+  // syntax error in it — which during active development is a normal
+  // state, not an exotic one — was reported as deleted from a project
+  // where it is sitting right there.
+  //
+  // Extension parity was fixable from the commit side (that was B3);
+  // parse success is not, because knowing it for a historical blob would
+  // mean parsing the blob. So the check happens on the LIVE side, where
+  // the file either exists or does not. A file still on disk is not
+  // removed, and we do not claim to know whether it changed — its
+  // content was never indexed to compare against.
+  let stillOnDisk = 0;
+  if (after.spec === 'live') {
+    const gone = diff.removedFiles.filter((rel) => {
+      try {
+        return !fs.existsSync(resolveWithin(projectPath, rel, 'removal check'));
+      } catch {
+        // Unresolvable means we cannot show it is there, so leave the
+        // diff's answer alone rather than quietly dropping a real
+        // removal.
+        return true;
+      }
+    });
+    stillOnDisk = diff.removedFiles.length - gone.length;
+    diff.removedFiles = gone;
+    // The summary is a count OF that list; leaving it stale would put a
+    // different number in the headline than in the file list.
+    diff.summary = { ...diff.summary, removed: gone.length };
+  }
+  if (stillOnDisk > 0) {
+    notes.push(
+      `${stillOnDisk} file(s) present at "${beforeSpec}" are still on disk but are not in the index — `
+        + 'most often a parse error. They are not reported as removed, and no claim is made about '
+        + 'whether their contents changed.',
+    );
+  }
   if (!edgesComparable) {
     // Say it plainly. Reporting zero edge changes for a comparison that
     // never looked at edges would read as a finding rather than an
