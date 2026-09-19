@@ -75,12 +75,20 @@ export interface PairedDevice {
   confirmedAt?: string | null;
 }
 
-/** Mirrors PeerCapability in services/peer-capabilities.ts. */
+/**
+ * Mirrors PeerCapability in services/peer-capabilities.ts.
+ *
+ * Phase 30: `capture` covers reading the user's screen, clipboard or
+ * microphone. No peer RPC method needs it yet — it is here because this is
+ * the SHARED vocabulary, and the MCP surface does need it. Keeping the two
+ * lists identical is the point of having one name for the concept.
+ */
 export type PeerCapabilityName =
   | 'read'
   | 'write'
   | 'project'
   | 'files'
+  | 'capture'
   | 'settings'
   | 'terminal';
 

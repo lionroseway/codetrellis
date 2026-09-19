@@ -48,6 +48,8 @@ import { getDeviations, resolveDeviation, detectDeviations } from '../services/d
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow } from '../services/persistence';
 import { getSettings, updateSettings } from '../services/settings-service';
+import { assertMcpMayCall, McpAuthorizationError } from '../services/mcp-capabilities';
+import { DEFAULT_GRANTS, type PeerCapability } from '../services/peer-capabilities';
 import { tailLog, getCurrentLogPath, getLogDir } from '../services/logger';
 import { listCrossSystemEdges, getCrossSystemStats } from '../services/cross-system-service';
 import {
@@ -290,6 +292,40 @@ function buildToolDeps(sessionId: string): ToolDeps {
  * support requires one server instance per session. All instances
  * share the same module-level state.
  */
+/**
+ * What this installation grants MCP clients.
+ *
+ * Read fresh on every call rather than captured at connect time, so turning
+ * a capability off takes effect on the next tool call instead of requiring
+ * the agent to reconnect — a grant the user has just revoked must not
+ * survive in a long-lived SSE session.
+ */
+function grantedMcpCapabilities(): readonly PeerCapability[] {
+  try {
+    const configured = getSettings().mcp?.capabilities;
+    return Array.isArray(configured) ? configured : DEFAULT_GRANTS;
+  } catch {
+    // Settings unreadable — fall back to the defaults, which are the
+    // narrower answer. Failing open here would defeat the point.
+    return DEFAULT_GRANTS;
+  }
+}
+
+/**
+ * Every tool name registered on any McpServer instance in this process.
+ *
+ * Populated by the interception below, so it reflects what the server
+ * ACTUALLY registered rather than a hand-kept list — which is the only
+ * form of this that cannot drift. The authorisation coverage test reads
+ * it; see `mcp-capabilities.ts`.
+ */
+const REGISTERED_TOOLS = new Set<string>();
+
+/** Snapshot of the registered tool names, sorted. */
+export function listRegisteredTools(): string[] {
+  return [...REGISTERED_TOOLS].sort();
+}
+
 function setupMcpServerInstance(sessionId: string): McpServer {
   const mcpServer = new McpServer(
     { name: 'codetrellis', version: '0.1.0' },
@@ -302,46 +338,105 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     }
   );
 
-  // Generic per-tool-call broadcast: every MCP tool invocation flows
-  // into the agent-event channel for the Agent Timeline. Also bumps
-  // session last_seen so an actively-working agent doesn't go stale
-  // in the cleanStaleSessions sweep (Bugfix C).
+  // Generic per-tool-call interception — the ONE place every MCP tool
+  // call passes through.
   //
-  // sessionId is the McpServer-instance binding (closure capture) —
-  // every tool call on this server belongs to the same SSE session.
-  const originalRegisterTool = (mcpServer.registerTool as any).bind(mcpServer);
-  (mcpServer as any).registerTool = (name: string, config: any, handler: any) => {
-    return originalRegisterTool(name, config, async (args: any, extra: any) => {
-      const start = Date.now();
-      // Heartbeat: any tool call counts as activity, push last_seen.
-      try { sessionService.heartbeat(sessionId); } catch { /* best-effort */ }
-      const agentInfo = inferAgentFromSession(sessionId);
-      try {
-        const result = await handler(args, extra);
-        broadcastToolEvent({
-          tool: name,
-          args: summarizeArgs(args),
-          phase: 'complete',
-          durationMs: Date.now() - start,
-          sessionId,
-          agentType: agentInfo.type,
-          agentModel: agentInfo.model,
-        });
-        return result;
-      } catch (err) {
+  // It broadcasts into the agent-event channel for the Agent Timeline and
+  // bumps session last_seen so an actively-working agent does not go stale
+  // in the cleanStaleSessions sweep (Bugfix C). `sessionId` is the
+  // McpServer-instance binding (closure capture) — every tool call on this
+  // server belongs to the same SSE session.
+  //
+  // BOTH registration APIs are wrapped, and that is not a detail.
+  // `registerTool` is the current SDK method; `server.tool()` is the
+  // deprecated one, and three files still use it — peer-tools,
+  // audio-tools and contribution-tools, 21 tools between them. Only
+  // `registerTool` was intercepted, so those 21 were invisible to the
+  // Timeline: CLAUDE.md says "all MCP tool calls broadcast on the
+  // tool_call / tool_error channel with agent attribution", and for
+  // `write_remote_terminal` — which drives a terminal on a paired
+  // device — that was not true. Anything added here that covers only one
+  // API covers seven eighths of the surface.
+  const registerName = (name: string) => { REGISTERED_TOOLS.add(name); };
+
+  const instrument = (name: string, handler: any) => async (args: any, extra: any) => {
+    const start = Date.now();
+    // Heartbeat: any tool call counts as activity, push last_seen.
+    try { sessionService.heartbeat(sessionId); } catch { /* best-effort */ }
+    const agentInfo = inferAgentFromSession(sessionId);
+
+    // AUTHORISE — Phase 30. One gate, here, rather than a check added to 21
+    // tool files. Both confinement guards in this codebase rotted precisely
+    // because the rule lived at each call site and a new site could simply
+    // not have it; a single choke point plus a coverage test is the shape
+    // that survives.
+    //
+    // The refusal is broadcast like any other tool error, so a blocked call
+    // is visible in the Timeline rather than disappearing.
+    try {
+      assertMcpMayCall(name, grantedMcpCapabilities());
+    } catch (err) {
+      if (err instanceof McpAuthorizationError) {
+        console.warn(`[MCP][Authz] REFUSED ${name} — ${err.message}`);
         broadcastToolEvent({
           tool: name,
           args: summarizeArgs(args),
           phase: 'error',
-          durationMs: Date.now() - start,
+          durationMs: 0,
           sessionId,
           agentType: agentInfo.type,
           agentModel: agentInfo.model,
-          error: err instanceof Error ? err.message : String(err),
+          error: err.message,
         });
-        throw err;
       }
-    });
+      throw err;
+    }
+
+    try {
+      const result = await handler(args, extra);
+      broadcastToolEvent({
+        tool: name,
+        args: summarizeArgs(args),
+        phase: 'complete',
+        durationMs: Date.now() - start,
+        sessionId,
+        agentType: agentInfo.type,
+        agentModel: agentInfo.model,
+      });
+      return result;
+    } catch (err) {
+      broadcastToolEvent({
+        tool: name,
+        args: summarizeArgs(args),
+        phase: 'error',
+        durationMs: Date.now() - start,
+        sessionId,
+        agentType: agentInfo.type,
+        agentModel: agentInfo.model,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+  };
+
+  const originalRegisterTool = (mcpServer.registerTool as any).bind(mcpServer);
+  (mcpServer as any).registerTool = (name: string, config: any, handler: any) => {
+    registerName(name);
+    return originalRegisterTool(name, config, instrument(name, handler));
+  };
+
+  // `tool()` has several overloads — (name, cb), (name, description, cb),
+  // (name, schema, cb), (name, description, schema, cb) — and the callback
+  // is last in every one of them. Replacing only the final argument is
+  // therefore overload-proof, where matching on arity would not be.
+  const originalTool = (mcpServer.tool as any).bind(mcpServer);
+  (mcpServer as any).tool = (...args: any[]) => {
+    const name = args[0] as string;
+    const last = args.length - 1;
+    registerName(name);
+    const next = [...args];
+    next[last] = instrument(name, args[last]);
+    return originalTool(...next);
   };
 
   // Register all tools and resources via domain modules
@@ -371,6 +466,20 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerResources(mcpServer, deps);
 
   return mcpServer;
+}
+
+/**
+ * Build a throwaway server instance purely to enumerate what registers.
+ *
+ * The authorisation coverage test needs the names the server ACTUALLY
+ * registers, not a list someone typed — a list checked against itself
+ * verifies nothing, which is the failure mode every drift guard in this
+ * codebase exists to prevent. No transport is connected, so this does
+ * nothing but populate the registry.
+ */
+export function enumerateRegisteredTools(): string[] {
+  setupMcpServerInstance('tool-coverage-probe');
+  return listRegisteredTools();
 }
 
 // ── HTTP/SSE server lifecycle ───────────────────────────────────────
