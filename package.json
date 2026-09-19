@@ -46,6 +46,7 @@
     "smoke:plan-items": "tsx scripts/smoke-plan-items.ts",
     "smoke:plan-migrate": "tsx scripts/smoke-plan-migrate.ts",
     "smoke:schema-reconcile": "tsx scripts/smoke-schema-reconcile.ts",
+    "demo": "tsx scripts/demo.ts",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit"
   },
@@ -142,7 +143,7 @@
   "build": {
     "appId": "dev.codetrellis.app",
     "productName": "CodeTrellis",
-    "copyright": "Copyright © 2026 CodeTrellis Contributors",
+    "copyright": "Copyright \u00a9 2026 CodeTrellis Contributors",
     "directories": {
       "output": "out/make",
       "buildResources": "resources"

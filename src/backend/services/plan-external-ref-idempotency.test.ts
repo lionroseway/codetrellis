@@ -121,3 +121,32 @@ describe('attribution of an attached ticket (m9)', () => {
     assert.equal(refs()[0].authorType, 'human');
   });
 });
+
+describe('an archived plan releases its ticket', () => {
+  test('re-importing an epic works after its plan is deleted', async () => {
+    // `deletePlan` is a soft delete. This lookup ignored status, so a
+    // deleted plan kept its ticket and `create_plan_from_external` refused
+    // the re-import — advising "delete it first" to someone who had.
+    // Found by running the demo script a second time.
+    const plans = await import('./plan-service');
+    const uid = plans.createPlan({ title: 'Epic one', description: '', tasks: [] }, 'test', 'human', '/repo').uid;
+    intake.setPlanExternalRef({ planUid: uid, url: 'https://acme.atlassian.net/browse/DEMO-1', key: 'DEMO-1' });
+
+    assert.equal(intake.findPlanByExternalKey('DEMO-1'), uid, 'a live plan owns its ticket');
+
+    plans.deletePlan(uid);
+    assert.equal(
+      intake.findPlanByExternalKey('DEMO-1'),
+      null,
+      'a deleted plan still owned the ticket, so the epic could never be re-imported',
+    );
+  });
+
+  test('a live plan still blocks a duplicate import', () => {
+    // The refusal is right when the plan is actually there — that is M10.
+    const uid = intake.setPlanExternalRef({
+      planUid: PLAN, url: 'https://acme.atlassian.net/browse/DEMO-2', key: 'DEMO-2',
+    }).planUid;
+    assert.equal(intake.findPlanByExternalKey('DEMO-2'), uid);
+  });
+});

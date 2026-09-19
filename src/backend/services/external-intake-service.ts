@@ -136,8 +136,22 @@ function sameUrl(a: string, b: string): boolean {
 export function findPlanByExternalKey(key: string): string | null {
   if (!key) return null;
   try {
+    // ARCHIVED PLANS DO NOT OWN THEIR TICKET.
+    //
+    // `deletePlan` is a soft delete — it sets status to 'archived' — and
+    // this lookup did not filter on status. So deleting a plan locked its
+    // ticket to a plan you could no longer see: re-importing the same epic
+    // was refused, pointing at something already in the bin, and the
+    // refusal advised "delete it first" to a user who just had. There was
+    // no way out of that from inside the product.
+    //
+    // Found by running the demo twice.
     const res = getDb().exec(
-      `SELECT plan_uid FROM plan_external_refs WHERE external_key = ? ORDER BY created_at ASC LIMIT 1`,
+      `SELECT r.plan_uid
+         FROM plan_external_refs r
+         JOIN plans p ON p.uid = r.plan_uid
+        WHERE r.external_key = ? AND p.status != 'archived'
+        ORDER BY r.created_at ASC LIMIT 1`,
       [key],
     );
     return (res[0]?.values?.[0]?.[0] as string | undefined) ?? null;
