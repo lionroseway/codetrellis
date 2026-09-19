@@ -206,8 +206,16 @@ test.describe('Comparison + review (Phase 25)', () => {
       expect(md).toContain('## Plan review');
       expect(md).toMatch(/Landed \| Partial \| Untouched/);
       // The markdown form is what reaches reviewers who do not have the
-      // app — which is most reviewers, most of the time.
-      expect(md).toContain('Baseline');
+      // app — which is most reviewers, most of the time — so it has to say
+      // what it compared against.
+      //
+      // This asserted the literal word "Baseline", which pinned a default
+      // that turned out to be wrong: `scanProject` re-pins the baseline on
+      // every run, so a review after a rescan compared the baseline with
+      // itself and reported every item untouched. The default is the newest
+      // commit now. What matters here is that the basis is NAMED, not which
+      // one it happens to be.
+      expect(md).toMatch(/Comparing \*\*(Baseline|Commit .+|Checkpoint .+|Live.*)\*\* →/);
     } finally {
       await h.teardown();
     }

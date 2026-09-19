@@ -1,7 +1,7 @@
 import { listAllItems } from './plan-item-service';
 import { projectRelative } from './trusted-roots';
 import path from 'node:path';
-import { compareSnapshots, type ComparisonResult } from './snapshot-compare-service';
+import { compareSnapshots, listComparands, type ComparisonResult } from './snapshot-compare-service';
 import { formatCost } from './pricing';
 import { getBudgetReport } from './budget-service';
 import type { PlanItem } from '../../shared/types';
@@ -102,6 +102,40 @@ function edgeKey(source: string, target: string): string {
  * `snapshot-compare-service`), so edge findings need a checkpoint on
  * both sides.
  */
+/**
+ * What to compare against when the caller does not say.
+ *
+ * NOT the baseline, and that is the whole point. `scanProject` re-pins the
+ * baseline on every run (server.ts, `setBaseline(captureSnapshot(...))`),
+ * so the sequence every agent actually follows — edit files, rescan, ask
+ * for a review — moved the baseline to the post-edit state and then
+ * compared it against itself. The review answered "untouched" for every
+ * item on a plan whose work had genuinely landed, silently, with no error
+ * to notice.
+ *
+ * Verified end to end: one file edited, `compare_snapshots` against a
+ * checkpoint correctly reported 1 modified, and `review_plan` in the same
+ * session reported 0 of 3 landed.
+ *
+ * The code surface already learned this — `CodeWorkspace` picks its diff
+ * base from the comparand list for exactly this reason (m11). The review
+ * kept the old default. Same lesson, second surface, which is the shape
+ * this codebase keeps repeating.
+ *
+ * The newest commit is the honest default: it is a point that does not
+ * move underneath you. Baseline remains the fallback for a project with no
+ * commits, where it is the only thing there is.
+ */
+function defaultComparand(projectPath: string): string {
+  try {
+    const newestCommit = listComparands(projectPath, 1).find((c) => c.kind === 'commit');
+    if (newestCommit) return newestCommit.spec;
+  } catch {
+    // Not a git repo, or git is unavailable — baseline is all we have.
+  }
+  return 'baseline';
+}
+
 export function reviewPlan(params: {
   planUid: string;
   projectPath: string;
@@ -109,7 +143,7 @@ export function reviewPlan(params: {
   after?: string;
 }): { ok: true; review: PlanReview } | { ok: false; error: string } {
   const compared = compareSnapshots(
-    params.before ?? 'baseline',
+    params.before ?? defaultComparand(params.projectPath),
     params.after ?? 'live',
     params.projectPath,
   );
