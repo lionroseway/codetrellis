@@ -494,10 +494,42 @@ export function useWebSocket() {
                 try {
                   const { useProjectStore } = await import('../stores/project-store');
                   const { getAPI } = await import('../bridge');
-                  useProjectStore.getState().setRoot(projectPath);
-                  await getAPI().scanProject(projectPath);
+                  const store = useProjectStore.getState();
+
+                  // APPLY the result. This called `setRoot` and then
+                  // `scanProject`, and threw the result away — so the
+                  // file tree and the monorepo config were never set.
+                  // An agent calling `open_project` left the user looking
+                  // at an empty Explorer, an empty graph and a status bar
+                  // reading "No project", on a project that had scanned
+                  // perfectly well: the data was in the backend and
+                  // nothing put it in the stores.
+                  //
+                  // Same sequence the Welcome screen uses when a person
+                  // opens a project, because it should be the same thing
+                  // happening.
+                  store.setRoot(projectPath);
+                  store.setScanStatus('scanning');
+                  const result = await getAPI().scanProject(projectPath);
+                  store.applyScanResult(result);
+
+                  // Branch AFTER the scan: the project only becomes a
+                  // trusted root once it is scanned, so asking earlier is
+                  // refused (the same ordering the Welcome screen needs).
+                  try {
+                    const branchRes = await fetch(
+                      `/api/git/branch?path=${encodeURIComponent(projectPath)}`,
+                    );
+                    if (branchRes.ok) {
+                      const data = (await branchRes.json()) as { branch?: string | null };
+                      const active = useProjectStore.getState().activeTabId;
+                      if (active) useProjectStore.getState().setTabBranch(active, data.branch ?? null);
+                    }
+                  } catch { /* a missing branch label is not worth failing an open over */ }
                 } catch (err) {
                   console.error('[WS] Failed to open project:', err);
+                  const { useProjectStore } = await import('../stores/project-store');
+                  useProjectStore.getState().setError(String(err));
                 }
               })();
             }
