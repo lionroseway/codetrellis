@@ -148,10 +148,22 @@ That starts the backend (Express on `127.0.0.1:3001` plus the MCP server on
 ```bash
 npm run lint          # ESLint — severity policy lives in the flat config
 npm run typecheck     # tsc --noEmit
-npm run test:unit     # unit suite
-npm run test:harness  # browser harness
-npm test              # Playwright E2E
+npm run test:unit     # unit suite — pure logic, ~2s
+npm run test:harness  # API-level E2E against a real backend, ~5 min
+npm test              # browser E2E (Playwright, drives the actual UI)
 ```
+
+Run `test:unit` as well as the harness rather than instead of it. Two of
+its tests are structural guards the harness cannot express: one fails when
+a component has no exported name referenced anywhere, i.e. nothing renders
+it, and one asserts that no request handler reads a project root straight
+off the request. Both exist because what they check is invisible to a grep
+and to a green suite.
+
+The browser suite needs a backend running and authenticates with the
+per-launch capability token like any other client; the Playwright config
+attaches it. It is not in CI, which is how it managed to sit broken for a
+whole phase.
 
 ### See it work
 
@@ -190,8 +202,49 @@ npm run release          # build every platform, publish to the releases repo
 npm run release:dry-run  # build only, skip upload
 ```
 
-`scripts/release.sh` builds the installers and uploads them to
-`lionroseway/codetrellis-releases` as a tagged GitHub Release.
+`scripts/release.sh` needs a clean tree and `gh auth status` logged in. It
+builds and signs macOS **locally** — `node-pty` is a native module, so
+Windows and Linux cannot cross-compile and are built on native CI runners
+instead. Those runners upload to a transient staging release on this repo,
+which the script downloads, publishes to
+`lionroseway/codetrellis-releases`, and then deletes. Every artefact is
+listed in a `SHA256SUMS` signed with a key that lives only on the release
+machine, so the app can verify a download without trusting the server it
+came from.
+
+Two things about this that have each cost a release:
+
+**`npm run package:mac` does not sign.** v0.1.13 shipped to the public
+repo completely unsigned — `spctl` reported no usable signature — even
+though the certificate and credentials were all in place, because that
+target is the unsigned one. Only `scripts/release.sh` calls
+`package:mac:signed`. Use `package:mac` for local testing and nothing else.
+
+**The mobile half is not automated, and it is easy to lose.** Neither CI
+nor the release script builds the companion; CI runs a mobile typecheck
+and says so in its own comment rather than letting green imply more than
+it means. Both mobile artefacts are built on a machine with the toolchains:
+
+```bash
+cd mobile
+npx eas-cli build --local --profile production-apk --platform android \
+  --output ../out/make/CodeTrellis-Companion-<version>.apk
+npx eas-cli build --local --profile production --platform ios \
+  --output ../out/make/CodeTrellis-Companion-<version>.ipa
+npx eas-cli submit --platform ios --path ../out/make/CodeTrellis-Companion-<version>.ipa
+```
+
+`--local` is preferred over EAS's hosted builders: identical config and
+credential handling, no queue, no build quota. Build the APK **before**
+running the release script and it rides the same signed manifest as
+everything else. v0.1.12 and v0.1.13 shipped an APK; v0.1.14 was the first
+release cut by the script, which knew nothing about the artefact, so it
+silently stopped being published and nothing said a word. The script now
+picks it up when present and warns loudly when it is not — but it still
+cannot build one for you.
+
+Android has no submit profile yet; the AAB goes to Play Console by hand.
+iOS submit is configured and goes to TestFlight.
 
 ## Architecture
 
