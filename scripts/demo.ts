@@ -24,6 +24,11 @@
  * It needs the app running (packaged or `npm run dev`) with its MCP server
  * up, and the `capture` capability granted if you want it to screenshot.
  * Everything it changes on disk, it changes back.
+ *
+ * The journeys still to add — a human planning by hand, an agent blocked
+ * and unblocked, two agents contending, the graph properly, upgrade — are
+ * catalogued in `docs/DEMO-JOURNEYS.md`, along with the fixtures they need
+ * and the rules for adding one.
  */
 
 import fs from 'node:fs';
