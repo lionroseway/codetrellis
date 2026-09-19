@@ -68,6 +68,23 @@ export function setActiveProjectRoot(projectPath: string | null): void {
   activeProjectRoot = projectPath;
 }
 
+/**
+ * The project the user is looking at, or null.
+ *
+ * Exposed for the write paths that CREATE something belonging to a
+ * project without being handed one — importing a ticket tree, importing
+ * a conversation. Those used to store an empty project path, which is
+ * not "unknown" but "belongs to nowhere": every project-scoped feature
+ * on such a plan (drift, review comparands, git context) then degraded
+ * silently, and the plan looked normal while answering nothing.
+ *
+ * A caller-supplied `project_path` still wins — this is the fallback,
+ * and it is exactly the root the confinement check already trusts.
+ */
+export function getActiveProjectRoot(): string | null {
+  return activeProjectRoot;
+}
+
 /** Everything this process currently considers an opened project. */
 export function listTrustedRoots(): string[] {
   const roots = new Set<string>();

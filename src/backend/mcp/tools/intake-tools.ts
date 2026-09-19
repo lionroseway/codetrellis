@@ -31,6 +31,7 @@ import {
   type IntakeNode,
 } from '../../services/external-intake-service';
 import { createExternalRef } from '../../services/external-refs-service';
+import { getActiveProjectRoot } from '../../services/trusted-roots';
 
 const externalSchema = z.object({
   url: z.string().describe('Link to the ticket / issue / page.'),
@@ -82,6 +83,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         description: z.string().optional(),
         external: externalSchema.optional().describe('The epic / parent ticket this plan represents.'),
         items: z.array(rootSchema).describe('The ticket tree, already fetched.'),
+        project_path: z.string().optional().describe(
+          'Absolute path to the project this plan belongs to. Defaults to the project currently open.',
+        ),
       },
     },
     async (args, extra: any) => {
@@ -113,11 +117,18 @@ export function register(server: McpServer, deps: ToolDeps): void {
         }
       }
 
+      // A ticket-imported plan belongs to a project like any other. This
+      // passed '' — not "unknown" but "belongs to nowhere" — so drift,
+      // review comparands and git context all answered nothing on every
+      // plan that came in from a tracker, while the plan itself looked
+      // perfectly normal. Found because the drift feed reported 0 of 3
+      // satisfied on a plan whose work had demonstrably landed: with no
+      // project there is no working tree to ask.
       const plan = deps.planService.createPlan(
         { title: args.title, description: args.description ?? '', tasks: [] },
         author.author,
         author.authorType,
-        '',
+        args.project_path ?? getActiveProjectRoot() ?? '',
       );
 
       if (args.external) {

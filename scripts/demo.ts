@@ -486,11 +486,11 @@ const SCENES: Scene[] = [
         'A repo with history',
         'Three commits, one of them somebody else’s, and uncommitted work on top. "What landed?" now has more than one answer.',
       );
-      await c.call('open_project', { project_path: fixture.path });
+      await c.call('open_project', { path: fixture.path });
       await c.beat();
 
       const comparands = await c.json('list_comparands', { project_path: fixture.path });
-      const list: Array<{ id?: string; kind?: string; label?: string }> =
+      const list: Array<{ spec?: string; kind?: string; label?: string }> =
         Array.isArray(comparands) ? comparands : (comparands?.comparands ?? []);
       const kinds = new Set(list.map((x) => x.kind).filter(Boolean));
       console.log(`    comparands: ${list.length} · kinds: ${[...kinds].join(', ') || 'none'}`);
@@ -507,11 +507,11 @@ const SCENES: Scene[] = [
       c.state.historyPlan = planUid;
       c.state.historyRepo = fixture.path;
 
-      await c.call('create_item', {
+      await c.call('add_item', {
         plan_uid: planUid, kind: 'action', title: 'Round in the Go money package',
         file_specs: [{ path: 'src/money.go', action: 'modify' }],
       });
-      await c.call('create_item', {
+      await c.call('add_item', {
         plan_uid: planUid, kind: 'action', title: 'Round in the Python report',
         file_specs: [{ path: 'src/report.py', action: 'modify' }],
       });
@@ -524,26 +524,30 @@ const SCENES: Scene[] = [
       const live = await c.json('review_plan', {
         plan_uid: planUid, project_path: fixture.path, before: 'baseline', after: 'live',
       });
-      const older = fixture.commits[1].sha;
+      // Use what the picker offered, verbatim. A journey that invents its
+      // own identifier tests the journey's guess rather than the product:
+      // comparands are `commit:<short-sha>`, and a bare SHA is refused.
+      const olderEntry = list.filter((x) => x.kind === 'commit')[1] ?? list.find((x) => x.kind === 'commit');
+      const older = olderEntry?.spec ?? 'baseline';
       const sinceCommit = await c.json('review_plan', {
         plan_uid: planUid, project_path: fixture.path, before: older, after: 'live',
       });
 
       const summarise = (r: any) => {
         if (!r) return 'no answer';
-        const a = r.planAlignment ?? r.alignment ?? {};
-        const unclaimed = r.unclaimedChanges ?? r.unclaimed ?? [];
-        return `satisfied ${a.satisfied ?? '?'} · missing ${a.missing ?? '?'} · unclaimed ${Array.isArray(unclaimed) ? unclaimed.length : '?'}`;
+        const sm = r.summary ?? {};
+        return `${sm.itemsLanded ?? '?'} landed · ${sm.itemsPartial ?? '?'} partial · ${sm.itemsUntouched ?? '?'} untouched`
+          + ` · ${sm.filesChanged ?? '?'} files · ${sm.unclaimedCount ?? (r.unclaimedChanges?.length ?? '?')} unclaimed`;
       };
       console.log('    vs working tree :', summarise(live));
-      console.log(`    vs ${older.slice(0, 7)}      :`, summarise(sinceCommit));
+      console.log(`    vs ${older.padEnd(16)}:`, summarise(sinceCommit));
 
       if (JSON.stringify(live) === JSON.stringify(sinceCommit)) {
         c.flag('reviewing against a commit gave exactly the working-tree answer — the comparand was ignored');
       }
 
-      const unclaimed = sinceCommit?.unclaimedChanges ?? sinceCommit?.unclaimed ?? [];
-      const names = (Array.isArray(unclaimed) ? unclaimed : []).map((u: any) => u.path ?? u.file ?? u).join(', ');
+      const unclaimed: string[] = sinceCommit?.unclaimedChanges ?? [];
+      const names = unclaimed.join(', ');
       console.log('    unclaimed since that commit:', names || 'none');
       if (!names.includes('notify.rb')) {
         c.flag('notify.rb landed after that commit and is in no plan item, but review did not surface it');
@@ -562,11 +566,13 @@ const SCENES: Scene[] = [
         'Opening one package of a monorepo',
         'Two sibling packages have uncommitted work. None of it belongs to the one you opened.',
       );
-      await c.call('open_project', { project_path: project });
+      await c.call('open_project', { path: project });
       await c.beat();
 
-      const status = await c.api(`/api/git/status?projectPath=${encodeURIComponent(project)}`);
-      const files: string[] = (status?.files ?? status?.changes ?? []).map((f: any) => f.path ?? f.file ?? f);
+      const status = await c.api(`/api/git/status?path=${encodeURIComponent(project)}`);
+      const files: string[] = [
+        ...(status?.unstaged ?? []), ...(status?.staged ?? []), ...(status?.untracked ?? []),
+      ].map((f: any) => (typeof f === 'string' ? f : f.path ?? f.file));
       console.log('    changed, as the panel sees it:', files.length ? files.join(', ') : 'none');
       const leaked = files.filter((f) => f.includes('billing') || f.includes('tools/'));
       if (leaked.length) c.flag(`the parent repo's files leaked into the package: ${leaked.join(', ')}`);
@@ -583,7 +589,7 @@ const SCENES: Scene[] = [
     async run(c) {
       const bare = noGitDirectory();
       await c.say('A directory with no git in it', 'There is nothing to compare against. Saying so is the correct answer.');
-      await c.call('open_project', { project_path: bare });
+      await c.call('open_project', { path: bare });
       const noGit = await c.json('list_comparands', { project_path: bare });
       const noGitList: any[] = Array.isArray(noGit) ? noGit : (noGit?.comparands ?? []);
       console.log('    no-git comparands:', noGitList.map((x) => x.kind ?? x.id).join(', ') || 'none');
@@ -591,7 +597,7 @@ const SCENES: Scene[] = [
 
       const fresh = repoWithNoCommits();
       await c.say('A repo on its first day', 'Initialised, nothing committed. Also a real state, and also not an error.');
-      await c.call('open_project', { project_path: fresh });
+      await c.call('open_project', { path: fresh });
       const noCommits = await c.json('list_comparands', { project_path: fresh });
       const freshList: any[] = Array.isArray(noCommits) ? noCommits : (noCommits?.comparands ?? []);
       console.log('    no-commits comparands:', freshList.map((x) => x.kind ?? x.id).join(', ') || 'none');
@@ -612,7 +618,7 @@ const SCENES: Scene[] = [
         'Plans are files in the repo, so two branches planning at once conflict like any other file. Resolving that by hand-editing markers is what this avoids.',
         'warning',
       );
-      await c.call('open_project', { project_path: fixture.path });
+      await c.call('open_project', { path: fixture.path });
       await c.beat();
 
       const found = await c.json('detect_conflicts', { project_path: fixture.path });
@@ -698,7 +704,10 @@ async function main() {
     beat: (mult = 1) => new Promise((r) => setTimeout(r, BEAT * mult)),
     async call(tool, args = {}) {
       const r = await client.callTool(tool, args);
-      if (r.isError) ctx.flag(`${tool}: ${r.text.split('\n')[0].slice(0, 140)}`);
+      // Collapse rather than take the first line: an error whose body is
+      // pretty-printed JSON has "{" as its first line, and a flag reading
+      // `review_plan: {` says nothing at all.
+      if (r.isError) ctx.flag(`${tool}: ${r.text.replace(/\s+/g, ' ').trim().slice(0, 220)}`);
       return { ok: !r.isError, text: r.text };
     },
     async refuse(tool, args = {}) {
@@ -780,7 +789,7 @@ async function main() {
     await client.callTool('dismiss_presence', {}).catch(() => {});
     // Some journeys open a throwaway repo. Put the user back where they
     // started before the fixtures are deleted underneath the app.
-    await client.callTool('open_project', { project_path: PROJECT }).catch(() => {});
+    await client.callTool('open_project', { path: PROJECT }).catch(() => {});
     await client.callTool('rescan_project', { project_path: PROJECT }).catch(() => {});
     await client.disconnect().catch(() => {});
     if (fixtureRoot()) console.log('   removed the throwaway fixtures');
