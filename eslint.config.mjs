@@ -22,7 +22,11 @@ export default tseslint.config(
       'out/**',
       'dist/**',
       'node_modules/**',
-      'mobile/**', // separate package, own deps and own lint script
+      // Linted by mobile/eslint.config.mjs, which exists now. This line
+      // used to claim that and there was no config there at all, so
+      // `cd mobile && npm run lint` walked up to THIS file, found itself
+      // ignored, and exited 1 having checked nothing.
+      'mobile/**',
       'src/frontend/.vite/**',
       'resources/**',
       '**/*.wasm',

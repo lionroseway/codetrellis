@@ -1622,6 +1622,8 @@ interface UpdateResultData {
   download?: UpdateDownload;
   releaseNotes?: { url?: string; markdown?: string };
   source: 'website' | 'github' | 'cache';
+  /** A newer release exists with no artifact this platform can run. */
+  noAssetForPlatform?: boolean;
 }
 
 interface UpdateStateData {
@@ -1755,6 +1757,35 @@ function UpdatesSection() {
               {result.download.sha256 ? ` · sha256 ${result.download.sha256.slice(0, 12)}…` : ''}
             </div>
           )}
+        </div>
+      ) : result?.noAssetForPlatform ? (
+        // A newer version exists and there is nothing here to install.
+        // Reporting "you're on the latest version" would be a lie the
+        // user can check; rendering nothing, which is what happened
+        // before, is worse.
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 flex items-start gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/[0.1] border border-amber-500/30 shrink-0">
+            <AlertCircle size={16} className="text-amber-300" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] text-foreground">
+              v{result.latest} was released without a build for this platform.
+            </div>
+            <div className="text-[11px] text-foreground-subtle mt-0.5">
+              You're on v{result.current} and there is nothing to install yet. The release notes may
+              say more.
+            </div>
+            {result.releaseNotes?.url && (
+              <a
+                href={result.releaseNotes.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-[11px] text-accent hover:underline mt-1.5 inline-block"
+              >
+                Release notes
+              </a>
+            )}
+          </div>
         </div>
       ) : status === 'up-to-date' ? (
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex items-center gap-3">

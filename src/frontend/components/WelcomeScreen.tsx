@@ -69,18 +69,27 @@ export function WelcomeScreen() {
     const api = getAPI();
     const store = useProjectStore.getState();
 
-    let branch: string | null = null;
-    try {
-      const branchRes = await fetch(`/api/git/branch?path=${encodeURIComponent(projectPath)}`);
-      const branchData = await branchRes.json();
-      branch = branchData.branch;
-    } catch { /* ignore */ }
-
-    store.addTab(projectPath, branch);
+    const tabId = store.addTab(projectPath, null);
     store.setScanStatus('scanning');
     try {
       const result = await api.scanProject(projectPath);
       store.applyScanResult(result);
+  // The branch is read AFTER the scan, not before.
+  //
+  // `/api/git/branch` goes through `requireProjectPath`, which refuses a
+  // path that is not a trusted root — and a folder being opened for the
+  // first time is not one until `scanProject` registers it. Asking first
+  // got a 403, the caller read `undefined` off the error body, and the
+  // new tab was created with no branch label until something else
+  // happened to rescan. Loopback is not an authorisation boundary, so
+  // the route's refusal is right; the order of the two calls was wrong.
+      try {
+        const branchRes = await fetch(`/api/git/branch?path=${encodeURIComponent(projectPath)}`);
+        if (branchRes.ok) {
+          const branchData = (await branchRes.json()) as { branch?: string | null };
+          store.setTabBranch(tabId, branchData.branch ?? null);
+        }
+      } catch { /* a missing branch label is not worth failing an open over */ }
     } catch (err) {
       store.setError(String(err));
     }

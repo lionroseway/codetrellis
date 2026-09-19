@@ -51,6 +51,14 @@ export interface UpdateCheckResult {
   source: 'website' | 'github' | 'cache';
   /** Did we have to fall back from the website to GitHub on this check? */
   websiteFellBackToGithub?: boolean;
+  /**
+   * A newer release exists but carries nothing this platform can run.
+   *
+   * `available` is false in that case — offering a binary that will not
+   * launch is worse than offering none — but the reason is not "you are
+   * up to date", and saying so would be a lie the user could check.
+   */
+  noAssetForPlatform?: boolean;
 }
 
 export interface UpdateState {
@@ -224,8 +232,14 @@ async function checkViaWebsite(
   if (typeof data.available !== 'boolean' || typeof data.latest !== 'string') {
     return null;
   }
+  // Same rule as the GitHub path: a release with no artifact for this
+  // platform is not an available update, whichever source said so. The
+  // panel's status branches all require a download, so `available` with
+  // none rendered the entire status card as null.
+  const newer = data.available === true;
   return {
-    available: data.available,
+    available: newer && !!data.download,
+    noAssetForPlatform: newer && !data.download,
     latest: data.latest,
     current: data.current ?? current,
     publishedAt: data.publishedAt,
@@ -270,10 +284,19 @@ async function checkViaGithub(
   if (!tag) throw new Error('GitHub release had no tag');
 
   const asset = pickAssetForPlatform(release.assets ?? [], platform);
-  const available = compareSemver(tag, current) > 0;
+  // A newer version with nothing this platform can run is NOT an
+  // available update. `available: true` with no download matched none of
+  // the Settings panel's three status branches, so the whole status card
+  // rendered as null — a user on a platform the release skipped saw the
+  // version hero and then nothing at all: no update, no "up to date", no
+  // error. `detectPlatform`'s own comment says this case is "surfaced as
+  // up to date"; now it is.
+  const newer = compareSemver(tag, current) > 0;
+  const available = newer && asset !== null;
 
   return {
     available,
+    noAssetForPlatform: newer && asset === null,
     latest: tag,
     current,
     publishedAt: release.published_at,
@@ -294,21 +317,43 @@ async function checkViaGithub(
   };
 }
 
-function pickAssetForPlatform(
+/**
+ * The asset this platform can actually run, or null.
+ *
+ * Order matters WITHIN an architecture — `Setup` should win over
+ * `Portable` on Windows — but never ACROSS one. The arch-agnostic
+ * fallbacks that used to end two of these lists (`/\.dmg$/i` for
+ * darwin-x64, `/\.AppImage$/i` for linux-x64) resolved an Intel Mac to
+ * the arm64 DMG and an x64 Linux box to the arm64 AppImage whenever its
+ * own arch was missing from the release.
+ *
+ * v0.1.14 ships the full matrix, so this does not bite today. It is
+ * one partial release away from biting: `release.sh` collects artifacts
+ * with `[[ -f "$f" ]] &&` and has a `--mac-only` mode, so a failed x64
+ * build publishes anyway with no completeness check. And the
+ * consequence is now WORSE than it was, because the wrong-arch
+ * installer is in the signed manifest: it downloads, it verifies, the
+ * panel reports success, and it will not launch.
+ *
+ * A missing asset returns null, which `checkViaGithub` reports as no
+ * update — see the `available` computation there. Offering the wrong
+ * binary is not a kinder failure than offering none.
+ */
+export function pickAssetForPlatform(
   assets: NonNullable<GithubRelease['assets']>,
   platform: string,
 ): NonNullable<GithubRelease['assets']>[number] | null {
-  // Match by filename pattern. Order matters — `Setup` should
-  // win over `Portable` on Windows, AppImage over zip on Linux.
   const matches = (name: string, pattern: RegExp) => pattern.test(name);
 
   const byPlatform: Record<string, RegExp[]> = {
     'darwin-arm64': [/-arm64\.dmg$/i],
-    'darwin-x64': [/-x64\.dmg$/i, /\.dmg$/i],
-    'win32-x64': [/-Setup-.+\.exe$/i, /-Portable-.+\.exe$/i, /\.exe$/i],
-    'win32-arm64': [/-Setup-.+\.exe$/i, /\.exe$/i],
+    'darwin-x64': [/-x64\.dmg$/i],
+    // Windows arm64 runs x64 binaries under emulation, so these are not
+    // an arch fallback — they are the artifact that platform is served.
+    'win32-x64': [/-Setup-.+\.exe$/i, /-Portable-.+\.exe$/i],
+    'win32-arm64': [/-Setup-.+\.exe$/i, /-Portable-.+\.exe$/i],
     'linux-arm64': [/-arm64\.AppImage$/i],
-    'linux-x64': [/(?<!arm64)\.AppImage$/i, /\.AppImage$/i],
+    'linux-x64': [/-x86_64\.AppImage$/i, /(?<!arm64)\.AppImage$/i],
   };
   const patterns = byPlatform[platform] ?? [];
   for (const pattern of patterns) {

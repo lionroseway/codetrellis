@@ -287,14 +287,28 @@ function classifyConflictFile(filePath: string): FileConflict['entityType'] {
 
 /**
  * Extract the content from one side of a conflict-marked file.
- * Handles standard git conflict markers:
+ *
  *   <<<<<<< HEAD (or ours)
  *   ... our content ...
+ *   ||||||| merged common ancestors     <- diff3 / zdiff3 only
+ *   ... the base, which belongs to NEITHER side ...
  *   =======
  *   ... their content ...
  *   >>>>>>> branch
+ *
+ * The base section is the part this used to get wrong. `merge.conflictStyle
+ * = diff3` (or `zdiff3`) is a common global git setting, and under it every
+ * conflict carries a third block. Without a case for `|||||||`, the marker
+ * line AND the whole base block were kept as part of "ours", so our side
+ * never parsed as YAML — which made `parseYamlConflictFields` return null
+ * for every conflicted manifest, so the field-level resolution UI told the
+ * user their file "could not be broken into fields" and the whole feature
+ * was unreachable for anyone with that setting.
+ *
+ * The base is deliberately DISCARDED rather than offered: it is the common
+ * ancestor, which is what neither person chose.
  */
-function extractConflictSide(content: string, side: 'ours' | 'theirs'): string | null {
+export function extractConflictSide(content: string, side: 'ours' | 'theirs'): string | null {
   const lines = content.split('\n');
   const result: string[] = [];
   let inConflict = false;
@@ -305,6 +319,12 @@ function extractConflictSide(content: string, side: 'ours' | 'theirs'): string |
     if (line.startsWith('<<<<<<<')) {
       inConflict = true;
       inOurSide = true;
+      inTheirSide = false;
+      continue;
+    }
+    if (line.startsWith('|||||||') && inConflict) {
+      // Base section begins: from here to `=======` belongs to nobody.
+      inOurSide = false;
       inTheirSide = false;
       continue;
     }

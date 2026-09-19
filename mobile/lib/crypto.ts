@@ -108,7 +108,7 @@ const BLOCK_BYTES = 64;
 /** HMAC-SHA256, RFC 2104. */
 export function hmacSha256(key: Uint8Array, message: Uint8Array): Uint8Array {
   // A key longer than the block is hashed first; a shorter one is zero-padded.
-  let k = key.length > BLOCK_BYTES ? sha256(key) : key;
+  const k = key.length > BLOCK_BYTES ? sha256(key) : key;
   const padded = new Uint8Array(BLOCK_BYTES);
   padded.set(k);
 

@@ -138,7 +138,7 @@ export function handleRpcResponse(data: string | ArrayBuffer): boolean {
  * Cancel all pending RPC requests (e.g. on disconnect).
  */
 export function cancelAllPendingRpc(): void {
-  for (const [id, req] of pending) {
+  for (const [, req] of pending) {
     clearTimeout(req.timer);
     req.reject(new Error('Connection lost — RPC cancelled'));
   }

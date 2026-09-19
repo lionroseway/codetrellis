@@ -58,11 +58,6 @@ function getEventStyle(type: string) {
   return EVENT_COLORS[type] ?? { bg: '#27272a', fg: '#a1a1aa', label: type };
 }
 
-function formatTime(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 function formatRelative(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
   if (seconds < 60) return 'just now';

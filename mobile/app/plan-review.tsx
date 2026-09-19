@@ -158,7 +158,18 @@ export default function PlanReviewScreen() {
   const [copying, setCopying] = useState(false);
 
   const load = useCallback(async () => {
-    if (!planUid) return;
+    // A terminal state, not a bare return. The early return sat BEFORE
+    // the try, so the `finally` that clears `loading` never ran and the
+    // screen showed an ActivityIndicator with no text and no control,
+    // forever — and left `refreshing` stuck after a pull-to-refresh. The
+    // only caller today always passes a uid; a deep link or a
+    // notification route into this screen would not.
+    if (!planUid) {
+      setError('No plan was given to review. Go back and pick one.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     setError(null);
     try {
       const [rev, nxt, cmp] = await Promise.all([
