@@ -911,7 +911,28 @@ app.get('/api/fs/browse', (req, res) => {
 });
 
 // Scan a project directory
-let scanInFlight = false;
+/**
+ * The scan currently running, if any — so a second caller JOINS it rather
+ * than being refused.
+ *
+ * It was a boolean, and a concurrent scan threw "A scan is already in
+ * progress". That is a real condition with two ordinary causes: the MCP
+ * `open_project` tool scans and then tells the UI to open the project,
+ * which scans again; and any two clients can ask at once. Refusing the
+ * second caller turned a timing overlap into an error the caller had to
+ * understand and retry, and the AST pass logged it as a failure.
+ *
+ * Coalescing is the honest answer: both callers want the same work done on
+ * the same directory, and one of them is already doing it.
+ */
+let scanInFlight: { path: string; promise: Promise<ScanStats> } | null = null;
+
+interface ScanStats {
+  fileCount: number;
+  symbolCount: number;
+  importCount: number;
+  resolvedImports: number;
+}
 /** The project that the in-memory DB currently holds AST data for.
  *  When the user switches projects we must do a full (non-incremental)
  *  scan; when they rescan the *same* project we can skip unchanged files. */
@@ -926,19 +947,36 @@ export function getActiveProjectPath(): string | null {
  * Core scan logic — callable both from the REST endpoint and MCP tool.
  * Throws on validation errors; callers should catch and surface appropriately.
  */
-export async function scanProject(projectPath: string): Promise<{ fileCount: number; symbolCount: number; importCount: number; resolvedImports: number }> {
+export async function scanProject(projectPath: string): Promise<ScanStats> {
   if (!projectPath || typeof projectPath !== 'string') {
     throw new Error('projectPath is required');
   }
   if (!fs.existsSync(projectPath)) {
     throw new Error(`Path does not exist: ${projectPath}`);
   }
-  if (scanInFlight) {
-    throw new Error('A scan is already in progress');
-  }
-  scanInFlight = true;
 
+  if (scanInFlight) {
+    // Same directory: join the running scan and share its result.
+    if (scanInFlight.path === projectPath) return scanInFlight.promise;
+    // A DIFFERENT directory is a genuine conflict — the AST tables hold one
+    // project at a time, so two projects scanning at once would interleave
+    // into a graph belonging to neither. Still refused, and now the message
+    // says which project is holding the scanner.
+    throw new Error(
+      `A scan of ${scanInFlight.path} is already in progress; wait for it before scanning ${projectPath}`,
+    );
+  }
+
+  const run = runScan(projectPath);
+  scanInFlight = { path: projectPath, promise: run };
   try {
+    return await run;
+  } finally {
+    scanInFlight = null;
+  }
+}
+
+async function runScan(projectPath: string): Promise<ScanStats> {
     const isSameProject = lastScannedProject === projectPath;
     console.log(`[Scan] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
 
@@ -1088,10 +1126,7 @@ export async function scanProject(projectPath: string): Promise<{ fileCount: num
       console.warn('[Scan] System docs watcher failed to start:', err);
     }
 
-    return stats;
-  } finally {
-    scanInFlight = false;
-  }
+  return stats;
 }
 
 app.post('/api/project/scan', async (req, res) => {
