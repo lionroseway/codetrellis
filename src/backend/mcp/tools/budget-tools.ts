@@ -21,7 +21,7 @@ import {
   checkBudget,
   getUnattributedTokenReports,
 } from '../../services/budget-service';
-import { formatCost, PRICING_VERSION } from '../../services/pricing';
+import { formatCost } from '../../services/pricing';
 
 /** Round for display without pretending to more precision than we have. */
 function round(n: number | null, places = 1): number | null {
@@ -69,7 +69,12 @@ function summarise(planUid: string) {
     })),
     // Cost figures are only as current as the price table that produced
     // them; saying which one avoids a stale number reading as fresh.
-    pricing_version: PRICING_VERSION,
+    // This is the table the TOTAL was priced under — `mixed` when it
+    // spans a price change — not whichever table happens to be loaded
+    // now, which is what it used to report and is the exact claim the
+    // field exists to prevent.
+    pricing_version: report.pricingVersion,
+    pricing_versions: report.pricingVersions,
     note: [
       report.spentCostUsd === null && getUnattributedTokenReports() === 0
         ? 'No cost recorded: no agent on this plan reported a model we have prices for. Time is still measured.'

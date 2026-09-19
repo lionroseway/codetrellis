@@ -260,6 +260,15 @@ export function resolveComparand(spec: string, projectPath: string): ResolvedCom
 /** Everything a picker needs to offer. */
 export function listComparands(
   projectPath: string,
+  /**
+   * How many recent commits to offer. Defaults to the picker's 20.
+   *
+   * Playback asks for up to 100 and used to get 20 whatever it asked
+   * for, because this was hardcoded — so `?limit=100` on a 500-commit
+   * repository returned exactly the same sequence as `?limit=20`, with
+   * nothing said about the ceiling.
+   */
+  commitLimit: number = 20,
 ): Array<{ spec: string; label: string; kind: string; timestamp?: number }> {
   const out: Array<{ spec: string; label: string; kind: string; timestamp?: number }> = [
     { spec: 'live', label: 'Live (working tree)', kind: 'live' },
@@ -283,7 +292,8 @@ export function listComparands(
 
   // Recent commits, so the common case needs no typing.
   try {
-    const log = execFileSync('git', ['log', '-20', '--format=%h\t%s'], {
+    const n = Math.min(Math.max(Math.trunc(commitLimit) || 20, 1), 500);
+    const log = execFileSync('git', ['log', `-${n}`, '--format=%h\t%s'], {
       cwd: projectPath,
       encoding: 'utf-8',
     });

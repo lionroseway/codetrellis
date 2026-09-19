@@ -92,13 +92,31 @@ export interface BudgetReport {
   /** Projection to completion. Null when there is nothing to project from. */
   forecastMinutes: number | null;
   forecastCostUsd: number | null;
-  /** Share of items done — what the forecast projects against. */
+  /**
+   * Share of items RESOLVED — what the forecast projects against.
+   *
+   * Resolved, not done: `skipped` is terminal too. Counting only `done`
+   * meant a plan of five done and five skipped items reported 0.5 and
+   * forecast twice the time already spent on work that was finished.
+   */
   completionRatio: number | null;
   /** Per-agent split, for a plan worked by more than one. */
   byAgent: Array<{ agentType: string; minutes: number; costUsd: number | null }>;
   /** Items over their estimate, worst first. */
   overruns: Array<{ itemUid: string; estimateMinutes: number; spentMinutes: number }>;
+  /**
+   * The price table the cost figures were actually priced under —
+   * `'mixed'` when the total spans more than one.
+   *
+   * It used to be the CURRENT table's version unconditionally, which is
+   * the one claim the field exists to prevent: a total accrued half
+   * before and half after a price change was stamped with the new
+   * version, asserting a provenance it did not have. See
+   * `pricingVersions` for the unreduced answer.
+   */
   pricingVersion: string;
+  /** Every distinct price table contributing to `spentCostUsd`, sorted. */
+  pricingVersions: string[];
 }
 
 // ── Pure logic ───────────────────────────────────────────────────────
@@ -436,15 +454,20 @@ interface Rollup {
   spentCostUsd: number | null;
   byAgent: Map<string, { minutes: number; costUsd: number | null }>;
   byItem: Map<string, number>;
+  /** Distinct price tables the costed rows were stamped with. */
+  pricingVersions: Set<string>;
 }
 
 function rollup(planUid: string): Rollup {
-  const out: Rollup = { spentMinutes: 0, spentCostUsd: null, byAgent: new Map(), byItem: new Map() };
+  const out: Rollup = {
+    spentMinutes: 0, spentCostUsd: null, byAgent: new Map(), byItem: new Map(),
+    pricingVersions: new Set<string>(),
+  };
 
   let res;
   try {
     res = getDb().exec(
-      `SELECT item_uid, agent_type, started_at, ended_at, cost_usd
+      `SELECT item_uid, agent_type, started_at, ended_at, cost_usd, pricing_version
        FROM item_time_entries WHERE plan_uid = ?`,
       [planUid],
     );
@@ -457,6 +480,10 @@ function rollup(planUid: string): Rollup {
     const agentType = (row[1] as string | null) ?? 'unknown';
     const minutes = minutesBetween(row[2] as number, row[3] as number);
     const cost = row[4] as number | null;
+    // Only a row that CONTRIBUTES to the cost total carries provenance
+    // for it; a row with no cost was never priced by any table.
+    const priced = row[5] as string | null;
+    if (cost !== null && priced) out.pricingVersions.add(priced);
 
     out.spentMinutes += minutes;
     if (cost !== null) out.spentCostUsd = (out.spentCostUsd ?? 0) + cost;
@@ -510,9 +537,16 @@ export function getBudgetReport(planUid: string): BudgetReport {
     null,
   );
 
+  // `skipped` is terminal: a skipped item will never become done, so
+  // leaving it in the unfinished column means the forecast never
+  // converges. A plan of five done and five skipped is FINISHED, and
+  // used to report a ratio of 0.5 — forecasting twice the time already
+  // spent, on a plan with no work left in it.
   const actionable = items.filter((i) => i.status !== null);
-  const done = actionable.filter((i) => i.status === 'done').length;
-  const completionRatio = actionable.length > 0 ? done / actionable.length : null;
+  const resolved = actionable.filter((i) => i.status === 'done' || i.status === 'skipped').length;
+  const completionRatio = actionable.length > 0 ? resolved / actionable.length : null;
+
+  const pricingVersions = [...spent.pricingVersions].sort();
 
   const overruns = items
     .filter((i) => i.estimateMinutes !== null && (spent.byItem.get(i.uid) ?? 0) > i.estimateMinutes)
@@ -536,7 +570,14 @@ export function getBudgetReport(planUid: string): BudgetReport {
     completionRatio,
     byAgent: [...spent.byAgent.entries()].map(([agentType, v]) => ({ agentType, ...v })),
     overruns,
-    pricingVersion: PRICING_VERSION,
+    // The version the TOTAL was priced under, not the one in force now.
+    // With nothing priced yet, the current table is the honest answer:
+    // it is what the next row will use.
+    pricingVersion:
+      pricingVersions.length === 0 ? PRICING_VERSION
+        : pricingVersions.length === 1 ? pricingVersions[0]
+          : 'mixed',
+    pricingVersions,
   };
 }
 

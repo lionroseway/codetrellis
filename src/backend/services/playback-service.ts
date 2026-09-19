@@ -89,7 +89,7 @@ export function buildPlaybackSequence(params: {
   const limit = Math.min(Math.max(params.limit ?? 20, 2), 100);
   const notes: string[] = [];
 
-  const comparands = listComparands(params.projectPath);
+  const comparands = listComparands(params.projectPath, limit);
   const times = commitTimes(params.projectPath, limit);
 
   const points = comparands

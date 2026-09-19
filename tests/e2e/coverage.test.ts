@@ -133,12 +133,30 @@ test.describe('Scan coverage (Phase 29)', () => {
       // `cross_system_edges.label` from a callsite's method and pattern,
       // which only works while this and cross-system-service agree on
       // how that label is built. If they drift, everything reads as
-      // unpaired and nothing errors — so the invariant is asserted
-      // directly: calls that are not unmatched are exactly the edges.
+      // unpaired and nothing errors.
+      //
+      // This asserted `calls - unmatchedCalls === edges`, which is not an
+      // identity and was only true of this fixture. Calls and edges are
+      // not in bijection in EITHER direction: cross-system-service fans
+      // one call out to every file serving the route and deliberately
+      // does not dedupe, so a second controller on an existing route
+      // makes edges exceed paired calls; and two identical calls in one
+      // file share a (file, label) pair, so paired calls can exceed
+      // edges. Either change breaks the assertion for a reason with
+      // nothing to do with label drift, and the obvious response is to
+      // loosen it — which deletes the only guard on the contract.
+      //
+      // What drift actually looks like is total: no callsite matches any
+      // label, so every call reads unpaired while the edges are plainly
+      // there. That is what is asserted, and it is true whatever the
+      // fixture's route topology.
+      const pairedCalls = report.http.calls - report.http.unmatchedCalls;
       expect(
-        report.http.calls - report.http.unmatchedCalls,
-        'paired calls must equal the edges drawn',
-      ).toBe(report.http.edges);
+        pairedCalls,
+        'no call was counted as paired, though edges exist — the label expression has drifted '
+          + 'from cross-system-service',
+      ).toBeGreaterThan(0);
+      expect(report.http.unmatchedCalls).toBeLessThan(report.http.calls);
 
       // Routes are the other way round: the fixture serves more
       // endpoints than it calls, which is the number worth surfacing.

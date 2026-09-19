@@ -114,10 +114,14 @@ export function buildPrDraft(params: {
   const planRefs = getPlanExternalRefs(params.planUid);
   const itemRefs = items.flatMap((i) => getExternalRefs(i.uid));
 
+  // No casts. `externalKey` is on `ExternalRef` now, so if a SELECT ever
+  // drops the column again the compiler says so — the `as` that used to
+  // be here is exactly what let the field go unread for a whole phase
+  // while `create_plan_from_external` dutifully wrote it.
   const tickets = [
-    ...planRefs.map((r) => r.externalKey).filter((k): k is string => !!k),
-    ...itemRefs.map((r) => (r as { externalKey?: string | null }).externalKey).filter((k): k is string => !!k),
-  ];
+    ...planRefs.map((r) => r.externalKey),
+    ...itemRefs.map((r) => r.externalKey),
+  ].filter((k): k is string => !!k);
   const uniqueTickets = [...new Set(tickets)];
 
   const lines: string[] = [];
@@ -127,14 +131,17 @@ export function buildPrDraft(params: {
     lines.push('## What this does', '', description, '');
   }
 
-  if (uniqueTickets.length > 0) {
+  // Gated on having REFS, not on having parsed keys from them. A
+  // Notion page or a Slack thread has no `PROJ-412` in it and is still
+  // the lineage a reviewer wants; keying the section on the key list
+  // dropped the whole thing, URLs included.
+  if (planRefs.length + itemRefs.length > 0) {
     lines.push('## Tickets', '');
     for (const ref of planRefs) {
       lines.push(`- ${ref.externalKey ? `**${ref.externalKey}**` : ref.title} — ${ref.url}`);
     }
     for (const ref of itemRefs) {
-      const key = (ref as { externalKey?: string | null }).externalKey;
-      lines.push(`- ${key ? `${key}` : ref.title} — ${ref.url}`);
+      lines.push(`- ${ref.externalKey ? ref.externalKey : ref.title} — ${ref.url}`);
     }
     lines.push('');
   }

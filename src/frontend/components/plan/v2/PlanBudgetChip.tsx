@@ -54,6 +54,7 @@ interface BudgetReport {
   byAgent: Array<{ agentType: string; minutes: number; costUsd: number | null }>;
   overruns: Array<{ itemUid: string; estimateMinutes: number; spentMinutes: number }>;
   pricingVersion: string;
+  pricingVersions?: string[];
 }
 
 const CHIP_STYLE: Record<BudgetState, string> = {
@@ -183,6 +184,21 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
               muted={report.forecastMinutes == null}
             />
             <Row label="Cost" value={formatCost(report.spentCostUsd)} muted={report.spentCostUsd === null} />
+            {report.spentCostUsd !== null && (
+              // Provenance for the only figure here that is derived rather
+              // than measured. The field was declared and never rendered,
+              // so the cost surface a human actually looks at carried no
+              // indication of which price table produced it.
+              <Row
+                label="Priced under"
+                value={
+                  report.pricingVersion === 'mixed'
+                    ? `${(report.pricingVersions ?? []).join(' + ')} (mixed)`
+                    : report.pricingVersion
+                }
+                muted
+              />
+            )}
           </dl>
 
           {report.spentCostUsd === null && (

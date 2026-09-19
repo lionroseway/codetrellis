@@ -38,6 +38,40 @@ test.describe('Comparand and target edge cases', () => {
       // The neighbouring case, for contrast: this always behaved.
       const unknown = await h.client.raw('GET', `/api/compare?${q}&before=commit:deadbeef&after=live`);
       expect(unknown.status).toBe(404);
+
+      // The same input on the two surfaces an agent actually calls.
+      // `commit:<ref>` is documented as "any git ref", so a RANGE is a
+      // natural thing to send — and a range contains `..`, which
+      // SAFE_REF forbids. Both used to answer "Internal server error",
+      // which the review panel renders verbatim: the user is told the
+      // desktop broke when in fact their input was refused.
+      const plan = await h.client.createPlan({ title: 'Refusals', projectPath: h.fixture.projectPath });
+      const p = `project=${encodeURIComponent(h.fixture.projectPath)}`;
+      for (const spec of ['commit:HEAD~1..HEAD', 'commit:--output=/tmp/x']) {
+        for (const route of [`review`, `pr-draft`]) {
+          const res = await h.client.raw(
+            'GET',
+            `/api/plans/${encodeURIComponent(plan.uid)}/${route}?${p}`
+              + `&before=${encodeURIComponent(spec)}&after=live`,
+          );
+          expect(res.status, `${route} on ${spec} must not be a 500`).not.toBe(500);
+          // And whatever it does answer must carry a reason, not just a code.
+          if (!res.ok) {
+            const body = (await res.json()) as { reason?: string; error?: string };
+            expect(
+              body.reason ?? body.error ?? '',
+              `${route} on ${spec} refused without saying why`,
+            ).not.toBe('Internal server error');
+          }
+        }
+      }
+
+      // The file surface reads a ref too, and refuses rather than crashing.
+      const file = await h.client.raw(
+        'GET',
+        `/api/file/at?${p}&path=src/a.ts&at=${encodeURIComponent('commit:--output=/tmp/x')}`,
+      );
+      expect(file.status).not.toBe(500);
     } finally {
       await h.teardown();
     }
