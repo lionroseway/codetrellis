@@ -74,6 +74,11 @@ test.describe('E2E harness smoke', () => {
       expect(a.backend.backendPort).not.toBe(b.backend.backendPort);
       expect(a.backend.mcpPort).not.toBe(b.backend.mcpPort);
 
+      // A plan belongs to a project, and a project root is never
+      // caller-nominated (Phase 19) — so A has to have opened its
+      // fixture before it can hold a plan for it.
+      await a.client.scanProject(a.fixture.projectPath);
+
       // Plans created in A shouldn't leak into B.
       await a.client.createPlan({
         title: 'Plan in A',

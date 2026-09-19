@@ -1,6 +1,19 @@
 /**
  * AudioCaptureBar — Phase 8.1 / 8.2.
  *
+ * Phase 29 §4.15 — this was written and never imported, so the four
+ * `/api/audio/*` endpoints looked surfaced to the §2 audit (it greps
+ * for endpoint paths in `src/frontend/`, and this file contains them)
+ * while nothing could reach them. The Cmd/Ctrl+Shift+M hint it draws
+ * was not bound to anything either — advertised by a component nobody
+ * could see. Both are now true.
+ *
+ * It is hidden by default and shown from the mic button in the status
+ * bar or that shortcut, because starting a microphone is an explicit
+ * act and a permanent strip offering it is not. Once capture is
+ * running the bar stays up regardless: a live microphone the user
+ * cannot see is not acceptable.
+ *
  * A compact bar that lets the user toggle audio capture from their
  * microphone. When active, audio chunks stream to the backend's
  * rolling buffer. Agents can then call `get_audio_context` to receive
@@ -11,7 +24,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Radio } from 'lucide-react';
+import { Mic, MicOff, Radio, X, Play } from 'lucide-react';
+import { useUiStore } from '../../stores/ui-store';
 
 interface CaptureStatus {
   capturing: boolean;
@@ -24,6 +38,7 @@ interface CaptureStatus {
 const CHUNK_INTERVAL_MS = 2000; // send a chunk every 2 seconds
 
 export function AudioCaptureBar() {
+  const visible = useUiStore((s) => s.audioBarVisible);
   const [status, setStatus] = useState<CaptureStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -151,7 +166,50 @@ export function AudioCaptureBar() {
     };
   }, []);
 
+  /**
+   * Phase 29 §4.16 — hear what the buffer actually holds.
+   *
+   * `/api/audio/recent` had no caller. Without it the bar reports
+   * "30s buffered · 12 chunks" and that is all a user can ever know:
+   * a muted microphone, the wrong input device, and a working capture
+   * produce the same two numbers. Agents read this buffer through
+   * `get_audio_context`, so "is there anything on it" is worth being
+   * able to answer before relying on it.
+   *
+   * Plays the last ten seconds rather than the whole buffer — enough to
+   * tell speech from silence, small enough to decode without thought.
+   */
+  const [previewing, setPreviewing] = useState(false);
+
+  const playRecent = useCallback(async () => {
+    setPreviewing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/audio/recent?seconds=10');
+      if (res.status === 404) {
+        setError('Nothing buffered yet');
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const snap = await res.json() as { audioBase64: string; mimeType: string };
+      const audio = new Audio(`data:${snap.mimeType};base64,${snap.audioBase64}`);
+      audio.onended = () => setPreviewing(false);
+      audio.onerror = () => {
+        setError('Could not play the buffered audio');
+        setPreviewing(false);
+      };
+      await audio.play();
+      return;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    setPreviewing(false);
+  }, []);
+
   const capturing = status?.capturing ?? false;
+
+  // Hidden unless asked for — but never while the microphone is live.
+  if (!visible && !capturing) return null;
 
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 text-xs border-t ${
@@ -188,6 +246,18 @@ export function AudioCaptureBar() {
         </span>
       )}
 
+      {(status?.chunkCount ?? 0) > 0 && (
+        <button
+          onClick={playRecent}
+          disabled={previewing}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 disabled:opacity-50"
+          title="Play the last 10 seconds — check the microphone is picking you up"
+        >
+          <Play size={9} />
+          {previewing ? 'Playing…' : 'Check'}
+        </button>
+      )}
+
       {!capturing && (
         <span className="text-[10px] text-zinc-600">
           <kbd className="px-1 py-0.5 rounded bg-zinc-800/60 text-zinc-500 text-[9px]">
@@ -201,6 +271,17 @@ export function AudioCaptureBar() {
           <MicOff size={9} />
           {error}
         </span>
+      )}
+
+      <div className="flex-1" />
+      {!capturing && (
+        <button
+          onClick={() => useUiStore.getState().toggleAudioBar()}
+          className="p-0.5 rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60"
+          title="Hide"
+        >
+          <X size={11} />
+        </button>
       )}
     </div>
   );

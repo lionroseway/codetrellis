@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FolderOpen, GitBranch, Cpu, Eye, ArrowRight, Pin, PinOff, X, Clock } from 'lucide-react';
 import { getAPI } from '../bridge';
 import { useProjectStore } from '../stores/project-store';
+import { ActiveAgentProjects, useActiveAgentProjects } from './ActiveAgentProjects';
 
 interface RecentProject {
   path: string;
@@ -50,6 +51,9 @@ const steps = [
 export function WelcomeScreen() {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [loadingRecents, setLoadingRecents] = useState(true);
+  // Phase 29 — projects an agent is ALREADY working in. See
+  // ActiveAgentProjects; /api/auto-detect has always known this.
+  const activeSessions = useActiveAgentProjects();
 
   useEffect(() => {
     fetch('/api/recent-projects')
@@ -65,18 +69,27 @@ export function WelcomeScreen() {
     const api = getAPI();
     const store = useProjectStore.getState();
 
-    let branch: string | null = null;
-    try {
-      const branchRes = await fetch(`/api/git/branch?path=${encodeURIComponent(projectPath)}`);
-      const branchData = await branchRes.json();
-      branch = branchData.branch;
-    } catch { /* ignore */ }
-
-    store.addTab(projectPath, branch);
+    const tabId = store.addTab(projectPath, null);
     store.setScanStatus('scanning');
     try {
       const result = await api.scanProject(projectPath);
       store.applyScanResult(result);
+  // The branch is read AFTER the scan, not before.
+  //
+  // `/api/git/branch` goes through `requireProjectPath`, which refuses a
+  // path that is not a trusted root — and a folder being opened for the
+  // first time is not one until `scanProject` registers it. Asking first
+  // got a 403, the caller read `undefined` off the error body, and the
+  // new tab was created with no branch label until something else
+  // happened to rescan. Loopback is not an authorisation boundary, so
+  // the route's refusal is right; the order of the two calls was wrong.
+      try {
+        const branchRes = await fetch(`/api/git/branch?path=${encodeURIComponent(projectPath)}`);
+        if (branchRes.ok) {
+          const branchData = (await branchRes.json()) as { branch?: string | null };
+          store.setTabBranch(tabId, branchData.branch ?? null);
+        }
+      } catch { /* a missing branch label is not worth failing an open over */ }
     } catch (err) {
       store.setError(String(err));
     }
@@ -116,7 +129,12 @@ export function WelcomeScreen() {
     }).catch(() => {});
   };
 
-  const hasRecents = recents.length > 0;
+  // A project an agent is live in appears in the section above, which
+  // says strictly more than a recents row and offers the same action.
+  // Listing it twice would be clutter, so the live one wins.
+  const livePaths = new Set(activeSessions.map((s) => s.projectPath));
+  const visibleRecents = recents.filter((p) => !livePaths.has(p.path));
+  const hasRecents = visibleRecents.length > 0;
 
   return (
     <div className="w-full h-full relative overflow-hidden">
@@ -146,6 +164,8 @@ export function WelcomeScreen() {
           Visualize your codebase architecture and monitor<br />AI coding agents in real-time
         </p>
 
+        <ActiveAgentProjects sessions={activeSessions} onOpen={openAtPath} />
+
         {hasRecents && (
           <div className="w-full max-w-lg mb-6">
             <div className="flex items-center justify-between mb-2 px-1">
@@ -161,7 +181,7 @@ export function WelcomeScreen() {
               </button>
             </div>
             <div className="space-y-1">
-              {recents.map((project) => (
+              {visibleRecents.map((project) => (
                 <RecentProjectRow
                   key={project.path}
                   project={project}
@@ -175,7 +195,7 @@ export function WelcomeScreen() {
         )}
 
         {/* Steps — full presentation when no recents, compact list when recents exist */}
-        {!hasRecents && !loadingRecents && (
+        {!hasRecents && activeSessions.length === 0 && !loadingRecents && (
           <div className="w-full max-w-lg space-y-2.5 mb-8">
             {steps.map((step, i) => (
               <div

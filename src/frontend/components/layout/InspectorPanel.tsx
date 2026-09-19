@@ -1,13 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import {
   ArrowRight, ArrowLeft, Braces, Box, Layers, LetterText, List, Hash,
   MousePointerClick, FileCode, Folder, Package, ChevronRight, Code2,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, GitCompare,
 } from 'lucide-react';
 import { useUiStore, type SelectedNodeKind, type SelectedNodeMeta } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
+/**
+ * Phase 26 — the diff editor is lazy.
+ *
+ * CodeMirror costs ~700 kB of the bundle, and a user who never opens a
+ * diff should never pay for it. That is the same argument this phase
+ * makes about the graph, so applying it to our own dependency is the
+ * consistent thing to do rather than the clever one.
+ */
+const CodeDiffView = lazy(() =>
+  import('../inspector/CodeDiffView').then((m) => ({ default: m.CodeDiffView })),
+);
+import type { FileOverlay } from '../../lib/plan-overlay';
+import { revealPlanItem } from '../../lib/open-plan-item';
 
 interface SymbolInfo {
   name: string;
@@ -203,6 +216,12 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
   const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
   const [deps, setDeps] = useState<FileDeps | null>(null);
   const [content, setContent] = useState<FileContent | null>(null);
+  const [codeMode, setCodeMode] = useState<'read' | 'diff'>('read');
+  const [overlay, setOverlay] = useState<FileOverlay | null>(null);
+  // Compared against the last commit by default: `scanProject` re-pins
+  // the baseline on every run, so baseline → live is empty right after a
+  // scan (see PHASE-26 §4).
+  const [diffBefore] = useState('commit:HEAD');
   const [showCode, setShowCode] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
 
@@ -213,10 +232,23 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
   }, [nodeId, root]);
 
   useEffect(() => {
-    if (!absPath) { setSymbols([]); setDeps(null); setContent(null); return; }
+    if (!absPath) { setSymbols([]); setDeps(null); setContent(null); setOverlay(null); return; }
     setShowCode(false);
     setContent(null);
     setContentError(null);
+    setOverlay(null);
+
+    // Phase 26 — what the plan wants from this file. Fetched with the
+    // file rather than on demand, because the count feeds a chip the
+    // user sees before opening the source.
+    if (root) {
+      fetch(
+        `/api/file/overlay?path=${encodeURIComponent(absPath)}&project=${encodeURIComponent(root)}`,
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => setOverlay(data && !data.error ? data : null))
+        .catch(() => setOverlay(null));
+    }
 
     fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`)
       .then((r) => r.json()).then(setSymbols).catch(() => setSymbols([]));
@@ -271,7 +303,62 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
       </button>
 
       {showCode && (
-        <CodePreview content={content} error={contentError} onClose={() => setShowCode(false)} />
+        <>
+          {/* Phase 26 — reading the file, and diffing it, are the same
+              surface. The toggle sits with the code rather than in a
+              separate route, because "what does this look like now" and
+              "what changed" are one question asked twice. */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCodeMode('read')}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                codeMode === 'read'
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-foreground-subtle hover:text-foreground'
+              }`}
+            >
+              <Code2 size={10} /> Source
+            </button>
+            <button
+              onClick={() => setCodeMode('diff')}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                codeMode === 'diff'
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-foreground-subtle hover:text-foreground'
+              }`}
+            >
+              <GitCompare size={10} /> Diff
+            </button>
+            {overlay && overlay.itemCount > 0 && (
+              <span className="ml-auto text-[9.5px] text-accent">
+                {overlay.itemCount} plan item{overlay.itemCount === 1 ? '' : 's'} target this file
+              </span>
+            )}
+          </div>
+
+          {codeMode === 'read' ? (
+            <CodePreview
+              content={content}
+              error={contentError}
+              overlay={overlay}
+              onClose={() => setShowCode(false)}
+              onOpenItem={(itemUid, planUid) => { void revealPlanItem(planUid, itemUid); }}
+            />
+          ) : root ? (
+            <Suspense
+              fallback={
+                <div className="px-3 py-4 text-[10.5px] text-foreground-subtle">Loading the diff editor…</div>
+              }
+            >
+              <CodeDiffView
+                projectPath={root}
+                relativePath={nodeId.startsWith('/') ? nodeId.slice(root.length + 1) : nodeId}
+                before={diffBefore}
+                after="live"
+              />
+            </Suspense>
+          ) : null}
+        </>
       )}
 
       {symbols.length > 0 && (

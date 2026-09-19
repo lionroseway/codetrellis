@@ -37,7 +37,6 @@ function resolveDataDir(): string {
   if (fromEnv && fromEnv.trim()) return fromEnv;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getSettings } = _lazy___settings_service;
     const override = getSettings().data.dataDirOverride;
     if (override && typeof override === 'string' && override.trim()) return override;
@@ -53,11 +52,6 @@ function getDbPath(): string {
   return path.join(resolveDataDir(), 'data.db');
 }
 
-function getDbTmpPath(): string {
-  return path.join(resolveDataDir(), 'data.db.tmp');
-}
-
-let dirty = false;
 let autoSaveInterval: ReturnType<typeof setInterval> | null = null;
 
 export function ensureDataDir(): void {
@@ -94,7 +88,6 @@ export function loadFromDisk(): Uint8Array | null {
  * Kept for API compatibility with existing callers.
  */
 export function saveToDisk(_data?: Uint8Array): void {
-  dirty = false;
 }
 
 /**
@@ -102,12 +95,10 @@ export function saveToDisk(_data?: Uint8Array): void {
  * Call this after any plan/task/comment mutation.
  */
 export function markDirty(): void {
-  dirty = true;
 }
 
 /**
  * Start auto-saving the database at the given interval.
- * Only writes if dirty flag is set.
  */
 export function startAutoSave(_exportFn: () => Uint8Array, _intervalMs = 30000): void {
   // No-op since better-sqlite3: the DB is disk-backed (WAL) and
@@ -120,7 +111,6 @@ export function startAutoSave(_exportFn: () => Uint8Array, _intervalMs = 30000):
  * and, crucially, no longer serialize the whole DB on every mutation.
  */
 export function saveNow(_exportFn: () => Uint8Array): void {
-  dirty = false;
 }
 
 export function stopAutoSave(): void {

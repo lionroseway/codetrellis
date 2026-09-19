@@ -30,7 +30,7 @@ export default function ConnectionSwitcherScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [devices, setDevices] = useState<PairedDesktop[]>([]);
-  const [connectionState, setConnectionState] = useState<ConnectionState>(connection.state);
+  const [, setConnectionState] = useState<ConnectionState>(connection.state);
   const [connectedFingerprint, setConnectedFingerprint] = useState<string | null>(null);
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
 

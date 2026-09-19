@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Plus, X, FileText, Folder, Hash, ArrowRight, Link2, Image as ImageIcon, Video,
-  Code, Upload, FolderOpen, ChevronDown, ChevronRight, Box,
+  Code, ChevronDown, ChevronRight, 
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { PantryPlaceholder } from './PantryPlaceholder';
 import { useProjectStore } from '../../../stores/project-store';
 import { useToastStore } from '../../../stores/toast-store';
 import {
@@ -360,8 +361,8 @@ interface PickerMode {
 
 function AddMenu({
   isAction,
-  onTargetFile, onTargetFolder, onTargetSymbol, onTargetEdge,
-  onUrl, onPickImageOrVideo, onRefFile, onRefFolder, onCodeBlock, onTranscript,
+  onTargetFile, onTargetEdge,
+  onUrl, onPickImageOrVideo, onRefFile, onCodeBlock,
 }: {
   isAction: boolean;
   onTargetFile: () => void;
@@ -391,14 +392,6 @@ function AddMenu({
       <MenuItem icon={Link2} label="URL" hint="Paste a link" onClick={onUrl} />
       <MenuItem icon={ImageIcon} label="Image / video" hint="Upload from disk" onClick={onPickImageOrVideo} />
       <MenuItem icon={Code} label="Paste text" hint="Code snippet or transcript" onClick={onCodeBlock} />
-    </div>
-  );
-}
-
-function MenuHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-2.5 pt-1.5 text-[11px] uppercase tracking-wider text-foreground-subtle font-semibold">
-      {children}
     </div>
   );
 }
@@ -785,9 +778,42 @@ const ATTACHMENT_ICON: Record<AttachmentKind, typeof Link2> = {
 
 function AttachmentRow({ itemUid, attachment }: { itemUid: string; attachment: TaskAttachment }) {
   const removeItemAttachment = usePlanItemsStore((s) => s.removeItemAttachment);
+  const projectRoot = useProjectStore((s) => s.root);
   const Icon = ATTACHMENT_ICON[attachment.kind];
   const previewable = isInlinePreviewable(attachment.kind);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  /**
+   * Phase 29 §4.15 — what an unresolvable attachment looks like.
+   *
+   * `PantryPlaceholder` (Phase 7.1) was written for exactly this and
+   * never imported, so until now a reference that does not resolve
+   * rendered as a broken-image glyph. That is the worst possible answer
+   * here: an external contributor cannot tell "you are not allowed to
+   * see this" from "the app is broken", and the first is a normal,
+   * expected state of a shared plan.
+   *
+   * `/api/pantry/resolve` is what knows the difference, and it was
+   * unsurfaced too — it returns a reason per reference. Asked for only
+   * once the media has actually failed, so the ordinary case costs
+   * nothing.
+   */
+  const [failed, setFailed] = useState(false);
+  const [reason, setReason] = useState<string | undefined>();
+
+  const handleMediaError = useCallback(async () => {
+    setFailed(true);
+    if (!projectRoot) return;
+    try {
+      const res = await fetch(
+        `/api/pantry/resolve?project=${encodeURIComponent(projectRoot)}`
+        + `&refs=${encodeURIComponent(attachment.value)}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json() as { results?: Array<{ status: string; reason?: string }> };
+      setReason(data.results?.[0]?.reason);
+    } catch { /* a missing reason just means the placeholder says less */ }
+  }, [projectRoot, attachment.value]);
 
   const isUploadedCopy =
     attachment.value.startsWith('.codetrellis/attachments/') ||
@@ -812,7 +838,16 @@ function AttachmentRow({ itemUid, attachment }: { itemUid: string; attachment: T
           <X size={13} />
         </button>
 
-        {previewable && (
+        {previewable && failed && (
+          <div className="p-2">
+            <PantryPlaceholder
+              reference={attachment.value}
+              reason={reason}
+              author={attachment.author ?? undefined}
+            />
+          </div>
+        )}
+        {previewable && !failed && (
           <button
             onClick={() => setLightboxOpen(true)}
             className="block w-full bg-black/40 hover:bg-black/30 transition-colors"
@@ -824,6 +859,7 @@ function AttachmentRow({ itemUid, attachment }: { itemUid: string; attachment: T
                 alt={attachment.label || 'attachment'}
                 className="w-full max-h-56 object-contain"
                 loading="lazy"
+                onError={handleMediaError}
               />
             ) : (
               <video
@@ -832,6 +868,7 @@ function AttachmentRow({ itemUid, attachment }: { itemUid: string; attachment: T
                 preload="metadata"
                 muted
                 playsInline
+                onError={handleMediaError}
               />
             )}
           </button>

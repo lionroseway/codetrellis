@@ -46,6 +46,7 @@ const MANIFEST_PRIORITY: ReadonlyArray<{ filename: string; kind: ManifestKind }>
   { filename: 'build.gradle.kts', kind: 'build.gradle.kts' },
   { filename: 'build.gradle', kind: 'build.gradle' },
   { filename: 'Gemfile', kind: 'Gemfile' },
+  { filename: 'Package.swift', kind: 'Package.swift' },
   // Lower-priority manifests that signal a project but with weaker info
   { filename: 'setup.py', kind: 'setup.py' },
   { filename: 'requirements.txt', kind: 'requirements.txt' },
@@ -120,6 +121,22 @@ function detectSystemAtDir(
     return readManifest(dir, projectRoot, filename, kind);
   }
 
+  // Special case: a .NET project file is named after the project
+  // (`Acme.Billing.csproj`), so it cannot be matched by filename like
+  // every other manifest. It is checked after the priority list so a
+  // directory holding both a csproj and, say, a package.json still
+  // reports as the npm package it primarily is.
+  // Sorted so a directory with more than one project file always picks
+  // the same one — readdir order is not guaranteed, and a graph that
+  // differs between scans of an unchanged tree is worse than a graph
+  // that picks the "wrong" project consistently.
+  const csproj = [...filenames]
+    .filter((name) => name.toLowerCase().endsWith('.csproj'))
+    .sort()[0];
+  if (csproj) {
+    return readCsproj(dir, projectRoot, path.join(dir, csproj));
+  }
+
   // Special case: tsconfig.json is only a system if there's no
   // package.json sibling. That covers standalone TS areas like e2e/
   // or scripts/ that have a tsconfig but not their own package.
@@ -128,6 +145,27 @@ function detectSystemAtDir(
   }
 
   return null;
+}
+
+/**
+ * A .NET project. MSBuild's default root namespace is the project
+ * file's base name, so that is what `packageName` carries — the C#
+ * resolver overrides it with `<RootNamespace>` when the csproj declares
+ * one, which it reads itself rather than making every scan parse XML.
+ */
+function readCsproj(dir: string, projectRoot: string, manifestPath: string): DiscoveredSystem {
+  const projectName = path.basename(manifestPath, path.extname(manifestPath));
+  return {
+    id: stableId(dir),
+    name: projectName,
+    rootPath: dir,
+    relativeRoot: path.relative(projectRoot, dir),
+    language: 'csharp',
+    manifestKind: 'csproj',
+    manifestPath,
+    isWorkspaceRoot: false,
+    packageName: projectName,
+  };
 }
 
 function readManifest(
@@ -177,6 +215,8 @@ function readManifest(
         language: 'ruby', manifestKind: kind, manifestPath,
         isWorkspaceRoot: false,
       };
+    case 'Package.swift':
+      return readSwiftPackage(dir, projectRoot, manifestPath, id, relativeRoot, baseName);
     default:
       return {
         id, name: baseName, rootPath: dir, relativeRoot,
@@ -311,6 +351,36 @@ function readGoMod(
     manifestPath,
     isWorkspaceRoot: false,
     packageName: moduleName,
+  };
+}
+
+/**
+ * A SwiftPM package. The `name:` in the `Package(` initialiser is the
+ * package name, which is *not* necessarily the directory name and is
+ * what a cross-package `import` is written against.
+ */
+function readSwiftPackage(
+  dir: string,
+  _projectRoot: string,
+  manifestPath: string,
+  id: string,
+  relativeRoot: string,
+  baseName: string,
+): DiscoveredSystem {
+  let raw = '';
+  try { raw = fs.readFileSync(manifestPath, 'utf-8'); } catch { /* ignore */ }
+  // `let package = Package(\n    name: "BillingCore",` — the first
+  // `name:` in the file is the package's own, since targets come later.
+  const nameMatch = raw.match(/name\s*:\s*"([^"]+)"/);
+  const packageName = nameMatch ? nameMatch[1] : baseName;
+
+  return {
+    id, name: packageName, rootPath: dir, relativeRoot,
+    language: 'swift',
+    manifestKind: 'Package.swift',
+    manifestPath,
+    isWorkspaceRoot: false,
+    packageName,
   };
 }
 

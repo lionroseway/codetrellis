@@ -111,15 +111,52 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'open_project',
     {
       description:
-        'Open and scan a project directory in CodeTrellis. This triggers a full AST parse of the codebase, ' +
-        'building the dependency graph. Use this during onboarding to load a project for the first time.',
+        'Open and scan a project directory in CodeTrellis. Parses the codebase, builds the dependency ' +
+        'graph, and makes the project available to every tool that takes a project_path. Use this during ' +
+        'onboarding to load a project for the first time.',
       inputSchema: {
         path: z.string().describe('Absolute path to the project root directory.'),
       },
     },
     async ({ path: projectPath }) => {
-      deps.broadcast('ui-open-project', { path: projectPath });
-      return { content: [{ type: 'text' as const, text: `Opening project: ${projectPath}` }] };
+      // Actually open it, rather than asking the renderer to.
+      //
+      // This only broadcast `ui-open-project` and returned "Opening
+      // project: …" — success, unconditionally, having done nothing. With
+      // no renderer listening (a headless agent, or a window still coming
+      // up) nothing happened at all, and the description's promise of "a
+      // full AST parse" was simply untrue.
+      //
+      // It went unnoticed because `rescan_project` did the real work and
+      // was unconfined, so the documented open-then-rescan flow appeared to
+      // work. Phase 30 confines rescan to opened projects, which turned a
+      // cosmetic lie into a dead end: open_project said ok, rescan said the
+      // project is not open, and both were right.
+      //
+      // Scanning is what REGISTERS a trusted root (`recordProjectOpen` +
+      // `setActiveProjectRoot`), and scan is deliberately exempt from
+      // confinement because it is how a directory becomes a project.
+      try {
+        const stats = await deps.scanProject(projectPath);
+        // Broadcast after, so the UI switches to a project that is ready
+        // rather than one still parsing.
+        deps.broadcast('ui-open-project', { path: projectPath });
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Opened ${projectPath} — ${stats.fileCount} files, ${stats.symbolCount} symbols, `
+              + `${stats.importCount} imports (${stats.resolvedImports} resolved)`,
+          }],
+        };
+      } catch (err) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Could not open ${projectPath}: ${err instanceof Error ? err.message : String(err)}`,
+          }],
+          isError: true,
+        };
+      }
     },
   );
 
@@ -221,7 +258,6 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ identity, mcp, plans, data, device, firstRunComplete }) => {
-      const before = deps.getSettings();
       const patch: any = {};
       if (identity) patch.identity = identity;
       if (mcp) patch.mcp = mcp;
@@ -235,7 +271,6 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // Phase 9 — live-restart mDNS when device settings change.
       if (device?.advertise !== undefined || device?.deviceName !== undefined) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const mdns = _lazy_______services_mdns_service;
           if (updated.device.advertise) {
             mdns.startMdns(updated.device.deviceName || undefined);

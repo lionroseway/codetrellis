@@ -320,7 +320,7 @@ function tryExtractProjectRoot(sessionId: string, args: string): void {
  * tokens. Used for Jaccard similarity of tool args.
  */
 function tokenize(s: string): Set<string> {
-  const tokens = s.toLowerCase().split(/[\s,{}\[\]":]+/).filter(Boolean);
+  const tokens = s.toLowerCase().split(/[\s,{}[\]":]+/).filter(Boolean);
   return new Set(tokens);
 }
 

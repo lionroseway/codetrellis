@@ -3,6 +3,8 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { DEFAULT_SETTINGS, type AppSettings, type PowerTriggers } from '../../shared/types';
 import { getSettingsDir } from './persistence';
+import { ALL_CAPABILITIES } from './peer-capabilities';
+import type { PeerCapabilityName } from '../../shared/types/peer';
 
 /**
  * Settings service — Phase 13 §D.
@@ -218,6 +220,28 @@ export function mergeWithDefaults(raw: any): AppSettings {
     mcp: {
       port: typeof raw?.mcp?.port === 'number' ? raw.mcp.port : DEFAULT_SETTINGS.mcp.port,
       autodetectOnCollision: typeof raw?.mcp?.autodetectOnCollision === 'boolean' ? raw.mcp.autodetectOnCollision : DEFAULT_SETTINGS.mcp.autodetectOnCollision,
+      // Phase 30. Validated against the real capability names rather than
+      // trusted: this list is what the authorisation gate reads, so a
+      // malformed settings file must not be able to widen it. An absent or
+      // invalid value leaves it undefined, which the gate reads as
+      // DEFAULT_GRANTS — the narrower answer.
+      // Spread rather than assigned, so an absent grant list stays ABSENT
+      // rather than becoming an explicit `undefined`. The gate reads absent
+      // as DEFAULT_GRANTS, and a key that exists with no value is a
+      // different thing from a key that was never written.
+      ...(Array.isArray(raw?.mcp?.capabilities)
+        ? {
+            capabilities: (raw.mcp.capabilities as unknown[]).filter(
+              (c): c is PeerCapabilityName =>
+                typeof c === 'string' && (ALL_CAPABILITIES as readonly string[]).includes(c),
+            ),
+          }
+        : {}),
+      // An existing settings file predates this field, and the secure value
+      // is the default rather than the permissive one — so an upgrade
+      // CONFINES path-taking tools rather than leaving them open because
+      // nobody had an opinion yet.
+      projectScope: raw?.mcp?.projectScope === 'anywhere' ? 'anywhere' : 'opened',
     },
     plans: {
       defaultVisibility: raw?.plans?.defaultVisibility === 'local' ? 'local' : DEFAULT_SETTINGS.plans.defaultVisibility,

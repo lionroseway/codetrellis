@@ -22,7 +22,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
 import { getRpcTimeoutMs, setRpcTimeoutMs, RPC_TIMEOUT_MIN_MS, RPC_TIMEOUT_MAX_MS } from '../lib/prefs';
 import { useDevicePowerStatus } from '../lib/store';
@@ -60,7 +60,6 @@ interface AppSettings {
 }
 
 export default function SettingsScreen() {
-  const router = useRouter();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

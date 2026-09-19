@@ -51,6 +51,14 @@ interface ProjectState {
 
   // Tab management
   addTab: (root: string, branch?: string | null) => string;
+  /**
+   * Set a tab's branch label after the fact.
+   *
+   * Needed because the branch can only be read once the project is a
+   * trusted root, which `scanProject` is what establishes — so the tab
+   * exists before its branch is knowable.
+   */
+  setTabBranch: (id: string, branch: string | null) => void;
   removeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
 
@@ -113,6 +121,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       return { tabs, activeTabId: id, ...deriveActiveState(tabs, id) };
     });
     return id;
+  },
+
+  setTabBranch: (id, branch) => {
+    set((s) => {
+      const tabs = s.tabs.map((t) => (t.id === id ? { ...t, branch } : t));
+      return { tabs, ...deriveActiveState(tabs, s.activeTabId) };
+    });
   },
 
   removeTab: (id) => {

@@ -4,7 +4,10 @@ import * as _lazy___git_identity from './git-identity';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
-import type { Plan, Task, PlanVersion, CreatePlanInput, PlanStatus, FileSpec } from '../../shared/types';
+// Direct, not lazy: plan-item-service does not import this module, so
+// there is no cycle to break.
+import * as planItemService from './plan-item-service';
+import type { Plan, Task, PlanItem, PlanVersion, CreatePlanInput, PlanStatus, FileSpec } from '../../shared/types';
 
 /**
  * Compute `affectedFiles` from `fileSpecs`. Phase 14 §A treats
@@ -41,7 +44,6 @@ function deriveAffectedFiles(fileSpecs: FileSpec[] | undefined, existing: string
  */
 function notifyMutation(planUid: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { scheduleWriteThrough } = _lazy___plan_file_service;
     scheduleWriteThrough(planUid);
   } catch { /* auto-sync not available — fine, manual export still works */ }
@@ -67,7 +69,6 @@ export function createPlan(
   // plan's home repo. Stable across clones (same URL means same repo
   // regardless of local path). Falls back to null when the project
   // isn't a git repo or has no origin.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getNormalisedOriginUrl } = _lazy___git_identity;
   const homeRepo: string | null = normalizedPath ? (getNormalisedOriginUrl(normalizedPath) ?? null) : null;
 
@@ -121,11 +122,22 @@ export function createPlan(
     scope: [],
   };
 
-  // Version 1
+  // Version 1.
+  //
+  // The snapshot is the bare plan, matching what `updatePlan` writes
+  // for every subsequent version. It used to be `{ plan, tasks }` —
+  // one column, two shapes, nothing checking they agreed. Phase 29
+  // §4.8 gave `plan_versions` a reader that diffs each snapshot
+  // against the one before it, and v2-against-v1 compared a bare plan
+  // to a wrapper, so every tracked field looked like it had changed
+  // from nothing on a plan's first edit.
+  //
+  // Rows written before this still carry the wrapper, so the reader
+  // unwraps it rather than relying on this fix alone.
   db.run(
     `INSERT INTO plan_versions (plan_uid, version, snapshot, change_summary, author, created_at)
      VALUES (?, 1, ?, 'Plan created', ?, ?)`,
-    [uid, JSON.stringify({ plan, tasks }), author, now]
+    [uid, JSON.stringify(plan), author, now]
   );
 
   markDirty();
@@ -182,9 +194,54 @@ export function getPlan(planUid: string): (Plan & { tasks: Task[] }) | null {
   const core = rowToPlanCore(r);
   return {
     ...core,
-    taskCount: tasks.length,
-    completedTaskCount: tasks.filter((t) => t.status === 'done').length,
+    // Same source as the list — see `countPlanActions`. Counting the
+    // legacy `tasks` array here meant the plan DETAIL disagreed with
+    // itself too: 0 actions beside an item tree that plainly had some.
+    ...countPlanActions(db, planUid),
     tasks,
+  };
+}
+
+/**
+ * How many ACTIONS a plan has, and how many are done.
+ *
+ * Counts `plan_items`, not `tasks`. `tasks` is the pre-V2 table and no
+ * modern write path touches it — `add_item` and `bulk_add_items` both go to
+ * `plan_items` — so counting it reported 0/0 for every plan an agent has
+ * ever created. That number is on the plan list, the plan chip, the
+ * minimised chip and two popovers, so "0/0 actions · 0%" was what the user
+ * saw for real, populated plans.
+ *
+ * F13 fixed the ONE surface that contradicted itself most visibly (the V2
+ * toolbar, by deriving from the live item tree) and left the stale field
+ * feeding everything else. Fixing it here fixes all of them, because they
+ * all read this.
+ *
+ * Legacy plans really do have `tasks` rows and no items, so those still
+ * count — `plan_items` wins when a plan has any, otherwise `tasks` does.
+ * Summing both would double-count anything that was ever migrated.
+ */
+function countPlanActions(db: ReturnType<typeof getDb>, planUid: string): {
+  taskCount: number;
+  completedTaskCount: number;
+} {
+  const items = db.exec(
+    `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END)
+     FROM plan_items WHERE plan_uid = ? AND kind = 'action'`,
+    [planUid],
+  );
+  const itemTotal = (items[0]?.values[0]?.[0] as number) || 0;
+  if (itemTotal > 0) {
+    return { taskCount: itemTotal, completedTaskCount: (items[0]?.values[0]?.[1] as number) || 0 };
+  }
+
+  const legacy = db.exec(
+    `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
+    [planUid],
+  );
+  return {
+    taskCount: (legacy[0]?.values[0]?.[0] as number) || 0,
+    completedTaskCount: (legacy[0]?.values[0]?.[1] as number) || 0,
   };
 }
 
@@ -202,15 +259,7 @@ export function listPlans(projectPath?: string, statusFilter?: string): Plan[] {
 
   return result[0].values.map((r: any[]) => {
     const core = rowToPlanCore(r);
-    const counts = db.exec(
-      `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
-      [r[0]]
-    );
-    return {
-      ...core,
-      taskCount: (counts[0]?.values[0]?.[0] as number) || 0,
-      completedTaskCount: (counts[0]?.values[0]?.[1] as number) || 0,
-    };
+    return { ...core, ...countPlanActions(db, r[0] as string) };
   });
 }
 
@@ -281,7 +330,6 @@ export function deletePlan(planUid: string): void {
  * later imported into one). Stores the normalised form.
  */
 export function setPlanHomeRepo(planUid: string, homeRepoUrl: string | null): void {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised = homeRepoUrl ? normaliseRepoUrl(homeRepoUrl) : null;
   const now = Date.now();
@@ -300,7 +348,6 @@ export function setPlanHomeRepo(planUid: string, homeRepoUrl: string | null): vo
  * scope array.
  */
 export function addPlanScope(planUid: string, repoUrl: string): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) throw new Error('addPlanScope: repoUrl must be a non-empty URL');
@@ -330,7 +377,6 @@ export function addPlanScope(planUid: string, repoUrl: string): string[] {
  * scope. Returns the updated scope array.
  */
 export function removePlanScope(planUid: string, repoUrl: string): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) throw new Error('removePlanScope: repoUrl must be a non-empty URL');
@@ -360,7 +406,6 @@ export function removePlanScope(planUid: string, repoUrl: string): string[] {
  * Pure read; doesn't materialise full task lists for performance.
  */
 export function listPlansByRepoUrl(repoUrl: string): Plan[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normaliseRepoUrl } = _lazy___git_identity;
   const normalised: string = normaliseRepoUrl(repoUrl);
   if (!normalised) return [];
@@ -382,15 +427,7 @@ export function listPlansByRepoUrl(repoUrl: string): Plan[] {
 
   return result[0].values.map((r: any[]) => {
     const core = rowToPlanCore(r);
-    const counts = db.exec(
-      `SELECT COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) FROM tasks WHERE plan_uid = ?`,
-      [r[0]],
-    );
-    return {
-      ...core,
-      taskCount: (counts[0]?.values[0]?.[0] as number) || 0,
-      completedTaskCount: (counts[0]?.values[0]?.[1] as number) || 0,
-    };
+    return { ...core, ...countPlanActions(db, r[0] as string) };
   });
 }
 
@@ -639,7 +676,27 @@ export function claimTask(taskUid: string, agentId: string, agentType: string, m
   return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
 }
 
-export function getNextTask(planUid: string, phaseUid?: string | null): Task | null {
+/**
+ * The next thing to work on: the first pending item whose dependencies
+ * are all done.
+ *
+ * **This reads `plan_items` first and `tasks` only as a fallback.**
+ * Those are two separate tables with two separate writers — `tasks` is
+ * V1, `plan_items` is the V2 model the workspace has written since
+ * Phase 15 — and this function used to read only `tasks`. Which meant
+ * it returned "nothing next" for every plan authored in the current
+ * UI, because such a plan has no rows in `tasks` at all. Nothing
+ * noticed, because nothing called it: no MCP tool exposes it and
+ * neither client called the REST route (Phase 29 §4.14). It was
+ * answering the right question against the wrong table.
+ *
+ * A V1 plan keeps its old answer exactly — the fallback runs only when
+ * the plan has no V2 items.
+ */
+export function getNextTask(planUid: string, phaseUid?: string | null): Task | PlanItem | null {
+  const items = planItemService.listAllItems(planUid);
+  if (items.length > 0) return nextPlanItem(items, phaseUid);
+
   const tasks = getTasksByPlan(planUid);
   const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.uid));
 
@@ -647,6 +704,30 @@ export function getNextTask(planUid: string, phaseUid?: string | null): Task | n
     if (task.status !== 'pending') continue;
     if (phaseUid !== undefined && task.phaseUid !== phaseUid) continue;
     if (task.dependencies.every((d) => done.has(d))) return task;
+  }
+  return null;
+}
+
+/**
+ * V2 selection. Objects carry no status, so only Actions are
+ * candidates. `listAllItems` is already ordered by sortOrder, which is
+ * the order the tree renders — so "first ready" here means the same
+ * thing the user sees top-to-bottom.
+ *
+ * `phaseUid` has no V2 equivalent: phases became ordinary parent items.
+ * Passing one filters by parent instead, which is the same intent in
+ * the new model.
+ */
+function nextPlanItem(items: PlanItem[], parentUid?: string | null): PlanItem | null {
+  const done = new Set(
+    items.filter((i) => i.status === 'done' || i.status === 'skipped').map((i) => i.uid),
+  );
+
+  for (const item of items) {
+    if (item.kind !== 'action') continue;
+    if (item.status !== 'pending') continue;
+    if (parentUid !== undefined && item.parentUid !== parentUid) continue;
+    if ((item.dependencies ?? []).every((d) => done.has(d))) return item;
   }
   return null;
 }

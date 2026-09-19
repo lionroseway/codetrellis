@@ -33,6 +33,9 @@ test.describe('CDev Phase 8 — audio capture pipeline', () => {
   test('audio buffer accepts chunks and returns recent audio via MCP', async () => {
     const h = await setupHarness('cdev-phase8-buffer');
     try {
+      // Phase 30: audio is `capture` and is off by default — reading the
+      // user's microphone is not something connecting an agent should grant.
+      await h.client.grantMcpCapabilities(['read', 'write', 'project', 'files', 'capture']);
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
 
       // Initially not capturing
@@ -104,6 +107,9 @@ test.describe('CDev Phase 8 — audio capture pipeline', () => {
   test('MCP get_audio_context returns audio and get_audio_status reports state', async () => {
     const h = await setupHarness('cdev-phase8-mcp');
     try {
+      // Phase 30: audio is `capture` and is off by default — reading the
+      // user's microphone is not something connecting an agent should grant.
+      await h.client.grantMcpCapabilities(['read', 'write', 'project', 'files', 'capture']);
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
 
       // Check status when not capturing
@@ -157,6 +163,9 @@ test.describe('CDev Phase 8 — audio capture pipeline', () => {
   test('capture start/stop round-trip and buffer clear on restart', async () => {
     const h = await setupHarness('cdev-phase8-lifecycle');
     try {
+      // Phase 30: audio is `capture` and is off by default — reading the
+      // user's microphone is not something connecting an agent should grant.
+      await h.client.grantMcpCapabilities(['read', 'write', 'project', 'files', 'capture']);
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
 
       // Start capture with 60s buffer

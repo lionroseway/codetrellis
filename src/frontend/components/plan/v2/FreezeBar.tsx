@@ -47,16 +47,6 @@ export function FreezeBar({ planUid }: { planUid?: string }) {
 
     fetchFreeze();
 
-    // Listen for freeze-changed events via WebSocket
-    const handleWsMessage = (e: MessageEvent) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'freeze-changed') {
-          fetchFreeze();
-        }
-      } catch { /* ignore */ }
-    };
-
     // Re-check periodically for auto-expiry
     const interval = setInterval(fetchFreeze, 60_000);
 

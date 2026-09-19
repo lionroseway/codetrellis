@@ -580,7 +580,105 @@ const PERF_VERIFY = `# Verification
 (optimisations considered but skipped — and why; future-you will want this list)
 `;
 
+
+// --- from-ticket (Phase 24) -------------------------------------------------
+
+const FROM_TICKET_INTAKE = `# Intake
+
+What the ticket says, and what it leaves unsaid.
+
+## The ask, in the requester's words
+
+<paste the ticket description verbatim — do not paraphrase it here, a
+paraphrase loses the thing you will argue about later>
+
+## What this actually touches
+
+Fill this in from the graph, not from the ticket. A ticket describes
+intent; the graph knows which files and which services the intent lands
+on. This section is the reason the plan exists rather than the ticket
+being worked directly.
+
+- Systems:
+- Files / symbols:
+- Cross-system edges crossed (HTTP, SQL):
+
+## Contradictions found
+
+Where the ticket and the codebase disagree. "No API changes" next to a
+story that rewrites a route file belongs here, and belongs here BEFORE
+anyone starts.
+
+## Questions for the requester
+
+Answer these before building, not after.
+`;
+
+const FROM_TICKET_ACCEPTANCE = `# Acceptance criteria
+
+Copied from the ticket, one checkbox each, in the requester's words.
+
+Keeping the requester's wording matters: this is the list they will
+check against, and a helpfully-reworded criterion is one nobody agreed
+to.
+
+- [ ] <criterion>
+
+## Out of scope
+
+What the ticket explicitly does NOT cover. Writing it down is what stops
+the plan quietly growing.
+`;
+
 export const PLAN_TEMPLATES: PlanTemplate[] = [
+  {
+    id: 'from-ticket',
+    label: 'From a ticket',
+    shortDescription: 'Intake scaffold for work arriving from Jira, Linear or an issue tracker.',
+    longDescription:
+      'For work that starts outside CodeTrellis. An agent holding both your tracker\'s MCP server and ' +
+      'this one can fill it in one turn — see `create_plan_from_external`, which builds the nested ' +
+      'plan directly from a fetched epic. The template is the manual path, and the shape that path ' +
+      'produces: an intake page that records what the ticket says AND what the graph says it touches, ' +
+      'acceptance criteria in the requester\'s own words, and two phases that keep clarification ' +
+      'separate from building. Use `{{ticket}}` for the key and `{{summary}}` for the title.',
+    defaultTitle: '{{ticket}}: {{summary}}',
+    defaultPlanDescription:
+      'Work arriving from a tracker. Read the intake page first — especially the contradictions section — ' +
+      'and get the open questions answered before starting Phase 2.',
+    placeholders: [
+      { key: 'ticket', label: 'Ticket key', default: 'PROJ-000' },
+      { key: 'summary', label: 'Ticket summary', default: '<what the ticket asks for>' },
+    ],
+    phases: [
+      {
+        phaseNumber: 1,
+        title: 'Clarify',
+        scope:
+          'Map the ticket onto the codebase. Which systems does it touch, which files, does it cross a ' +
+          'service boundary nobody mentioned? Answer the open questions. No implementation.',
+        acceptanceCriteria:
+          '- [ ] Intake page lists the real files and systems, taken from the graph\n' +
+          '- [ ] Acceptance criteria transcribed in the requester\'s words\n' +
+          '- [ ] Contradictions between the ticket and the codebase written down\n' +
+          '- [ ] Open questions answered by the requester, not guessed at\n',
+      },
+      {
+        phaseNumber: 2,
+        title: 'Deliver',
+        scope: 'Build against the acceptance criteria. Each criterion should map to something in the diff.',
+        prerequisites: 'Phase 1 questions answered and contradictions resolved.',
+        acceptanceCriteria:
+          '- [ ] Every acceptance criterion is checked off and traceable to a change\n' +
+          '- [ ] Drift report against the plan: clean\n' +
+          '- [ ] Ticket status written back (get_external_sync_state, then your tracker\'s MCP)\n',
+      },
+    ],
+    docs: [
+      { key: 'intake', orderHint: '00', docType: 'requirements', title: 'Intake', body: FROM_TICKET_INTAKE },
+      { key: 'acceptance', orderHint: '01', docType: 'acceptance_criteria', title: 'Acceptance criteria', body: FROM_TICKET_ACCEPTANCE },
+    ],
+  },
   {
     id: 'mass-refactor',
     label: 'Mass refactor (swf-style)',

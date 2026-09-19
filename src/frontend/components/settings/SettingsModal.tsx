@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
+import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
 
 // --- Per-device access (Phase 19, finding 15) -------------------------------
@@ -72,6 +73,48 @@ const DEVICE_CAPABILITIES: Array<{
     name: 'settings',
     label: 'Change desktop settings',
     hint: 'Includes exposing this machine on the network — a device with this can widen its own reach.',
+    sensitive: true,
+  },
+];
+
+/**
+ * What an MCP client may do — Phase 30.
+ *
+ * Separate from `DEVICE_CAPABILITIES` because the surfaces differ in what
+ * they can reach, not because the vocabulary differs: both read the same
+ * seven names. `capture` is absent from the device list because no peer RPC
+ * method needs it yet, and showing a toggle that governs nothing would be
+ * worse than not showing it.
+ */
+const MCP_DEFAULT_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
+
+const MCP_CAPABILITIES: Array<{
+  name: PeerCapabilityName;
+  label: string;
+  hint: string;
+  /** Rendered in amber: granting it has consequences beyond reading data. */
+  sensitive?: boolean;
+}> = [
+  { name: 'read', label: 'Read plans, items and the graph', hint: 'Plans, items, docs, channels, dependencies, reviews.' },
+  { name: 'write', label: 'Change plans, and drive the UI', hint: 'Create and edit plans, items, docs and comments; move the graph; show prompts.' },
+  { name: 'project', label: 'Open, close and rescan projects', hint: 'Switch which project this desktop is working on.' },
+  { name: 'files', label: 'Read and write plan files', hint: 'Export plans to disk, import them back, browse plan documents.' },
+  {
+    name: 'capture',
+    label: 'Read your screen, clipboard and microphone',
+    hint: 'Screenshots, clipboard contents, and audio capture. Your clipboard routinely holds passwords.',
+    sensitive: true,
+  },
+  {
+    name: 'settings',
+    label: 'Change desktop settings',
+    hint: 'Includes writing .claude/settings.local.json to auto-approve every tool — an agent with this can widen its own reach.',
+    sensitive: true,
+  },
+  {
+    name: 'terminal',
+    label: 'Run commands',
+    hint: 'Create terminals, type into them, read scrollback, and drive terminals on paired devices. This is command execution on this machine.',
     sensitive: true,
   },
 ];
@@ -380,6 +423,60 @@ function McpSection({
         </div>
       )}
 
+      <div className="pt-1 border-t border-white/[0.06]">
+        <p className="text-[11px] text-foreground mb-1">What connected agents may do</p>
+        <p className="text-[10px] text-foreground-subtle leading-relaxed mb-2">
+          Applies to every MCP client on this machine — Claude Code, Codex, Cursor, Claude Desktop.
+          Running commands, reading your screen or clipboard, and changing settings are off until you
+          turn them on. An agent that is refused is told which of these to ask you for.
+        </p>
+        <div className="space-y-1.5">
+          {MCP_CAPABILITIES.map((cap) => {
+            const held = (settings.mcp.capabilities ?? MCP_DEFAULT_CAPABILITIES).includes(cap.name);
+            return (
+              <label key={cap.name} className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={held}
+                  onChange={(e) => {
+                    const current = settings.mcp.capabilities ?? MCP_DEFAULT_CAPABILITIES;
+                    const next = e.target.checked
+                      ? [...new Set([...current, cap.name])]
+                      : current.filter((c) => c !== cap.name);
+                    onChange({ mcp: { ...settings.mcp, capabilities: next } });
+                  }}
+                  className="mt-0.5 accent-accent"
+                />
+                <span className="min-w-0">
+                  <span className={`text-[11px] ${cap.sensitive ? 'text-amber-300' : 'text-foreground'}`}>
+                    {cap.label}
+                  </span>
+                  <span className="block text-[10px] text-foreground-subtle">{cap.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <Field label="Which projects agents can reach">
+        <select
+          value={settings.mcp.projectScope ?? 'opened'}
+          onChange={(e) =>
+            onChange({ mcp: { ...settings.mcp, projectScope: e.target.value as 'opened' | 'anywhere' } })
+          }
+          className="bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+        >
+          <option value="opened">Only projects I have opened</option>
+          <option value="anywhere">Any path the agent names</option>
+        </select>
+        <p className="mt-1 text-[10px] text-foreground-subtle leading-relaxed">
+          Tools that take a project path — reviews, git history, freezes, plan creation — are confined
+          to projects this app has opened. This is not a sandbox: an agent can still open a project
+          itself, but you will see the tab appear. Choose &quot;any path&quot; for a fully autonomous agent.
+        </p>
+      </Field>
+
       <Field label="Config snippet for your agent">
         <div className="flex items-start gap-2">
           <pre className="flex-1 bg-black/30 border border-white/[0.06] rounded-md px-3 py-2 text-[10.5px] font-mono text-foreground-muted overflow-x-auto">
@@ -585,6 +682,40 @@ interface SyncStatusData {
   remoteMachine: string | null;
 }
 
+/**
+ * Phase 29 §4.16 — what an import would actually bring.
+ *
+ * `/api/sync/peek` had no caller. Without it the Import button is a
+ * blind write: `importSync` REPLACES local settings with the bundle in
+ * the sync directory, and the panel could only say when that bundle
+ * was exported and from which machine — never what is in it. "Import
+ * from saif-mbp" and "overwrite your settings with a file you have not
+ * seen" were the same click.
+ *
+ * `/api/sync/status` already carries the machine and the timestamp, so
+ * peek is asked for exactly what status cannot answer: whether the
+ * bundle holds settings, and how many projects come with them.
+ */
+interface SyncPeekData {
+  available: boolean;
+  remoteMachine: string | null;
+  lastExportAt: string | null;
+  hasSettings: boolean;
+  hasRecentProjects: boolean;
+  recentProjectCount: number;
+}
+
+/** "settings and 12 projects" — never "settings and 0 projects". */
+export function describeBundle(peek: SyncPeekData): string {
+  const parts: string[] = [];
+  if (peek.hasSettings) parts.push('your settings');
+  if (peek.hasRecentProjects && peek.recentProjectCount > 0) {
+    parts.push(`${peek.recentProjectCount} project${peek.recentProjectCount === 1 ? '' : 's'}`);
+  }
+  if (parts.length === 0) return 'nothing this version knows how to read';
+  return parts.join(' and ');
+}
+
 function SyncSection({
   settings,
   onChange,
@@ -594,12 +725,14 @@ function SyncSection({
 }) {
   const [syncPath, setSyncPath] = useState(settings.data.personalSyncPath);
   const [syncStatus, setSyncStatus] = useState<SyncStatusData | null>(null);
+  const [peek, setPeek] = useState<SyncPeekData | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [resultMsg, setResultMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/sync/status').then((r) => r.json()).then(setSyncStatus).catch(() => {});
+    fetch('/api/sync/peek').then((r) => r.json()).then(setPeek).catch(() => {});
   }, [settings.data.personalSyncPath, settings.data.personalSyncMode]);
 
   const save = () => {
@@ -708,6 +841,17 @@ function SyncSection({
               </button>
             )}
           </div>
+
+          {/* Phase 29 §4.16 — say what Import would replace, before it
+              is clicked. Import overwrites local settings, so "what is
+              in the bundle" is the one thing the user needs and the
+              status endpoint cannot answer. */}
+          {syncStatus.lastImportAvailable && peek?.available && (
+            <p className="text-[10.5px] text-foreground-subtle leading-relaxed border-t border-white/[0.06] pt-2">
+              That bundle holds <span className="text-foreground-muted">{describeBundle(peek)}</span>.
+              {peek.hasSettings && ' Importing replaces your current settings with it.'}
+            </p>
+          )}
         </div>
       )}
 
@@ -932,11 +1076,6 @@ function DevicesSection({
       setPairingError(err instanceof Error ? err.message : String(err));
       setPairingState('error');
     }
-  }, []);
-
-  // Transition from showing QR to waiting
-  const handleQrShown = useCallback(() => {
-    setPairingState('waiting-phone');
   }, []);
 
   // --- Step 2: User enters the code from their phone to confirm ---
@@ -1579,6 +1718,8 @@ interface UpdateResultData {
   download?: UpdateDownload;
   releaseNotes?: { url?: string; markdown?: string };
   source: 'website' | 'github' | 'cache';
+  /** A newer release exists with no artifact this platform can run. */
+  noAssetForPlatform?: boolean;
 }
 
 interface UpdateStateData {
@@ -1686,34 +1827,61 @@ function UpdatesSection() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Phase 29 — this used to be a bare browser link, which meant
+              every update this app has ever shipped was applied
+              unverified while it carried a complete verified download
+              path (Phase 19, finding 23) that nothing invoked. */}
+          <VerifiedUpdateDownload
+            latestVersion={result.latest}
+            browserUrl={result.download.url}
+            filename={result.download.filename}
+          />
+          {result.releaseNotes?.url && (
             <a
-              href={result.download.url}
+              href={result.releaseNotes.url}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium rounded-lg bg-accent/20 border border-accent/50 text-accent hover:bg-accent/30 transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
             >
-              <Download size={12} />
-              Download {result.download.filename}
+              Release notes
+              <ExternalLink size={11} />
             </a>
-            {result.releaseNotes?.url && (
-              <a
-                href={result.releaseNotes.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
-              >
-                Release notes
-                <ExternalLink size={11} />
-              </a>
-            )}
-          </div>
+          )}
           {result.download.size !== undefined && (
             <div className="text-[10px] text-foreground-subtle font-mono pl-12">
               {formatBytes(result.download.size)}
               {result.download.sha256 ? ` · sha256 ${result.download.sha256.slice(0, 12)}…` : ''}
             </div>
           )}
+        </div>
+      ) : result?.noAssetForPlatform ? (
+        // A newer version exists and there is nothing here to install.
+        // Reporting "you're on the latest version" would be a lie the
+        // user can check; rendering nothing, which is what happened
+        // before, is worse.
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 flex items-start gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/[0.1] border border-amber-500/30 shrink-0">
+            <AlertCircle size={16} className="text-amber-300" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] text-foreground">
+              v{result.latest} was released without a build for this platform.
+            </div>
+            <div className="text-[11px] text-foreground-subtle mt-0.5">
+              You're on v{result.current} and there is nothing to install yet. The release notes may
+              say more.
+            </div>
+            {result.releaseNotes?.url && (
+              <a
+                href={result.releaseNotes.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-[11px] text-accent hover:underline mt-1.5 inline-block"
+              >
+                Release notes
+              </a>
+            )}
+          </div>
         </div>
       ) : status === 'up-to-date' ? (
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex items-center gap-3">

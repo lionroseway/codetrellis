@@ -16,7 +16,7 @@ import type { PresenceCard } from '@shared/types';
 function renderCardText(text: string): React.ReactNode[] {
   // Split on **bold**, `code`, and [text](url) — keep it minimal
   const parts: React.ReactNode[] = [];
-  let remaining = text;
+  const remaining = text;
   let key = 0;
 
   const regex = /(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\[([^\]]+?)\]\(([^)]+?)\))/g;
@@ -129,6 +129,13 @@ export function PresencePane() {
   const setMinimized = usePresenceStore((s) => s.setMinimized);
   const setPosition = usePresenceStore((s) => s.setPosition);
   const ackCard = usePresenceStore((s) => s.ackCard);
+
+  // Phase 29 §4.16 — recover the cards the backend still holds. A card
+  // with requireAck is an agent blocked on await_ack; before this, a
+  // reload made that prompt vanish while the agent kept waiting.
+  useEffect(() => {
+    usePresenceStore.getState().hydrate();
+  }, []);
 
   const [speakingCardId, setSpeakingCardId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');

@@ -1,36 +1,45 @@
+/**
+ * AgentPanel — SUPERSEDED. Nothing renders this.
+ *
+ * `PlanPanel` replaced it in the same slot: both read
+ * `agentPanelVisible` from the ui-store, both draw the same close
+ * button, and `PlanPanel` has two tabs more (Proposed, Comments).
+ *
+ * It matters because of what happened next. Phase 22 rewrote the
+ * Timeline to group tool calls into turns — and wrote that rewrite
+ * **here**, into the panel that had already been replaced. So the flat
+ * raw-payload list it was meant to fix is what users kept seeing, and
+ * `agent-turns.test.ts` tested logic no interface reached. Phase 29
+ * §4.15 moved the turn view into `AgentTurns.tsx` and wired it into
+ * `PlanPanel`.
+ *
+ * This file now imports that shared component rather than keeping its
+ * own copy, so a third divergence cannot start here.
+ *
+ * The one thing it still shows that `PlanPanel` does not is the Plan
+ * tab: `agent-store`'s `currentPlan`, the chat-derived plan heuristic
+ * from the Claude Code session-JSONL watcher. That reader is also the
+ * only one, so the heuristic's output is invisible too — recorded in
+ * §4.15 as its own decision rather than folded into this one.
+ */
+
 import { useState } from 'react';
-import { FileEdit, Search, ClipboardList, Circle, XCircle, ShieldCheck, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
+import { AgentTurnList, useAgentTurns } from './AgentTurns';
 
 type Tab = 'plan' | 'timeline' | 'changes';
 
-const EVENT_ICON_MAP: Record<string, typeof FileEdit> = {
-  file_changed: FileEdit, architecture_query: Search, plan_reported: ClipboardList,
-  session_start: Circle, session_end: XCircle, conformity_check: ShieldCheck,
-};
-
-function formatPayload(payload: Record<string, unknown>): string {
-  if (payload.action === 'read') return `Read ${payload.file}`;
-  if (payload.action === 'write') return `Write ${payload.file}`;
-  if (payload.action === 'edit') return `Edit ${payload.file}`;
-  if (payload.action === 'bash') return `$ ${payload.command}`;
-  if (payload.tool === 'Glob') return `Glob: ${payload.pattern}`;
-  if (payload.tool === 'Grep') return `Grep: ${payload.pattern}`;
-  if (payload.text) return String(payload.text).substring(0, 100);
-  if (payload.message) return String(payload.message).substring(0, 100);
-  if (payload.sessionId) return `Session: ${String(payload.sessionId).substring(0, 12)}...`;
-  return JSON.stringify(payload).substring(0, 80);
-}
-
 export function AgentPanel() {
   const visible = useUiStore((s) => s.agentPanelVisible);
-  const height = useUiStore((s) => s.agentPanelHeight);
   const [activeTab, setActiveTab] = useState<Tab>('timeline');
 
   const events = useAgentStore((s) => s.events);
   const currentPlan = useAgentStore((s) => s.currentPlan);
   const status = useAgentStore((s) => s.status);
+
+  const turns = useAgentTurns(events);
 
   const fileChanges = events.filter(
     (e) => e.type === 'file_changed' && (e.payload.action === 'write' || e.payload.action === 'edit')
@@ -40,7 +49,7 @@ export function AgentPanel() {
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'plan', label: 'Plan' },
-    { key: 'timeline', label: 'Timeline', count: events.length },
+    { key: 'timeline', label: 'Timeline', count: turns.length },
     { key: 'changes', label: 'Changes', count: fileChanges.length },
   ];
 
@@ -103,26 +112,7 @@ export function AgentPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
-            {events.length === 0 ? (
-              <div className="text-foreground-subtle py-6 text-center">
-                No agent events yet
-              </div>
-            ) : (
-              <div className="space-y-px">
-                {events.slice(-100).reverse().map((event) => {
-                  const Icon = EVENT_ICON_MAP[event.type] || Circle;
-                  return (
-                    <div key={event.id} className="flex items-start gap-2 py-1 px-2 hover:bg-surface-hover rounded-md transition-colors">
-                      <span className="text-[9px] text-foreground-subtle font-mono shrink-0 mt-0.5 opacity-50">
-                        {new Date(event.timestamp).toLocaleTimeString()}
-                      </span>
-                      <Icon size={11} className="text-foreground-subtle shrink-0 mt-0.5" />
-                      <span className="text-foreground-muted truncate">{formatPayload(event.payload)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <AgentTurnList turns={turns} status={status} detectedPlan={currentPlan} />
           </div>
         )}
 

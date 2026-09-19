@@ -17,6 +17,9 @@ const ALWAYS_IGNORED = new Set([
   'target',
   // PHP / Go vendored deps
   'vendor',
+  // Go — `testdata` is the language's convention for fixture input that
+  // is deliberately not valid source. Parsing it produces pure noise.
+  'testdata',
 ]);
 
 const LANG_MAP: Record<string, string> = {
@@ -27,7 +30,10 @@ const LANG_MAP: Record<string, string> = {
   '.go': 'go',
   '.java': 'java',
   '.php': 'php',
-  '.rb': 'ruby',
+  '.rb': 'ruby', '.rake': 'ruby',
+  '.cs': 'csharp',
+  '.kt': 'kotlin', '.kts': 'kotlin',
+  '.swift': 'swift',
   '.json': 'json',
   '.css': 'css',
   '.scss': 'css',
@@ -37,6 +43,32 @@ const LANG_MAP: Record<string, string> = {
   '.toml': 'toml',
   '.sql': 'sql',
 };
+
+/**
+ * Every language tag this scanner can attach to a file.
+ *
+ * Exported so the parser registry can cross-check it — see
+ * `findUnparsedLanguages`. A language that is tagged here but parsed
+ * nowhere renders as a file with no symbols and no edges, which looks
+ * like a working scan of an empty file.
+ */
+export function listTaggedLanguages(): string[] {
+  return [...new Set(Object.values(LANG_MAP))];
+}
+
+/**
+ * Every extension this scanner will ingest.
+ *
+ * The language-level cross-check above missed a whole class of the same
+ * drift: `.rake` was claimed by the Ruby parser plugin and absent from
+ * `LANG_MAP`, so `ruby` was tagged, `ruby` was parsed, the language check
+ * was satisfied — and a Rakefile was never ingested at all. The
+ * file-watcher meanwhile derived its list from the PLUGINS, so editing a
+ * `.rake` file queued a re-parse of a file the scan had never stored.
+ */
+export function listTaggedExtensions(): string[] {
+  return Object.keys(LANG_MAP);
+}
 
 function isSourceFile(name: string): boolean {
   return path.extname(name).toLowerCase() in LANG_MAP;

@@ -3,10 +3,24 @@ import path from 'node:path';
 import os from 'node:os';
 import type { AgentEvent } from '../../shared/types';
 import { broadcast } from '../server';
+import { recordTokens } from '../services/budget-service';
 
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
-const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions');
-const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
+/**
+ * Where Claude Code keeps its session records.
+ *
+ * Read through functions rather than pinned at module load, and overridable,
+ * because a hardcoded `~/.claude` is untestable by construction — which is
+ * why this module had no tests and why a watcher that never rebound to a
+ * restarted session went unnoticed. Same shape as `CODETRELLIS_DATA_DIR`.
+ */
+const claudeDir = (): string =>
+  process.env.CODETRELLIS_CLAUDE_DIR || path.join(os.homedir(), '.claude');
+const sessionsDir = (): string => path.join(claudeDir(), 'sessions');
+const projectsDir = (): string => path.join(claudeDir(), 'projects');
+
+/** Poll cadence. Overridable so a test does not have to wait real seconds. */
+const pollIntervalMs = (): number =>
+  Number(process.env.CODETRELLIS_WATCHER_POLL_MS) || 2000;
 
 let watchInterval: ReturnType<typeof setInterval> | null = null;
 let tailPosition = 0;
@@ -18,13 +32,13 @@ let eventCounter = 0;
  * Find active Claude Code sessions matching a project path.
  */
 function findActiveSession(projectRoot: string): { sessionId: string; jsonlPath: string } | null {
-  if (!fs.existsSync(SESSIONS_DIR)) return null;
+  if (!fs.existsSync(sessionsDir())) return null;
 
-  const sessionFiles = fs.readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.json'));
+  const sessionFiles = fs.readdirSync(sessionsDir()).filter((f) => f.endsWith('.json'));
 
   for (const file of sessionFiles) {
     try {
-      const session = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, file), 'utf-8'));
+      const session = JSON.parse(fs.readFileSync(path.join(sessionsDir(), file), 'utf-8'));
 
       // Check if session's cwd matches our project
       if (session.cwd !== projectRoot) continue;
@@ -38,7 +52,7 @@ function findActiveSession(projectRoot: string): { sessionId: string; jsonlPath:
 
       // Find the JSONL file — Claude encodes paths by replacing every "/" with "-" (leading dash kept)
       const encodedPath = projectRoot.replace(/\//g, '-');
-      const projectDir = path.join(PROJECTS_DIR, encodedPath);
+      const projectDir = path.join(projectsDir(), encodedPath);
 
       if (!fs.existsSync(projectDir)) continue;
 
@@ -65,6 +79,32 @@ function parseJsonlEntry(line: string): AgentEvent | null {
     const type = entry.type;
 
     if (type === 'assistant') {
+      // Phase 23 — token usage. Claude Code records it on every
+      // assistant entry, and it is the only place any agent tells us
+      // what it actually spent. Reported to the budget service as a side
+      // effect rather than as an event, because it is accounting, not
+      // something the Timeline should render.
+      //
+      // Cache tokens are carried separately on purpose: for a long agent
+      // session they dominate, and pricing them at the input rate would
+      // overstate cost several-fold.
+      const usage = entry.message?.usage;
+      const sessionId = entry.sessionId ?? entry.session_id;
+      if (usage && typeof sessionId === 'string') {
+        try {
+          recordTokens({
+            sessionId,
+            model: entry.message?.model ?? null,
+            tokens: {
+              inputTokens: usage.input_tokens ?? 0,
+              outputTokens: usage.output_tokens ?? 0,
+              cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+              cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+            },
+          });
+        } catch { /* accounting must never break the watcher */ }
+      }
+
       const content = entry.message?.content;
       if (!Array.isArray(content)) return null;
 
@@ -144,7 +184,7 @@ function parseJsonlEntry(line: string): AgentEvent | null {
 function isPlanLike(text: string): boolean {
   // Simple heuristic: text contains numbered steps or bullet points with action verbs
   const lines = text.split('\n').filter((l) => l.trim());
-  const numberedLines = lines.filter((l) => /^\s*\d+[\.\)]\s/.test(l));
+  const numberedLines = lines.filter((l) => /^\s*\d+[.)]\s/.test(l));
   if (numberedLines.length >= 3) return true;
 
   const hasHeaders = lines.some((l) => l.startsWith('##') || l.startsWith('**'));
@@ -195,6 +235,35 @@ function tailJsonl(): void {
 }
 
 /**
+ * How many 2s ticks between re-checks for a DIFFERENT session while bound.
+ * Five is ~10s — fast enough that a restarted agent reappears before anyone
+ * looks, slow enough that parsing every session file stays negligible.
+ */
+const REBIND_CHECK_TICKS = 5;
+
+/**
+ * Bind to a session's JSONL and announce it.
+ *
+ * Tailing starts at the CURRENT end of the file, not the beginning: the
+ * backlog of a session already in progress is history, and replaying it would
+ * put a finished conversation through the Timeline as if it were happening now.
+ */
+function bindToSession(session: { sessionId: string; jsonlPath: string }): void {
+  const rebinding = activeSessionId !== null && activeSessionId !== session.sessionId;
+  activeSessionId = session.sessionId;
+  activeJsonlPath = session.jsonlPath;
+  try {
+    tailPosition = fs.statSync(activeJsonlPath).size;
+  } catch {
+    tailPosition = 0;
+  }
+  console.log(
+    `[ClaudeWatcher] ${rebinding ? 'Rebound to new' : 'Found active'} session: ${activeSessionId}`,
+  );
+  broadcast('agent-event', makeEvent('session_start', { sessionId: activeSessionId }));
+}
+
+/**
  * Start watching for Claude Code activity in the given project.
  */
 export function startClaudeCodeWatcher(projectRoot: string): void {
@@ -203,39 +272,42 @@ export function startClaudeCodeWatcher(projectRoot: string): void {
   // Try to find an active session immediately
   const session = findActiveSession(projectRoot);
   if (session) {
-    activeSessionId = session.sessionId;
-    activeJsonlPath = session.jsonlPath;
-    // Start from end of file (only tail new entries)
-    try {
-      tailPosition = fs.statSync(activeJsonlPath).size;
-    } catch {
-      tailPosition = 0;
-    }
-    console.log(`[ClaudeWatcher] Found active session: ${activeSessionId}`);
-    broadcast('agent-event', makeEvent('session_start', { sessionId: activeSessionId }));
+    bindToSession(session);
   } else {
     console.log('[ClaudeWatcher] No active Claude Code session found, polling...');
   }
 
-  // Poll every 2 seconds: check for new sessions and tail JSONL
+  // Poll every 2 seconds: find or re-find a session, then tail it.
+  //
+  // The rebind is the point. This used to bind once and then only ever tail,
+  // because `activeJsonlPath` was cleared by nothing but `stopClaudeCodeWatcher`
+  // and the watcher is started only from the scan path. So when a user exited
+  // Claude Code and started a fresh session in the same directory — which writes
+  // a DIFFERENT <sessionId>.jsonl — this kept statting the old, now-static file
+  // forever. `tailJsonl` sees `size <= tailPosition`, returns, and says nothing.
+  // The Timeline, the detected-plan banner and token accounting all went quietly
+  // dead for the rest of the project's life, with no error anywhere.
+  //
+  // `findActiveSession` parses every file in the sessions directory, so it runs
+  // every tick only while unbound. Once bound it runs every REBIND_CHECK_TICKS,
+  // which picks up a restarted agent within ~10s — far below the threshold where
+  // anyone would notice, and a twentieth of the I/O.
+  let ticksSinceRebindCheck = 0;
   watchInterval = setInterval(() => {
-    if (!activeJsonlPath) {
+    const dueForRebindCheck =
+      !activeJsonlPath || ++ticksSinceRebindCheck >= REBIND_CHECK_TICKS;
+
+    if (dueForRebindCheck) {
+      ticksSinceRebindCheck = 0;
       const session = findActiveSession(projectRoot);
-      if (session) {
-        activeSessionId = session.sessionId;
-        activeJsonlPath = session.jsonlPath;
-        try {
-          tailPosition = fs.statSync(activeJsonlPath).size;
-        } catch {
-          tailPosition = 0;
-        }
-        console.log(`[ClaudeWatcher] Found active session: ${activeSessionId}`);
-        broadcast('agent-event', makeEvent('session_start', { sessionId: activeSessionId }));
-      }
-    } else {
-      tailJsonl();
+      // A null result means no LIVE session right now — the agent has exited
+      // and not been replaced. Stay bound: the file is static so tailing costs
+      // nothing, and the next check rebinds the moment a new one appears.
+      if (session && session.sessionId !== activeSessionId) bindToSession(session);
     }
-  }, 2000);
+
+    if (activeJsonlPath) tailJsonl();
+  }, pollIntervalMs());
 
   console.log(`[ClaudeWatcher] Watching for Claude Code sessions in ${projectRoot}`);
 }

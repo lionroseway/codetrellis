@@ -12,7 +12,7 @@ import {
   SCHEMA_PLAN_ITEMS,
   SCHEMA_SYSTEM_DOCS,
   SCHEMA_EXTERNAL_REFS,
-  PERSISTENT_SCHEMA_SQL,
+  RECONCILED_SCHEMA_SQL,
   EPHEMERAL_TABLES,
 } from './db-schema';
 
@@ -30,7 +30,6 @@ import {
  * Loaded via require (computed-free) + marked external in
  * electron.vite.config so the native .node binary isn't bundled.
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const BetterSqlite3: any = require('better-sqlite3');
 
 let bdb: any = null;
@@ -292,7 +291,7 @@ export async function initDatabase(): Promise<void> {
   // renames). The lazy `ALTER TABLE` block above stays the right
   // place for non-additive changes (NOT NULL with backfill, renames,
   // indexes, data migrations); the reconciler is the safety net.
-  const reconcile = reconcileSchemaFromSql(db, PERSISTENT_SCHEMA_SQL, {
+  const reconcile = reconcileSchemaFromSql(db, RECONCILED_SCHEMA_SQL, {
     skipTables: EPHEMERAL_TABLES,
   });
   if (reconcile.columnsAdded.length > 0) {
@@ -377,8 +376,8 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
     // Store imports
     for (const imp of parsed.imports) {
       d.run(
-        `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace) VALUES (?, ?, ?, ?, ?)`,
-        [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0]
+        `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace, is_relative) VALUES (?, ?, ?, ?, ?, ?)`,
+        [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0, imp.isRelative ? 1 : 0]
       );
     }
 
@@ -460,6 +459,49 @@ export function searchSymbols(query: string): Array<{
 /**
  * Get all symbols for a file.
  */
+/**
+ * A file's symbols INCLUDING class members, each qualified by its parent.
+ *
+ * `getFileSymbols` filters `parent_symbol_id IS NULL`, which is right for a
+ * file tree — you want the top level, not every method. It is wrong for
+ * anchoring an edit to a symbol: the TypeScript, Python and PHP parsers store
+ * class members as nested children, so a plan declaring
+ * `edits: [{ symbol: 'save' }]` against `class Store { save() {} }` was told
+ * there is no such symbol. The languages whose parsers flatten members
+ * (Go, Ruby, C#, Kotlin, Swift) worked, which is why this looked like a
+ * missing feature rather than a bug in four languages.
+ *
+ * Members come back as `Parent.member` so the existing qualified-suffix match
+ * in `resolveSymbolSpan` has something to match on — the same shape the
+ * flattening parsers already emit.
+ */
+export function getFileSymbolsWithMembers(filePath: string): Array<{
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+  modifiers: string[];
+}> {
+  const d = getDb();
+  const results = d.exec(
+    `SELECT CASE WHEN p.name IS NOT NULL THEN p.name || '.' || s.name ELSE s.name END,
+            s.kind, s.start_line, s.end_line, s.modifiers
+     FROM symbols s
+     JOIN files f ON s.file_id = f.id
+     LEFT JOIN symbols p ON s.parent_symbol_id = p.id
+     WHERE f.path = ?
+     ORDER BY s.start_line`,
+    [filePath],
+  );
+  return (results[0]?.values ?? []).map((r: unknown[]) => ({
+    name: r[0] as string,
+    kind: r[1] as string,
+    startLine: r[2] as number,
+    endLine: r[3] as number,
+    modifiers: r[4] ? JSON.parse(r[4] as string) : [],
+  }));
+}
+
 export function getFileSymbols(filePath: string): Array<{
   name: string;
   kind: string;
@@ -616,7 +658,9 @@ export function resolveImports(
   try { d.run(`ALTER TABLE tasks ADD COLUMN phase_uid TEXT`); } catch { /* exists */ }
 
   // Get all imports
-  const importsResult = d.exec(`SELECT i.id, i.source_path, f.path FROM imports i JOIN files f ON i.file_id = f.id`);
+  const importsResult = d.exec(
+    `SELECT i.id, i.source_path, f.path, i.is_relative FROM imports i JOIN files f ON i.file_id = f.id`,
+  );
   if (!importsResult[0]) return;
 
   let resolved = 0;
@@ -624,6 +668,11 @@ export function resolveImports(
     const importId = row[0] as number;
     const sourcePath = row[1] as string;
     const importerPath = row[2] as string;
+    // Phase 27 — Ruby is the first language where `require_relative 'x'`
+    // and `require 'x'` have identical sources and different meanings,
+    // so relativeness has to travel with the import rather than being
+    // re-derived from the string.
+    const isRelative = Boolean(row[3]);
 
     const language = fileLangByPath.get(importerPath);
     const resolver = language ? getResolverForLanguage(language) : null;
@@ -635,9 +684,18 @@ export function resolveImports(
           knownFiles: filePathSet,
           aliasMap,
           systems,
+          isRelative,
         })
       : null;
-    if (resolvedPath) {
+    // A file does not depend on itself. Phase 27 made this reachable:
+    // the languages that import a *container* rather than a file (a C#
+    // namespace, a Kotlin package, a Swift module, a Go package) resolve
+    // to a representative file in that container, and when the importer
+    // names its own container the representative can be the importer. A
+    // self-edge is meaningless in a file dependency graph and renders as
+    // a loop on the node, so it is dropped here rather than in each
+    // resolver — a plugin cannot forget a check it does not have to make.
+    if (resolvedPath && resolvedPath !== importerPath) {
       d.run(`UPDATE imports SET resolved_path = ? WHERE id = ?`, [resolvedPath, importId]);
       resolved++;
     }

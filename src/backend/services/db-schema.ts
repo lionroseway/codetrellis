@@ -46,7 +46,8 @@ export const SCHEMA_AST = `
     source_path TEXT NOT NULL,
     specifiers TEXT,
     is_default INTEGER DEFAULT 0,
-    is_namespace INTEGER DEFAULT 0
+    is_namespace INTEGER DEFAULT 0,
+    is_relative INTEGER DEFAULT 0
   );
 
   CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);
@@ -54,6 +55,12 @@ export const SCHEMA_AST = `
   CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
   CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
 
+  -- Callsites are non-import couplings. The columns are generic "what was
+  -- referenced" slots shared across protocols, not HTTP-specific ones:
+  --   HTTP: method = GET/POST…,  url_pattern = /api/orders
+  --   SQL:  method = READ/WRITE, url_pattern = table name, sql_text = snippet
+  -- idx_callsites_url therefore serves both the route matcher and the
+  -- table matcher. See services/sql/index.ts.
   CREATE TABLE IF NOT EXISTS callsites (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
@@ -292,7 +299,9 @@ export const SCHEMA_PLAN_ITEMS = `
     author_type      TEXT NOT NULL DEFAULT 'human',
     created_at       INTEGER NOT NULL,
     updated_at       INTEGER NOT NULL,
-    migrated_from    TEXT
+    migrated_from    TEXT,
+    estimate_minutes   INTEGER,
+    estimate_cost_usd  REAL
   );
   CREATE INDEX IF NOT EXISTS idx_plan_items_plan       ON plan_items(plan_uid);
   CREATE INDEX IF NOT EXISTS idx_plan_items_parent     ON plan_items(parent_uid);
@@ -300,6 +309,50 @@ export const SCHEMA_PLAN_ITEMS = `
   CREATE INDEX IF NOT EXISTS idx_plan_items_status     ON plan_items(status);
   CREATE INDEX IF NOT EXISTS idx_plan_items_sort       ON plan_items(plan_uid, parent_uid, sort_order);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_items_migrated ON plan_items(migrated_from);
+
+  -- Phase 23 — time and cost. One row per closed TURN (see
+  -- budget-service), not per tool call: an agent's wall-clock is mostly
+  -- model thinking between calls, so summing tool durations would
+  -- undercount it several-fold.
+  --
+  -- item_uid is nullable on purpose. Time an agent spends before
+  -- claiming anything is real time and belongs to the plan; dropping it
+  -- would make every plan look cheaper than it was.
+  --
+  -- cost_usd is nullable for the same reason costOf returns null:
+  -- an agent that does not report its model has an unknown cost, and
+  -- zero would read as free.
+  CREATE TABLE IF NOT EXISTS item_time_entries (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_uid           TEXT NOT NULL,
+    item_uid           TEXT,
+    session_id         TEXT,
+    agent_type         TEXT,
+    agent_model        TEXT,
+    started_at         INTEGER NOT NULL,
+    ended_at           INTEGER NOT NULL,
+    input_tokens       INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    cost_usd           REAL,
+    pricing_version    TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_time_entries_plan ON item_time_entries(plan_uid);
+  CREATE INDEX IF NOT EXISTS idx_time_entries_item ON item_time_entries(item_uid);
+
+  -- A ceiling is advisory, the same posture as the stuck sensor: we have
+  -- no mechanism to halt an agent, and pretending otherwise would be
+  -- worse than honest advice. notified_at exists so the 80% warning
+  -- fires once rather than on every tool call.
+  CREATE TABLE IF NOT EXISTS plan_budgets (
+    plan_uid    TEXT PRIMARY KEY,
+    minutes     INTEGER,
+    cost_usd    REAL,
+    exempt      INTEGER NOT NULL DEFAULT 0,
+    notified_at INTEGER,
+    updated_at  INTEGER NOT NULL
+  );
 
   CREATE TABLE IF NOT EXISTS plan_item_versions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -383,20 +436,62 @@ export const SCHEMA_EXTERNAL_REFS = `
     url TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '',
     metadata TEXT DEFAULT NULL,
+    external_key TEXT,
     author TEXT NOT NULL DEFAULT 'human',
     author_type TEXT NOT NULL DEFAULT 'human',
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_external_refs_item ON external_refs(item_uid);
   CREATE INDEX IF NOT EXISTS idx_external_refs_kind ON external_refs(kind);
+
+  -- Phase 24 — the ticket key (PROJ-412, ENG-88) as its own column.
+  -- The URL already encodes it, but write-back needs to match on the key
+  -- and re-import needs it to be idempotent, and re-parsing a URL at
+  -- every comparison would make the key a derived value in two places.
+  -- Nullable, so the reconciler adds it with no migration.
+
+  -- Plan-level external refs. An epic maps to a PLAN, not to an item,
+  -- and external_refs.item_uid is NOT NULL — a constraint the reconciler
+  -- cannot relax. A separate table is honest about that rather than
+  -- storing a plan uid in a column named item_uid.
+  CREATE TABLE IF NOT EXISTS plan_external_refs (
+    uid          TEXT PRIMARY KEY,
+    plan_uid     TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'url',
+    url          TEXT NOT NULL,
+    title        TEXT NOT NULL DEFAULT '',
+    external_key TEXT,
+    metadata     TEXT DEFAULT NULL,
+    author       TEXT NOT NULL DEFAULT 'human',
+    author_type  TEXT NOT NULL DEFAULT 'human',
+    created_at   INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_plan_external_refs_plan ON plan_external_refs(plan_uid);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_external_refs_key ON plan_external_refs(plan_uid, external_key);
+
+  -- The write-back watermark. CodeTrellis never talks to Jira: the
+  -- agent holds that credential and does the writing. All we owe it is
+  -- "what changed since you last synced", which is this one timestamp.
+  CREATE TABLE IF NOT EXISTS external_sync_state (
+    plan_uid       TEXT PRIMARY KEY,
+    last_synced_at INTEGER NOT NULL,
+    synced_by      TEXT,
+    note           TEXT
+  );
 `;
 
 /**
- * Persistent schema in declaration order — the union of every table
- * the reconciler should keep in sync with the live DB. AST tables are
- * excluded because they're dropped + rebuilt on every scan.
+ * Every table the reconciler keeps in sync with the live DB, in
+ * declaration order.
+ *
+ * `SCHEMA_AST` is in here, and its absence was a bug — see
+ * `EPHEMERAL_TABLES` below for what it cost. The old name
+ * (`PERSISTENT_SCHEMA_SQL`) is kept as an alias because "persistent" was
+ * never the distinction that mattered: the AST tables persist perfectly
+ * well, they are just emptied on each scan.
  */
-export const PERSISTENT_SCHEMA_SQL = [
+export const RECONCILED_SCHEMA_SQL = [
+  SCHEMA_AST,
   SCHEMA_PLANS_CORE,
   SCHEMA_ATTACHMENTS,
   SCHEMA_PLAN_ITEMS,
@@ -404,11 +499,27 @@ export const PERSISTENT_SCHEMA_SQL = [
   SCHEMA_EXTERNAL_REFS,
 ].join('\n');
 
-/** Table names the reconciler should ignore (ephemeral AST data). */
-export const EPHEMERAL_TABLES = [
-  'files',
-  'symbols',
-  'imports',
-  'callsites',
-  'cross_system_edges',
-];
+/** @deprecated Use `RECONCILED_SCHEMA_SQL`. */
+export const PERSISTENT_SCHEMA_SQL = RECONCILED_SCHEMA_SQL;
+
+/**
+ * Table names the reconciler should ignore.
+ *
+ * **Nothing is ignored, and that is the fix.** This list held the five AST
+ * tables, excluded on the grounds that they are "dropped + rebuilt on every
+ * project scan, so reconciling them is wasted work". They are not dropped.
+ * `storeParsedFile` and its neighbours clear them with `DELETE FROM`, and the
+ * DDL is `CREATE TABLE IF NOT EXISTS` — which is a no-op against a table that
+ * already exists. So a column added to an AST table reached new installs only.
+ *
+ * Phase 27 added `imports.is_relative`. On any database created before it,
+ * every scan then failed with `table imports has no column named is_relative`
+ * and fell back to "serving file tree only": no graph, no symbols, no edges,
+ * with the failure logged once at info level and the UI showing an empty
+ * project. Upgrading users would have lost the product's entire output.
+ *
+ * The reconciler is precisely the safety net for this, and it had been told
+ * to look away from the tables most likely to need it. The cost of not
+ * looking away is one `PRAGMA table_info` per table, once, at boot.
+ */
+export const EPHEMERAL_TABLES: string[] = [];

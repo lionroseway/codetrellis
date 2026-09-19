@@ -1,4 +1,5 @@
 import type { ParserPlugin, SyntaxNode } from './base';
+import { flattenSymbols } from './base';
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -18,23 +19,41 @@ function lineOf(node: SyntaxNode): { startLine: number; endLine: number } {
   return { startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1 };
 }
 
-function extractMembers(body: SyntaxNode | null): ParsedSymbol[] {
+/**
+ * Members are qualified `Type.member` — Phase 27.
+ *
+ * They used to be bare (`post`, `run`, `close`), which collided across
+ * every class in a project the moment two of them shared a method name,
+ * and they were nested, which meant no reader ever saw them: every
+ * per-file query filters on `parent_symbol_id IS NULL`. Java methods
+ * were absent from the inspector's file list and from every per-file
+ * symbol count while being findable in search — half-present, in the
+ * way nothing reported. See `flattenSymbols`.
+ */
+function extractMembers(body: SyntaxNode | null, owner: string): ParsedSymbol[] {
   if (!body) return [];
   const out: ParsedSymbol[] = [];
   for (const child of body.children) {
     if (child.type === 'method_declaration' || child.type === 'constructor_declaration') {
-      out.push({ name: nameOf(child), kind: 'method', ...lineOf(child), children: [], modifiers: [] });
+      out.push({
+        name: `${owner}.${nameOf(child)}`,
+        kind: 'method',
+        ...lineOf(child),
+        children: [],
+        modifiers: child.type === 'constructor_declaration' ? ['constructor'] : [],
+      });
     }
   }
   return out;
 }
 
 function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
+  const name = nameOf(node);
   switch (node.type) {
     case 'class_declaration':
-      return { name: nameOf(node), kind: 'class', ...lineOf(node), children: extractMembers(node.childForFieldName('body')), modifiers: [] };
+      return { name, kind: 'class', ...lineOf(node), children: extractMembers(node.childForFieldName('body'), name), modifiers: [] };
     case 'interface_declaration':
-      return { name: nameOf(node), kind: 'interface', ...lineOf(node), children: extractMembers(node.childForFieldName('body')), modifiers: [] };
+      return { name, kind: 'interface', ...lineOf(node), children: extractMembers(node.childForFieldName('body'), name), modifiers: [] };
     case 'enum_declaration':
       return { name: nameOf(node), kind: 'enum', ...lineOf(node), children: [], modifiers: [] };
     case 'record_declaration':
@@ -50,7 +69,8 @@ function extractSymbols(node: SyntaxNode): ParsedSymbol[] {
     const sym = nodeToSymbol(child);
     if (sym) symbols.push(sym);
   }
-  return symbols;
+  // Flat, qualified names — see `flattenSymbols`.
+  return flattenSymbols(symbols);
 }
 
 function extractImports(node: SyntaxNode): ImportDeclaration[] {

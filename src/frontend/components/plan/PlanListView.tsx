@@ -5,6 +5,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
 import { CrossRepoSection } from './CrossRepoSection';
+import { PlanTemplatePicker } from './PlanTemplatePicker';
 
 interface OrphanedPlanDir {
   dirPath: string;
@@ -43,6 +44,9 @@ export function PlanList() {
   const [showReconcile, setShowReconcile] = useState(false);
   const [pruning, setPruning] = useState(false);
   const [confirmPrune, setConfirmPrune] = useState(false);
+  // Phase 29 §4.10 — this button used to fire a "coming soon" toast
+  // while mobile had shipped the same picker two phases earlier.
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   // CDev Phase 3.6 — soften the "no plans" nudge when the repo
   // declares repoRole: "code" in its project config (plans live
   // elsewhere in this deployment).
@@ -295,9 +299,9 @@ export function PlanList() {
             New plan
           </button>
           <button
-            onClick={() => addToast({ type: 'info', title: 'Templates', message: 'Template picker coming soon — use MCP create_plan_from_template for now.' })}
+            onClick={() => setShowTemplatePicker(true)}
             className="flex items-center gap-1 px-2 py-1.5 text-[12.5px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors"
-            title="Create from template"
+            title="New plan from template"
           >
             <Layers size={12} />
           </button>
@@ -654,6 +658,13 @@ export function PlanList() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Phase 29 §4.10 — new plan from a built-in, project or user
+          template. Project and user templates live on disk and had no
+          desktop surface at all before this. */}
+      {showTemplatePicker && (
+        <PlanTemplatePicker onClose={() => setShowTemplatePicker(false)} />
       )}
     </div>
   );

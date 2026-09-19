@@ -29,6 +29,10 @@ test.describe.serial('Git integration', () => {
   test.beforeAll(async () => {
     h = await setupHarness('git-integration');
     encodedPath = encodeURIComponent(h.fixture.projectPath);
+    // The git routes take the repository as `?path=` and run git with it
+    // as `cwd`, so they are confined to opened projects (Phase 19).
+    // Opening the fixture is what lets these tests exercise git at all.
+    await h.client.scanProject(h.fixture.projectPath);
   });
 
   test.afterAll(async () => {

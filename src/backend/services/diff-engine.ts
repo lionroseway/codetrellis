@@ -1,5 +1,3 @@
-import { getDependencyEdges, getDbStats } from './database';
-
 export interface GraphSnapshot {
   timestamp: number;
   files: Map<string, { hash: string; symbolCount: number }>;
@@ -60,11 +58,17 @@ export function getBaseline(): GraphSnapshot | null {
 }
 
 /**
- * Compute diff between baseline and current state.
+ * Diff any two snapshots.
+ *
+ * Phase 25 — extracted from `computeDiff`, which could only ever compare
+ * against the module-level baseline. Making it a pure function of two
+ * snapshots is what lets the UI compare *any* two points: baseline, a
+ * named checkpoint, a git commit, the planned projection, or the live
+ * working tree. `computeDiff` now delegates, so there is one
+ * implementation rather than two that can disagree.
  */
-export function computeDiff(current: GraphSnapshot): ArchDiff | null {
-  if (!baselineSnapshot) return null;
-
+export function diffSnapshots(before: GraphSnapshot, current: GraphSnapshot): ArchDiff {
+  const baselineSnapshot = before;
   const addedFiles: string[] = [];
   const removedFiles: string[] = [];
   const modifiedFiles: string[] = [];
@@ -129,4 +133,13 @@ export function computeDiff(current: GraphSnapshot): ArchDiff | null {
       edgesRemoved: removedEdges.length,
     },
   };
+}
+
+/**
+ * Compute the diff between the pinned baseline and the current state.
+ * Null when no baseline has been captured yet.
+ */
+export function computeDiff(current: GraphSnapshot): ArchDiff | null {
+  if (!baselineSnapshot) return null;
+  return diffSnapshots(baselineSnapshot, current);
 }

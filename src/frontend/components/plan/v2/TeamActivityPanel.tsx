@@ -17,10 +17,10 @@ import {
   Trash2,
   FileText,
   MessageSquare,
-  Settings,
+  
   Package,
   RefreshCw,
-  ChevronRight,
+  
 } from 'lucide-react';
 import { useProjectStore } from '../../../stores/project-store';
 

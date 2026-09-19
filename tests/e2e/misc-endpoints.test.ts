@@ -21,6 +21,8 @@
  */
 
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { setupHarness, type Harness } from '../harness';
 
@@ -210,13 +212,47 @@ test.describe.serial('Miscellaneous endpoints', () => {
   });
 
   test('GET /api/fs/browse lists directories', async () => {
-    const encodedPath = encodeURIComponent(h.fixture.projectPath);
-    const res = await h.client.raw('GET', `/api/fs/browse?path=${encodedPath}`);
-    expect(res.ok).toBe(true);
-    const body = await res.json();
-    expect(body).toHaveProperty('current');
-    expect(body).toHaveProperty('parent');
-    expect(body).toHaveProperty('dirs');
-    expect(Array.isArray(body.dirs)).toBe(true);
+    // Browsing is confined to the user's home directory — a deliberate
+    // Phase 19 control, guarded in depth by
+    // `filesystem-boundary.test.ts` ("directory browsing cannot leave
+    // the home directory"), which asserts home is browsable and /etc,
+    // /var and / are refused. THIS test is the shape check: given a
+    // directory the picker is allowed to open, does it return a usable
+    // listing?
+    //
+    // It used to browse `h.fixture.projectPath`, which lives under the
+    // repo. That only worked when the repo happened to sit inside the
+    // running user's home — true on a developer's laptop, false
+    // wherever the checkout and the account diverge (a container
+    // running as root against /home/user/..., for instance), where it
+    // failed with the 403 the control is supposed to produce. The test
+    // was reporting the security control working as if it were a bug.
+    //
+    // So it browses a directory it creates under `os.homedir()`, which
+    // is browsable by definition of the rule, and asserts the listing
+    // actually contains what was put there.
+    const scratch = fs.mkdtempSync(path.join(os.homedir(), 'ct-browse-'));
+    const childName = 'a-listed-child';
+    fs.mkdirSync(path.join(scratch, childName));
+    try {
+      const res = await h.client.raw(
+        'GET',
+        `/api/fs/browse?path=${encodeURIComponent(scratch)}`,
+      );
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body).toHaveProperty('current');
+      expect(body).toHaveProperty('parent');
+      expect(body).toHaveProperty('dirs');
+      expect(Array.isArray(body.dirs)).toBe(true);
+      // Named, not just shaped: "lists directories" should mean it
+      // listed the directory that is there.
+      expect(
+        body.dirs.map((d: { name: string }) => d.name),
+        'the listing must contain the child directory that was created',
+      ).toContain(childName);
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    }
   });
 });

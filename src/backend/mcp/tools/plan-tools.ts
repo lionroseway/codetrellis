@@ -7,6 +7,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta } from '../helpers';
 import { buildPlanPrompt, buildItemPrompt } from '../prompt-builders';
+import { getActiveProjectRoot } from '../../services/trusted-roots';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Plan CRUD ---
@@ -408,15 +409,20 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: {
         text: z.string().describe('The text content to import (markdown, conversation, issue body, etc.).'),
         title: z.string().optional().describe('Optional title for the new plan. Auto-generated if omitted.'),
+        project_path: z.string().optional().describe(
+          'Absolute path to the project this plan belongs to. Defaults to the project currently open.',
+        ),
       },
     },
-    async ({ text, title }) => {
+    async ({ text, title, project_path }) => {
       try {
         const result = deps.planImportService.importFromConversation({ text, title });
 
+        // Same defect as `create_plan_from_external`: a plan imported from
+        // text belongs to the project you are in, not to nowhere.
         const plan = deps.planService.createPlan(
           { title: result.title, description: result.description, tasks: [] },
-          'mcp-agent', 'mcp', '',
+          'mcp-agent', 'mcp', project_path ?? getActiveProjectRoot() ?? '',
         );
 
         let itemCount = 0;

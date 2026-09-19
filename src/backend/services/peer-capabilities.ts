@@ -34,18 +34,41 @@
  * device should not be able to widen its own reach.
  */
 
-/** Capability classes. Ordered roughly by how much damage they permit. */
+/**
+ * Capability classes. Ordered roughly by how much damage they permit.
+ *
+ * Phase 30 made this the vocabulary for BOTH surfaces — paired devices and
+ * MCP clients — rather than inventing a second one that would drift. See
+ * `mcp-capabilities.ts`.
+ *
+ * `capture` is the one addition Phase 30 needed. The original six were
+ * derived from what a paired phone can ask for, and none of them describes
+ * reading the user's screen, clipboard or microphone — which the MCP
+ * surface does (`screenshot`, `clipboard_read`, `start_audio_capture`).
+ * Filing those under `read` would have put a microphone in the default
+ * grant; filing them under `settings` would have been a lie about what
+ * they do. It is excluded from the defaults.
+ */
 export type PeerCapability =
   | 'read'      // look at plans, graph, docs, channels
   | 'write'     // change plans, docs, comments, channels
   | 'project'   // open / close / rescan projects
   | 'files'     // read file CONTENT and browse the filesystem
+  | 'capture'   // read the SCREEN, CLIPBOARD or MICROPHONE
   | 'settings'  // change desktop settings — includes network exposure
   | 'terminal'; // create and drive terminals — COMMAND EXECUTION
 
+/**
+ * The same type, named for what it now governs.
+ *
+ * `PeerCapability` is kept as the primary name so the peer code reads
+ * unchanged; use this alias where the subject is a surface in general.
+ */
+export type SurfaceCapability = PeerCapability;
+
 /** Every capability name, for validating what the settings UI sends. */
 export const ALL_CAPABILITIES: readonly PeerCapability[] = Object.freeze([
-  'read', 'write', 'project', 'files', 'settings', 'terminal',
+  'read', 'write', 'project', 'files', 'capture', 'settings', 'terminal',
 ]);
 
 /**
@@ -74,7 +97,18 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'plan.item.get': 'read',
   'plan.items': 'read',
   'plan.list': 'read',
+  'plan.nextItem': 'read',
   'plan.template.list': 'read',
+  // Phase 29 mobile review flow. All four are read-only by
+  // construction: review and pr-draft never touch the repository (the
+  // agent does the git and opens the PR with its own credentials), and
+  // comparands / compare only read snapshots. 'read' is therefore the
+  // right grant — giving them 'project' would hand a phone more than
+  // the flow needs.
+  'review.comparands': 'read',
+  'review.compare': 'read',
+  'review.get': 'read',
+  'review.prDraft': 'read',
   'power.status': 'read',
   'project.active': 'read',
   'project.list': 'read',

@@ -2,9 +2,17 @@
  * Cross-system edges — non-import couplings between files.
  *
  * Pulls every callsite the parsers stored, runs per-protocol matchers,
- * and writes the resulting `cross_system_edges` rows. Today only HTTP
- * is matched (TS `fetch(...)` ↔ Python FastAPI/Flask routes); SQL,
- * subprocess, env, OpenAPI come later as more matchers.
+ * and writes the resulting `cross_system_edges` rows. Two matchers now:
+ *
+ *   - **HTTP** — a `fetch` / `axios` / `http.Get` call paired with the
+ *     route declaration that serves it, in any language.
+ *   - **SQL** (Phase 21) — a table reference in application code paired
+ *     with the `.sql` file that CREATEs that table, carrying whether the
+ *     reference reads or writes.
+ *
+ * Together they make a path like
+ * `OrdersPage.tsx → billing/main.go → 003_create_orders.sql` traversable
+ * in one graph. Subprocess, env and OpenAPI come later.
  *
  * Renderer-side, edges merge into the dependency graph alongside
  * imports (see `getAllGraphEdges` below) so callers can pass a single
@@ -32,6 +40,7 @@ interface CallsiteRow {
   method: string | null;
   urlPattern: string | null;
   line: number | null;
+  language: string | null;
 }
 
 /**
@@ -46,7 +55,8 @@ export function recomputeCrossSystemEdges(): { added: number } {
   let result;
   try {
     result = db.exec(`
-      SELECT c.file_id, f.path, f.relative_path, c.kind, c.protocol, c.method, c.url_pattern, c.line
+      SELECT c.file_id, f.path, f.relative_path, c.kind, c.protocol, c.method, c.url_pattern, c.line,
+             f.language
       FROM callsites c
       JOIN files f ON c.file_id = f.id
     `);
@@ -64,6 +74,7 @@ export function recomputeCrossSystemEdges(): { added: number } {
     method: (r[5] as string | null) ?? null,
     urlPattern: (r[6] as string | null) ?? null,
     line: (r[7] as number | null) ?? null,
+    language: (r[8] as string | null) ?? null,
   }));
 
   const httpRoutes = rows.filter((r) => r.kind === 'http_route');
@@ -84,8 +95,16 @@ export function recomputeCrossSystemEdges(): { added: number } {
   const inserts: Array<{ source: CallsiteRow; target: CallsiteRow; label: string }> = [];
   for (const call of httpCalls) {
     if (!call.method || !call.urlPattern) continue;
-    const exact = routesByKey.get(`${call.method} ${call.urlPattern}`);
-    if (exact) {
+    // A route registered without a verb serves every verb. Go's
+    // `http.HandleFunc("/x", h)` is the common case and is emitted as `ANY`,
+    // which matched nothing at all before this: the route was extracted,
+    // stored, and then silently unpairable, so a stdlib Go service looked like
+    // it served endpoints nobody called next to calls nobody served.
+    const exact = [
+      ...(routesByKey.get(`${call.method} ${call.urlPattern}`) ?? []),
+      ...(routesByKey.get(`ANY ${call.urlPattern}`) ?? []),
+    ];
+    if (exact.length > 0) {
       for (const route of exact) {
         if (route.fileId === call.fileId) continue; // skip self-loops
         inserts.push({ source: call, target: route, label: `${call.method} ${call.urlPattern}` });
@@ -99,6 +118,14 @@ export function recomputeCrossSystemEdges(): { added: number } {
     // for MVP — false positives erode trust faster than missed pairs.
   }
 
+  // ── SQL (Phase 21) ────────────────────────────────────────────────
+  //
+  // A `sql_query` callsite carries the table name in `url_pattern` and
+  // READ / WRITE in `method` (see services/sql/index.ts for why those
+  // columns). The defining side is not another callsite but a SYMBOL:
+  // the table as declared by a CREATE in some .sql file.
+  const sqlInserts = matchSqlEdges(db, rows);
+
   // Replace the table atomically-ish (sql.js doesn't expose
   // transactions cleanly; the operation is idempotent so a partial
   // write self-heals on the next scan).
@@ -110,9 +137,107 @@ export function recomputeCrossSystemEdges(): { added: number } {
       [source.fileId, target.fileId, 'http', label, 1.0],
     );
   }
+  for (const edge of sqlInserts) {
+    db.run(
+      `INSERT INTO cross_system_edges (source_file_id, target_file_id, protocol, label, confidence)
+       VALUES (?, ?, ?, ?, ?)`,
+      [edge.sourceFileId, edge.targetFileId, 'sql', edge.label, edge.confidence],
+    );
+  }
 
-  console.log(`[XS] Cross-system edges: ${inserts.length} HTTP pair${inserts.length === 1 ? '' : 's'} matched`);
-  return { added: inserts.length };
+  const total = inserts.length + sqlInserts.length;
+  console.log(
+    `[XS] Cross-system edges: ${inserts.length} HTTP pair${inserts.length === 1 ? '' : 's'}, ` +
+      `${sqlInserts.length} SQL reference${sqlInserts.length === 1 ? '' : 's'} matched`,
+  );
+  return { added: total };
+}
+
+interface SqlEdge {
+  sourceFileId: number;
+  targetFileId: number;
+  label: string;
+  confidence: number;
+}
+
+/**
+ * Pair `sql_query` callsites with the `.sql` file that defines the table.
+ *
+ * The rules that keep this honest:
+ *
+ *   - **An unknown table produces no edge.** If nothing in the repo
+ *     CREATEs it, we do not know where it lives, and a guessed edge on
+ *     an architecture graph is worse than a missing one because people
+ *     act on it. This is also what stops ORM-managed and external tables
+ *     from inventing couplings.
+ *   - **Ambiguity produces no edge.** If two files define the same table
+ *     name, we cannot say which one a query means. The migration fold
+ *     (see services/sql/schema.ts) already collapses the common cause of
+ *     this, so what survives is genuinely ambiguous.
+ *   - **A file referencing its own table is not an edge.** A view
+ *     selecting from a table in the same file is internal structure.
+ */
+function matchSqlEdges(db: ReturnType<typeof getDb>, rows: CallsiteRow[]): SqlEdge[] {
+  const refs = rows.filter((r) => r.kind === 'sql_query' && r.urlPattern);
+  if (refs.length === 0) return [];
+
+  // Table name → defining .sql file. Built from symbols, because a
+  // definition is a declaration, not a callsite.
+  let symbolResult;
+  try {
+    symbolResult = db.exec(`
+      SELECT s.name, s.modifiers, f.id
+      FROM symbols s
+      JOIN files f ON s.file_id = f.id
+      WHERE f.language = 'sql'
+    `);
+  } catch {
+    return [];
+  }
+
+  const definers = new Map<string, number[]>();
+  for (const row of symbolResult[0]?.values ?? []) {
+    const name = String(row[0] ?? '');
+    let modifiers: string[] = [];
+    try {
+      modifiers = JSON.parse(String(row[1] ?? '[]'));
+    } catch { /* a malformed modifier list is not worth failing over */ }
+    // Only tables and views are addressable by a query.
+    if (!modifiers.includes('table') && !modifiers.includes('view')) continue;
+
+    const bare = name.split('.').pop()!.toLowerCase();
+    const bucket = definers.get(bare) ?? [];
+    bucket.push(row[2] as number);
+    definers.set(bare, bucket);
+  }
+
+  if (definers.size === 0) return [];
+
+  const seen = new Set<string>();
+  const edges: SqlEdge[] = [];
+
+  for (const ref of refs) {
+    const table = ref.urlPattern!.toLowerCase();
+    const candidates = definers.get(table);
+    if (!candidates || candidates.length !== 1) continue;
+
+    const targetFileId = candidates[0];
+    if (targetFileId === ref.fileId) continue;
+
+    const op = (ref.method ?? 'READ').toUpperCase();
+    const key = `${ref.fileId}:${targetFileId}:${op}:${table}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    edges.push({
+      sourceFileId: ref.fileId,
+      targetFileId,
+      label: `${op} ${table}`,
+      confidence: 1.0,
+    });
+  }
+
+  return edges;
 }
 
 export function listCrossSystemEdges(): CrossSystemEdge[] {

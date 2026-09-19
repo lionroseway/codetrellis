@@ -18,6 +18,7 @@
 
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
+import { lineOf, normalizeUrl as normalizePath, isLikelyApiPath } from './shared';
 
 const FETCH_RE = /\bfetch\s*\(\s*([`'"])([^`'"]+?)\1(?:\s*,\s*\{([\s\S]*?)\})?/g;
 const AXIOS_RE = /\baxios\s*\.\s*(get|post|put|patch|delete|head|options)\s*\(\s*([`'"])([^`'"]+?)\2/gi;
@@ -83,37 +84,4 @@ function* iterateAxios(content: string): Iterable<Callsite> {
       context: `axios.${verb.toLowerCase()}`,
     };
   }
-}
-
-function isLikelyApiPath(s: string): boolean {
-  // Accept absolute paths (`/api/...`, `/v1/...`) and full URLs that
-  // include `/api`. Reject obvious non-routes (single words, hash IDs).
-  if (!s) return false;
-  if (s.startsWith('/')) return true;
-  if (/^https?:\/\//.test(s) && /\/api\//.test(s)) return true;
-  return false;
-}
-
-function normalizePath(url: string): string {
-  // Strip protocol + host so the matcher only sees `/path`.
-  let p = url;
-  const proto = /^https?:\/\/[^/]+/;
-  p = p.replace(proto, '');
-  // Resolve template-literal placeholders (`${id}`) to `:id` so the
-  // matcher can pair them with FastAPI's `{user_id}` style.
-  p = p.replace(/\$\{[^}]+\}/g, ':id');
-  // Trim querystring.
-  const q = p.indexOf('?');
-  if (q >= 0) p = p.slice(0, q);
-  // Trim trailing slash for consistency (except root "/").
-  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
-  return p;
-}
-
-function lineOf(content: string, charIndex: number): number {
-  let line = 1;
-  for (let i = 0; i < charIndex && i < content.length; i++) {
-    if (content.charCodeAt(i) === 10) line++;
-  }
-  return line;
 }

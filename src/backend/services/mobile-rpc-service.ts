@@ -30,7 +30,10 @@ import { assertPeerMayCall, DEFAULT_GRANTS, PeerAuthorizationError } from './pee
 import { recordPeerAudit, terminalAuditDetail } from './peer-audit-service';
 import { getPairedDevice } from './paired-device-service';
 import { readFileWithin, isWithin } from './confined-fs';
-import { listTrustedRoots } from './trusted-roots';
+import { listTrustedRoots, resolveTrustedProjectRoot } from './trusted-roots';
+import { reviewPlan } from './plan-review-service';
+import { buildPrDraft } from './pr-draft-service';
+import { listComparands, compareSnapshots } from './snapshot-compare-service';
 import {
   onChannelMessage,
   sendToPeer,
@@ -310,6 +313,72 @@ function sendResponse(fingerprint: string, response: RpcResponse): void {
 
 // --- Method router -----------------------------------------------------------
 
+/**
+ * Resolve a project root a PEER asked for.
+ *
+ * Phase 19's rule — "never accept `projectRoot` / `projectPath` from a
+ * request body" — was swept across the REST handlers and **this file was
+ * missed**. Ten call sites took `params.projectPath` straight from the
+ * phone and used it: `project.rescan` walked and parsed it, and
+ * `plan.file.export`, `sysdoc.create` and `plan.template.create` WROTE
+ * into it. A paired device could make the desktop read and write outside
+ * every opened project.
+ *
+ * Pairing is not the control. The device is authenticated by DTLS and
+ * checked against the capability matrix, but neither answers "is this a
+ * project the user opened" — and the audit code in `handleRpc` exists
+ * precisely because a pairing can outlive the user's trust in a device.
+ *
+ * So a peer-supplied path goes through the same `resolveTrustedProjectRoot`
+ * the REST side uses: it must match a root the user actually opened,
+ * canonically, not by string prefix. The fallback to the active or
+ * most-recent project is unchanged — those come from the desktop's own
+ * state, not from the wire.
+ */
+function peerProjectRoot(
+  params: Record<string, unknown>,
+  opts: { required?: boolean } = {},
+): string | undefined {
+  const nominated = params.projectPath;
+  if (typeof nominated === 'string' && nominated.trim().length > 0) {
+    // Throws ConfinementError when it is not an opened project, which
+    // surfaces to the phone as an RPC error. That is the right answer —
+    // the alternative is silently acting on a different directory.
+    return resolveTrustedProjectRoot(nominated, 'projectPath');
+  }
+  const fallback = getActiveProjectPath()
+    || recentProjectsService.listRecentProjects()[0]?.path;
+  if (!fallback && opts.required) {
+    throw new Error('No active project on the desktop');
+  }
+  return fallback ?? undefined;
+}
+
+/**
+ * The project root a PLAN belongs to.
+ *
+ * Phase 19's rule does not stop at "do not take it from the wire" — it
+ * says where to take it from instead: "derive roots from the stored
+ * item, plan, or opened-project record". A plan carries its own
+ * `projectPath`, so for a plan-scoped call that is the answer, and the
+ * active-project fallback is not.
+ *
+ * It is also the only correct answer on a desktop with several projects
+ * open: the phone is reviewing a specific plan, and whichever project
+ * happens to be foregrounded on the desktop is unrelated to it.
+ *
+ * Still confined. The stored value is trusted because the user opened
+ * that project — but a plan row can outlive the project being opened,
+ * so it is checked rather than assumed.
+ */
+function planProjectRoot(planUid: string): string {
+  const plan = planService.getPlan(planUid);
+  if (!plan?.projectPath) {
+    throw new Error(`Plan ${planUid} is not associated with a project`);
+  }
+  return resolveTrustedProjectRoot(plan.projectPath, 'plan.projectPath');
+}
+
 async function routeMethod(
   method: string,
   params: Record<string, unknown>,
@@ -318,7 +387,11 @@ async function routeMethod(
   switch (method) {
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {
-      const projectPath = params.projectPath as string | undefined;
+      // Optional filter. Confined all the same: an unopened path here
+      // would be a way to probe which directories exist.
+      const projectPath = typeof params.projectPath === 'string' && params.projectPath
+        ? resolveTrustedProjectRoot(params.projectPath, 'projectPath')
+        : undefined;
       return planService.listPlans(projectPath).map((p) => {
         const items = planItemService.listAllItems(p.uid);
         return {
@@ -375,10 +448,7 @@ async function routeMethod(
 
     case 'plan.create': {
       const title = requireString(params, 'title');
-      const projectPath = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectPath) throw new Error('No project to create the plan in.');
+      const projectPath = peerProjectRoot(params, { required: true })!;
       const plan = planService.createPlan(
         { title, description: (params.description as string) || '', tasks: [] },
         getAuthorKey('human'),
@@ -548,10 +618,7 @@ async function routeMethod(
     }
 
     case 'project.rescan': {
-      const projectPath = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectPath) throw new Error('No project to rescan.');
+      const projectPath = peerProjectRoot(params, { required: true })!;
       const result = await scanProject(projectPath);
       return result;
     }
@@ -613,10 +680,7 @@ async function routeMethod(
 
     // --- System docs ---------------------------------------------------------
     case 'sysdoc.list': {
-      const projectPath = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectPath) throw new Error('No active project on the desktop');
+      const projectPath = peerProjectRoot(params, { required: true })!;
       const search = params.search as string | undefined;
       return search
         ? systemDocsService.searchSystemDocs(projectPath, search)
@@ -632,10 +696,7 @@ async function routeMethod(
     }
 
     case 'sysdoc.create': {
-      const projectPath = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectPath) throw new Error('No active project on the desktop');
+      const projectPath = peerProjectRoot(params, { required: true })!;
       const title = requireString(params, 'title');
       const doc = systemDocsService.createSystemDoc({
         projectPath,
@@ -675,19 +736,13 @@ async function routeMethod(
 
     // --- Plan templates + file import/export ---------------------------------
     case 'plan.template.list': {
-      const projectRoot = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path
-        || undefined;
+      const projectRoot = peerProjectRoot(params);
       return planTemplates.listTemplates(projectRoot);
     }
 
     case 'plan.template.create': {
       const templateId = requireString(params, 'templateId');
-      const projectPath = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectPath) throw new Error('No project to create the plan in.');
+      const projectPath = peerProjectRoot(params, { required: true })!;
       const result = planTemplatesService.applyTemplate({
         templateId,
         projectPath,
@@ -703,19 +758,13 @@ async function routeMethod(
 
     case 'plan.file.export': {
       const planUid = requireString(params, 'planUid');
-      const projectRoot = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectRoot) throw new Error('No active project on the desktop');
+      const projectRoot = peerProjectRoot(params, { required: true })!;
       const result = planFileService.exportPlan(planUid, projectRoot);
       return { planDir: result.planDir, fileCount: result.files.length };
     }
 
     case 'plan.file.discover': {
-      const projectRoot = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectRoot) throw new Error('No active project on the desktop');
+      const projectRoot = peerProjectRoot(params, { required: true })!;
       const dirs = planFileService.discoverPlanDirs(projectRoot);
       return dirs.map((d) => ({ dir: d, name: path.basename(d) }));
     }
@@ -1000,14 +1049,78 @@ async function routeMethod(
     }
 
     // --- Changes / diff -------------------------------------------------------
+    // --- Review (Phase 29 mobile flow) ---------------------------------------
+    //
+    // Phase 25 built the review surface and shipped it REST + MCP only.
+    // Phase 29 §4.13 gave it a desktop panel; none of it was ever bridged
+    // to the phone, so a user watching an agent from their phone could
+    // read the plan and the channel but never ask "did it do what it
+    // said". These four methods are that question.
+    //
+    // All read-only. `buildPrDraft` in particular never touches the
+    // repository — CodeTrellis supplies the body an agent cannot write
+    // and the agent does the git with its own credentials.
+    case 'review.get': {
+      const planUid = requireString(params, 'planUid');
+      const projectPath = planProjectRoot(planUid);
+      const result = reviewPlan({
+        planUid,
+        projectPath,
+        before: params.before as string | undefined,
+        after: params.after as string | undefined,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return result.review;
+    }
+
+    case 'review.prDraft': {
+      const planUid = requireString(params, 'planUid');
+      const projectPath = planProjectRoot(planUid);
+      const result = buildPrDraft({
+        planUid,
+        projectPath,
+        before: params.before as string | undefined,
+        after: params.after as string | undefined,
+      });
+      if (!result.ok) throw new Error(result.error ?? 'Could not build a PR draft');
+      return result.draft;
+    }
+
+    case 'review.comparands': {
+      // Scoped to the PLAN, like review.get and review.prDraft beside it.
+      // Without a planUid this fell back to the desktop's active project, so a
+      // phone reviewing a plan in project B was offered project A's commits —
+      // and picking one produced a comparison against a repository the plan has
+      // nothing to do with. The planUid is optional so existing callers that
+      // genuinely want the active project keep working.
+      const planUid = params.planUid as string | undefined;
+      const projectPath = planUid ? planProjectRoot(planUid) : peerProjectRoot(params, { required: true })!;
+      return listComparands(projectPath);
+    }
+
+    case 'review.compare': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      const before = (params.before as string) || 'baseline';
+      const after = (params.after as string) || 'live';
+      const result = compareSnapshots(before, after, projectPath);
+      if (!result.ok) throw new Error(result.error);
+      return result.result;
+    }
+
+    // What to work on next. `getNextTask` reads plan_items for a V2 plan
+    // and falls back to the legacy tasks table (Phase 29 §4.14), so the
+    // phone gets the same answer the desktop strip shows.
+    case 'plan.nextItem': {
+      const planUid = requireString(params, 'planUid');
+      const next = planService.getNextTask(planUid);
+      return next ?? { none: true };
+    }
+
     case 'changes.summary': {
       // Fall back to the most-recent project when the backend's in-memory
       // active path is null (e.g. after a restart that loaded the graph
       // from persistence without a fresh scan).
-      const projectPath = (params.projectPath as string)
-        || getActiveProjectPath()
-        || recentProjectsService.listRecentProjects()[0]?.path;
-      if (!projectPath) throw new Error('No active project on the desktop');
+      const projectPath = peerProjectRoot(params, { required: true })!;
 
       const git = getGitWorkingTreeStatus(projectPath);
 
@@ -1250,7 +1363,7 @@ function buildGraphScene(mode: string, planUid?: string, granularity: 'cluster' 
       const mark = (relPath: string, state: NodeState, ghostOk: boolean) => {
         const key = keyFn(relPath);
         let c = clusters.get(key);
-        if (!c && ghostOk) { c = ensure(key); c.fileCount = c.fileCount; }
+        if (!c && ghostOk) { c = ensure(key); }
         if (c) c.state = state;
       };
       for (const g of proj.ghostFiles) { ensure(keyFn(g.path)).state = 'planned_add'; }

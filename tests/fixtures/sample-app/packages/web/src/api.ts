@@ -1,10 +1,15 @@
 /**
- * HTTP client for the Python API.
+ * HTTP client for the fixture's backend services.
  *
- * Every cross-system edge in this fixture starts here — the
- * harness asserts that exactly four `fetch(...)` calls match
- * four corresponding `@router.{get,post}(...)` declarations
- * in `services/api/app/routes/`.
+ * Most cross-system edges in this fixture start here — the harness
+ * asserts that four `fetch(...)` calls match four corresponding
+ * `@router.{get,post}(...)` declarations in `services/api/app/routes/`
+ * (Python), and that one more matches a chi route in
+ * `services/billing/main.go` (Go, Phase 20).
+ *
+ * The Go service also calls the Python service directly
+ * (`services/billing/client/orders.go`), so not every edge originates
+ * in this file.
  */
 
 import type { User, Order, CreateUserPayload, CreateOrderPayload } from '@sample/shared';
@@ -44,5 +49,14 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`createOrder failed: ${res.status}`);
+  return res.json();
+}
+
+export async function listInvoices(): Promise<unknown[]> {
+  // Pairs with the Go billing service's chi route, which is registered
+  // inside `r.Route("/api/billing", ...)` — so this literal only
+  // matches if the extractor resolves the group prefix.
+  const res = await fetch('/api/billing/invoices');
+  if (!res.ok) throw new Error(`listInvoices failed: ${res.status}`);
   return res.json();
 }

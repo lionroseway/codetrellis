@@ -33,7 +33,7 @@ shared via the bridge abstraction.
 |---|---|---|---|
 | Data Model & Types | 100 | High | Plan, Task, Comment, PlanDocument, ProjectionData, Trellis snapshots all typed |
 | Database Persistence | 100 | Good | sql.js with file export — survives restarts |
-| AST Parsing (7 langs) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go and SQL pending. |
+| AST Parsing (9 langs + SQL) | 100 | High | TS/TSX/JS/JSX, Python, Rust, PHP, Java, **Go**, **Ruby** — all with proper per-language symbol AND import extraction via the plugin architecture (parsers/ + resolvers/). Go landed in Phase 20 (parser + module-path resolver + callsites). **SQL** (Phase 21) has symbols and references but deliberately no parser plugin, grammar or resolver — it has no import graph; see `services/sql/`. |
 | Multi-System Ingestion | 75 | High | Phase 1 + 2 + plugin refactor done. Real swf scan: 2552 edges (1688 Py + 591 tsx + 273 ts), 13 systems discovered, all `@swf/*` aliases resolve. Cross-system MVP shipped (HTTP TS↔Python). Remaining: systems DB + UI, SQL / subprocess / env matchers, server-side per-scope views. |
 | Cross-system edges | 35 | Medium | MVP shipped: TS/JS `fetch(...)` + `axios.*` ↔ Python FastAPI/Flask route matcher. New `callsites/<lang>.ts` plugin slot + `cross-system-service` matcher + dashed protocol-tinted graph edges. REST + MCP (`list_cross_system_edges`). **Apr 28**: edges now auto-refresh on file change (500 ms debounced recompute fired from the file-watcher), no longer need a manual re-scan. Pending: SQL ref tracker, subprocess, env-configured URLs, OpenAPI contracts. |
 | MCP Server | 100 | High | 30+ tools across architecture queries / plans / phases / tasks / spec docs / proposed-changes / templates / comments / sessions / drift / trellis snapshots. Skill resources (`codetrellis://skill[/quickstart|/power-user]`). |
@@ -49,10 +49,10 @@ shared via the bridge abstraction.
 | Agent skill / instructions resource | 100 | High | Phase 12 §E. Three MCP resources: `codetrellis://skill` (project-tailored summary listing current plans + connected agents), `…/quickstart` (first-time flow), `…/power-user` (deep usage incl. phase + template guidance). Markdown so any MCP-capable agent can ingest. |
 | Multi-agent visibility (TopBar) | 100 | High | Phase 12 §D2 + Apr 28 wire-level fix. `ConnectedAgents` widget replaces the single-agent pill; popover shows every active MCP session (type, model, active plan, last seen) and refreshes live on session events. `register_session` / `set_active_plan` keyed off the caller's transport sessionId so multiple simultaneous agents stay attributed. **As of Apr 28** the underlying MCP server now genuinely supports multiple concurrent agents — `mcp/server.ts` factors tool registration into `setupMcpServerInstance()` and the `/sse` handler builds a fresh server per agent connection. Verified by `tests/e2e/multi-agent.test.ts` (concurrent + sequential `claim_task` contention both green). |
 | Three Trellis States | 85 | Medium | Snapshots + projection + baseline pin/auto/branch — modes don't yet read as visually unmistakable |
-| Architecture Diffing | 90 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope |
+| Architecture Diffing | 95 | High | File-level + edge-level drift; per-line git annotations; pluggable plan scope. **Phase 25**: any two points can now be compared (live / baseline / checkpoint / commit), and `plan-review-service` scores a diff against the plan that asked for it — including unclaimed file changes and unplanned edges. |
 | Inspector + Code Viewer | 100 | High | Cluster/file/symbol routing + Prism syntax highlighting + git gutter + drift coloring + selection-to-task |
 | Graph Visualization | 75 | Medium | Glassmorphic nodes, curved edges, cluster discovery, selection emphasis, per-system scope filter, files-view no longer hides files silently, regular edges no longer animated (perf fix). **Missing: node-level drift ring, semantic zoom, mode visual distinctness, system-aware clustering, server-side per-scope views.** |
-| Real-time Activity Visualization | 60 | Medium | recently-changed pulse + edge drift; node drift not yet wired |
+| Real-time Activity Visualization | 70 | Medium | recently-changed pulse + edge drift; node drift not yet wired. **Phase 22** made the agent Timeline legible — turn grouping, plain-English rows, a live in-scope badge in `ConnectedAgents`. |
 | Toast Notifications | 100 | Good | Wired to plans, tasks, deviations, conflicts, sessions, plan-doc events |
 | Deviation Detection | 75 | Medium | Service + MCP tools + file-watcher hook; needs more detection types and graph surfacing |
 | Conflict Detection | 70 | Medium | File-level conflict on claim_task with broadcast |
@@ -73,6 +73,447 @@ shared via the bridge abstraction.
 ---
 
 ## 2. Recently Shipped
+
+### Sep 17, 2026 — Phase 26: the code-first surface
+
+Design: [PHASE-26-CODE-FIRST-SURFACE.md](PHASE-26-CODE-FIRST-SURFACE.md).
+
+**The reframe**: the graph is the most expensive thing the renderer does
+and the part some users will never want — while every signal it draws is
+already per-file or per-line. So a code-first view is not a lesser
+fallback; it is the same information, cheaper to render, for people who
+think in files. All four layers landed.
+
+- **Plan overlay** (`plan-overlay-service` + `/api/file/overlay`).
+  `FileSpec.edits[]` has carried `lineRange` and `symbol` since Phase 15
+  §M2 and **nothing had ever drawn it**. Three anchor shapes, plus a
+  fourth outcome that matters as much: an edit naming lines the file no
+  longer has is reported **unanchored**, never clamped. A marker in the
+  wrong place is worse than no marker, because a reader believes it.
+- **Diff editor** on CodeMirror 6 (`/api/file/at` + `CodeDiffView`).
+  A checkpoint and the baseline store content *hashes*, not blobs, so
+  they say so rather than falling back to the live file — which would
+  diff a file against itself and render as "no changes".
+- **Fast-forward** (`playback-service` + `PlaybackBar`). Discrete frames,
+  never interpolated: between two recorded points a file either has a
+  state or it does not, and a tween of source code would be fiction.
+  Edge counts are **omitted** for commit frames rather than reported as
+  zero.
+- **Code-first mode** (`CodeWorkspace`, `workspaceMode: 'code'`, ⌘⇧C).
+  A peer of the graph — when active the graph does not mount, so its
+  layout cost is not paid at all.
+
+**The dependency, measured.** CodeMirror added ~6 MB to `node_modules`
+and took the main bundle 1,707 → 2,417 kB. Paying ~710 kB on every launch
+for an editor most users open rarely would contradict this phase's own
+argument, so the diff view is lazily imported: it builds as its own
+763 kB chunk and the main bundle returns to its previous size.
+
+**Coverage**: 19 harness tests + 24 unit tests.
+
+
+### Sep 17, 2026 — Phase 27 (part): Ruby, and a guard so this cannot recur
+
+Design: [PHASE-27-LANGUAGE-EXPANSION.md](PHASE-27-LANGUAGE-EXPANSION.md).
+
+**This closed a live bug, not a feature gap.** `'ruby'` was in the
+`SupportedLanguage` union and `.rb` was in the scanner's `LANG_MAP`, with
+no parser behind either — so a Ruby repository scanned cleanly, drew every
+file as a node, and showed zero symbols and zero edges. Confidently
+empty, no error to read. Exactly the state Go was in before Phase 20.
+
+- **`parsers/ruby.ts`** — classes, modules, methods, `attr_*`, constants,
+  with full nesting (`Billing::Invoice#post`). Methods are qualified the
+  way Ruby writes them: `#` for instance, `.` for class. Ruby codebases
+  are full of `call` / `run` / `perform` / `to_s` on different classes,
+  so flat names would collide constantly.
+- **`resolvers/ruby.ts`** — `require_relative` resolves against the
+  requiring file; bare `require` probes the conventional roots (`lib/`,
+  `app/`); stdlib and gems resolve to nothing. The header states the real
+  limitation plainly: **in a Rails app most dependencies are invisible
+  here**, because autoloading means referencing `User` loads
+  `app/models/user.rb` with no `require` anywhere. Expect a sparse graph
+  on Rails until a convention-based resolver exists — that absence means
+  "not yet extracted", not "not coupled".
+- **`ImportDeclaration.isRelative`** — Ruby is the first language where
+  `require_relative 'x'` and `require 'x'` are identical strings with
+  different meanings, so relativeness now travels with the import
+  (through a new `imports.is_relative` column) instead of being
+  re-derived from the string.
+
+**The structural fix matters more than the parser.** This was the third
+instance of a hand-maintained list falling out of sync — the
+file-watcher's extension list twice, and now the language tags — and
+every one failed silently. `findUnparsedLanguages()` now cross-checks the
+scanner's language tags against the parser registry at startup and warns,
+with a standing unit test asserting the set is empty. It reports rather
+than throws: refusing to boot over a cosmetic mismatch would be a worse
+failure than the one it prevents.
+
+**Grammar availability, measured** (packed each npm package and looked
+inside): `tree-sitter-ruby` and `tree-sitter-c-sharp` ship prebuilt wasm;
+`tree-sitter-swift` and `tree-sitter-kotlin` ship none **and** carry
+external C scanners, so they need a local build toolchain this repo does
+not have. Kotlin before Swift — it covers Android and JVM backend work,
+compounding with the existing Java parser.
+
+**Coverage**: 14 unit tests (including the grammar-load guard and the
+unparsed-language assertion) + 3 harness tests.
+
+
+### Sep 17, 2026 — Phase 25 (part): snapshot selection + plan review
+
+Design: [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md)
+(reconciled). Two of the four pieces shipped; plan→PR authoring and
+play-forward are explicitly **not built** and the doc says where they
+stand.
+
+**Snapshot selection.** `diff-engine.computeDiff` could only ever compare
+against the module-level baseline, so `diffSnapshots(before, after)` was
+extracted and `computeDiff` now delegates — one implementation rather
+than two that can disagree. `snapshot-compare-service` resolves any of
+`live` / `baseline` / `checkpoint:<id>` / `commit:<ref>` and diffs any
+two. REST `GET /api/comparands` + `/api/compare`; MCP `list_comparands`
++ `compare_snapshots`.
+
+Two things the building taught, both now in the doc:
+
+- **A commit contributes its file list only.** `git ls-tree -r` gives
+  exact per-file blob hashes, but a commit's *edges* would mean checking
+  the tree out and re-parsing it. So a commit comparand reports
+  `edgesKnown: false`, zeroes the edge fields, and says why — reporting
+  "no edges changed" for a comparison that never looked at edges would
+  read as a finding rather than an absence.
+- **`scanProject` re-pins the baseline on every run**, so `baseline →
+  live` is empty immediately after a scan. That is exactly why an
+  explicit comparand picker is the point of this phase rather than a
+  convenience on top of it, and it is probably part of why Diff mode has
+  never read as distinct (graph blocker #1): the chrome could not state
+  what it was showing because the comparands were implicit.
+
+**Plan review.** `plan-review-service` answers "does this diff do what
+the plan said?" — items landed / partial / untouched, plus the two
+findings a textual diff cannot give a reviewer:
+
+- **files that changed with no item claiming them**, the thing everyone
+  misses on a forty-file agent PR; and
+- **dependencies that appeared with no item planning them**. A new
+  cross-module coupling is one import line in a diff and a structural
+  change in the architecture.
+
+`renderReviewMarkdown` produces a block an agent can post as a PR comment
+with its own GitHub credentials — CodeTrellis holds none, same as Phase
+24 — and that markdown form is what reaches reviewers who do not have the
+app. Edge findings are suppressed when the comparison could not see
+edges, for the same reason as above.
+
+**PR draft.** `get_pr_draft` returns the title, body, head, base, tickets
+and warnings for a PR — and deliberately does **not** touch the
+repository. The design said "one action produces a branch, a commit and a
+PR"; building it made the better split obvious: CodeTrellis supplies what
+only it knows (the plan, the ticket lineage, the drift, the
+architectural delta), and the agent does the git, which is its native
+tool and which it can see better than we can. A test asserts the refs and
+HEAD are byte-identical before and after, because read-only is a promise
+worth proving.
+
+**Coverage**: 7 harness tests.
+
+
+### Sep 17, 2026 — Phase 24: SDLC intake
+
+Design: [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) (reconciled).
+Backend, MCP tools and the `from-ticket` template shipped; the UI chip is
+the remaining piece.
+
+**The principle, restated because it is the whole design**: we do not
+build integrations. A developer's agent already holds both the tracker's
+MCP server and ours, so CodeTrellis exposes the *contract* and the agent
+does the integration. That keeps the Jira credential off this process
+(Phase 19's whole point), works unchanged for Linear / ADO / GitHub
+Projects / a wiki, and keeps the "no data leaves your machine" promise on
+the README true. **There is no HTTP client anywhere in this phase** —
+which is also why its tests mock nothing.
+
+**Shipped:**
+
+- **`create_plan_from_external`** — an epic tree the agent already
+  fetched becomes plan → items → sub-items, each carrying its ticket key.
+  Depth capped at 3; past the cap a child becomes a *sibling* rather than
+  being dropped, because losing a story to someone's filing habits is
+  worse than showing it one level up.
+- **`plan_external_refs`** — an epic maps to a plan, not an item. A
+  separate table rather than a nullable column, because
+  `external_refs.item_uid` is NOT NULL and the reconciler only adds
+  columns. Storing a plan uid in a column named `item_uid` would have
+  been the dishonest shortcut.
+- **`external_key`** on both levels: write-back matches on the key and
+  re-import is idempotent on it.
+- **`get_external_sync_state` / `mark_external_synced`** — the write-back
+  contract. **Reading never advances the watermark**; only marking does.
+  An agent that read the list and then failed to write would otherwise
+  lose those transitions silently.
+- **Acceptance criteria** land as a markdown checklist in the item body,
+  in the requester's words. Items have no acceptance field, and the body
+  renderer already shows checkboxes — so this uses what exists rather
+  than adding a field.
+- **`from-ticket` plan template** — the manual path, and the shape the
+  agent path produces: an intake page recording what the ticket says AND
+  what the graph says it touches, plus a Clarify phase before Deliver.
+
+**Coverage**: 5 harness tests + 12 unit tests, including that ticket text
+is stored inert — it arrives via an agent from a system many people can
+write to, so it is data, never instruction.
+
+
+### Sep 17, 2026 — Phase 23: time and cost budgets
+
+Design: [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) (reconciled).
+Backend, MCP and REST shipped; the UI surfaces are the remaining piece.
+
+Three numbers per plan — estimate, actual, forecast — plus one
+consequence: a ceiling a well-behaved agent checks before claiming more
+work.
+
+**Why it belongs here at all**: agents can count their own tokens. What
+they cannot answer is "how much has *this plan* cost across three agents
+and two days, and which item ate it". CodeTrellis is the only component
+that sees every agent's activity attributed to one shared plan, which
+makes this structural rather than a feature.
+
+**Shipped:**
+
+- **`services/pricing.ts`** — a versioned data table, not constants in a
+  service, because a stale multiplier buried in code silently corrupts
+  every figure already shown to someone. Cache reads and writes priced
+  separately: for a long agent session they dominate, and pricing them
+  at the input rate overstates cost several-fold.
+- **`services/budget-service.ts`** — time accumulated per **turn**, not
+  per tool call. Summing `durationMs` undercounts badly because an
+  agent's wall-clock is mostly model thinking between calls. Turns work
+  for every MCP client, so Codex and Cursor get time even though they
+  report no tokens.
+- **Token capture** — the Claude Code watcher already parsed
+  `message.content` for tool blocks and ignored `message.usage`, which
+  is the only place any agent tells us what it actually spent.
+- **`item_time_entries` + `plan_budgets`** tables, and
+  `estimate_minutes` / `estimate_cost_usd` on `plan_items` (nullable, so
+  the schema reconciler adds them with no migration).
+- **MCP**: `get_budget`, `set_budget`, `check_budget` — the last
+  mirroring `check_freeze`. **REST**: `GET/PUT /api/plans/:uid/budget`
+  and `/budget/check`.
+- **Sweep** — flushes turns that have gone quiet (unflushed time is time
+  never recorded) and raises a `need-decision` channel event once per
+  ceiling crossing.
+
+**The rule the tests are really about: an unknown cost stays unknown.**
+`costOf` returns null, never zero, for a model we have no prices for.
+Zero reads as "this was free"; null reads as "we do not know", which is
+the truth for any agent that does not report its model. An unknown cost
+also cannot breach a cost ceiling — treating it as zero would report
+"well within budget" for an agent whose spend is entirely invisible to
+us. Same restraint on the forecast: one item done out of twenty produces
+null rather than a number that looks precise and is noise.
+
+**Advisory, deliberately.** Nothing here can halt an agent, and building
+as though it could would be worse than honest advice — the same posture
+as the stuck sensor.
+
+**Coverage**: 20 unit tests. Harness coverage of the end-to-end path
+(scripted agent → rollup) and the once-only warning is still to write.
+
+
+### Sep 17, 2026 — Phase 22: agent activity clarity
+
+Design: [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md)
+(reconciled — one design call changed).
+
+The data was already good; the reading of it was bad. Every MCP tool call
+has been broadcast with `{tool, args, phase, durationMs, sessionId,
+agentType, agentModel}` since Phase 12 — and the Timeline rendered it as
+`JSON.stringify(payload).slice(0, 80)`, because `formatPayload` only knew
+the shapes the Claude Code JSONL watcher produces. A user was being asked
+to infer what an agent was doing from truncated JSON. Nobody does that.
+
+**Shipped** — four pure modules under `src/frontend/lib/` plus the
+components that render them. No new tables, no new MCP tools, no new
+broadcast types.
+
+- **`tool-phrasing.ts`** — every event becomes a sentence.
+  `update_item {"uid":"itm_4f…","status":"in_progress"}` reads as
+  *Started "Add refresh-token rotation"*. Unknown tools degrade to a
+  readable name rather than raw JSON, so a tool shipped without phrasing
+  looks plain instead of broken.
+- **`agent-turns.ts`** — consecutive calls from one session inside 30s
+  become one turn. Turns are grouped **per session**, because concurrent
+  agents interleave and merging them would attribute one agent's work to
+  another — a bug this codebase has actually had. Headline priority:
+  error, then a question to the human, then the last mutation, then the
+  reads. Mutations describe intent; the reads around them are only how
+  the agent got there.
+- **`scope-check.ts`** — the live "is it touching what I asked?" check,
+  surfaced in `ConnectedAgents` as an amber warning listing files that no
+  in-flight item claims. The drift machinery already computed this but
+  framed it as an after-the-fact report; the same fact framed as *right
+  now* is what makes it worth watching.
+- **AgentPanel Timeline** now renders turn cards, collapsed, expandable
+  to the individual phrased rows, each of which discloses its raw
+  payload. Nothing is dropped — a complete log is what makes the Timeline
+  worth anything in a post-mortem. The idle state finally says something
+  ("Last activity 4 minutes ago — …") instead of rendering nothing, which
+  was indistinguishable from the app being broken.
+
+**Changed from the design**: the scope check is **project-level, not
+per-agent**. Agents write code with their own file tools, not through
+MCP, so the file-watcher sees a change without knowing who made it. A
+per-agent attribution would have been a guess wearing a badge; the
+popover says plainly that the check spans the project.
+
+**Coverage**: 29 unit tests. Keeping the logic pure rather than inlining
+it into components is what makes "does this read as a sentence" and "did
+two agents get mixed up" testable at all.
+
+### Sep 17, 2026 — Harness: a leaked backend per test
+
+Found while running the full suite repeatedly for Phases 20–22, and it
+explains a lot of history.
+
+`startBackend` spawns `npx` → `tsx` → `node`, and teardown signalled only
+the direct child. `npx` does not forward SIGTERM, so **every test left a
+live backend** — holding its data dir, its chokidar watchers and its
+ports. Nothing failed, which is exactly why it survived: the suite simply
+got slower as it went. A full run left ~190 backend processes alive and
+the machine at a load average of 100+ on 4 cores.
+
+That load is almost certainly the real cause of the "timing-sensitive
+tests are flaky" note in §7 and the two retries configured in
+`playwright.harness.config.ts`. They were not flaky; they were starved.
+
+Fix: spawn into its own process group (`detached`, non-Windows) and
+signal the group on teardown, with a fallback to the direct child and a
+bounded wait after SIGKILL so a stuck handle cannot hang teardown.
+Verified: a 7-test run now leaves zero backends behind, where it
+previously left seven.
+
+
+### Sep 17, 2026 — Phase 21: SQL schema + ref-tracker
+
+Design: [PHASE-21-SQL-REF-TRACKER.md](PHASE-21-SQL-REF-TRACKER.md)
+(reconciled with what shipped — three design calls changed and are
+marked in the doc).
+
+Closes multi-system sub-phase 2.G. The graph now reaches the database:
+`OrdersPage.tsx --http--> billing/main.go --sql--> 001_create_invoices.sql`
+is one traversable path across three languages and two coupling kinds.
+
+**Shipped:**
+
+- **`services/sql/tokenizer.ts`** — the piece everything else stands on.
+  Comments, string literals, quoted identifiers and dollar-quoting are
+  handled lexically, which is what stops `-- SELECT * FROM ghost_table`
+  and `'from fake_table'` becoming dependencies.
+- **`services/sql/refs.ts`** — table references with READ/WRITE
+  attribution, CTE aliases excluded, table functions and derived tables
+  ignored. `looksLikeSql` is structural rather than a prefix regex,
+  because `INSERT\s+INTO` matches the prose "insert into the form".
+- **`services/sql/schema.ts`** — DDL to table/view/proc symbols (columns
+  and indexes deliberately excluded), plus the **migration fold**: a
+  directory of numbered `.sql` files is replayed so a dropped table stops
+  existing and an `ALTER` does not claim to define a table. Runs as a
+  post-pass in `parseFiles`, because folding is a property of a directory
+  and no per-file parse can see it.
+- **`services/sql/embedded.ts`** — one scanner over string-literal
+  quoting styles, called from `parseSource` for **every** language rather
+  than per-extractor. Rust, PHP and Java get table references with no
+  per-language work.
+- **SQL matcher in `cross-system-service`** — pairs a table reference
+  with the `.sql` file that CREATEs it. Emits nothing on an unknown
+  table, nothing on an ambiguous one, nothing for a self-reference.
+
+**Library choice, measured not assumed.** `sqlglot` is the best SQL
+parser of the three evaluated and got all nine hard cases right, but it
+is Python and would mean shipping a Python runtime in Electron across
+five targets. `sql-parser-cst` is pure JS but is a *parser*, and rejected
+three of seven fragment forms that appear in ordinary code (`%s`,
+`${...}`, truncated). The tokenizer matches sqlglot's answers on every
+hard case because those cases are lexical, not grammatical. Full
+comparison table in the phase doc.
+
+**Coverage**: `tests/e2e/sql-refs.test.ts` (7), plus 56 unit tests across
+`tokenizer` / `refs` / `schema` / `embedded`.
+
+**Also**: `cross-system.test.ts` counts are now scoped by protocol. They
+were unscoped totals, which broke the moment a second protocol existed
+and would have broken again on the third; the intent was always "the
+HTTP pairings are exactly these".
+
+
+### Sep 17, 2026 — Phase 20: Go support
+
+Design: [PHASE-20-GO-SUPPORT.md](PHASE-20-GO-SUPPORT.md).
+
+Go was the worst-supported ecosystem in a specific way: `.go` was
+already in the scanner's `LANG_MAP` and `go.mod` was already a
+recognised manifest, so a Go repo scanned and drew every file as a node
+**with zero symbols and zero edges**. Confidently empty, with no error
+to read.
+
+**Shipped:**
+
+- **`parsers/go.ts`** — functions, methods, types, consts, vars.
+  Methods are named `(Receiver).Method` because Go codebases are full
+  of `Handle` / `String` / `Close` hanging off different types, and flat
+  names collide in symbol search. Exportedness (initial capital) is
+  captured as a modifier — it is Go's only visibility marker and the
+  architectural boundary that matters.
+- **`resolvers/go.ts`** — resolution by **module path**, not
+  containment, which is the opposite of every other resolver. The module
+  index is built from `ctx.systems` (`system-discovery` already parses
+  the `module` line), plus `replace` directives read per manifest —
+  those are how monorepos wire sibling modules, so skipping them loses
+  exactly the edges worth having. `go.work` needs no handling: its
+  `use` targets are themselves discovered modules.
+- **`callsites/go.ts`** — stdlib, stdlib 1.22 `"GET /path"`, chi, gin,
+  echo and gorilla. **Route prefixes are resolved**, both the
+  block-scoped kind (chi's `r.Route("/api", func(r){…})`) and the
+  variable-bound kind (`v1 := r.Group("/api/v1")`). Without that, a
+  grouped router — i.e. most production Go — reports the wrong URL,
+  which is worse than reporting none.
+- **`tree-sitter-go.wasm`** committed, plus
+  `resources/tree-sitter/README.md` recording provenance and sha256 for
+  all eight grammars. The `tree-sitter-wasms` build of Go does not load
+  under `web-tree-sitter@0.27`; the official `tree-sitter-go` package's
+  wasm does. An incompatible grammar is caught, logged and skipped at
+  load time, so it presents as a silently empty language —
+  `parsers/go.test.ts` loads the grammar directly under
+  `npm run test:unit` as the fast guard against exactly that.
+- **Fixture**: `services/billing` (chi routes behind a group, internal
+  packages, a `testdata/` trap) + `services/shared-go` reached through a
+  `replace` directive. Cross-system pairings went 4 → 6.
+
+**Two bugs found while testing, both pre-existing and both worse than
+the feature:**
+
+1. **The file-watcher's parseable-extension list didn't include `.go`** —
+   so Go edits would never have re-parsed and the graph would have gone
+   stale silently. This is the *second* time that hand-maintained list
+   went stale (the first was .py/.rs/.php/.java). It is now **derived
+   from the parser registry**, so it cannot drift again.
+2. **`startWatching` returned before chokidar's initial walk finished**,
+   and the scan endpoint didn't await it — leaving a silent window right
+   after a scan where edits were not seen at all. That is precisely when
+   an agent is most likely to be writing, since a scan is what precedes
+   handing it work. `startWatching` now resolves on `ready` (bounded by
+   a 10s guard) and the scan awaits it. This had been showing up as
+   "flaky" auto-refresh tests; it was not flake, it was a race, and a
+   bigger fixture widened it until it was deterministic.
+
+**Coverage**: `tests/e2e/go-support.test.ts` (8 tests: symbols, in-module
+resolution, `replace` sibling, stdlib/external non-resolution, testdata
+exclusion, prefix-resolved cross-system pairing, Go→Python outbound,
+watcher auto-refresh), `parsers/go.test.ts` (11), `callsites/go.test.ts`
+(prefix composition, all five frameworks, outbound).
+
 
 ### May 4, 2026 — Phase 15.D.2: inline code context (body-first @ authoring)
 
@@ -2142,6 +2583,21 @@ darker); smooth transitions when expanding/collapsing.
 
 ## 7. Open Items (priority order)
 
+### Phases 20–25 — the product queue behind Phase 19
+
+Designed 2026-09-17. Sequencing and reasoning in
+[ROADMAP-PHASE-20-25.md](ROADMAP-PHASE-20-25.md); one doc per phase:
+
+| Phase | Doc | One line |
+|---|---|---|
+| 20 | [PHASE-20-GO-SUPPORT.md](PHASE-20-GO-SUPPORT.md) | Go parser / resolver / callsites — closes 2.F |
+| 21 | [PHASE-21-SQL-REF-TRACKER.md](PHASE-21-SQL-REF-TRACKER.md) | Schema symbols + SQL ref-tracker — closes 2.G |
+| 22 | [PHASE-22-AGENT-ACTIVITY-CLARITY.md](PHASE-22-AGENT-ACTIVITY-CLARITY.md) | Turn grouping, plain-English rows, live in-scope badge |
+| 23 | [PHASE-23-BUDGETS.md](PHASE-23-BUDGETS.md) | Time + cost per item; ceilings as governance |
+| 24 | [PHASE-24-SDLC-INTAKE.md](PHASE-24-SDLC-INTAKE.md) | Jira / Linear intake into nested plans, no credential held |
+| 25 | [PHASE-25-REVIEW-AND-PLAYBACK.md](PHASE-25-REVIEW-AND-PLAYBACK.md) | Plan↔PR review, snapshot picker, play-forward |
+
+
 ### 🐛 Bugs surfaced by user reports
 
 | Bug | Found by | Fix | Status |
@@ -2239,7 +2695,7 @@ Already shipped: 1.A–1.E, 1.6 (plugin architecture), 2.A–2.E
 (Python/Rust/PHP/Java parsers + resolvers), graph scope filter, AST
 per-project scoping, /api/diff fix, EMFILE survival, animation perf.
 
-Remaining: 2.F (Go), 2.G (SQL ref-tracker), 3 (systems DB + MCP),
+Remaining: ~~2.F (Go)~~ ✅ shipped Phase 20, ~~2.G (SQL ref-tracker)~~ ✅ shipped [Phase 21](PHASE-21-SQL-REF-TRACKER.md), 3 (systems DB + MCP),
 4 (system-aware UI), 5 (cross-system links), 6 (external libs).
 
 ### Graph-quality blockers (Immediate Focus from previous tracker)

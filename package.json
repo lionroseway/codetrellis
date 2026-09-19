@@ -1,7 +1,7 @@
 {
   "name": "codetrellis",
   "productName": "CodeTrellis",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Monitor AI coding agents and visualize their impact on codebase architecture in real-time",
   "license": "Apache-2.0",
   "homepage": "https://codetrellis.dev",
@@ -46,12 +46,14 @@
     "smoke:plan-items": "tsx scripts/smoke-plan-items.ts",
     "smoke:plan-migrate": "tsx scripts/smoke-plan-migrate.ts",
     "smoke:schema-reconcile": "tsx scripts/smoke-schema-reconcile.ts",
+    "demo": "tsx scripts/demo.ts",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/express": "^5.0.0",
@@ -64,6 +66,9 @@
     "electron": "^44.4.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.12.0",
     "jsqr": "^1.4.0",
     "patch-package": "^8.0.1",
     "png2icons": "^2.0.1",
@@ -76,9 +81,22 @@
     "tree-sitter-typescript": "^0.23.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.70.0",
     "vite": "^7.3.6"
   },
   "dependencies": {
+    "@codemirror/lang-go": "^6.0.1",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-php": "^6.0.2",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-rust": "^6.0.2",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/legacy-modes": "^6.5.4",
+    "@codemirror/merge": "^6.12.2",
+    "@codemirror/state": "^6.7.5",
+    "@codemirror/view": "^6.43.12",
     "@dagrejs/dagre": "^3.0.0",
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
@@ -125,7 +143,7 @@
   "build": {
     "appId": "dev.codetrellis.app",
     "productName": "CodeTrellis",
-    "copyright": "Copyright © 2026 CodeTrellis Contributors",
+    "copyright": "Copyright \u00a9 2026 CodeTrellis Contributors",
     "directories": {
       "output": "out/make",
       "buildResources": "resources"

@@ -14,10 +14,9 @@
  * (via the WebSocket "deviation-detected" event).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, Eye, EyeOff, RefreshCw, X } from 'lucide-react';
-import { usePlanStore } from '../../../stores/plan-store';
-import type { Deviation, PlanItem } from '@shared/types';
+import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, Check, EyeOff, RefreshCw, X } from 'lucide-react';
+import type { Deviation } from '@shared/types';
 
 const SEVERITY_META = {
   error: { color: 'text-red-400', bg: 'bg-red-500/[0.08]', border: 'border-red-500/20', label: 'Error' },

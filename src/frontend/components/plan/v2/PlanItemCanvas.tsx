@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, FileText, Zap, Folder, Copy, History,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User,
-  AlertTriangle, MessageSquare, HelpCircle, Activity, Hash,
-  X, Import,
+  AlertTriangle, MessageSquare, HelpCircle, Activity, 
+  X, Import, GitPullRequest,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { usePlanStore } from '../../../stores/plan-store';
@@ -15,7 +15,13 @@ import { useSlashMenu } from './SlashMenu';
 import { useMentionPicker } from './MentionPicker';
 import { BodyRenderer } from './BodyRenderer';
 import { PlanGitContextChip } from './PlanGitContextChip';
+import { PlanBudgetChip } from './PlanBudgetChip';
+import { PlanTicketSyncChip } from './PlanTicketSyncChip';
+import { PlanSyncChip } from './PlanSyncChip';
+import { PlanVersionHistory } from './PlanVersionHistory';
+import { NextUpStrip } from './NextUpStrip';
 import { PlanDiffPanel } from './PlanDiffPanel';
+import { PlanReviewPanel } from './PlanReviewPanel';
 import { ContextRail } from './ContextRail';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
@@ -23,6 +29,7 @@ import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
 import { PlanTemplateChooser } from './PlanTemplateChooser';
 import { PlanImportModal } from './PlanImportModal';
+import { PlanShareMenu } from './PlanShareMenu';
 import { CodebaseOrientation } from './CodebaseOrientation';
 import { PlanCompletionSummary } from './PlanCompletionSummary';
 import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
@@ -230,8 +237,58 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
   const updateItem = usePlanItemsStore((s) => s.updateItem);
   const openHistoryDrawer = usePlanItemsStore((s) => s.openHistoryDrawer);
   const addToast = useToastStore((s) => s.addToast);
+  const projectRoot = useProjectStore((s) => s.root);
+  const [promoting, setPromoting] = useState(false);
 
   const isAction = item.kind === 'action';
+
+  /**
+   * Phase 29 §4.15 — the contributor half of Phase 7.2.
+   *
+   * `ContributionPanel` shows what is staged and now accepts it, but
+   * nothing could put anything there from the desktop: promotion was
+   * MCP-only, so the panel could only ever be empty for a human
+   * contributor. This is the other end.
+   *
+   * The service stages under the **current git branch**, which is the
+   * whole point — the staged files travel with the contributor's PR.
+   * So the confirmation names the item, not a branch this component
+   * would have to look up and could get wrong.
+   */
+  const promote = async () => {
+    if (!projectRoot) return;
+    setPromoting(true);
+    try {
+      const res = await fetch('/api/contributions/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: projectRoot,
+          itemUid: item.uid,
+          title: item.title,
+          kind: item.kind,
+          status: item.status ?? undefined,
+          body: item.body ?? undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      addToast({
+        type: 'success',
+        title: 'Staged for contribution',
+        message: `"${item.title}" written to .codetrellis/contributions/ on this branch. Commit it with your PR.`,
+        duration: 6000,
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Could not stage',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setPromoting(false);
+    }
+  };
 
   const copyContext = async () => {
     const lines: string[] = [`# ${item.title}`, ''];
@@ -358,6 +415,15 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
         <History size={12} />
         History
       </button>
+      <button
+        onClick={promote}
+        disabled={promoting || !projectRoot}
+        className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.05] hover:text-foreground text-[12.5px] disabled:opacity-50"
+        title="Stage this item under .codetrellis/contributions/ on the current branch, so it travels with your pull request"
+      >
+        <GitPullRequest size={12} />
+        {promoting ? 'Staging…' : 'Contribute'}
+      </button>
 
       {item.blockedReason && (
         <div className="basis-full mt-1.5 rounded-md bg-red-500/[0.08] border border-red-500/30 p-2.5 text-[13px] text-red-300">
@@ -395,6 +461,7 @@ function PlanHomePage() {
   const [title, setTitle] = useState(plan?.title ?? '');
   const [description, setDescription] = useState(plan?.description ?? '');
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPlanHistory, setShowPlanHistory] = useState(false);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -403,7 +470,7 @@ function PlanHomePage() {
     if (!plan) return;
     setTitle(plan.title ?? '');
     setDescription(plan.description ?? '');
-  }, [plan?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [plan?.uid]);
 
   const saveTitle = (next: string) => {
     setTitle(next);
@@ -479,11 +546,48 @@ function PlanHomePage() {
                 {plan.completedTaskCount ?? 0}/{plan.taskCount ?? 0} actions
               </span>
               <PlanGitContextChip plan={plan} />
+              {/* Phase 29 — Phase 23 built all of this and shipped it
+                  MCP-only. See PlanBudgetChip. */}
+              <PlanBudgetChip plan={plan} />
+              {/* Phase 29 — Phase 24's sync watermark had no REST endpoint
+                  at all, let alone a surface. See PlanTicketSyncChip. */}
+              <PlanTicketSyncChip plan={plan} />
+              {/* Phase 29 §4.14 — shared-vs-local. Three endpoints
+                  implemented this toggle and none had a caller; the
+                  WebSocket hook has been listening for its events the
+                  whole time. See PlanSyncChip. */}
+              <PlanSyncChip plan={plan} />
+              {/* Phase 29 §4.8 — plan_versions has had a row per edit
+                  since Phase 3 and no reader. Its sibling
+                  plan_item_versions was already surfaced by
+                  PlanItemHistoryDrawer; this is the plan-level half.
+                  Distinct from the History rail in the shell header,
+                  which time-travels git commits. */}
+              <button
+                onClick={() => setShowPlanHistory(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] text-[12.5px] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-white/[0.04] transition-colors"
+                title="This plan's revision history — title, status and description over time"
+              >
+                <History size={11} />
+                Revisions
+              </button>
+              {/* Phase 29 §4.16 — the two ways a plan leaves this
+                  machine, behind one chip. Was a standalone "Save as
+                  template" button; §4.16 added a second export action
+                  and the row had reached nine chips, so they are
+                  grouped instead. Still gated on the plan having a
+                  shape worth exporting. */}
+              {!isEmpty && <PlanShareMenu plan={plan} />}
             </div>
           </div>
 
           {/* Progress summary — shows task breakdown when there are actions */}
           <PlanProgressSummary items={Object.values(itemsByUid)} />
+
+          {/* Phase 29 §4.14 — which pending Action is actually
+              unblocked. The tree shows status; it cannot show
+              readiness. See NextUpStrip. */}
+          {!isEmpty && <NextUpStrip planUid={plan.uid} />}
 
           {/* Body — click-to-edit. Read mode shows the chip-aware
               renderer; edit mode opens a textarea with the slash
@@ -506,6 +610,14 @@ function PlanHomePage() {
           {/* Plan diff — what's planned vs what's landed. Shown
               when there's something to diff (any Action with intent). */}
           <PlanDiffPanel planUid={plan.uid} />
+
+          {/* Phase 29 — Phase 25's whole review surface (comparands,
+              compare, review, pr-draft) was REST + MCP only. Sits below
+              the diff panel because it answers a different question:
+              that one asks whether the code matches the plan's declared
+              intent, this one asks what changed between two points and
+              which of it any item claimed. */}
+          <PlanReviewPanel planUid={plan.uid} />
 
           {/* Phase 17.M — Completion retrospective. Auto-shown when
               every action is done/skipped or plan status is 'completed'. */}
@@ -584,6 +696,16 @@ function PlanHomePage() {
         </div>
       </div>
       {showImportModal && <PlanImportModal onClose={() => setShowImportModal(false)} />}
+
+      {showPlanHistory && (
+        <PlanVersionHistory
+          planUid={plan.uid}
+          planTitle={plan.title}
+          onClose={() => setShowPlanHistory(false)}
+        />
+      )}
+
+
     </div>
   );
 }
@@ -731,7 +853,7 @@ function BodyEditor({ item }: { item: PlanItem }) {
     setTitle(item.title);
     setBody(item.body ?? '');
     setEditingBody(!(item.body ?? '').trim());
-  }, [item.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item.uid]);
 
   // When the body arrives from fetchItemFull (hydration returns
   // summaries without body; the full item lands async and we must
@@ -741,7 +863,7 @@ function BodyEditor({ item }: { item: PlanItem }) {
       setBody(item.body ?? '');
       setEditingBody(!(item.body ?? '').trim());
     }
-  }, [item.body]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item.body]);
 
   // Debounced autosave for title.
   const saveTitle = (next: string) => {

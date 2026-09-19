@@ -249,7 +249,7 @@ export async function connectWithAnswer(
  */
 export async function createAnswer(
   offerSdp: string,
-  offerIceCandidates: string[],
+  _offerIceCandidates: string[],
 ): Promise<{
   answer: string;
   iceCandidates: string[];

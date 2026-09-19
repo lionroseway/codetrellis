@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Cpu, Sparkles, Bot, Plug } from 'lucide-react';
+import { Cpu, Sparkles, Bot, Plug, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
+import { useAgentStore } from '../../stores/agent-store';
+import { usePlanItemsStore } from '../../stores/plan-items-store';
+import { checkScope, describeScope } from '../../lib/scope-check';
 import type { AgentSessionInfo } from '@shared/types';
 
 /**
@@ -14,6 +17,17 @@ import type { AgentSessionInfo } from '@shared/types';
  * Why: multiple Claude Code instances OR Claude Code + Codex + Cursor
  * can all connect at once. The human needs to see who is in the room
  * and what each one is doing — not just "an agent is active".
+ *
+ * Phase 22 adds the question that actually matters while work is in
+ * flight: **is it touching what I asked it to touch?** The drift
+ * machinery already computes this, but frames it as an after-the-fact
+ * report; here it is live, next to the agents doing the touching.
+ *
+ * The scope check is project-level, not per-agent, and the popover says
+ * so. Agents write code with their own file tools rather than through
+ * MCP, so the file-watcher sees a change without knowing who made it —
+ * and a per-agent attribution we cannot support would be worse than an
+ * honest project-level one.
  */
 
 function agentBadge(agentType: string): { Icon: typeof Cpu; tint: string; label: string } {
@@ -41,6 +55,13 @@ function shortSessionId(id: string): string {
 export function ConnectedAgents() {
   const sessions = usePlanStore((s) => s.sessions);
   const plans = usePlanStore((s) => s.plans);
+  const recentlyChangedFiles = useAgentStore((s) => s.recentlyChangedFiles);
+  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+
+  const scope = useMemo(
+    () => checkScope([...recentlyChangedFiles], Object.values(itemsByUid)),
+    [recentlyChangedFiles, itemsByUid],
+  );
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, right: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -97,6 +118,11 @@ export function ConnectedAgents() {
         <span>
           {count === 0 ? 'No agents' : count === 1 ? '1 agent' : `${count} agents`}
         </span>
+        {/* The one thing worth interrupting for: work landing outside
+            what any in-flight item claims. */}
+        {scope.verdict === 'out-of-scope' && (
+          <AlertTriangle size={11} className="text-warning" />
+        )}
       </button>
 
       {open && createPortal(
@@ -105,6 +131,48 @@ export function ConnectedAgents() {
           style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
           className="w-72 bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] py-1"
         >
+          {/* Phase 22 — live scope check. Project-level by design; the
+              note says so rather than implying per-agent attribution we
+              cannot support. */}
+          {scope.verdict !== 'clean' && (
+            <div
+              className={`px-3 py-2 border-b border-white/[0.06] ${
+                scope.verdict === 'out-of-scope' ? 'bg-warning-muted/30' : ''
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                {scope.verdict === 'out-of-scope' ? (
+                  <AlertTriangle size={11} className="text-warning shrink-0" />
+                ) : (
+                  <CheckCircle2 size={11} className="text-success shrink-0" />
+                )}
+                <span
+                  className={`text-[10px] ${
+                    scope.verdict === 'out-of-scope' ? 'text-warning' : 'text-foreground-muted'
+                  }`}
+                >
+                  {describeScope(scope)}
+                </span>
+              </div>
+              {scope.outOfScope.length > 0 && (
+                <ul className="mt-1 ml-4 space-y-0.5">
+                  {scope.outOfScope.slice(0, 4).map((file) => (
+                    <li key={file} className="text-[9px] font-mono text-foreground-subtle truncate">
+                      {file}
+                    </li>
+                  ))}
+                  {scope.outOfScope.length > 4 && (
+                    <li className="text-[9px] text-foreground-subtle">
+                      +{scope.outOfScope.length - 4} more
+                    </li>
+                  )}
+                </ul>
+              )}
+              <div className="mt-1 ml-4 text-[9px] text-foreground-subtle opacity-70">
+                Across the project — file changes aren't attributable to one agent.
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.06]">
             <span className="text-[10px] uppercase tracking-wider text-foreground-subtle">
               Connected agents

@@ -24,6 +24,7 @@ interface ElectronAPI {
   }) => Promise<string[] | null>;
   /** Reveal the current day's log file in Finder / Explorer. */
   revealLogs: () => Promise<string>;
+  revealUpdateDownload?: () => Promise<string | null>;
   /** Absolute path of the current day's log file. */
   getLogPath: () => Promise<string>;
 }

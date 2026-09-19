@@ -32,8 +32,6 @@ import type { AppSettings, PersonalSyncMode } from '../../shared/types';
 
 const SYNC_DIR_NAME = 'codetrellis-sync';
 
-/** Machine-local fields stripped before exporting settings. */
-const MACHINE_LOCAL_KEYS: (keyof AppSettings)[] = [];
 
 interface SyncMeta {
   machineId: string;

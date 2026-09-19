@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap, FileCode } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useUiStore } from '../../stores/ui-store';
@@ -57,17 +57,27 @@ async function openProject() {
 
   const store = useProjectStore.getState();
 
-  let branch: string | null = null;
-  try {
-    const branchRes = await fetch(`/api/git/branch?path=${encodeURIComponent(projectPath)}`);
-    branch = (await branchRes.json()).branch;
-  } catch { /* ignore */ }
-
-  store.addTab(projectPath, branch);
+  const tabId = store.addTab(projectPath, null);
   store.setScanStatus('scanning');
   try {
     const result = await api.scanProject(projectPath);
     store.applyScanResult(result);
+  // The branch is read AFTER the scan, not before.
+  //
+  // `/api/git/branch` goes through `requireProjectPath`, which refuses a
+  // path that is not a trusted root — and a folder being opened for the
+  // first time is not one until `scanProject` registers it. Asking first
+  // got a 403, the caller read `undefined` off the error body, and the
+  // new tab was created with no branch label until something else
+  // happened to rescan. Loopback is not an authorisation boundary, so
+  // the route's refusal is right; the order of the two calls was wrong.
+    try {
+      const branchRes = await fetch(`/api/git/branch?path=${encodeURIComponent(projectPath)}`);
+      if (branchRes.ok) {
+        const branchData = (await branchRes.json()) as { branch?: string | null };
+        store.setTabBranch(tabId, branchData.branch ?? null);
+      }
+    } catch { /* a missing branch label is not worth failing an open over */ }
   } catch (err) {
     store.setError(String(err));
   }
@@ -326,6 +336,38 @@ function DocsToggle() {
   );
 }
 
+/**
+ * Phase 26 — the code-first mode toggle.
+ *
+ * A peer of the graph rather than a panel inside it: switching here
+ * unmounts the graph entirely, so its layout cost is not paid by someone
+ * who only wants to read code. On a large repository that is the
+ * difference between a usable app and a slow one.
+ */
+function CodeModeToggle() {
+  const root = useProjectStore((s) => s.root);
+  const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  if (!root) return null;
+
+  const active = workspaceMode === 'code';
+  return (
+    <button
+      type="button"
+      onClick={() => setWorkspaceMode(active ? 'graph' : 'code')}
+      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border transition-all shrink-0 ${
+        active
+          ? 'border-accent/60 text-accent bg-accent/10 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
+          : 'border-border text-foreground-muted hover:text-foreground hover:border-border-glow hover:shadow-[0_0_8px_rgba(59,130,246,0.1)]'
+      }`}
+      title={active ? 'Back to the graph' : 'Read code, diffs and history without the graph (⌘⇧C)'}
+    >
+      <FileCode size={12} />
+      Code
+    </button>
+  );
+}
+
 export function TopBar() {
   const tabs = useProjectStore((s) => s.tabs);
   const activeTabId = useProjectStore((s) => s.activeTabId);
@@ -387,6 +429,7 @@ export function TopBar() {
         ))}
       </div>
 
+      <CodeModeToggle />
       <DocsToggle />
 
       <button
@@ -404,7 +447,7 @@ export function TopBar() {
       />
 
       <button
-        onClick={() => useUiStore.getState().setLearnTrellisOpen(true)}
+        onClick={() => window.dispatchEvent(new CustomEvent('open-mcp-guide'))}
         className="flex items-center justify-center w-8 h-8 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
         title="Learn CodeTrellis"
         aria-label="Open onboarding tour"

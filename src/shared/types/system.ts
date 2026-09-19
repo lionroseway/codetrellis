@@ -10,7 +10,7 @@
 export type SystemLanguage =
   | 'typescript' | 'javascript'
   | 'python' | 'rust' | 'go'
-  | 'php' | 'java' | 'ruby'
+  | 'php' | 'java' | 'ruby' | 'csharp' | 'kotlin' | 'swift'
   | 'mixed' | 'unknown';
 
 export type ManifestKind =
@@ -25,6 +25,8 @@ export type ManifestKind =
   | 'build.gradle'
   | 'build.gradle.kts'
   | 'Gemfile'
+  | 'csproj'
+  | 'Package.swift'
   | 'tsconfig.json'
   | 'pnpm-workspace.yaml'
   | 'nx.json'

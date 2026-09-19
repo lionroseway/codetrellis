@@ -16,7 +16,6 @@ import {
   Alert,
   StyleSheet,
   RefreshControl,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -29,7 +28,7 @@ import {
 } from '../lib/storage';
 import { connection } from '../lib/connection';
 import { registerForPush, sendPushTokenToDesktop } from '../lib/push';
-import { startDiscovery, stopDiscovery, getDiscoveredDesktops, onDiscoveryChange, type DiscoveredDesktop } from '../lib/discovery';
+import { startDiscovery, stopDiscovery, onDiscoveryChange } from '../lib/discovery';
 import type { PairedDesktop, ConnectionState } from '../lib/types';
 import { isUsableSecret } from '../lib/peer-auth';
 

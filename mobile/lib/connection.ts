@@ -25,7 +25,6 @@ import type {
   ConnectionTarget,
   ConnectionState,
   WorkspaceSnapshot,
-  BridgeToWebView,
 } from './types';
 
 // --- Types -------------------------------------------------------------------

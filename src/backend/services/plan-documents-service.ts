@@ -8,7 +8,6 @@ import type { PlanDocument, PlanDocumentVersion } from '../../shared/types';
 /** Phase 13 §B auto-sync hook — see plan-service for the rationale. */
 function notifyMutation(planUid: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { scheduleWriteThrough } = _lazy___plan_file_service;
     scheduleWriteThrough(planUid);
   } catch { /* fine */ }

@@ -22,7 +22,7 @@ export function buildSkillGuide(flavor: SkillFlavor): string {
   if (flavor === 'ui-nav') return UI_NAV;
   if (flavor === 'diagnostics') return DIAGNOSTICS;
   if (flavor === 'multi-agent') return MULTI_AGENT;
-  return projectStateSummary() + '\n\n' + PHILOSOPHY + '\n\n' + TOOL_REFERENCE;
+  return projectStateSummary() + '\n\n' + PHILOSOPHY + '\n\n' + JOURNEYS + '\n\n' + CAPABILITIES + '\n\n' + TOOL_REFERENCE;
 }
 
 // ── Dynamic project state ───────────────────────────────────────────
@@ -56,6 +56,123 @@ ${planLines}
 
 ${sessionLines}`;
 }
+
+
+// ── Journeys — what to OFFER the user ───────────────────────────────
+
+/**
+ * The ten things this product takes a person through, each with its
+ * entry point.
+ *
+ * This exists because an agent that only has a tool list will use the
+ * tools it was asked about and never mention the rest. Five whole feature
+ * areas — budgets, ticket intake, compare/playback, plan review, and
+ * everything Phase 30 gates — were absent from these guides, so no agent
+ * could offer them and no user found them.
+ */
+const JOURNEYS = `## What you can offer the user
+
+Eleven journeys. Say them in the user's terms, not in tool names, and offer
+the one that fits what they are actually doing.
+
+### 1. Understand a codebase
+"Show me how this hangs together." Scan the project, then read the graph:
+\`check_architecture\`, \`search_symbols\`, \`get_dependencies\`. For services
+that talk to each other over HTTP or SQL rather than imports, use
+\`list_cross_system_edges\` — that map is the thing people are most
+surprised exists.
+
+### 2. Plan before touching code
+"Let's agree what we're doing first." \`create_plan\`, then \`add_item\` or
+\`bulk_add_items\` to break it down. Anchor Actions to real files and
+symbols so the plan is checkable later — \`suggest_specs\` proposes the
+anchors from the item's text.
+
+### 3. Work a plan
+\`get_next_item\` → \`claim_item\` → \`update_item_progress\` → mark done.
+\`approve_gate\` where a human has to sign off. \`set_item_blocked\` when
+something stops you, because a blocked item the user can see beats a
+silent stall.
+
+### 4. Start from a ticket
+"We already have this in Jira / Linear / GitHub."
+\`create_plan_from_external\` imports an epic and its children as a plan,
+keeping the ticket keys. \`get_external_sync_state\` then tells you which
+statuses have moved so you can write them back with your own tracker
+tools, and \`mark_external_synced\` advances the watermark.
+
+### 5. See what actually changed
+\`capture_checkpoint\` pins a moment. \`list_comparands\` shows every point
+you can compare — checkpoints, commits, the baseline, the working tree —
+and \`compare_snapshots\` diffs any two of them. Useful before a risky
+change and again afterwards.
+
+### 6. Trace a change back to why
+"Why is this file being touched?" Open it in Code and the reader marks
+every line git sees as changed — green for added, amber for modified, the
+whole file green when it is new. Above the source, any plan item that
+declared this file says so and what it means to do to it: **new file**,
+**modify**, **rewrite**, **delete**. Click that row and the item opens.
+
+Going the other way, from an item to the code: \`read_item_full\` gives you
+its declared targets, and \`get_dependencies\` tells you what else leans on
+them before you touch anything.
+
+### 7. Review before the PR
+"Did we do what we said?" \`review_plan\` compares the plan's declared
+targets against what actually changed, per item, and flags changed files
+no item claimed. \`get_pr_draft\` turns that into a PR description with the
+tickets and the review included.
+
+### 8. Keep time and cost in check
+\`set_budget\` puts a ceiling on a plan; \`check_budget\` before starting
+more work tells you whether to continue, and \`get_budget\` shows spend,
+forecast and per-agent split. Advisory by design — nothing halts you, so
+a well-behaved agent asks.
+
+### 9. Coordinate several agents
+Register with \`register_session\` so you appear in the timeline. Claim
+work rather than assuming it. \`post_channel_event\` raises a question,
+decision or blocker the human (or another agent) can answer, and
+\`get_channel_thread\` reads the replies.
+
+### 10. Steer from a phone
+The desktop pairs with a mobile app over a peer mesh.
+\`list_paired_devices\`, \`get_peer_status\`, and \`mobile_present\` to put
+something in front of the user wherever they are.
+
+### 11. Keep the architecture honest
+\`check_conformity\` before adding imports, \`get_drift_report\` for where
+reality has moved away from the plan, \`get_freeze_status\` when a release
+is locked down, and the system docs tools for the written architecture
+that should stay true.
+
+**Offer, do not assume.** Several of these change the user's repository or
+their screen. Say what you are about to do.`;
+
+// ── Capabilities — what you may be refused, and what to say ─────────
+
+const CAPABILITIES = `## When a tool is refused
+
+Tools are authorised individually by capability, and three groups are OFF
+until the user turns them on:
+
+| Capability | Covers | Default |
+|---|---|---|
+| \`terminal\` | creating and driving terminals, and terminals on paired devices | **off** |
+| \`capture\` | screenshots, clipboard contents, microphone audio | **off** |
+| \`settings\` | changing desktop settings, unpairing devices, writing agent permission files | **off** |
+
+Reading plans, editing them, opening projects and reading plan files are
+granted by default, so the ordinary loop needs no setup.
+
+A refusal names the capability and where to grant it. **Pass that on to
+the user rather than retrying** — retrying will fail identically, and the
+user is one checkbox in Settings → MCP Server from unblocking you.
+
+Tools that take a \`project_path\` are also confined to projects the app
+has opened. If you get "is not open", ask the user to open it, or use
+\`open_project\` — which is visible to them, as it should be.`;
 
 // ── Philosophy — what CodeTrellis is and how to think about it ──────
 
@@ -216,7 +333,7 @@ edges.
 | Tool | What it does |
 |------|-------------|
 | \`add_item(plan_uid, kind, ...)\` | Create an Object or Action |
-| \`bulk_add_items(plan_uid, items[])\` | Create many items with \_temp\_uid parent refs |
+| \`bulk_add_items(plan_uid, items[])\` | Create many items with \`_temp_uid\` parent refs |
 | \`get_item(uid)\` | Lightweight single-row fetch |
 | \`read_item_full(uid)\` | Full context bundle: item + parent + children + attachments + comments + versions |
 | \`update_item(uid, ...)\` | Update any field; auto-versioned |
@@ -439,6 +556,102 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`create_plan_from_template(template_id, ...)\` | Seed a plan from a template |
 | \`publish_plan_as_template(plan_uid, ...)\` | Snapshot a plan as a reusable template |
 | \`import_external(text, title?)\` | Import a plan from conversation / markdown / issue text |
+
+### Budgets — time and cost (Phase 23)
+
+| Tool | What it does |
+|------|-------------|
+| \`get_budget(plan_uid)\` | Spend, forecast, per-agent split, overruns, and which price table the cost figures came from |
+| \`set_budget(plan_uid, minutes?, cost_usd?, exempt?)\` | Put a ceiling on a plan, or exempt it |
+| \`check_budget(plan_uid)\` | Should more work start? Advisory — nothing halts you, so ask |
+
+Cost is null, never zero, when no agent reported a model we have prices
+for. Unknown is not free.
+
+### Tickets — external intake (Phase 24)
+
+| Tool | What it does |
+|------|-------------|
+| \`create_plan_from_external(external?, children[])\` | Import an epic and its children as a plan, keeping ticket keys. Idempotent on the epic's key |
+| \`set_plan_external_ref(plan_uid, url, key?, title?)\` | Attach the ticket a plan represents |
+| \`list_plan_external_refs(plan_uid)\` | The tickets this plan came from |
+| \`get_external_sync_state(plan_uid)\` | Which item statuses moved since the last write-back, with suggested transitions |
+| \`mark_external_synced(plan_uid)\` | Advance the watermark — call it AFTER writing statuses back |
+
+Reading the sync state does not advance the watermark, deliberately: an
+agent that read the list and then failed to write would otherwise lose
+those transitions silently.
+
+### Compare and history (Phase 25)
+
+| Tool | What it does |
+|------|-------------|
+| \`list_comparands(project_path)\` | Every point you can compare from: live, baseline, checkpoints, recent commits |
+| \`compare_snapshots(project_path, before, after)\` | Diff any two of them — files added / removed / modified, and edges where both sides know them |
+| \`get_plan_history(plan_uid, project_path)\` | How a plan changed across commits |
+| \`get_plan_at_commit(plan_uid, project_path, commit)\` | A plan as it stood at one commit |
+| \`diff_plan_between_commits(plan_uid, project_path, base, head)\` | What changed in the plan between two commits |
+| \`search_plan_history(project_path, query)\` | Find a plan change by text |
+| \`get_team_activity(project_path)\` | Who changed which plans, from the manifest's git history |
+
+A commit contributes its file list only; reconstructing its edges would
+mean checking the tree out and re-parsing it. Compare against a checkpoint
+when you need edges.
+
+### Review and PR draft (Phase 29)
+
+| Tool | What it does |
+|------|-------------|
+| \`review_plan(plan_uid, project_path, before?, after?)\` | Per item: what landed, what is missing, and which changed files no item claimed |
+| \`get_pr_draft(plan_uid, project_path, before?, after?)\` | A PR title and body with the tickets and the review folded in |
+
+Read-only. Neither touches the repository — you do the git and open the
+PR with your own credentials.
+
+### Conflicts and governance
+
+| Tool | What it does |
+|------|-------------|
+| \`detect_conflicts(project_path)\` | Manifest files with conflict markers after a merge |
+| \`resolve_conflict(project_path, file_path, resolutions[])\` | Resolve field by field and stage the result |
+| \`get_freeze_status(project_path)\` / \`check_freeze(project_path)\` | Is the repo locked down for a release? |
+| \`set_freeze(project_path, active, reason?)\` | Lock or unlock it |
+| \`exempt_plan_from_freeze(plan_uid, project_path)\` | Let one plan through the freeze |
+
+### Peers and mobile
+
+| Tool | What it does |
+|------|-------------|
+| \`get_peer_status()\` | Discovery state, paired device count, live connections |
+| \`list_discovered_peers()\` / \`list_paired_devices()\` / \`list_peer_connections()\` | Who is nearby, paired, and connected |
+| \`unpair_device(fingerprint)\` | Remove a pairing — needs \`settings\` |
+| \`get_remote_state()\` | What a connected phone is showing |
+| \`mobile_navigate(route)\` / \`mobile_present(...)\` | Drive the phone's screen |
+| \`mobile_screenshot()\` | Picture of the phone's screen — needs \`capture\` |
+| \`list_remote_terminals()\` / \`write_remote_terminal(...)\` | Terminals on a paired device — needs \`terminal\` |
+| \`get_remote_audio()\` | Audio from a paired device — needs \`capture\` |
+| \`list_remote_input_requests()\` / \`respond_remote_input(...)\` | Questions the phone is waiting on |
+
+### Audio capture
+
+| Tool | What it does |
+|------|-------------|
+| \`start_audio_capture(max_buffer_seconds?)\` / \`stop_audio_capture()\` | Start and stop capturing the user's microphone |
+| \`push_audio_chunk(...)\` | Feed a chunk into the rolling buffer |
+| \`get_audio_context()\` / \`get_audio_status()\` | Read the buffer, or just its state |
+
+All four need \`capture\`, which is off by default. This is the user's
+microphone — say what you are doing before you start it.
+
+### Contributions (pantry)
+
+| Tool | What it does |
+|------|-------------|
+| \`list_contributions(project_path)\` | What is staged to contribute upstream |
+| \`promote_to_contribution(...)\` | Move local work into the contribution set |
+| \`accept_contributions(project_path, ...)\` | Take contributions into the project |
+| \`prepare_contributor_branch(project_path, ...)\` | Set up a branch to contribute from |
+| \`resolve_pantry_references(project_path)\` | Resolve references held in the local pantry |
 
 ### MCP resources (read on connect)
 

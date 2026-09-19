@@ -9,10 +9,10 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  getNodesBounds,
-  getViewportForBounds,
+  
+  
   type Node,
-  type Edge,
+  
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
@@ -35,6 +35,7 @@ import { ImportEdge } from '../graph/edges/ImportEdge';
 import { SelectionActionBar } from '../graph/SelectionActionBar';
 import { WelcomeScreen } from '../WelcomeScreen';
 import { useTerminalStore } from '../../stores/terminal-store';
+import type { GraphNode, GraphEdge } from '@shared/types';
 
 const nodeTypes = {
   packageNode: PackageNode,
@@ -68,6 +69,7 @@ export function MainCanvas() {
   const selectedNodeId = useUiStore((s) => s.selectedNodeId);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
   const layoutMode = useGraphStore((s) => s.layoutMode);
+  const setGraphData = useGraphStore((s) => s.setGraphData);
   const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
   const trellisMode = useGraphStore((s) => s.trellisMode);
   const setTrellisMode = useGraphStore((s) => s.setTrellisMode);
@@ -169,6 +171,54 @@ export function MainCanvas() {
       })
       .catch(() => setCurrentSnapshot(null));
   }, [setBaselineReference, setCurrentSnapshot]);
+
+  /**
+   * Phase 29 §4.16 — capture a trellis checkpoint for the active plan.
+   *
+   * `/api/trellis/capture` had no caller, so snapshots could only ever
+   * be created by an agent over MCP. The consumer was already here:
+   * Diff mode below asks for `?plan=<uid>` and uses the newest
+   * snapshot, falling back to the generic baseline when there is none.
+   * So a user on Diff mode was always comparing against the baseline,
+   * with no way to mark a point of their own.
+   *
+   * This is deliberately NOT the same thing as Pin. Pin anchors the
+   * baseline to a git commit — reproducible, and about the repository.
+   * A checkpoint is a moment in a plan's life ("before the agent
+   * started"), which has no commit to name it by. They are worth
+   * keeping separate; the crowding in this panel is a reason to be
+   * careful about a third control, not a reason to conflate two.
+   */
+  const [capturingTrellis, setCapturingTrellis] = useState(false);
+
+  const captureTrellisCheckpoint = useCallback(async () => {
+    if (!root || !activePlanUid) return;
+    setCapturingTrellis(true);
+    try {
+      const res = await fetch('/api/trellis/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: root, planUid: activePlanUid }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      useToastStore.getState().addToast({
+        type: 'success',
+        title: 'Checkpoint captured',
+        message: 'Diff mode now compares against this point instead of the baseline.',
+      });
+      // Nudge Diff mode to re-read; it keys off trellisMode + plan.
+      if (trellisMode === 'diff') setTrellisMode('diff');
+    } catch (err) {
+      useToastStore.getState().addToast({
+        type: 'error',
+        title: 'Could not capture checkpoint',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setCapturingTrellis(false);
+    }
+  }, [root, activePlanUid, trellisMode, setTrellisMode]);
 
   const captureBaseline = useCallback((commitHash?: string | null) => {
     if (!root) return Promise.resolve();
@@ -642,20 +692,50 @@ export function MainCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
 
-  const selectedCommitLabel = useMemo(() => {
-    if (baselineMode === 'auto') return 'Track HEAD';
-    if (!baselineCommitHash) return 'Pin current HEAD';
-    const matchingCommit = recentCommits.find((commit) => commit.commitHash === baselineCommitHash);
-    if (matchingCommit) {
-      return `${matchingCommit.shortCommitHash} · ${matchingCommit.subject}`;
-    }
-    return baselineShortCommitHash ? `${baselineShortCommitHash} · pinned` : 'Pinned baseline';
-  }, [baselineMode, baselineCommitHash, baselineShortCommitHash, recentCommits]);
-
   useEffect(() => {
     setNodes((prev) => preserveNodePositions(prev, displayGraphData?.nodes ?? []));
     setEdges(displayGraphData?.edges ?? []);
   }, [displayGraphData, setNodes, setEdges]);
+
+  // Publish what is on screen, so `graph_snapshot` can answer with it.
+  //
+  // `graph-store` has carried `nodes`, `edges` and a `setGraphData` setter
+  // since it was written, and nothing in the codebase ever called the
+  // setter — the canvas keeps its graph in a memo and ReactFlow's own
+  // state. So the store was permanently empty, and `graph_snapshot`, which
+  // reads it and advertises "all nodes and edges … programmatically
+  // analyse the architecture", answered `{ nodes: [], edges: [] }` on every
+  // project no matter how large. Found by asking for it while watching the
+  // graph render.
+  //
+  // Mapped to the shared node shape the snapshot handler expects: the
+  // canvas works in ReactFlow nodes, where the label and kind live under
+  // `data`.
+  useEffect(() => {
+    const rf = displayGraphData?.nodes ?? [];
+    const rfEdges = displayGraphData?.edges ?? [];
+    setGraphData(
+      rf.map((n) => {
+        const d = (n.data ?? {}) as Record<string, unknown>;
+        return {
+          id: n.id,
+          type: (d.nodeType as GraphNode['type']) ?? (n.type as GraphNode['type']),
+          label: typeof d.label === 'string' ? d.label : n.id,
+          filePath: typeof d.filePath === 'string' ? d.filePath : undefined,
+          parentId: (n.parentId as string | undefined) ?? null,
+          metadata: d,
+          changeStatus: d.changeStatus as GraphNode['changeStatus'],
+        };
+      }),
+      rfEdges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        type: (((e.data as Record<string, unknown> | undefined)?.kind) as GraphEdge['type']) ?? 'import',
+        label: typeof e.label === 'string' ? e.label : undefined,
+      })),
+    );
+  }, [displayGraphData, setGraphData]);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
@@ -806,6 +886,21 @@ export function MainCanvas() {
                 </button>
               ))}
             </div>
+
+            {/* Phase 29 §4.16 — give Diff mode something of your own to
+                compare against. Only shown with a plan open, because a
+                checkpoint is scoped to one. */}
+            {activePlanUid && (
+              <button
+                onClick={captureTrellisCheckpoint}
+                disabled={capturingTrellis}
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] text-zinc-400 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all hover:text-zinc-200 hover:border-white/15 disabled:opacity-50"
+                title="Capture the architecture as it stands now, as a checkpoint for this plan. Diff mode compares against the newest one."
+              >
+                <Camera size={11} />
+                {capturingTrellis ? 'Capturing…' : 'Checkpoint'}
+              </button>
+            )}
 
             <div className="flex min-w-0 shrink items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
               <button

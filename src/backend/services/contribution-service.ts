@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { removeWithin, resolveWithin, ConfinementError } from './confined-fs';
+import { removeWithin, ConfinementError } from './confined-fs';
 
 /**
  * Branch names become directory names under `.codetrellis/contributions/`.
@@ -366,6 +366,32 @@ export function prepareContributorBranch(
     throw new Error(`plan.yaml not found for ${planSlug}`);
   }
 
+  // REFUSE ON A DIRTY MANIFEST (Phase 29 §4.16).
+  //
+  // This function checks out a new branch, REWRITES `.codetrellis/`,
+  // then runs `git add .codetrellis/` and commits. Any uncommitted work
+  // under that directory is therefore swept into the contributor
+  // branch's commit — and `checkout -` at the end returns the user to a
+  // branch that no longer has it. Their edits are not destroyed, but
+  // they have silently moved somewhere they never asked for.
+  //
+  // That was tolerable while this was MCP-only and an agent called it
+  // deliberately. §4.16 gives it a button, so the precondition has to
+  // be real rather than assumed. Committed work is fine; only
+  // uncommitted manifest changes are refused, and the message says what
+  // to do about it.
+  const dirty = runGitArgs(
+    ['status', '--porcelain', '--', '.codetrellis/'], projectRoot,
+  ).trim();
+  if (dirty) {
+    const files = dirty.split('\n').slice(0, 5).map((l) => l.slice(3)).join(', ');
+    throw new Error(
+      'Uncommitted changes under .codetrellis/ would be committed onto the contributor '
+      + `branch and disappear from this one. Commit or stash them first: ${files}`
+      + (dirty.split('\n').length > 5 ? ' …' : ''),
+    );
+  }
+
   const planYaml = fs.readFileSync(planYamlPath, 'utf-8');
   const planMeta = parseYaml(planYaml) as Record<string, unknown>;
 
@@ -422,10 +448,27 @@ export function prepareContributorBranch(
       fs.rmSync(contribDir, { recursive: true, force: true });
     }
 
-    // Stage and commit
+    // Stage and commit — WITH A PATHSPEC.
+    //
+    // Without `-- .codetrellis/` this commits the whole index, and the index
+    // survives `checkout -b`. So a user who had staged an unrelated source
+    // change — `git add src/app.ts` — got it committed onto the contributor
+    // branch, and then the `checkout -` below returned the worktree to the
+    // original branch's HEAD, silently reverting their edit. Their work
+    // existed only as a commit on a branch nobody told them about, and the
+    // branch they were told to hand to an outside collaborator carried
+    // unrelated in-progress source.
+    //
+    // The precondition above does not catch this: it is scoped to
+    // `.codetrellis/`, so a clean manifest with a dirty index passes it.
+    // Widening that check would have been the smaller fix but the weaker
+    // one — it refuses work that is none of its business, and still races
+    // anything staged while this runs. The pathspec makes the commit
+    // structurally incapable of carrying anything but the manifest, and
+    // leaves the user's staged work staged.
     runGitArgs(['add', '.codetrellis/'], projectRoot);
     const message = `[cdev] prepare contributor branch: ${planSlug}\n\nFiltered to ${cleanedItems.length} shared items for external collaboration.`;
-    runGitArgs(['commit', '-m', message, '--allow-empty'], projectRoot);
+    runGitArgs(['commit', '-m', message, '--allow-empty', '--', '.codetrellis/'], projectRoot);
 
     // Get the commit hash
     const sha = runGitArgs(['rev-parse', 'HEAD'], projectRoot).trim();
