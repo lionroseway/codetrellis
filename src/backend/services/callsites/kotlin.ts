@@ -1,7 +1,7 @@
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
 import {
-  VERB_SET, lineOf, joinPath, isLikelyApiPath, stripLineComment,
+  VERB_SET, lineOf, joinPath, isLikelyApiPath, isNonClientReceiver, stripLineComment,
   countBraces, unwindBlocks, route, call, type BlockPrefix,
 } from './shared';
 
@@ -62,7 +62,15 @@ const KTOR_ROUTE_BLOCK_RE = /(?:^|[^.\w])route\s*\(\s*"([^"]*)"\s*\)\s*\{/;
 /** Ktor bare verb — `get("/orders") {`. No receiver: see the header. */
 const KTOR_VERB_RE = /(?:^|[^.\w])(get|post|put|patch|delete|head|options)\s*\(\s*"([^"]*)"\s*\)\s*\{/g;
 
-/** `client.get("http://…")`, `httpClient.post("/api/x")`. */
+/**
+ * `client.get("http://…")`, `httpClient.post("/api/x")`.
+ *
+ * The receiver is filtered — see `isNonClientReceiver`. Spring's Kotlin
+ * MockMvc DSL is spelled identically (`mockMvc.get("/api/orders") { … }`)
+ * and is an assertion about a route this service *serves*, so reading it
+ * as an outbound call gave the service an HTTP edge to itself, sourced
+ * from its own test suite.
+ */
 const CLIENT_VERB_RE = /(\w+)\s*\.\s*(get|post|put|patch|delete|head|options)\s*(?:<[^>]*>)?\s*\(\s*"([^"]*)"/g;
 
 /** OkHttp: `.url("http://…")`. */
@@ -163,6 +171,7 @@ function extractOutbound(content: string): Callsite[] {
   CLIENT_VERB_RE.lastIndex = 0;
   while ((m = CLIENT_VERB_RE.exec(content))) {
     const [, recv, verb, url] = m;
+    if (isNonClientReceiver(recv)) continue;
     if (!isLikelyApiPath(url)) continue;
     out.push(call(lineOf(content, m.index), verb, url, `${recv}.${verb}`));
   }

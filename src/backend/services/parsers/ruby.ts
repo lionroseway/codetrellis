@@ -63,9 +63,16 @@ function attrNames(call: SyntaxNode): string[] {
  * is the norm, not an edge case — and a flat walk of the file's top
  * level would miss every method in the codebase.
  */
-function symbolsInBody(body: SyntaxNode | null, qualifier: string | null): ParsedSymbol[] {
+function symbolsInBody(
+  body: SyntaxNode | null,
+  qualifier: string | null,
+  singleton = false,
+): ParsedSymbol[] {
   if (!body) return [];
   const out: ParsedSymbol[] = [];
+  // Inside `class << self` every definition is a CLASS method, spelled
+  // `Klass.name`, however it is written in the body.
+  const sep = singleton ? '.' : '#';
 
   for (const child of body.children) {
     switch (child.type) {
@@ -73,11 +80,11 @@ function symbolsInBody(body: SyntaxNode | null, qualifier: string | null): Parse
         const name = nameOf(child);
         if (!name) break;
         out.push({
-          name: qualifier ? `${qualifier}#${name}` : name,
+          name: qualifier ? `${qualifier}${sep}${name}` : name,
           kind: 'function',
           ...lineOf(child),
           children: [],
-          modifiers: ['instance_method'],
+          modifiers: [singleton ? 'class_method' : 'instance_method'],
         });
         break;
       }
@@ -103,7 +110,7 @@ function symbolsInBody(body: SyntaxNode | null, qualifier: string | null): Parse
         if (!fn || !ATTR_CALLS.has(fn)) break;
         for (const attr of attrNames(child)) {
           out.push({
-            name: qualifier ? `${qualifier}#${attr}` : attr,
+            name: qualifier ? `${qualifier}${sep}${attr}` : attr,
             // attr_* genuinely defines methods in Ruby, so that is what
             // they are — there is no separate property concept to model.
             kind: 'method',
@@ -119,6 +126,23 @@ function symbolsInBody(body: SyntaxNode | null, qualifier: string | null): Parse
       case 'module':
         out.push(...classOrModule(child, qualifier));
         break;
+
+      case 'singleton_class': {
+        // `class << self` — the canonical way to declare several class
+        // methods at once, and it arrives as its own node type rather
+        // than as `singleton_method` children. It used to fall through
+        // to `default: break`, so a class whose entire public interface
+        // was written this way contributed NO symbols at all. ActiveRecord
+        // and service-object codebases are full of it.
+        const reopened = child.children.find(
+          (c: SyntaxNode) => c.type === 'self' || c.type === 'constant',
+        );
+        // `class << obj` reopens some OTHER object's singleton; those
+        // methods do not belong to this class and are not named by it.
+        if (reopened?.type !== 'self') break;
+        out.push(...symbolsInBody(bodyOf(child), qualifier, true));
+        break;
+      }
 
       case 'assignment': {
         // `CONST = …` at class level. Only constants — a local
@@ -217,13 +241,33 @@ function extractSymbols(root: SyntaxNode): ParsedSymbol[] {
  */
 const REQUIRE_CALLS = new Set(['require', 'require_relative', 'load', 'autoload']);
 
+/**
+ * Requires are collected from the WHOLE tree, not `program`'s direct
+ * children.
+ *
+ * `require` is a method call, so it is legal anywhere an expression is,
+ * and the places it actually appears are mostly not the top level: inside
+ * a `module`/`class` body, behind an `if RUBY_VERSION` guard, or wrapped
+ * in `begin/rescue LoadError` for an optional dependency. Scanning only
+ * the top level dropped every one of those — the dependency edge was
+ * missing precisely for the conditional dependencies worth seeing.
+ */
+function* callNodes(node: SyntaxNode): Iterable<SyntaxNode> {
+  if (node.type === 'call') yield node;
+  for (const child of node.children) yield* callNodes(child);
+}
+
 function extractImports(root: SyntaxNode): ImportDeclaration[] {
   const imports: ImportDeclaration[] = [];
 
-  for (const child of root.children) {
-    if (child.type !== 'call') continue;
-
-    const fn = child.children.find((c: SyntaxNode) => c.type === 'identifier')?.text;
+  for (const child of callNodes(root)) {
+    // The callee must be the FIRST child: `require 'json'`. A call with
+    // a receiver (`loader.require 'x'`) puts the receiver there instead,
+    // and is not Kernel#require. Matching any identifier child mattered
+    // little while this only saw the top level; walking the whole tree,
+    // it would start claiming unrelated calls.
+    const head = child.children[0];
+    const fn = head?.type === 'identifier' ? head.text : undefined;
     if (!fn || !REQUIRE_CALLS.has(fn)) continue;
 
     const args = child.children.find((c: SyntaxNode) => c.type === 'argument_list');

@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ParsedFile, ParsedSymbol, Callsite, SupportedLanguage } from '../../shared/types';
 import { createHash } from 'node:crypto';
-import { PARSER_PLUGINS, getPluginForFile, listPluginExtensions, findUnparsedLanguages, type ParserPlugin } from './parsers';
-import { listTaggedLanguages } from './project-scanner';
+import { PARSER_PLUGINS, getPluginForFile, listPluginExtensions, findUnparsedLanguages, findUnscannedExtensions, type ParserPlugin } from './parsers';
+import { listTaggedLanguages, listTaggedExtensions } from './project-scanner';
 import { getCallsiteExtractor } from './callsites';
 import { extractSqlSymbols, extractTableRefs, sqlRefsToCallsites, applyMigrationFold } from './sql';
 import { extractEmbeddedSql } from './sql/embedded';
@@ -118,6 +118,14 @@ export async function initParser(): Promise<void> {
         `[AST] These languages are tagged by the scanner but have no parser: ${unparsed.join(', ')}. ` +
           'Files in them will show zero symbols and zero edges, which looks like a working scan of an ' +
           'empty file. Add a parser plugin or stop tagging them.',
+      );
+    }
+    const unscanned = findUnscannedExtensions(listTaggedExtensions());
+    if (unscanned.length > 0) {
+      console.warn(
+        `[AST] These extensions have a parser but the scanner never ingests them: ${unscanned.join(', ')}. ` +
+          'Files with them are absent from the graph entirely, and the file-watcher will queue re-parses ' +
+          'for files no scan ever stored. Add them to the scanner\'s LANG_MAP or drop them from the plugin.',
       );
     }
   } catch { /* diagnostics must never block startup */ }

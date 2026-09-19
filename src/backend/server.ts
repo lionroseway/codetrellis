@@ -1306,7 +1306,7 @@ function detectLanguage(filePath: string): string {
     '.ts': 'typescript', '.tsx': 'tsx', '.js': 'javascript', '.jsx': 'jsx',
     '.json': 'json', '.css': 'css', '.scss': 'scss', '.html': 'markup',
     '.py': 'python', '.rs': 'rust', '.go': 'go', '.java': 'java',
-    '.php': 'php', '.rb': 'ruby', '.sh': 'bash', '.md': 'markdown',
+    '.php': 'php', '.rb': 'ruby', '.rake': 'ruby', '.sh': 'bash', '.md': 'markdown',
     '.yml': 'yaml', '.yaml': 'yaml', '.toml': 'toml', '.sql': 'sql',
     '.cs': 'csharp', '.kt': 'kotlin', '.kts': 'kotlin', '.swift': 'swift',
   };

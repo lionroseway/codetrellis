@@ -93,3 +93,23 @@ export function findUnparsedLanguages(
     .filter((lang) => !parsed.has(lang) && !intentionallyUnparsed.has(lang))
     .sort();
 }
+
+/**
+ * Extensions a parser plugin claims that the scanner will never hand it.
+ *
+ * The language-level check above is necessary and was not sufficient:
+ * `.rake` was in `rubyPlugin.extensions` and not in the scanner's
+ * `LANG_MAP`, which the language check cannot see, because `ruby` was
+ * tagged and parsed via `.rb`. The file never reached the parser, so a
+ * Rakefile's tasks and requires were simply absent from the graph — and
+ * the file-watcher, which builds its list from the plugins, would
+ * cheerfully queue re-parses for a file no scan had ever stored.
+ *
+ * Reports rather than throws, for the same reason as its neighbour.
+ */
+export function findUnscannedExtensions(
+  taggedExtensions: ReadonlyArray<string>,
+): string[] {
+  const tagged = new Set(taggedExtensions.map((e) => e.toLowerCase()));
+  return [...EXTENSION_INDEX.keys()].filter((ext) => !tagged.has(ext)).sort();
+}

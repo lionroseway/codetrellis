@@ -30,7 +30,7 @@ const LANG_MAP: Record<string, string> = {
   '.go': 'go',
   '.java': 'java',
   '.php': 'php',
-  '.rb': 'ruby',
+  '.rb': 'ruby', '.rake': 'ruby',
   '.cs': 'csharp',
   '.kt': 'kotlin', '.kts': 'kotlin',
   '.swift': 'swift',
@@ -54,6 +54,20 @@ const LANG_MAP: Record<string, string> = {
  */
 export function listTaggedLanguages(): string[] {
   return [...new Set(Object.values(LANG_MAP))];
+}
+
+/**
+ * Every extension this scanner will ingest.
+ *
+ * The language-level cross-check above missed a whole class of the same
+ * drift: `.rake` was claimed by the Ruby parser plugin and absent from
+ * `LANG_MAP`, so `ruby` was tagged, `ruby` was parsed, the language check
+ * was satisfied — and a Rakefile was never ingested at all. The
+ * file-watcher meanwhile derived its list from the PLUGINS, so editing a
+ * `.rake` file queued a re-parse of a file the scan had never stored.
+ */
+export function listTaggedExtensions(): string[] {
+  return Object.keys(LANG_MAP);
 }
 
 function isSourceFile(name: string): boolean {

@@ -106,15 +106,6 @@ function buildModuleIndex(systems: ReadonlyArray<DiscoveredSystem>): ModuleEntry
 }
 
 /**
- * Stdlib imports have no dot in their first segment (`fmt`,
- * `net/http`, `encoding/json`). Every module path is domain-prefixed.
- */
-function isStdlib(importPath: string): boolean {
-  const first = importPath.split('/')[0];
-  return !first.includes('.');
-}
-
-/**
  * Go imports a directory. Pick one file to carry the edge: prefer a
  * file named after the package directory (the dominant convention),
  * then any non-test file.
@@ -130,10 +121,24 @@ function pickPackageFile(dir: string, knownFiles: Set<string>): string | null {
   });
 }
 
+/**
+ * There is deliberately no stdlib pre-filter here.
+ *
+ * There was: "no dot in the first segment" (`fmt`, `net/http`), on the
+ * grounds that every module path is domain-prefixed. That is a
+ * convention, not a rule — `go mod init billing` is legal and common in
+ * internal repositories — and the filter ran BEFORE the module index,
+ * so a project whose own module is dotless resolved none of its own
+ * imports. It failed silently, as an absence of edges.
+ *
+ * The index is authoritative instead: a prefix that matches a module
+ * this project declares is by definition not stdlib. Anything the index
+ * does not claim returns null, which is where the real stdlib imports
+ * end up — the same answer, without the assumption.
+ */
 function resolve(ctx: ResolveContext): string | null {
   const { importSource, knownFiles, systems } = ctx;
   if (!importSource) return null;
-  if (isStdlib(importSource)) return null;
 
   const index = buildModuleIndex(systems);
 

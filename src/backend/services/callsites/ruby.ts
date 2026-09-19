@@ -1,6 +1,6 @@
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
-import { lineOf, joinPath, isLikelyApiPath, route, call } from './shared';
+import { lineOf, joinPath, isLikelyApiPath, isNonClientReceiver, route, call } from './shared';
 
 /**
  * Ruby callsite extractor — Phase 28.
@@ -272,18 +272,6 @@ function extractRoutes(content: string, filePath: string): Callsite[] {
 
 // ── Outbound ────────────────────────────────────────────────────────
 
-/**
- * Receivers that are never an HTTP client, however much `.get` looks
- * like one. Ruby's `Hash#[]` alternatives and ActiveRecord scopes use
- * the same spelling, and without this every `params.fetch`-adjacent
- * `.get('id')` in a codebase becomes an outbound call.
- */
-const NON_CLIENT_RECEIVERS = new Set([
-  'params', 'options', 'opts', 'config', 'settings', 'headers', 'env',
-  'session', 'cookies', 'cache', 'store', 'hash', 'data', 'payload',
-  'attributes', 'json', 'body',
-]);
-
 function extractOutbound(content: string): Callsite[] {
   const out: Callsite[] = [];
   let m: RegExpExecArray | null;
@@ -298,7 +286,7 @@ function extractOutbound(content: string): Callsite[] {
   CLIENT_RE.lastIndex = 0;
   while ((m = CLIENT_RE.exec(content))) {
     const [, recv, verb, url] = m;
-    if (NON_CLIENT_RECEIVERS.has(recv.toLowerCase())) continue;
+    if (isNonClientReceiver(recv)) continue;
     if (!isLikelyApiPath(url)) continue;
     out.push(call(lineOf(content, m.index), verb, url, `${recv}.${verb}`));
   }

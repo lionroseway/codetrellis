@@ -144,6 +144,36 @@ export function isLikelyApiPath(s: string): boolean {
 }
 
 /**
+ * Receivers that are never an HTTP client, however much `.get("…")`
+ * looks like one.
+ *
+ * Two languages independently needed this and only one had it. Ruby's
+ * `Hash#[]` alternatives and ActiveRecord scopes share the spelling, so
+ * `cache.get('session-key')` read as an outbound call; on the JVM the
+ * same shape is Spring's MockMvc test DSL — `mockMvc.get("/api/orders")`
+ * is a *test asserting on a route this service owns*, and reading it as
+ * an outbound call draws a service→itself edge sourced from a test file.
+ *
+ * The set lives here rather than in either extractor because the next
+ * language to add a `receiver.verb("literal")` rule will need it too,
+ * and a per-language copy is how the two drifted in the first place.
+ */
+const NON_CLIENT_RECEIVERS = new Set([
+  // Containers and config, in every language.
+  'params', 'options', 'opts', 'config', 'configuration', 'settings', 'props',
+  'properties', 'preferences', 'prefs', 'headers', 'env', 'session', 'cookies',
+  'cache', 'store', 'storage', 'hash', 'map', 'dict', 'data', 'payload',
+  'attributes', 'attrs', 'json', 'body', 'registry', 'context', 'bundle',
+  // JVM test DSLs that spell an assertion like a call.
+  'mockmvc', 'mvc', 'mockserver', 'stubfor',
+]);
+
+/** True when `recv.verb("…")` must not be read as an outbound HTTP call. */
+export function isNonClientReceiver(recv: string): boolean {
+  return NON_CLIENT_RECEIVERS.has(recv.toLowerCase());
+}
+
+/**
  * Strip a trailing line comment, without cutting inside a string —
  * `"http://x"` contains the `//` marker.
  */

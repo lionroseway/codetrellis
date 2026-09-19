@@ -126,6 +126,30 @@ function extractRoutes(content: string): Callsite[] {
   return out;
 }
 
+/**
+ * A route literal is a PATH. `cache.Get("session-key")`,
+ * `cfg.Get("timeout")` and `redis.Get(key)` are spelled exactly like a
+ * gorilla or chi registration, and nothing in the shape distinguishes
+ * them — so every map-like `.Get("…")` in a Go codebase was becoming an
+ * inbound HTTP route, and any outbound call whose path happened to
+ * match one paired with it.
+ *
+ * `isLikelyApiPath` guarded the outbound half of this file and never
+ * the inbound half. The leading slash is the test.
+ *
+ * The exception is a registration on a router GROUP: gin accepts
+ * `v1.GET("users", h)` because the group carries the slash. So a
+ * slashless literal is allowed only when the receiver is a group this
+ * file has already seen declared, which is a much narrower opening than
+ * "any identifier".
+ */
+function isRouteLiteral(literal: string, prefixed: boolean): boolean {
+  if (literal.startsWith('/')) return true;
+  if (!prefixed || literal === '') return false;
+  // A group-relative route is still a path segment, not a cache key.
+  return !/\s/.test(literal);
+}
+
 function* routesOnLine(
   line: string,
   lineNo: number,
@@ -138,6 +162,7 @@ function* routesOnLine(
   while ((m = VERB_METHOD_RE.exec(line))) {
     const [, recv, verb, literal] = m;
     const prefix = groupPrefix.get(recv) ?? blockPrefix;
+    if (!isRouteLiteral(literal, groupPrefix.has(recv) || blockPrefix !== '')) continue;
     yield {
       kind: 'http_route',
       protocol: 'http',
@@ -171,6 +196,8 @@ function* routesOnLine(
     const suffixVerbs = methodsSuffix
       ? methodsSuffix[1].split(',').map((s) => s.replace(/["'\s]/g, '').toUpperCase()).filter((s) => VERB_SET.has(s))
       : [];
+
+    if (!isRouteLiteral(literal, groupPrefix.has(recv) || blockPrefix !== '')) continue;
 
     const methods = suffixVerbs.length > 0 ? suffixVerbs : [method ?? 'ANY'];
     for (const verb of methods) {
