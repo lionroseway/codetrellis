@@ -481,11 +481,17 @@ export const SCHEMA_EXTERNAL_REFS = `
 `;
 
 /**
- * Persistent schema in declaration order — the union of every table
- * the reconciler should keep in sync with the live DB. AST tables are
- * excluded because they're dropped + rebuilt on every scan.
+ * Every table the reconciler keeps in sync with the live DB, in
+ * declaration order.
+ *
+ * `SCHEMA_AST` is in here, and its absence was a bug — see
+ * `EPHEMERAL_TABLES` below for what it cost. The old name
+ * (`PERSISTENT_SCHEMA_SQL`) is kept as an alias because "persistent" was
+ * never the distinction that mattered: the AST tables persist perfectly
+ * well, they are just emptied on each scan.
  */
-export const PERSISTENT_SCHEMA_SQL = [
+export const RECONCILED_SCHEMA_SQL = [
+  SCHEMA_AST,
   SCHEMA_PLANS_CORE,
   SCHEMA_ATTACHMENTS,
   SCHEMA_PLAN_ITEMS,
@@ -493,11 +499,27 @@ export const PERSISTENT_SCHEMA_SQL = [
   SCHEMA_EXTERNAL_REFS,
 ].join('\n');
 
-/** Table names the reconciler should ignore (ephemeral AST data). */
-export const EPHEMERAL_TABLES = [
-  'files',
-  'symbols',
-  'imports',
-  'callsites',
-  'cross_system_edges',
-];
+/** @deprecated Use `RECONCILED_SCHEMA_SQL`. */
+export const PERSISTENT_SCHEMA_SQL = RECONCILED_SCHEMA_SQL;
+
+/**
+ * Table names the reconciler should ignore.
+ *
+ * **Nothing is ignored, and that is the fix.** This list held the five AST
+ * tables, excluded on the grounds that they are "dropped + rebuilt on every
+ * project scan, so reconciling them is wasted work". They are not dropped.
+ * `storeParsedFile` and its neighbours clear them with `DELETE FROM`, and the
+ * DDL is `CREATE TABLE IF NOT EXISTS` — which is a no-op against a table that
+ * already exists. So a column added to an AST table reached new installs only.
+ *
+ * Phase 27 added `imports.is_relative`. On any database created before it,
+ * every scan then failed with `table imports has no column named is_relative`
+ * and fell back to "serving file tree only": no graph, no symbols, no edges,
+ * with the failure logged once at info level and the UI showing an empty
+ * project. Upgrading users would have lost the product's entire output.
+ *
+ * The reconciler is precisely the safety net for this, and it had been told
+ * to look away from the tables most likely to need it. The cost of not
+ * looking away is one `PRAGMA table_info` per table, once, at boot.
+ */
+export const EPHEMERAL_TABLES: string[] = [];

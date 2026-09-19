@@ -12,7 +12,7 @@ import {
   SCHEMA_PLAN_ITEMS,
   SCHEMA_SYSTEM_DOCS,
   SCHEMA_EXTERNAL_REFS,
-  PERSISTENT_SCHEMA_SQL,
+  RECONCILED_SCHEMA_SQL,
   EPHEMERAL_TABLES,
 } from './db-schema';
 
@@ -291,7 +291,7 @@ export async function initDatabase(): Promise<void> {
   // renames). The lazy `ALTER TABLE` block above stays the right
   // place for non-additive changes (NOT NULL with backfill, renames,
   // indexes, data migrations); the reconciler is the safety net.
-  const reconcile = reconcileSchemaFromSql(db, PERSISTENT_SCHEMA_SQL, {
+  const reconcile = reconcileSchemaFromSql(db, RECONCILED_SCHEMA_SQL, {
     skipTables: EPHEMERAL_TABLES,
   });
   if (reconcile.columnsAdded.length > 0) {
