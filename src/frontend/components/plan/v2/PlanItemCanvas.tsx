@@ -607,17 +607,24 @@ function PlanHomePage() {
               Friendly coach, dismissible, never blocks anything. */}
           <PlanLevelNudge plan={plan} topLevelCount={topLevel.length} />
 
+          {/* Review — what actually landed between two points, and what
+              changed that no item claimed.
+
+              ABOVE the plan diff, and it used to be below it. The two
+              answer different questions: the diff asks whether the code
+              matches the plan's declared intent, this asks what moved
+              between two points and who claimed it. Both are worth
+              having, but only one of them is step three of plan →
+              execute → check, and it was the last collapsed row on a
+              long page, under the body, the codebase summary and the
+              diff. People had to be told it existed.
+
+              Order is the cheapest signal of what a page is for. */}
+          <PlanReviewPanel planUid={plan.uid} />
+
           {/* Plan diff — what's planned vs what's landed. Shown
               when there's something to diff (any Action with intent). */}
           <PlanDiffPanel planUid={plan.uid} />
-
-          {/* Phase 29 — Phase 25's whole review surface (comparands,
-              compare, review, pr-draft) was REST + MCP only. Sits below
-              the diff panel because it answers a different question:
-              that one asks whether the code matches the plan's declared
-              intent, this one asks what changed between two points and
-              which of it any item claimed. */}
-          <PlanReviewPanel planUid={plan.uid} />
 
           {/* Phase 17.M — Completion retrospective. Auto-shown when
               every action is done/skipped or plan status is 'completed'. */}

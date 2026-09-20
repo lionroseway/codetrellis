@@ -11,6 +11,14 @@ export interface SelectedNodeMeta {
   symbolStartLine?: number;
   symbolEndLine?: number;
   parentFilePath?: string;
+  /**
+   * A line to scroll to and mark when the code reader opens this file.
+   *
+   * Carried on the selection rather than passed as a prop because the
+   * reader resolves its own file from the selection — see
+   * `lib/open-file-at`, which is the only thing that sets it.
+   */
+  line?: number;
 }
 
 /**
