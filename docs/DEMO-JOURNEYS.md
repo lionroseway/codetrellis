@@ -238,6 +238,15 @@ performance.
   the canvas is drawing one" and had never looked at the canvas. The
   canvas was blank; the tool it accused was correct. A wrong flag costs
   more attention than a missing one and sends you to the wrong file.
+- **Never hard-code a number in a flag.** "review says 2 landed; only one
+  file was edited" was true when written and false a week later, because
+  a new scene edited a second file. The review was right and the flag
+  accused it. Derive the expectation from what the run actually did —
+  `edited` knows — so the assertion cannot go stale behind you.
+- **A screenshot must name its subject.** `shot()` takes the file it is
+  supposed to be a picture of and waits for the window to show it. One
+  captured `app.rb` under a caption naming `money.go`, and nothing
+  disagreed.
 - **Check the window is usable before claiming anything.** `ui_ready`
   reports whether the shell is mounted and whether a dialog covers it.
   A full run once passed twenty-four scenes against an app that had

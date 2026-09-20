@@ -408,19 +408,49 @@ const SCENES: Scene[] = [
   {
     id: 'review',
     title: 'Did we do what we said?',
-    watch: 'one item landed, two still missing — that asymmetry is the point',
+    watch: 'the items whose files were touched read landed; the rest read untouched',
     async run(c) {
       if (!c.state.plan) return;
-      await c.say('Reviewing the plan', 'One of three files was changed. The review should say so.');
+
+      // Derive the expectation from what this run actually touched.
+      //
+      // This used to assert "only one file was edited" as a literal, and
+      // then I added a scene that edits a second one. The review started
+      // reporting two landed — correctly — and the flag called it
+      // over-counting. The review was right and the flag had gone stale
+      // the moment a later scene changed the premise.
+      //
+      // Third time a flag has lied in this file. A flag that hard-codes a
+      // number is a fact about the script at the moment it was written,
+      // not about the product, and it decays silently.
+      const changedHere = [...edited.keys()].map((abs) => path.relative(PROJECT, abs));
+      await c.say(
+        'Reviewing the plan',
+        `${changedHere.length} of three files changed so far. The review should say which.`,
+      );
+
       const rev = await c.json('review_plan', { plan_uid: c.state.plan, project_path: PROJECT });
-      const items: Array<{ title: string; verdict: string }> = rev?.items ?? rev?.review?.items ?? [];
+      const items: Array<{ title: string; verdict: string; landed?: string[] }> =
+        rev?.items ?? rev?.review?.items ?? [];
       for (const i of items) console.log(`    ${String(i.verdict).padEnd(10)} ${i.title}`);
-      const landed = items.filter((i) => i.verdict === 'landed').length;
-      console.log(`    → ${landed} landed of ${items.length}`);
-      if (items.length > 0 && landed === 0) {
-        c.flag('review says nothing landed, but a file was edited — check the default comparand');
+
+      const landed = items.filter((i) => i.verdict === 'landed');
+      console.log(`    → ${landed.length} landed of ${items.length}`);
+      console.log(`    edited this run: ${changedHere.join(', ') || 'nothing'}`);
+
+      if (items.length > 0 && changedHere.length > 0 && landed.length === 0) {
+        c.flag('review says nothing landed, but files were edited — check the default comparand');
       }
-      if (landed > 1) c.flag(`review says ${landed} landed; only one file was edited`);
+
+      // The invariant that cannot go stale: an item reads landed only if
+      // a file this run actually touched is among its landed targets.
+      for (const item of landed) {
+        const claimed = item.landed ?? [];
+        const real = claimed.some((t) => changedHere.some((f) => f.endsWith(t) || t.endsWith(f)));
+        if (!real) {
+          c.flag(`"${item.title}" reads landed, but nothing this run edited is among its targets`);
+        }
+      }
       await c.beat();
     },
   },
