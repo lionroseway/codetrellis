@@ -43,6 +43,40 @@ describe('the truth table', () => {
   });
 });
 
+describe('a plan that targets a file, not lines', () => {
+  // Most plans are like this. `fileSpecs` is a list of paths, so an item
+  // saying "modify app.rb" produces a marker with no line span, and
+  // `indexMarkers` — which expands spans — indexes nothing.
+  //
+  // Without the file-level fallback every line of correctly executed work
+  // reads as DRIFT: changed, and as far as the line knows, nobody asked.
+  // A screenshot of work done exactly to order, marked as work nobody
+  // wanted, is what caught it.
+  test('a changed line in a claimed file is aligned, not drift', () => {
+    assert.equal(lineVerdict('modified', false, true), 'aligned');
+    assert.equal(lineVerdict('added', false, true), 'aligned');
+  });
+
+  test('a line-level claim still wins on its own', () => {
+    assert.equal(lineVerdict('modified', true, false), 'aligned');
+  });
+
+  test('an unclaimed file still drifts', () => {
+    assert.equal(lineVerdict('modified', false, false), 'drifted');
+  });
+
+  test('a file-level claim does not make every untouched line outstanding', () => {
+    // Otherwise mentioning a file in a plan would mark the whole thing,
+    // which is noise rather than information.
+    assert.equal(lineVerdict('unchanged', false, true), null);
+    assert.equal(lineVerdict(undefined, false, true), null);
+  });
+
+  test('a line-level claim on an untouched line is still outstanding', () => {
+    assert.equal(lineVerdict('unchanged', true, true), 'outstanding');
+  });
+});
+
 describe('the verdict is readable without colour', () => {
   test('every verdict has a distinct glyph', () => {
     const glyphs = Object.values(VERDICT_STYLE).map((v) => v.glyph);
@@ -84,6 +118,13 @@ describe('git state is kept, just demoted', () => {
 });
 
 describe('the tooltip answers the question that had nowhere to be asked', () => {
+  test('it says whether the claim is on the file or the lines', () => {
+    const onFile = verdictTooltip('aligned', 'modified', 'Notifier should format', 'modify', true);
+    assert.match(onFile, /this file/);
+    const onLines = verdictTooltip('aligned', 'modified', 'Align rounding', 'modify', false);
+    assert.match(onLines, /these lines/);
+  });
+
   test('it names the item when there is one', () => {
     const t = verdictTooltip('aligned', 'modified', 'Align rounding in the Go money package', 'modify');
     assert.match(t, /Planned, and changed/);

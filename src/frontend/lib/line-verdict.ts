@@ -34,11 +34,32 @@ export type LineVerdict = 'aligned' | 'drifted' | 'outstanding';
 export function lineVerdict(
   annotation: LineAnnotation | undefined,
   planned: boolean,
+  /**
+   * Does a plan item claim this FILE, without naming lines?
+   *
+   * Most plans target files. `fileSpecs` is a list of paths, and an item
+   * that says "modify services/notifier/app.rb" produces a file-level
+   * marker with no line span — so `indexMarkers`, which expands spans,
+   * indexes nothing and every line reads `planned: false`.
+   *
+   * Without this, a change made exactly as the plan asked renders as
+   * DRIFT, on every ordinary plan, which is precisely backwards. Caught
+   * by looking at a screenshot of work that had just been done to order
+   * and seeing it marked as work nobody asked for.
+   *
+   * A file-level claim is weaker evidence than a line-level one — it says
+   * the right file, not the right place — but it is emphatically not
+   * "nobody asked for this", and that is the distinction the verdict
+   * exists to draw.
+   */
+  fileClaimed = false,
 ): LineVerdict | null {
   const changed = annotation === 'added' || annotation === 'modified';
-  if (changed && planned) return 'aligned';
+  if (changed && (planned || fileClaimed)) return 'aligned';
   if (changed) return 'drifted';
   if (planned) return 'outstanding';
+  // A file-level claim does not make every UNCHANGED line outstanding —
+  // that would mark a whole file the plan merely mentions.
   return null;
 }
 
@@ -125,6 +146,8 @@ export function verdictTooltip(
   annotation: LineAnnotation | undefined,
   itemTitle?: string | null,
   intent?: string | null,
+  /** True when the claim is on the file rather than these lines. */
+  fileLevel = false,
 ): string {
   if (!verdict) return 'Unchanged, and no plan item covers this line';
 
@@ -134,7 +157,8 @@ export function verdictTooltip(
   else if (annotation === 'modified') parts.push('modified since HEAD');
 
   if (itemTitle) {
-    parts.push(intent ? `${intent} · ${itemTitle}` : itemTitle);
+    const scope = fileLevel ? 'this file' : 'these lines';
+    parts.push(intent ? `${intent} ${scope} · ${itemTitle}` : `${itemTitle} wants ${scope}`);
   } else if (verdict === 'drifted') {
     parts.push('no item claims this file');
   }

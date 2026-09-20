@@ -79,7 +79,15 @@ interface Ctx {
   /** Narrate in the app itself, and pause long enough to read it. */
   say(title: string, text: string, tone?: 'neutral' | 'success' | 'warning' | 'question'): Promise<void>;
   beat(multiplier?: number): Promise<void>;
-  shot(label: string): Promise<void>;
+  /**
+   * Capture the window.
+   *
+   * `expectFile` names the file the shot is supposed to be OF. A
+   * screenshot that cannot say what it is a picture of is not evidence:
+   * this scene once captured `app.rb` under a caption claiming it showed
+   * `money.go`, and nothing anywhere disagreed.
+   */
+  shot(label: string, expectFile?: string): Promise<void>;
   /** Edit a file; it is restored when the demo ends, however it ends. */
   edit(relative: string, mutate: (src: string) => string): void;
   /** A second (third…) connected agent, for contention journeys. */
@@ -256,7 +264,7 @@ const SCENES: Scene[] = [
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
       await c.call('navigate_to', { target: 'code', file_path: abs, line: 25 });
       await c.beat(2);
-      await c.shot('04-trace');
+      await c.shot('04-trace', 'services/shared-go/money/money.go');
     },
   },
 
@@ -278,7 +286,7 @@ const SCENES: Scene[] = [
       await c.call('navigate_to', { target: 'code', file_path: unplanned, line: 21 });
       await c.beat(2);
       console.log('    unplanned edit in app.rb — expect ◆ drifted');
-      await c.shot('14-verdict-drift');
+      await c.shot('14-verdict-drift', 'services/notifier/app.rb');
 
       // The Go file was edited in `work` AND is targeted by an item.
       const planned = path.join(PROJECT, 'services/shared-go/money/money.go');
@@ -300,7 +308,7 @@ const SCENES: Scene[] = [
         console.log('    money.go differs from its pre-edit state — the gutter should mark it');
       }
       console.log('    planned + changed in money.go — expect ✓ aligned');
-      await c.shot('15-verdict-aligned');
+      await c.shot('15-verdict-aligned', 'services/shared-go/money/money.go');
     },
   },
 
@@ -319,7 +327,7 @@ const SCENES: Scene[] = [
       await c.beat(2);
       // The file, with the marker naming the item — this is the half a
       // screenshot can actually show.
-      await c.shot('16a-roundtrip-from-code');
+      await c.shot('16a-roundtrip-from-code', 'services/shared-go/money/money.go');
 
       // `select_item` is NOT the journey. It jumps to the item without
       // going through the code reader's banner, so no breadcrumb is left
@@ -864,8 +872,26 @@ async function main() {
       await client.callTool('present', { title, text, tone }).catch(() => {});
       await ctx.beat();
     },
-    async shot(label) {
+    async shot(label, expectFile) {
       if (!SHOTS) return;
+
+      // Wait for the window to actually be showing the subject, rather
+      // than photographing whatever happens to be there when the beat
+      // elapses. Navigation is async and a fixed pause is a guess.
+      if (expectFile) {
+        let onScreen: string | null = null;
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          const state = await client.callTool('ui_ready', {});
+          try { onScreen = JSON.parse(state.text).openFile ?? null; } catch { onScreen = null; }
+          if (onScreen && onScreen.endsWith(expectFile)) break;
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        if (!onScreen || !onScreen.endsWith(expectFile)) {
+          ctx.flag(`shot "${label}" expected ${expectFile} on screen, found ${onScreen ?? 'nothing'} — not captured`);
+          return;
+        }
+      }
+
       const r = await client.callTool('screenshot', {});
       const img = r.content.find((x) => x.type === 'image') as { data?: string } | undefined;
       if (!img?.data) { ctx.flag(`screenshot "${label}" came back empty — is the capture capability on?`); return; }

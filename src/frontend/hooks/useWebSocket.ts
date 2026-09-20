@@ -651,6 +651,7 @@ export function useWebSocket() {
                 let workspaceMode = 'unknown';
                 let scanStatus = 'unknown';
                 let graphNodes = 0;
+                let openFile: string | null = null;
                 try {
                   const { useProjectStore } = await import('../stores/project-store');
                   const { useUiStore } = await import('../stores/ui-store');
@@ -664,6 +665,12 @@ export function useWebSocket() {
                   // means it ran and came back with nothing.
                   scanStatus = useProjectStore.getState().scanStatus ?? 'unknown';
                   graphNodes = useGraphStore.getState().nodes.length;
+                  // Which file the reader is on. A screenshot that cannot
+                  // say what it is a picture of is not evidence — the
+                  // demo captured `app.rb` under the caption "aligned,
+                  // money.go" and nothing could tell.
+                  const sel = useUiStore.getState();
+                  openFile = sel.selectedNodeKind === 'file' ? sel.selectedNodeId : null;
                 } catch { /* stores unavailable — shellMounted already says so */ }
 
                 await fetch('/api/screenshot-response', {
@@ -679,6 +686,7 @@ export function useWebSocket() {
                       workspaceMode,
                       scanStatus,
                       graphNodes,
+                      openFile,
                     }),
                   }),
                 }).catch(() => {});

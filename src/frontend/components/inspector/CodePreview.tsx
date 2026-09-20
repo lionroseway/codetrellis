@@ -199,6 +199,7 @@ function CodePreviewInner({
                       line={line}
                       getTokenProps={getTokenProps}
                       planMarkers={overlayIndex.get(lineNum)}
+                    fileClaim={overlay?.fileLevel?.[0]}
                       onOpenItem={onOpenItem}
                     />
                   </Fragment>
@@ -442,6 +443,7 @@ function LineRow({
   line,
   getTokenProps,
   planMarkers,
+  fileClaim,
   onOpenItem,
 }: {
   lineNum: number;
@@ -454,16 +456,19 @@ function LineRow({
   line: any[];
   getTokenProps: any;
   planMarkers?: OverlayMarker[];
+  /** A plan item claiming the whole file, when no line span applies. */
+  fileClaim?: OverlayMarker;
   onOpenItem?: (itemUid: string, planUid: string) => void;
 }) {
   const lineProps = getLineProps({ line });
   const marker = planMarkers && planMarkers.length > 0 ? planMarkers[0] : null;
+  const fileClaimed = Boolean(fileClaim);
   const showLabel = marker ? isSpanStart(marker, lineNum) : false;
 
   // The join. Git says what changed, the plan says what was meant to —
   // neither is the answer on its own, and the reader used to be left to
   // compare two faint colours per line. See `lib/line-verdict`.
-  const verdict = lineVerdict(annotation, Boolean(marker));
+  const verdict = lineVerdict(annotation, Boolean(marker), fileClaimed);
   const style = verdict ? VERDICT_STYLE[verdict] : null;
 
   // Selection COMPOSES over the verdict rather than replacing it. The old
@@ -480,7 +485,13 @@ function LineRow({
     <div
       ref={rowRef}
       onClick={onClick}
-      title={verdictTooltip(verdict, annotation, marker?.itemTitle, marker?.intent)}
+      title={verdictTooltip(
+        verdict,
+        annotation,
+        marker?.itemTitle ?? fileClaim?.itemTitle,
+        marker?.intent ?? fileClaim?.intent,
+        !marker && Boolean(fileClaim),
+      )}
       className={`flex cursor-pointer ${rowBg} ${selectionRing} hover:bg-white/[0.04] transition-colors`}
     >
       {/* Verdict stripe — carries the signal even under a selection ring,
