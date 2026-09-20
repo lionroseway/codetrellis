@@ -51,7 +51,7 @@ in the journey that owns it, not in a backlog here.
 
 One cross-cutting change through Go, C# and Ruby, then the journeys that
 are about the repository rather than the code. This is `npm run demo` —
-21 scenes.
+24 scenes.
 
 | Scene | Watch for |
 |---|---|
@@ -61,6 +61,9 @@ are about the repository rather than the code. This is `npm run demo` —
 | `work` | claim, progress, a real file edit, Timeline and activity move |
 | `terminal` | agent-driven shell, output comes back |
 | `trace` | gutter marks the changed lines, overlay names the item and its intent |
+| `verdict` | ✓ aligned, ◆ drifted, ◇ outstanding — one answer per line, not two faint colours |
+| `roundtrip` | the plan header grows a back button naming the file; it returns you to the line |
+| `colleague` | a review against a branch the picker never offered |
 | `channel` | `need-decision` posted, badge lights, thread resolves |
 | `review` | **1 landed of 3** — the asymmetry is the whole point |
 | `pr` | ticket key in the title, review in the body |

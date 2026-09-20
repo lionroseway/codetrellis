@@ -258,6 +258,89 @@ const SCENES: Scene[] = [
   },
 
   {
+    id: 'verdict',
+    title: 'Planned, drifted, outstanding — one answer per line',
+    watch: 'three different gutter marks in one file: ✓ aligned, ◆ drifted, ◇ still outstanding',
+    async run(c) {
+      if (!c.state.plan) return;
+      await c.say(
+        'What the plan wanted, and what actually happened',
+        'Green where they agree. Pink where something changed that no item asked for. Hollow where the plan is still waiting.',
+      );
+
+      // An edit nobody planned, in a file no item targets — drift, by
+      // construction rather than by luck.
+      c.edit('services/notifier/app.rb', (src) => `${src}\n# demo: unplanned tweak\n`);
+      const unplanned = path.join(PROJECT, 'services/notifier/app.rb');
+      await c.call('graph_focus', { path: unplanned, highlight: true });
+      await c.beat(2);
+      console.log('    unplanned edit in app.rb — expect ◆ drifted');
+      await c.shot('14-verdict-drift');
+
+      // The Go file was edited in `work` AND is targeted by an item.
+      const planned = path.join(PROJECT, 'services/shared-go/money/money.go');
+      await c.say('The same file, from the other side', 'This one was planned and it happened, so it reads as aligned.');
+      await c.call('graph_focus', { path: planned, highlight: true });
+      await c.beat(2);
+      console.log('    planned + changed in money.go — expect ✓ aligned');
+      await c.shot('15-verdict-aligned');
+    },
+  },
+
+  {
+    id: 'roundtrip',
+    title: 'Follow the trace, and come back',
+    watch: 'the plan header grows a back button naming the file — click it and you land on the same line',
+    async run(c) {
+      if (!c.state.go) return;
+      await c.say(
+        'Code to the item and back again',
+        'Following "this item wants this file" used to cost you your place. The header now carries the way back.',
+      );
+      const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
+      await c.call('graph_focus', { path: abs, highlight: true });
+      await c.beat();
+      await c.call('select_item', { uid: c.state.go });
+      await c.beat(2);
+      console.log('    now on the item — the back control should name money.go');
+      await c.shot('16-roundtrip');
+    },
+  },
+
+  {
+    id: 'colleague',
+    title: 'Review work that is not yours',
+    watch: 'a review against a branch, not the working tree',
+    async run(c) {
+      if (!c.state.plan) return;
+      await c.say(
+        'Someone else’s branch',
+        'The comparison does not care whose work it is. Any ref the repo can resolve is a comparand.',
+      );
+      const comparands = await c.json('list_comparands', { project_path: PROJECT });
+      const list: Array<{ spec?: string; kind?: string }> =
+        Array.isArray(comparands) ? comparands : (comparands?.comparands ?? []);
+      const offered = new Set(list.map((x) => x.spec));
+
+      // A named branch rather than one of the offered commits — the point
+      // is that a ref nobody listed still works.
+      const ref = 'commit:main';
+      console.log('    picker offered', list.length, 'comparands ·', offered.has(ref) ? 'including' : 'NOT including', ref);
+      const r = await c.json('review_plan', {
+        plan_uid: c.state.plan, project_path: PROJECT, before: ref, after: 'live',
+      });
+      if (!r) { c.flag(`reviewing against ${ref} returned nothing`); return; }
+      const sm = r.summary ?? {};
+      console.log(`    vs ${ref}: ${sm.itemsLanded ?? '?'} landed · ${sm.filesChanged ?? '?'} files · ${sm.unclaimedCount ?? '?'} unclaimed`);
+      if (!offered.has(ref)) {
+        console.log('    ↑ accepted a ref the picker never listed — capability is ahead of its disclosure');
+      }
+      await c.beat();
+      await c.shot('17-colleague');
+    },
+  },
+
+  {
     id: 'channel',
     title: 'The agent hits a decision it cannot make',
     watch: 'the Channel badge, then the thread',
