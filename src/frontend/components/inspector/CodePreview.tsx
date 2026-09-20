@@ -59,6 +59,7 @@ interface Props {
 }
 
 export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem }: Props) {
+
   if (error) {
     return (
       <div className="rounded-md border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-[10.5px] text-red-200">
@@ -98,6 +99,28 @@ function CodePreviewInner({
   overlay?: FileOverlay | null;
   onOpenItem?: (itemUid: string, planUid: string) => void;
 }) {
+  /**
+   * Scroll the highlighted line into view.
+   *
+   * `highlightLine` tinted a row and did nothing else, so "open this file
+   * at line 25" opened the file at line 1 and marked something you could
+   * not see. Every caller that means "go here" — the plan diff, a review
+   * row, `navigate_to({target:'code', line})` — was landing at the top of
+   * the file and leaving the reader to find it.
+   *
+   * `center` rather than `start` because the line usually only makes
+   * sense with what is around it.
+   */
+  const highlightRowRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (highlightLine == null) return;
+    const el = highlightRowRef.current;
+    if (!el) return;
+    const t = setTimeout(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [highlightLine, content?.path]);
   const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null);
   const [showPopover, setShowPopover] = useState(false);
 
@@ -170,6 +193,7 @@ function CodePreviewInner({
                       annotation={annotation}
                       inSelection={inSelection}
                       isHighlighted={isHighlighted}
+                    rowRef={isHighlighted ? highlightRowRef : undefined}
                       onClick={(e) => handleLineClick(lineNum, e)}
                       getLineProps={getLineProps}
                       line={line}
@@ -412,6 +436,7 @@ function LineRow({
   annotation,
   inSelection,
   isHighlighted,
+  rowRef,
   onClick,
   getLineProps,
   line,
@@ -423,6 +448,7 @@ function LineRow({
   annotation: LineAnnotation | undefined;
   inSelection: boolean;
   isHighlighted: boolean;
+  rowRef?: React.Ref<HTMLDivElement>;
   onClick: (e: React.MouseEvent) => void;
   getLineProps: any;
   line: any[];
@@ -452,6 +478,7 @@ function LineRow({
 
   return (
     <div
+      ref={rowRef}
       onClick={onClick}
       title={verdictTooltip(verdict, annotation, marker?.itemTitle, marker?.intent)}
       className={`flex cursor-pointer ${rowBg} ${selectionRing} hover:bg-white/[0.04] transition-colors`}

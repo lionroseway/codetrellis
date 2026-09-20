@@ -239,7 +239,11 @@ const SCENES: Scene[] = [
       const stillThere = JSON.stringify(alive).includes(c.state.term);
       console.log('    session survives hiding the drawer:', stillThere ? 'yes' : 'NO');
       if (!stillThere) c.flag('hiding the terminal drawer killed the session');
-      await c.call('toggle_panel', { panel: 'terminal' });
+      // And it stays away. This used to toggle straight back, which
+      // contradicted the narration two lines above and left the drawer
+      // covering the bottom half of every later scene — including the
+      // one whose whole point is the gutter, which then sat below the
+      // fold in every screenshot.
     },
   },
 
@@ -250,7 +254,7 @@ const SCENES: Scene[] = [
     async run(c) {
       await c.say('Reading the change', 'Changed lines are marked, and the plan item that wanted this file is above the source.');
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
-      await c.call('navigate_to', { target: 'code', file_path: abs });
+      await c.call('navigate_to', { target: 'code', file_path: abs, line: 25 });
       await c.beat(2);
       await c.shot('04-trace');
     },
@@ -271,7 +275,7 @@ const SCENES: Scene[] = [
       // construction rather than by luck.
       c.edit('services/notifier/app.rb', (src) => `${src}\n# demo: unplanned tweak\n`);
       const unplanned = path.join(PROJECT, 'services/notifier/app.rb');
-      await c.call('navigate_to', { target: 'code', file_path: unplanned });
+      await c.call('navigate_to', { target: 'code', file_path: unplanned, line: 21 });
       await c.beat(2);
       console.log('    unplanned edit in app.rb — expect ◆ drifted');
       await c.shot('14-verdict-drift');
@@ -279,8 +283,22 @@ const SCENES: Scene[] = [
       // The Go file was edited in `work` AND is targeted by an item.
       const planned = path.join(PROJECT, 'services/shared-go/money/money.go');
       await c.say('The same file, from the other side', 'This one was planned and it happened, so it reads as aligned.');
-      await c.call('navigate_to', { target: 'code', file_path: planned });
+      // Scroll to where the change actually is, not to line 1.
+      await c.call('navigate_to', { target: 'code', file_path: planned, line: 25 });
       await c.beat(2);
+      // Assert the precondition the screenshot depends on.
+      //
+      // A shot of a file with no changed lines proves nothing, and that
+      // is exactly what this scene produced for a whole session after the
+      // fixture drifted: a correctly rendered file with nothing to render,
+      // captioned as proof that the verdict worked.
+      const onDisk = fs.readFileSync(planned, 'utf-8');
+      const original = edited.get(planned);
+      if (original === undefined || onDisk === original) {
+        c.flag('money.go is unchanged — the aligned screenshot would show an unmarked file');
+      } else {
+        console.log('    money.go differs from its pre-edit state — the gutter should mark it');
+      }
       console.log('    planned + changed in money.go — expect ✓ aligned');
       await c.shot('15-verdict-aligned');
     },
@@ -297,12 +315,30 @@ const SCENES: Scene[] = [
         'Following "this item wants this file" used to cost you your place. The header now carries the way back.',
       );
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
-      await c.call('navigate_to', { target: 'code', file_path: abs });
-      await c.beat();
+      await c.call('navigate_to', { target: 'code', file_path: abs, line: 25 });
+      await c.beat(2);
+      // The file, with the marker naming the item — this is the half a
+      // screenshot can actually show.
+      await c.shot('16a-roundtrip-from-code');
+
+      // `select_item` is NOT the journey. It jumps to the item without
+      // going through the code reader's banner, so no breadcrumb is left
+      // and the header grows no way back — which is exactly what the
+      // first screenshot of this scene proved, while the caption claimed
+      // otherwise.
+      //
+      // The real path is a click on "…wants this file", and it is covered
+      // by `e2e/review-regressions/round-trip.spec.ts`, which drives that
+      // button and fails when the back control is reverted. A demo scene
+      // cannot click it, so it says so rather than implying it did.
+      await c.say(
+        'The way back',
+        'Clicking "wants this file" leaves a breadcrumb, so the plan header carries a way back to the line. That click is covered by the round-trip spec.',
+      );
       await c.call('select_item', { item_uid: c.state.go });
       await c.beat(2);
-      console.log('    now on the item — the back control should name money.go');
-      await c.shot('16-roundtrip');
+      console.log('    on the item (via select_item — no breadcrumb; the click path is in round-trip.spec.ts)');
+      await c.shot('16b-roundtrip-on-item');
     },
   },
 
@@ -840,7 +876,25 @@ async function main() {
     edit(relative, mutate) {
       const abs = path.join(PROJECT, relative);
       if (!edited.has(abs)) edited.set(abs, fs.readFileSync(abs, 'utf-8'));
-      fs.writeFileSync(abs, mutate(edited.get(abs)!));
+      const before = edited.get(abs)!;
+      const after = mutate(before);
+
+      // An edit that changes nothing is the scene not happening.
+      //
+      // `String.replace` with no match returns the original, silently. The
+      // work scene replaced a line that was no longer in the fixture — I
+      // had committed the demo's own mutation into it with `git add -A`
+      // mid-run — so "do the work" wrote the same bytes back, git reported
+      // no change, no line was annotated, and the verdict scene rendered a
+      // file with nothing marked while narrating what the marks meant.
+      //
+      // Every layer said success. Only the screenshot disagreed.
+      if (after === before) {
+        ctx.flag(`edit to ${relative} changed nothing — the fixture may already contain the edit`);
+        return;
+      }
+
+      fs.writeFileSync(abs, after);
     },
     async agent(name) {
       const extra = createMcpClient({ mcpPort: MCP_PORT, capabilityToken: token, clientName: name });
