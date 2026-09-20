@@ -11,9 +11,7 @@ import {
   indexMarkers, markerLabel, intentTint, isSpanStart,
   type FileOverlay, type OverlayIndex, type OverlayMarker,
 } from '../../lib/plan-overlay';
-import {
-  lineVerdict, gitMark, verdictTooltip, VERDICT_STYLE,
-} from '../../lib/line-verdict';
+import { lineVerdict, verdictTooltip, VERDICT_STYLE } from '../../lib/line-verdict';
 
 export type LineAnnotation = 'unchanged' | 'added' | 'modified';
 
@@ -441,7 +439,6 @@ function LineRow({
   // compare two faint colours per line. See `lib/line-verdict`.
   const verdict = lineVerdict(annotation, Boolean(marker));
   const style = verdict ? VERDICT_STYLE[verdict] : null;
-  const mark = gitMark(annotation);
 
   // Selection COMPOSES over the verdict rather than replacing it. The old
   // chain put `inSelection` first, so clicking the line you were
@@ -471,10 +468,16 @@ function LineRow({
       >
         {style?.glyph ?? ''}
       </span>
-      {/* Raw git state, demoted: our verdict is the answer, this is its input. */}
-      <span className="select-none w-3 text-center shrink-0 text-[10px] leading-snug text-foreground-subtle/70">
-        {mark}
-      </span>
+      {/*
+        The raw git mark is NOT a column.
+
+        It had one, and that was three pieces of furniture — stripe,
+        verdict, git mark — before the line number and four before any
+        code. Git state is the verdict's INPUT; the comment saying so was
+        already here while it still occupied width of its own. It lives
+        in the tooltip now, which is where someone goes when the glyph is
+        not enough.
+      */}
       {/* line number */}
       <span className="select-none text-foreground-subtle/50 w-10 text-right pr-2 shrink-0 border-r border-white/[0.04]">
         {lineNum}

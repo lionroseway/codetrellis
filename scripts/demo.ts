@@ -433,7 +433,17 @@ const SCENES: Scene[] = [
       const snap = await c.json('graph_snapshot');
       const n = snap?.nodeCount ?? snap?.nodes?.length ?? 0;
       console.log(`    graph_snapshot: ${n} nodes`);
-      if (n === 0) c.flag('graph_snapshot returned an empty graph while the canvas is drawing one');
+      if (n === 0) {
+        // Do not assert what has not been checked.
+        //
+        // This used to flag "an empty graph WHILE THE CANVAS IS DRAWING
+        // ONE", and it had no idea whether the canvas was drawing
+        // anything. Chased as a snapshot bug, it turned out the canvas
+        // really was blank — the tool was right and the flag was the
+        // thing lying. A wrong flag costs more attention than a missing
+        // one, and it sends you to the wrong file.
+        c.flag('graph_snapshot returned 0 nodes — check whether the canvas is actually drawing a graph');
+      }
 
       await c.say('Narrowing the scope', 'One service at a time, when the whole estate is too much.');
       await c.call('graph_set_scope', { scope_path: path.join(PROJECT, 'services') });

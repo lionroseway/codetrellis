@@ -97,7 +97,16 @@ export const VERDICT_STYLE: Record<LineVerdict, VerdictStyle> = {
   },
 };
 
-/** The raw git mark, demoted to a secondary column beside the verdict. */
+/**
+ * The raw git mark.
+ *
+ * No longer rendered: it had its own gutter column, which made three
+ * pieces of furniture before the line number for a signal that is the
+ * verdict's input rather than an answer. `verdictTooltip` carries it in
+ * words instead. Kept because the mapping is worth stating in one place
+ * if any surface needs it again — the sidebar's file-level badges are
+ * the likely caller.
+ */
 export function gitMark(annotation: LineAnnotation | undefined): string {
   if (annotation === 'added') return '+';
   if (annotation === 'modified') return '~';

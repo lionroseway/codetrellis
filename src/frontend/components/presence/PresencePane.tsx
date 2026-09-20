@@ -266,9 +266,19 @@ export function PresencePane() {
 
   if (!visible || cards.length === 0) return null;
 
+  // Default to the RIGHT, not the left.
+  //
+  // Bottom-left puts a 340px panel directly over the code reader's
+  // gutter — the strip carrying the per-line verdict, which is the one
+  // column in this app you cannot afford to cover. The pane narrating
+  // "green where they agree, pink where something changed" was sitting
+  // on top of the greens and pinks.
+  //
+  // It is draggable and the position sticks, so this only decides where
+  // it starts. Starting somewhere that hides the subject is the bug.
   const posStyle = position
     ? { left: position.x, top: position.y, right: 'auto' as const, bottom: 'auto' as const }
-    : { bottom: 80, left: 16 };
+    : { bottom: 80, right: 16 };
 
   return (
     <div

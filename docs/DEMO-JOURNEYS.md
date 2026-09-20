@@ -234,6 +234,14 @@ performance.
   can verify by eye.
 - **Flag, do not fail.** These are verification aids. A scene that notices
   something wrong prints it; the suite is where things fail.
+- **A flag may only claim what it checked.** One read "empty graph while
+  the canvas is drawing one" and had never looked at the canvas. The
+  canvas was blank; the tool it accused was correct. A wrong flag costs
+  more attention than a missing one and sends you to the wrong file.
+- **Check the window is usable before claiming anything.** `ui_ready`
+  reports whether the shell is mounted and whether a dialog covers it.
+  A full run once passed twenty-four scenes against an app that had
+  never mounted, and every screenshot was of the first-run form.
 - **Leave nothing behind.** Restore every file, delete every plan. The
   second run must be as clean as the first — and running it twice is how
   the archived-plan bug was found.
