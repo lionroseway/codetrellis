@@ -16,7 +16,7 @@ import {
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -287,26 +287,84 @@ export function MainCanvas() {
       });
   }, [root]);
 
-  // Fetch dependency edges when scan completes
+  // Fetch dependency edges when the scan completes.
+  //
+  // WHY THIS IS MORE CAREFUL THAN IT LOOKS
+  //
+  // The previous version rendered a permanently blank canvas, silently,
+  // on a database holding fifty perfectly good edges. Five things
+  // combined, and each one on its own was survivable:
+  //
+  //   1. `.catch(() => setLoadingGraph(false))` swallowed every failure.
+  //      No log, no state, no message — the graph was simply empty and
+  //      the app looked like a project with no dependencies.
+  //   2. `hasFetchedRef.current = root` was set BEFORE the request, so a
+  //      failed attempt counted as a completed one.
+  //   3. The effect only re-runs on `[scanStatus, root]`. Neither
+  //      changes while you sit on a project, so one lost fetch stayed
+  //      lost until you switched projects or restarted.
+  //   4. No cancellation. Opening several projects in a row — which the
+  //      demo does — lets a response for an earlier root land after a
+  //      later one, so the canvas shows another project's graph or
+  //      clobbers a good result with a stale empty one.
+  //   5. `r.json()` without checking `r.ok`. An error body is valid
+  //      JSON, so `{ error: … }` was assigned straight into `depEdges`,
+  //      where `.length` is undefined and every downstream guard reads
+  //      false.
+  //
+  // It took a screenshot to find, because every layer reported success.
   const hasFetchedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (scanStatus !== 'ready' || !root) return;
-    // Don't re-fetch if we already fetched for this project
-    if (hasFetchedRef.current === root && depEdges.length > 0) return;
+  const [graphLoadError, setGraphLoadError] = useState<string | null>(null);
 
+  const loadDepEdges = useCallback((forRoot: string) => {
+    let cancelled = false;
     setLoadingGraph(true);
-    hasFetchedRef.current = root;
+    setGraphLoadError(null);
 
     fetch('/api/dependencies?include=cross_system')
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`the server answered ${r.status}`);
+        const body = await r.json();
+        // Only an array is a graph. Anything else is an error shape that
+        // happens to parse.
+        if (!Array.isArray(body)) throw new Error('the response was not a list of edges');
+        return body as DependencyEdge[];
+      })
       .then((edges) => {
+        // A late answer for a project we have already left is not ours.
+        if (cancelled || useProjectStore.getState().root !== forRoot) return;
         setDepEdges(edges);
+        hasFetchedRef.current = forRoot;   // only a SUCCESS counts as fetched
         setLoadingGraph(false);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[Graph] Could not load dependency edges:', message);
+        setGraphLoadError(message);
+        hasFetchedRef.current = null;      // so a retry is allowed
         setLoadingGraph(false);
       });
-  }, [scanStatus, root]);
+
+    return () => { cancelled = true; };
+  }, [setDepEdges, setLoadingGraph]);
+
+  // Bumped whenever the backend says the graph data changed, so the
+  // effect below has a reason to run again. Without it, `[scanStatus,
+  // root]` never change while you sit on a project and a single empty
+  // result is permanent.
+  const [graphDataToken, setGraphDataToken] = useState(0);
+  useEffect(() => {
+    const onChanged = () => setGraphDataToken((n) => n + 1);
+    window.addEventListener('graph-data-changed', onChanged);
+    return () => window.removeEventListener('graph-data-changed', onChanged);
+  }, []);
+
+  useEffect(() => {
+    if (scanStatus !== 'ready' || !root) return;
+    if (hasFetchedRef.current === root && depEdges.length > 0) return;
+    return loadDepEdges(root);
+  }, [scanStatus, root, graphDataToken, loadDepEdges]);
 
   // Poll for diffs every 10 seconds
   const refreshWorkingTreeDiff = useCallback(() => {
@@ -794,6 +852,61 @@ export function MainCanvas() {
 
   if (!root) {
     return <WelcomeScreen />;
+  }
+
+  // A blank canvas must say why it is blank.
+  //
+  // When the edge fetch failed the app rendered an empty grid — visually
+  // identical to a project with no dependencies at all — and nothing
+  // anywhere said otherwise. Silence and "there is nothing here" are
+  // different answers and were being drawn the same way.
+  if (graphLoadError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
+        <div className="max-w-sm text-center px-6">
+          <AlertTriangle size={22} className="mx-auto mb-3 text-amber-300" />
+          <p className="text-[13.5px] text-foreground mb-1.5">The dependency graph did not load</p>
+          <p className="text-[11.5px] text-foreground-subtle leading-relaxed mb-4">
+            {graphLoadError}. The project is scanned — this is the graph fetch, not the scan,
+            so nothing has been lost.
+          </p>
+          <button
+            onClick={() => { if (root) loadDepEdges(root); }}
+            className="px-3 py-1.5 rounded-md border border-accent/30 bg-accent/[0.08] text-accent text-[12px] hover:bg-accent/[0.16] transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // A scope that matches nothing is not "no dependencies".
+  //
+  // The graph had exactly one empty rendering for three different
+  // situations: no edges, a failed fetch, and a filter that excluded
+  // everything. They want different answers, and drawing them the same
+  // way is how an absolute scope path blanked the canvas for an entire
+  // session without anyone being able to tell why.
+  if (scopePath && depEdges.length > 0 && displayGraphData.nodes.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
+        <div className="max-w-sm text-center px-6">
+          <Filter size={20} className="mx-auto mb-3 text-accent/70" />
+          <p className="text-[13.5px] text-foreground mb-1.5">Nothing matches this scope</p>
+          <p className="text-[11.5px] text-foreground-subtle leading-relaxed mb-4">
+            The project has {depEdges.length} connection{depEdges.length === 1 ? '' : 's'}, and none of
+            them is under <code className="font-mono text-foreground-muted">{scopePath}</code>.
+          </p>
+          <button
+            onClick={() => setScopePath(null)}
+            className="px-3 py-1.5 rounded-md border border-accent/30 bg-accent/[0.08] text-accent text-[12px] hover:bg-accent/[0.16] transition-colors"
+          >
+            Clear the scope
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (scanStatus === 'scanning' || loadingGraph) {

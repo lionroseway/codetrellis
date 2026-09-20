@@ -970,7 +970,33 @@ export async function scanProject(projectPath: string): Promise<ScanStats> {
   const run = runScan(projectPath);
   scanInFlight = { path: projectPath, promise: run };
   try {
-    return await run;
+    const stats = await run;
+
+    // Announce that the graph's data has been replaced.
+    //
+    // A scan truncates `files` and `imports` and repopulates them — the
+    // AST tables hold one project at a time, as the conflict check above
+    // says. So DURING a scan there are legitimately zero edges to serve,
+    // and a canvas that fetches its edges in that window gets a perfectly
+    // valid HTTP 200 carrying an empty array.
+    //
+    // The canvas fetched exactly once, when `scanStatus` became ready.
+    // Nothing errored, nothing was logged, and the graph stayed blank
+    // until the app was restarted, because the effect's inputs never
+    // changed again. Found by opening four throwaway projects in a row
+    // and then reopening the first one.
+    //
+    // This lives INSIDE scanProject rather than at the five call sites —
+    // an HTTP endpoint, two MCP tools and two mobile RPCs. Announcing it
+    // at each is how four of them end up not announcing it, which is
+    // exactly the bug: the endpoint knew and the MCP path did not.
+    broadcast('graph-data-changed', {
+      projectPath,
+      fileCount: stats.fileCount ?? null,
+      symbolCount: stats.symbolCount ?? null,
+    });
+
+    return stats;
   } finally {
     scanInFlight = null;
   }

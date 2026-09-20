@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { GraphNode, GraphEdge, ViewDepth, ArchitectureDiff, ProjectionData, TrellisMode } from '@shared/types';
 import type { LayoutMode } from '../lib/graph-builder';
+import { useProjectStore } from './project-store';
 
 export type BaselineMode = 'pinned' | 'auto';
 
@@ -129,7 +130,45 @@ export const useGraphStore = create<GraphState>((set) => ({
     }
     return { trellisMode: mode };
   }),
-  setScopePath: (scopePath) => set({ scopePath }),
+  /**
+   * Narrow the graph to a subtree.
+   *
+   * ALWAYS STORED PROJECT-RELATIVE, whatever the caller passes.
+   *
+   * The filter in `graph-builder` compares against `sourceRelative` /
+   * `targetRelative`, which are project-relative. The graph toolbar
+   * passes a relative path and worked. `graph_set_scope` over MCP passes
+   * an absolute one — the natural thing for an agent holding a real path
+   * — and `'services/api/x.ts'.startsWith('/Users/…/services/')` is never
+   * true, so every edge was filtered out and the canvas went blank.
+   *
+   * Worse, it stayed blank. Setting the scope back to the project root to
+   * "clear" it is also absolute, so the reset filtered everything out
+   * too, and the graph stayed empty until the scope was cleared to an
+   * empty string or the app restarted. That is the whole of the empty
+   * graph after the demo: the demo narrows to `services`, then resets to
+   * the project root, and both are absolute.
+   *
+   * Normalising here rather than in the builder means there is one
+   * representation in the store and every caller — toolbar, MCP, mobile,
+   * anything later — agrees by construction.
+   */
+  setScopePath: (scopePath) => {
+    if (!scopePath) { set({ scopePath: null }); return; }
+
+    const root = useProjectStore.getState().root;
+    let next = scopePath;
+
+    if (root && next.startsWith(root)) {
+      next = next.slice(root.length).replace(/^[/\\]+/, '');
+    }
+    next = next.replace(/^[./\\]+/, '').replace(/[/\\]+$/, '');
+
+    // The project root itself is not a scope — it is every file, which
+    // is what "no scope" means. Storing it as a prefix would filter
+    // against the empty string and match nothing.
+    set({ scopePath: next === '' ? null : next });
+  },
   setBaselineMode: (mode) => set({ baselineMode: mode }),
   setBaselineReference: (data) => set({
     baselineCommitHash: data.commitHash,

@@ -609,6 +609,17 @@ export function useWebSocket() {
             }
           }
 
+          // --- The graph's data was replaced by a scan ---
+          //
+          // Re-broadcast as a window event so the canvas can refetch. A
+          // scan truncates and repopulates `files` and `imports`, so a
+          // canvas that fetched its edges mid-scan holds an empty list
+          // that nothing would ever correct.
+          if (type === 'graph-data-changed') {
+            window.dispatchEvent(new CustomEvent('graph-data-changed', { detail: payload }));
+            return;
+          }
+
           // --- UI readiness (MCP ui_ready tool) ---
           //
           // Can a person actually use what is on screen right now?
@@ -638,11 +649,21 @@ export function useWebSocket() {
 
                 let projectOpen = false;
                 let workspaceMode = 'unknown';
+                let scanStatus = 'unknown';
+                let graphNodes = 0;
                 try {
                   const { useProjectStore } = await import('../stores/project-store');
                   const { useUiStore } = await import('../stores/ui-store');
+                  const { useGraphStore } = await import('../stores/graph-store');
                   projectOpen = useProjectStore.getState().tabs.length > 0;
                   workspaceMode = useUiStore.getState().workspaceMode;
+                  // `scanStatus` gates the edge fetch, and `graphNodes` is
+                  // what actually reached the canvas. Reporting both turns
+                  // "the graph is empty" from a symptom into a diagnosis:
+                  // not-ready means the fetch never ran, ready-with-zero
+                  // means it ran and came back with nothing.
+                  scanStatus = useProjectStore.getState().scanStatus ?? 'unknown';
+                  graphNodes = useGraphStore.getState().nodes.length;
                 } catch { /* stores unavailable — shellMounted already says so */ }
 
                 await fetch('/api/screenshot-response', {
@@ -656,6 +677,8 @@ export function useWebSocket() {
                       blockedBy: blocking,
                       projectOpen,
                       workspaceMode,
+                      scanStatus,
+                      graphNodes,
                     }),
                   }),
                 }).catch(() => {});
