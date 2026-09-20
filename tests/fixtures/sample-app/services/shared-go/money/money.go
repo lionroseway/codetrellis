@@ -22,4 +22,5 @@ func (a Amount) Add(b Amount) Amount {
 	return Amount{Minor: a.Minor + b.Minor, Currency: a.Currency}
 }
 
-func normalise(minor int64) int64 { return minor }
+// normalise rounds half-up so every service agrees.
+func normalise(minor int64) int64 { return (minor + 1) / 2 * 2 }

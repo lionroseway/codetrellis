@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Plus, AlertTriangle, ShieldCheck, Hourglass, MinusCircle, ChevronDown, Check } from 'lucide-react';
@@ -11,6 +11,9 @@ import {
   indexMarkers, markerLabel, intentTint, isSpanStart,
   type FileOverlay, type OverlayIndex, type OverlayMarker,
 } from '../../lib/plan-overlay';
+import {
+  lineVerdict, gitMark, verdictTooltip, VERDICT_STYLE,
+} from '../../lib/line-verdict';
 
 export type LineAnnotation = 'unchanged' | 'added' | 'modified';
 
@@ -26,6 +29,12 @@ export interface FileContent {
   truncated: boolean;
   language?: string;
   annotations?: LineAnnotation[];
+  /**
+   * How many lines were deleted immediately above a given line, keyed by
+   * 1-based line number within this window. A removal is not a property
+   * of any surviving line, so it cannot live in `annotations`.
+   */
+  deletedBefore?: Record<string, number>;
   drift?: {
     status: DriftStatus;
     activePlanUids: string[];
@@ -151,22 +160,33 @@ function CodePreviewInner({
                 const annotation = content.annotations?.[i];
                 const inSelection = selectedRange != null && lineNum >= selectedRange.start && lineNum <= selectedRange.end;
                 const isHighlighted = highlightLine != null && lineNum === highlightLine;
+                // A removal has no line of its own — it sits in the gap
+                // above this one. Rendering it here is the only way the
+                // reader ever sees deleted code referenced at all.
+                const removed = content.deletedBefore?.[String(i + 1)];
                 return (
-                  <LineRow
-                    key={i}
-                    lineNum={lineNum}
-                    annotation={annotation}
-                    inSelection={inSelection}
-                    isHighlighted={isHighlighted}
-                    onClick={(e) => handleLineClick(lineNum, e)}
-                    getLineProps={getLineProps}
-                    line={line}
-                    getTokenProps={getTokenProps}
-                    planMarkers={overlayIndex.get(lineNum)}
-                    onOpenItem={onOpenItem}
-                  />
+                  <Fragment key={i}>
+                    {removed ? <DeletedGap count={removed} /> : null}
+                    <LineRow
+                      lineNum={lineNum}
+                      annotation={annotation}
+                      inSelection={inSelection}
+                      isHighlighted={isHighlighted}
+                      onClick={(e) => handleLineClick(lineNum, e)}
+                      getLineProps={getLineProps}
+                      line={line}
+                      getTokenProps={getTokenProps}
+                      planMarkers={overlayIndex.get(lineNum)}
+                      onOpenItem={onOpenItem}
+                    />
+                  </Fragment>
                 );
               })}
+              {/* A deletion at the very end of the file has no following
+                  line to hang from. */}
+              {content.deletedBefore?.[String(tokens.length + 1)] ? (
+                <DeletedGap count={content.deletedBefore[String(tokens.length + 1)]} />
+              ) : null}
             </pre>
           )}
         </Highlight>
@@ -361,6 +381,34 @@ function SelectionBar({
   );
 }
 
+/**
+ * The place where lines used to be.
+ *
+ * Deliberately not a fake line: no line number, no code, nothing that
+ * could be mistaken for content that exists. Just a marker saying how
+ * much went, so a refactor that cuts forty lines and adds two stops
+ * reading as two added lines.
+ */
+function DeletedGap({ count }: { count: number }) {
+  return (
+    <div
+      className="flex items-center select-none"
+      title={`${count} line${count === 1 ? '' : 's'} deleted here since HEAD`}
+    >
+      <span className="w-[3px] shrink-0 bg-rose-400/70" aria-hidden="true" />
+      <span className="w-4 text-center shrink-0 text-[11px] leading-snug font-semibold text-rose-300">
+        −
+      </span>
+      <span className="w-3 shrink-0" />
+      <span className="w-10 shrink-0 border-r border-white/[0.04]" />
+      <span className="px-2 text-[10.5px] leading-snug text-rose-300/80 italic">
+        {count} line{count === 1 ? '' : 's'} deleted
+      </span>
+      <span className="flex-1 ml-2 h-px bg-rose-400/20" />
+    </div>
+  );
+}
+
 function LineRow({
   lineNum,
   annotation,
@@ -387,31 +435,45 @@ function LineRow({
   const lineProps = getLineProps({ line });
   const marker = planMarkers && planMarkers.length > 0 ? planMarkers[0] : null;
   const showLabel = marker ? isSpanStart(marker, lineNum) : false;
-  const gutterClass = annotation === 'added'
-    ? 'bg-emerald-500/20 text-emerald-200'
-    : annotation === 'modified'
-      ? 'bg-amber-500/20 text-amber-200'
-      : '';
-  const gutterMark = annotation === 'added' ? '+' : annotation === 'modified' ? '~' : '';
 
-  const rowBg = inSelection
-    ? 'bg-accent/10'
+  // The join. Git says what changed, the plan says what was meant to —
+  // neither is the answer on its own, and the reader used to be left to
+  // compare two faint colours per line. See `lib/line-verdict`.
+  const verdict = lineVerdict(annotation, Boolean(marker));
+  const style = verdict ? VERDICT_STYLE[verdict] : null;
+  const mark = gitMark(annotation);
+
+  // Selection COMPOSES over the verdict rather than replacing it. The old
+  // chain put `inSelection` first, so clicking the line you were
+  // inspecting removed the tint you were inspecting it for.
+  const rowBg = style?.row ?? '';
+  const selectionRing = inSelection
+    ? 'ring-1 ring-inset ring-accent/60'
     : isHighlighted
-      ? 'bg-accent/[0.06]'
-      : annotation === 'added'
-        ? 'bg-emerald-500/[0.04]'
-        : annotation === 'modified'
-          ? 'bg-amber-500/[0.04]'
-          : '';
+      ? 'ring-1 ring-inset ring-accent/30'
+      : '';
 
   return (
     <div
       onClick={onClick}
-      className={`flex cursor-pointer ${rowBg} hover:bg-white/[0.03] transition-colors`}
+      title={verdictTooltip(verdict, annotation, marker?.itemTitle, marker?.intent)}
+      className={`flex cursor-pointer ${rowBg} ${selectionRing} hover:bg-white/[0.04] transition-colors`}
     >
-      {/* git gutter */}
-      <span className={`select-none w-3 text-center shrink-0 text-[10px] leading-snug ${gutterClass}`}>
-        {gutterMark}
+      {/* Verdict stripe — carries the signal even under a selection ring,
+          and is the one mark that survives every other state. */}
+      <span
+        className={`select-none w-[3px] shrink-0 ${style ? style.stripe : 'bg-transparent'}`}
+        aria-hidden="true"
+      />
+      {/* Verdict glyph. Shape as well as colour, so it reads without it. */}
+      <span
+        className={`select-none w-4 text-center shrink-0 text-[11px] leading-snug font-semibold ${style ? style.ink : ''}`}
+      >
+        {style?.glyph ?? ''}
+      </span>
+      {/* Raw git state, demoted: our verdict is the answer, this is its input. */}
+      <span className="select-none w-3 text-center shrink-0 text-[10px] leading-snug text-foreground-subtle/70">
+        {mark}
       </span>
       {/* line number */}
       <span className="select-none text-foreground-subtle/50 w-10 text-right pr-2 shrink-0 border-r border-white/[0.04]">

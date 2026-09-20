@@ -1018,15 +1018,19 @@ async function routeMethod(
         const r = getDb().exec(`SELECT language FROM files WHERE path = ?`, [filePath]);
         if (r[0]?.values[0]) language = r[0].values[0][0] as string;
       } catch { /* */ }
-      // Per-line git status for the gutter (added / modified vs HEAD).
-      let lineStatus: Array<'unchanged' | 'added' | 'modified'> | null = null;
+      // Per-line git status for the gutter, and the deletions that have
+      // no line of their own. The phone gets both for the same reason the
+      // desktop does: a removal the reader cannot see is a change that did
+      // not happen as far as they know.
       // `owningRoot` replaces the old `root`: the project that actually
       // contains this file, rather than whichever happened to be first.
-      lineStatus = safe(
+      const git = safe(
         () => computeGitLineAnnotations(owningRoot, path.resolve(filePath), lineCount),
         null,
       );
-      return { content, language, truncated, lineCount, lineStatus };
+      const lineStatus = git?.annotations ?? null;
+      const deletedBefore = git?.deletedBefore ?? null;
+      return { content, language, truncated, lineCount, lineStatus, deletedBefore };
     }
 
     case 'graph.fileSearch': {
