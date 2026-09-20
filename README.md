@@ -246,6 +246,14 @@ cannot build one for you.
 Android has no submit profile yet; the AAB goes to Play Console by hand.
 iOS submit is configured and goes to TestFlight.
 
+**The notes the script publishes are a download page, not release notes.**
+They carry the file list and the first-launch tips and no "what's new" at
+all — v0.1.14 shipped the whole of the security hardening work under the
+words "installer downloads", and nobody reading it could tell. Writing the
+real ones is a deliberate second step; the shape and the rules are in
+[`.claude/skills/codetrellis-release-notes`](.claude/skills/codetrellis-release-notes/SKILL.md),
+and the script prints the reminder and the command when it finishes.
+
 ## Architecture
 
 ```
