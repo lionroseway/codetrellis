@@ -109,6 +109,23 @@ export function App() {
     return () => window.removeEventListener('__test_open_project__', handler);
   }, []);
 
+  // Test hook: open a file in the code reader, so a spec can start from
+  // "reading this file" without ten clicks through the explorer tree.
+  //
+  // Sibling of the project hook above and used the same way — only to
+  // ARRIVE. Everything a spec is actually asserting is driven through
+  // the real controls; a hook that performed the journey would test the
+  // hook.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path: filePath, line } = (e as CustomEvent).detail ?? {};
+      if (typeof filePath !== 'string') return;
+      void import('./lib/open-file-at').then((m) => m.openFileAt(filePath, line ?? null));
+    };
+    window.addEventListener('__test_open_file__', handler);
+    return () => window.removeEventListener('__test_open_file__', handler);
+  }, []);
+
   // First-run auto-open of the Learn Trellis takeover. Triggers
   // exactly once per machine: when the user has no projects open
   // and the localStorage seen-flag isn't set. We wait a beat so
