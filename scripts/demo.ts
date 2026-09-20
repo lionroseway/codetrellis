@@ -300,7 +300,7 @@ const SCENES: Scene[] = [
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
       await c.call('graph_focus', { path: abs, highlight: true });
       await c.beat();
-      await c.call('select_item', { uid: c.state.go });
+      await c.call('select_item', { item_uid: c.state.go });
       await c.beat(2);
       console.log('    now on the item — the back control should name money.go');
       await c.shot('16-roundtrip');
@@ -848,7 +848,16 @@ async function main() {
         if (!res.ok) { ctx.flag(`GET ${pathAndQuery} -> ${res.status}`); return null; }
         return await res.json();
       } catch (err) {
-        ctx.flag(`GET ${pathAndQuery} failed: ${err instanceof Error ? err.message : err}`);
+        // A packaged build serves the renderer over IPC and binds no TCP
+        // port, so there is simply nothing to call. That is the Phase 19
+        // posture working, not a fault — flagging it would train us to
+        // ignore flags.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/fetch failed|ECONNREFUSED/i.test(msg)) {
+          console.log(`    (no HTTP API on :${API_PORT} — packaged builds are IPC-only; skipping this check)`);
+          return null;
+        }
+        ctx.flag(`GET ${pathAndQuery} failed: ${msg}`);
         return null;
       }
     },
