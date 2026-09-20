@@ -123,6 +123,11 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   graph_toggle_projection: 'write',
   graph_export: 'read',
   graph_snapshot: 'read',
+  // Not `capture`: this returns whether the window is usable, never what
+  // is on it. Any agent about to drive the UI should be able to ask
+  // first — gating it behind a capability most installs withhold would
+  // leave exactly the agents that need it unable to check.
+  ui_ready: 'read',
 
   // ── intake-tools ────────────────────────────────────────────────────
   create_plan_from_external: 'write',

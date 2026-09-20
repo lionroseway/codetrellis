@@ -249,6 +249,17 @@ export function useWebSocket() {
               })();
             } else if (target === 'graph') {
               useUiStore.getState().setWorkspaceMode('graph');
+            } else if (target === 'code') {
+              // Goes through the same helper the reader's own links use,
+              // so an agent arriving at a file lands exactly where a
+              // person clicking would.
+              const filePath = payload?.filePath as string | undefined;
+              if (filePath) {
+                void import('../lib/open-file-at').then((m) =>
+                  m.openFileAt(filePath, (payload?.line as number | undefined) ?? null));
+              } else {
+                useUiStore.getState().setWorkspaceMode('code');
+              }
             } else if (target === 'split') {
               (async () => {
                 if (planUid) {
@@ -596,6 +607,61 @@ export function useWebSocket() {
                 useGraphStore.getState().setViewDepth(depth);
               })();
             }
+          }
+
+          // --- UI readiness (MCP ui_ready tool) ---
+          //
+          // Can a person actually use what is on screen right now?
+          //
+          // This exists because the demo drove twenty-four scenes against
+          // an app that was never mounted — the first-run wizard rendered
+          // IN PLACE OF the shell — and reported "nothing looked wrong".
+          // The backend answered every call correctly the whole time. A
+          // verification tool that cannot see a blocking modal proves
+          // nothing, and neither does a green run from one.
+          if (type === 'ui-ready-request') {
+            const nonce = payload?.nonce as string | undefined;
+            if (nonce) {
+              (async () => {
+                // A dialog that covers the app is the thing worth
+                // reporting. Asking the DOM is deliberate: a store flag
+                // would say what we intended to render, and the bug was
+                // that intent and screen disagreed.
+                const blocking = Array.from(document.querySelectorAll('[role="dialog"]'))
+                  .filter((el) => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > window.innerWidth * 0.4 && r.height > window.innerHeight * 0.3;
+                  })
+                  .map((el) => el.getAttribute('aria-label') || 'unnamed dialog');
+
+                const shellMounted = Boolean(document.querySelector('[data-app-shell]'));
+
+                let projectOpen = false;
+                let workspaceMode = 'unknown';
+                try {
+                  const { useProjectStore } = await import('../stores/project-store');
+                  const { useUiStore } = await import('../stores/ui-store');
+                  projectOpen = useProjectStore.getState().tabs.length > 0;
+                  workspaceMode = useUiStore.getState().workspaceMode;
+                } catch { /* stores unavailable — shellMounted already says so */ }
+
+                await fetch('/api/screenshot-response', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    nonce,
+                    data: JSON.stringify({
+                      ready: shellMounted && blocking.length === 0,
+                      shellMounted,
+                      blockedBy: blocking,
+                      projectOpen,
+                      workspaceMode,
+                    }),
+                  }),
+                }).catch(() => {});
+              })();
+            }
+            return;
           }
 
           // --- Graph snapshot request (MCP graph_snapshot tool) ---

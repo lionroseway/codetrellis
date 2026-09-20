@@ -250,8 +250,7 @@ const SCENES: Scene[] = [
     async run(c) {
       await c.say('Reading the change', 'Changed lines are marked, and the plan item that wanted this file is above the source.');
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
-      await c.call('graph_focus', { path: abs, highlight: true });
-      await c.call('graph_select', { paths: [abs] });
+      await c.call('navigate_to', { target: 'code', file_path: abs });
       await c.beat(2);
       await c.shot('04-trace');
     },
@@ -272,7 +271,7 @@ const SCENES: Scene[] = [
       // construction rather than by luck.
       c.edit('services/notifier/app.rb', (src) => `${src}\n# demo: unplanned tweak\n`);
       const unplanned = path.join(PROJECT, 'services/notifier/app.rb');
-      await c.call('graph_focus', { path: unplanned, highlight: true });
+      await c.call('navigate_to', { target: 'code', file_path: unplanned });
       await c.beat(2);
       console.log('    unplanned edit in app.rb — expect ◆ drifted');
       await c.shot('14-verdict-drift');
@@ -280,7 +279,7 @@ const SCENES: Scene[] = [
       // The Go file was edited in `work` AND is targeted by an item.
       const planned = path.join(PROJECT, 'services/shared-go/money/money.go');
       await c.say('The same file, from the other side', 'This one was planned and it happened, so it reads as aligned.');
-      await c.call('graph_focus', { path: planned, highlight: true });
+      await c.call('navigate_to', { target: 'code', file_path: planned });
       await c.beat(2);
       console.log('    planned + changed in money.go — expect ✓ aligned');
       await c.shot('15-verdict-aligned');
@@ -298,7 +297,7 @@ const SCENES: Scene[] = [
         'Following "this item wants this file" used to cost you your place. The header now carries the way back.',
       );
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
-      await c.call('graph_focus', { path: abs, highlight: true });
+      await c.call('navigate_to', { target: 'code', file_path: abs });
       await c.beat();
       await c.call('select_item', { item_uid: c.state.go });
       await c.beat(2);
@@ -862,6 +861,35 @@ async function main() {
       }
     },
   };
+
+  // ── Preflight: is anyone actually looking at the product? ──────────
+  //
+  // This exists because a full run once reported "Nothing looked wrong"
+  // across twenty-four scenes against an app that had never mounted. The
+  // first-run wizard rendered in place of the shell, the backend answered
+  // every call correctly, and every screenshot was of a sign-up form.
+  //
+  // A demo that cannot tell the window is blocked is worth less than no
+  // demo, because it converts "unverified" into "verified" without doing
+  // any verifying. So this refuses to start rather than producing a green
+  // run nobody should trust.
+  const readyRaw = await client.callTool('ui_ready', {});
+  let ready: { ready?: boolean; shellMounted?: boolean; blockedBy?: string[]; projectOpen?: boolean } | null = null;
+  try { ready = JSON.parse(readyRaw.text); } catch { /* reported below */ }
+
+  if (!ready || ready.ready !== true) {
+    console.error('\n  The window is not in a state anyone could watch.\n');
+    if (!ready) {
+      console.error(`  ${readyRaw.text.replace(/\s+/g, ' ').slice(0, 160)}`);
+    } else if (!ready.shellMounted) {
+      console.error('  The app shell is not mounted — something is rendering instead of it.');
+    } else if (ready.blockedBy?.length) {
+      console.error(`  A dialog is covering it: ${ready.blockedBy.join(', ')}`);
+    }
+    console.error('\n  Nothing was run. Clear the window and try again.\n');
+    await client.disconnect().catch(() => {});
+    process.exit(1);
+  }
 
   const scenes = ONLY ? SCENES.filter((s) => s.id === ONLY) : SCENES;
   if (scenes.length === 0) {

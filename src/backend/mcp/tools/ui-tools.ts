@@ -11,6 +11,48 @@ import type { ToolDeps } from '../types';
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Screenshot ---
 
+  // --- ui_ready ---
+
+  server.registerTool(
+    'ui_ready',
+    {
+      description:
+        'Is the CodeTrellis window actually usable right now? Reports whether the app shell is mounted, '
+        + 'whether a blocking dialog covers it, whether a project is open, and which workspace is showing. '
+        + 'Call this before driving the UI: every other tool answers from the backend and will happily '
+        + 'succeed while the window shows something else entirely.',
+      inputSchema: {},
+    },
+    async () => {
+      const nonce = `ur-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const p = new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          deps.pendingResponses.delete(nonce);
+          reject(new Error('No answer from the window — is the CodeTrellis UI open?'));
+        }, 5_000);
+        deps.pendingResponses.set(nonce, { resolve, reject, timer });
+      });
+
+      deps.broadcast('ui-ready-request', { nonce });
+
+      try {
+        return { content: [{ type: 'text' as const, text: await p }] };
+      } catch (err) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              ready: false,
+              reason: err instanceof Error ? err.message : String(err),
+            }),
+          }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   server.registerTool(
     'screenshot',
     {

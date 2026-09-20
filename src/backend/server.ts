@@ -3494,10 +3494,27 @@ app.get('/api/settings/first-run-check', (req, res) => {
   const projectPath = optionalProjectRoot(req, res);
   if (projectPath === null) return;
   const gitDefaults = readGitIdentity(projectPath);
+
+  // Can we answer "who are you?" without asking?
+  //
+  // The wizard asked the user to confirm a name and email it had
+  // ALREADY read out of `git config` and pre-filled into both boxes —
+  // an interruption to confirm what we knew. Worse, it replaced the
+  // whole app rather than sitting over it, so a first-time user could
+  // not look at anything until they had filled in a form about
+  // attribution for work they had not done yet.
+  //
+  // `canDeriveIdentity` says whether asking is necessary at all. The
+  // frontend seeds silently when it is true, and only prompts when git
+  // genuinely cannot tell us — which is the case worth a question.
+  const haveIdentity = Boolean(settings.identity.displayName || settings.identity.email);
+  const canDeriveIdentity = haveIdentity || Boolean(gitDefaults.name || gitDefaults.email);
+
   res.json({
     firstRunComplete: settings.firstRunComplete,
     identity: settings.identity,
     gitDefaults,
+    canDeriveIdentity,
   });
 });
 

@@ -471,7 +471,8 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 
 | Tool | What it does |
 |------|-------------|
-| \`navigate_to(target, plan_uid?)\` | Switch to plan / graph / split / timeline view |
+| \`ui_ready()\` | **Call this first.** Is the window usable — shell mounted, nothing blocking it? Every other tool answers from the backend and will succeed happily while the user is looking at something else |
+| \`navigate_to(target, plan_uid?, file_path?, line?)\` | Switch to plan / graph / split / timeline / code view. For \`code\`, pass \`file_path\` (and optionally \`line\`) to open the reader on it |
 | \`open_plan(plan_uid, split_view?)\` | Open a specific plan |
 | \`select_item(item_uid, plan_uid?)\` | Navigate to a specific item in the plan tree |
 | \`navigate_item_back()\` | Go back in item selection history (Cmd+[) |
