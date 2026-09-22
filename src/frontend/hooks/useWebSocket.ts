@@ -287,7 +287,13 @@ export function useWebSocket() {
             const panel = payload?.panel as string | undefined;
             if (panel === 'sidebar') useUiStore.getState().toggleSidebar();
             if (panel === 'inspector') useUiStore.getState().toggleInspector();
-            if (panel === 'terminal') useUiStore.getState().toggleAgentPanel();
+            // `terminal` toggled the PLAN panel. It called
+            // `toggleAgentPanel()`, a name left over from when that slot held
+            // the agent panel, so "hide the terminal" hid the plans and left
+            // the terminal open. Both halves were visible in the demo: the
+            // drawer never went away, and the plan pane went blank.
+            if (panel === 'terminal') useTerminalStore.getState().togglePanel();
+            if (panel === 'plans') useUiStore.getState().toggleAgentPanel();
             if (panel === 'split') useUiStore.getState().toggleSplitView();
             // F10 — Channel / Activity / History panels live in the plan
             // workspace; make sure it's showing, then toggle the panel.

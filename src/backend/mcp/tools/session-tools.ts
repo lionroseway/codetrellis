@@ -119,8 +119,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description: 'Toggle a UI panel on or off in the CodeTrellis interface. ' +
         '"channel", "activity" and "history" live inside the plan workspace and will switch to it if a plan is active.',
       inputSchema: {
-        panel: z.enum(['sidebar', 'inspector', 'terminal', 'split', 'channel', 'activity', 'history']).describe(
-          'Which panel to toggle. "channel" = peer-to-peer coordination Channel panel, ' +
+        panel: z.enum(['sidebar', 'inspector', 'terminal', 'plans', 'split', 'channel', 'activity', 'history']).describe(
+          'Which panel to toggle. "terminal" = the terminal drawer, "plans" = the Plans \/ Timeline panel under the graph, "channel" = peer-to-peer coordination Channel panel, ' +
           '"activity" = plan activity/event feed, "history" = plan history (time-travel) rail.',
         ),
       },

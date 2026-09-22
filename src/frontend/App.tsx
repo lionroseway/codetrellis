@@ -99,6 +99,7 @@ export function App() {
   const planPanelExpanded = useUiStore((s) => s.planPanelExpanded);
   const inspectorExpanded = useUiStore((s) => s.inspectorExpanded);
   const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const planPanelVisible = useUiStore((s) => s.agentPanelVisible);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
   const splitView = useUiStore((s) => s.splitView);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
@@ -261,7 +262,10 @@ export function App() {
                     The Allotment stays mounted so pane sizes survive. */}
                 {workspaceMode !== 'code' && <MainCanvas />}
               </Allotment.Pane>
-              <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100}>
+              {/* Collapses when the panel is hidden. PlanPanel returns null
+                  in that state, and the pane used to keep its full height
+                  anyway, so hiding it left an empty slab under the graph. */}
+              <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100} visible={planPanelVisible}>
                 <PlanPanel />
               </Allotment.Pane>
             </Allotment>

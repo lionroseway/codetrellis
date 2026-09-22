@@ -477,7 +477,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`select_item(item_uid, plan_uid?)\` | Navigate to a specific item in the plan tree |
 | \`navigate_item_back()\` | Go back in item selection history (Cmd+[) |
 | \`navigate_item_forward()\` | Go forward in item selection history (Cmd+]) |
-| \`toggle_panel(panel)\` | Show/hide sidebar / inspector / terminal / split / channel / activity / history |
+| \`toggle_panel(panel)\` | Show/hide sidebar / inspector / terminal / plans / split / channel / activity / history |
 | \`toggle_activity_drawer()\` | Toggle the activity/comment feed drawer |
 | \`open_history_drawer(item_uid)\` | Open version history for a specific item |
 | \`open_settings()\` | Open the settings modal |
@@ -973,7 +973,7 @@ follow along.
 |------|-----------------|
 | \`navigate_to(target, plan_uid?)\` | Switch main view: "plan" / "graph" / "split" / "timeline" |
 | \`open_plan(plan_uid, split_view?)\` | Open a plan; human sees the plan tree |
-| \`toggle_panel(panel)\` | Show/hide "sidebar" / "inspector" / "terminal" / "split" / "channel" / "activity" / "history" |
+| \`toggle_panel(panel)\` | Show/hide "sidebar" / "inspector" / "terminal" / "plans" / "split" / "channel" / "activity" / "history" |
 | \`toggle_activity_drawer()\` | Slide the activity/comment feed open or closed |
 | \`refresh_ui()\` | Force the UI to re-fetch everything |
 
