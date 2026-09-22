@@ -26,7 +26,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
-import { buildDependencyGraph, buildFromSnapshot, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
+import { buildDependencyGraph, buildFromSnapshot, uniqueGraph, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
 import { PackageNode } from '../graph/nodes/PackageNode';
 import { DirectoryNode } from '../graph/nodes/DirectoryNode';
 import { FileNode } from '../graph/nodes/FileNode';
@@ -67,6 +67,8 @@ export function MainCanvas() {
   const toggleExpand = useGraphStore((s) => s.toggleExpand);
   const setSelectedNode = useUiStore((s) => s.setSelectedNode);
   const selectedNodeId = useUiStore((s) => s.selectedNodeId);
+  const graphStyle = useUiStore((s) => s.graphStyle);
+  const setGraphStyle = useUiStore((s) => s.setGraphStyle);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
   const layoutMode = useGraphStore((s) => s.layoutMode);
   const setGraphData = useGraphStore((s) => s.setGraphData);
@@ -659,7 +661,7 @@ export function MainCanvas() {
   const workingTreeDiff = useMemo(() => mergeLiveDiff(null, diffData), [diffData]);
   const liveWorkingTreeDiff = useMemo(() => mergeLiveDiff(snapshotDiff, diffData), [snapshotDiff, diffData]);
 
-  const graphData = useMemo(() => {
+  const rawGraphData = useMemo(() => {
     // Current/Planned mode: render from frozen snapshot
     if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
       return buildFromSnapshot(
@@ -689,6 +691,10 @@ export function MainCanvas() {
     if (depEdges.length === 0) return { nodes: [], edges: [] };
     return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || projectionEnabled ? projectionData : null, layoutMode, trellisMode, scopePath);
   }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot, scopePath]);
+
+  // One element per id, whichever builder ran. Duplicate ids leak DOM on
+  // every render; see `uniqueGraph` for how much.
+  const graphData = useMemo(() => uniqueGraph(rawGraphData), [rawGraphData]);
 
   const activeDiff = trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff;
 
@@ -968,7 +974,11 @@ export function MainCanvas() {
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
-        className="!bg-transparent"
+        // Nodes and edges outside the viewport are not mounted. On a
+        // symbol-depth graph that is most of them, and every mounted card
+        // is DOM the browser lays out and paints on every pan frame.
+        onlyRenderVisibleElements
+        className={`!bg-transparent ${graphStyle === 'performance' ? 'graph-perf' : ''}`}
       >
         <AutoFitView nodes={nodes} />
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
@@ -999,6 +1009,21 @@ export function MainCanvas() {
                 </button>
               ))}
             </div>
+
+            {/* Card style. Glass is the frosted, glowing look; Performance
+                draws the same status as bold outlines and pans smoothly
+                on large graphs. Also in Settings → Appearance. */}
+            <button
+              onClick={() => setGraphStyle(graphStyle === 'performance' ? 'glass' : 'performance')}
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200 hover:border-white/15"
+              title={graphStyle === 'performance'
+                ? 'Performance style: status shown as bold outlines. Click for Glass (frosted cards, glows — slower on large graphs)'
+                : 'Glass style: frosted cards and glows. Click for Performance (bold outlines, smooth on large graphs)'}
+              data-testid="graph-style-toggle"
+            >
+              {graphStyle === 'performance' ? <Zap size={11} /> : <Sparkles size={11} />}
+              {graphStyle === 'performance' ? 'Performance' : 'Glass'}
+            </button>
 
             {/* Phase 29 §4.16 — give Diff mode something of your own to
                 compare against. Only shown with a plan open, because a

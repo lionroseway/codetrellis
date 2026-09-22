@@ -1,8 +1,9 @@
 import { memo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useStore, type NodeProps } from '@xyflow/react';
 import { ChevronDown, ChevronRight, Files, Orbit } from 'lucide-react';
 
-import { getChangeVisual, type GraphNodeVisualData } from '../../../lib/graph-visuals';
+import { farStatusStyle, getChangeVisual, LOD_ZOOM, statusOutline, type GraphNodeVisualData } from '../../../lib/graph-visuals';
+import { useUiStore } from '../../../stores/ui-store';
 
 interface PackageNodeData extends GraphNodeVisualData {
   label: string;
@@ -19,11 +20,22 @@ function PackageNodeComponent({ data }: NodeProps) {
   const change = getChangeVisual(d.changeStatus);
   const isRelatedToSelection = d.relatedToSelection == null ? true : Boolean(d.relatedToSelection);
   const mode = typeof d.mode === 'string' ? d.mode : undefined;
+  const perf = useUiStore((s) => s.graphStyle) === 'performance';
+  const far = useStore((st) => st.transform[2] < LOD_ZOOM);
+  const glow = change?.glow || 'rgba(59, 130, 246, 0.26)';
 
   return (
     <div
-      className={`group relative w-[260px] overflow-hidden rounded-[24px] border border-blue-300/14 bg-[linear-gradient(180deg,rgba(59,130,246,0.16),rgba(8,14,29,0.76))] px-4 py-3 backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200/24 ${!isRelatedToSelection ? 'opacity-50' : ''} ${d.changeStatus === 'modified' ? 'border-amber-300/45 bg-[linear-gradient(180deg,rgba(245,158,11,0.18),rgba(8,14,29,0.76))]' : ''} ${d.changeStatus === 'added' ? 'border-emerald-300/45 bg-[linear-gradient(180deg,rgba(34,197,94,0.2),rgba(8,14,18,0.76))]' : ''} ${d.changeStatus === 'removed' ? 'border-red-300/42 bg-[linear-gradient(180deg,rgba(239,68,68,0.2),rgba(20,8,12,0.76))]' : ''} ${d.changeStatus === 'planned_add' ? 'border-emerald-300/32 bg-[linear-gradient(180deg,rgba(34,197,94,0.16),rgba(8,14,18,0.76))]' : ''} ${d.changeStatus === 'planned_modify' ? 'border-orange-300/34 bg-[linear-gradient(180deg,rgba(249,115,22,0.16),rgba(20,10,8,0.76))]' : ''} ${d.changeStatus === 'planned_remove' ? 'border-red-300/32 bg-[linear-gradient(180deg,rgba(239,68,68,0.16),rgba(20,8,12,0.76))]' : ''} ${d.changeStatus === 'unexpected_live' ? 'border-fuchsia-300/40 bg-[linear-gradient(180deg,rgba(217,70,239,0.18),rgba(20,8,24,0.76))]' : ''} ${mode === 'current' ? 'border-blue-200/18 bg-[linear-gradient(180deg,rgba(59,130,246,0.18),rgba(8,14,29,0.76))]' : ''} ${mode === 'planned' ? 'border-emerald-300/16 bg-[linear-gradient(180deg,rgba(34,197,94,0.16),rgba(8,14,18,0.76))]' : ''} ${mode === 'diff' ? 'border-fuchsia-300/16 bg-[linear-gradient(180deg,rgba(168,85,247,0.14),rgba(14,8,29,0.76))]' : ''}`}
-      style={{ boxShadow: `0 24px 56px rgba(0,0,0,0.46), 0 0 ${isRelatedToSelection ? 52 : 40}px ${change?.glow || 'rgba(59, 130, 246, 0.26)'}` }}
+      className={`group relative w-[260px] overflow-hidden rounded-[24px] border border-blue-300/14 bg-[linear-gradient(180deg,rgba(59,130,246,0.16),rgba(8,14,29,0.76))] px-4 py-3 hover:border-blue-200/24 ${perf ? 'bg-[#0e1422]' : 'backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5'} ${!isRelatedToSelection ? 'opacity-50' : ''} ${d.changeStatus === 'modified' ? 'border-amber-300/45 bg-[linear-gradient(180deg,rgba(245,158,11,0.18),rgba(8,14,29,0.76))]' : ''} ${d.changeStatus === 'added' ? 'border-emerald-300/45 bg-[linear-gradient(180deg,rgba(34,197,94,0.2),rgba(8,14,18,0.76))]' : ''} ${d.changeStatus === 'removed' ? 'border-red-300/42 bg-[linear-gradient(180deg,rgba(239,68,68,0.2),rgba(20,8,12,0.76))]' : ''} ${d.changeStatus === 'planned_add' ? 'border-emerald-300/32 bg-[linear-gradient(180deg,rgba(34,197,94,0.16),rgba(8,14,18,0.76))]' : ''} ${d.changeStatus === 'planned_modify' ? 'border-orange-300/34 bg-[linear-gradient(180deg,rgba(249,115,22,0.16),rgba(20,10,8,0.76))]' : ''} ${d.changeStatus === 'planned_remove' ? 'border-red-300/32 bg-[linear-gradient(180deg,rgba(239,68,68,0.16),rgba(20,8,12,0.76))]' : ''} ${d.changeStatus === 'unexpected_live' ? 'border-fuchsia-300/40 bg-[linear-gradient(180deg,rgba(217,70,239,0.18),rgba(20,8,24,0.76))]' : ''} ${mode === 'current' ? 'border-blue-200/18 bg-[linear-gradient(180deg,rgba(59,130,246,0.18),rgba(8,14,29,0.76))]' : ''} ${mode === 'planned' ? 'border-emerald-300/16 bg-[linear-gradient(180deg,rgba(34,197,94,0.16),rgba(8,14,18,0.76))]' : ''} ${mode === 'diff' ? 'border-fuchsia-300/16 bg-[linear-gradient(180deg,rgba(168,85,247,0.14),rgba(14,8,29,0.76))]' : ''}`}
+      style={perf
+        ? (far ? farStatusStyle : statusOutline)({
+            glow,
+            changed: Boolean(change),
+            planned: typeof d.changeStatus === 'string' && d.changeStatus.startsWith('planned_'),
+            live: d.changeStatus === 'in_progress_task' || d.changeStatus === 'active',
+            focused: Boolean(d.isFocused),
+          })
+        : { boxShadow: `0 24px 56px rgba(0,0,0,0.46), 0 0 ${isRelatedToSelection ? 52 : 40}px ${glow}` }}
     >
       <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-0 !bg-blue-100 !shadow-[0_0_12px_rgba(59,130,246,0.65)]" />
       <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.2),transparent_44%)]" />

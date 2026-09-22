@@ -2,6 +2,8 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from 'lucide-react';
 
+import { useUiStore } from '../../../stores/ui-store';
+
 interface DirectoryNodeData {
   label: string;
   childCount: number;
@@ -13,9 +15,10 @@ interface DirectoryNodeData {
 
 function DirectoryNodeComponent({ data }: NodeProps) {
   const d = data as DirectoryNodeData;
+  const perf = useUiStore((s) => s.graphStyle) === 'performance';
 
   return (
-    <div className="group relative w-[230px] overflow-hidden rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(13,17,28,0.7))] px-3.5 py-3 backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:border-white/18">
+    <div className={`group relative w-[230px] overflow-hidden rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(13,17,28,0.7))] px-3.5 py-3 hover:border-white/18 ${perf ? 'bg-[#0e1422]' : 'backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-all duration-300 hover:-translate-y-0.5'}`}>
       <Handle type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-white/70" />
       <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-[radial-gradient(circle_at_top_left,rgba(148,163,184,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.12),transparent_40%)]" />
       <div className="relative z-10 flex items-center gap-2">
