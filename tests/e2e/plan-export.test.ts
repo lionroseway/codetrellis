@@ -124,6 +124,33 @@ test.describe('Plan export — Phase 13 §A round-trip', () => {
     }
   });
 
+  // A committed plan.yaml carries the AUTHOR'S absolute projectPath. It
+  // used to be trusted, so a plan imported from a clone, another machine
+  // or another worktree belonged to a checkout that is not this one and
+  // appeared under no project; and the scan's "no plans for this project,
+  // re-import from disk" pass never saw its own imports and re-ran on
+  // every scan. The root now comes from where the plan sits.
+  test('a plan committed on another machine belongs to the checkout that imports it', async () => {
+    const h = await setupHarness('plan-import-root');
+    const uid = 'a1b2c3d4-0000-4000-8000-000000000001';
+    try {
+      const dir = path.join(h.fixture.projectPath, '.codetrellis', 'plans', 'committed-elsewhere');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'plan.yaml'), yaml.stringify({
+        uid, title: 'Committed elsewhere', status: 'draft',
+        projectPath: '/Users/someone-else/work/repo',
+      }));
+
+      // A fresh DB: the scan's re-import pass is how a clone first sees it.
+      await h.client.scanProject(h.fixture.projectPath);
+      const plan = (await h.client.listPlans()).find((p) => p.uid === uid);
+      expect(plan, 'plan was not re-imported by the scan').toBeTruthy();
+      expect(plan!.projectPath).toBe(h.fixture.projectPath);
+    } finally {
+      await h.teardown();
+    }
+  });
+
   test('editing plan.yaml on disk + explicit import reconciles into the DB', async () => {
     // Deterministic version of the auto-sync flow: instead of waiting
     // for chokidar to detect the change, we call `/api/plans/import`

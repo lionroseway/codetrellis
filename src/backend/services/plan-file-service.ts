@@ -322,7 +322,7 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   }
 
   const planUid = planRaw.uid as string;
-  const projectPath = (planRaw.projectPath as string) || '.';
+  const projectPath = importedPlanRoot(planUid, planDir, planRaw.projectPath);
 
   // 1. Plan upsert (same for V1 and V2).
   upsertPlan(planUid, planRaw, projectPath);
@@ -1200,6 +1200,43 @@ function serializeDoc(doc: PlanDocument): string {
 }
 
 // --- Upserts (importer side) ---
+
+/**
+ * Which project an imported plan belongs to.
+ *
+ * This used to be `plan.yaml`'s own `projectPath`, else `'.'`. A committed
+ * plan.yaml carries whatever absolute path the AUTHOR'S machine had (this
+ * repo's own plans say /Users/<someone>/...), or nothing. So a plan
+ * imported from a clone, another machine, or another worktree belonged to
+ * a checkout that is not this one, or to `'.'`: it vanished from every
+ * scoped view. Worse, the scan's "DB has no plans for this project, so
+ * re-import from disk" pass could never see its own imports, and re-ran
+ * on every scan. And a root read from file CONTENT is the kind of input
+ * the Phase 19 rules say never to derive a root from.
+ *
+ * Now, in order:
+ *   1. an existing plan keeps its root while that root still exists, so
+ *      a plan committed on several branches does not hop between
+ *      worktrees each time a different one is scanned;
+ *   2. otherwise the root is where the plan SITS: the directory holding
+ *      `.codetrellis/plans/<slug>/`;
+ *   3. only for a directory outside that layout, the file's absolute
+ *      `projectPath`, and `'.'` as the last resort (the old behaviour).
+ */
+export function importedPlanRoot(planUid: string, planDir: string, declared: unknown): string {
+  const existing = planService.getPlan(planUid)?.projectPath;
+  if (existing && path.isAbsolute(existing) && fs.existsSync(existing)) return existing;
+
+  const slugDir = path.resolve(planDir);
+  const plansDir = path.dirname(slugDir);
+  const dotDir = path.dirname(plansDir);
+  if (path.basename(plansDir) === 'plans' && path.basename(dotDir) === '.codetrellis') {
+    return path.dirname(dotDir);
+  }
+
+  if (typeof declared === 'string' && path.isAbsolute(declared)) return declared;
+  return '.';
+}
 
 function upsertPlan(planUid: string, raw: any, projectPath: string): void {
   const db = getDb();
