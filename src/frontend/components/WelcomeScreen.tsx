@@ -152,6 +152,15 @@ export function WelcomeScreen() {
       <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] rounded-full bg-violet-500/[0.03] blur-[80px]" />
 
       {/* Content */}
+      {/*
+        The scroll container. The root clips — it has to, or the blurred
+        glows spill out — and the column used to sit directly inside it,
+        vertically centred at `min-h-full`. So with enough active agents and
+        recent projects, or a short window, the list ran off the bottom with
+        no way to reach it: clipped, not scrollable. Centring survives for
+        the short case because the inner column still fills the height.
+      */}
+      <div className="relative h-full overflow-y-auto">
       <div className="relative flex flex-col items-center justify-center min-h-full max-w-2xl mx-auto px-8 py-10">
         {/* Logo */}
         <div className="relative mb-6">
@@ -225,6 +234,7 @@ export function WelcomeScreen() {
             <ArrowRight size={14} />
           </button>
         )}
+      </div>
       </div>
     </div>
   );
