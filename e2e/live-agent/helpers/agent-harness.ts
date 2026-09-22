@@ -8,6 +8,7 @@
 
 import { type APIRequestContext } from '@playwright/test';
 import WebSocket from 'ws';
+import { authHeaders } from '../../helpers/setup';
 
 const API = 'http://localhost:3001/api';
 const WS_URL = 'ws://localhost:3001/ws';
@@ -92,7 +93,8 @@ export function createWsCollector(): Promise<WsEventCollector> {
       reject: (err: Error) => void;
     }> = [];
 
-    const ws = new WebSocket(WS_URL);
+    // The WebSocket authenticates (Phase 19): send the token, or 401.
+    const ws = new WebSocket(WS_URL, { headers: authHeaders() });
 
     ws.on('open', () => {
       resolve({

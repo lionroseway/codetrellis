@@ -68,10 +68,11 @@ const storageState = {
 
 export default defineConfig({
   testDir: './e2e',
-  // The marketing spec regenerates committed screenshots under
-  // marketing-assets/. In a normal run it silently rewrote them with
-  // whatever test data was loaded. Opt in with E2E_MARKETING=1.
-  testIgnore: process.env.E2E_MARKETING ? [] : ['**/marketing/**'],
+  // Two specs regenerate COMMITTED images: marketing/ (marketing-assets/)
+  // and screenshots/ (screenshots/*.png). In a normal run they silently
+  // rewrote them with whatever test data was loaded. Opt in with
+  // E2E_MARKETING=1.
+  testIgnore: process.env.E2E_MARKETING ? [] : ['**/marketing/**', '**/screenshots/**'],
   timeout: 30000,
   // Playwright's default is half the CPU cores. Every test opens and scans
   // this whole repository in its own Chromium against ONE backend, so on a

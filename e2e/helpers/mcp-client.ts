@@ -11,6 +11,8 @@
 
 import http from 'node:http';
 
+import { authHeaders } from './setup';
+
 const MCP_PORT = 19432;
 
 interface PendingRequest {
@@ -35,7 +37,15 @@ export async function createMcpClient(): Promise<{
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('SSE connect timeout')), 10000);
 
-    sseRequest = http.get(`http://127.0.0.1:${MCP_PORT}/sse`, (res) => {
+    // The MCP transport authenticates (Phase 19). Without the token the
+    // server answers 401 and never sends an `endpoint` event, which read
+    // as "SSE connect timeout" on every MCP spec.
+    sseRequest = http.get(`http://127.0.0.1:${MCP_PORT}/sse`, { headers: authHeaders() }, (res) => {
+      if (res.statusCode && res.statusCode >= 400) {
+        clearTimeout(timeout);
+        reject(new Error(`MCP SSE refused: HTTP ${res.statusCode}`));
+        return;
+      }
       let buffer = '';
       res.on('data', (chunk: Buffer) => {
         buffer += chunk.toString();

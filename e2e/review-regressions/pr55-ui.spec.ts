@@ -196,7 +196,10 @@ test.describe('Plan template picker (M26)', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await page.getByTitle('New plan from template').click();
 
+    // Inside the picker: page-wide, "Performance" also matches the graph
+    // toolbar's card-style toggle, which comes first in the DOM.
     const template = page
+      .getByRole('dialog', { name: 'New plan from template' })
       .getByRole('button')
       .filter({ hasText: /Feature|Bug fix|Refactor|Migration|Performance/ })
       .first();

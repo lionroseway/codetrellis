@@ -31,6 +31,11 @@ export const PROJECT_PATH = process.cwd();
  * endpoint that starts authenticating does not break the suite again.
  */
 export function authHeaders(): Record<string, string> {
+  // playwright.config.ts pins the token for the run and the backend adopts
+  // it, so this is the value the server holds. The file is the fallback
+  // for a run against a server this config did not start.
+  const pinned = process.env.CODETRELLIS_CAPABILITY_TOKEN;
+  if (pinned) return { 'x-codetrellis-token': pinned };
   const dataDir = process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
   try {
     return {

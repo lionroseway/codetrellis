@@ -59,8 +59,8 @@ test.describe('Project scan', () => {
   test('trellis mode buttons are visible', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByRole('button', { name: 'Live' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Baseline' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Live', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Baseline', exact: true })).toBeVisible();
   });
 
   test('layout toggle (Map/Tree) is visible', async ({ page }) => {

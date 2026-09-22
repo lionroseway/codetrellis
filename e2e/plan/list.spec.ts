@@ -61,7 +61,7 @@ test.describe('Plan list', () => {
 
     // Plan cards have the title attribute for opening workspace
     const planCard = page.locator(
-      'button[title="Click to open the plan workspace (Spec / Tasks / Activity)"]',
+      'button[title="Click to open the plan workspace"]',
     ).filter({ hasText: 'E2E List Badge Plan' });
     await expect(planCard).toBeVisible({ timeout: 5000 });
   });

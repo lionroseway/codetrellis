@@ -29,7 +29,7 @@ test.describe('Settings modal chrome', () => {
     await expect(dialog.getByRole('button', { name: 'Identity' })).toBeVisible({ timeout: 3000 });
     await expect(dialog.getByRole('button', { name: 'MCP Server' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Plans' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Data' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Data', exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Logs' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Telemetry' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Updates' })).toBeVisible();
