@@ -41,7 +41,7 @@ import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStat
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
-import { startMcpServer, getMcpStatus, getMcpConfig } from './mcp/server';
+import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
@@ -3400,6 +3400,13 @@ app.get('/api/mcp/status', (_req, res) => {
 // MCP config for agents to copy
 app.get('/api/mcp/config', (_req, res) => {
   res.json(getMcpConfig());
+});
+
+// Everything the copy surfaces need to explain the credential, not just
+// carry it. The token is safe to return here: this API already required
+// it to answer.
+app.get('/api/mcp/setup', (_req, res) => {
+  res.json(getMcpSetup());
 });
 
 // --- Logs API (Phase 13 follow-up) ---

@@ -673,7 +673,17 @@ The user may have changed the default port. Check
 \`GET http://127.0.0.1:3001/api/mcp/status\` (returns
 \`{ running, port, connectedAgents }\`) or fetch the config from
 \`GET /api/mcp/config\`. The default port is 19432 but autodetect
-walks forward on collision.`;
+walks forward on collision.
+
+### Authentication
+
+Every MCP request needs this launch's capability token, as the
+\`x-codetrellis-token\` header (or \`Authorization: Bearer\`, or
+\`?ct_token=\` for clients that cannot send headers). Any process
+running as the user can read it from \`<dataDir>/capability-token\`;
+\`GET /api/mcp/setup\` returns the exact path. It changes every time
+CodeTrellis starts, so a 401 "Missing or invalid capability token"
+after a restart means: re-read the file and update your config.`;
 
 // ── Quickstart ──────────────────────────────────────────────────────
 

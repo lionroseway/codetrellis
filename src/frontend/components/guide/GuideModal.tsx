@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Copy, Check, Sparkles, Plug } from 'lucide-react';
 import { GUIDE_SECTIONS, GUIDE_GROUPS } from './guide-content';
+import { configText, copyText, fetchMcpSetup, maskToken, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 
 /**
  * The in-app guide — rail on the left, one topic at a time on the right.
@@ -35,7 +36,7 @@ export const GUIDE_SEEN_KEY = 'codetrellis:guide:seen';
 export function GuideModal() {
   const [open, setOpen] = useState(false);
   const [activeId, setActiveId] = useState(GUIDE_SECTIONS[0].id);
-  const [mcpConfig, setMcpConfig] = useState('');
+  const [mcpSetup, setMcpSetup] = useState<McpSetup | null>(null);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -49,10 +50,7 @@ export function GuideModal() {
 
   useEffect(() => {
     if (!open) return;
-    fetch('/api/mcp/config')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((cfg) => cfg && setMcpConfig(JSON.stringify(cfg, null, 2)))
-      .catch(() => {});
+    fetchMcpSetup().then(setMcpSetup);
   }, [open]);
 
   useEffect(() => {
@@ -141,7 +139,7 @@ export function GuideModal() {
             )}
 
             {active.id === 'connect-agent' && (
-              <McpConfigBlock config={mcpConfig} />
+              <McpConfigBlock setup={mcpSetup} />
             )}
 
             {active.asks && active.asks.length > 0 && (
@@ -216,33 +214,44 @@ function AskCard({ prompt, note }: { prompt: string; note?: string }) {
 }
 
 /** The connect-an-agent config, kept where the instructions are. */
-function McpConfigBlock({ config }: { config: string }) {
-  const [copied, setCopied] = useState(false);
+function McpConfigBlock({ setup }: { setup: McpSetup | null }) {
+  const [copied, setCopied] = useState<'config' | 'agent' | null>(null);
+  const copy = async (what: 'config' | 'agent') => {
+    if (!setup) return;
+    if (await copyText(what === 'config' ? configText(setup) : setup.agentPrompt)) {
+      setCopied(what);
+      setTimeout(() => setCopied(null), 1500);
+    }
+  };
 
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/25 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.06]">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/[0.06]">
         <span className="flex items-center gap-1.5 text-[10.5px] text-foreground-muted">
           <Plug size={11} className="text-accent" />
           MCP server config
         </span>
-        <button
-          onClick={() => {
-            navigator.clipboard.writeText(config).then(
-              () => { setCopied(true); setTimeout(() => setCopied(false), 1500); },
-              () => {},
-            );
-          }}
-          disabled={!config}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-white/[0.08] text-[10.5px] text-foreground-muted hover:text-foreground hover:bg-white/[0.05] disabled:opacity-40"
-        >
-          {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <span className="flex items-center gap-1.5">
+          {([['config', 'Copy'], ['agent', 'Copy agent instructions']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => copy(key)}
+              disabled={!setup}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-white/[0.08] text-[10.5px] text-foreground-muted hover:text-foreground hover:bg-white/[0.05] disabled:opacity-40"
+            >
+              {copied === key ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+              {copied === key ? 'Copied' : label}
+            </button>
+          ))}
+        </span>
       </div>
       <pre className="px-3 py-2 text-[10.5px] font-mono text-foreground-muted overflow-x-auto">
-        {config || 'Loading…'}
+        {setup ? maskToken(configText(setup), tokenOf(setup)) : 'Loading…'}
       </pre>
+      <p className="px-3 pb-2 text-[10px] text-foreground-subtle leading-relaxed">
+        Includes this launch&apos;s token (shown masked; copied in full). It changes every time CodeTrellis starts.
+        The agent instructions tell an LLM to read it from <code className="font-mono break-all">{setup?.tokenFile ?? '<data dir>/capability-token'}</code> itself.
+      </p>
     </div>
   );
 }

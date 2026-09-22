@@ -192,6 +192,41 @@ test.describe.serial('Miscellaneous endpoints', () => {
     expect(typeof body).toBe('object');
   });
 
+  // The copy buttons (Settings, guide, status bar) all paste this. After
+  // Phase 19 it was still a bare URL, so every freshly pasted config was
+  // refused and nothing said a credential existed. The property worth
+  // pinning is not the JSON shape but that a copied config CONNECTS.
+  test('the copied MCP config authenticates against the real server', async () => {
+    const body = await (await h.client.raw('GET', '/api/mcp/config')).json();
+    const entry = body.codetrellis as { url: string; headers?: Record<string, string> };
+    expect(entry.headers?.['x-codetrellis-token']).toBe(h.backend.capabilityToken);
+
+    const open = async (headers: Record<string, string>) => {
+      const ctrl = new AbortController();
+      try {
+        const res = await fetch(entry.url, { headers, signal: ctrl.signal });
+        return res.status;
+      } finally {
+        ctrl.abort(); // SSE never ends on its own
+      }
+    };
+    expect(await open(entry.headers ?? {})).toBe(200);
+    // And the bare URL, which is what the buttons used to copy, is refused.
+    expect(await open({})).toBe(401);
+  });
+
+  test('agent setup instructions name the credential without containing it', async () => {
+    const setup = await (await h.client.raw('GET', '/api/mcp/setup')).json();
+    const token = h.backend.capabilityToken;
+    // Pasted into a chat, so sent to a model provider: no secret in it.
+    expect(setup.agentPrompt).not.toContain(token);
+    expect(setup.agentPrompt).toContain(setup.tokenFile);
+    expect(setup.agentPrompt).toContain('x-codetrellis-token');
+    expect(setup.agentPrompt).toMatch(/changes every time/);
+    // The command is run locally and must work as pasted.
+    expect(setup.claudeCodeCommand).toContain(token);
+  });
+
   test('GET /api/agent/status returns watcher state', async () => {
     const res = await h.client.raw('GET', '/api/agent/status');
     expect(res.ok).toBe(true);
