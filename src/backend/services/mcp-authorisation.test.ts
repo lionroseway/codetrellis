@@ -211,6 +211,29 @@ describe('project scope — M34', () => {
     assert.doesNotThrow(() => scope('terminal_list', undefined, 'opened'));
   });
 
+  test('a plan_dir to import is held to the same scope', () => {
+    // import_plan_from_files READS the directory and stores what it finds.
+    // It named a plan_dir, not a project_path, so it passed unchecked.
+    const inside = path.join(opened, '.codetrellis', 'plans', 'p');
+    const outside = path.join(elsewhere, '.codetrellis', 'plans', 'p');
+    const notAPlanDir = path.join(opened, 'src');
+    for (const d of [inside, outside, notAPlanDir]) fs.mkdirSync(d, { recursive: true });
+    assert.doesNotThrow(() => scope('import_plan_from_files', { plan_dir: inside }, 'opened'));
+    assert.doesNotThrow(() => scope('import_plan_from_files', { plan_dir: path.join(inside, 'plan.yaml') }, 'opened'));
+    assert.throws(() => scope('import_plan_from_files', { plan_dir: outside }, 'opened'), McpAuthorizationError);
+    assert.throws(() => scope('import_plan_from_files', { plan_dir: notAPlanDir }, 'opened'), McpAuthorizationError);
+    assert.doesNotThrow(() => scope('import_plan_from_files', { plan_dir: outside }, 'anywhere'));
+  });
+
+  test('a plan_dir that is a symlink out of the project is refused', () => {
+    const target = path.join(elsewhere, 'linked-target');
+    fs.mkdirSync(target, { recursive: true });
+    const link = path.join(opened, '.codetrellis', 'plans', 'linked');
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    fs.symlinkSync(target, link);
+    assert.throws(() => scope('import_plan_from_files', { plan_dir: link }, 'opened'), McpAuthorizationError);
+  });
+
   test('open_project is not caught by this, and must not be', () => {
     // It takes `path`, not `project_path`, because opening is how a
     // directory BECOMES a project. Confining it would make it impossible to

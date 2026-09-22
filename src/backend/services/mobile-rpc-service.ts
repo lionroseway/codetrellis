@@ -30,7 +30,7 @@ import { assertPeerMayCall, DEFAULT_GRANTS, PeerAuthorizationError } from './pee
 import { recordPeerAudit, terminalAuditDetail } from './peer-audit-service';
 import { getPairedDevice } from './paired-device-service';
 import { readFileWithin, isWithin } from './confined-fs';
-import { listTrustedRoots, resolveTrustedProjectRoot } from './trusted-roots';
+import { listTrustedRoots, resolveTrustedPlanDir, resolveTrustedProjectRoot } from './trusted-roots';
 import { reviewPlan } from './plan-review-service';
 import { buildPrDraft } from './pr-draft-service';
 import { listComparands, compareSnapshots } from './snapshot-compare-service';
@@ -770,7 +770,8 @@ async function routeMethod(
     }
 
     case 'plan.file.import': {
-      const planDir = requireString(params, 'planDir');
+      // Confined like every other peer path: an opened project's plan dir.
+      const planDir = resolveTrustedPlanDir(requireString(params, 'planDir'));
       const result = planFileService.importPlan(planDir);
       broadcast('plan-created', { uid: result.plan?.uid });
       return { plan: result.plan, warnings: result.warnings };

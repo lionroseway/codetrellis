@@ -132,6 +132,11 @@ test.describe('CDev Phase 3.7 — comprehensive Phase 3 demo', () => {
       };
       copyTree(planDir, teammatePlanDir);
 
+      // A teammate imports inside a project THEY have open. The import
+      // tools only read plan dirs of opened projects (resolveTrustedPlanDir),
+      // so open the teammate's checkout the way the app would.
+      await h.client.scanProject(teammateRoot);
+
       // The teammate plan.yaml exists, but we need to give the
       // import a path it understands. The importer accepts either
       // the plan dir or plan.yaml.

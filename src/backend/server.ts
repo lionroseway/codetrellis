@@ -33,7 +33,7 @@ import { readFileWithin, isWithin, isInside, ConfinementError } from './services
 
 /** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
 const MAX_BROWSE_ENTRIES = 1000;
-import { resolveTrustedProjectRoot, listTrustedRoots, setActiveProjectRoot, projectRelative } from './services/trusted-roots';
+import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, setActiveProjectRoot, projectRelative } from './services/trusted-roots';
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
@@ -3079,9 +3079,18 @@ app.post('/api/plans/:uid/export', (req, res) => {
 });
 
 app.post('/api/plans/import', (req, res) => {
-  const planDir = (req.query.path as string) || (req.body && req.body.planDir);
-  if (!planDir) {
+  const rawPlanDir = (req.query.path as string) || (req.body && req.body.planDir);
+  if (!rawPlanDir) {
     res.status(400).json({ error: 'planDir path required (?path=… or body.planDir)' });
+    return;
+  }
+  // Confined: a plan directory of an opened project, compared on the real
+  // path. See resolveTrustedPlanDir.
+  let planDir: string;
+  try {
+    planDir = resolveTrustedPlanDir(rawPlanDir);
+  } catch (err) {
+    res.status(err instanceof ConfinementError ? 403 : 400).json({ error: err instanceof Error ? err.message : String(err) });
     return;
   }
   try {
