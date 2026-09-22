@@ -1491,7 +1491,28 @@ export function computeGitLineAnnotations(
  * plan only (the user explicitly picked a comparison target). Otherwise we
  * fall back to "any active plan." File-level for v1 — no per-line drift.
  */
-function computeFileDrift(
+/**
+ * Does a plan item's file spec cover this project-relative path?
+ *
+ * Exact path, the destination of a move, or anything under a directory
+ * spec. Separators are normalised because specs are authored by hand and
+ * by agents on any platform.
+ */
+function fileSpecCovers(
+  spec: { path: string; moveTo?: string; isDir?: boolean },
+  relative: string,
+): boolean {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const target = norm(relative);
+  for (const candidate of [spec.path, spec.moveTo].filter(Boolean) as string[]) {
+    const c = norm(candidate);
+    if (c === target) return true;
+    if (target.startsWith(`${c}/`)) return true;
+  }
+  return false;
+}
+
+export function computeFileDrift(
   projectPath: string,
   filePath: string,
   isDirty: boolean,
@@ -1531,13 +1552,28 @@ function computeFileDrift(
   const planUids: string[] = [];
   const taskUids: string[] = [];
   for (const plan of plans) {
+    // Legacy tasks carry `affectedFiles`.
     const tasks = planService.getTasksByPlan(plan.uid);
     const matching = tasks.filter(
       (t) => t.affectedFiles.some((f) => f === relative || f === filePath),
     );
-    if (matching.length > 0) {
+
+    // V2 action items carry `fileSpecs`, and this function never read them.
+    //
+    // Every plan created in the UI or imported from a ticket stores its
+    // targets there, so on any modern plan the file header said
+    // "Drift · unexpected" for every file the plan asked to change — right
+    // above a gutter marking the same lines aligned. The sidebar and the
+    // per-line verdict both go through the proposed-changes feed, which
+    // reads both shapes; this was the one reader left on the old table.
+    const items = planItemService.listAllItems(plan.uid).filter(
+      (it) => it.kind === 'action' && (it.fileSpecs ?? []).some((fs) => fileSpecCovers(fs, relative)),
+    );
+
+    if (matching.length > 0 || items.length > 0) {
       planUids.push(plan.uid);
       for (const t of matching) taskUids.push(t.uid);
+      for (const it of items) taskUids.push(it.uid);
     }
   }
 
