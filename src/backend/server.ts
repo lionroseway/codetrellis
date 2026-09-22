@@ -42,6 +42,7 @@ import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
+import { listWorktreesWithPlans } from './services/worktree-service';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
@@ -605,6 +606,16 @@ app.get('/api/git/branch', (req, res) => {
   } catch {
     res.json({ branch: null });
   }
+});
+
+// Every worktree of the opened project's repo, with the plans on each
+// one's disk. Works from ANY checkout (see worktree-service for why
+// /api/git/info below does not). Roots are derived from git, never taken
+// from the request; the one the caller names is confined first.
+app.get('/api/git/worktrees', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(listWorktreesWithPlans(projectRoot));
 });
 
 // List git branches and worktrees for a project

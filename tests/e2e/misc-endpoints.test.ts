@@ -227,6 +227,19 @@ test.describe.serial('Miscellaneous endpoints', () => {
     expect(setup.claudeCodeCommand).toContain(token);
   });
 
+  // Worktree roots are derived from git, never taken from the request;
+  // the project the caller names must be one this app has open.
+  test('GET /api/git/worktrees refuses a project that is not open', async () => {
+    const res = await h.client.raw('GET', `/api/git/worktrees?project=${encodeURIComponent('/')}`);
+    expect(res.status).toBe(403);
+  });
+
+  test('GET /api/git/worktrees answers for the open project', async () => {
+    const res = await h.client.raw('GET', `/api/git/worktrees?project=${encodeURIComponent(h.fixture.projectPath)}`);
+    expect(res.ok).toBe(true);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+
   test('GET /api/agent/status returns watcher state', async () => {
     const res = await h.client.raw('GET', '/api/agent/status');
     expect(res.ok).toBe(true);
