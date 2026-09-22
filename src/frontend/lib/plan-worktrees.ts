@@ -110,10 +110,12 @@ export async function fetchWorktrees(root: string): Promise<WorktreeInfo[]> {
 }
 
 /**
- * Open a worktree as a project tab, or switch to it if it already is one.
+ * Open a project root (a worktree, or any plan's project) as a tab, or
+ * switch to it if it already is one.
  *
- * The branch popover opened a NEW tab on every click, so opening the same
- * worktree twice gave two tabs scanning the same directory.
+ * The branch popover and plan activation both opened a NEW tab every
+ * time, so opening the same checkout twice gave two tabs scanning the
+ * same directory.
  */
 export async function openWorktreeTab(wtPath: string, branch: string | null): Promise<void> {
   const { useProjectStore } = await import('../stores/project-store');
@@ -130,5 +132,11 @@ export async function openWorktreeTab(wtPath: string, branch: string | null): Pr
     store.applyScanResult(await getAPI().scanProject(wtPath));
   } catch (err) {
     store.setError(String(err));
+    return;
   }
+  // The scan imports plans found on the worktree's disk, but that pass
+  // broadcasts nothing, so "open this worktree to import its plans" used
+  // to open the worktree and still show none of them.
+  const { usePlanStore } = await import('../stores/plan-store');
+  await usePlanStore.getState().fetchPlans();
 }

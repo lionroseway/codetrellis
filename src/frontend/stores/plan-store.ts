@@ -209,16 +209,11 @@ export const usePlanStore = create<PlanState>((set, get) => ({
             branch = (await branchRes.json()).branch;
           } catch { /* ignore */ }
 
-          projectStore.addTab(plan.projectPath, branch);
-          projectStore.setScanStatus('scanning');
-          try {
-            const { getAPI } = await import('../bridge');
-            const api = getAPI();
-            const result = await api.scanProject(plan.projectPath);
-            projectStore.applyScanResult(result);
-          } catch (err) {
-            projectStore.setError(String(err));
-          }
+          // Switch to its tab if it is already open. This always added a
+          // new one, so switching between two worktrees' plans stacked up
+          // duplicate tabs scanning the same directory.
+          const { openWorktreeTab } = await import('../lib/plan-worktrees');
+          await openWorktreeTab(plan.projectPath, branch);
         }
       }
     } else {

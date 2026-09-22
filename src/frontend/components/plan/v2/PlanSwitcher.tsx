@@ -27,7 +27,7 @@ export function PlanSwitcher() {
   const panelRef = useRef<HTMLDivElement>(null);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
   const setActivePlan = usePlanStore((s) => s.setActivePlan);
-  const grouped = usePlanWorktrees();
+  const grouped = usePlanWorktrees(open);
 
   useEffect(() => {
     if (!open) return;
