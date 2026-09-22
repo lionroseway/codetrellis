@@ -87,7 +87,15 @@ interface Ctx {
    * this scene once captured `app.rb` under a caption claiming it showed
    * `money.go`, and nothing anywhere disagreed.
    */
-  shot(label: string, expectFile?: string): Promise<void>;
+  /**
+   * Capture the window — but only once it shows what the shot claims to.
+   *
+   * `expectFile`: the reader must be RENDERING this file (not merely have
+   * it selected). `expectVerdict`: at least one line on it must carry this
+   * verdict. A shot that cannot meet its own caption is flagged and not
+   * saved, because an image of the wrong thing is worse than no image.
+   */
+  shot(label: string, expectFile?: string, expectVerdict?: 'aligned' | 'drifted' | 'outstanding'): Promise<void>;
   /** Edit a file; it is restored when the demo ends, however it ends. */
   edit(relative: string, mutate: (src: string) => string): void;
   /** A second (third…) connected agent, for contention journeys. */
@@ -264,7 +272,7 @@ const SCENES: Scene[] = [
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
       await c.call('navigate_to', { target: 'code', file_path: abs, line: 25 });
       await c.beat(2);
-      await c.shot('04-trace', 'services/shared-go/money/money.go');
+      await c.shot('04-trace', 'services/shared-go/money/money.go', 'aligned');
     },
   },
 
@@ -281,12 +289,17 @@ const SCENES: Scene[] = [
 
       // An edit nobody planned, in a file no item targets — drift, by
       // construction rather than by luck.
-      c.edit('services/notifier/app.rb', (src) => `${src}\n# demo: unplanned tweak\n`);
-      const unplanned = path.join(PROJECT, 'services/notifier/app.rb');
-      await c.call('navigate_to', { target: 'code', file_path: unplanned, line: 21 });
+      // A file NO item targets. This used to be `services/notifier/app.rb`,
+      // described as untargeted — but the plan's third item targets exactly
+      // that file, so once file-level claims counted (514c70f) the edit
+      // correctly read as aligned, and the scene's own shot check refused
+      // to photograph "drift" that was not there.
+      c.edit('services/api/app/config.py', (src) => `${src}\n# demo: unplanned tweak\n`);
+      const unplanned = path.join(PROJECT, 'services/api/app/config.py');
+      await c.call('navigate_to', { target: 'code', file_path: unplanned, line: 9 });
       await c.beat(2);
-      console.log('    unplanned edit in app.rb — expect ◆ drifted');
-      await c.shot('14-verdict-drift', 'services/notifier/app.rb');
+      console.log('    unplanned edit in config.py — expect ◆ drifted');
+      await c.shot('14-verdict-drift', 'services/api/app/config.py', 'drifted');
 
       // The Go file was edited in `work` AND is targeted by an item.
       const planned = path.join(PROJECT, 'services/shared-go/money/money.go');
@@ -308,7 +321,7 @@ const SCENES: Scene[] = [
         console.log('    money.go differs from its pre-edit state — the gutter should mark it');
       }
       console.log('    planned + changed in money.go — expect ✓ aligned');
-      await c.shot('15-verdict-aligned', 'services/shared-go/money/money.go');
+      await c.shot('15-verdict-aligned', 'services/shared-go/money/money.go', 'aligned');
     },
   },
 
@@ -327,7 +340,7 @@ const SCENES: Scene[] = [
       await c.beat(2);
       // The file, with the marker naming the item — this is the half a
       // screenshot can actually show.
-      await c.shot('16a-roundtrip-from-code', 'services/shared-go/money/money.go');
+      await c.shot('16a-roundtrip-from-code', 'services/shared-go/money/money.go', 'aligned');
 
       // `select_item` is NOT the journey. It jumps to the item without
       // going through the code reader's banner, so no breadcrumb is left
@@ -902,23 +915,42 @@ async function main() {
       await client.callTool('present', { title, text, tone }).catch(() => {});
       await ctx.beat();
     },
-    async shot(label, expectFile) {
+    async shot(label, expectFile, expectVerdict) {
       if (!SHOTS) return;
 
       // Wait for the window to actually be showing the subject, rather
       // than photographing whatever happens to be there when the beat
       // elapses. Navigation is async and a fixed pause is a guess.
-      if (expectFile) {
+      if (expectFile || expectVerdict) {
         let onScreen: string | null = null;
-        for (let attempt = 0; attempt < 12; attempt += 1) {
+        let marks: Record<string, number> = {};
+        const satisfied = () =>
+          (!expectFile || (onScreen?.endsWith(expectFile) ?? false))
+          && (!expectVerdict || (marks[expectVerdict] ?? 0) > 0);
+
+        for (let attempt = 0; attempt < 16; attempt += 1) {
           const state = await client.callTool('ui_ready', {});
-          try { onScreen = JSON.parse(state.text).openFile ?? null; } catch { onScreen = null; }
-          if (onScreen && onScreen.endsWith(expectFile)) break;
+          try {
+            const parsed = JSON.parse(state.text);
+            onScreen = parsed.openFile ?? null;
+            // Visible marks only. Counting what is merely in the DOM let a
+            // shot pass whose aligned lines were under the terminal drawer.
+            marks = parsed.visibleVerdicts ?? {};
+          } catch { onScreen = null; marks = {}; }
+          if (satisfied()) break;
           await new Promise((r) => setTimeout(r, 500));
         }
-        if (!onScreen || !onScreen.endsWith(expectFile)) {
-          ctx.flag(`shot "${label}" expected ${expectFile} on screen, found ${onScreen ?? 'nothing'} — not captured`);
+
+        if (!satisfied()) {
+          const seen = Object.entries(marks).map(([k, n]) => `${n} ${k}`).join(', ') || 'no VISIBLE marked lines';
+          ctx.flag(
+            `shot "${label}" wanted ${expectFile ?? 'any file'}${expectVerdict ? ` with ${expectVerdict} lines` : ''}; `
+            + `the window showed ${onScreen ?? 'no file'} with ${seen} — not captured`,
+          );
           return;
+        }
+        if (expectVerdict) {
+          console.log(`    on screen: ${onScreen?.split('/').pop()} · ${Object.entries(marks).map(([k, n]) => `${n} ${k}`).join(', ')}`);
         }
       }
 

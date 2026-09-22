@@ -117,7 +117,12 @@ function CodePreviewInner({
     const el = highlightRowRef.current;
     if (!el) return;
     const t = setTimeout(() => {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // Instant, not smooth. A smooth scroll is animated by
+      // requestAnimationFrame, which does not run while the window is
+      // behind another app — so "open at line 25" left the reader at the
+      // top whenever it was triggered from somewhere else, an agent
+      // included. A jump to a line should be a jump anyway.
+      el.scrollIntoView({ block: 'center', behavior: 'auto' });
     }, 80);
     return () => clearTimeout(t);
   }, [highlightLine, content?.path]);
@@ -153,7 +158,15 @@ function CodePreviewInner({
   }, [selectedRange, lines, content.startLine]);
 
   return (
-    <div className={`rounded-md border ${driftBorder} bg-black/30 overflow-hidden`}>
+    // `data-code-file` is what is RENDERED, as opposed to what is selected.
+    // The two disagree while a new file is being fetched, and a screenshot
+    // taken in that gap shows the previous file under the new one's name —
+    // which is exactly what happened to the demo's "aligned" shot. See the
+    // `ui_ready` responder in useWebSocket.
+    <div
+      data-code-file={content.path}
+      className={`rounded-md border ${driftBorder} bg-black/30 overflow-hidden`}
+    >
       <Header content={content} onClose={onClose} />
 
       {selectedRange && (
@@ -484,6 +497,10 @@ function LineRow({
   return (
     <div
       ref={rowRef}
+      // Machine-readable verdict, so a check can count what rendered
+      // instead of trusting that the right file on screen means the
+      // right marks on it.
+      data-verdict={verdict ?? undefined}
       onClick={onClick}
       title={verdictTooltip(
         verdict,

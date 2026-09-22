@@ -40,6 +40,7 @@ const PRE_EDIT_FORMS: Array<{ file: string; mustContain: string; scene: string }
 /** Marks the demo appends. Their presence means a run was committed. */
 const RUN_ARTEFACTS: Array<{ file: string; mustNotContain: string }> = [
   { file: 'services/notifier/app.rb', mustNotContain: '# demo: unplanned tweak' },
+  { file: 'services/api/app/config.py', mustNotContain: '# demo: unplanned tweak' },
   {
     file: 'services/shared-go/money/money.go',
     mustNotContain: '// normalise rounds half-up so every service agrees.',

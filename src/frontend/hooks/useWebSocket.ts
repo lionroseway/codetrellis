@@ -652,6 +652,8 @@ export function useWebSocket() {
                 let scanStatus = 'unknown';
                 let graphNodes = 0;
                 let openFile: string | null = null;
+                const verdicts: Record<string, number> = {};
+                const visibleVerdicts: Record<string, number> = {};
                 try {
                   const { useProjectStore } = await import('../stores/project-store');
                   const { useUiStore } = await import('../stores/ui-store');
@@ -665,12 +667,41 @@ export function useWebSocket() {
                   // means it ran and came back with nothing.
                   scanStatus = useProjectStore.getState().scanStatus ?? 'unknown';
                   graphNodes = useGraphStore.getState().nodes.length;
-                  // Which file the reader is on. A screenshot that cannot
-                  // say what it is a picture of is not evidence — the
-                  // demo captured `app.rb` under the caption "aligned,
+                  // Which file the reader is SHOWING. A screenshot that
+                  // cannot say what it is a picture of is not evidence —
+                  // the demo captured `app.rb` under the caption "aligned,
                   // money.go" and nothing could tell.
-                  const sel = useUiStore.getState();
-                  openFile = sel.selectedNodeKind === 'file' ? sel.selectedNodeId : null;
+                  //
+                  // Read from the DOM, not from the selection. The first
+                  // version read `selectedNodeId`, which changes the moment
+                  // navigation starts; the rendered file changes only when
+                  // its content arrives. In between, the store says the new
+                  // file and the screen shows the old one — the precise
+                  // disagreement this check exists to catch.
+                  openFile = document.querySelector('[data-code-file]')?.getAttribute('data-code-file') ?? null;
+                  // And what the reader actually marked on it. The right
+                  // file with no marks is the failure a screenshot hides
+                  // best: it looks like a clean file.
+                  for (const el of Array.from(document.querySelectorAll('[data-code-file] [data-verdict]'))) {
+                    const v = el.getAttribute('data-verdict');
+                    if (!v) continue;
+                    verdicts[v] = (verdicts[v] ?? 0) + 1;
+
+                    // And separately, the ones a person could SEE: inside
+                    // the viewport and not covered by a drawer, a panel or
+                    // a card. A mark scrolled off-screen or under the
+                    // terminal is in the DOM and in no screenshot — which
+                    // is how a shot captioned "aligned" once showed a file
+                    // whose aligned lines were hidden behind the drawer.
+                    const r = el.getBoundingClientRect();
+                    const x = r.left + Math.min(40, r.width / 2);
+                    const y = r.top + r.height / 2;
+                    if (y < 0 || y > window.innerHeight || x < 0 || x > window.innerWidth) continue;
+                    const top = document.elementFromPoint(x, y);
+                    if (top && (top === el || el.contains(top))) {
+                      visibleVerdicts[v] = (visibleVerdicts[v] ?? 0) + 1;
+                    }
+                  }
                 } catch { /* stores unavailable — shellMounted already says so */ }
 
                 await fetch('/api/screenshot-response', {
@@ -687,6 +718,8 @@ export function useWebSocket() {
                       scanStatus,
                       graphNodes,
                       openFile,
+                      verdicts,
+                      visibleVerdicts,
                     }),
                   }),
                 }).catch(() => {});
