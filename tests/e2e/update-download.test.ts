@@ -106,11 +106,28 @@ test.describe('A caller cannot name the URL (Phase 19, finding 23)', () => {
         sha256: 'a'.repeat(64),
       });
 
-      expect(res.status, 'the body is ignored; state says no update').toBe(409);
+      // The property is that the BODY IS IGNORED — not that no update
+      // exists. This used to assert 409, which only held while the backend
+      // believed it was up to date. Under the harness it reads its version
+      // from the committed build-info, so the moment a newer release was
+      // published the endpoint correctly started a real download (from
+      // GitHub, body ignored), answered 200, and a security test went red
+      // for a reason that had nothing to do with security. It also pulled a
+      // full installer mid-suite.
+      //
+      // So: whatever the update state, nothing the caller sent may reach
+      // the answer or the download.
+      expect([409, 200, 502], `unexpected status ${res.status}`).toContain(res.status);
       const body = await res.text();
       expect(body, 'and nothing echoes the attacker-supplied values back').not.toContain('evil.example');
       expect(body).not.toContain('cron.d');
+
+      const state = await (await h.client.raw('GET', '/api/updates/download/status')).text();
+      expect(state, 'the download in flight is not the caller\'s').not.toContain('evil.example');
+      expect(state).not.toContain('cron.d');
     } finally {
+      // If an update WAS available, a real download started. Stop it.
+      await h.client.raw('POST', '/api/updates/download/cancel').catch(() => {});
       await h.teardown();
     }
   });
