@@ -1,0 +1,106 @@
+# E2E on a pull request — ON REQUEST, via the `run-e2e` label.
+#
+# Neither end-to-end suite gates PRs (see ci.yml's header for the harness
+# timings that decided that). But running them locally is heavy: the
+# browser suite drove a developer laptop's swap to 6.5 of 8 GB. A runner is
+# the right place, and a label is the right switch: add `run-e2e` to a PR
+# and both suites run against its head; push again and they re-run while
+# the label stays on. Remove it to stop.
+#
+# The `run-e2e` label predates this file and had no workflow behind it.
+#
+# `pull_request`, never `pull_request_target`: this repository is public,
+# and neither suite needs a secret. A fork's run gets none, which is right.
+#
+# Non-gating by design: the browser suite (`npm test`, e2e/) is the older
+# suite and has known failures being worked through. The job reports; it
+# does not block a merge. Artifacts are kept on failure so a red run can
+# be triaged without re-running it.
+
+name: e2e (on request)
+
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    name: Harness
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-e2e')
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    # Same budget as the nightly (e2e-harness.yml): measured >20 min here.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Verify native binding
+        run: |
+          node -e "const B=require('better-sqlite3');new B(':memory:').exec('create table t(a)');console.log('better-sqlite3 OK on',process.version,process.arch)" \
+            || { echo "::error::better-sqlite3 native binding failed to load — wrong arch or Node version. Try: npm rebuild better-sqlite3"; exit 1; }
+      - name: Configure git for fixtures
+        run: |
+          git config --global user.email "ci@codetrellis.invalid"
+          git config --global user.name "CodeTrellis CI"
+      - name: Install Playwright runner
+        run: npx playwright install --with-deps chromium
+      - name: Harness suite
+        run: npm run test:harness
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-report-${{ github.run_id }}
+          path: playwright-report/
+          if-no-files-found: ignore
+
+  browser:
+    name: Browser suite
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-e2e')
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 75
+    env:
+      # playwright.config.ts gives each run its own temp data dir and token,
+      # and fails on a busy port rather than reusing a stray server.
+      E2E_WORKERS: '2'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Verify native binding
+        run: |
+          node -e "const B=require('better-sqlite3');new B(':memory:').exec('create table t(a)');console.log('better-sqlite3 OK on',process.version,process.arch)" \
+            || { echo "::error::better-sqlite3 native binding failed to load"; exit 1; }
+      - name: Configure git
+        run: |
+          git config --global user.email "ci@codetrellis.invalid"
+          git config --global user.name "CodeTrellis CI"
+      - name: Install Playwright runner
+        run: npx playwright install --with-deps chromium
+      - name: Browser suite
+        run: npx playwright test --reporter=list,html
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-report-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
