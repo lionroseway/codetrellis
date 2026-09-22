@@ -183,6 +183,14 @@ export function SettingsModal({
     return () => { cancelled = true; };
   }, []);
 
+  // Escape closes, as every other modal in the app does. Settings had no
+  // key handling at all, so the only way out was the X or the backdrop.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const update = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
     setSaving(true);
@@ -210,6 +218,9 @@ export function SettingsModal({
   return createPortal(
     <Backdrop onClose={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
         className="w-full max-w-3xl max-h-[85vh] flex rounded-2xl border border-white/[0.08] bg-[#0b1020] shadow-[0_24px_80px_rgba(0,0,0,0.6)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >

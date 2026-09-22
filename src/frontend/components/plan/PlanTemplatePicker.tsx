@@ -193,6 +193,9 @@ export function PlanTemplatePicker({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="New plan from template"
         className="w-full max-w-lg max-h-[80vh] rounded-2xl border border-white/[0.08] bg-[#0b1020] shadow-[0_24px_80px_rgba(0,0,0,0.6)] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
