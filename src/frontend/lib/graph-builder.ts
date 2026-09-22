@@ -31,6 +31,69 @@ export interface FileSymbol {
   modifiers?: string[];
 }
 
+/**
+ * One graph element per id. The canvas depends on it.
+ *
+ * React Flow keys every edge and node by `id`, and React cannot tell two
+ * children with the same key apart. On each re-render it keeps one and
+ * leaks the other into the DOM, never removing it. The builder emitted
+ * duplicate edge ids whenever `depEdges` held two rows for the same pair,
+ * which is ordinary: `import type { A }` and `import { b }` from the same
+ * module are two rows. The hub view alone produced 24 duplicate ids on
+ * this repository.
+ *
+ * The leak compounded. Every graph rebuild (the 10-second git check,
+ * each WebSocket event) and, once viewport culling was on, every pan
+ * frame added more copies. One edge was measured at 790 copies in the
+ * DOM, with 7,070 edge elements for 126 real edges, and panning at
+ * 2.6 fps. Hiding the edge layer alone brought it to 50 fps. This was
+ * most of the "graph slows the machine down", and it looked like the
+ * glass effect because the stale copies still carried the glow filter.
+ *
+ * Merges rather than drops: a duplicate edge carries its own imported
+ * symbols, and the merged edge should list all of them.
+ */
+export function uniqueGraph(graph: GraphData): GraphData {
+  const nodeIds = new Set<string>();
+  const nodes = graph.nodes.filter((n) => {
+    if (nodeIds.has(n.id)) return false;
+    nodeIds.add(n.id);
+    return true;
+  });
+
+  const byId = new Map<string, Edge>();
+  for (const edge of graph.edges) {
+    const prior = byId.get(edge.id);
+    if (!prior) {
+      byId.set(edge.id, edge);
+      continue;
+    }
+    const a = (prior.data || {}) as { symbols?: string[]; symbolCount?: number };
+    const b = (edge.data || {}) as { symbols?: string[]; symbolCount?: number };
+    if (!a.symbols && !b.symbols) continue;
+    const symbols = uniqueNames([...(a.symbols ?? []), ...(b.symbols ?? [])]);
+    byId.set(edge.id, {
+      ...prior,
+      data: { ...(prior.data || {}), symbols, symbolCount: symbols.length },
+    });
+  }
+
+  if (nodes.length === graph.nodes.length && byId.size === graph.edges.length) return graph;
+  return { ...graph, nodes, edges: [...byId.values()] };
+}
+
+/**
+ * Order-preserving de-duplication.
+ *
+ * `specifiersIn` is keyed by importer, so a name imported by three files
+ * appears three times when flattened. The file card keys its export chips
+ * by name, which made the same React duplicate-key error, once per
+ * card per render: over 18,000 console errors in one session.
+ */
+export function uniqueNames(names: string[]): string[] {
+  return [...new Set(names)];
+}
+
 export interface GraphData {
   nodes: Node[];
   edges: Edge[];
@@ -611,7 +674,7 @@ function buildHubView(
         isHub,
         onToggle: () => onToggle(path),
         exports: info.specifiersIn.size > 0
-          ? [...info.specifiersIn.values()].flat().slice(0, 5)
+          ? uniqueNames([...info.specifiersIn.values()].flat()).slice(0, 5)
           : undefined,
       },
     });
@@ -678,7 +741,7 @@ function buildFocusView(
       isFocused: true,
       symbolCount: symbols.length,
       onToggle: () => onToggle(focusPath),
-      exports: [...focusInfo.specifiersIn.values()].flat().slice(0, 8),
+      exports: uniqueNames([...focusInfo.specifiersIn.values()].flat()).slice(0, 8),
     },
   });
 
