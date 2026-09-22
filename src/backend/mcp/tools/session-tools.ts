@@ -120,7 +120,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         '"channel", "activity" and "history" live inside the plan workspace and will switch to it if a plan is active.',
       inputSchema: {
         panel: z.enum(['sidebar', 'inspector', 'terminal', 'plans', 'split', 'channel', 'activity', 'history']).describe(
-          'Which panel to toggle. "terminal" = the terminal drawer, "plans" = the Plans \/ Timeline panel under the graph, "channel" = peer-to-peer coordination Channel panel, ' +
+          'Which panel to toggle. "terminal" = the terminal drawer, "plans" = the Plans / Timeline panel under the graph, "channel" = peer-to-peer coordination Channel panel, ' +
           '"activity" = plan activity/event feed, "history" = plan history (time-travel) rail.',
         ),
       },
