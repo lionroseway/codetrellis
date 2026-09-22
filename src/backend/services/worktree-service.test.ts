@@ -86,6 +86,28 @@ describe('plans per worktree', () => {
   });
 });
 
+describe('only real worktrees of this repo', () => {
+  test('a hand-written .git/worktrees entry pointing elsewhere is dropped', () => {
+    // A clone can ship .git/worktrees/<name>/gitdir naming any directory.
+    // git lists it; nothing points back from that directory, so we don't.
+    const elsewhere = path.join(tmp, 'elsewhere');
+    writePlan(elsewhere, 'private', 'uid-private', 'Not a worktree of this repo');
+    fs.writeFileSync(path.join(elsewhere, '.git'), 'gitdir: /nowhere/at/all\n');
+    const entry = path.join(main, '.git', 'worktrees', 'injected');
+    fs.mkdirSync(entry, { recursive: true });
+    fs.writeFileSync(path.join(entry, 'gitdir'), path.join(elsewhere, '.git') + '\n');
+    fs.writeFileSync(path.join(entry, 'HEAD'), 'ref: refs/heads/main\n');
+    fs.writeFileSync(path.join(entry, 'commondir'), '../..\n');
+    try {
+      const listed = listWorktrees(main).map((w) => w.path);
+      assert.ok(!listed.includes(elsewhere), `listed an injected worktree: ${listed}`);
+      assert.equal(listed.length, 2, 'the two real worktrees are still there');
+    } finally {
+      fs.rmSync(entry, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('porcelain parsing', () => {
   test('detached, bare and prunable entries', () => {
     const out = [

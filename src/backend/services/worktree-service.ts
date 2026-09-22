@@ -20,7 +20,9 @@
  *
  * CONFINEMENT
  *
- * Worktree roots come from git, never from the request: the caller names
+ * Worktree roots come from git, never from the request, and each one is
+ * checked to point back at this repository (see `belongsToRepo`): the
+ * caller names
  * an opened project (confined upstream by `requireProjectRoot`), and the
  * siblings are derived from its repository. Plan files inside a sibling
  * are read through `confined-fs`, so a symlinked `.codetrellis/plans/x`
@@ -99,20 +101,60 @@ function safeCanonical(p: string): string {
   }
 }
 
+function git(projectRoot: string, args: string[]): string {
+  // execFile, no shell; `-C <root>` where root is a confined project root.
+  return execFileSync('git', ['-C', projectRoot, ...args], {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 5000,
+  });
+}
+
+/**
+ * Does `wt` really belong to the repository whose common git dir is
+ * `commonDir`?
+ *
+ * `git worktree list` reports whatever `.git/worktrees/<name>/gitdir`
+ * says, and a cloned repository can ship that directory hand-written,
+ * pointing at any path on the machine. Everything downstream (reading
+ * plan titles, offering "Open worktree") would then act on a directory
+ * the user never made a worktree of. So the claim is checked from the
+ * other side: a linked worktree's own `.git` FILE must point back into
+ * `<commonDir>/worktrees/`, and the main checkout's `.git` must BE the
+ * common dir. Plain file reads (lstat first, so a symlinked `.git` is
+ * refused); git is not run inside the candidate directory.
+ */
+export function belongsToRepo(wt: Pick<Worktree, 'path' | 'isMain'>, commonDir: string): boolean {
+  try {
+    const wtRoot = fs.realpathSync.native(wt.path);
+    const dotGit = path.join(wtRoot, '.git');
+    const st = fs.lstatSync(dotGit);
+    if (wt.isMain) {
+      return st.isDirectory() && fs.realpathSync.native(dotGit) === commonDir;
+    }
+    if (!st.isFile()) return false;
+    const m = /^gitdir:\s*(.+)\s*$/m.exec(fs.readFileSync(dotGit, 'utf-8'));
+    if (!m) return false;
+    const target = fs.realpathSync.native(path.resolve(wtRoot, m[1].trim()));
+    return path.dirname(target) === path.join(commonDir, 'worktrees');
+  } catch {
+    return false;
+  }
+}
+
 /** Worktrees of the repository containing `projectRoot`. Empty if not a repo. */
 export function listWorktrees(projectRoot: string): Worktree[] {
   let out: string;
+  let commonDir: string;
   try {
-    // execFile, no shell; `-C <root>` where root is a confined project root.
-    out = execFileSync('git', ['-C', projectRoot, 'worktree', 'list', '--porcelain'], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 5000,
-    });
+    out = git(projectRoot, ['worktree', 'list', '--porcelain']);
+    commonDir = fs.realpathSync.native(
+      path.resolve(projectRoot, git(projectRoot, ['rev-parse', '--git-common-dir']).trim()),
+    );
   } catch {
     return [];
   }
-  return parseWorktreePorcelain(out, projectRoot);
+  return parseWorktreePorcelain(out, projectRoot).filter((w) => w.bare || w.prunable || belongsToRepo(w, commonDir));
 }
 
 /** Plan summaries on disk in one worktree. Never throws. */
