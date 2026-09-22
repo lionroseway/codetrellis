@@ -635,26 +635,56 @@ export function MainCanvas() {
     return () => clearInterval(interval);
   }, [trellisMode, currentSnapshot?.id]);
 
-  // Fetch symbols for focused file in symbol view
+  // Symbols for the focused file, in Symbols view.
+  //
+  // Four ways this used to fail quietly, each read as "Symbols is broken":
+  //   - keyed by relative path and never cleared, so `src/index.ts` in the
+  //     next project showed the previous project's symbols;
+  //   - cached forever, so a file's symbols went stale on its first edit;
+  //   - an error body (401, 500) was cached AS the symbol list, and the
+  //     file showed nothing until reload;
+  //   - no loading or empty state: a focused file with no symbols and one
+  //     still loading looked the same as a broken view.
+  // Now: cleared on project change, refetched on every focus and rescan
+  // (one indexed query), only arrays accepted, stale responses dropped,
+  // and `symbolsStatus` drives a visible state.
+  const [symbolsStatus, setSymbolsStatus] = useState<{ path: string; state: 'loading' | 'ready' | 'error'; count: number } | null>(null);
   useEffect(() => {
-    if (viewDepth !== 'symbol') return;
-    const focusedFiles = [...expandedNodes].filter((id) => id.includes('.'));
-    if (focusedFiles.length === 0) return;
+    setSymbolsMap(new Map());
+    setSymbolsStatus(null);
+  }, [root]);
 
-    for (const relPath of focusedFiles) {
-      if (symbolsMap.has(relPath)) continue;
-      // Find absolute path from dep edges
-      const edge = depEdges.find((e) => e.sourceRelative === relPath || e.targetRelative === relPath);
-      const absPath = edge ? (edge.sourceRelative === relPath ? edge.source : edge.target) : null;
-      if (!absPath) continue;
-
-      fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`)
-        .then((r) => r.json())
-        .then((symbols: FileSymbol[]) => {
-          setSymbolsMap((prev) => new Map(prev).set(relPath, symbols));
-        })
-        .catch(() => {});
+  useEffect(() => {
+    if (viewDepth !== 'symbol') { setSymbolsStatus(null); return; }
+    let relPath: string | null = null;
+    let absPath: string | null = null;
+    for (const id of expandedNodes) {
+      if (id.startsWith('cluster:')) continue;
+      const e = depEdges.find((d) => d.sourceRelative === id || d.targetRelative === id || d.source === id || d.target === id);
+      if (!e) continue;
+      const isSource = e.sourceRelative === id || e.source === id;
+      relPath = isSource ? e.sourceRelative : e.targetRelative;
+      absPath = isSource ? e.source : e.target;
+      break;
     }
+    if (!relPath || !absPath) { setSymbolsStatus(null); return; }
+
+    const rel = relPath;
+    let cancelled = false;
+    // Keep showing a list we already have while it refreshes.
+    setSymbolsStatus((prev) => (prev?.path === rel && prev.state === 'ready' ? prev : { path: rel, state: 'loading', count: 0 }));
+    fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((symbols: unknown) => {
+        if (cancelled) return;
+        if (!Array.isArray(symbols)) throw new Error('not a symbol list');
+        setSymbolsMap((prev) => new Map(prev).set(rel, symbols as FileSymbol[]));
+        setSymbolsStatus({ path: rel, state: 'ready', count: symbols.length });
+      })
+      .catch(() => {
+        if (!cancelled) setSymbolsStatus({ path: rel, state: 'error', count: 0 });
+      });
+    return () => { cancelled = true; };
   }, [viewDepth, expandedNodes, depEdges]);
 
   // Build the graph
@@ -801,6 +831,7 @@ export function MainCanvas() {
     );
   }, [displayGraphData, setGraphData]);
 
+  const focusFile = useGraphStore((s) => s.focusFile);
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
       const data = (node.data || {}) as Record<string, unknown>;
@@ -823,8 +854,12 @@ export function MainCanvas() {
         symbolKind: typeof data.symbolKind === 'string' ? data.symbolKind : undefined,
         parentFilePath,
       });
+      // In Symbols view a file click IS the way in: it focuses the file
+      // and shows what it defines. Elsewhere a click only selects, and
+      // focus stays on the card's own Focus button.
+      if (viewDepth === 'symbol' && kind === 'file' && typeof node.id === 'string') focusFile(node.id);
     },
-    [setSelectedNode],
+    [setSelectedNode, viewDepth, focusFile],
   );
 
   // Phase 17.C — multi-select sync from ReactFlow → graph store
@@ -984,6 +1019,24 @@ export function MainCanvas() {
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
+        {viewDepth === 'symbol' && (
+          <Panel position="top-left">
+            <div
+              data-testid="symbols-status"
+              className="rounded-lg border border-white/[0.08] bg-[#0b1120]/90 px-3 py-1.5 text-[11px] text-zinc-300"
+            >
+              {!symbolsStatus && 'Symbols: click a file to see what it defines.'}
+              {symbolsStatus?.state === 'loading' && `Loading symbols in ${symbolsStatus.path.split('/').pop()}…`}
+              {symbolsStatus?.state === 'error' && (
+                <span className="text-amber-300">Couldn&apos;t load symbols for {symbolsStatus.path.split('/').pop()}. Try Rescan.</span>
+              )}
+              {symbolsStatus?.state === 'ready' && (symbolsStatus.count === 0
+                ? `${symbolsStatus.path.split('/').pop()} has no top-level symbols. Click another file.`
+                : `${symbolsStatus.count} symbol${symbolsStatus.count === 1 ? '' : 's'} in ${symbolsStatus.path.split('/').pop()} · click another file to switch`)}
+            </div>
+          </Panel>
+        )}
+
         <Panel position="top-right">
           <div className="flex max-w-[min(880px,calc(100vw-620px))] flex-wrap items-center justify-end gap-2">
             {/* Trellis mode selector */}

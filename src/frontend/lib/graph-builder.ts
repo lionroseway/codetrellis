@@ -403,8 +403,17 @@ export function buildDependencyGraph(
   const extraPaths = collectStandalonePaths(diffData);
   const arch = analyzeArchitecture(depEdges, extraPaths);
 
-  // Check if a specific file is focused (clicked)
-  const focusedFile = [...expandedNodes].find((id) => arch.has(id));
+  // Check if a specific file is focused (clicked). Accept the absolute
+  // form too: the code reader and `open-file-at` select files by absolute
+  // path, and a focus carried from there into Symbols matched nothing.
+  const absToRel = new Map<string, string>();
+  for (const e of depEdges) {
+    absToRel.set(e.source, e.sourceRelative);
+    absToRel.set(e.target, e.targetRelative);
+  }
+  const focusedFile = [...expandedNodes]
+    .map((id) => (arch.has(id) ? id : absToRel.get(id)))
+    .find((id): id is string => Boolean(id && arch.has(id)));
   // Check if a cluster is expanded
   const expandedClusters = new Set([...expandedNodes].filter((id) => id.startsWith('cluster:')));
 
@@ -413,7 +422,11 @@ export function buildDependencyGraph(
   if (focusedFile) {
     // Focus mode: show one file and all its connections
     result = buildFocusView(focusedFile, arch, depEdges, changeMap, edgeChangeMap, onToggle, symbolsMap, viewDepth);
-  } else if (viewDepth === 'file' || expandedClusters.size > 0) {
+  } else if (viewDepth === 'file' || viewDepth === 'symbol' || expandedClusters.size > 0) {
+    // Symbols with nothing focused shows FILES, not clusters: you pick a
+    // file to see its symbols, and a cluster card cannot be picked. This
+    // branch used to fall through to the cluster overview, so the Symbols
+    // button rendered exactly the Clusters view.
     // Hub/file view: show important files, with expanded clusters showing their files
     result = buildHubView(arch, depEdges, changeMap, edgeChangeMap, onToggle, expandedClusters, Boolean(scopePath));
   } else {
@@ -723,7 +736,9 @@ function buildFocusView(
   const focusInfo = arch.get(focusPath);
   if (!focusInfo) return { nodes, edges };
 
-  const symbols = symbolsMap.get(focusPath) || [];
+  // Array check, not `|| []`: an error body cached as symbols is truthy.
+  const loaded = symbolsMap.get(focusPath);
+  const symbols = Array.isArray(loaded) ? loaded : [];
 
   // Center node — the focused file (large)
   nodes.push({
