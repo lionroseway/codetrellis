@@ -5,6 +5,7 @@ import { useAgentStore } from '../../stores/agent-store';
 import { useTerminalStore } from '../../stores/terminal-store';
 import { CoverageChip } from './CoverageChip';
 import { useUiStore } from '../../stores/ui-store';
+import { configText, copyText, fetchMcpSetup } from '../../lib/mcp-setup';
 
 export function StatusBar() {
   const scanStatus = useProjectStore((s) => s.scanStatus);
@@ -15,14 +16,10 @@ export function StatusBar() {
   const audioBarVisible = useUiStore((s) => s.audioBarVisible);
 
   const handleCopyMcpConfig = async () => {
-    try {
-      const res = await fetch('/api/mcp/config');
-      const config = await res.json();
-      await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      await navigator.clipboard.writeText('{"codetrellis":{"type":"sse","url":"http://127.0.0.1:19432/sse"}}');
+    // No hard-coded fallback: a config without this launch's token is
+    // refused by the server, so copying one would only look like success.
+    const setup = await fetchMcpSetup();
+    if (setup && (await copyText(configText(setup)))) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }

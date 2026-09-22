@@ -1,8 +1,9 @@
 import { memo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useStore, type NodeProps } from '@xyflow/react';
 import { Box, Braces, Hash, Layers, LetterText, List, type LucideIcon } from 'lucide-react';
 
-import type { GraphNodeVisualData } from '../../../lib/graph-visuals';
+import { LOD_ZOOM, statusOutline, type GraphNodeVisualData } from '../../../lib/graph-visuals';
+import { useUiStore } from '../../../stores/ui-store';
 
 interface SymbolNodeData extends GraphNodeVisualData {
   label: string;
@@ -23,17 +24,32 @@ function SymbolNodeComponent({ data }: NodeProps) {
   const d = data as SymbolNodeData;
   const config = KIND_CONFIG[d.symbolKind] || KIND_CONFIG.variable;
   const Icon = config.icon;
+  const perf = useUiStore((s) => s.graphStyle) === 'performance';
+  const zoomedOut = useStore((st) => st.transform[2] < LOD_ZOOM);
 
   return (
     <div
-      className="group relative w-[190px] overflow-hidden rounded-[18px] border px-3 py-2.5 backdrop-blur-lg transition-all duration-300 hover:-translate-y-0.5"
-      style={{
-        borderColor: config.border,
-        background: `linear-gradient(180deg, rgba(255,255,255,0.12), ${config.bg})`,
-        boxShadow: `0 16px 36px rgba(0,0,0,0.32), 0 0 22px ${config.glow}`,
-      }}
+      className={`group relative w-[190px] overflow-hidden rounded-[18px] border px-3 py-2.5 ${perf ? '' : 'backdrop-blur-lg transition-all duration-300 hover:-translate-y-0.5'}`}
+      style={perf
+        ? {
+            borderColor: config.border,
+            // Opaque base: without the blur, a translucent card shows the edges behind it.
+            background: `linear-gradient(180deg, rgba(255,255,255,0.12), ${config.bg}), #0e1422`,
+            ...statusOutline({ glow: config.glow, changed: false }),
+          }
+        : {
+            borderColor: config.border,
+            background: `linear-gradient(180deg, rgba(255,255,255,0.12), ${config.bg})`,
+            boxShadow: `0 16px 36px rgba(0,0,0,0.32), 0 0 22px ${config.glow}`,
+          }}
     >
       <Handle type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-white/70" />
+      {perf && zoomedOut ? (
+        <div className="flex min-h-[36px] items-center gap-2">
+          <Icon size={20} style={{ color: config.color }} />
+          <div className="min-w-0 flex-1 truncate text-[18px] font-semibold text-zinc-50">{d.label}</div>
+        </div>
+      ) : (
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/8" style={{ backgroundColor: config.bg }}>
           <Icon size={14} className="drop-shadow-[0_0_8px_currentColor]" style={{ color: config.color }} />
@@ -45,6 +61,7 @@ function SymbolNodeComponent({ data }: NodeProps) {
           <div className="truncate text-[12px] text-zinc-100">{d.label}</div>
         </div>
       </div>
+      )}
       <Handle type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-white/70" />
     </div>
   );

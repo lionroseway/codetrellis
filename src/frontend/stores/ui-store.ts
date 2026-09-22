@@ -11,6 +11,14 @@ export interface SelectedNodeMeta {
   symbolStartLine?: number;
   symbolEndLine?: number;
   parentFilePath?: string;
+  /**
+   * A line to scroll to and mark when the code reader opens this file.
+   *
+   * Carried on the selection rather than passed as a prop because the
+   * reader resolves its own file from the selection — see
+   * `lib/open-file-at`, which is the only thing that sets it.
+   */
+  line?: number;
 }
 
 /**
@@ -87,6 +95,45 @@ interface UiState {
   setPlanPanelExpanded: (v: boolean) => void;
   setInspectorExpanded: (v: boolean) => void;
   setDriftComparePlanUid: (uid: string | null) => void;
+
+  /**
+   * How graph cards are drawn. See `GraphStyle`.
+   */
+  graphStyle: GraphStyle;
+  setGraphStyle: (style: GraphStyle) => void;
+}
+
+/**
+ * Graph card rendering.
+ *
+ * `glass` is the original look: frosted cards (backdrop blur), soft
+ * coloured glows, pulsing rings on focused and in-progress nodes, and a
+ * drop-shadow filter on every edge. It is also the reason a large graph
+ * stutters on pan and zoom. A backdrop blur re-samples everything behind
+ * the card on every frame the canvas moves, and an SVG filter per edge
+ * does the same work thousands of times.
+ *
+ * `performance` keeps every signal and changes how it is drawn. Status is
+ * the product here, since you are meant to be able to see at a glance which
+ * files the agent touched, so each glow becomes a thick solid outline
+ * in the same colour, and each pulse a static double outline. Outlines
+ * are painted once and cost nothing on pan. The frosting, the ambient
+ * drop shadows and the per-edge filters go.
+ *
+ * Default is `performance`: the expensive look is the one to opt into.
+ * Stored per machine in localStorage, because it is a property of the
+ * display, not of the project or the account.
+ */
+export type GraphStyle = 'performance' | 'glass';
+
+const GRAPH_STYLE_KEY = 'codetrellis.graphStyle';
+
+function readGraphStyle(): GraphStyle {
+  try {
+    return localStorage.getItem(GRAPH_STYLE_KEY) === 'glass' ? 'glass' : 'performance';
+  } catch {
+    return 'performance';
+  }
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -103,6 +150,11 @@ export const useUiStore = create<UiState>((set) => ({
   planPanelExpanded: false,
   inspectorExpanded: false,
   driftComparePlanUid: null,
+  graphStyle: readGraphStyle(),
+  setGraphStyle: (graphStyle) => {
+    try { localStorage.setItem(GRAPH_STYLE_KEY, graphStyle); } catch { /* private window — session only */ }
+    set({ graphStyle });
+  },
   splitView: false,
   toggleSplitView: () => set((s) => ({ splitView: !s.splitView })),
   audioBarVisible: false,

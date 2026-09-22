@@ -82,12 +82,18 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description: 'Navigate the CodeTrellis UI to a specific view. Use this to show the user what you are working on — open the plan workspace, switch to graph view, or enable split view.',
       inputSchema: {
-        target: z.enum(['plan', 'graph', 'split', 'timeline']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open'),
+        target: z.enum(['plan', 'graph', 'split', 'timeline', 'code']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open, "code" = the code reader on a file'),
         plan_uid: z.string().optional().describe('If navigating to plan/split/timeline, which plan to show. If omitted, keeps the current active plan.'),
+        // `code` was missing entirely, so an agent could show someone the
+        // graph, a plan, a split and a timeline — and never the code,
+        // which is where the per-line verdict lives. An agent that says
+        // "look at what changed" could not make that happen.
+        file_path: z.string().optional().describe('For target "code": absolute path of the file to open.'),
+        line: z.number().int().optional().describe('For target "code": line to scroll to and mark.'),
       },
     },
-    async ({ target, plan_uid }) => {
-      deps.broadcast('ui-navigate', { target, planUid: plan_uid });
+    async ({ target, plan_uid, file_path, line }) => {
+      deps.broadcast('ui-navigate', { target, planUid: plan_uid, filePath: file_path, line });
       return { content: [{ type: 'text' as const, text: `Navigated to ${target}${plan_uid ? ` (plan ${plan_uid})` : ''}` }] };
     },
   );
@@ -113,8 +119,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description: 'Toggle a UI panel on or off in the CodeTrellis interface. ' +
         '"channel", "activity" and "history" live inside the plan workspace and will switch to it if a plan is active.',
       inputSchema: {
-        panel: z.enum(['sidebar', 'inspector', 'terminal', 'split', 'channel', 'activity', 'history']).describe(
-          'Which panel to toggle. "channel" = peer-to-peer coordination Channel panel, ' +
+        panel: z.enum(['sidebar', 'inspector', 'terminal', 'plans', 'split', 'channel', 'activity', 'history']).describe(
+          'Which panel to toggle. "terminal" = the terminal drawer, "plans" = the Plans / Timeline panel under the graph, "channel" = peer-to-peer coordination Channel panel, ' +
           '"activity" = plan activity/event feed, "history" = plan history (time-travel) rail.',
         ),
       },

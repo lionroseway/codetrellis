@@ -22,6 +22,21 @@ import { getDataDir } from './persistence';
 let installed = false;
 let logStream: fs.WriteStream | null = null;
 let currentLogPath: string | null = null;
+/** Bytes in today's file, so the cap below needs no stat per line. */
+let currentBytes = 0;
+let capNoticeWritten = false;
+
+/**
+ * Retention.
+ *
+ * Files rotated daily and were never removed or bounded. One install
+ * had 1.8 GB of logs, single days reaching 656 MB, on a machine whose
+ * disk was 99% full. A log is for "what happened recently"; nobody reads
+ * day 40, and a runaway loop writing the same warning should cost a
+ * bounded amount of disk, not the disk.
+ */
+export const LOG_RETENTION_DAYS = 14;
+export const LOG_DAILY_CAP_BYTES = 50 * 1024 * 1024;
 
 export function installFileLogger(): void {
   if (installed) return;
@@ -47,6 +62,14 @@ export function installFileLogger(): void {
       rotateIfNeeded();
       const ts = new Date().toISOString();
       const line = `${ts} [${level}] ${formatArgs(args)}\n`;
+      if (currentBytes >= LOG_DAILY_CAP_BYTES) {
+        if (!capNoticeWritten) {
+          capNoticeWritten = true;
+          logStream?.write(`${ts} [warn] [Logger] Daily cap of ${LOG_DAILY_CAP_BYTES} bytes reached; further lines today go to the console only.\n`);
+        }
+        return;
+      }
+      currentBytes += Buffer.byteLength(line);
       logStream?.write(line);
     } catch {
       // Don't recurse into console.* if the write itself failed.
@@ -133,6 +156,34 @@ function rotateIfNeeded(): void {
   }
   logStream = fs.createWriteStream(targetPath, { flags: 'a', encoding: 'utf-8' });
   currentLogPath = targetPath;
+  try { currentBytes = fs.statSync(targetPath).size; } catch { currentBytes = 0; }
+  capNoticeWritten = false;
+  pruneOldLogs(logDir(), new Date());
+}
+
+/**
+ * Delete daily logs older than the retention window.
+ *
+ * Only files named exactly `YYYY-MM-DD.log` are candidates, so nothing
+ * else a user or tool put in the directory is touched. Exported for the
+ * test; runs on each day's rotation.
+ */
+export function pruneOldLogs(dir: string, now: Date, keepDays = LOG_RETENTION_DAYS): string[] {
+  const removed: string[] = [];
+  const cutoff = new Date(now);
+  cutoff.setUTCDate(cutoff.getUTCDate() - keepDays);
+  const cutoffYmd = ymd(cutoff);
+  let names: string[] = [];
+  try { names = fs.readdirSync(dir); } catch { return removed; }
+  for (const name of names) {
+    const m = /^(\d{4}-\d{2}-\d{2})\.log$/.exec(name);
+    if (!m || m[1] >= cutoffYmd) continue;
+    try {
+      fs.unlinkSync(path.join(dir, name));
+      removed.push(name);
+    } catch { /* in use or already gone */ }
+  }
+  return removed;
 }
 
 function formatArgs(args: unknown[]): string {

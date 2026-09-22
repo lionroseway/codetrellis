@@ -249,6 +249,17 @@ export function useWebSocket() {
               })();
             } else if (target === 'graph') {
               useUiStore.getState().setWorkspaceMode('graph');
+            } else if (target === 'code') {
+              // Goes through the same helper the reader's own links use,
+              // so an agent arriving at a file lands exactly where a
+              // person clicking would.
+              const filePath = payload?.filePath as string | undefined;
+              if (filePath) {
+                void import('../lib/open-file-at').then((m) =>
+                  m.openFileAt(filePath, (payload?.line as number | undefined) ?? null));
+              } else {
+                useUiStore.getState().setWorkspaceMode('code');
+              }
             } else if (target === 'split') {
               (async () => {
                 if (planUid) {
@@ -276,7 +287,13 @@ export function useWebSocket() {
             const panel = payload?.panel as string | undefined;
             if (panel === 'sidebar') useUiStore.getState().toggleSidebar();
             if (panel === 'inspector') useUiStore.getState().toggleInspector();
-            if (panel === 'terminal') useUiStore.getState().toggleAgentPanel();
+            // `terminal` toggled the PLAN panel. It called
+            // `toggleAgentPanel()`, a name left over from when that slot held
+            // the agent panel, so "hide the terminal" hid the plans and left
+            // the terminal open. Both halves were visible in the demo: the
+            // drawer never went away, and the plan pane went blank.
+            if (panel === 'terminal') useTerminalStore.getState().togglePanel();
+            if (panel === 'plans') useUiStore.getState().toggleAgentPanel();
             if (panel === 'split') useUiStore.getState().toggleSplitView();
             // F10 — Channel / Activity / History panels live in the plan
             // workspace; make sure it's showing, then toggle the panel.
@@ -596,6 +613,125 @@ export function useWebSocket() {
                 useGraphStore.getState().setViewDepth(depth);
               })();
             }
+          }
+
+          // --- The graph's data was replaced by a scan ---
+          //
+          // Re-broadcast as a window event so the canvas can refetch. A
+          // scan truncates and repopulates `files` and `imports`, so a
+          // canvas that fetched its edges mid-scan holds an empty list
+          // that nothing would ever correct.
+          if (type === 'graph-data-changed') {
+            window.dispatchEvent(new CustomEvent('graph-data-changed', { detail: payload }));
+            return;
+          }
+
+          // --- UI readiness (MCP ui_ready tool) ---
+          //
+          // Can a person actually use what is on screen right now?
+          //
+          // This exists because the demo drove twenty-four scenes against
+          // an app that was never mounted — the first-run wizard rendered
+          // IN PLACE OF the shell — and reported "nothing looked wrong".
+          // The backend answered every call correctly the whole time. A
+          // verification tool that cannot see a blocking modal proves
+          // nothing, and neither does a green run from one.
+          if (type === 'ui-ready-request') {
+            const nonce = payload?.nonce as string | undefined;
+            if (nonce) {
+              (async () => {
+                // A dialog that covers the app is the thing worth
+                // reporting. Asking the DOM is deliberate: a store flag
+                // would say what we intended to render, and the bug was
+                // that intent and screen disagreed.
+                const blocking = Array.from(document.querySelectorAll('[role="dialog"]'))
+                  .filter((el) => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > window.innerWidth * 0.4 && r.height > window.innerHeight * 0.3;
+                  })
+                  .map((el) => el.getAttribute('aria-label') || 'unnamed dialog');
+
+                const shellMounted = Boolean(document.querySelector('[data-app-shell]'));
+
+                let projectOpen = false;
+                let workspaceMode = 'unknown';
+                let scanStatus = 'unknown';
+                let graphNodes = 0;
+                let openFile: string | null = null;
+                const verdicts: Record<string, number> = {};
+                const visibleVerdicts: Record<string, number> = {};
+                try {
+                  const { useProjectStore } = await import('../stores/project-store');
+                  const { useUiStore } = await import('../stores/ui-store');
+                  const { useGraphStore } = await import('../stores/graph-store');
+                  projectOpen = useProjectStore.getState().tabs.length > 0;
+                  workspaceMode = useUiStore.getState().workspaceMode;
+                  // `scanStatus` gates the edge fetch, and `graphNodes` is
+                  // what actually reached the canvas. Reporting both turns
+                  // "the graph is empty" from a symptom into a diagnosis:
+                  // not-ready means the fetch never ran, ready-with-zero
+                  // means it ran and came back with nothing.
+                  scanStatus = useProjectStore.getState().scanStatus ?? 'unknown';
+                  graphNodes = useGraphStore.getState().nodes.length;
+                  // Which file the reader is SHOWING. A screenshot that
+                  // cannot say what it is a picture of is not evidence —
+                  // the demo captured `app.rb` under the caption "aligned,
+                  // money.go" and nothing could tell.
+                  //
+                  // Read from the DOM, not from the selection. The first
+                  // version read `selectedNodeId`, which changes the moment
+                  // navigation starts; the rendered file changes only when
+                  // its content arrives. In between, the store says the new
+                  // file and the screen shows the old one — the precise
+                  // disagreement this check exists to catch.
+                  openFile = document.querySelector('[data-code-file]')?.getAttribute('data-code-file') ?? null;
+                  // And what the reader actually marked on it. The right
+                  // file with no marks is the failure a screenshot hides
+                  // best: it looks like a clean file.
+                  for (const el of Array.from(document.querySelectorAll('[data-code-file] [data-verdict]'))) {
+                    const v = el.getAttribute('data-verdict');
+                    if (!v) continue;
+                    verdicts[v] = (verdicts[v] ?? 0) + 1;
+
+                    // And separately, the ones a person could SEE: inside
+                    // the viewport and not covered by a drawer, a panel or
+                    // a card. A mark scrolled off-screen or under the
+                    // terminal is in the DOM and in no screenshot — which
+                    // is how a shot captioned "aligned" once showed a file
+                    // whose aligned lines were hidden behind the drawer.
+                    const r = el.getBoundingClientRect();
+                    const x = r.left + Math.min(40, r.width / 2);
+                    const y = r.top + r.height / 2;
+                    if (y < 0 || y > window.innerHeight || x < 0 || x > window.innerWidth) continue;
+                    const top = document.elementFromPoint(x, y);
+                    if (top && (top === el || el.contains(top))) {
+                      visibleVerdicts[v] = (visibleVerdicts[v] ?? 0) + 1;
+                    }
+                  }
+                } catch { /* stores unavailable — shellMounted already says so */ }
+
+                await fetch('/api/screenshot-response', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    nonce,
+                    data: JSON.stringify({
+                      ready: shellMounted && blocking.length === 0,
+                      shellMounted,
+                      blockedBy: blocking,
+                      projectOpen,
+                      workspaceMode,
+                      scanStatus,
+                      graphNodes,
+                      openFile,
+                      verdicts,
+                      visibleVerdicts,
+                    }),
+                  }),
+                }).catch(() => {});
+              })();
+            }
+            return;
           }
 
           // --- Graph snapshot request (MCP graph_snapshot tool) ---

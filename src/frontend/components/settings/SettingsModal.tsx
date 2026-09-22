@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   X,
   User,
+  Palette,
   Plug,
   ClipboardList,
   HardDrive,
@@ -22,6 +23,8 @@ import {
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
+import { useUiStore, type GraphStyle } from '../../stores/ui-store';
+import { configText, copyText, fetchMcpSetup, maskToken, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
 
 // --- Per-device access (Phase 19, finding 15) -------------------------------
@@ -134,10 +137,11 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'mcp' | 'plans' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
+  { key: 'appearance', label: 'Appearance', Icon: Palette },
   { key: 'mcp', label: 'MCP Server', Icon: Plug },
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
   { key: 'data', label: 'Data', Icon: HardDrive },
@@ -246,6 +250,7 @@ export function SettingsModal({
             {section === 'identity' && (
               <IdentitySection settings={settings} onChange={update} />
             )}
+            {section === 'appearance' && <AppearanceSection />}
             {section === 'mcp' && (
               <McpSection settings={settings} boundPort={boundPort} onChange={update} />
             )}
@@ -354,6 +359,58 @@ function IdentitySection({
 
 // --- MCP ---
 
+/**
+ * Appearance — graph card style.
+ *
+ * Local to this machine (localStorage via ui-store), not an AppSettings
+ * field: how heavy a graph this display can draw is a property of the
+ * hardware, and syncing it would push a laptop into glass because a
+ * desktop chose it.
+ */
+function AppearanceSection() {
+  const graphStyle = useUiStore((s) => s.graphStyle);
+  const setGraphStyle = useUiStore((s) => s.setGraphStyle);
+  const options: { key: GraphStyle; label: string; sub: string }[] = [
+    {
+      key: 'performance',
+      label: 'Performance (default)',
+      sub: 'Solid cards. Status is drawn as bold outlines: solid when changed, dashed when planned, double while an agent is working on it. Pans smoothly on large graphs.',
+    },
+    {
+      key: 'glass',
+      label: 'Glass',
+      sub: 'Frosted cards with coloured glows and pulsing rings. Same information, heavier to draw: expect stutter on graphs with thousands of nodes.',
+    },
+  ];
+  return (
+    <div className="space-y-4">
+      <Field label="Graph cards">
+        <div className="space-y-2" role="radiogroup" aria-label="Graph card style">
+          {options.map((o) => (
+            <label key={o.key} className="flex items-start gap-2.5 text-[11.5px] leading-snug cursor-pointer">
+              <input
+                type="radio"
+                name="graph-style"
+                checked={graphStyle === o.key}
+                onChange={() => setGraphStyle(o.key)}
+                className="accent-accent mt-[3px]"
+                data-testid={`graph-style-${o.key}`}
+              />
+              <div>
+                <div className="text-foreground-muted">{o.label}</div>
+                <div className="text-[10px] text-foreground-subtle mt-0.5">{o.sub}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </Field>
+      <p className="text-[10px] text-foreground-subtle">
+        Also switchable from the graph toolbar. Saved on this machine only.
+      </p>
+    </div>
+  );
+}
+
 function McpSection({
   settings,
   boundPort,
@@ -365,11 +422,11 @@ function McpSection({
 }) {
   const [port, setPort] = useState(String(settings.mcp.port));
   const [autodetect, setAutodetect] = useState(settings.mcp.autodetectOnCollision);
-  const [copied, setCopied] = useState(false);
-  const [config, setConfig] = useState<Record<string, unknown> | null>(null);
+  const [copied, setCopied] = useState<'config' | 'claude' | 'agent' | null>(null);
+  const [setup, setSetup] = useState<McpSetup | null>(null);
 
   useEffect(() => {
-    fetch('/api/mcp/config').then((r) => r.json()).then(setConfig).catch(() => {});
+    fetchMcpSetup().then(setSetup);
   }, [boundPort]);
 
   const save = () => {
@@ -378,11 +435,13 @@ function McpSection({
     onChange({ mcp: { port: n, autodetectOnCollision: autodetect } });
   };
 
-  const copy = () => {
-    if (!config) return;
-    navigator.clipboard.writeText(JSON.stringify(config, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  const copy = async (what: 'config' | 'claude' | 'agent') => {
+    if (!setup) return;
+    const text = what === 'config' ? configText(setup) : what === 'claude' ? setup.claudeCodeCommand : setup.agentPrompt;
+    if (await copyText(text)) {
+      setCopied(what);
+      setTimeout(() => setCopied(null), 1500);
+    }
   };
 
   const driftedPort = boundPort != null && boundPort !== settings.mcp.port;
@@ -477,25 +536,42 @@ function McpSection({
         </p>
       </Field>
 
-      <Field label="Config snippet for your agent">
-        <div className="flex items-start gap-2">
-          <pre className="flex-1 bg-black/30 border border-white/[0.06] rounded-md px-3 py-2 text-[10.5px] font-mono text-foreground-muted overflow-x-auto">
-{config ? JSON.stringify(config, null, 2) : 'Loading...'}
-          </pre>
-          <button
-            onClick={copy}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-[10.5px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] shrink-0"
-            title="Copy to clipboard"
-          >
-            {copied ? <CheckCircle2 size={11} className="text-green-400" /> : <Copy size={11} />}
-            {copied ? 'Copied' : 'Copy'}
-          </button>
+      <Field label="Connect an agent">
+        <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.04] px-3 py-2 text-[10.5px] text-amber-100/90 leading-relaxed mb-2">
+          Agents must authenticate. The config below carries this launch&apos;s token in an{' '}
+          <code className="font-mono">{setup?.header ?? 'x-codetrellis-token'}</code> header. The token{' '}
+          <strong>changes every time CodeTrellis starts</strong>, so an agent that connected yesterday is refused
+          today with &quot;Missing or invalid capability token&quot; until it is re-copied, or until the agent re-reads{' '}
+          <code className="font-mono break-all">{setup?.tokenFile ?? '<data dir>/capability-token'}</code>.
+        </div>
+        <pre className="bg-black/30 border border-white/[0.06] rounded-md px-3 py-2 text-[10.5px] font-mono text-foreground-muted overflow-x-auto" data-testid="mcp-config-snippet">
+{setup ? maskToken(configText(setup), tokenOf(setup)) : 'Loading...'}
+        </pre>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {([
+            { key: 'config', label: 'Copy config', title: 'JSON for an mcpServers block (Cursor, Claude Code .mcp.json, …). Includes the token.' },
+            { key: 'claude', label: 'Copy Claude Code command', title: 'A `claude mcp add` one-liner. Includes the token.' },
+            { key: 'agent', label: 'Copy instructions for an agent', title: 'Plain-English setup an LLM can follow. Tells it where to read the token; does not contain it.' },
+          ] as const).map((b) => (
+            <button
+              key={b.key}
+              onClick={() => copy(b.key)}
+              disabled={!setup}
+              title={b.title}
+              data-testid={`mcp-copy-${b.key}`}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[10.5px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-40"
+            >
+              {copied === b.key ? <CheckCircle2 size={11} className="text-green-400" /> : <Copy size={11} />}
+              {copied === b.key ? 'Copied' : b.label}
+            </button>
+          ))}
         </div>
       </Field>
 
       <p className="text-[10px] text-foreground-subtle leading-relaxed">
-        Drop this into your agent's MCP config file
-        (<code className="font-mono">~/.cursor/mcp.json</code>, <code className="font-mono">~/.codex/config.json</code>, or your tool's equivalent).
+        Paste the config into your client&apos;s MCP servers setting (Cursor: <code className="font-mono">~/.cursor/mcp.json</code>),
+        or run the Claude Code command. Easiest of all: paste the instructions into your agent and let it configure
+        itself. They tell it the server needs a credential and where to read it, without putting the token in the chat.
       </p>
     </>
   );

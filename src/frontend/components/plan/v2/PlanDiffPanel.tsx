@@ -4,6 +4,8 @@ import {
   Plus, Pencil, Trash, Move, CircleSlash, CheckCircle2, AlertTriangle, Loader2, Eye,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { useProjectStore } from '../../../stores/project-store';
+import { openFileAt, absoluteFilePath } from '../../../lib/open-file-at';
 import type {
   ProposedChange, ChangeDriftStatus, ChangeKind, ChangeOperation,
 } from '@shared/types';
@@ -28,6 +30,7 @@ import type {
  */
 export function PlanDiffPanel({ planUid }: { planUid: string }) {
   const selectItem = usePlanItemsStore((s) => s.selectItem);
+  const root = useProjectStore((s) => s.root);
   const [changes, setChanges] = useState<ProposedChange[] | null>(null);
   const [filter, setFilter] = useState<ChangeDriftStatus | 'all'>('all');
   const [collapsed, setCollapsed] = useState(false);
@@ -160,7 +163,12 @@ export function PlanDiffPanel({ planUid }: { planUid: string }) {
                   </button>
                   <div className="divide-y divide-white/[0.04]">
                     {group.rows.map((ch) => (
-                      <ChangeRow key={ch.id} change={ch} onOpen={() => selectItem(ch.taskUid)} />
+                      <ChangeRow
+                        key={ch.id}
+                        change={ch}
+                        root={root}
+                        onOpenItem={() => selectItem(ch.taskUid)}
+                      />
                     ))}
                   </div>
                 </div>
@@ -200,16 +208,42 @@ function DriftChip({
   );
 }
 
-function ChangeRow({ change, onOpen }: { change: ProposedChange; onOpen: () => void }) {
+/**
+ * One proposed change.
+ *
+ * The row used to open the owning Action — the same thing the Action
+ * header directly above it already does. So the panel named a file and
+ * offered no way to look at it, while spending its only click on a
+ * destination you could already reach.
+ *
+ * A file row now opens the file. Symbols and connections have no file to
+ * open, so those keep the old behaviour rather than pretending.
+ */
+function ChangeRow({
+  change, root, onOpenItem,
+}: {
+  change: ProposedChange;
+  root: string | null;
+  onOpenItem: () => void;
+}) {
   const KindIcon = CHANGE_KIND_ICON[change.kind];
   const OpIcon = OPERATION_ICON[change.operation];
   const drift = DRIFT_TINT[change.driftStatus];
 
+  // A move reads as `old → new`; the file to open is where it landed.
+  const filePath = change.kind === 'file'
+    ? change.target.split(' → ').pop()!.trim()
+    : null;
+
+  const open = filePath
+    ? () => { void openFileAt(absoluteFilePath(root, filePath)); }
+    : onOpenItem;
+
   return (
     <button
-      onClick={onOpen}
+      onClick={open}
       className="w-full text-left px-3 py-2 flex items-start gap-2.5 hover:bg-white/[0.04] transition-colors group"
-      title="Open the owning Action"
+      title={filePath ? `Read ${filePath}` : 'Open the owning Action'}
     >
       <KindIcon size={13} className="text-foreground-subtle shrink-0 mt-0.5" />
       <span className={`flex items-center gap-1 text-[11px] uppercase tracking-wider font-medium px-2 py-0.5 rounded shrink-0 ${OPERATION_TINT[change.operation]}`}>

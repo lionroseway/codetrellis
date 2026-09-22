@@ -1,5 +1,5 @@
 import { type PeerCapability, DEFAULT_GRANTS } from './peer-capabilities';
-import { isTrustedProjectRoot } from './trusted-roots';
+import { isTrustedProjectRoot, isTrustedPlanDir } from './trusted-roots';
 import type { McpProjectScope } from '../../shared/types/settings';
 
 /**
@@ -123,6 +123,11 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   graph_toggle_projection: 'write',
   graph_export: 'read',
   graph_snapshot: 'read',
+  // Not `capture`: this returns whether the window is usable, never what
+  // is on it. Any agent about to drive the UI should be able to ask
+  // first — gating it behind a capability most installs withhold would
+  // leave exactly the agents that need it unable to check.
+  ui_ready: 'read',
 
   // ── intake-tools ────────────────────────────────────────────────────
   create_plan_from_external: 'write',
@@ -401,6 +406,19 @@ export function assertMcpProjectInScope(
   scope: McpProjectScope,
 ): void {
   if (scope === 'anywhere') return;
+
+  // `plan_dir` names a directory to READ (import_plan_from_files), so it
+  // is held to the same scope as a project path: inside an opened
+  // project's .codetrellis/plans/. It used to pass unchecked.
+  const planDir = (args as { plan_dir?: unknown } | null | undefined)?.plan_dir;
+  if (typeof planDir === 'string' && planDir.trim().length > 0 && !isTrustedPlanDir(planDir)) {
+    throw new McpAuthorizationError(
+      `"${tool}" named a plan directory outside the projects this app has opened: "${planDir}". ` +
+        'Plan directories are read from <opened project>/.codetrellis/plans/<slug>. Open the project ' +
+        'first, or set MCP project scope to "anywhere" in Settings → MCP Server.',
+      null,
+    );
+  }
 
   const candidate = (args as { project_path?: unknown } | null | undefined)?.project_path;
   // Absent or empty is not this function's business: the tool's own schema

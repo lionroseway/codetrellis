@@ -14,6 +14,7 @@ import {
   getCapabilityToken,
   getTokenFilePath,
   TOKEN_HEADER,
+  TOKEN_QUERY_PARAM,
 } from '../services/capability-token';
 import * as _lazy____server from '../server';
 import http from 'node:http';
@@ -729,12 +730,78 @@ export function getMcpStatus(): {
 /**
  * MCP config for agents to copy into their settings.
  */
+/**
+ * The snippet a user pastes into their agent's MCP config.
+ *
+ * It carries this launch's capability token as a header. Before Phase 19
+ * the server was open and a bare URL was a complete config. Afterwards
+ * every copy button in the app (Settings, the guide, the status bar)
+ * still produced a bare URL, so a freshly pasted config was refused with
+ * "Missing or invalid capability token" and nothing on the copy surface
+ * had said a credential existed.
+ *
+ * Header rather than `?ct_token=` in the URL: every mainstream SSE client
+ * (Claude Code, Cursor, the MCP SDK) sends configured headers on the
+ * stream request, and a URL is the part of a config that ends up in logs
+ * and screenshots. The query parameter is still accepted, and
+ * `getMcpSetup` tells an agent about it for clients that cannot set
+ * headers.
+ */
 export function getMcpConfig(): Record<string, unknown> {
   return {
     codetrellis: {
       type: 'sse',
       url: `http://127.0.0.1:${boundPort}/sse`,
+      headers: { [TOKEN_HEADER]: getCapabilityToken() },
     },
+  };
+}
+
+export interface McpSetup {
+  /** Paste-ready `mcpServers` entry, token included. */
+  config: Record<string, unknown>;
+  url: string;
+  /** The header name the token goes in. */
+  header: string;
+  /** Fallback for clients that cannot send headers. */
+  queryParam: string;
+  /** Where any process running as this user can read the current token. */
+  tokenFile: string;
+  /** One-liner for Claude Code. Contains the token. */
+  claudeCodeCommand: string;
+  /**
+   * Instructions for an LLM agent to configure itself.
+   *
+   * Deliberately WITHOUT the token. This text is meant to be pasted into
+   * a chat, which sends it to a model provider, and the agent can read
+   * the file itself: it runs as the user, and the file is the design
+   * (see capability-token). It also survives a restart, which a pasted
+   * value does not.
+   */
+  agentPrompt: string;
+}
+
+export function getMcpSetup(): McpSetup {
+  const url = `http://127.0.0.1:${boundPort}/sse`;
+  const tokenFile = getTokenFilePath();
+  const token = getCapabilityToken();
+  return {
+    config: getMcpConfig(),
+    url,
+    header: TOKEN_HEADER,
+    queryParam: TOKEN_QUERY_PARAM,
+    tokenFile,
+    claudeCodeCommand: `claude mcp add --transport sse codetrellis ${url} --header "${TOKEN_HEADER}: ${token}"`,
+    agentPrompt: [
+      'Connect yourself to the CodeTrellis MCP server running on this machine.',
+      '',
+      `- Transport: SSE. URL: ${url}`,
+      `- It requires a credential. Every request must carry the header \`${TOKEN_HEADER}: <token>\` (\`Authorization: Bearer <token>\` also works). If your MCP client cannot send headers, append \`?${TOKEN_QUERY_PARAM}=<token>\` to the URL instead.`,
+      `- Read the token from the file ${tokenFile} (readable only by this user). Do not ask me to paste it.`,
+      '- The token changes every time CodeTrellis starts. If a request is refused with HTTP 401 "Missing or invalid capability token", re-read the file and update the config. Do not retry with the old value.',
+      '- Name the server `codetrellis`. In Claude Code: `claude mcp add --transport sse codetrellis ' + url + ' --header "' + TOKEN_HEADER + ': <token>"`.',
+      '- Once connected, call `register_session`, then `get_app_guide`.',
+    ].join('\n'),
   };
 }
 

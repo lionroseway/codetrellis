@@ -5,6 +5,7 @@ import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useUiStore } from '../../stores/ui-store';
 import { getAPI } from '../../bridge';
+import { openWorktreeTab } from '../../lib/plan-worktrees';
 import type { ViewDepth, PowerStatus } from '../../../shared/types';
 import { ConnectedAgents } from './ConnectedAgents';
 import { DeviceIndicator } from '../pairing/DeviceIndicator';
@@ -231,13 +232,8 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
                   onClick={(e) => {
                     e.stopPropagation();
                     setOpen(false);
-                    // Open worktree as a new tab
-                    const store = useProjectStore.getState();
-                    store.addTab(wt.path, wt.branch);
-                    store.setScanStatus('scanning');
-                    getAPI().scanProject(wt.path)
-                      .then((result) => store.applyScanResult(result))
-                      .catch((err) => store.setError(String(err)));
+                    // Open as a tab, or switch to it if it already is one.
+                    void openWorktreeTab(wt.path, wt.branch);
                   }}
                   className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover rounded transition-colors text-left"
                 >

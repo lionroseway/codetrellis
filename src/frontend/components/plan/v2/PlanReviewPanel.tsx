@@ -4,6 +4,7 @@ import {
   CircleSlash, AlertTriangle, Check, GitPullRequest, Loader2,
 } from 'lucide-react';
 import { useProjectStore } from '../../../stores/project-store';
+import { openFileAt, absoluteFilePath } from '../../../lib/open-file-at';
 
 /**
  * Reviewing a plan against what actually landed — Phase 29 (surfacing
@@ -94,7 +95,11 @@ const VERDICT: Record<ReviewedItem['verdict'], { Icon: typeof CheckCircle2; tint
 
 export function PlanReviewPanel({ planUid }: { planUid: string }) {
   const projectRoot = useProjectStore((s) => s.root);
-  const [open, setOpen] = useState(false);
+  // Open by default. Closed-by-default is right for a panel you consult;
+  // this one IS the third step of plan → execute → check, and shutting it
+  // made the product's own answer something you had to go looking for.
+  // It still collapses, and the choice sticks for the session.
+  const [open, setOpen] = useState(true);
   const [comparands, setComparands] = useState<Comparand[]>([]);
   const [before, setBefore] = useState('commit:HEAD');
   const [after, setAfter] = useState('live');
@@ -210,17 +215,10 @@ export function PlanReviewPanel({ planUid }: { planUid: string }) {
               </div>
 
               {review.items.length > 0 && (
-                <ul className="space-y-1">
-                  {review.items.map((item) => {
-                    const v = VERDICT[item.verdict];
-                    return (
-                      <li key={item.uid} className="flex items-baseline gap-2 text-[11.5px]">
-                        <v.Icon size={11} className={`${v.tint} shrink-0 translate-y-0.5`} />
-                        <span className="text-foreground-muted truncate flex-1">{item.title}</span>
-                        <span className={`${v.tint} shrink-0 text-[10.5px]`}>{v.label}</span>
-                      </li>
-                    );
-                  })}
+                <ul className="space-y-0.5">
+                  {review.items.map((item) => (
+                    <ReviewedItemRow key={item.uid} item={item} root={projectRoot} />
+                  ))}
                 </ul>
               )}
 
@@ -239,7 +237,9 @@ export function PlanReviewPanel({ planUid }: { planUid: string }) {
                   </p>
                   <ul className="space-y-0.5 max-h-40 overflow-y-auto">
                     {review.unclaimedChanges.map((f) => (
-                      <li key={f} className="font-mono text-[10px] text-foreground-subtle truncate">{f}</li>
+                      <li key={f}>
+                        <FileLink path={f} root={projectRoot} tone="text-amber-200/90" />
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -321,5 +321,88 @@ function ComparandSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+
+/**
+ * A file you can actually open.
+ *
+ * Every path this panel prints used to be dead text: it would tell you a
+ * file changed and no item claimed it — the finding this panel exists to
+ * produce — and leave you to find that file yourself.
+ */
+function FileLink({ path, root, tone }: { path: string; root: string | null; tone?: string }) {
+  return (
+    <button
+      onClick={() => { void openFileAt(absoluteFilePath(root, path)); }}
+      title={`Read ${path}`}
+      className={`block w-full text-left font-mono text-[10px] truncate hover:underline transition-colors ${tone ?? 'text-foreground-subtle hover:text-foreground'}`}
+    >
+      {path}
+    </button>
+  );
+}
+
+/**
+ * One item's verdict, and the files behind it.
+ *
+ * The verdict alone is where this panel stopped. "Two untouched" is a
+ * fact you cannot act on: untouched *which* files, and are they the ones
+ * you thought? The service has always returned `landed` and `missing`
+ * per item — the renderer simply dropped them — so this needed no new
+ * endpoint, only somewhere to put them.
+ *
+ * Collapsed by default: the summary is what most readers want, and a
+ * panel that dumps every path for every item is the reason people stop
+ * reading panels.
+ */
+function ReviewedItemRow({ item, root }: { item: ReviewedItem; root: string | null }) {
+  const [open, setOpen] = useState(false);
+  const v = VERDICT[item.verdict];
+  const fileCount = item.landed.length + item.missing.length;
+
+  return (
+    <li className="rounded-md hover:bg-white/[0.025] transition-colors">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        disabled={fileCount === 0}
+        className="w-full flex items-baseline gap-2 text-[11.5px] px-1.5 py-1 text-left disabled:cursor-default"
+      >
+        <v.Icon size={11} className={`${v.tint} shrink-0 translate-y-0.5`} />
+        <span className="text-foreground-muted truncate flex-1">{item.title}</span>
+        {fileCount > 0 && (
+          <span className="text-foreground-subtle/70 shrink-0 text-[10px] tabular-nums">
+            {fileCount} file{fileCount === 1 ? '' : 's'}
+          </span>
+        )}
+        <span className={`${v.tint} shrink-0 text-[10.5px]`}>{v.label}</span>
+      </button>
+
+      {open && fileCount > 0 && (
+        <div className="pl-6 pr-2 pb-1.5 space-y-1.5">
+          {item.landed.length > 0 && (
+            <div>
+              <div className="text-[9.5px] uppercase tracking-[0.1em] text-emerald-300/70 mb-0.5">
+                Landed
+              </div>
+              {item.landed.map((f) => (
+                <FileLink key={f} path={f} root={root} tone="text-emerald-200/80 hover:text-emerald-100" />
+              ))}
+            </div>
+          )}
+          {item.missing.length > 0 && (
+            <div>
+              <div className="text-[9.5px] uppercase tracking-[0.1em] text-foreground-subtle mb-0.5">
+                Still outstanding
+              </div>
+              {item.missing.map((f) => (
+                <FileLink key={f} path={f} root={root} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

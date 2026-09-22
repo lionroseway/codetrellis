@@ -37,34 +37,60 @@ export function App() {
   useWebSocket();
   useKeyboardShortcuts();
 
-  // Phase 5.1 — first-run onboarding gate. The wizard checks the
-  // backend on mount; if `firstRunComplete` is already true it calls
-  // onComplete immediately and the app renders normally. This state
-  // starts as 'checking' so we don't flash the wizard or the main
-  // shell while the fetch is in flight.
-  const [firstRunState, setFirstRunState] = useState<'checking' | 'wizard' | 'done'>('checking');
+  // First run. Nothing blocks any more.
+  //
+  // This used to `return <FirstRunWizard/>` in place of the entire app,
+  // so a new user met a two-step form — "who are you?", then the MCP
+  // snippet — before they could look at a single thing. Both boxes were
+  // pre-filled from `git config`, which means the interruption existed
+  // to confirm what we already knew.
+  //
+  // It also hid a whole class of failure. The app was not merely
+  // covered, it was NOT MOUNTED, so anything driving the product over
+  // MCP got correct answers from the backend while the window showed a
+  // sign-up form. A full demo run reported "nothing looked wrong"
+  // against twenty-four scenes nobody could see.
+  //
+  // Now: seed the identity from git and get out of the way. The ask only
+  // survives for the case that genuinely needs it — a machine where git
+  // cannot tell us who this is — and even then it sits OVER the app
+  // rather than instead of it.
+  const [askIdentity, setAskIdentity] = useState(false);
 
-  // Quick pre-check: fetch just the firstRunComplete flag so we can
-  // avoid mounting the wizard at all for returning users.
   useEffect(() => {
     fetch('/api/settings/first-run-check')
       .then((r) => r.json())
-      .then((data) => {
-        if (data.firstRunComplete) {
-          setFirstRunState('done');
-        } else {
-          setFirstRunState('wizard');
+      .then(async (data) => {
+        if (data.firstRunComplete) return;
+
+        if (data.canDeriveIdentity) {
+          // Persist what git already told us and mark first run done.
+          // Best-effort: a failure here costs a second attempt next
+          // launch, which is cheaper than a modal.
+          await fetch('/api/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              identity: {
+                displayName: data.identity?.displayName || data.gitDefaults?.name || '',
+                email: data.identity?.email || data.gitDefaults?.email || '',
+              },
+              firstRunComplete: true,
+            }),
+          }).catch(() => {});
+          return;
         }
+
+        setAskIdentity(true);
       })
       .catch(() => {
-        // Backend unreachable — skip the wizard so the app isn't
-        // permanently gated. The wizard will try again next launch.
-        setFirstRunState('done');
+        // Backend unreachable. Render the app regardless — a product
+        // you cannot open is worse than one with no attribution.
       });
   }, []);
 
   const onFirstRunComplete = useCallback(() => {
-    setFirstRunState('done');
+    setAskIdentity(false);
   }, []);
 
   const horizontalRef = useRef<AllotmentHandle>(null);
@@ -73,6 +99,7 @@ export function App() {
   const planPanelExpanded = useUiStore((s) => s.planPanelExpanded);
   const inspectorExpanded = useUiStore((s) => s.inspectorExpanded);
   const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const planPanelVisible = useUiStore((s) => s.agentPanelVisible);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
   const splitView = useUiStore((s) => s.splitView);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
@@ -107,6 +134,23 @@ export function App() {
     };
     window.addEventListener('__test_open_project__', handler);
     return () => window.removeEventListener('__test_open_project__', handler);
+  }, []);
+
+  // Test hook: open a file in the code reader, so a spec can start from
+  // "reading this file" without ten clicks through the explorer tree.
+  //
+  // Sibling of the project hook above and used the same way — only to
+  // ARRIVE. Everything a spec is actually asserting is driven through
+  // the real controls; a hook that performed the journey would test the
+  // hook.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path: filePath, line } = (e as CustomEvent).detail ?? {};
+      if (typeof filePath !== 'string') return;
+      void import('./lib/open-file-at').then((m) => m.openFileAt(filePath, line ?? null));
+    };
+    window.addEventListener('__test_open_file__', handler);
+    return () => window.removeEventListener('__test_open_file__', handler);
   }, []);
 
   // First-run auto-open of the Learn Trellis takeover. Triggers
@@ -186,19 +230,14 @@ export function App() {
     return () => cancelAnimationFrame(raf);
   }, [inspectorExpanded]);
 
-  // Phase 5.1 gate — show nothing while checking, wizard if needed.
-  if (firstRunState === 'checking') {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]" />
-    );
-  }
-
-  if (firstRunState === 'wizard') {
-    return <FirstRunWizard onComplete={onFirstRunComplete} />;
-  }
-
   return (
-    <div className="flex flex-col h-screen text-foreground bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]">
+    // `data-app-shell` is how anything outside the renderer can tell that
+    // the application actually mounted, rather than something standing in
+    // for it. See the `ui_ready` responder in useWebSocket.
+    <div
+      data-app-shell
+      className="flex flex-col h-screen text-foreground bg-gradient-to-br from-[#0a0b10] via-[#0d0e18] to-[#0a0b10]"
+    >
       <AgentPulse />
       <TopBar />
       {/* Graph layout is always rendered behind. The plan workspace
@@ -223,7 +262,10 @@ export function App() {
                     The Allotment stays mounted so pane sizes survive. */}
                 {workspaceMode !== 'code' && <MainCanvas />}
               </Allotment.Pane>
-              <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100}>
+              {/* Collapses when the panel is hidden. PlanPanel returns null
+                  in that state, and the pane used to keep its full height
+                  anyway, so hiding it left an empty slab under the graph. */}
+              <Allotment.Pane preferredSize={PLAN_PANEL_DEFAULT} minSize={100} visible={planPanelVisible}>
                 <PlanPanel />
               </Allotment.Pane>
             </Allotment>
@@ -294,6 +336,9 @@ export function App() {
       <StatusBar />
       <FolderPickerModal />
       <GuideModal />
+      {/* Only when git could not tell us who this is. Over the app,
+          never instead of it. */}
+      {askIdentity && <FirstRunWizard onComplete={onFirstRunComplete} />}
       <GettingStarted />
       <PresencePane />
       <ToastContainer />

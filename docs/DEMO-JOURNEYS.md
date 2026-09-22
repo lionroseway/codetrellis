@@ -51,7 +51,7 @@ in the journey that owns it, not in a backlog here.
 
 One cross-cutting change through Go, C# and Ruby, then the journeys that
 are about the repository rather than the code. This is `npm run demo` —
-21 scenes.
+24 scenes.
 
 | Scene | Watch for |
 |---|---|
@@ -61,6 +61,9 @@ are about the repository rather than the code. This is `npm run demo` —
 | `work` | claim, progress, a real file edit, Timeline and activity move |
 | `terminal` | agent-driven shell, output comes back |
 | `trace` | gutter marks the changed lines, overlay names the item and its intent |
+| `verdict` | ✓ aligned, ◆ drifted, ◇ outstanding — one answer per line, not two faint colours |
+| `roundtrip` | the plan header grows a back button naming the file; it returns you to the line |
+| `colleague` | a review against a branch the picker never offered |
 | `channel` | `need-decision` posted, badge lights, thread resolves |
 | `review` | **1 landed of 3** — the asymmetry is the whole point |
 | `pr` | ticket key in the title, review in the body |
@@ -231,6 +234,23 @@ performance.
   can verify by eye.
 - **Flag, do not fail.** These are verification aids. A scene that notices
   something wrong prints it; the suite is where things fail.
+- **A flag may only claim what it checked.** One read "empty graph while
+  the canvas is drawing one" and had never looked at the canvas. The
+  canvas was blank; the tool it accused was correct. A wrong flag costs
+  more attention than a missing one and sends you to the wrong file.
+- **Never hard-code a number in a flag.** "review says 2 landed; only one
+  file was edited" was true when written and false a week later, because
+  a new scene edited a second file. The review was right and the flag
+  accused it. Derive the expectation from what the run actually did —
+  `edited` knows — so the assertion cannot go stale behind you.
+- **A screenshot must name its subject.** `shot()` takes the file it is
+  supposed to be a picture of and waits for the window to show it. One
+  captured `app.rb` under a caption naming `money.go`, and nothing
+  disagreed.
+- **Check the window is usable before claiming anything.** `ui_ready`
+  reports whether the shell is mounted and whether a dialog covers it.
+  A full run once passed twenty-four scenes against an app that had
+  never mounted, and every screenshot was of the first-run form.
 - **Leave nothing behind.** Restore every file, delete every plan. The
   second run must be as clean as the first — and running it twice is how
   the archived-plan bug was found.

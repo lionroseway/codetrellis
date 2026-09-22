@@ -79,10 +79,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'CodeTrellis runs a local MCP server. Copy the config into your agent, restart it, and it appears in '
       + 'the top bar. Any MCP-capable client works — there is nothing Claude-specific about it.',
     points: [
-      'Claude Code: ~/.claude/settings.json under mcpServers.',
-      'Cursor: Settings → MCP Servers.',
-      'Claude Desktop: its own MCP settings file.',
-      'The config carries a per-launch token. It changes each time the app starts, so re-copy it if your agent stops connecting.',
+      'The server needs a credential: a per-launch token, sent as the x-codetrellis-token header. The copied config includes it.',
+      'The token changes every time the app starts. An agent refused with "Missing or invalid capability token" needs the config re-copied, or to re-read the token file.',
+      'Easiest: "Copy agent instructions" and paste them into your agent. They tell it where to read the token, so the token itself never goes into the chat.',
+      'Claude Code: Settings → MCP Server → Copy Claude Code command. Cursor: paste the config into ~/.cursor/mcp.json.',
     ],
     asks: [
       {

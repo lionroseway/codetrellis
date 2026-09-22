@@ -154,6 +154,44 @@ export function resolveTrustedProjectRoot(
   );
 }
 
+/**
+ * A plan directory an import may read: `<opened project>/.codetrellis/plans/<slug>`.
+ *
+ * Import took this path from the caller (REST body or query, an MCP
+ * argument, a paired phone's RPC) and read whatever was there. Compared
+ * on the REAL path, so a symlinked slug or `.codetrellis` that resolves
+ * elsewhere does not match. Accepts the directory or its `plan.yaml`.
+ * Returns the canonical directory.
+ */
+export function resolveTrustedPlanDir(candidate: unknown, label = 'planDir'): string {
+  if (typeof candidate !== 'string' || candidate.trim().length === 0) {
+    throw new ConfinementError(`${label}: a plan directory is required`);
+  }
+  const dir = /[\\/]plan\.ya?ml$/.test(candidate) ? path.dirname(candidate) : candidate;
+  let canon: string;
+  try {
+    canon = fs.realpathSync.native(path.resolve(dir));
+  } catch {
+    throw new ConfinementError(`${label}: "${candidate}" does not exist or cannot be resolved`);
+  }
+  for (const root of listTrustedRoots()) {
+    const canonRoot = canonicaliseForCompare(root);
+    if (canonRoot && path.dirname(canon) === path.join(canonRoot, '.codetrellis', 'plans')) return canon;
+  }
+  throw new ConfinementError(
+    `${label}: "${candidate}" is not a plan directory (.codetrellis/plans/<slug>) of a project this app has opened.`,
+  );
+}
+
+export function isTrustedPlanDir(candidate: unknown): boolean {
+  try {
+    resolveTrustedPlanDir(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Non-throwing form, for callers that want to fall back rather than fail. */
 export function isTrustedProjectRoot(candidate: unknown): boolean {
   try {

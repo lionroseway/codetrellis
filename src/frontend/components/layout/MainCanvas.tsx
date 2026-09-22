@@ -16,7 +16,7 @@ import {
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -26,7 +26,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
-import { buildDependencyGraph, buildFromSnapshot, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
+import { buildDependencyGraph, buildFromSnapshot, uniqueGraph, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
 import { PackageNode } from '../graph/nodes/PackageNode';
 import { DirectoryNode } from '../graph/nodes/DirectoryNode';
 import { FileNode } from '../graph/nodes/FileNode';
@@ -67,6 +67,8 @@ export function MainCanvas() {
   const toggleExpand = useGraphStore((s) => s.toggleExpand);
   const setSelectedNode = useUiStore((s) => s.setSelectedNode);
   const selectedNodeId = useUiStore((s) => s.selectedNodeId);
+  const graphStyle = useUiStore((s) => s.graphStyle);
+  const setGraphStyle = useUiStore((s) => s.setGraphStyle);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
   const layoutMode = useGraphStore((s) => s.layoutMode);
   const setGraphData = useGraphStore((s) => s.setGraphData);
@@ -287,26 +289,84 @@ export function MainCanvas() {
       });
   }, [root]);
 
-  // Fetch dependency edges when scan completes
+  // Fetch dependency edges when the scan completes.
+  //
+  // WHY THIS IS MORE CAREFUL THAN IT LOOKS
+  //
+  // The previous version rendered a permanently blank canvas, silently,
+  // on a database holding fifty perfectly good edges. Five things
+  // combined, and each one on its own was survivable:
+  //
+  //   1. `.catch(() => setLoadingGraph(false))` swallowed every failure.
+  //      No log, no state, no message — the graph was simply empty and
+  //      the app looked like a project with no dependencies.
+  //   2. `hasFetchedRef.current = root` was set BEFORE the request, so a
+  //      failed attempt counted as a completed one.
+  //   3. The effect only re-runs on `[scanStatus, root]`. Neither
+  //      changes while you sit on a project, so one lost fetch stayed
+  //      lost until you switched projects or restarted.
+  //   4. No cancellation. Opening several projects in a row — which the
+  //      demo does — lets a response for an earlier root land after a
+  //      later one, so the canvas shows another project's graph or
+  //      clobbers a good result with a stale empty one.
+  //   5. `r.json()` without checking `r.ok`. An error body is valid
+  //      JSON, so `{ error: … }` was assigned straight into `depEdges`,
+  //      where `.length` is undefined and every downstream guard reads
+  //      false.
+  //
+  // It took a screenshot to find, because every layer reported success.
   const hasFetchedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (scanStatus !== 'ready' || !root) return;
-    // Don't re-fetch if we already fetched for this project
-    if (hasFetchedRef.current === root && depEdges.length > 0) return;
+  const [graphLoadError, setGraphLoadError] = useState<string | null>(null);
 
+  const loadDepEdges = useCallback((forRoot: string) => {
+    let cancelled = false;
     setLoadingGraph(true);
-    hasFetchedRef.current = root;
+    setGraphLoadError(null);
 
     fetch('/api/dependencies?include=cross_system')
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`the server answered ${r.status}`);
+        const body = await r.json();
+        // Only an array is a graph. Anything else is an error shape that
+        // happens to parse.
+        if (!Array.isArray(body)) throw new Error('the response was not a list of edges');
+        return body as DependencyEdge[];
+      })
       .then((edges) => {
+        // A late answer for a project we have already left is not ours.
+        if (cancelled || useProjectStore.getState().root !== forRoot) return;
         setDepEdges(edges);
+        hasFetchedRef.current = forRoot;   // only a SUCCESS counts as fetched
         setLoadingGraph(false);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[Graph] Could not load dependency edges:', message);
+        setGraphLoadError(message);
+        hasFetchedRef.current = null;      // so a retry is allowed
         setLoadingGraph(false);
       });
-  }, [scanStatus, root]);
+
+    return () => { cancelled = true; };
+  }, [setDepEdges, setLoadingGraph]);
+
+  // Bumped whenever the backend says the graph data changed, so the
+  // effect below has a reason to run again. Without it, `[scanStatus,
+  // root]` never change while you sit on a project and a single empty
+  // result is permanent.
+  const [graphDataToken, setGraphDataToken] = useState(0);
+  useEffect(() => {
+    const onChanged = () => setGraphDataToken((n) => n + 1);
+    window.addEventListener('graph-data-changed', onChanged);
+    return () => window.removeEventListener('graph-data-changed', onChanged);
+  }, []);
+
+  useEffect(() => {
+    if (scanStatus !== 'ready' || !root) return;
+    if (hasFetchedRef.current === root && depEdges.length > 0) return;
+    return loadDepEdges(root);
+  }, [scanStatus, root, graphDataToken, loadDepEdges]);
 
   // Poll for diffs every 10 seconds
   const refreshWorkingTreeDiff = useCallback(() => {
@@ -575,33 +635,63 @@ export function MainCanvas() {
     return () => clearInterval(interval);
   }, [trellisMode, currentSnapshot?.id]);
 
-  // Fetch symbols for focused file in symbol view
+  // Symbols for the focused file, in Symbols view.
+  //
+  // Four ways this used to fail quietly, each read as "Symbols is broken":
+  //   - keyed by relative path and never cleared, so `src/index.ts` in the
+  //     next project showed the previous project's symbols;
+  //   - cached forever, so a file's symbols went stale on its first edit;
+  //   - an error body (401, 500) was cached AS the symbol list, and the
+  //     file showed nothing until reload;
+  //   - no loading or empty state: a focused file with no symbols and one
+  //     still loading looked the same as a broken view.
+  // Now: cleared on project change, refetched on every focus and rescan
+  // (one indexed query), only arrays accepted, stale responses dropped,
+  // and `symbolsStatus` drives a visible state.
+  const [symbolsStatus, setSymbolsStatus] = useState<{ path: string; state: 'loading' | 'ready' | 'error'; count: number } | null>(null);
   useEffect(() => {
-    if (viewDepth !== 'symbol') return;
-    const focusedFiles = [...expandedNodes].filter((id) => id.includes('.'));
-    if (focusedFiles.length === 0) return;
+    setSymbolsMap(new Map());
+    setSymbolsStatus(null);
+  }, [root]);
 
-    for (const relPath of focusedFiles) {
-      if (symbolsMap.has(relPath)) continue;
-      // Find absolute path from dep edges
-      const edge = depEdges.find((e) => e.sourceRelative === relPath || e.targetRelative === relPath);
-      const absPath = edge ? (edge.sourceRelative === relPath ? edge.source : edge.target) : null;
-      if (!absPath) continue;
-
-      fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`)
-        .then((r) => r.json())
-        .then((symbols: FileSymbol[]) => {
-          setSymbolsMap((prev) => new Map(prev).set(relPath, symbols));
-        })
-        .catch(() => {});
+  useEffect(() => {
+    if (viewDepth !== 'symbol') { setSymbolsStatus(null); return; }
+    let relPath: string | null = null;
+    let absPath: string | null = null;
+    for (const id of expandedNodes) {
+      if (id.startsWith('cluster:')) continue;
+      const e = depEdges.find((d) => d.sourceRelative === id || d.targetRelative === id || d.source === id || d.target === id);
+      if (!e) continue;
+      const isSource = e.sourceRelative === id || e.source === id;
+      relPath = isSource ? e.sourceRelative : e.targetRelative;
+      absPath = isSource ? e.source : e.target;
+      break;
     }
+    if (!relPath || !absPath) { setSymbolsStatus(null); return; }
+
+    const rel = relPath;
+    let cancelled = false;
+    // Keep showing a list we already have while it refreshes.
+    setSymbolsStatus((prev) => (prev?.path === rel && prev.state === 'ready' ? prev : { path: rel, state: 'loading', count: 0 }));
+    fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((symbols: unknown) => {
+        if (cancelled) return;
+        if (!Array.isArray(symbols)) throw new Error('not a symbol list');
+        setSymbolsMap((prev) => new Map(prev).set(rel, symbols as FileSymbol[]));
+        setSymbolsStatus({ path: rel, state: 'ready', count: symbols.length });
+      })
+      .catch(() => {
+        if (!cancelled) setSymbolsStatus({ path: rel, state: 'error', count: 0 });
+      });
+    return () => { cancelled = true; };
   }, [viewDepth, expandedNodes, depEdges]);
 
   // Build the graph
   const workingTreeDiff = useMemo(() => mergeLiveDiff(null, diffData), [diffData]);
   const liveWorkingTreeDiff = useMemo(() => mergeLiveDiff(snapshotDiff, diffData), [snapshotDiff, diffData]);
 
-  const graphData = useMemo(() => {
+  const rawGraphData = useMemo(() => {
     // Current/Planned mode: render from frozen snapshot
     if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
       return buildFromSnapshot(
@@ -631,6 +721,10 @@ export function MainCanvas() {
     if (depEdges.length === 0) return { nodes: [], edges: [] };
     return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || projectionEnabled ? projectionData : null, layoutMode, trellisMode, scopePath);
   }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot, scopePath]);
+
+  // One element per id, whichever builder ran. Duplicate ids leak DOM on
+  // every render; see `uniqueGraph` for how much.
+  const graphData = useMemo(() => uniqueGraph(rawGraphData), [rawGraphData]);
 
   const activeDiff = trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff;
 
@@ -737,6 +831,7 @@ export function MainCanvas() {
     );
   }, [displayGraphData, setGraphData]);
 
+  const focusFile = useGraphStore((s) => s.focusFile);
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
       const data = (node.data || {}) as Record<string, unknown>;
@@ -759,8 +854,12 @@ export function MainCanvas() {
         symbolKind: typeof data.symbolKind === 'string' ? data.symbolKind : undefined,
         parentFilePath,
       });
+      // In Symbols view a file click IS the way in: it focuses the file
+      // and shows what it defines. Elsewhere a click only selects, and
+      // focus stays on the card's own Focus button.
+      if (viewDepth === 'symbol' && kind === 'file' && typeof node.id === 'string') focusFile(node.id);
     },
-    [setSelectedNode],
+    [setSelectedNode, viewDepth, focusFile],
   );
 
   // Phase 17.C — multi-select sync from ReactFlow → graph store
@@ -794,6 +893,61 @@ export function MainCanvas() {
 
   if (!root) {
     return <WelcomeScreen />;
+  }
+
+  // A blank canvas must say why it is blank.
+  //
+  // When the edge fetch failed the app rendered an empty grid — visually
+  // identical to a project with no dependencies at all — and nothing
+  // anywhere said otherwise. Silence and "there is nothing here" are
+  // different answers and were being drawn the same way.
+  if (graphLoadError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
+        <div className="max-w-sm text-center px-6">
+          <AlertTriangle size={22} className="mx-auto mb-3 text-amber-300" />
+          <p className="text-[13.5px] text-foreground mb-1.5">The dependency graph did not load</p>
+          <p className="text-[11.5px] text-foreground-subtle leading-relaxed mb-4">
+            {graphLoadError}. The project is scanned — this is the graph fetch, not the scan,
+            so nothing has been lost.
+          </p>
+          <button
+            onClick={() => { if (root) loadDepEdges(root); }}
+            className="px-3 py-1.5 rounded-md border border-accent/30 bg-accent/[0.08] text-accent text-[12px] hover:bg-accent/[0.16] transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // A scope that matches nothing is not "no dependencies".
+  //
+  // The graph had exactly one empty rendering for three different
+  // situations: no edges, a failed fetch, and a filter that excluded
+  // everything. They want different answers, and drawing them the same
+  // way is how an absolute scope path blanked the canvas for an entire
+  // session without anyone being able to tell why.
+  if (scopePath && depEdges.length > 0 && displayGraphData.nodes.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
+        <div className="max-w-sm text-center px-6">
+          <Filter size={20} className="mx-auto mb-3 text-accent/70" />
+          <p className="text-[13.5px] text-foreground mb-1.5">Nothing matches this scope</p>
+          <p className="text-[11.5px] text-foreground-subtle leading-relaxed mb-4">
+            The project has {depEdges.length} connection{depEdges.length === 1 ? '' : 's'}, and none of
+            them is under <code className="font-mono text-foreground-muted">{scopePath}</code>.
+          </p>
+          <button
+            onClick={() => setScopePath(null)}
+            className="px-3 py-1.5 rounded-md border border-accent/30 bg-accent/[0.08] text-accent text-[12px] hover:bg-accent/[0.16] transition-colors"
+          >
+            Clear the scope
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (scanStatus === 'scanning' || loadingGraph) {
@@ -855,12 +1009,34 @@ export function MainCanvas() {
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
-        className="!bg-transparent"
+        // Nodes and edges outside the viewport are not mounted. On a
+        // symbol-depth graph that is most of them, and every mounted card
+        // is DOM the browser lays out and paints on every pan frame.
+        onlyRenderVisibleElements
+        className={`!bg-transparent ${graphStyle === 'performance' ? 'graph-perf' : ''}`}
       >
         <AutoFitView nodes={nodes} />
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
+        {viewDepth === 'symbol' && (
+          <Panel position="top-left">
+            <div
+              data-testid="symbols-status"
+              className="rounded-lg border border-white/[0.08] bg-[#0b1120]/90 px-3 py-1.5 text-[11px] text-zinc-300"
+            >
+              {!symbolsStatus && 'Symbols: click a file to see what it defines.'}
+              {symbolsStatus?.state === 'loading' && `Loading symbols in ${symbolsStatus.path.split('/').pop()}…`}
+              {symbolsStatus?.state === 'error' && (
+                <span className="text-amber-300">Couldn&apos;t load symbols for {symbolsStatus.path.split('/').pop()}. Try Rescan.</span>
+              )}
+              {symbolsStatus?.state === 'ready' && (symbolsStatus.count === 0
+                ? `${symbolsStatus.path.split('/').pop()} has no top-level symbols. Click another file.`
+                : `${symbolsStatus.count} symbol${symbolsStatus.count === 1 ? '' : 's'} in ${symbolsStatus.path.split('/').pop()} · click another file to switch`)}
+            </div>
+          </Panel>
+        )}
+
         <Panel position="top-right">
           <div className="flex max-w-[min(880px,calc(100vw-620px))] flex-wrap items-center justify-end gap-2">
             {/* Trellis mode selector */}
@@ -886,6 +1062,21 @@ export function MainCanvas() {
                 </button>
               ))}
             </div>
+
+            {/* Card style. Glass is the frosted, glowing look; Performance
+                draws the same status as bold outlines and pans smoothly
+                on large graphs. Also in Settings → Appearance. */}
+            <button
+              onClick={() => setGraphStyle(graphStyle === 'performance' ? 'glass' : 'performance')}
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200 hover:border-white/15"
+              title={graphStyle === 'performance'
+                ? 'Performance style: status shown as bold outlines. Click for Glass (frosted cards, glows — slower on large graphs)'
+                : 'Glass style: frosted cards and glows. Click for Performance (bold outlines, smooth on large graphs)'}
+              data-testid="graph-style-toggle"
+            >
+              {graphStyle === 'performance' ? <Zap size={11} /> : <Sparkles size={11} />}
+              {graphStyle === 'performance' ? 'Performance' : 'Glass'}
+            </button>
 
             {/* Phase 29 §4.16 — give Diff mode something of your own to
                 compare against. Only shown with a plan open, because a

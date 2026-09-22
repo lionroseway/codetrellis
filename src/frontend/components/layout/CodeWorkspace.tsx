@@ -6,7 +6,7 @@ import { CodePreview, type FileContent } from '../inspector/CodePreview';
 import { PlaybackBar, type PlaybackFrame } from '../inspector/PlaybackBar';
 import type { FileOverlay } from '../../lib/plan-overlay';
 import { resolveSelectedFile } from '../../lib/selected-file';
-import { revealPlanItem } from '../../lib/open-plan-item';
+import { openItemFromCode } from '../../lib/open-file-at';
 
 const CodeDiffView = lazy(() =>
   import('../inspector/CodeDiffView').then((m) => ({ default: m.CodeDiffView })),
@@ -232,7 +232,18 @@ export function CodeWorkspace() {
             // anything to do, so "Rework the ledger wants this file" had
             // hover feedback and no behaviour — worse than not looking
             // clickable at all.
-            onOpenItem={(itemUid, planUid) => { void revealPlanItem(planUid, itemUid); }}
+            highlightLine={selectedNodeMeta?.line}
+            // Leaving a breadcrumb on the way out. Without it the only
+            // route back was the top bar's Code button, which is a mode
+            // toggle and does not know what you were reading — so "go
+            // look at the item" cost you your place in the file.
+            onOpenItem={(itemUid, planUid) => {
+              void openItemFromCode(planUid, itemUid, {
+                filePath: selectedNode!,
+                line: selectedNodeMeta?.line ?? null,
+                label: selectedNode!.split('/').pop() ?? 'the file',
+              });
+            }}
           />
         ) : (
           <Suspense

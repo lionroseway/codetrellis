@@ -255,6 +255,27 @@ function createWindow(backendOk: boolean): void {
   const win = mainWindow;
   setElectronScreenshotCapture(async () => {
     if (win.isDestroyed()) throw new Error('BrowserWindow is destroyed');
+
+    // Capture twice and keep the second.
+    //
+    // Measured on a packaged build driven by the demo: every screenshot was
+    // exactly ONE CAPTURE behind — the shot labelled "drift" showed the view
+    // from the previous shot, seven seconds earlier, while a DOM check
+    // taken a moment before correctly reported the new file. Time did not
+    // matter; the count of captures did.
+    //
+    // That fits an occluded window (anything not in front on macOS):
+    // Chromium stops producing frames, and `capturePage()` forces a paint
+    // but returns the buffer it already had, so the fresh frame is what the
+    // NEXT call gets. Forcing a repaint with `invalidate()` plus a
+    // requestAnimationFrame wait was tried first and did nothing — rAF does
+    // not run in an occluded window either.
+    //
+    // The first capture is the forcing call; the second reads what it
+    // produced. It costs one extra capture per screenshot, which is cheap
+    // next to a picture of the wrong thing.
+    await win.webContents.capturePage();
+    await new Promise((r) => setTimeout(r, 120));
     const image = await win.webContents.capturePage();
     return image.toPNG().toString('base64');
   });

@@ -471,12 +471,13 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 
 | Tool | What it does |
 |------|-------------|
-| \`navigate_to(target, plan_uid?)\` | Switch to plan / graph / split / timeline view |
+| \`ui_ready()\` | **Call this first.** Is the window usable — shell mounted, nothing blocking it? Every other tool answers from the backend and will succeed happily while the user is looking at something else |
+| \`navigate_to(target, plan_uid?, file_path?, line?)\` | Switch to plan / graph / split / timeline / code view. For \`code\`, pass \`file_path\` (and optionally \`line\`) to open the reader on it |
 | \`open_plan(plan_uid, split_view?)\` | Open a specific plan |
 | \`select_item(item_uid, plan_uid?)\` | Navigate to a specific item in the plan tree |
 | \`navigate_item_back()\` | Go back in item selection history (Cmd+[) |
 | \`navigate_item_forward()\` | Go forward in item selection history (Cmd+]) |
-| \`toggle_panel(panel)\` | Show/hide sidebar / inspector / terminal / split / channel / activity / history |
+| \`toggle_panel(panel)\` | Show/hide sidebar / inspector / terminal / plans / split / channel / activity / history |
 | \`toggle_activity_drawer()\` | Toggle the activity/comment feed drawer |
 | \`open_history_drawer(item_uid)\` | Open version history for a specific item |
 | \`open_settings()\` | Open the settings modal |
@@ -672,7 +673,17 @@ The user may have changed the default port. Check
 \`GET http://127.0.0.1:3001/api/mcp/status\` (returns
 \`{ running, port, connectedAgents }\`) or fetch the config from
 \`GET /api/mcp/config\`. The default port is 19432 but autodetect
-walks forward on collision.`;
+walks forward on collision.
+
+### Authentication
+
+Every MCP request needs this launch's capability token, as the
+\`x-codetrellis-token\` header (or \`Authorization: Bearer\`, or
+\`?ct_token=\` for clients that cannot send headers). Any process
+running as the user can read it from \`<dataDir>/capability-token\`;
+\`GET /api/mcp/setup\` returns the exact path. It changes every time
+CodeTrellis starts, so a 401 "Missing or invalid capability token"
+after a restart means: re-read the file and update your config.`;
 
 // ── Quickstart ──────────────────────────────────────────────────────
 
@@ -972,7 +983,7 @@ follow along.
 |------|-----------------|
 | \`navigate_to(target, plan_uid?)\` | Switch main view: "plan" / "graph" / "split" / "timeline" |
 | \`open_plan(plan_uid, split_view?)\` | Open a plan; human sees the plan tree |
-| \`toggle_panel(panel)\` | Show/hide "sidebar" / "inspector" / "terminal" / "split" / "channel" / "activity" / "history" |
+| \`toggle_panel(panel)\` | Show/hide "sidebar" / "inspector" / "terminal" / "plans" / "split" / "channel" / "activity" / "history" |
 | \`toggle_activity_drawer()\` | Slide the activity/comment feed open or closed |
 | \`refresh_ui()\` | Force the UI to re-fetch everything |
 

@@ -5,6 +5,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
 import { CrossRepoSection } from './CrossRepoSection';
+import { OtherWorktreesSection } from './OtherWorktreesSection';
 import { PlanTemplatePicker } from './PlanTemplatePicker';
 
 interface OrphanedPlanDir {
@@ -234,8 +235,17 @@ export function PlanList() {
         p.uid.toLowerCase().includes(q)
       );
     }
-    return result;
-  }, [plans, planScope, searchQuery]);
+    // The active plan leads the list. With a plan open, the pane used to
+    // read as a flat list with one faintly tinted row somewhere in it.
+    return [...result].sort((a, b) => Number(b.uid === activePlanUid) - Number(a.uid === activePlanUid));
+  }, [plans, planScope, searchQuery, activePlanUid]);
+
+  // The active plan can be filtered out (another project's scope, or a
+  // search). Pin it anyway, so switching away from it stays one click.
+  const activePlanHidden = activePlanUid != null
+    && plans.some((p) => p.uid === activePlanUid)
+    && !filteredPlans.some((p) => p.uid === activePlanUid);
+  const activePlanRow = activePlanHidden ? plans.find((p) => p.uid === activePlanUid) : undefined;
 
   const handleDeleteSingle = useCallback(async (uid: string) => {
     const ok = await deletePlan(uid);
@@ -497,6 +507,20 @@ export function PlanList() {
         </div>
       )}
 
+      {activePlanRow && (
+        <button
+          onClick={() => setActivePlan(activePlanRow.uid)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 text-left"
+          title="The open plan, outside the current filter"
+          data-testid="pinned-active-plan"
+        >
+          <span className="text-[10px] uppercase tracking-wider text-accent shrink-0">Open</span>
+          <span className="text-[13px] font-medium text-foreground truncate flex-1">{activePlanRow.title}</span>
+          <span className="text-[10.5px] text-foreground-muted/60 truncate max-w-[30%]">{projectName(activePlanRow.projectPath)}</span>
+          <StatusBadge status={activePlanRow.status} />
+        </button>
+      )}
+
       {filteredPlans.map((plan) => {
         const progress = plan.taskCount ? Math.round(((plan.completedTaskCount || 0) / plan.taskCount) * 100) : 0;
         const isSelected = selectedUids.has(plan.uid);
@@ -528,7 +552,12 @@ export function PlanList() {
                 className="flex-1 min-w-0 text-left"
                 title="Click to open the plan workspace"
               >
-                <span className="text-[13px] font-medium text-foreground truncate block">{plan.title}</span>
+                <span className="text-[13px] font-medium text-foreground truncate block">
+                  {activePlanUid === plan.uid && (
+                    <span className="mr-1.5 text-[10px] uppercase tracking-wider text-accent align-middle">Open</span>
+                  )}
+                  {plan.title}
+                </span>
                 {planScope === 'all' && plan.projectPath && (
                   <span className="text-[10.5px] text-foreground-muted/60 truncate block mt-0.5">
                     {projectName(plan.projectPath)}
@@ -571,6 +600,11 @@ export function PlanList() {
           Showing {filteredPlans.length} of {plans.length} plans
         </div>
       )}
+
+      {/* Plans on this repo's other worktrees (other branches). Only when
+          scoped to this checkout: under "All projects" they are already
+          in the list above. */}
+      {planScope !== 'all' && <OtherWorktreesSection />}
 
       {/* CDev Phase 3.5 — cross-repo pointers under the local plans list. */}
       <CrossRepoSection />

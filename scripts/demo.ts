@@ -79,7 +79,23 @@ interface Ctx {
   /** Narrate in the app itself, and pause long enough to read it. */
   say(title: string, text: string, tone?: 'neutral' | 'success' | 'warning' | 'question'): Promise<void>;
   beat(multiplier?: number): Promise<void>;
-  shot(label: string): Promise<void>;
+  /**
+   * Capture the window.
+   *
+   * `expectFile` names the file the shot is supposed to be OF. A
+   * screenshot that cannot say what it is a picture of is not evidence:
+   * this scene once captured `app.rb` under a caption claiming it showed
+   * `money.go`, and nothing anywhere disagreed.
+   */
+  /**
+   * Capture the window — but only once it shows what the shot claims to.
+   *
+   * `expectFile`: the reader must be RENDERING this file (not merely have
+   * it selected). `expectVerdict`: at least one line on it must carry this
+   * verdict. A shot that cannot meet its own caption is flagged and not
+   * saved, because an image of the wrong thing is worse than no image.
+   */
+  shot(label: string, expectFile?: string, expectVerdict?: 'aligned' | 'drifted' | 'outstanding'): Promise<void>;
   /** Edit a file; it is restored when the demo ends, however it ends. */
   edit(relative: string, mutate: (src: string) => string): void;
   /** A second (third…) connected agent, for contention journeys. */
@@ -239,7 +255,11 @@ const SCENES: Scene[] = [
       const stillThere = JSON.stringify(alive).includes(c.state.term);
       console.log('    session survives hiding the drawer:', stillThere ? 'yes' : 'NO');
       if (!stillThere) c.flag('hiding the terminal drawer killed the session');
-      await c.call('toggle_panel', { panel: 'terminal' });
+      // And it stays away. This used to toggle straight back, which
+      // contradicted the narration two lines above and left the drawer
+      // covering the bottom half of every later scene — including the
+      // one whose whole point is the gutter, which then sat below the
+      // fold in every screenshot.
     },
   },
 
@@ -250,10 +270,129 @@ const SCENES: Scene[] = [
     async run(c) {
       await c.say('Reading the change', 'Changed lines are marked, and the plan item that wanted this file is above the source.');
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
-      await c.call('graph_focus', { path: abs, highlight: true });
-      await c.call('graph_select', { paths: [abs] });
+      await c.call('navigate_to', { target: 'code', file_path: abs, line: 25 });
       await c.beat(2);
-      await c.shot('04-trace');
+      await c.shot('04-trace', 'services/shared-go/money/money.go', 'aligned');
+    },
+  },
+
+  {
+    id: 'verdict',
+    title: 'Planned, drifted, outstanding — one answer per line',
+    watch: 'three different gutter marks in one file: ✓ aligned, ◆ drifted, ◇ still outstanding',
+    async run(c) {
+      if (!c.state.plan) return;
+      await c.say(
+        'What the plan wanted, and what actually happened',
+        'Green where they agree. Pink where something changed that no item asked for. Hollow where the plan is still waiting.',
+      );
+
+      // An edit nobody planned, in a file no item targets — drift, by
+      // construction rather than by luck.
+      // A file NO item targets. This used to be `services/notifier/app.rb`,
+      // described as untargeted — but the plan's third item targets exactly
+      // that file, so once file-level claims counted (514c70f) the edit
+      // correctly read as aligned, and the scene's own shot check refused
+      // to photograph "drift" that was not there.
+      c.edit('services/api/app/config.py', (src) => `${src}\n# demo: unplanned tweak\n`);
+      const unplanned = path.join(PROJECT, 'services/api/app/config.py');
+      await c.call('navigate_to', { target: 'code', file_path: unplanned, line: 9 });
+      await c.beat(2);
+      console.log('    unplanned edit in config.py — expect ◆ drifted');
+      await c.shot('14-verdict-drift', 'services/api/app/config.py', 'drifted');
+
+      // The Go file was edited in `work` AND is targeted by an item.
+      const planned = path.join(PROJECT, 'services/shared-go/money/money.go');
+      await c.say('The same file, from the other side', 'This one was planned and it happened, so it reads as aligned.');
+      // Scroll to where the change actually is, not to line 1.
+      await c.call('navigate_to', { target: 'code', file_path: planned, line: 25 });
+      await c.beat(2);
+      // Assert the precondition the screenshot depends on.
+      //
+      // A shot of a file with no changed lines proves nothing, and that
+      // is exactly what this scene produced for a whole session after the
+      // fixture drifted: a correctly rendered file with nothing to render,
+      // captioned as proof that the verdict worked.
+      const onDisk = fs.readFileSync(planned, 'utf-8');
+      const original = edited.get(planned);
+      if (original === undefined || onDisk === original) {
+        c.flag('money.go is unchanged — the aligned screenshot would show an unmarked file');
+      } else {
+        console.log('    money.go differs from its pre-edit state — the gutter should mark it');
+      }
+      console.log('    planned + changed in money.go — expect ✓ aligned');
+      await c.shot('15-verdict-aligned', 'services/shared-go/money/money.go', 'aligned');
+    },
+  },
+
+  {
+    id: 'roundtrip',
+    title: 'Follow the trace, and come back',
+    watch: 'the plan header grows a back button naming the file — click it and you land on the same line',
+    async run(c) {
+      if (!c.state.go) return;
+      await c.say(
+        'Code to the item and back again',
+        'Following "this item wants this file" used to cost you your place. The header now carries the way back.',
+      );
+      const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
+      await c.call('navigate_to', { target: 'code', file_path: abs, line: 25 });
+      await c.beat(2);
+      // The file, with the marker naming the item — this is the half a
+      // screenshot can actually show.
+      await c.shot('16a-roundtrip-from-code', 'services/shared-go/money/money.go', 'aligned');
+
+      // `select_item` is NOT the journey. It jumps to the item without
+      // going through the code reader's banner, so no breadcrumb is left
+      // and the header grows no way back — which is exactly what the
+      // first screenshot of this scene proved, while the caption claimed
+      // otherwise.
+      //
+      // The real path is a click on "…wants this file", and it is covered
+      // by `e2e/review-regressions/round-trip.spec.ts`, which drives that
+      // button and fails when the back control is reverted. A demo scene
+      // cannot click it, so it says so rather than implying it did.
+      await c.say(
+        'The way back',
+        'Clicking "wants this file" leaves a breadcrumb, so the plan header carries a way back to the line. That click is covered by the round-trip spec.',
+      );
+      await c.call('select_item', { item_uid: c.state.go });
+      await c.beat(2);
+      console.log('    on the item (via select_item — no breadcrumb; the click path is in round-trip.spec.ts)');
+      await c.shot('16b-roundtrip-on-item');
+    },
+  },
+
+  {
+    id: 'colleague',
+    title: 'Review work that is not yours',
+    watch: 'a review against a branch, not the working tree',
+    async run(c) {
+      if (!c.state.plan) return;
+      await c.say(
+        'Someone else’s branch',
+        'The comparison does not care whose work it is. Any ref the repo can resolve is a comparand.',
+      );
+      const comparands = await c.json('list_comparands', { project_path: PROJECT });
+      const list: Array<{ spec?: string; kind?: string }> =
+        Array.isArray(comparands) ? comparands : (comparands?.comparands ?? []);
+      const offered = new Set(list.map((x) => x.spec));
+
+      // A named branch rather than one of the offered commits — the point
+      // is that a ref nobody listed still works.
+      const ref = 'commit:main';
+      console.log('    picker offered', list.length, 'comparands ·', offered.has(ref) ? 'including' : 'NOT including', ref);
+      const r = await c.json('review_plan', {
+        plan_uid: c.state.plan, project_path: PROJECT, before: ref, after: 'live',
+      });
+      if (!r) { c.flag(`reviewing against ${ref} returned nothing`); return; }
+      const sm = r.summary ?? {};
+      console.log(`    vs ${ref}: ${sm.itemsLanded ?? '?'} landed · ${sm.filesChanged ?? '?'} files · ${sm.unclaimedCount ?? '?'} unclaimed`);
+      if (!offered.has(ref)) {
+        console.log('    ↑ accepted a ref the picker never listed — capability is ahead of its disclosure');
+      }
+      await c.beat();
+      await c.shot('17-colleague');
     },
   },
 
@@ -282,19 +421,49 @@ const SCENES: Scene[] = [
   {
     id: 'review',
     title: 'Did we do what we said?',
-    watch: 'one item landed, two still missing — that asymmetry is the point',
+    watch: 'the items whose files were touched read landed; the rest read untouched',
     async run(c) {
       if (!c.state.plan) return;
-      await c.say('Reviewing the plan', 'One of three files was changed. The review should say so.');
+
+      // Derive the expectation from what this run actually touched.
+      //
+      // This used to assert "only one file was edited" as a literal, and
+      // then I added a scene that edits a second one. The review started
+      // reporting two landed — correctly — and the flag called it
+      // over-counting. The review was right and the flag had gone stale
+      // the moment a later scene changed the premise.
+      //
+      // Third time a flag has lied in this file. A flag that hard-codes a
+      // number is a fact about the script at the moment it was written,
+      // not about the product, and it decays silently.
+      const changedHere = [...edited.keys()].map((abs) => path.relative(PROJECT, abs));
+      await c.say(
+        'Reviewing the plan',
+        `${changedHere.length} of three files changed so far. The review should say which.`,
+      );
+
       const rev = await c.json('review_plan', { plan_uid: c.state.plan, project_path: PROJECT });
-      const items: Array<{ title: string; verdict: string }> = rev?.items ?? rev?.review?.items ?? [];
+      const items: Array<{ title: string; verdict: string; landed?: string[] }> =
+        rev?.items ?? rev?.review?.items ?? [];
       for (const i of items) console.log(`    ${String(i.verdict).padEnd(10)} ${i.title}`);
-      const landed = items.filter((i) => i.verdict === 'landed').length;
-      console.log(`    → ${landed} landed of ${items.length}`);
-      if (items.length > 0 && landed === 0) {
-        c.flag('review says nothing landed, but a file was edited — check the default comparand');
+
+      const landed = items.filter((i) => i.verdict === 'landed');
+      console.log(`    → ${landed.length} landed of ${items.length}`);
+      console.log(`    edited this run: ${changedHere.join(', ') || 'nothing'}`);
+
+      if (items.length > 0 && changedHere.length > 0 && landed.length === 0) {
+        c.flag('review says nothing landed, but files were edited — check the default comparand');
       }
-      if (landed > 1) c.flag(`review says ${landed} landed; only one file was edited`);
+
+      // The invariant that cannot go stale: an item reads landed only if
+      // a file this run actually touched is among its landed targets.
+      for (const item of landed) {
+        const claimed = item.landed ?? [];
+        const real = claimed.some((t) => changedHere.some((f) => f.endsWith(t) || t.endsWith(f)));
+        if (!real) {
+          c.flag(`"${item.title}" reads landed, but nothing this run edited is among its targets`);
+        }
+      }
       await c.beat();
     },
   },
@@ -351,7 +520,17 @@ const SCENES: Scene[] = [
       const snap = await c.json('graph_snapshot');
       const n = snap?.nodeCount ?? snap?.nodes?.length ?? 0;
       console.log(`    graph_snapshot: ${n} nodes`);
-      if (n === 0) c.flag('graph_snapshot returned an empty graph while the canvas is drawing one');
+      if (n === 0) {
+        // Do not assert what has not been checked.
+        //
+        // This used to flag "an empty graph WHILE THE CANVAS IS DRAWING
+        // ONE", and it had no idea whether the canvas was drawing
+        // anything. Chased as a snapshot bug, it turned out the canvas
+        // really was blank — the tool was right and the flag was the
+        // thing lying. A wrong flag costs more attention than a missing
+        // one, and it sends you to the wrong file.
+        c.flag('graph_snapshot returned 0 nodes — check whether the canvas is actually drawing a graph');
+      }
 
       await c.say('Narrowing the scope', 'One service at a time, when the whole estate is too much.');
       await c.call('graph_set_scope', { scope_path: path.join(PROJECT, 'services') });
@@ -736,8 +915,45 @@ async function main() {
       await client.callTool('present', { title, text, tone }).catch(() => {});
       await ctx.beat();
     },
-    async shot(label) {
+    async shot(label, expectFile, expectVerdict) {
       if (!SHOTS) return;
+
+      // Wait for the window to actually be showing the subject, rather
+      // than photographing whatever happens to be there when the beat
+      // elapses. Navigation is async and a fixed pause is a guess.
+      if (expectFile || expectVerdict) {
+        let onScreen: string | null = null;
+        let marks: Record<string, number> = {};
+        const satisfied = () =>
+          (!expectFile || (onScreen?.endsWith(expectFile) ?? false))
+          && (!expectVerdict || (marks[expectVerdict] ?? 0) > 0);
+
+        for (let attempt = 0; attempt < 16; attempt += 1) {
+          const state = await client.callTool('ui_ready', {});
+          try {
+            const parsed = JSON.parse(state.text);
+            onScreen = parsed.openFile ?? null;
+            // Visible marks only. Counting what is merely in the DOM let a
+            // shot pass whose aligned lines were under the terminal drawer.
+            marks = parsed.visibleVerdicts ?? {};
+          } catch { onScreen = null; marks = {}; }
+          if (satisfied()) break;
+          await new Promise((r) => setTimeout(r, 500));
+        }
+
+        if (!satisfied()) {
+          const seen = Object.entries(marks).map(([k, n]) => `${n} ${k}`).join(', ') || 'no VISIBLE marked lines';
+          ctx.flag(
+            `shot "${label}" wanted ${expectFile ?? 'any file'}${expectVerdict ? ` with ${expectVerdict} lines` : ''}; `
+            + `the window showed ${onScreen ?? 'no file'} with ${seen} — not captured`,
+          );
+          return;
+        }
+        if (expectVerdict) {
+          console.log(`    on screen: ${onScreen?.split('/').pop()} · ${Object.entries(marks).map(([k, n]) => `${n} ${k}`).join(', ')}`);
+        }
+      }
+
       const r = await client.callTool('screenshot', {});
       const img = r.content.find((x) => x.type === 'image') as { data?: string } | undefined;
       if (!img?.data) { ctx.flag(`screenshot "${label}" came back empty — is the capture capability on?`); return; }
@@ -748,7 +964,25 @@ async function main() {
     edit(relative, mutate) {
       const abs = path.join(PROJECT, relative);
       if (!edited.has(abs)) edited.set(abs, fs.readFileSync(abs, 'utf-8'));
-      fs.writeFileSync(abs, mutate(edited.get(abs)!));
+      const before = edited.get(abs)!;
+      const after = mutate(before);
+
+      // An edit that changes nothing is the scene not happening.
+      //
+      // `String.replace` with no match returns the original, silently. The
+      // work scene replaced a line that was no longer in the fixture — I
+      // had committed the demo's own mutation into it with `git add -A`
+      // mid-run — so "do the work" wrote the same bytes back, git reported
+      // no change, no line was annotated, and the verdict scene rendered a
+      // file with nothing marked while narrating what the marks meant.
+      //
+      // Every layer said success. Only the screenshot disagreed.
+      if (after === before) {
+        ctx.flag(`edit to ${relative} changed nothing — the fixture may already contain the edit`);
+        return;
+      }
+
+      fs.writeFileSync(abs, after);
     },
     async agent(name) {
       const extra = createMcpClient({ mcpPort: MCP_PORT, capabilityToken: token, clientName: name });
@@ -765,11 +999,49 @@ async function main() {
         if (!res.ok) { ctx.flag(`GET ${pathAndQuery} -> ${res.status}`); return null; }
         return await res.json();
       } catch (err) {
-        ctx.flag(`GET ${pathAndQuery} failed: ${err instanceof Error ? err.message : err}`);
+        // A packaged build serves the renderer over IPC and binds no TCP
+        // port, so there is simply nothing to call. That is the Phase 19
+        // posture working, not a fault — flagging it would train us to
+        // ignore flags.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/fetch failed|ECONNREFUSED/i.test(msg)) {
+          console.log(`    (no HTTP API on :${API_PORT} — packaged builds are IPC-only; skipping this check)`);
+          return null;
+        }
+        ctx.flag(`GET ${pathAndQuery} failed: ${msg}`);
         return null;
       }
     },
   };
+
+  // ── Preflight: is anyone actually looking at the product? ──────────
+  //
+  // This exists because a full run once reported "Nothing looked wrong"
+  // across twenty-four scenes against an app that had never mounted. The
+  // first-run wizard rendered in place of the shell, the backend answered
+  // every call correctly, and every screenshot was of a sign-up form.
+  //
+  // A demo that cannot tell the window is blocked is worth less than no
+  // demo, because it converts "unverified" into "verified" without doing
+  // any verifying. So this refuses to start rather than producing a green
+  // run nobody should trust.
+  const readyRaw = await client.callTool('ui_ready', {});
+  let ready: { ready?: boolean; shellMounted?: boolean; blockedBy?: string[]; projectOpen?: boolean } | null = null;
+  try { ready = JSON.parse(readyRaw.text); } catch { /* reported below */ }
+
+  if (!ready || ready.ready !== true) {
+    console.error('\n  The window is not in a state anyone could watch.\n');
+    if (!ready) {
+      console.error(`  ${readyRaw.text.replace(/\s+/g, ' ').slice(0, 160)}`);
+    } else if (!ready.shellMounted) {
+      console.error('  The app shell is not mounted — something is rendering instead of it.');
+    } else if (ready.blockedBy?.length) {
+      console.error(`  A dialog is covering it: ${ready.blockedBy.join(', ')}`);
+    }
+    console.error('\n  Nothing was run. Clear the window and try again.\n');
+    await client.disconnect().catch(() => {});
+    process.exit(1);
+  }
 
   const scenes = ONLY ? SCENES.filter((s) => s.id === ONLY) : SCENES;
   if (scenes.length === 0) {

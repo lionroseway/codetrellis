@@ -202,3 +202,30 @@ body {
   animation: graph-focus-pulse 0.6s ease-out 3;
   z-index: 10 !important;
 }
+
+/*
+ * Performance graph style (ui-store `graphStyle`).
+ *
+ * The node components already choose outlines over glows in this mode;
+ * this is the net under them for every smaller effect inside a card:
+ * icon drop-shadows, chip glows, handle halos, hover transitions. Each
+ * is individually cheap, but multiplied by a few thousand mounted nodes
+ * they are what makes panning stutter.
+ *
+ * `outline` is deliberately NOT touched: it is how status is drawn here.
+ * SMIL `animateMotion` (the flow dots on active edges) is unaffected by
+ * `animation: none`, and is kept, because it only runs on the handful of
+ * edges the agent is working on right now.
+ */
+.graph-perf .react-flow__node,
+.graph-perf .react-flow__node *,
+.graph-perf .react-flow__edgelabel-renderer * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+.graph-perf .react-flow__node * {
+  filter: none !important;
+}

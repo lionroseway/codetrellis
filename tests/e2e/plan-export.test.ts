@@ -95,8 +95,10 @@ test.describe('Plan export — Phase 13 §A round-trip', () => {
       const exported = await h.client.exportPlan(source.uid, h.fixture.projectPath);
 
       // Copy the plan dir to a "fresh" location so the import isn't
-      // a no-op against the existing on-disk + DB state.
-      const transitDir = path.join(h.fixture.tmpDir, 'plan-transit');
+      // a no-op against the existing on-disk + DB state. Inside the
+      // project's plans dir: import only reads plan directories of
+      // opened projects (resolveTrustedPlanDir).
+      const transitDir = path.join(h.fixture.projectPath, '.codetrellis', 'plans', 'plan-transit');
       fs.cpSync(exported.planDir, transitDir, { recursive: true });
 
       // Wipe the in-DB plan so import has somewhere to go. Reuse the
@@ -119,6 +121,73 @@ test.describe('Plan export — Phase 13 §A round-trip', () => {
       const sourceDescs = new Set(sourceDetail.tasks.map((t) => t.description));
       const importedDescs = new Set(imp.tasks.map((t) => t.description));
       expect(importedDescs).toEqual(sourceDescs);
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  // A committed plan.yaml carries the AUTHOR'S absolute projectPath. It
+  // used to be trusted, so a plan imported from a clone, another machine
+  // or another worktree belonged to a checkout that is not this one and
+  // appeared under no project; and the scan's "no plans for this project,
+  // re-import from disk" pass never saw its own imports and re-ran on
+  // every scan. The root now comes from where the plan sits.
+  test('a plan committed on another machine belongs to the checkout that imports it', async () => {
+    const h = await setupHarness('plan-import-root');
+    const uid = 'a1b2c3d4-0000-4000-8000-000000000001';
+    try {
+      const dir = path.join(h.fixture.projectPath, '.codetrellis', 'plans', 'committed-elsewhere');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'plan.yaml'), yaml.stringify({
+        uid, title: 'Committed elsewhere', status: 'draft',
+        projectPath: '/Users/someone-else/work/repo',
+      }));
+
+      // A fresh DB: the scan's re-import pass is how a clone first sees it.
+      await h.client.scanProject(h.fixture.projectPath);
+      const plan = (await h.client.listPlans()).find((p) => p.uid === uid);
+      expect(plan, 'plan was not re-imported by the scan').toBeTruthy();
+      expect(plan!.projectPath).toBe(h.fixture.projectPath);
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  // Import reads a directory and stores what it finds, doc bodies
+  // verbatim. The directory must be an opened project's plan dir, and no
+  // file is read through a symlink.
+  test('import is confined to plan directories of opened projects', async () => {
+    const h = await setupHarness('plan-import-confined');
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+      const outside = path.join(h.fixture.tmpDir, 'not-a-project', '.codetrellis', 'plans', 'x');
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'plan.yaml'), yaml.stringify({ uid: 'b1b2c3d4-0000-4000-8000-000000000002', title: 'Outside' }));
+      const res = await h.client.raw('POST', `/api/plans/import?path=${encodeURIComponent(outside)}`);
+      expect(res.status).toBe(403);
+      expect((await h.client.listPlans()).some((p) => p.title === 'Outside')).toBe(false);
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  test('import does not read a plan file through a symlink', async () => {
+    const h = await setupHarness('plan-import-symlink');
+    const uid = 'c1b2c3d4-0000-4000-8000-000000000003';
+    try {
+      await h.client.scanProject(h.fixture.projectPath);
+      const dir = path.join(h.fixture.projectPath, '.codetrellis', 'plans', 'linked-doc');
+      fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'plan.yaml'), yaml.stringify({ uid, title: 'Has a linked doc' }));
+      // A well-formed doc that lives OUTSIDE the plan dir, reached by a link.
+      const target = path.join(h.fixture.tmpDir, 'outside-doc.md');
+      fs.writeFileSync(target, '---\nuid: d1b2c3d4-0000-4000-8000-000000000004\ntitle: Linked\n---\nOUTSIDE-CONTENT\n');
+      fs.symlinkSync(target, path.join(dir, 'docs', 'linked.md'));
+
+      const res = await h.client.raw('POST', `/api/plans/import?path=${encodeURIComponent(dir)}`);
+      expect(res.ok).toBe(true);
+      const docs = await (await h.client.raw('GET', `/api/plans/${uid}/docs`)).json();
+      expect(JSON.stringify(docs)).not.toContain('OUTSIDE-CONTENT');
     } finally {
       await h.teardown();
     }

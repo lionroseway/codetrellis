@@ -38,6 +38,7 @@ import * as planItemService from './plan-item-service';
 import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
 import { getDb } from './database';
+import { readTextWithin } from './confined-fs';
 import type {
   Plan,
   PlanItem,
@@ -290,6 +291,22 @@ function writeItemChildren(
 }
 
 /**
+ * Every file an import reads goes through the confined helper, rooted at
+ * the plan directory.
+ *
+ * Plan directories arrive in repositories, and a repository can commit
+ * symlinks. Import stores what it reads (doc bodies verbatim), so a read
+ * that follows a link stores whatever the link points at. `readTextWithin`
+ * refuses any symlinked component and anything outside the root.
+ */
+function readPlanFile(planDir: string, file: string): string {
+  // Relative, because the helper canonicalises the ROOT: an absolute path
+  // spelled through a symlinked prefix (/tmp vs /private/tmp on macOS)
+  // would otherwise read as outside it.
+  return readTextWithin(planDir, path.relative(planDir, file), 'plan file');
+}
+
+/**
  * Import a plan from a `<plan-dir>/plan.yaml` (and sibling files).
  * Upsert: matches by UID. Returns the resulting in-DB rows.
  */
@@ -316,13 +333,13 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   }
 
   const warnings: string[] = [];
-  const planRaw = parseYaml(fs.readFileSync(planFile, 'utf-8'));
+  const planRaw = parseYaml(readPlanFile(planDir, planFile));
   if (!planRaw || typeof planRaw !== 'object' || !planRaw.uid || !planRaw.title) {
     throw new Error(`Invalid plan.yaml at ${planFile} — missing uid or title`);
   }
 
   const planUid = planRaw.uid as string;
-  const projectPath = (planRaw.projectPath as string) || '.';
+  const projectPath = importedPlanRoot(planUid, planDir, planRaw.projectPath);
 
   // 1. Plan upsert (same for V1 and V2).
   upsertPlan(planUid, planRaw, projectPath);
@@ -362,7 +379,7 @@ function importPlanV1(planDir: string, planUid: string, warnings: string[]): Imp
       if (!fname.endsWith('.yaml') && !fname.endsWith('.yml')) continue;
       const fpath = path.join(phaseDir, fname);
       try {
-        const raw = parseYaml(fs.readFileSync(fpath, 'utf-8'));
+        const raw = parseYaml(readPlanFile(planDir, fpath));
         if (!raw?.uid) { warnings.push(`Skipping ${fpath} — missing uid`); continue; }
         upsertPhase(planUid, raw);
       } catch (err) {
@@ -378,7 +395,7 @@ function importPlanV1(planDir: string, planUid: string, warnings: string[]): Imp
       if (!fname.endsWith('.yaml') && !fname.endsWith('.yml')) continue;
       const fpath = path.join(taskDir, fname);
       try {
-        const raw = parseYaml(fs.readFileSync(fpath, 'utf-8'));
+        const raw = parseYaml(readPlanFile(planDir, fpath));
         if (!raw?.uid) { warnings.push(`Skipping ${fpath} — missing uid`); continue; }
         upsertTask(planUid, raw);
       } catch (err) {
@@ -394,7 +411,7 @@ function importPlanV1(planDir: string, planUid: string, warnings: string[]): Imp
       if (!fname.endsWith('.md')) continue;
       const fpath = path.join(docDir, fname);
       try {
-        const { meta, body } = parseFrontMatter(fs.readFileSync(fpath, 'utf-8'));
+        const { meta, body } = parseFrontMatter(readPlanFile(planDir, fpath));
         if (!meta.uid) { warnings.push(`Skipping ${fpath} — missing uid in front-matter`); continue; }
         upsertDoc(planUid, meta, body);
       } catch (err) {
@@ -423,7 +440,7 @@ function importPlanV2(planDir: string, planUid: string, warnings: string[]): Imp
   const importedItems: PlanItem[] = [];
 
   if (fs.existsSync(itemsDir)) {
-    importItemsFromDir(itemsDir, planUid, null, warnings, importedItems);
+    importItemsFromDir(planDir, itemsDir, planUid, null, warnings, importedItems);
   }
 
   const updatedPlan = planService.getPlan(planUid);
@@ -448,6 +465,7 @@ function importPlanV2(planDir: string, planUid: string, warnings: string[]): Imp
  * - directory with `_self.yaml` → item with children (recurse)
  */
 function importItemsFromDir(
+  planDir: string,
   dir: string,
   planUid: string,
   parentUid: string | null,
@@ -461,11 +479,13 @@ function importItemsFromDir(
     const fullPath = path.join(dir, entry);
 
     try {
-      const stat = fs.statSync(fullPath);
+      // lstat: a symlinked entry is neither a file nor a directory here,
+      // so it is skipped rather than followed.
+      const stat = fs.lstatSync(fullPath);
 
       if (stat.isFile() && (entry.endsWith('.yaml') || entry.endsWith('.yml'))) {
         // Leaf item
-        const raw = parseYaml(fs.readFileSync(fullPath, 'utf-8'));
+        const raw = parseYaml(readPlanFile(planDir, fullPath));
         if (!raw?.uid) { warnings.push(`Skipping ${fullPath} — missing uid`); continue; }
         const item = upsertItem(planUid, parentUid, raw, warnings);
         if (item) collected.push(item);
@@ -476,13 +496,13 @@ function importItemsFromDir(
           warnings.push(`Skipping directory ${fullPath} — no _self.yaml`);
           continue;
         }
-        const raw = parseYaml(fs.readFileSync(selfPath, 'utf-8'));
+        const raw = parseYaml(readPlanFile(planDir, selfPath));
         if (!raw?.uid) { warnings.push(`Skipping ${selfPath} — missing uid`); continue; }
         const item = upsertItem(planUid, parentUid, raw, warnings);
         if (item) {
           collected.push(item);
           // Recurse into children
-          importItemsFromDir(fullPath, planUid, item.uid, warnings, collected);
+          importItemsFromDir(planDir, fullPath, planUid, item.uid, warnings, collected);
         }
       }
     } catch (err) {
@@ -1200,6 +1220,43 @@ function serializeDoc(doc: PlanDocument): string {
 }
 
 // --- Upserts (importer side) ---
+
+/**
+ * Which project an imported plan belongs to.
+ *
+ * This used to be `plan.yaml`'s own `projectPath`, else `'.'`. A committed
+ * plan.yaml carries whatever absolute path the AUTHOR'S machine had (this
+ * repo's own plans say /Users/<someone>/...), or nothing. So a plan
+ * imported from a clone, another machine, or another worktree belonged to
+ * a checkout that is not this one, or to `'.'`: it vanished from every
+ * scoped view. Worse, the scan's "DB has no plans for this project, so
+ * re-import from disk" pass could never see its own imports, and re-ran
+ * on every scan. And a root read from file CONTENT is the kind of input
+ * the Phase 19 rules say never to derive a root from.
+ *
+ * Now, in order:
+ *   1. an existing plan keeps its root while that root still exists, so
+ *      a plan committed on several branches does not hop between
+ *      worktrees each time a different one is scanned;
+ *   2. otherwise the root is where the plan SITS: the directory holding
+ *      `.codetrellis/plans/<slug>/`;
+ *   3. only for a directory outside that layout, the file's absolute
+ *      `projectPath`, and `'.'` as the last resort (the old behaviour).
+ */
+export function importedPlanRoot(planUid: string, planDir: string, declared: unknown): string {
+  const existing = planService.getPlan(planUid)?.projectPath;
+  if (existing && path.isAbsolute(existing) && fs.existsSync(existing)) return existing;
+
+  const slugDir = path.resolve(planDir);
+  const plansDir = path.dirname(slugDir);
+  const dotDir = path.dirname(plansDir);
+  if (path.basename(plansDir) === 'plans' && path.basename(dotDir) === '.codetrellis') {
+    return path.dirname(dotDir);
+  }
+
+  if (typeof declared === 'string' && path.isAbsolute(declared)) return declared;
+  return '.';
+}
 
 function upsertPlan(planUid: string, raw: any, projectPath: string): void {
   const db = getDb();

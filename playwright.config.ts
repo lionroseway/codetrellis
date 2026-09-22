@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,18 +22,28 @@ import { defineConfig } from '@playwright/test';
  * backend that restarts mid-run invalidates it — that presents as a
  * sudden wall of 401s, and the fix is to re-run, not to debug the app.
  */
+/**
+ * The suite's OWN data directory and token.
+ *
+ * The backend below used to run with no CODETRELLIS_DATA_DIR, so it
+ * wrote into the developer's real ~/.codetrellis: every test's project,
+ * plan and settings change landed in the database the desktop app uses.
+ * A throwaway directory per run keeps the suite off real data.
+ *
+ * The token is pinned rather than read from the directory: a fresh
+ * directory has no token file until the backend boots, and this config
+ * is evaluated before that. The backend honours CODETRELLIS_CAPABILITY_TOKEN
+ * (see capability-token.ts) and writes it to the directory, where the Vite
+ * proxy and `e2e/helpers` read it. Set on process.env so worker processes,
+ * which inherit the runner's environment, agree with the runner.
+ */
+process.env.CODETRELLIS_DATA_DIR ??= path.join(os.tmpdir(), `codetrellis-e2e-${process.pid}`);
+process.env.CODETRELLIS_CAPABILITY_TOKEN ??= crypto.randomBytes(24).toString('hex');
+const E2E_DATA_DIR = process.env.CODETRELLIS_DATA_DIR;
+const E2E_TOKEN = process.env.CODETRELLIS_CAPABILITY_TOKEN;
+
 function capabilityToken(): Record<string, string> {
-  const dataDir = process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
-  try {
-    return {
-      'x-codetrellis-token': fs.readFileSync(path.join(dataDir, 'capability-token'), 'utf-8').trim(),
-    };
-  } catch {
-    // No token yet — the webServer below mints one on boot. Going out
-    // unauthenticated makes the failure read as 401 rather than ENOENT,
-    // which is the more useful thing to find in a report.
-    return {};
-  }
+  return { 'x-codetrellis-token': E2E_TOKEN };
 }
 
 /**
@@ -57,7 +68,16 @@ const storageState = {
 
 export default defineConfig({
   testDir: './e2e',
+  // The marketing spec regenerates committed screenshots under
+  // marketing-assets/. In a normal run it silently rewrote them with
+  // whatever test data was loaded. Opt in with E2E_MARKETING=1.
+  testIgnore: process.env.E2E_MARKETING ? [] : ['**/marketing/**'],
   timeout: 30000,
+  // Playwright's default is half the CPU cores. Every test opens and scans
+  // this whole repository in its own Chromium against ONE backend, so on a
+  // laptop the default drove swap to 6.5 of 8 GB and filled the disk.
+  // Two is what a developer machine carries; CI or a big box can raise it.
+  workers: Number(process.env.E2E_WORKERS) || 2,
   retries: 0,
   use: {
     baseURL: 'http://localhost:5173',
@@ -71,13 +91,18 @@ export default defineConfig({
     {
       command: 'npx tsx src/backend/index.ts',
       port: 3001,
-      reuseExistingServer: true,
+      env: { CODETRELLIS_DATA_DIR: E2E_DATA_DIR, CODETRELLIS_CAPABILITY_TOKEN: E2E_TOKEN },
+      // Reusing whatever is on :3001 meant testing against the developer's
+      // dev backend and its real data, with a token this run does not
+      // hold. A busy port now fails loudly; opt back in explicitly.
+      reuseExistingServer: Boolean(process.env.E2E_REUSE_SERVER),
       timeout: 15000,
     },
     {
       command: 'npx vite --config vite.web.config.ts',
       port: 5173,
-      reuseExistingServer: true,
+      env: { CODETRELLIS_DATA_DIR: E2E_DATA_DIR },
+      reuseExistingServer: Boolean(process.env.E2E_REUSE_SERVER),
       timeout: 15000,
     },
   ],

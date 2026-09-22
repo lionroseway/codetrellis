@@ -33,7 +33,7 @@ import { readFileWithin, isWithin, isInside, ConfinementError } from './services
 
 /** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
 const MAX_BROWSE_ENTRIES = 1000;
-import { resolveTrustedProjectRoot, listTrustedRoots, setActiveProjectRoot, projectRelative } from './services/trusted-roots';
+import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, setActiveProjectRoot, projectRelative } from './services/trusted-roots';
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
@@ -41,7 +41,8 @@ import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStat
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
-import { startMcpServer, getMcpStatus, getMcpConfig } from './mcp/server';
+import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
+import { listWorktreesWithPlans } from './services/worktree-service';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
@@ -607,6 +608,16 @@ app.get('/api/git/branch', (req, res) => {
   }
 });
 
+// Every worktree of the opened project's repo, with the plans on each
+// one's disk. Works from ANY checkout (see worktree-service for why
+// /api/git/info below does not). Roots are derived from git, never taken
+// from the request; the one the caller names is confined first.
+app.get('/api/git/worktrees', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(listWorktreesWithPlans(projectRoot));
+});
+
 // List git branches and worktrees for a project
 app.get('/api/git/info', (req, res) => {
   const projectPath = requireProjectPath(req, res);
@@ -970,7 +981,33 @@ export async function scanProject(projectPath: string): Promise<ScanStats> {
   const run = runScan(projectPath);
   scanInFlight = { path: projectPath, promise: run };
   try {
-    return await run;
+    const stats = await run;
+
+    // Announce that the graph's data has been replaced.
+    //
+    // A scan truncates `files` and `imports` and repopulates them — the
+    // AST tables hold one project at a time, as the conflict check above
+    // says. So DURING a scan there are legitimately zero edges to serve,
+    // and a canvas that fetches its edges in that window gets a perfectly
+    // valid HTTP 200 carrying an empty array.
+    //
+    // The canvas fetched exactly once, when `scanStatus` became ready.
+    // Nothing errored, nothing was logged, and the graph stayed blank
+    // until the app was restarted, because the effect's inputs never
+    // changed again. Found by opening four throwaway projects in a row
+    // and then reopening the first one.
+    //
+    // This lives INSIDE scanProject rather than at the five call sites —
+    // an HTTP endpoint, two MCP tools and two mobile RPCs. Announcing it
+    // at each is how four of them end up not announcing it, which is
+    // exactly the bug: the endpoint knew and the MCP path did not.
+    broadcast('graph-data-changed', {
+      projectPath,
+      fileCount: stats.fileCount ?? null,
+      symbolCount: stats.symbolCount ?? null,
+    });
+
+    return stats;
   } finally {
     scanInFlight = null;
   }
@@ -1293,12 +1330,23 @@ app.get('/api/file/content', (req, res) => {
 
     // Compute git per-line annotations vs HEAD if a project root is known.
     let annotations: Array<'unchanged' | 'added' | 'modified'> | undefined;
+    let deletedBefore: Record<number, number> | undefined;
     let isDirty = false;
     if (projectPath) {
-      const fullAnnotations = computeGitLineAnnotations(projectPath, filePath, fullLineCount);
-      if (fullAnnotations) {
-        annotations = fullAnnotations.slice(start - 1, end);
-        isDirty = fullAnnotations.some((a) => a !== 'unchanged');
+      const git = computeGitLineAnnotations(projectPath, filePath, fullLineCount);
+      if (git) {
+        annotations = git.annotations.slice(start - 1, end);
+        isDirty = git.annotations.some((a) => a !== 'unchanged')
+          || Object.keys(git.deletedBefore).length > 0;
+
+        // Re-base the deletion anchors onto the window being served. A
+        // marker outside it is dropped rather than clamped to the edge,
+        // which would claim lines vanished somewhere they did not.
+        deletedBefore = {};
+        for (const [line, count] of Object.entries(git.deletedBefore)) {
+          const n = Number(line);
+          if (n >= start && n <= end + 1) deletedBefore[n - start + 1] = count;
+        }
       }
     }
 
@@ -1328,6 +1376,7 @@ app.get('/api/file/content', (req, res) => {
       truncated,
       language,
       annotations,
+      deletedBefore,
       drift,
     });
   } catch (err) {
@@ -1354,11 +1403,29 @@ function detectLanguage(filePath: string): string {
  * tracked yet (whole file is implicitly 'added' — caller can detect via
  * isDirty=true) or if git fails.
  */
+/**
+ * Per-line git state for a file, plus the deletions that have no line.
+ *
+ * A removal is not a property of a line — the line is gone. It sits
+ * BETWEEN two surviving lines, which is why the per-line array could
+ * never express it and why deleted code was invisible in the reader. A
+ * refactor that cut forty lines and added two rendered as two modified
+ * lines and no other trace.
+ *
+ * `deletedBefore` maps a 1-based line number to how many lines were
+ * removed immediately above it, so the renderer can put a marker in the
+ * gap where they used to be.
+ */
+export interface GitLineAnnotations {
+  annotations: Array<'unchanged' | 'added' | 'modified'>;
+  deletedBefore: Record<number, number>;
+}
+
 export function computeGitLineAnnotations(
   projectPath: string,
   filePath: string,
   lineCount: number,
-): Array<'unchanged' | 'added' | 'modified'> | null {
+): GitLineAnnotations | null {
   try {
     const relative = path.relative(projectPath, filePath);
     if (relative.startsWith('..')) return null;
@@ -1371,10 +1438,10 @@ export function computeGitLineAnnotations(
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
       );
       if (!lsOut) {
-        return Array(lineCount).fill('added');
+        return { annotations: Array(lineCount).fill('added'), deletedBefore: {} };
       }
     } catch {
-      return Array(lineCount).fill('added');
+      return { annotations: Array(lineCount).fill('added'), deletedBefore: {} };
     }
 
     // Diff against HEAD (working tree, not index) with zero context
@@ -1385,27 +1452,45 @@ export function computeGitLineAnnotations(
     );
 
     const annotations: Array<'unchanged' | 'added' | 'modified'> = Array(lineCount).fill('unchanged');
-    const HUNK_RE = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm;
+    const deletedBefore: Record<number, number> = {};
+
+    // Both sides of the hunk header are needed now. `-oldStart,oldLen`
+    // says how much was there; `+newStart,newLen` says how much remains.
+    // The old side used to be discarded, which is precisely the
+    // information a deletion consists of.
+    const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm;
     let match: RegExpExecArray | null;
     while ((match = HUNK_RE.exec(diffOut)) !== null) {
-      const startLine = parseInt(match[1], 10);
-      const lineCountInHunk = match[2] != null ? parseInt(match[2], 10) : 1;
-      // Was the hunk preceded by deletions? Crude heuristic: scan the hunk body
-      // for both '+' and '-' lines to decide added vs modified.
+      const oldLen = match[2] != null ? parseInt(match[2], 10) : 1;
+      const startLine = parseInt(match[3], 10);
+      const newLen = match[4] != null ? parseInt(match[4], 10) : 1;
+
       const blockStart = match.index + match[0].length;
       const nextHunk = diffOut.indexOf('\n@@', blockStart);
       const block = diffOut.slice(blockStart, nextHunk === -1 ? undefined : nextHunk);
       const hasRemoval = /^-/m.test(block);
       const status = hasRemoval ? 'modified' : 'added';
 
-      for (let i = 0; i < lineCountInHunk; i += 1) {
+      for (let i = 0; i < newLen; i += 1) {
         const idx = startLine - 1 + i;
         if (idx >= 0 && idx < annotations.length) {
           annotations[idx] = status;
         }
       }
+
+      // More went than came back. Record the surplus against the line it
+      // vanished above, so the gap is visible rather than implied.
+      //
+      // `newLen === 0` is a pure deletion: git reports `+N,0` meaning
+      // "after line N", so the marker belongs before N+1. Otherwise the
+      // block shrank, and the marker belongs after what survived.
+      if (oldLen > newLen) {
+        const anchor = newLen === 0 ? startLine + 1 : startLine + newLen;
+        const clamped = Math.min(Math.max(anchor, 1), lineCount + 1);
+        deletedBefore[clamped] = (deletedBefore[clamped] ?? 0) + (oldLen - newLen);
+      }
     }
-    return annotations;
+    return { annotations, deletedBefore };
   } catch {
     return null;
   }
@@ -1417,7 +1502,28 @@ export function computeGitLineAnnotations(
  * plan only (the user explicitly picked a comparison target). Otherwise we
  * fall back to "any active plan." File-level for v1 — no per-line drift.
  */
-function computeFileDrift(
+/**
+ * Does a plan item's file spec cover this project-relative path?
+ *
+ * Exact path, the destination of a move, or anything under a directory
+ * spec. Separators are normalised because specs are authored by hand and
+ * by agents on any platform.
+ */
+function fileSpecCovers(
+  spec: { path: string; moveTo?: string; isDir?: boolean },
+  relative: string,
+): boolean {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const target = norm(relative);
+  for (const candidate of [spec.path, spec.moveTo].filter(Boolean) as string[]) {
+    const c = norm(candidate);
+    if (c === target) return true;
+    if (target.startsWith(`${c}/`)) return true;
+  }
+  return false;
+}
+
+export function computeFileDrift(
   projectPath: string,
   filePath: string,
   isDirty: boolean,
@@ -1457,13 +1563,28 @@ function computeFileDrift(
   const planUids: string[] = [];
   const taskUids: string[] = [];
   for (const plan of plans) {
+    // Legacy tasks carry `affectedFiles`.
     const tasks = planService.getTasksByPlan(plan.uid);
     const matching = tasks.filter(
       (t) => t.affectedFiles.some((f) => f === relative || f === filePath),
     );
-    if (matching.length > 0) {
+
+    // V2 action items carry `fileSpecs`, and this function never read them.
+    //
+    // Every plan created in the UI or imported from a ticket stores its
+    // targets there, so on any modern plan the file header said
+    // "Drift · unexpected" for every file the plan asked to change — right
+    // above a gutter marking the same lines aligned. The sidebar and the
+    // per-line verdict both go through the proposed-changes feed, which
+    // reads both shapes; this was the one reader left on the old table.
+    const items = planItemService.listAllItems(plan.uid).filter(
+      (it) => it.kind === 'action' && (it.fileSpecs ?? []).some((fs) => fileSpecCovers(fs, relative)),
+    );
+
+    if (matching.length > 0 || items.length > 0) {
       planUids.push(plan.uid);
       for (const t of matching) taskUids.push(t.uid);
+      for (const it of items) taskUids.push(it.uid);
     }
   }
 
@@ -2958,9 +3079,18 @@ app.post('/api/plans/:uid/export', (req, res) => {
 });
 
 app.post('/api/plans/import', (req, res) => {
-  const planDir = (req.query.path as string) || (req.body && req.body.planDir);
-  if (!planDir) {
+  const rawPlanDir = (req.query.path as string) || (req.body && req.body.planDir);
+  if (!rawPlanDir) {
     res.status(400).json({ error: 'planDir path required (?path=… or body.planDir)' });
+    return;
+  }
+  // Confined: a plan directory of an opened project, compared on the real
+  // path. See resolveTrustedPlanDir.
+  let planDir: string;
+  try {
+    planDir = resolveTrustedPlanDir(rawPlanDir);
+  } catch (err) {
+    res.status(err instanceof ConfinementError ? 403 : 400).json({ error: err instanceof Error ? err.message : String(err) });
     return;
   }
   try {
@@ -3292,6 +3422,13 @@ app.get('/api/mcp/config', (_req, res) => {
   res.json(getMcpConfig());
 });
 
+// Everything the copy surfaces need to explain the credential, not just
+// carry it. The token is safe to return here: this API already required
+// it to answer.
+app.get('/api/mcp/setup', (_req, res) => {
+  res.json(getMcpSetup());
+});
+
 // --- Logs API (Phase 13 follow-up) ---
 
 app.get('/api/logs/tail', (req, res) => {
@@ -3446,10 +3583,27 @@ app.get('/api/settings/first-run-check', (req, res) => {
   const projectPath = optionalProjectRoot(req, res);
   if (projectPath === null) return;
   const gitDefaults = readGitIdentity(projectPath);
+
+  // Can we answer "who are you?" without asking?
+  //
+  // The wizard asked the user to confirm a name and email it had
+  // ALREADY read out of `git config` and pre-filled into both boxes —
+  // an interruption to confirm what we knew. Worse, it replaced the
+  // whole app rather than sitting over it, so a first-time user could
+  // not look at anything until they had filled in a form about
+  // attribution for work they had not done yet.
+  //
+  // `canDeriveIdentity` says whether asking is necessary at all. The
+  // frontend seeds silently when it is true, and only prompts when git
+  // genuinely cannot tell us — which is the case worth a question.
+  const haveIdentity = Boolean(settings.identity.displayName || settings.identity.email);
+  const canDeriveIdentity = haveIdentity || Boolean(gitDefaults.name || gitDefaults.email);
+
   res.json({
     firstRunComplete: settings.firstRunComplete,
     identity: settings.identity,
     gitDefaults,
+    canDeriveIdentity,
   });
 });
 

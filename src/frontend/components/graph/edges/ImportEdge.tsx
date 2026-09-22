@@ -1,6 +1,8 @@
 import { memo, useId, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
 
+import { useUiStore } from '../../../stores/ui-store';
+
 interface ImportEdgeData {
   importState?: 'regular' | 'planned_add' | 'planned_remove' | 'active' | 'symbol_link' | 'added' | 'removed' | 'unexpected';
   symbols?: string[];
@@ -92,7 +94,13 @@ function ImportEdgeComponent(props: EdgeProps) {
   const symbolNames = edgeData.symbols && edgeData.symbols.length > 0 ? edgeData.symbols : typeof label === 'string' && label.length > 0 ? label.split(',').map((item) => item.trim()) : [];
   const symbolCount = Math.max(edgeData.symbolCount || symbolNames.length, 1);
   const baseStrokeWidth = Math.min(1.2 + symbolCount * 0.55, 4.4);
-  const strokeWidth = edgeData.emphasized ? baseStrokeWidth + 1.5 : baseStrokeWidth;
+  const perf = useUiStore((s) => s.graphStyle) === 'performance';
+  // A status edge in performance mode has no glow to set it apart, so it
+  // gets the weight instead. Same rule as the cards: the signal moves
+  // from a filter to geometry, it does not go away.
+  const hasStatus = Boolean(edgeData.importState) && edgeData.importState !== 'symbol_link' && edgeData.importState !== 'regular';
+  const statusBoost = perf && hasStatus ? 1.5 : 0;
+  const strokeWidth = (edgeData.emphasized ? baseStrokeWidth + 1.5 : baseStrokeWidth) + statusBoost;
   const labelText = symbolNames.length > 0 ? `{ ${symbolNames.slice(0, 4).join(', ')}${symbolNames.length > 4 ? ', ...' : ''} }` : typeof label === 'string' ? label : '';
   const showLabel = Boolean(labelText && (edgeData.alwaysShowLabel || selected || isHovered || edgeData.emphasized));
 
@@ -108,7 +116,10 @@ function ImportEdgeComponent(props: EdgeProps) {
             stroke: visual.color,
             strokeWidth,
             strokeDasharray: visual.dashArray,
-            filter: `drop-shadow(0 0 ${isHovered || selected ? 10 : 6}px ${visual.glow})`,
+            // One SVG filter per edge is the single most expensive thing the
+            // glass style does: thousands of them, re-rasterised on every
+            // pan frame. Hover and selection still get it, since that is one edge.
+            filter: perf && !isHovered && !selected ? undefined : `drop-shadow(0 0 ${isHovered || selected ? 10 : 6}px ${visual.glow})`,
             opacity: edgeData.muted ? 0.18 : edgeData.importState === 'planned_remove' ? 0.78 : 1,
           }}
         />
@@ -137,7 +148,7 @@ function ImportEdgeComponent(props: EdgeProps) {
       {showLabel && labelText && (
         <EdgeLabelRenderer>
           <div
-            className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[10px] font-medium backdrop-blur-md ${
+            className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[10px] font-medium ${perf ? '' : 'backdrop-blur-md'} ${
               edgeData.importState === 'planned_remove' || edgeData.importState === 'removed'
                 ? 'border-red-300/20 bg-red-500/12 text-red-100 line-through'
                 : edgeData.importState === 'unexpected'
@@ -148,7 +159,7 @@ function ImportEdgeComponent(props: EdgeProps) {
             }`}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              boxShadow: `0 0 18px ${visual.glow}`,
+              boxShadow: perf ? undefined : `0 0 18px ${visual.glow}`,
             }}
           >
             {labelText}

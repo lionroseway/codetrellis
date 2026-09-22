@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Allotment } from 'allotment';
-import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle, History } from 'lucide-react';
+import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle, History, ArrowLeft } from 'lucide-react';
 import { useUiStore } from '../../../stores/ui-store';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
@@ -18,6 +18,8 @@ import { PlanReadinessRing } from './PlanReadinessRing';
 import { FreezeBar } from './FreezeBar';
 import { ManifestConflictBar } from './ManifestConflictBar';
 import { ContributionPanel } from './ContributionPanel';
+import { PlanSwitcher } from './PlanSwitcher';
+import { peekCodeReturn, returnToCode, type CodeReturn } from '../../../lib/open-file-at';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -60,6 +62,12 @@ export function PlanWorkspaceShellV2() {
   const activeStorePlanUid = usePlanItemsStore((s) => s.activePlanUid);
   const selectedItemUid = usePlanItemsStore((s) => s.selectedItemUid);
   const selectItem = usePlanItemsStore((s) => s.selectItem);
+
+  // Whether there is code to go back to. Read once on mount rather than
+  // subscribed: the breadcrumb is set before the navigation that brings
+  // this shell up, so it is already there by the time this runs.
+  const [codeReturn, setCodeReturn] = useState<CodeReturn | null>(null);
+  useEffect(() => { setCodeReturn(peekCodeReturn()); }, [selectedItemUid]);
 
   useEffect(() => {
     if (!plan) return;
@@ -140,6 +148,24 @@ export function PlanWorkspaceShellV2() {
           <ChevronLeft size={13} />
           <Minimize2 size={13} />
         </button>
+        {/*
+          The way back to the code you came from.
+
+          Only rendered when there IS a way back — arriving here from the
+          graph or the plan list leaves no breadcrumb, and a disabled
+          "back" pointing nowhere is worse than no control. See
+          `lib/open-file-at`.
+        */}
+        {codeReturn && (
+          <button
+            onClick={() => { void returnToCode().then((ok) => { if (ok) setCodeReturn(null); }); }}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded border border-accent/25 bg-accent/[0.07] text-accent hover:bg-accent/[0.14] transition-colors"
+            title={`Back to ${codeReturn.filePath}${codeReturn.line ? `:${codeReturn.line}` : ''}`}
+          >
+            <ArrowLeft size={12} />
+            <span className="font-mono text-[11.5px] truncate max-w-[16ch]">{codeReturn.label}</span>
+          </button>
+        )}
         <div className="h-5 w-px bg-white/[0.08]" />
         <ListChecks size={12} className="text-accent shrink-0" />
         {/*
@@ -163,6 +189,7 @@ export function PlanWorkspaceShellV2() {
         >
           {plan.title}
         </button>
+        <PlanSwitcher />
         <span className="text-[11px] uppercase tracking-wider text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30">
           V2
         </span>

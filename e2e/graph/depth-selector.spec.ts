@@ -50,6 +50,37 @@ test.describe('Depth selector', () => {
     await expect(page.locator('.react-flow')).toBeVisible();
   });
 
+  // The test above only checks the canvas survives, which is how Symbols
+  // shipped rendering the Clusters view for months: nothing asserted it
+  // showed a symbol. This walks the actual journey.
+  test('Symbols shows the symbols of the file you pick', async ({ page }) => {
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Symbols' }).click();
+
+    // Nothing picked yet: files to choose from (not clusters), and it says so.
+    const status = page.getByTestId('symbols-status');
+    await expect(status).toContainText('click a file');
+    await expect(page.locator('.react-flow__node-packageNode')).toHaveCount(0);
+
+    const file = page.locator('.react-flow__node[data-id="src/frontend/stores/graph-store.ts"]');
+    await expect(file).toHaveCount(1);
+    await file.dispatchEvent('click');
+
+    await expect(page.locator('.react-flow__node-symbolNode').first()).toBeVisible({ timeout: 10_000 });
+    await expect(status).toContainText(/\d+ symbols? in graph-store\.ts/);
+  });
+
+  test('a file focused in Files view survives the switch to Symbols', async ({ page }) => {
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Files' }).click();
+    const file = page.locator('.react-flow__node[data-id="src/frontend/stores/graph-store.ts"]');
+    await expect(file).toHaveCount(1);
+    await file.dispatchEvent('click'); // selects it in the inspector
+
+    await page.getByRole('button', { name: 'Symbols' }).click();
+    await expect(page.locator('.react-flow__node-symbolNode').first()).toBeVisible({ timeout: 10_000 });
+  });
+
   test('switching back to Clusters from Files', async ({ page }) => {
     await gotoWithProject(page);
 
