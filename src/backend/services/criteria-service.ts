@@ -117,7 +117,15 @@ function toSignoff(r: Row): CriterionSignoff {
     note: (r[6] as string | null) ?? null,
     createdAt: r[7] as number,
     evidenceHashes,
+    anchor: typeof r[9] === 'string'
+      ? { attachmentUid: r[9] as string, locator: parseJson(r[10]) }
+      : null,
   };
+}
+
+function parseJson(v: unknown): unknown {
+  if (typeof v !== 'string') return null;
+  try { return JSON.parse(v); } catch { return null; }
 }
 
 function latestSubmissionOf(criterionUid: string): CriterionEvidence[] {
@@ -137,7 +145,8 @@ function latestSubmissionOf(criterionUid: string): CriterionEvidence[] {
 
 function latestSignoffOf(criterionUid: string): CriterionSignoff | null {
   const r = rows(
-    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes
+    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes,
+            anchor_attachment_uid, anchor_locator
      FROM criterion_signoffs WHERE criterion_uid = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     [criterionUid],
   )[0];
@@ -229,7 +238,8 @@ export function listCriteria(itemUid: string): ItemCriterion[] {
 
 export function listSignoffs(criterionUid: string): CriterionSignoff[] {
   return rows(
-    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes
+    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes,
+            anchor_attachment_uid, anchor_locator
      FROM criterion_signoffs WHERE criterion_uid = ? ORDER BY created_at, rowid`,
     [criterionUid],
   ).map(toSignoff);
@@ -492,11 +502,12 @@ export function submitCriterion(
  */
 export function decideCriterion(
   criterionUid: string,
-  input: { decision: unknown; note?: unknown },
+  input: { decision: unknown; note?: unknown; anchor?: unknown },
   decision: HumanDecision,
 ): ItemCriterion {
   assertHuman(decision);
-  if (!getCriterion(criterionUid)) throw new CriterionError('Criterion not found', 404);
+  const criterion = getCriterion(criterionUid);
+  if (!criterion) throw new CriterionError('Criterion not found', 404);
   if (input.decision !== 'approved' && input.decision !== 'sent_back') {
     throw new CriterionError('decision must be approved or sent_back');
   }
@@ -504,9 +515,30 @@ export function decideCriterion(
   if (input.decision === 'sent_back' && !note) {
     throw new CriterionError('Say what is wrong — a send-back note is what the agent reads next.');
   }
-  appendSignoff(criterionUid, input.decision, decision.actor, 'human', decision.channel, note);
+  const anchor = input.decision === 'sent_back' ? parseAnchor(input.anchor, criterion.itemUid) : null;
+  appendSignoff(criterionUid, input.decision, decision.actor, 'human', decision.channel, note, anchor);
   markDirty();
   return getCriterion(criterionUid)!;
+}
+
+/**
+ * Where a send-back points (§8.2): an attachment on the SAME item, and a
+ * small locator object. A note about a file on some other item is a note
+ * about somewhere else.
+ */
+function parseAnchor(raw: unknown, itemUid: string): { attachmentUid: string; locator: unknown } | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new CriterionError('anchor must be {attachmentUid, locator}');
+  const a = raw as Record<string, unknown>;
+  if (typeof a.attachmentUid !== 'string') throw new CriterionError('anchor.attachmentUid is required');
+  const owner = rows(`SELECT target_uid FROM attachments WHERE uid = ?`, [a.attachmentUid])[0];
+  if (!owner) throw new CriterionError('The anchored file is not an attachment', 404);
+  if (owner[0] !== itemUid) throw new CriterionError('The anchored file belongs to another item');
+  const locator = a.locator ?? null;
+  if (locator !== null && (typeof locator !== 'object' || Array.isArray(locator) || JSON.stringify(locator).length > 2000)) {
+    throw new CriterionError('anchor.locator must be a small object such as {"lines": "4-6"}');
+  }
+  return { attachmentUid: a.attachmentUid, locator };
 }
 
 function appendSignoff(
@@ -516,6 +548,7 @@ function appendSignoff(
   actorType: string,
   channel: CriterionSignoff['channel'],
   note: string | null,
+  anchor: { attachmentUid: string; locator: unknown } | null = null,
 ): void {
   // An approval records the hash of every file it was taken on, so a later
   // edit to any of them shows as `stale` rather than silently still `met`.
@@ -528,9 +561,13 @@ function appendSignoff(
   }
   getDb().run(
     `INSERT INTO criterion_signoffs
-       (uid, criterion_uid, decision, actor, actor_type, channel, note, evidence_hashes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [randomUUID(), criterionUid, decision, actor, actorType, channel, note, JSON.stringify(evidenceHashes), tick()],
+       (uid, criterion_uid, decision, actor, actor_type, channel, note, evidence_hashes, created_at,
+        anchor_attachment_uid, anchor_locator)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      randomUUID(), criterionUid, decision, actor, actorType, channel, note, JSON.stringify(evidenceHashes), tick(),
+      anchor?.attachmentUid ?? null, anchor ? JSON.stringify(anchor.locator) : null,
+    ],
   );
 }
 

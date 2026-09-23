@@ -115,7 +115,14 @@ interface PlanItemsState {
   addCriterion: (itemUid: string, input: { text: string; kind: CriterionKind; policy?: CriterionPolicy }) => Promise<string | null>;
   updateCriterion: (itemUid: string, criterionUid: string, changes: { text?: string; policy?: CriterionPolicy }) => Promise<string | null>;
   deleteCriterion: (itemUid: string, criterionUid: string) => Promise<string | null>;
-  decideCriterion: (itemUid: string, criterionUid: string, decision: 'approved' | 'sent_back', note?: string) => Promise<string | null>;
+  decideCriterion: (
+    itemUid: string,
+    criterionUid: string,
+    decision: 'approved' | 'sent_back',
+    note?: string,
+    /** §8.2 — the file and place a send-back is about. */
+    anchor?: { attachmentUid: string; locator: unknown },
+  ) => Promise<string | null>;
   /**
    * A criterion being written, per item. Held here rather than in the
    * block's own state: the canvas re-renders on every broadcast, and a
@@ -520,8 +527,8 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
   deleteCriterion: (itemUid, criterionUid) =>
     criteriaWrite(`/api/criteria/${criterionUid}`, 'DELETE', undefined, () => get().refreshCriteria(itemUid)),
 
-  decideCriterion: (itemUid, criterionUid, decision, note) =>
-    criteriaWrite(`/api/criteria/${criterionUid}/decide`, 'POST', { decision, note }, () => get().refreshCriteria(itemUid)),
+  decideCriterion: (itemUid, criterionUid, decision, note, anchor) =>
+    criteriaWrite(`/api/criteria/${criterionUid}/decide`, 'POST', { decision, note, anchor }, () => get().refreshCriteria(itemUid)),
 }));
 
 /** Returns null on success, or the server's reason — shown to the person. */

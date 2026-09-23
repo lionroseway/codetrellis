@@ -49,6 +49,11 @@ export interface CriterionSignoff {
    * moment. A file whose hash no longer matches makes the criterion stale.
    */
   evidenceHashes?: Record<string, string | null>;
+  /**
+   * For a send-back taken from the exact place (§8.2): the file and the
+   * locator the note is about.
+   */
+  anchor?: { attachmentUid: string; locator: unknown } | null;
 }
 
 export interface ItemCriterion {

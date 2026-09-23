@@ -1389,6 +1389,10 @@ function slimCriterion(c: AgentCriterion) {
     policy: c.policy,
     state: c.state,
     sent_back_note: c.state === 'sent_back' ? c.latestSignoff?.note ?? null : null,
+    // Where the person sent it back from: the file and the cell, lines or page.
+    sent_back_at: c.state === 'sent_back' && c.latestSignoff?.anchor
+      ? { attachment_uid: c.latestSignoff.anchor.attachmentUid, locator: c.latestSignoff.anchor.locator }
+      : null,
     decided_by: c.latestSignoff ? { actor: c.latestSignoff.actor, actor_type: c.latestSignoff.actorType } : null,
   };
 }

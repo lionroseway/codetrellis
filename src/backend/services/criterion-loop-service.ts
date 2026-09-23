@@ -256,7 +256,14 @@ export async function getWorklist(planUid: string): Promise<Worklist> {
 
       if (c.state === 'met') { met++; continue; }
       if (c.state === 'sent_back') {
-        entries.push({ ...base, reason: 'sent_back', note: c.latestSignoff?.note ?? null, anchors, details: [], order });
+        // The place the person sent it back FROM comes first: it is what
+        // the note is about.
+        const at = c.latestSignoff?.anchor;
+        const pointed = at ? [{ attachmentUid: at.attachmentUid, path: pathOf(at.attachmentUid), locator: at.locator }] : [];
+        entries.push({
+          ...base, reason: 'sent_back', note: c.latestSignoff?.note ?? null,
+          anchors: [...pointed, ...anchors], details: [], order,
+        });
       } else if (c.state === 'stale') {
         const files = changedEvidenceFiles(c);
         entries.push({

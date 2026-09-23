@@ -16,6 +16,7 @@ import { MinimizedPlanChip } from './components/plan/MinimizedPlanChip';
 import { PlanWorkspaceShellV2 } from './components/plan/v2/PlanWorkspaceShellV2';
 import { SystemDocsPanel } from './components/system-docs/SystemDocsPanel';
 import { FolderPickerModal } from './components/FolderPickerModal';
+import { ArtefactViewer } from './components/artefact/ArtefactViewer';
 import { GuideModal } from './components/guide/GuideModal';
 import { GettingStarted } from './components/GettingStarted';
 import { GUIDE_SEEN_KEY } from './components/guide/GuideModal';
@@ -335,6 +336,8 @@ export function App() {
       <AudioCaptureBar />
       <StatusBar />
       <FolderPickerModal />
+      {/* Phase 31 §7 — evidence, opened at the place it cites. */}
+      <ArtefactViewer />
       <GuideModal />
       {/* Only when git could not tell us who this is. Over the app,
           never instead of it. */}

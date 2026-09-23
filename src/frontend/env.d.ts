@@ -25,6 +25,8 @@ interface ElectronAPI {
   /** Reveal the current day's log file in Finder / Explorer. */
   revealLogs: () => Promise<string>;
   revealUpdateDownload?: () => Promise<string | null>;
+  /** Phase 31 §7.4 — reveal an attachment's file by uid; there is no "open". */
+  revealArtefact?: (uid: string) => Promise<boolean>;
   /** Absolute path of the current day's log file. */
   getLogPath: () => Promise<string>;
 }
