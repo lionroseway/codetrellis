@@ -23,6 +23,7 @@ import {
   removeWithin,
   isWithin,
   isInside,
+  openReadStreamWithin,
   ConfinementError,
 } from './confined-fs';
 
@@ -221,5 +222,40 @@ describe('isWithin / isInside', () => {
     assert.equal(isInside('/a/b', '/a/b/c'), true);
     assert.equal(isInside('/a/b', '/a/bc'), false, 'a prefix match is not containment');
     assert.equal(isInside('/a/b', '/a'), false);
+  });
+});
+
+describe('openReadStreamWithin — the check and the read are one open', () => {
+  const drain = (stream: fs.ReadStream) =>
+    new Promise<string>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      stream.on('data', (c) => chunks.push(c as Buffer));
+      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      stream.on('error', reject);
+    });
+
+  test('streams a file inside the root, with its size', async () => {
+    const { stream, size } = openReadStreamWithin(root, 'sub/nested.txt');
+    assert.equal(size, 'nested'.length);
+    assert.equal(await drain(stream), 'nested');
+  });
+
+  test('honours an inclusive byte range, as a video Range request needs', async () => {
+    const { stream } = openReadStreamWithin(root, 'inside.txt', { start: 1, end: 3 });
+    assert.equal(await drain(stream), 'nsi');
+  });
+
+  test('refuses a link to a file outside — string comparison would have served SECRET', () => {
+    const link = path.join(root, 'stream-escape.txt');
+    fs.symlinkSync(path.join(outside, 'secret.txt'), link, 'file');
+    assert.throws(() => openReadStreamWithin(root, 'stream-escape.txt'), ConfinementError);
+  });
+
+  test('refuses a directory, which would otherwise error mid-response', () => {
+    assert.throws(() => openReadStreamWithin(root, 'sub'), /not a regular file/);
+  });
+
+  test('refuses traversal', () => {
+    assert.throws(() => openReadStreamWithin(root, '../outside/secret.txt'), ConfinementError);
   });
 });

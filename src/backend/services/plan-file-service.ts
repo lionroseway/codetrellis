@@ -50,7 +50,6 @@ import type {
   TaskStatus,
   TaskAttachment,
   Comment,
-  AttachmentKind,
   CommentKind,
   CommentSource,
   CommentType,
@@ -520,7 +519,7 @@ function upsertItem(
   planUid: string,
   parentUid: string | null,
   raw: any,
-  _warnings: string[],
+  warnings: string[],
 ): PlanItem | null {
   const uid = String(raw.uid);
   const existing = planItemService.getItem(uid);
@@ -610,18 +609,26 @@ function upsertItem(
   if (Array.isArray(raw.attachments)) {
     for (const a of raw.attachments) {
       if (!a?.uid || !a?.kind || a?.value == null) continue;
-      taskAttachmentsService.upsertAttachment({
+      // A plan file is untrusted input: its attachments are validated as if
+      // an agent had submitted them, and never re-home another item's.
+      const valid = taskAttachmentsService.validateImportedAttachment(a, uid);
+      if ('refused' in valid) {
+        warnings.push(`Skipped attachment ${String(a.uid)} on item ${uid}: ${valid.refused}`);
+        continue;
+      }
+      const stored = taskAttachmentsService.upsertAttachment({
         uid: String(a.uid),
         targetType: 'item',
         targetUid: uid,
-        kind: String(a.kind) as AttachmentKind,
-        value: String(a.value),
-        label: a.label ?? null,
-        contentType: a.contentType ?? null,
+        kind: valid.kind,
+        value: valid.value,
+        label: typeof a.label === 'string' ? a.label : null,
+        contentType: valid.contentType,
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
       });
+      if (!stored) warnings.push(`Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
   }
 
@@ -1438,18 +1445,24 @@ function upsertTask(planUid: string, raw: any): void {
   if (Array.isArray(raw.attachments)) {
     for (const a of raw.attachments) {
       if (!a?.uid || !a?.kind || a?.value == null) continue;
-      taskAttachmentsService.upsertAttachment({
+      const valid = taskAttachmentsService.validateImportedAttachment(a, String(raw.uid));
+      if ('refused' in valid) {
+        console.warn(`[Import] Skipped attachment ${String(a.uid)} on task ${String(raw.uid)}: ${valid.refused}`);
+        continue;
+      }
+      const stored = taskAttachmentsService.upsertAttachment({
         uid: String(a.uid),
         targetType: 'task',
         targetUid: String(raw.uid),
-        kind: String(a.kind) as AttachmentKind,
-        value: String(a.value),
-        label: a.label ?? null,
-        contentType: a.contentType ?? null,
+        kind: valid.kind,
+        value: valid.value,
+        label: typeof a.label === 'string' ? a.label : null,
+        contentType: valid.contentType,
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
       });
+      if (!stored) console.warn(`[Import] Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
   }
   if (Array.isArray(raw.comments)) {

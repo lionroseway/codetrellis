@@ -29,7 +29,7 @@ import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
 import { isSafeGitRef } from './services/git-safety';
-import { readFileWithin, isWithin, isInside, ConfinementError } from './services/confined-fs';
+import { readFileWithin, isWithin, isInside, ConfinementError, openReadStreamWithin } from './services/confined-fs';
 
 /** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
 const MAX_BROWSE_ENTRIES = 1000;
@@ -2767,41 +2767,81 @@ app.post('/api/items/:uid/attachments', (req, res) => {
  * access — works in both Electron and dev/web mode.
  */
 app.get('/api/attachments/:uid/file', (req, res) => {
+  // Phase 31 §4.2 / §7.1. Every property this route relies on is derived
+  // here, never taken from the request or trusted from the row:
+  //  - the project root comes from the item's plan and is re-checked
+  //    against the projects this app has opened;
+  //  - the path is confined to that root (or to this item's own upload
+  //    folder) and opened ONCE — the stream reads the descriptor that was
+  //    checked, so it cannot be swapped for a link in between;
+  //  - the type comes from the extension, not the stored content_type;
+  //  - errors never carry a path.
   const db = getDb();
-  const r = db.exec(
-    `SELECT value, target_uid, content_type FROM attachments WHERE uid = ?`,
-    [req.params.uid],
-  );
-  const row = r[0]?.values[0];
+  const row = db.exec(`SELECT value, target_uid FROM attachments WHERE uid = ?`, [req.params.uid])[0]?.values[0];
   if (!row) { res.status(404).json({ error: 'Attachment not found' }); return; }
   const value = row[0] as string;
   const targetUid = row[1] as string;
-  const contentType = (row[2] as string | null) ?? 'application/octet-stream';
 
-  // Resolve project root from the parent item -> plan -> project_path.
-  // Cheap join — runs once per attachment fetch.
-  let projectRoot: string | undefined;
-  const parent = db.exec(
+  let trustedRoot: string | null = null;
+  const projectPath = db.exec(
     `SELECT p.project_path FROM plan_items i JOIN plans p ON p.uid = i.plan_uid WHERE i.uid = ?`,
     [targetUid],
-  );
-  const projectPath = parent[0]?.values[0]?.[0] as string | undefined;
-  if (projectPath) projectRoot = projectPath;
+  )[0]?.values[0]?.[0] as string | undefined;
+  if (projectPath) {
+    try { trustedRoot = resolveTrustedProjectRoot(projectPath, 'attachment project'); } catch { trustedRoot = null; }
+  }
 
-  const abs = taskAttachmentsService.resolveAttachmentAbsPath(value, projectRoot);
-  if (!abs) {
-    res.status(404).json({ error: 'Attachment value is not a file', value });
+  const location = taskAttachmentsService.resolveAttachmentLocation(value, targetUid, trustedRoot);
+  const contentType = location ? taskAttachmentsService.servedContentType(location.rel) : null;
+  if (!location || !contentType) {
+    res.status(404).json({ error: 'This attachment is not a file that can be shown' });
     return;
   }
-  if (!fs.existsSync(abs)) {
-    res.status(404).json({ error: 'Attachment file missing on disk', path: abs });
+
+  // A single inclusive byte range, so video can seek.
+  let range: { start: number; end?: number } | undefined;
+  const header = typeof req.headers.range === 'string' ? req.headers.range : '';
+  const m = header.match(/^bytes=(\d+)-(\d*)$/);
+  if (m) range = { start: Number(m[1]), end: m[2] ? Number(m[2]) : undefined };
+
+  let opened: ReturnType<typeof openReadStreamWithin>;
+  try {
+    opened = openReadStreamWithin(location.root, location.rel, range ?? {}, 'attachment');
+  } catch {
+    res.status(404).json({ error: 'Attachment file not found' });
     return;
   }
-  // Caching is fine — the file is immutable (uid in the path).
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  const { stream, size } = opened;
+
   res.setHeader('Content-Type', contentType);
-  fs.createReadStream(abs).pipe(res);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Files change (a recorded output is edited), so nothing is cached.
+  res.setHeader('Cache-Control', 'no-store');
+  // Harmless for <img>/<video>; stops an SVG opened directly from running
+  // script in this origin.
+  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+  res.setHeader('Accept-Ranges', 'bytes');
+  if (range) {
+    const end = Math.min(range.end ?? size - 1, size - 1);
+    if (range.start > end) {
+      stream.destroy();
+      res.status(416).setHeader('Content-Range', `bytes */${size}`).end();
+      return;
+    }
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${range.start}-${end}/${size}`);
+    res.setHeader('Content-Length', String(end - range.start + 1));
+  } else {
+    res.setHeader('Content-Length', String(size));
+  }
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(500).json({ error: 'Could not read the attachment' });
+    else res.destroy();
+  });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
 });
+
 
 // Plan versions
 app.get('/api/plans/:uid/versions', (req, res) => {

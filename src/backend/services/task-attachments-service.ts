@@ -14,7 +14,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { resolveWithin, writeFileWithin } from './confined-fs';
+import { writeFileWithin } from './confined-fs';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 
 /**
@@ -80,49 +80,51 @@ function resolveAttachmentDir(targetUid: string, projectRoot: string | undefined
 }
 
 /**
- * Resolve a stored attachment `value` back to an absolute path on
- * disk. Used by the file-serving REST endpoint. Returns null for
- * non-file kinds (URLs, file_ref pointing at project files, etc).
+ * Where a stored attachment `value` may be read from: a containment root
+ * and a path relative to it, for `openReadStreamWithin`. Null when the
+ * value is not something this app will read.
+ *
+ * Phase 31 §4.2 — the rules that make a recorded path safe to show:
+ *
+ *  - `userdata://attachments/<item-uid>/<file>` — bytes this app wrote for
+ *    THIS item. Contained in `<dataDir>/attachments/<item-uid>`, never the
+ *    wider data directory (which holds the capability token and database).
+ *  - a relative path — inside the project that owns the item, whose root
+ *    the caller has derived from the stored plan and checked against the
+ *    opened projects. Never taken from a request.
+ *  - an absolute path — refused. A reference to a file outside the project
+ *    is text to show, not bytes to serve: it is how a shared plan file would
+ *    otherwise point a teammate's app at their own home directory.
  */
-export function resolveAttachmentAbsPath(value: string, projectRoot?: string): string | null {
+export function resolveAttachmentLocation(
+  value: string,
+  targetUid: string,
+  trustedProjectRoot: string | null,
+): { root: string; rel: string } | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
   if (value.startsWith('userdata://')) {
+    const prefix = `userdata://attachments/${targetUid}/`;
+    if (!value.startsWith(prefix)) return null;
     const userDataDir = process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
-    const rel = value.replace(/^userdata:\/\//, '');
-    // `startsWith` was the check here. It compares TEXT, so a symlink under
-    // the data dir pointing anywhere passed it (Phase 19, A2). resolveWithin
-    // canonicalises and refuses links.
-    try {
-      return resolveWithin(userDataDir, rel, 'attachment(userdata)');
-    } catch {
-      return null;
-    }
+    return { root: path.join(userDataDir, 'attachments', targetUid), rel: value.slice(prefix.length) };
   }
-  // Project-relative paths — `.codetrellis/...` (the bytes-uploaded
-  // attachment dir) AND any other path inside the project (file_ref
-  // attachments that just reference an existing project file).
-  if (projectRoot && !path.isAbsolute(value)) {
-    // Same substitution: text comparison cannot see through a link.
-    try {
-      return resolveWithin(projectRoot, value, 'attachment(project)');
-    } catch {
-      return null;
-    }
-  }
-  // Absolute paths: only serve if under the user's home dir (loose
-  // boundary so external-but-user-owned files like ~/Desktop work).
-  // No project-root override — outside-project absolute references
-  // are user-explicit.
-  if (path.isAbsolute(value)) {
-    // A file_ref may legitimately point outside the project (~/Desktop and
-    // the like), but it must still be inside the user's own home and must
-    // not be reached through a link (Phase 19, finding 3).
-    try {
-      return resolveWithin(os.homedir(), value, 'attachment(absolute)');
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  if (path.isAbsolute(value) || /^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+  if (!trustedProjectRoot) return null;
+  return { root: trustedProjectRoot, rel: value };
+}
+
+/**
+ * The type a served attachment is sent as — from its extension, never
+ * from the stored `content_type`, which is whatever the caller (or a plan
+ * file) said it was.
+ */
+const SERVED_TYPES: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  svg: 'image/svg+xml', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+};
+
+export function servedContentType(rel: string): string | null {
+  return SERVED_TYPES[path.extname(rel).slice(1).toLowerCase()] ?? null;
 }
 
 /**
@@ -331,6 +333,45 @@ export function deleteAttachment(uid: string): boolean {
  * Bulk import — used by plan-file-service when restoring a plan from
  * disk. Preserves the original uid + createdAt.
  */
+const ATTACHMENT_KINDS: readonly AttachmentKind[] = ['url', 'image', 'video', 'file_ref', 'code_block', 'transcript'];
+
+/**
+ * An attachment read from a plan file, validated exactly as if an agent had
+ * submitted it (Phase 31 §4.2). A plan file is untrusted input: it arrives
+ * through `git pull` from anyone who can push to the repository.
+ *
+ * Returns the values to store, or the reason it was refused.
+ */
+export function validateImportedAttachment(
+  raw: { kind?: unknown; value?: unknown; contentType?: unknown },
+  targetUid: string,
+): { kind: AttachmentKind; value: string; contentType: string | null } | { refused: string } {
+  const kind = raw.kind as AttachmentKind;
+  if (!(ATTACHMENT_KINDS as readonly unknown[]).includes(kind)) return { refused: `unknown kind ${String(raw.kind)}` };
+  if (typeof raw.value !== 'string' || raw.value.length === 0) return { refused: 'no value' };
+  const value = raw.value;
+  if (value.includes('\0')) return { refused: 'value contains a NUL byte' };
+
+  if (kind === 'url') {
+    // Rendered as a link; anything but http(s) is a script URL waiting to be clicked.
+    if (!/^https?:\/\//i.test(value)) return { refused: 'a url must be http(s)' };
+  } else if (kind === 'image' || kind === 'video' || kind === 'file_ref') {
+    if (value.startsWith('userdata://')) {
+      // Only this item's own upload folder: bytes this app wrote for it.
+      if (!value.startsWith(`userdata://attachments/${targetUid}/`) || value.includes('..')) {
+        return { refused: 'points into the data directory outside this item\'s uploads' };
+      }
+    } else if (path.isAbsolute(value) || /^[a-z][a-z0-9+.-]*:/i.test(value)) {
+      return { refused: 'absolute paths and URLs are not file references; use a path inside the project' };
+    } else if (path.normalize(value).split(/[\\/]/).includes('..')) {
+      return { refused: 'path leaves the project' };
+    }
+  }
+
+  const ct = typeof raw.contentType === 'string' ? raw.contentType.toLowerCase() : null;
+  return { kind, value, contentType: ct && ALLOWED_ATTACHMENT_TYPES.has(ct) ? ct : null };
+}
+
 export function upsertAttachment(input: {
   uid: string;
   targetType: AttachmentTargetType;
@@ -342,13 +383,16 @@ export function upsertAttachment(input: {
   author: string;
   authorType: string;
   createdAt: number;
-}): void {
+}): boolean {
   const db = getDb();
-  const exists = db.exec(`SELECT uid FROM attachments WHERE uid = ?`, [input.uid]);
-  if (exists[0]?.values[0]) {
+  const exists = db.exec(`SELECT target_type, target_uid FROM attachments WHERE uid = ?`, [input.uid])[0]?.values[0];
+  if (exists) {
+    // An upsert never moves an attachment between items: a uid in one
+    // plan file must not rewrite an attachment another item owns.
+    if (exists[0] !== input.targetType || exists[1] !== input.targetUid) return false;
     db.run(
-      `UPDATE attachments SET target_type = ?, target_uid = ?, kind = ?, value = ?, label = ?, content_type = ?, author = ?, author_type = ?, created_at = ? WHERE uid = ?`,
-      [input.targetType, input.targetUid, input.kind, input.value,
+      `UPDATE attachments SET kind = ?, value = ?, label = ?, content_type = ?, author = ?, author_type = ?, created_at = ? WHERE uid = ?`,
+      [input.kind, input.value,
        input.label ?? null, input.contentType ?? null,
        input.author, input.authorType, input.createdAt, input.uid],
     );
@@ -362,6 +406,7 @@ export function upsertAttachment(input: {
     );
   }
   markDirty();
+  return true;
 }
 
 function guessExtensionFromContentType(contentType?: string): string | null {
