@@ -30,7 +30,9 @@ test.describe('Terminal empty state', () => {
     await gotoWithProject(page);
 
     // Open terminal panel
-    const termToggle = page.locator('button').filter({ hasText: 'Terminal' }).first();
+    // By its title: "a button containing Terminal" also matches the file
+    // tree's e2e/terminal/ folder, which comes first in the page.
+    const termToggle = page.locator('button[title^="Toggle terminal"]');
     await termToggle.click();
     await page.waitForTimeout(1000);
 

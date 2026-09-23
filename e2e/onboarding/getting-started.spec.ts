@@ -77,10 +77,14 @@ test.describe('Getting Started checklist', () => {
     await gotoWithProject(page, { skipOnboarding: false });
     await page.waitForTimeout(1500);
 
+    // The step offers the link only until an agent has connected, and this
+    // suite shares one backend — another spec may already have connected
+    // one. When it is offered, it must open the guide (which replaced the
+    // three-step "Connect an AI Agent" wizard).
     const link = page.getByText('Show MCP setup');
     if (await link.isVisible({ timeout: 2000 }).catch(() => false)) {
       await link.click();
-      await expect(page.getByText('Connect an AI Agent')).toBeVisible({ timeout: 3000 });
+      await expect(page.getByRole('dialog', { name: 'CodeTrellis guide' })).toBeVisible({ timeout: 3000 });
     }
   });
 

@@ -187,8 +187,18 @@ export function PlanTemplatePicker({ onClose }: { onClose: () => void }) {
       .filter((g) => g.items.length > 0);
   }, [templates]);
 
+  // A modal says it is one, and Escape leaves it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="New plan from template"
       className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
       onClick={onClose}
     >

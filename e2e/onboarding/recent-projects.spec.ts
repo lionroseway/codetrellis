@@ -72,6 +72,7 @@ test.describe('Recent projects', () => {
     const openAnother = page.getByText('Open another');
     const openProject = page.getByRole('button', { name: 'Open Project' }).first();
     // One of these should be visible depending on recents state
-    await expect(openAnother.or(openProject)).toBeVisible({ timeout: 5000 });
+    // Both can show at once (the TopBar has its own Open button), so take the first.
+    await expect(openAnother.or(openProject).first()).toBeVisible({ timeout: 5000 });
   });
 });

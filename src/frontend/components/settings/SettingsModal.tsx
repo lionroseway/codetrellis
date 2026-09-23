@@ -286,8 +286,20 @@ export function SettingsModal({
 }
 
 function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  // A modal says it is one, and Escape leaves it — as the guide and every
+  // other dialog here do. Neither was true of Settings: a screen reader had
+  // no dialog to announce, and the keyboard had no way out but Tab-hunting
+  // for the close button.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Settings"
       className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
       onClick={onClose}
     >

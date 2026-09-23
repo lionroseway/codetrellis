@@ -100,13 +100,16 @@ test.describe('Git diff colours on the lines', () => {
       await surface.getByRole('button', { name: /^notifier/ }).first().click({ timeout: 10_000 });
       await surface.getByRole('button', { name: /^zz_new_file\.rb/ }).first().click({ timeout: 10_000 });
 
-      // The gutter marks additions with '+' on an emerald ground.
-      const added = surface.locator('.bg-emerald-500\\/20');
-      await expect.poll(() => added.count(), { timeout: 15_000 }).toBeGreaterThan(0);
-      await expect(added.first()).toContainText('+');
-
-      // Nothing should read as "modified" in a file that never existed.
-      await expect(surface.locator('.bg-amber-500\\/20')).toHaveCount(0);
+      // Git's answer (added) is now the INPUT to one verdict per line
+      // (lib/line-verdict) rather than a column of its own. No plan asked
+      // for this file, so every line reads as drifted — ◆ — and the count
+      // is read off data-verdict rather than off a colour class.
+      // Three written lines plus the empty one after the final newline —
+      // git counts that too, so "every line" is at least the three.
+      const drifted = surface.locator('[data-verdict="drifted"]');
+      await expect.poll(() => drifted.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
+      await expect(drifted.first()).toContainText('◆');
+      await expect(surface.locator('[data-verdict="outstanding"]')).toHaveCount(0);
     } finally {
       fs.rmSync(abs, { force: true });
     }
@@ -125,12 +128,11 @@ test.describe('Git diff colours on the lines', () => {
       await surface.getByRole('button', { name: /^notifier/ }).first().click({ timeout: 10_000 });
       await surface.getByRole('button', { name: /^app\.rb/ }).first().click({ timeout: 10_000 });
 
-      // An appended line is an addition with no removal, so it is marked
-      // added rather than modified — and the untouched lines carry no
-      // mark at all, which is the point of a per-line annotation.
-      const marked = surface.locator('.bg-emerald-500\\/20, .bg-amber-500\\/20');
+      // Only the appended lines carry a verdict — the untouched ones carry
+      // none, which is the point of a per-line annotation.
+      const marked = surface.locator('[data-verdict]');
       await expect.poll(() => marked.count(), { timeout: 15_000 }).toBeGreaterThan(0);
-      const lineCount = await surface.locator('.bg-emerald-500\\/20, .bg-amber-500\\/20').count();
+      const lineCount = await marked.count();
       expect(lineCount, 'the whole file was marked, so this is not per-line').toBeLessThan(10);
     } finally {
       fs.writeFileSync(abs, original);
@@ -144,7 +146,8 @@ test.describe('Git diff colours on the lines', () => {
     const surface = await enterCodeMode(page);
     await surface.getByRole('button', { name: /^README\.md/ }).first().click({ timeout: 10_000 });
     await expect(surface.locator('pre, code').first()).toBeVisible({ timeout: 10_000 });
-    await expect(surface.locator('.bg-emerald-500\\/20')).toHaveCount(0);
-    await expect(surface.locator('.bg-amber-500\\/20')).toHaveCount(0);
+    // No line of a clean file reads as changed. (A plan may still mark
+    // lines it intends to touch as outstanding — that is not a change.)
+    await expect(surface.locator('[data-verdict="drifted"], [data-verdict="aligned"]')).toHaveCount(0);
   });
 });

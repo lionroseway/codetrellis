@@ -12,10 +12,10 @@ test.describe('Trellis modes', () => {
   test('Live / Baseline / Planned / Diff buttons are visible', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByRole('button', { name: 'Live' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Baseline' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Planned' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Diff' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Live', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Baseline', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Planned', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Diff', exact: true })).toBeVisible();
   });
 
   test('Live is the default active mode', async ({ page }) => {
@@ -28,7 +28,7 @@ test.describe('Trellis modes', () => {
   test('clicking Baseline switches mode', async ({ page }) => {
     await gotoWithProject(page);
 
-    await page.getByRole('button', { name: 'Baseline' }).click();
+    await page.getByRole('button', { name: 'Baseline', exact: true }).click();
     await page.waitForTimeout(1000);
 
     // Graph should still render
@@ -38,7 +38,7 @@ test.describe('Trellis modes', () => {
   test('clicking Planned switches mode', async ({ page }) => {
     await gotoWithProject(page);
 
-    await page.getByRole('button', { name: 'Planned' }).click();
+    await page.getByRole('button', { name: 'Planned', exact: true }).click();
     await page.waitForTimeout(1000);
 
     await expect(page.locator('.react-flow')).toBeVisible();
@@ -47,7 +47,7 @@ test.describe('Trellis modes', () => {
   test('clicking Diff switches mode', async ({ page }) => {
     await gotoWithProject(page);
 
-    await page.getByRole('button', { name: 'Diff' }).click();
+    await page.getByRole('button', { name: 'Diff', exact: true }).click();
     await page.waitForTimeout(1000);
 
     await expect(page.locator('.react-flow')).toBeVisible();
@@ -56,10 +56,10 @@ test.describe('Trellis modes', () => {
   test('switching back to Live from Baseline', async ({ page }) => {
     await gotoWithProject(page);
 
-    await page.getByRole('button', { name: 'Baseline' }).click();
+    await page.getByRole('button', { name: 'Baseline', exact: true }).click();
     await page.waitForTimeout(500);
 
-    await page.getByRole('button', { name: 'Live' }).click();
+    await page.getByRole('button', { name: 'Live', exact: true }).click();
     await page.waitForTimeout(500);
 
     await expect(page.locator('.react-flow')).toBeVisible();
