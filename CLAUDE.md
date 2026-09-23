@@ -180,7 +180,11 @@ a tagged candidate and on packaged artifacts.
   (binary PTY), `audio` (WebM/Opus). mDNS discovery via
   `_codetrellis._tcp`.
 - **Agent comms**: Local MCP server (SSE on `:19432`) — every tool call
-  from any agent is broadcast as `tool_call` / `tool_error`. Claude
+  from any agent is broadcast as `tool_call` / `tool_error`. Agents
+  connect through the **stdio connector**, which re-reads the per-launch
+  token on every connect so a config survives restarts — see
+  `docs/claude/mcp-tools.md`. A config carrying the token itself stops
+  working at the next launch; never make that the default again. Claude
   Code session-JSONL watcher tails `~/.claude/sessions/<id>.jsonl`
   for chat-derived plan heuristics.
 - **Cross-system extraction**: per-language callsite extractors
@@ -443,6 +447,14 @@ How the script is shaped, and why (see [`saif-desktop-app-releases`]):
   `*.deb`). An unpinned glob sweeps a stale build from a previous run
   into the release and nothing about the result looks wrong until a user
   reports the wrong version.
+- **Every packaged app is checked for the version it will report**
+  (`scripts/verify-build-stamp.js`, in `release.sh` and every CI build
+  job). The updater's "current" version is in the bundled code, not
+  `Info.plist`: it is imported from `package.json`, and commit / build
+  number are stamped by `electron.vite.config.ts`. Before that, a
+  `prepackage` hook that no real build script triggered left
+  v0.1.10–v0.1.13 reporting 0.1.9, and v0.1.15 offering itself as an
+  update. Don't reintroduce a committed, generated version file.
 - **Signing identity comes from the environment**
   (`CSC_NAME="…" npm run package:mac`), never the build config — a
   machine with no certificate still produces a build instead of failing.

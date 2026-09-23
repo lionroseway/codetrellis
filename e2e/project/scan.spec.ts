@@ -36,7 +36,7 @@ test.describe('Project scan', () => {
   test('StatusBar shows "Ready" after scan', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByText('Ready')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Ready', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
   test('plan panel tabs are visible', async ({ page }) => {

@@ -10,7 +10,6 @@
  */
 
 import http from 'node:http';
-
 import { authHeaders } from './setup';
 
 const MCP_PORT = 19432;
@@ -37,13 +36,13 @@ export async function createMcpClient(): Promise<{
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('SSE connect timeout')), 10000);
 
-    // The MCP transport authenticates (Phase 19). Without the token the
-    // server answers 401 and never sends an `endpoint` event, which read
-    // as "SSE connect timeout" on every MCP spec.
+    // The MCP server authenticates like every other local transport
+    // (Phase 19). The advertised POST endpoint carries the token back, but
+    // the stream request itself has to present it.
     sseRequest = http.get(`http://127.0.0.1:${MCP_PORT}/sse`, { headers: authHeaders() }, (res) => {
-      if (res.statusCode && res.statusCode >= 400) {
+      if (res.statusCode !== 200) {
         clearTimeout(timeout);
-        reject(new Error(`MCP SSE refused: HTTP ${res.statusCode}`));
+        reject(new Error(`MCP SSE refused with HTTP ${res.statusCode}`));
         return;
       }
       let buffer = '';
@@ -135,6 +134,7 @@ export async function createMcpClient(): Promise<{
         path: url.pathname + url.search,
         method: 'POST',
         headers: {
+          ...authHeaders(),
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
         },

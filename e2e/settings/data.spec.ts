@@ -13,7 +13,7 @@ test.describe('Settings data', () => {
 
     await page.locator('button[title*="Settings"]').click();
     await page.waitForTimeout(500);
-    await page.getByRole('button', { name: 'Data', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Data', exact: true }).click();
     await page.waitForTimeout(300);
 
     const input = page.locator('input[placeholder*="/path/to"]');
@@ -25,10 +25,11 @@ test.describe('Settings data', () => {
 
     await page.locator('button[title*="Settings"]').click();
     await page.waitForTimeout(500);
-    await page.getByRole('button', { name: 'Data', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Data', exact: true }).click();
     await page.waitForTimeout(300);
 
     // Should mention restart
-    await expect(page.getByText('restart').first()).toBeVisible({ timeout: 3000 });
+    // Scoped: unscoped, 'restart' first matched a hidden commit-message option.
+    await expect(page.getByRole('dialog', { name: 'Settings' }).getByText('restart').first()).toBeVisible({ timeout: 3000 });
   });
 });

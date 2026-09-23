@@ -245,6 +245,14 @@ export const SCHEMA_PLANS_CORE = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_recent_projects_opened ON recent_projects(last_opened_at DESC);
+
+  -- Projects pushed off recent_projects by the unpinned cap. Read ONLY to
+  -- explain a refusal ("this was opened, then dropped off"); it is never a
+  -- source of trust. Cleared when the project is opened again.
+  CREATE TABLE IF NOT EXISTS evicted_projects (
+    path TEXT PRIMARY KEY,
+    evicted_at INTEGER NOT NULL
+  );
 `;
 
 export const SCHEMA_ATTACHMENTS = `
@@ -258,7 +266,18 @@ export const SCHEMA_ATTACHMENTS = `
     content_type TEXT,
     author TEXT NOT NULL,
     author_type TEXT NOT NULL DEFAULT 'human',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    -- Phase 31 §4.2 — an artefact is an attachment with a role and a hash.
+    -- role: 'material' (input) · 'output' (produced by the work) ·
+    -- 'evidence' (captured to prove something) · NULL for everything else.
+    -- sha256/size/mtime are taken when recorded and re-taken whenever the
+    -- file's size or mtime moves, so a decision can notice the file changed.
+    role TEXT,
+    sha256 TEXT,
+    size INTEGER,
+    mtime INTEGER,
+    recorded_by TEXT,
+    recorded_by_type TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_attachments_target ON attachments(target_uid);
   CREATE INDEX IF NOT EXISTS idx_attachments_target_type ON attachments(target_type, target_uid);
@@ -309,6 +328,70 @@ export const SCHEMA_PLAN_ITEMS = `
   CREATE INDEX IF NOT EXISTS idx_plan_items_status     ON plan_items(status);
   CREATE INDEX IF NOT EXISTS idx_plan_items_sort       ON plan_items(plan_uid, parent_uid, sort_order);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_items_migrated ON plan_items(migrated_from);
+
+  -- Phase 31 §4.1 — acceptance criteria as rows. A line of prose has no
+  -- state, no owner and no evidence; a row has all three. text is
+  -- VERBATIM — the requester's wording is what they will check against.
+  -- state is derived (see criteria-service) and never stored.
+  CREATE TABLE IF NOT EXISTS item_criteria (
+    uid          TEXT PRIMARY KEY,
+    item_uid     TEXT NOT NULL,
+    sort_order   INTEGER NOT NULL DEFAULT 0,
+    text         TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'manual',
+    policy       TEXT NOT NULL DEFAULT 'propose',
+    source       TEXT,
+    author       TEXT NOT NULL,
+    author_type  TEXT NOT NULL,
+    origin_uid   TEXT,
+    created_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL,
+    -- When the wording last changed. Submissions and decisions older than
+    -- this were about different words, so they no longer count.
+    text_updated_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_item_criteria_item ON item_criteria(item_uid, sort_order);
+
+  -- One row per submission. attachment_uid is nullable: a submission can
+  -- be a note alone ("done — see the body"), and that is still a claim
+  -- someone has to judge.
+  CREATE TABLE IF NOT EXISTS criterion_evidence (
+    uid               TEXT PRIMARY KEY,
+    criterion_uid     TEXT NOT NULL,
+    submission_uid    TEXT NOT NULL,
+    attachment_uid    TEXT,
+    locator           TEXT,
+    note              TEXT,
+    sha256_at_submit  TEXT,
+    submitted_by      TEXT NOT NULL,
+    submitted_by_type TEXT NOT NULL,
+    submitted_at      INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_criterion_evidence_criterion ON criterion_evidence(criterion_uid, submitted_at);
+
+  -- Append-only. A decision is a record, never a flag that approving
+  -- destroys. evidence_hashes is filled from 31.2 on, when artefacts
+  -- carry a hash; until then it is '{}'.
+  CREATE TABLE IF NOT EXISTS criterion_signoffs (
+    uid             TEXT PRIMARY KEY,
+    criterion_uid   TEXT NOT NULL,
+    decision        TEXT NOT NULL,
+    actor           TEXT NOT NULL,
+    actor_type      TEXT NOT NULL,
+    channel         TEXT NOT NULL,
+    note            TEXT,
+    evidence_hashes TEXT NOT NULL DEFAULT '{}',
+    created_at      INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_criterion_signoffs_criterion ON criterion_signoffs(criterion_uid, created_at);
+
+  -- Items whose '## Acceptance criteria' body section has been read into
+  -- rows. Kept apart from plan_items, whose reader maps columns by
+  -- position, and so the pass can never run twice for an item.
+  CREATE TABLE IF NOT EXISTS item_criteria_migrated (
+    item_uid    TEXT PRIMARY KEY,
+    migrated_at INTEGER NOT NULL
+  );
 
   -- Phase 23 — time and cost. One row per closed TURN (see
   -- budget-service), not per tool call: an agent's wall-clock is mostly

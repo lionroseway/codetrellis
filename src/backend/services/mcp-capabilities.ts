@@ -1,5 +1,5 @@
 import { type PeerCapability, DEFAULT_GRANTS } from './peer-capabilities';
-import { isTrustedProjectRoot, isTrustedPlanDir } from './trusted-roots';
+import { evictedHint, isTrustedProjectRoot, isTrustedPlanDir } from './trusted-roots';
 import type { McpProjectScope } from '../../shared/types/settings';
 
 /**
@@ -154,13 +154,20 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   delete_item: 'write',
   claim_item: 'write',
   get_next_item: 'read',
-  approve_gate: 'write',
+  // Retired in Phase 31.1 — it refuses. Kept one release so an agent that
+  // learned it gets a direction rather than a missing tool.
+  approve_gate: 'read',
+  list_criteria: 'read',
+  record_artefact: 'write',
+  add_criterion: 'write',
+  submit_criterion: 'write',
   list_items: 'read',
   search_items: 'read',
   get_plan_timeline: 'read',
   restore_item_version: 'write',
   list_item_versions: 'read',
   list_item_comments: 'read',
+  resolve_reference: 'read',
   add_item_comment: 'write',
   update_item_progress: 'write',
   set_item_blocked: 'write',
@@ -426,10 +433,13 @@ export function assertMcpProjectInScope(
   if (typeof candidate !== 'string' || candidate.trim().length === 0) return;
 
   if (!isTrustedProjectRoot(candidate)) {
+    const evicted = evictedHint(candidate);
     throw new McpAuthorizationError(
-      `"${tool}" named a project that is not open: "${candidate}". Project roots come from the ` +
-        'projects this app has opened, not from the request. Open it first, or set MCP project ' +
-        'scope to "anywhere" in Settings → MCP Server.',
+      `"${tool}" named a project that is not open: "${candidate}". ` +
+        (evicted
+          ? evicted
+          : 'Project roots come from the projects this app has opened, not from the request. ' +
+            'Open it first, or set MCP project scope to "anywhere" in Settings → MCP Server.'),
       null,
     );
   }

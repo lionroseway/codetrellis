@@ -41,7 +41,7 @@ test.describe('Pre-seeded plan execution (Prompt A)', () => {
 
   test.afterEach(async ({ request }) => {
     wsCollector?.close();
-    await cleanupPlans(request, 'E2E');
+    await cleanupPlans(request, 'E2E Pre-seeded: Error');
     cleanupTempFixture(tempFixture);
   });
 

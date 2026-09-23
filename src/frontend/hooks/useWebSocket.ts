@@ -129,6 +129,10 @@ export function useWebSocket() {
             const comment = payload?.comment;
             if (itemUid && comment) usePlanItemsStore.getState().onItemCommentAdded(itemUid, comment);
           }
+          if (type === 'plan-item-criteria-changed') {
+            const itemUid = payload?.itemUid as string | undefined;
+            if (itemUid) void usePlanItemsStore.getState().refreshCriteria(itemUid);
+          }
           if (type === 'plan-item-attachment-added') {
             const itemUid = payload?.itemUid as string | undefined;
             const attachment = payload?.attachment;

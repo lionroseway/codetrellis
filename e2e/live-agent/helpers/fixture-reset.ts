@@ -11,7 +11,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { authHeaders } from '../../helpers/setup';
+import { openProject } from '../../helpers/setup';
 
 /** Root of the codetrellis repo (parent of e2e/). */
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -58,32 +58,18 @@ export function createTempFixture(): string {
 }
 
 /**
- * A temp fixture the app has OPENED.
+ * Create a temp fixture AND open it, as a user would before pointing an
+ * agent at it.
  *
- * Paths the API and MCP tools act on are confined to opened projects
- * (Phase 19), and a fresh mkdtemp copy is not one: seeding a plan in it
- * got a 403, and create_plan got an MCP refusal the spec then tried to
- * JSON.parse. Opening is a scan, the same call the app makes.
+ * Phase 19 derives project roots from opened projects: `create_plan`,
+ * `POST /api/plans` and every path-taking MCP tool refuse a path the app
+ * has not opened. A fresh temp copy has never been opened, so a test that
+ * only copies it gets refusals it then misreads as unparseable results.
  */
 export async function openTempFixture(): Promise<string> {
-  const dir = createTempFixture();
-  const headers = { 'Content-Type': 'application/json', ...authHeaders() };
-  // A scan that arrives while another is running (a previous test's scan
-  // of the whole repo, still going server-side) answers 200 but serves the
-  // file tree only and records nothing, so the copy is still not open.
-  // Confirm it reached the opened list; retry while the other scan ends.
-  for (let attempt = 0; attempt < 30; attempt++) {
-    await fetch('http://localhost:3001/api/project/scan', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ projectPath: dir }),
-    });
-    const recents = await (await fetch('http://localhost:3001/api/recent-projects', { headers })).json();
-    const list: Array<{ path?: string }> = Array.isArray(recents) ? recents : recents?.projects ?? [];
-    if (list.some((p) => p.path === dir)) return dir;
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  throw new Error(`could not open temp fixture ${dir}: never appeared among opened projects`);
+  const tmpDir = createTempFixture();
+  await openProject(tmpDir);
+  return tmpDir;
 }
 
 /**

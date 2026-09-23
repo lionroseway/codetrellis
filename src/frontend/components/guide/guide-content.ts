@@ -79,10 +79,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'CodeTrellis runs a local MCP server. Copy the config into your agent, restart it, and it appears in '
       + 'the top bar. Any MCP-capable client works — there is nothing Claude-specific about it.',
     points: [
-      'The server needs a credential: a per-launch token, sent as the x-codetrellis-token header. The copied config includes it.',
-      'The token changes every time the app starts. An agent refused with "Missing or invalid capability token" needs the config re-copied, or to re-read the token file.',
-      'Easiest: "Copy agent instructions" and paste them into your agent. They tell it where to read the token, so the token itself never goes into the chat.',
-      'Claude Code: Settings → MCP Server → Copy Claude Code command. Cursor: paste the config into ~/.cursor/mcp.json.',
+      'The copied config runs the CodeTrellis connector: a small local command your agent launches, which finds this app by itself. Nothing secret goes in the config, and it keeps working when CodeTrellis restarts.',
+      'Claude Code: Settings → MCP Server → Copy Claude Code command. Claude Desktop: paste the JSON into claude_desktop_config.json under mcpServers and restart it. Cursor: ~/.cursor/mcp.json.',
+      'Easiest: "Copy agent instructions" and paste them into your agent, and it sets itself up. They contain no secret.',
+      'A direct connection (a URL plus this launch\'s token) is still in Settings for clients that can only take a URL. It stops working whenever CodeTrellis restarts.',
     ],
     asks: [
       {
@@ -262,7 +262,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         note: 'What to say after clearing a full context, or on a different machine.',
       },
     ],
-    tools: ['get_next_item', 'claim_item', 'update_item_progress', 'set_item_blocked', 'approve_gate', 'copy_plan_as_prompt'],
+    tools: ['get_next_item', 'claim_item', 'update_item_progress', 'set_item_blocked', 'list_criteria', 'submit_criterion', 'copy_plan_as_prompt'],
   },
   {
     id: 'review',

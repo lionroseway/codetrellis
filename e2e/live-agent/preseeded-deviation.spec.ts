@@ -37,7 +37,7 @@ test.describe('Pre-seeded plan deviation (Prompt D)', () => {
 
   test.afterEach(async ({ request }) => {
     wsCollector?.close();
-    await cleanupPlans(request, 'E2E');
+    await cleanupPlans(request, 'E2E Pre-seeded: Deviation');
     cleanupTempFixture(tempFixture);
   });
 

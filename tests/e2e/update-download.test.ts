@@ -109,7 +109,7 @@ test.describe('A caller cannot name the URL (Phase 19, finding 23)', () => {
       // The property is that the BODY IS IGNORED — not that no update
       // exists. This used to assert 409, which only held while the backend
       // believed it was up to date. Under the harness it reads its version
-      // from the committed build-info, so the moment a newer release was
+      // from package.json, so the moment a newer release was
       // published the endpoint correctly started a real download (from
       // GitHub, body ignored), answered 200, and a security test went red
       // for a reason that had nothing to do with security. It also pulled a

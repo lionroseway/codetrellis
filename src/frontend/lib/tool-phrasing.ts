@@ -140,7 +140,11 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   },
   await_user_input: { intent: 'ask', mutating: false, phrase: () => 'Waiting for your answer' },
   await_ack: { intent: 'ask', mutating: false, phrase: () => 'Waiting for acknowledgement' },
-  approve_gate: { intent: 'ask', mutating: true, phrase: (a) => `Requested approval for ${subject(a, 'gate', 'name')}` },
+  approve_gate: { intent: 'error', mutating: false, phrase: (a) => `Tried to clear the approval gate on ${subject(a, 'uid')} — refused, sign-off is yours` },
+  record_artefact: { intent: 'write', mutating: true, phrase: (a) => `Recorded ${({ material: 'a material', output: 'an output', evidence: 'evidence' } as Record<string, string>)[String(a.role)] ?? 'a file'}: ${subject(a, 'path')}` },
+  list_criteria: { intent: 'read', mutating: false, phrase: (a) => `Read the criteria for ${subject(a, 'item_uid')}` },
+  add_criterion: { intent: 'write', mutating: true, phrase: (a) => `Added a criterion: ${subject(a, 'text')}` },
+  submit_criterion: { intent: 'ask', mutating: true, phrase: (a) => `Submitted evidence for ${subject(a, 'criterion_uid')}` },
 
   // ── Reading ───────────────────────────────────────────────────────
   search_symbols: { intent: 'read', mutating: false, phrase: (a) => `Looked for \`${String(a.query ?? '')}\`` },
@@ -151,6 +155,7 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   get_drift_report: { intent: 'read', mutating: false, phrase: () => 'Checked for drift' },
   get_next_item: { intent: 'read', mutating: false, phrase: () => 'Asked what to work on next' },
   get_item: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')}` },
+  resolve_reference: { intent: 'read', mutating: false, phrase: (a) => `Looked up ${subject(a, 'ref')}` },
   read_item_full: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')} in full` },
   get_plan: { intent: 'read', mutating: false, phrase: (a) => `Read plan ${subject(a, 'title', 'plan_uid')}` },
   list_items: { intent: 'read', mutating: false, phrase: () => 'Listed plan items' },

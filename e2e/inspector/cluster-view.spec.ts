@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, firstClickableNode } from '../helpers/setup';
+import { gotoWithProject, reachableNodes } from '../helpers/setup';
 
 test.describe('Inspector cluster view', () => {
   /** Scope selectors to the right-side inspector panel (border-l) */
@@ -18,7 +18,7 @@ test.describe('Inspector cluster view', () => {
 
     // Default depth is Clusters — click the first node
     await page.waitForTimeout(2000);
-    const firstNode = await firstClickableNode(page);
+    const firstNode = (await reachableNodes(page))[0];
     await firstNode.click();
     await page.waitForTimeout(500);
 
@@ -31,7 +31,7 @@ test.describe('Inspector cluster view', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = await firstClickableNode(page);
+    const firstNode = (await reachableNodes(page))[0];
     await firstNode.click();
     await page.waitForTimeout(500);
 
@@ -45,7 +45,7 @@ test.describe('Inspector cluster view', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = await firstClickableNode(page);
+    const firstNode = (await reachableNodes(page))[0];
     await firstNode.click();
     await page.waitForTimeout(1000);
 
@@ -61,7 +61,7 @@ test.describe('Inspector cluster view', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = await firstClickableNode(page);
+    const firstNode = (await reachableNodes(page))[0];
     await firstNode.click();
     await page.waitForTimeout(1000);
 

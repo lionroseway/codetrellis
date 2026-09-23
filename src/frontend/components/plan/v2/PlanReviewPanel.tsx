@@ -56,6 +56,8 @@ interface ReviewedItem {
   landed: string[];
   missing: string[];
   verdict: 'landed' | 'partial' | 'untouched' | 'no-targets';
+  /** Phase 31 — where its acceptance criteria stand. */
+  criteria?: { total: number; met: number; waiting: number; sentBack: number };
 }
 
 interface PlanReview {
@@ -374,6 +376,19 @@ function ReviewedItemRow({ item, root }: { item: ReviewedItem; root: string | nu
         {fileCount > 0 && (
           <span className="text-foreground-subtle/70 shrink-0 text-[10px] tabular-nums">
             {fileCount} file{fileCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {item.criteria && item.criteria.total > 0 && (
+          <span
+            data-testid="review-criteria"
+            className="text-foreground-subtle/70 shrink-0 text-[10px] tabular-nums"
+            title={[
+              `${item.criteria.met} of ${item.criteria.total} acceptance criteria met`,
+              item.criteria.waiting ? `${item.criteria.waiting} waiting for you` : '',
+              item.criteria.sentBack ? `${item.criteria.sentBack} sent back` : '',
+            ].filter(Boolean).join(' · ')}
+          >
+            {item.criteria.met === item.criteria.total ? '✓' : item.criteria.waiting ? '◐' : '○'} {item.criteria.met}/{item.criteria.total} met
           </span>
         )}
         <span className={`${v.tint} shrink-0 text-[10.5px]`}>{v.label}</span>

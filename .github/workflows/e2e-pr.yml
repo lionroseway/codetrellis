@@ -70,16 +70,13 @@ jobs:
     name: Browser suite
     if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-e2e')
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
-    # Serial (see playwright.config.ts `workers`): ~25 min at 2 workers,
-    # so allow for roughly double.
-    timeout-minutes: 90
+    timeout-minutes: 75
+    env:
+      # playwright.config.ts gives each run its own temp data dir and token,
+      # and fails on a busy port rather than reusing a stray server.
+      E2E_WORKERS: '2'
     steps:
-      # The PR's BRANCH, not the detached merge commit pull_request checks
-      # out by default: the suite drives the app on this repo, and a
-      # developer runs it on a branch (the branch chip, "current" badge).
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.head_ref || github.ref }}
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc

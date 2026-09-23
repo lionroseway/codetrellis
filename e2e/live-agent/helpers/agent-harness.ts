@@ -93,7 +93,8 @@ export function createWsCollector(): Promise<WsEventCollector> {
       reject: (err: Error) => void;
     }> = [];
 
-    // The WebSocket authenticates (Phase 19): send the token, or 401.
+    // The upgrade authenticates like every other local transport (Phase 19).
+    // A Node client can send the header; a browser would need the query form.
     const ws = new WebSocket(WS_URL, { headers: authHeaders() });
 
     ws.on('open', () => {

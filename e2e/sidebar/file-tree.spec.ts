@@ -87,8 +87,8 @@ test.describe('File tree', () => {
     // Common project root files/dirs: src, package.json, etc.
     // At least one of these should be in the tree
     const sidebarContent = page.locator('.glass-panel.border-r');
-    // `.first()`: a fresh profile opens the tree expanded, so nested
-    // `src/` and `mobile/package.json` appear too, and strict mode throws.
+    // .first(): the repo has more than one package.json (mobile/ has its
+    // own), and more than one src/.
     const hasSrc = await sidebarContent.getByText('src', { exact: true }).first().isVisible();
     const hasPackageJson = await sidebarContent
       .getByText('package.json', { exact: true })

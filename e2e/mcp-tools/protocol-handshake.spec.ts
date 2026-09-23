@@ -28,7 +28,7 @@ test.describe('MCP protocol handshake', () => {
       'search_symbols', 'get_dependencies', 'create_plan',
       'get_plan', 'list_plans', 'add_item', 'get_item',
       'update_item', 'claim_item', 'list_items',
-      'register_session', 'add_comment', 'get_comments',
+      'register_session', 'add_item_comment', 'list_item_comments',
     ];
 
     for (const name of expected) {

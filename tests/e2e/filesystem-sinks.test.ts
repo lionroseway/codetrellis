@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { setupHarness } from '../harness';
+import { setupHarness, authFetch } from '../harness';
 
 /** A file outside every project, with contents nothing legitimate should return. */
 function plantSecret(): { dir: string; file: string; contents: string; cleanup: () => void } {
@@ -345,11 +345,31 @@ test.describe('3 — an attachment file_ref cannot read outside', () => {
 
       // Control: a file INSIDE the project is served. Without this the
       // refusals below could be the endpoint simply not working.
-      const insideName = 'attachable.txt';
+      // The route serves previews (images, video), typed by extension.
+      const insideName = 'attachable.png';
       fs.writeFileSync(path.join(h.fixture.projectPath, insideName), 'SENTINEL-INSIDE-OK');
       const ok = await attach(insideName, h.fixture.projectPath);
       expect(ok.ok, 'precondition: an in-project reference must be served').toBe(true);
       expect(await ok.text()).toContain('SENTINEL-INSIDE-OK');
+      // Typed by extension, never sniffed, never cached (the file can change).
+      expect(ok.headers.get('content-type')).toBe('image/png');
+      expect(ok.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(ok.headers.get('cache-control')).toBe('no-store');
+
+      // A byte range, as video seeking asks for.
+      const created = await (await h.client.raw('POST', `/api/items/${item.uid}/attachments`, {
+        kind: 'file_ref', value: insideName, label: 'ref',
+      })).json() as { uid: string };
+      const partial = await authFetch(h.backend, `/api/attachments/${created.uid}/file`, {
+        headers: { Range: 'bytes=0-7' },
+      });
+      expect(partial.status).toBe(206);
+      expect(await partial.text()).toBe('SENTINEL');
+
+      // A directory is refused cleanly rather than failing mid-stream.
+      fs.mkdirSync(path.join(h.fixture.projectPath, 'a-folder.png'), { recursive: true });
+      const dir = await attach('a-folder.png', h.fixture.projectPath);
+      expect(dir.status).toBe(404);
 
       // 1. an absolute path outside the user's home directory
       const victim = path.join(outside, 'secret.txt');
@@ -367,12 +387,14 @@ test.describe('3 — an attachment file_ref cannot read outside', () => {
 
       // 3. a symlink inside the project pointing out — the case a text
       //    comparison cannot see (A2, applied to this sink).
-      const link = path.join(h.fixture.projectPath, 'looks-inside.txt');
+      const link = path.join(h.fixture.projectPath, 'looks-inside.png');
       try { fs.unlinkSync(link); } catch { /* */ }
       fs.symlinkSync(victim, link, 'file');
-      const viaLink = await attach('looks-inside.txt', h.fixture.projectPath);
+      const viaLink = await attach('looks-inside.png', h.fixture.projectPath);
       expect(viaLink.ok, 'a link out of the project must not be followed').toBe(false);
-      expect(await viaLink.text()).not.toContain('SENTINEL-OUTSIDE-HOME');
+      const refusal = await viaLink.text();
+      expect(refusal).not.toContain('SENTINEL-OUTSIDE-HOME');
+      expect(refusal, 'a refusal never carries a path').not.toContain(h.fixture.projectPath);
     } finally {
       try { fs.rmSync(outside, { recursive: true, force: true }); } catch { /* */ }
       await h.teardown();

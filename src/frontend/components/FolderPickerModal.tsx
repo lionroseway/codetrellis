@@ -53,7 +53,13 @@ export function FolderPickerModal() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => done(null)}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Open Project"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={() => done(null)}
+    >
       <div className="bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] w-[520px] max-h-[480px] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="px-4 pt-4 pb-2 flex items-center justify-between">

@@ -31,11 +31,6 @@ export const PROJECT_PATH = process.cwd();
  * endpoint that starts authenticating does not break the suite again.
  */
 export function authHeaders(): Record<string, string> {
-  // playwright.config.ts pins the token for the run and the backend adopts
-  // it, so this is the value the server holds. The file is the fallback
-  // for a run against a server this config did not start.
-  const pinned = process.env.CODETRELLIS_CAPABILITY_TOKEN;
-  if (pinned) return { 'x-codetrellis-token': pinned };
   const dataDir = process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
   try {
     return {
@@ -59,6 +54,35 @@ export function authHeaders(): Record<string, string> {
  * Skips all onboarding (Learn Trellis + Getting Started) by default.
  * Waits for the ReactFlow canvas to render.
  */
+/**
+ * Open a project the way the app does — `POST /api/project/scan` — and
+ * make sure it actually opened.
+ *
+ * Phase 19 derives project roots from opened projects, so a spec that
+ * creates a plan or calls a path-taking MCP tool needs its project opened
+ * first. The backend runs one scan at a time and answers a second with
+ * 200 plus an `astError` ("already in progress") — the file tree comes
+ * back, but the project is NOT recorded as opened. Parallel workers hit
+ * that constantly, so this retries until the scan really ran.
+ */
+export async function openProject(projectPath: string, timeoutMs = 110_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let last = '';
+  while (Date.now() < deadline) {
+    const res = await fetch(`${API}/project/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ projectPath }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { astError?: string | null; error?: string };
+    if (res.ok && !body.astError) return;
+    last = `HTTP ${res.status}: ${body.astError ?? body.error ?? ''}`;
+    if (res.ok && !/already in progress/i.test(body.astError ?? '')) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`could not open ${projectPath} — ${last}`);
+}
+
 export async function gotoWithProject(
   page: Page,
   opts: {
@@ -181,7 +205,7 @@ export async function seedPlan(
   const projectPath = opts.projectPath ?? PROJECT_PATH;
 
   // Create the plan
-  const createPlan = () => request.post(`${API}/plans`, {
+  const planRes = await request.post(`${API}/plans`, {
     headers: authHeaders(),
     data: {
       title,
@@ -189,17 +213,7 @@ export async function seedPlan(
       projectPath,
     },
   });
-  let planRes = await createPlan();
-  // Plans can only be created in an OPENED project. global-setup opens and
-  // pins the suite's projects, but a spec can still leave the server with
-  // the project not open; say so in the log, open it, and retry once
-  // rather than fail with a bare "expected truthy".
-  if (planRes.status() === 403 && /not an opened project/.test(await planRes.text())) {
-    console.warn(`[seedPlan] ${projectPath} was not open; opening it and retrying`);
-    await request.post(`${API}/project/scan`, { headers: authHeaders(), data: { projectPath } });
-    planRes = await createPlan();
-  }
-  expect(planRes.ok(), `POST /api/plans -> ${planRes.status()} ${(await planRes.text()).slice(0, 300)}`).toBeTruthy();
+  expect(planRes.ok()).toBeTruthy();
   const plan = await planRes.json();
 
   // Add action items
@@ -237,13 +251,26 @@ export async function seedPlan(
  * Assumes the page is already at the app with a project open.
  */
 export async function openPlan(page: Page, planTitle: string) {
+  // Another plan's workspace may already cover the page — plans are opened
+  // by broadcast, and specs on the other worker open theirs. Minimise it
+  // first; the Plans tab underneath it cannot be clicked.
+  const openWorkspace = page.getByTestId('copy-ref-plan').first();
+  if (await openWorkspace.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape');
+    await openWorkspace.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  }
   // Click Plans tab — use .first() because 'Plans' may appear in
   // both the PlanPanel tab bar and other contexts.
   await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
-  // Click the plan row
-  await page.locator(`text=${planTitle}`).first().click();
-  // Wait for workspace to load
-  await page.waitForTimeout(1500);
+  // Click the plan row once it is listed — a plan seeded a moment ago may
+  // arrive after the list first renders.
+  const row = page.locator(`text=${planTitle}`).first();
+  await row.waitFor({ timeout: 10_000 });
+  await row.click();
+  // Wait for the workspace itself (its plan reference chip), not a fixed
+  // sleep: a click that did not open the plan should fail HERE, not three
+  // steps later as an item that cannot be found.
+  await page.getByTestId('copy-ref-plan').first().waitFor({ timeout: 10_000 });
 }
 
 /**
@@ -253,7 +280,16 @@ export async function cleanupPlans(
   request: APIRequestContext,
   titlePattern: string,
 ) {
-  const res = await request.get(`${API}/plans`, { headers: authHeaders() });
+  // One retry, on a connection error only. This runs in afterEach, after a
+  // test's UI steps left the request context idle for seconds: Node closes
+  // an idle keep-alive socket after 5s, and a GET sent on it as it closes
+  // fails with ECONNRESET / "socket hang up" before reaching the server.
+  // Browsers retry an idempotent request in exactly this case.
+  const list = () => request.get(`${API}/plans`, { headers: authHeaders() });
+  const res = await list().catch((err: Error) => {
+    if (!/ECONNRESET|socket hang up/.test(err.message)) throw err;
+    return list();
+  });
   if (!res.ok()) {
     // Say so rather than silently leaving the plans behind. A cleanup
     // that no-ops looks identical to one that worked until the next run
@@ -264,8 +300,12 @@ export async function cleanupPlans(
   const body = await res.json();
   const plans: Array<{ uid: string; title: string; status: string }> =
     Array.isArray(body) ? body : (body?.plans ?? []);
+  // A title PREFIX, not a substring. Workers share one backend, so a
+  // broad pattern ("E2E", or "E2E Change" inside "MCP E2E Changes …")
+  // deleted other spec files' plans while they were being used — which
+  // presented as clicks on elements that had just been detached.
   for (const p of plans) {
-    if (p.title.includes(titlePattern) && p.status !== 'archived') {
+    if (p.title.startsWith(titlePattern) && p.status !== 'archived') {
       await request.delete(`${API}/plans/${p.uid}`, { headers: authHeaders() });
     }
   }
@@ -314,33 +354,36 @@ export async function getStoreState(page: Page, storeName: string) {
 }
 
 /**
- * The first graph node a person could actually click.
+ * Graph nodes a pointer can actually reach, in DOM order.
  *
- * `.react-flow__node` `.first()` is whichever node sorts first, and the
- * graph toolbar (modes, card style, baseline, filters, export) overlays
- * the top of the canvas. When the first node landed under it, every click
- * retried "element intercepts pointer events" until the test timed out -
- * which is what happened when a new import made `e2e/helpers/setup.ts`
- * a hub and a `setup` cluster sorted first. Pick by hit-test instead.
+ * The canvas has panels floating over it (baseline / Auto-track top right,
+ * controls, the minimap), and where a node lands depends on the layout of
+ * the checkout — so `.react-flow__node` `.first()` was under the Auto-track
+ * button on CI and clear of it locally, and 25 specs failed on one machine
+ * only. A node counts when the element at its centre is inside it.
  */
-export async function firstClickableNode(page: Page, selector = '.react-flow__node'): Promise<Locator> {
-  const [index = 0] = await clickableNodeIndices(page, selector);
-  return page.locator(selector).nth(index);
-}
-
-/** Indices (into `selector`'s matches) of nodes whose centre is really that node. */
-export async function clickableNodeIndices(page: Page, selector = '.react-flow__node'): Promise<number[]> {
-  await page.locator(selector).first().waitFor({ timeout: 10_000 });
-  return page.evaluate((sel) => {
-    const out: number[] = [];
-    Array.from(document.querySelectorAll(sel)).forEach((n, i) => {
-      const r = n.getBoundingClientRect();
-      const x = r.left + r.width / 2;
-      const y = r.top + r.height / 2;
-      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return;
-      const hit = document.elementFromPoint(x, y);
-      if (hit && n.contains(hit)) out.push(i);
-    });
-    return out;
-  }, selector);
+export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Locator[]> {
+  await page.locator('.react-flow__node').first().waitFor({ timeout: timeoutMs });
+  // Polled: right after load the layout is still settling (nodes placed
+  // off-screen, then fitted), and a toast or a broadcast-opened workspace can
+  // cover the canvas for a moment. Sampled once, that returned no nodes.
+  const deadline = Date.now() + timeoutMs;
+  let ids: string[] = [];
+  for (;;) {
+    ids = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node'))
+        .filter((n) => {
+          const r = n.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return false;
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return hit !== null && n.contains(hit);
+        })
+        .map((n) => n.dataset.id)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+    if (ids.length > 0 || Date.now() > deadline) break;
+    await page.waitForTimeout(250);
+  }
+  if (ids.length === 0) throw new Error('reachableNodes: every graph node is covered or off-screen');
+  return ids.map((id) => page.locator(`.react-flow__node[data-id="${id.replace(/"/g, '\\"')}"]`));
 }

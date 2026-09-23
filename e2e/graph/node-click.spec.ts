@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, firstClickableNode, clickableNodeIndices } from '../helpers/setup';
+import { gotoWithProject, reachableNodes } from '../helpers/setup';
 
 test.describe('Node click', () => {
   /** Scope selectors to the right-side inspector panel */
@@ -17,7 +17,7 @@ test.describe('Node click', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = await firstClickableNode(page);
+    const firstNode = (await reachableNodes(page))[0];
     await expect(firstNode).toBeVisible();
 
     await firstNode.click();
@@ -44,22 +44,20 @@ test.describe('Node click', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const nodes = page.locator('.react-flow__node');
-    const count = await nodes.count();
+    const nodes = await reachableNodes(page);
+    const count = nodes.length;
 
     if (count < 2) {
       test.skip();
       return;
     }
-    // Two nodes not under the graph toolbar (see clickableNodeIndices).
-    const [first = 0, second = 1] = await clickableNodeIndices(page);
 
     // Click first node
-    await nodes.nth(first).click();
+    await nodes[0].click();
     await page.waitForTimeout(500);
 
     // Click second node
-    await nodes.nth(second).click();
+    await nodes[1].click();
     await page.waitForTimeout(500);
 
     // Inspector should still be showing content
@@ -73,7 +71,7 @@ test.describe('Node click', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = await firstClickableNode(page);
+    const firstNode = (await reachableNodes(page))[0];
     await firstNode.click();
     await page.waitForTimeout(500);
 

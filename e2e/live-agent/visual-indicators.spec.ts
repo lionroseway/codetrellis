@@ -163,8 +163,12 @@ test.describe('Visual indicators', () => {
     await openPlan(page, plan.title);
     await page.waitForTimeout(1000);
 
+    // The committed copy is refreshed only on request (E2E_SCREENSHOTS=1);
+    // a normal run writing it left every checkout dirty.
     await page.screenshot({
-      path: 'e2e/screenshots/plan-workspace.png',
+      path: process.env.E2E_SCREENSHOTS
+        ? 'e2e/screenshots/plan-workspace.png'
+        : 'test-results/screenshots/plan-workspace.png',
       fullPage: false,
     });
   });

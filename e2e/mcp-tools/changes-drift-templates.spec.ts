@@ -20,7 +20,7 @@ const PROJECT_PATH = process.cwd();
 
 test.describe('MCP changes & drift', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'MCP E2E');
+    await cleanupPlans(request, 'MCP E2E Changes ');
   });
 
   test('list_proposed_changes + get_changes_summary', async () => {
@@ -72,7 +72,7 @@ test.describe('MCP changes & drift', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [],
-      title: 'MCP E2E Drift Plan',
+      title: 'MCP E2E Changes Drift Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
@@ -100,7 +100,7 @@ test.describe('MCP changes & drift', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [],
-      title: 'MCP E2E Reconcile Plan',
+      title: 'MCP E2E Changes Reconcile Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
@@ -117,7 +117,7 @@ test.describe('MCP changes & drift', () => {
 
 test.describe('MCP templates', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'MCP E2E');
+    await cleanupPlans(request, 'MCP E2E Changes ');
   });
 
   test('list_plan_templates returns available templates', async () => {
@@ -141,7 +141,7 @@ test.describe('MCP templates', () => {
     if (templateList.length > 0) {
       const result = await client.callTool('create_plan_from_template', {
         template_id: templateList[0].id || templateList[0].slug,
-        title: 'MCP E2E Template Plan',
+        title: 'MCP E2E Changes Template Plan',
         project_path: PROJECT_PATH,
       });
       expect(result).toBeTruthy();
@@ -153,7 +153,7 @@ test.describe('MCP templates', () => {
 
 test.describe('MCP file sync', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'MCP E2E');
+    await cleanupPlans(request, 'MCP E2E Changes ');
   });
 
   test('export_plan_to_files + import_plan_from_files + discover + unlink', async () => {
@@ -161,7 +161,7 @@ test.describe('MCP file sync', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [],
-      title: 'MCP E2E Export Plan',
+      title: 'MCP E2E Changes Export Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
@@ -207,7 +207,7 @@ test.describe('MCP file sync', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [{ description: 'Template task', affected_files: [] }],
-      title: 'MCP E2E Publish Plan',
+      title: 'MCP E2E Changes Publish Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
@@ -226,7 +226,7 @@ test.describe('MCP file sync', () => {
 
 test.describe('MCP sessions & checkpoints', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'MCP E2E');
+    await cleanupPlans(request, 'MCP E2E Changes ');
   });
 
   test('register_session registers agent session', async () => {
@@ -247,7 +247,7 @@ test.describe('MCP sessions & checkpoints', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [],
-      title: 'MCP E2E Active Plan',
+      title: 'MCP E2E Changes Active Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
@@ -274,7 +274,7 @@ test.describe('MCP sessions & checkpoints', () => {
 
 test.describe('MCP legacy task tools', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'MCP E2E');
+    await cleanupPlans(request, 'MCP E2E Changes ');
   });
 
   test('add_subtask + claim_task + update_task + update_task_progress + set_task_blocked', async () => {
@@ -282,7 +282,7 @@ test.describe('MCP legacy task tools', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [{ description: 'Legacy task for claim', affected_files: ['src/index.ts'] }],
-      title: 'MCP E2E Legacy Plan',
+      title: 'MCP E2E Changes Legacy Plan',
       project_path: PROJECT_PATH,
     });
     const planData = JSON.parse(planResult.content?.[0]?.text || '{}');
@@ -353,7 +353,7 @@ test.describe('MCP legacy task tools', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [],
-      title: 'MCP E2E Task Comment Plan',
+      title: 'MCP E2E Changes Task Comment Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
@@ -397,7 +397,7 @@ test.describe('MCP legacy task tools', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [],
-      title: 'MCP E2E Next Task Plan',
+      title: 'MCP E2E Changes Next Task Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;
@@ -423,7 +423,7 @@ test.describe('MCP legacy task tools', () => {
 
     const planResult = await client.callTool('create_plan', {
       tasks: [],
-      title: 'MCP E2E Restore Plan',
+      title: 'MCP E2E Changes Restore Plan',
       project_path: PROJECT_PATH,
     });
     const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;

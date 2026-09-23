@@ -14,8 +14,11 @@ export function ToastContainer() {
 
   if (toasts.length === 0) return null;
 
+  // bottom-20, not lower: MinimizedPlanChip floats in the same corner, and a
+  // toast stacked over it swallowed the click that restores the workspace —
+  // for as long as toasts kept arriving.
   return (
-    <div className="fixed bottom-8 right-4 z-[9999] flex flex-col gap-2 max-w-sm">
+    <div className="fixed bottom-20 right-4 z-[9999] flex flex-col gap-2 max-w-sm">
       {toasts.map((toast) => {
         const style = TOAST_STYLES[toast.type];
         const Icon = style.icon;

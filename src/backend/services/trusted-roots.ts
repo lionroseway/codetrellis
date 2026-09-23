@@ -36,7 +36,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { canonicalRoot, ConfinementError } from './confined-fs';
-import { listRecentProjects } from './recent-projects-service';
+import { listEvictedProjects, listRecentProjects, MAX_RECENT_UNPINNED } from './recent-projects-service';
 
 /**
  * Canonicalise for comparison, tolerating a path that no longer exists.
@@ -148,9 +148,41 @@ export function resolveTrustedProjectRoot(
     }
   }
 
+  const evicted = evictedHint(candidate);
   throw new ConfinementError(
     `${label}: "${candidate}" is not an opened project. ` +
-      'Project roots are derived from the projects this app has opened, not from the request.',
+      (evicted
+        ? evicted
+        : 'Project roots are derived from the projects this app has opened, not from the request.'),
+  );
+}
+
+/**
+ * Why a once-opened project is no longer trusted, or null if it never was.
+ *
+ * Only EXPLAINS a refusal; the caller has already refused. Opening more than
+ * {@link MAX_RECENT_UNPINNED} other projects drops the oldest unpinned one
+ * off Recent Projects, and with it the trust — silently, until now. "Open it
+ * first" was wrong advice for someone who had.
+ */
+export function evictedHint(candidate: unknown): string | null {
+  if (typeof candidate !== 'string' || candidate.trim().length === 0) return null;
+  let evicted: Array<{ path: string; evictedAt: number }>;
+  try {
+    evicted = listEvictedProjects();
+  } catch {
+    return null;
+  }
+  const lexical = path.resolve(candidate);
+  const canon = canonicaliseForCompare(candidate);
+  const hit = evicted.find(
+    (e) => path.resolve(e.path) === lexical || (canon !== null && canonicaliseForCompare(e.path) === canon),
+  );
+  if (!hit) return null;
+  return (
+    `It was opened before, but dropped off Recent Projects on ${new Date(hit.evictedAt).toISOString().slice(0, 10)} ` +
+    `when newer projects pushed it past the ${MAX_RECENT_UNPINNED} unpinned ones kept, and only projects on that ` +
+    'list are trusted. Open it again to restore access, and pin it in Recent Projects to stop it dropping off.'
   );
 }
 

@@ -25,7 +25,7 @@ export interface RecentProject {
   originUrl: string | null;
 }
 
-const MAX_RECENT_UNPINNED = 12;
+export const MAX_RECENT_UNPINNED = 12;
 
 export function recordProjectOpen(projectPath: string, branch?: string | null): void {
   const db = getDb();
@@ -62,6 +62,7 @@ export function recordProjectOpen(projectPath: string, branch?: string | null): 
     );
     pruneUnpinned();
   }
+  db.run(`DELETE FROM evicted_projects WHERE path = ?`, [projectPath]);
 
   markDirty();
 }
@@ -197,7 +198,30 @@ function pruneUnpinned(): void {
   if (!result[0]) return;
   const paths = result[0].values.map((r: any[]) => r[0] as string);
   const toRemove = paths.slice(MAX_RECENT_UNPINNED);
+  const now = Date.now();
   for (const p of toRemove) {
     db.run(`DELETE FROM recent_projects WHERE path = ?`, [p]);
+    db.run(
+      `INSERT INTO evicted_projects (path, evicted_at) VALUES (?, ?)
+       ON CONFLICT(path) DO UPDATE SET evicted_at = excluded.evicted_at`,
+      [p, now],
+    );
   }
+}
+
+/**
+ * Projects the unpinned cap pushed off the recent list, newest first.
+ *
+ * Trust is the active project plus `recent_projects`, so eviction quietly
+ * withdraws it: an agent that worked in a project yesterday is refused today
+ * with "not open", although the person did open it. This list exists so the
+ * refusal can say what actually happened. It must never be read as trust —
+ * a project removed from the list has to be opened again, by the person.
+ */
+export function listEvictedProjects(): Array<{ path: string; evictedAt: number }> {
+  const result = getDb().exec(
+    `SELECT path, evicted_at FROM evicted_projects ORDER BY evicted_at DESC`,
+  );
+  if (!result[0]) return [];
+  return result[0].values.map((r: any[]) => ({ path: r[0] as string, evictedAt: r[1] as number }));
 }

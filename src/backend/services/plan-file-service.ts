@@ -37,6 +37,7 @@ import * as planDocsService from './plan-documents-service';
 import * as planItemService from './plan-item-service';
 import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
+import * as criteriaService from './criteria-service';
 import { getDb } from './database';
 import { readTextWithin } from './confined-fs';
 import type {
@@ -49,7 +50,6 @@ import type {
   TaskStatus,
   TaskAttachment,
   Comment,
-  AttachmentKind,
   CommentKind,
   CommentSource,
   CommentType,
@@ -519,7 +519,7 @@ function upsertItem(
   planUid: string,
   parentUid: string | null,
   raw: any,
-  _warnings: string[],
+  warnings: string[],
 ): PlanItem | null {
   const uid = String(raw.uid);
   const existing = planItemService.getItem(uid);
@@ -609,19 +609,33 @@ function upsertItem(
   if (Array.isArray(raw.attachments)) {
     for (const a of raw.attachments) {
       if (!a?.uid || !a?.kind || a?.value == null) continue;
-      taskAttachmentsService.upsertAttachment({
+      // A plan file is untrusted input: its attachments are validated as if
+      // an agent had submitted them, and never re-home another item's.
+      const valid = taskAttachmentsService.validateImportedAttachment(a, uid);
+      if ('refused' in valid) {
+        warnings.push(`Skipped attachment ${String(a.uid)} on item ${uid}: ${valid.refused}`);
+        continue;
+      }
+      const stored = taskAttachmentsService.upsertAttachment({
         uid: String(a.uid),
         targetType: 'item',
         targetUid: uid,
-        kind: String(a.kind) as AttachmentKind,
-        value: String(a.value),
-        label: a.label ?? null,
-        contentType: a.contentType ?? null,
+        kind: valid.kind,
+        value: valid.value,
+        label: typeof a.label === 'string' ? a.label : null,
+        contentType: valid.contentType,
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
       });
+      if (!stored) warnings.push(`Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
+  }
+
+  // Phase 31 — criteria, under the rules for untrusted input (a file can
+  // add or reword, never weaken; see criteria-service.importCriteria).
+  if (item && Array.isArray(raw.criteria)) {
+    criteriaService.importCriteria(item.uid, raw.criteria);
   }
 
   // Inline comments
@@ -857,11 +871,23 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
  * `docs/*.md` file, re-import the parent plan directory. Skips files
  * we just wrote ourselves (see `recentSelfWrites`) so the
  * write-through-then-watcher doesn't ping-pong.
+ *
+ * Resolves once chokidar has finished its initial walk (bounded), for the
+ * same reason `startWatching` does: the scan response is what tells a
+ * caller the project is live, and the first thing that follows is often a
+ * plan export. A directory created before chokidar has attached to its
+ * parent is never watched at all — so an export racing an unready watcher
+ * left that plan's `channels/` invisible for the rest of the session, and
+ * a teammate's event arriving by `git pull` was never imported.
  */
 const watchersByProject = new Map<string, FSWatcher>();
+const watcherReady = new Map<string, Promise<void>>();
+const PLAN_WATCHER_READY_TIMEOUT_MS = 10_000;
 
-export function startPlanFileWatcher(projectRoot: string): void {
-  if (watchersByProject.has(projectRoot)) return; // already watching
+export function startPlanFileWatcher(projectRoot: string): Promise<void> {
+  if (watchersByProject.has(projectRoot)) {
+    return watcherReady.get(projectRoot) ?? Promise.resolve(); // already watching
+  }
 
   const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
 
@@ -975,7 +1001,24 @@ export function startPlanFileWatcher(projectRoot: string): void {
   });
 
   watchersByProject.set(projectRoot, watcher);
+  const ready = new Promise<void>((resolve) => {
+    let settled = false;
+    const done = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      resolve();
+    };
+    const guard = setTimeout(() => {
+      console.warn(`[Auto-sync] Plan watcher still starting after ${PLAN_WATCHER_READY_TIMEOUT_MS}ms — continuing`);
+      done();
+    }, PLAN_WATCHER_READY_TIMEOUT_MS);
+    guard.unref?.();
+    watcher.once('ready', done);
+  });
+  watcherReady.set(projectRoot, ready);
   console.log(`[Auto-sync] Watching ${plansRoot}`);
+  return ready;
 }
 
 export function stopPlanFileWatcher(projectRoot: string): void {
@@ -983,6 +1026,7 @@ export function stopPlanFileWatcher(projectRoot: string): void {
   if (w) {
     w.close().catch(() => {});
     watchersByProject.delete(projectRoot);
+    watcherReady.delete(projectRoot);
   }
 }
 
@@ -1132,6 +1176,11 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
       createdAt: new Date(c.createdAt).toISOString(),
     }));
   }
+
+  // Phase 31 — acceptance criteria. The criteria only, never the
+  // decisions: a sign-off read back from a file is whatever the file says.
+  const criteria = criteriaService.criteriaForExport(item.uid);
+  if (criteria.length) obj.criteria = criteria;
 
   return obj;
 }
@@ -1426,18 +1475,24 @@ function upsertTask(planUid: string, raw: any): void {
   if (Array.isArray(raw.attachments)) {
     for (const a of raw.attachments) {
       if (!a?.uid || !a?.kind || a?.value == null) continue;
-      taskAttachmentsService.upsertAttachment({
+      const valid = taskAttachmentsService.validateImportedAttachment(a, String(raw.uid));
+      if ('refused' in valid) {
+        console.warn(`[Import] Skipped attachment ${String(a.uid)} on task ${String(raw.uid)}: ${valid.refused}`);
+        continue;
+      }
+      const stored = taskAttachmentsService.upsertAttachment({
         uid: String(a.uid),
         targetType: 'task',
         targetUid: String(raw.uid),
-        kind: String(a.kind) as AttachmentKind,
-        value: String(a.value),
-        label: a.label ?? null,
-        contentType: a.contentType ?? null,
+        kind: valid.kind,
+        value: valid.value,
+        label: typeof a.label === 'string' ? a.label : null,
+        contentType: valid.contentType,
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
       });
+      if (!stored) console.warn(`[Import] Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
   }
   if (Array.isArray(raw.comments)) {

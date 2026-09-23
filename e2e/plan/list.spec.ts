@@ -59,11 +59,14 @@ test.describe('Plan list', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).click();
     await page.waitForTimeout(1000);
 
-    // Plan cards have the title attribute for opening workspace
-    const planCard = page.locator(
-      'button[title="Click to open the plan workspace"]',
-    ).filter({ hasText: 'E2E List Badge Plan' });
+    // The row's open button, then the status badge that sits beside it. A
+    // new plan is a draft. (The button's title used to carry a
+    // "(Spec / Tasks / Activity)" suffix; this matched on that and found
+    // nothing once it went.)
+    const planCard = page.locator('button[title="Click to open the plan workspace"]')
+      .filter({ hasText: 'E2E List Badge Plan' });
     await expect(planCard).toBeVisible({ timeout: 5000 });
+    await expect(planCard.locator('xpath=following-sibling::span[1]')).toHaveText('draft');
   });
 
   test('clicking a plan row opens the workspace', async ({ page, request }) => {
