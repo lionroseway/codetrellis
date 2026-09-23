@@ -506,10 +506,11 @@ them in passing.
 | PNG, JPEG, GIF, WebP | `<img>` | renderer | exact | — |
 | SVG | `<img>` **only** | renderer | exact | — (never inlined: an inlined SVG is a document that can run script; an `<img>` is not) |
 | MP4, WebM, MOV | `<video>`, Range | renderer | exact | time |
-| XLSX, XLS, CSV | SheetJS, cells as text | worker → grid | values and layout; charts and conditional formatting dropped | sheet + range |
+| XLSX, CSV | our workbook reader, cells as text | worker → grid | values and layout; charts and conditional formatting dropped. **As printed** on request, through the engine (§7.6) | sheet + range |
 | XLSM | as XLSX, with a "contains macros — not run" badge | worker | as above | as above — viewing is safe because nothing is evaluated |
-| DOCX | `mammoth` → HTML string → DOMPurify | worker → renderer | good for reading, not print-exact — headings, tables, lists and images survive; page layout does not | heading / text |
-| PPTX | the embedded `docProps/thumbnail.jpeg`, plus each slide's text | worker | **preview only**, said on screen | slide |
+| XLS | a card: save as .xlsx — or the engine's printed view (§7.6) | — | — | — |
+| DOCX | **the engine (§7.6) → PDF → pdf.js**; fallback `mammoth` → HTML string → DOMPurify | engine process; fallback worker → renderer | pages as Word lays them out; the fallback is reading-grade (headings, tables, lists, images; no page layout) and says so | text |
+| PPTX | **the engine (§7.6) → PDF → pdf.js**; fallback the embedded `docProps/thumbnail.jpeg`, plus each slide's text | engine process; fallback worker | slides as PowerPoint draws them — charts, tables, shapes, themes; the fallback is **preview only**, said on screen | slide = page |
 | Markdown, TXT, JSON, log | `BodyRenderer` / `CodePreview` read-only | renderer | exact | lines |
 | HTML | a separate sandboxed view (§7.3) | own process | exact | — |
 | Anything else | a metadata card: name, size, type, hash, who recorded it | — | — | — |
@@ -524,9 +525,16 @@ Rules that apply to every parsed format:
 - **Parser output is never trusted markup.** Spreadsheet cells render as
   React text. Converted DOCX HTML goes through DOMPurify before it reaches
   the DOM.
-- **SheetJS is pinned from the SheetJS CDN tarball**, not the `xlsx`
-  package on npm, which stopped receiving releases at a version with
-  published advisories. The lockfile records the tarball's integrity hash.
+- **No SheetJS.** This section first specified SheetJS from its CDN
+  tarball (the `xlsx` npm package stopped receiving releases at a version
+  with published advisories). The CDN was unreachable from the build
+  environment, and a workbook's cached values are a small, well-defined
+  read, so 31.3b shipped its own: `src/shared/lib/xlsx-xml.ts`, shared by
+  the viewer's worker and the backend's mechanical checks, so "is there a
+  sheet called Regional" and what the viewer shows cannot disagree. No
+  formula is evaluated; merged cells and number formats beyond dates are
+  not drawn. Formatting-faithful sheets come from the engine's printed
+  view (§7.6), not from a bigger parser.
 
 ### 7.3 HTML
 
@@ -574,6 +582,109 @@ sibling, `open-artefact-at.ts`, with the same shape:
 
 That turns "grounded" into one click: **the claim and the cell it came
 from, side by side.**
+
+### 7.6 Office documents as they look: the conversion engine
+
+Business users judge a deck by its slides and a report by its pages. A
+text rendering of either is not what they approved, and the organisations
+using CodeTrellis manage their machines (Intune and the like) — anything
+that has to be installed separately will not be there. So the fidelity
+has to ship inside the app.
+
+**What.** LibreOffice compiled to WebAssembly, converting DOCX, PPTX and
+(on request) XLSX/XLS to PDF, which the existing pdf.js view shows. One
+viewer, one locator model (`{page}`; `{text}` resolves through pdf.js's
+text layer to a page), and the send-back works unchanged.
+
+**Why this and not a JS renderer.** Measured on 23 Sept 2026 against a
+generated board deck (bullets, a clustered column chart and a pie, a
+themed table, chevrons, a rounded box, an image) and a report (header and
+footer, bullets, a styled table, an image, a page break):
+
+| | Deck | Report |
+|---|---|---|
+| `pptx-preview` (JS, in the page) | charts drawn empty with a placeholder title, bullets and table style lost | — |
+| `docx-preview` (JS, in the page) | — | good: pages, header/footer, table, image; list glyphs missing |
+| LibreOffice WASM, **browser worker** | text, tables, charts correct; **hangs on any autoshape** — a threading defect of the browser build | best of the three |
+| LibreOffice WASM, **Node process** | **everything**, including themed table, chevrons, shadow | same |
+
+**Where it runs: its own process, never the page.** An Electron
+`utilityProcess` in the packaged app, a forked Node process in dev and
+the test harness, behind one `services/rendition/engine-host.ts`. The
+browser build is not used (above), and a separate process means the
+engine's memory and any crash are not the window's.
+
+**Mounted only when needed.** Measured, Node, 4-core Linux:
+
+| | time |
+|---|---|
+| engine start (nothing loaded at app launch) | 1.4–1.8 s |
+| first conversion, 4-slide deck | 2.7 s |
+| further conversions while warm | 0.3–1.0 s |
+| resident while warm | ≈ 1.3 GB |
+
+So: nothing at launch. The first Office file opened starts the engine
+and the viewer says *Preparing preview…*; it stays warm while
+conversions keep coming and is **stopped after 3 idle minutes**, and on
+power-save. Opening a plan whose materials include Office files may
+pre-warm it. Every conversion is cached, so the second look costs
+nothing and does not start the engine.
+
+**The rendition cache.** `<dataDir>/renditions/<sha256(input)>-<engine
+version>.pdf`, written through the confined-file helper inside the data
+dir, never inside a project; LRU-capped at 500 MB. The key is the bytes
+converted, so a changed material gets a new rendition and an unchanged
+one is never converted twice. A stale rendition cannot be shown for new
+bytes.
+
+**The route.** `GET /api/artefacts/:uid/rendition` and
+`ct-artefact://<uid>?rendition=pdf`, both through the §7.1 resolver:
+uid → stored record → confined, `O_NOFOLLOW` read → hash → cache or
+engine → `application/pdf` with the §7.1 headers. The engine is handed
+**bytes**, never a path, and hands bytes back.
+
+**Security — what the engine may not do, and how each is proved.** It
+parses untrusted files, so it is treated as hostile:
+
+| It must not | Enforced by | Proved by (§18) |
+|---|---|---|
+| read or write the user's files | receives bytes over IPC; its filesystem is Emscripten's in-memory FS; launched with Node's permission model: file read only in its own asset directory, no write, no child processes, no native addons | a document linking `file:///etc/hosts` (or a Windows path) as an image converts without its contents |
+| reach the network | nothing in the conversion path needs it; the process is denied egress where the runtime supports it — **the build contains TLS code** ("no CA bundle" at start), so absence of a network stack is not assumed | a document with remote images, a remote template and an OLE link converts while a local listener records **zero** connections |
+| run macros | LibreOfficeKit load with macro execution disabled; a converter has no reason to run code | `.docm` / `.pptm` / `.xlsm` with auto-run macros that would write a file and open a socket: nothing happens |
+| exhaust the machine | input caps per format (as §7.2); a 30 s per-conversion timeout that **kills the process**; WASM memory fixed at build time; output capped | a zip bomb and a pathological document each end in the fallback and a sentence, and the app stays responsive |
+| outlive its use | idle stop, power-save stop, stopped with the app | the process is gone 3 idle minutes after the last conversion |
+| be someone else's binary | built **from LibreOffice's own source** at a pinned tag with a pinned Emscripten, in CI; `resources/rendition/README.md` records the sha256 and exact source of every file, as `resources/tree-sitter/` does for grammars | CI rebuilds and compares hashes; the app refuses an engine whose hash does not match |
+
+The npm packages used in the spike (`@bentopdf/libreoffice-wasm`,
+`@matbee/libreoffice-converter` — the same build) are **not** shipped.
+LibreOffice is MPL-2.0; the licence is recorded with the artefacts.
+
+If a platform's runtime cannot deny the engine egress, that is recorded
+in the Phase 19 register and the platform ships with the fallback only
+until it can — the table above is the bar, not an aspiration.
+
+**Packaging.** About 77 MB compressed, 247 MB installed, shipped
+uncompressed inside the app's resources — read-only and, on macOS,
+covered by the code signature — rather than unpacked into a writable data
+directory where it could be swapped. Metric-compatible fonts (Carlito for
+Calibri, Caladea for Cambria, Liberation for Arial/Times/Courier) ship
+with it; line breaks can still differ from Office by a word, and the view
+does not claim otherwise.
+
+**Fallbacks, packaged and always available.** While the engine starts,
+when it fails or times out, and past its caps: DOCX shows the mammoth
+text view (31.3c), XLSX the cell grid (31.3b), PPTX the embedded
+thumbnail and slide text — each labelled as a fallback. Nothing ever
+depends on the engine to be *usable*, only to look right.
+
+**What agents read.** `read_material` keeps using the light parsers — they
+are fast and need no engine. Where a rendition exists, its PDF text is
+what `read_material` returns for DOCX and PPTX, so an agent reads the
+words the person sees on the page.
+
+**The phone.** §12's preview is rendered on the desktop; for Office files
+it is now the rendition's pages as downscaled JPEG — the phone shows the
+slide, not a description of it.
 
 ## 8. Loops: checking is something you run, not a moment
 
@@ -949,6 +1060,10 @@ which is the Phase 20–28 failure mode exactly.
 - **Parsing is in a worker, capped, and its output is escaped or
   sanitised.**
 - **Reveal, never open.**
+- **Office files are converted, not opened.** The engine runs in its own
+  process, receives bytes and returns a PDF, cannot read the user's
+  files, reach the network or run macros, is built from source with
+  recorded hashes, and is stopped when idle (§7.6).
 - **HTML runs in its own sandboxed view**, offline, scripts off unless
   toggled per artefact.
 - **Imported plan files are validated like MCP input.**
@@ -1007,8 +1122,11 @@ table, the material-changed trigger. A "Run checks" button in the plan
 workspace; the Brief's comes with 31.5.
 
 **31.3 — the viewer.** Transport first (`ct-artefact:` and the REST twin),
-then images, video, PDF, CSV/XLSX, Markdown; then DOCX; then the PPTX
-preview; the HTML view last because it is the only new process. Send back
+then images, video, PDF, CSV/XLSX, Markdown (31.3a/b); then the DOCX text
+view (31.3c), which becomes the fallback; then **the conversion engine
+(31.3d, §7.6)** — engine host, rendition route and cache, DOCX and PPTX
+as pages, the PPTX thumbnail fallback, the security tests, built from
+source in CI; the HTML view last. Send back
 from the exact place (§8.2) lands with the first format that has a locator.
 
 **31.4 — Claude Desktop, the rest.** "Add to Claude Desktop" and the
@@ -1034,14 +1152,13 @@ claim a state the window is not showing.
 
 ## 17. Dependencies
 
-New: `pdfjs-dist`, SheetJS (CDN tarball, pinned), `mammoth`,
-`dompurify`, and a small zip reader (`fflate`) for PPTX thumbnails.
-The same parsers serve the viewer (in a renderer worker) and
-`read_material` (in a backend worker thread), so a format reads the same
-to Claude as it looks to the person checking it. `docx-preview` renders
-closer to Word's layout but needs the DOM, so it cannot run in a worker;
-it is the upgrade path if fidelity turns out to matter more than
-isolation.
+New: `pdfjs-dist` (legacy build — pdf.js 6 calls
+`Map#getOrInsertComputed`, which a browser-served renderer cannot count
+on), `mammoth`, `dompurify`, and **LibreOffice WASM built from source**
+(§7.6). No SheetJS (§7.2) and no `fflate`: the workbook reader and the
+viewer workers' capped zip reader are our own, small, and tested for
+bombs. `docx-preview` and `pptx-preview` were measured and not taken
+(§7.6): the engine renders both formats better, outside the page.
 Each licence is checked when it is added, and `security.yml`'s dependency
 report covers them from the first commit.
 
@@ -1095,6 +1212,21 @@ is the only proof.
      candidates; resolving a reference to a project outside
      `mcp.projectScope` is still refused by the tool.
 14. The `brief` demo scene runs clean against a packaged build.
+15. The engine (§7.6) cannot read a file it was not given, reach the
+    network, or run a macro — each row of §7.6's security table has a
+    test with a hostile document, and a local listener that must record
+    nothing.
+16. A zip bomb, a pathological document and a 30 s stall each end in the
+    fallback with a sentence; the engine process is killed, the app stays
+    responsive, and the next conversion starts a fresh engine.
+17. The engine is not running at launch, starts on the first Office file,
+    and is gone 3 idle minutes later; a second open of the same bytes is
+    served from the rendition cache without starting it.
+18. The generated board deck and report render with their page count,
+    slide text and chart legend intact; a cited `{page}` and `{text}` open
+    on the right page.
+19. On a packaged build of every platform, the engine's hashes match
+    `resources/rendition/README.md` and a DOCX and a PPTX render.
 
 ## 19. Done when
 
