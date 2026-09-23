@@ -30,7 +30,7 @@ test.describe('Acceptance criteria', () => {
       }],
     });
     await openPlan(page, PLAN_TITLE);
-    await page.getByText('Revenue summary').first().click();
+    await page.getByTestId('plan-item-tree').getByText('Revenue summary').first().click();
 
     const block = page.getByTestId('criteria-block');
     await expect(block.getByText('EMEA totals match the ledger')).toBeVisible({ timeout: 10_000 });
@@ -57,7 +57,7 @@ test.describe('Acceptance criteria', () => {
     const PLAN_TITLE = planTitle();
     await seedPlan(request, { title: PLAN_TITLE, actions: [{ title: 'Board deck', body: 'Build it.' }] });
     await openPlan(page, PLAN_TITLE);
-    await page.getByText('Board deck').first().click();
+    await page.getByTestId('plan-item-tree').getByText('Board deck').first().click();
 
     const block = page.getByTestId('criteria-block');
     await block.getByRole('button', { name: /Add acceptance criterion/ }).click();

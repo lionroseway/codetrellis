@@ -66,12 +66,24 @@ const storageState = {
   ],
 };
 
+const MARKETING_IGNORE = process.env.E2E_MARKETING ? [] : ['**/marketing/**'];
+
+/** Specs whose agents navigate every open page — see the `ui-driving` project. */
+const UI_DRIVING_SPECS = [
+  '**/live-agent/preseeded-execution.spec.ts',
+  '**/live-agent/preseeded-deviation.spec.ts',
+  '**/live-agent/authored-deviation.spec.ts',
+  '**/live-agent/agent-authored-flow.spec.ts',
+  '**/golden-chain/mcp-agent-flow.spec.ts',
+  '**/mcp-tools/changes-drift-templates.spec.ts',
+];
+
 export default defineConfig({
   testDir: './e2e',
   // The marketing spec regenerates committed screenshots under
   // marketing-assets/. In a normal run it silently rewrote them with
   // whatever test data was loaded. Opt in with E2E_MARKETING=1.
-  testIgnore: process.env.E2E_MARKETING ? [] : ['**/marketing/**'],
+  testIgnore: MARKETING_IGNORE,
   timeout: 30000,
   // Playwright's default is half the CPU cores. Every test opens and scans
   // this whole repository in its own Chromium against ONE backend, so on a
@@ -108,11 +120,32 @@ export default defineConfig({
   ],
   projects: [
     // Opens the project under test once — see e2e/project.setup.ts.
-    { name: 'setup', testMatch: /project\.setup\.ts$/ },
+    // Its `teardown` is the ui-driving project below: Playwright runs a
+    // teardown after every project that depends on setup has finished, and
+    // runs it even when some of their tests failed. As an ordinary dependent
+    // of `chromium` it would be skipped outright by one failing UI spec.
+    { name: 'setup', testMatch: /project\.setup\.ts$/, teardown: 'ui-driving' },
     {
       name: 'chromium',
       use: { browserName: 'chromium' },
       dependencies: ['setup'],
+      // A project's testIgnore REPLACES the top-level one, so repeat it.
+      testIgnore: [...MARKETING_IGNORE, ...UI_DRIVING_SPECS],
+    },
+    // After every other spec, one at a time. These call MCP tools that steer
+    // the UI (`set_active_plan`, `open_plan`, `navigate_to`), which broadcast
+    // `ui-navigate` to EVERY connected page — by design, so the app follows
+    // the agent. Run beside the UI specs, they switched another worker's page
+    // to their plan mid-test: the canvas dropped the selected item, and the
+    // Plans tab sat under a workspace nobody in that test had opened.
+    //
+    // Running one of these files on its own (`npx playwright test <file>`)
+    // skips setup, so open the project first or run the whole suite.
+    {
+      name: 'ui-driving',
+      use: { browserName: 'chromium' },
+      testMatch: UI_DRIVING_SPECS,
+      workers: 1,
     },
   ],
 });
