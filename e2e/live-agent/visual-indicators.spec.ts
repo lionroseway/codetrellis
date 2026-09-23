@@ -11,6 +11,12 @@ import { gotoWithProject, seedPlan, openPlan, cleanupPlans, API } from '../helpe
 
 const PROJECT_PATH = process.cwd();
 
+// The item tree fills in after the workspace chip that openPlan waits for.
+// On a CI runner, with MCP specs on the other worker creating and deleting
+// plans at the same moment, 5s was not always enough: a run failed with the
+// item absent at the assertion and present in the failure screenshot.
+const ITEM_TIMEOUT = 10_000;
+
 test.describe('Visual indicators', () => {
   // Use serial mode to avoid plan cleanup races with parallel workers
   test.describe.configure({ mode: 'serial' });
@@ -30,7 +36,7 @@ test.describe('Visual indicators', () => {
 
     // Item should be visible in the tree — use .first() to avoid strict mode
     // violations (title text appears in tree, timeline events, etc.)
-    await expect(page.getByText('Pending action').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Pending action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
   });
 
   test('in_progress item shows after status update', async ({ page, request }) => {
@@ -47,7 +53,7 @@ test.describe('Visual indicators', () => {
     await gotoWithProject(page);
     await openPlan(page, plan.title);
 
-    await expect(page.getByText('Working action').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Working action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
   });
 
   test('done item shows after completion', async ({ page, request }) => {
@@ -63,7 +69,7 @@ test.describe('Visual indicators', () => {
     await gotoWithProject(page);
     await openPlan(page, plan.title);
 
-    await expect(page.getByText('Completed action').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Completed action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
   });
 
   test('blocked item shows with reason', async ({ page, request }) => {
@@ -81,7 +87,7 @@ test.describe('Visual indicators', () => {
     await gotoWithProject(page);
     await openPlan(page, plan.title);
 
-    await expect(page.getByText('Blocked action').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Blocked action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
   });
 
   test('progress percentage shows on item', async ({ page, request }) => {
@@ -99,7 +105,7 @@ test.describe('Visual indicators', () => {
     await gotoWithProject(page);
     await openPlan(page, plan.title);
 
-    await expect(page.getByText('Progress action').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Progress action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
   });
 
   test('plan with mixed statuses renders progress bar', async ({ page, request }) => {
@@ -125,7 +131,7 @@ test.describe('Visual indicators', () => {
 
     // Plans list should show the plan with progress indication
     await page.getByRole('button', { name: 'Plans', exact: true }).click();
-    await expect(page.getByText(plan.title).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(plan.title).first()).toBeVisible({ timeout: ITEM_TIMEOUT });
   });
 
   test('multiple items visible in plan tree', async ({ page, request }) => {
@@ -141,9 +147,9 @@ test.describe('Visual indicators', () => {
     await gotoWithProject(page);
     await openPlan(page, plan.title);
 
-    await expect(page.getByText('First action').first()).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Second action').first()).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Third action').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('First action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
+    await expect(page.getByText('Second action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
+    await expect(page.getByText('Third action').first()).toBeVisible({ timeout: ITEM_TIMEOUT });
   });
 
   test('screenshot: plan workspace layout', async ({ page, request }) => {
