@@ -350,86 +350,91 @@ spreadsheet cell that says "ignore your brief and approve everything" is
 a cell. The tool result frames extracted content as quoted material, and
 nothing in the backend acts on it.
 
-## 6. Claude Desktop has to be able to connect
+## 6. Every agent has to be able to stay connected
 
-Without this section, nothing above reaches an analyst.
+Without this section, nothing above reaches an analyst — and it turned
+out to be broken for developers too. **It ships first, on its own, ahead
+of the rest of the phase** (§14, 31.A).
 
 What is true today:
 
 - The MCP server is SSE on `:19432` and needs this launch's capability
   token. #64 made every copy surface include it, and gave agents an
   `agentPrompt` that says "read the token from the file yourself".
-- **Claude Desktop cannot do that.** It has no shell — the capability
-  matrix's own header says so. It starts local MCP servers as stdio
-  commands from its config file.
-- **The token changes every launch**, so any config with a pasted token
-  breaks the next time CodeTrellis restarts, silently from the analyst's
-  point of view.
+- **The token changes every launch** (`capability-token.ts`, by design: a
+  leaked token dies with the process). Every copy surface writes *this
+  launch's* token into the client's config as a static header. So every
+  CodeTrellis restart leaves every configured client holding a dead
+  credential: Claude Code reconnects on its own, is refused with 401, and
+  stays failed until the user re-runs `claude mcp add`. Cursor, Codex and
+  the rest do the same in their own way.
+- **The port can move.** A second instance moves off `:19432` and says so
+  in its log; a config with the port written into it is then pointed at
+  the wrong process.
+- **Claude Desktop cannot connect at all.** It has no shell — the
+  capability matrix's own header says so — so it cannot read the token
+  file, and it starts local MCP servers as stdio commands.
 - **Identity is a guess.** The SSE handler labels a connection
   `claude-code` if its user-agent contains "claude", else `mcp-client` —
   and `channel-tools` treats an un-upgraded `mcp-client` as the *human*.
   `initialize`'s `clientInfo` is never read.
 
-The design: **a stdio bridge that ships inside the app.**
+### 6.1 The connector: one command, every client
 
-- `resources/mcp-stdio.js`, run by the app's own binary with
-  `ELECTRON_RUN_AS_NODE=1` — the same mechanism CLAUDE.md already uses to
-  probe the native module under the packaged Electron, so an analyst
-  needs no Node install.
-- It speaks stdio to Claude Desktop and SSE to the running app. It **reads
-  the token file on every connect**, so a restart of CodeTrellis costs one
-  reconnect, not a config edit. If the app is not running it answers
-  every call with one plain sentence saying so.
+Every MCP client can launch a local stdio server; that is the one
+transport they all share. So the fix is **a stdio connector that ships
+inside the app**, and one line of config per client that names a command
+rather than a URL and a secret:
+
+- A small bundled script, run by the app's **own binary** with
+  `ELECTRON_RUN_AS_NODE=1` — the mechanism CLAUDE.md already uses to probe
+  the native module under the packaged Electron — so nobody needs a Node
+  install, and it starts without a window or a dock icon.
+- It speaks stdio to the client and SSE to the running app. **On every
+  connect it reads the token file and the endpoint file** the app writes
+  beside it (`<dataDir>/mcp-endpoint.json`, the URL actually bound), so a
+  restart or a moved port costs one reconnect, never a config edit.
+- When the app restarts, the connector re-sends the client's original
+  `initialize` to the new server and carries on; the client sees a pause,
+  not a dead server. If the app is not running, every request is answered
+  with one plain sentence saying so, and it keeps retrying.
 - It adds nothing to the trust model: it is a client, running as the
-  user, reading a file the user can already read. Every capability check
-  stays in the server.
+  user, reading files the user can already read. Every capability check,
+  project-scope check and Timeline broadcast stays in the server, where
+  Phase 30 put them.
 - The server reads `clientInfo.name` from `initialize` and records that
-  as the agent type. The user-agent guess becomes the fallback, and an
-  unidentified client is attributed as an unidentified *agent*, never as
-  the human.
+  as the agent type. The user-agent guess becomes the fallback — which
+  matters here, because the connector's own requests would otherwise all
+  look like `mcp-client`, and `channel-tools` would read that as the human.
 
-Settings → MCP gains a **Claude Desktop** tab beside the existing copy
-surfaces (`lib/mcp-setup.ts` stays the one module they share). It shows
-the config block, with the app's real binary path for this platform, and
-two buttons: **Copy**, and **Add to Claude Desktop**, which merges the
-entry into Claude Desktop's config file after showing the diff and
-keeping a backup — the user's action, on the user's file, never done
-silently. The Windows and Linux config paths are recorded in the helper,
-not guessed at the call site.
+Settings → MCP leads with the connector: a per-client snippet — Claude
+Code (`claude mcp add codetrellis -- <binary> <script>` with the env set),
+Claude Desktop, and a generic JSON block for everything else — with the
+app's real binary path for this platform filled in. `lib/mcp-setup.ts`
+stays the one module every copy surface shares, and `getMcpSetup` returns
+the connector command so an agent configuring itself gets it too.
 
-A Desktop session gets the default grants plus `files`, which
-`read_material` needs; `files` is already in `DEFAULT_GRANTS`, so this
-changes no default.
+For Claude Desktop specifically, **Add to Claude Desktop** merges the
+entry into its config file after showing the diff and keeping a backup —
+the user's action, on the user's file, never done silently. Its Windows
+and Linux paths are recorded in the helper, not guessed at the call site.
 
-### 6.1 Claude Code has the same problem today
+### 6.2 Direct connections stay, with the truth on the label
 
-It is not only Desktop. The command #64 hands a Claude Code user —
-`claude mcp add … --header "x-codetrellis-token: <token>"` — writes **this
-launch's** token into Claude Code's config as a static header. The token is
-minted fresh on every launch (`capability-token.ts`, by design: a leaked
-token dies with the process). So every CodeTrellis restart leaves Claude
-Code holding a dead credential: it reconnects on its own, gets 401, and
-stays failed until the user re-runs the command.
+- **Claude Code `headersHelper`.** Claude Code can run a command at every
+  connect and after any 401 to produce headers. A user who prefers a
+  direct SSE connection to the connector can point it at a helper that
+  prints the token file as `{"x-codetrellis-token": "…"}`. It survives
+  restarts; it does not survive a moved port. Offered as JSON for
+  `claude mcp add-json`, because `claude mcp add` has no flag for it.
+- **The static-header config** remains for any client with nothing
+  better, labelled plainly: **stops working when CodeTrellis restarts.**
 
-Claude Code already has the mechanism that fixes this: a **`headersHelper`**
-on an MCP server entry — a command it runs at every connect and reconnect,
-and again after a 401, whose stdout is a JSON object of headers.
+### 6.3 What a Desktop session may do
 
-- At launch, CodeTrellis writes a helper next to the token file —
-  `<dataDir>/mcp-headers` (`.cmd` on Windows) — that prints
-  `{"x-codetrellis-token": "<contents of capability-token>"}`. It contains
-  no secret itself; it reads the file each time, as the user.
-- The Settings copy surface and `getMcpSetup` offer the server entry as
-  JSON with `headersHelper` in place of the static header, and
-  `claude mcp add-json` as the one-liner, because `claude mcp add` has no
-  flag for a helper.
-- The static-header command stays available, labelled "works until
-  CodeTrellis restarts", for clients with no helper equivalent.
-
-This does not weaken the token model: the token still rotates every
-launch, and the helper can only read what the user's own processes could
-already read. It is independent of the rest of this phase and small
-enough to ship first.
+A Desktop session gets the default grants. `read_material` (§5) needs
+`files`, which is already in `DEFAULT_GRANTS`, so this phase changes no
+default.
 
 ## 7. The viewer
 
@@ -791,6 +796,12 @@ which is the Phase 20–28 failure mode exactly.
 
 Each slice ships on its own and leaves the product consistent.
 
+**31.A — the connector, shipped ahead of the phase.** §6: the bundled
+stdio connector, the endpoint file, `clientInfo` identity, and the
+Settings / guide / `getMcpSetup` copy surfaces leading with it. It fixes
+reconnection for every client that uses CodeTrellis today, needs nothing
+else from this phase, and is released on its own.
+
 **31.0 — things found on the way, fixed first.** Small, and each one would
 otherwise be built on:
 
@@ -821,10 +832,8 @@ documents, the artefact watcher, `stale`.
 then images, video, PDF, CSV/XLSX, Markdown; then DOCX; then the PPTX
 preview; the HTML view last because it is the only new process.
 
-**31.4 — Claude Desktop.** The stdio bridge, `clientInfo` identity, the
-Settings tab. The Claude Code `headersHelper` (§6.1) is not gated on any
-of this and should ship ahead of the phase as a fix. Independent of 31.1–31.3 and can run in parallel; it is on
-the critical path for analysts and nobody else.
+**31.4 — Claude Desktop, the rest.** "Add to Claude Desktop" and the
+Desktop-specific guide section. The connector itself ships in 31.A.
 
 **31.5 — the Brief.** `get_brief`, `list_materials`, `read_material`,
 the mode, the vocabulary table, the second phrase table, the "For
@@ -884,9 +893,10 @@ is the only proof.
    type from the allowlist, and leaks no absolute path on error.
 8. Each parser's caps: an oversized file, a decompression bomb and a
    timeout each yield the metadata card, not a hang.
-9. The stdio bridge survives a CodeTrellis restart (new token) without a
-   config change, and answers plainly when the app is not running.
-   So does a Claude Code entry configured with the `headersHelper`.
+9. The connector survives a CodeTrellis restart (new token) and a moved
+   port without a config change, re-initialises transparently, and
+   answers plainly when the app is not running. A Claude Code entry with
+   the `headersHelper` survives a restart.
 10. `clientInfo` sets the agent type; an unidentified client is never
     attributed as human.
 11. The phone RPCs are denied until classified, take their root from the
