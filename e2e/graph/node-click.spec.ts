@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, firstClickableNode } from '../helpers/setup';
+import { gotoWithProject, firstClickableNode, clickableNodeIndices } from '../helpers/setup';
 
 test.describe('Node click', () => {
   /** Scope selectors to the right-side inspector panel */
@@ -51,13 +51,15 @@ test.describe('Node click', () => {
       test.skip();
       return;
     }
+    // Two nodes not under the graph toolbar (see clickableNodeIndices).
+    const [first = 0, second = 1] = await clickableNodeIndices(page);
 
     // Click first node
-    await nodes.nth(0).click();
+    await nodes.nth(first).click();
     await page.waitForTimeout(500);
 
     // Click second node
-    await nodes.nth(1).click();
+    await nodes.nth(second).click();
     await page.waitForTimeout(500);
 
     // Inspector should still be showing content

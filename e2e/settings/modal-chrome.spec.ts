@@ -73,7 +73,7 @@ test.describe('Settings modal chrome', () => {
     const dialog = page.getByRole('dialog');
     const sections = ['Identity', 'MCP Server', 'Plans', 'Data', 'Logs', 'Telemetry', 'Updates', 'About'];
     for (const section of sections) {
-      await dialog.getByRole('button', { name: section }).click();
+      await dialog.getByRole('button', { name: section, exact: true }).click();
       await page.waitForTimeout(200);
     }
 

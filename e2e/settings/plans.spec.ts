@@ -17,8 +17,8 @@ test.describe('Settings plans', () => {
     await page.waitForTimeout(300);
 
     // Shared and Local toggle buttons
-    await expect(page.locator('button:has-text("Shared")').first()).toBeVisible({ timeout: 3000 });
-    await expect(page.locator('button:has-text("Local")').first()).toBeVisible();
+    await expect(page.getByRole('dialog').locator('button:has-text("Shared")').first()).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog').locator('button:has-text("Local")').first()).toBeVisible();
   });
 
   test('clicking toggle switches active state', async ({ page }) => {
@@ -30,14 +30,14 @@ test.describe('Settings plans', () => {
     await page.waitForTimeout(300);
 
     // Click Local toggle
-    await page.locator('button:has-text("Local")').first().click();
+    await page.getByRole('dialog').locator('button:has-text("Local")').first().click();
     await page.waitForTimeout(500);
 
     // Switch back to Shared
-    await page.locator('button:has-text("Shared")').first().click();
+    await page.getByRole('dialog').locator('button:has-text("Shared")').first().click();
     await page.waitForTimeout(500);
 
     // Should not crash
-    await expect(page.locator('button:has-text("Shared")').first()).toBeVisible();
+    await expect(page.getByRole('dialog').locator('button:has-text("Shared")').first()).toBeVisible();
   });
 });
