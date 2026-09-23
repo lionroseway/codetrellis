@@ -245,6 +245,14 @@ export const SCHEMA_PLANS_CORE = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_recent_projects_opened ON recent_projects(last_opened_at DESC);
+
+  -- Projects pushed off recent_projects by the unpinned cap. Read ONLY to
+  -- explain a refusal ("this was opened, then dropped off"); it is never a
+  -- source of trust. Cleared when the project is opened again.
+  CREATE TABLE IF NOT EXISTS evicted_projects (
+    path TEXT PRIMARY KEY,
+    evicted_at INTEGER NOT NULL
+  );
 `;
 
 export const SCHEMA_ATTACHMENTS = `

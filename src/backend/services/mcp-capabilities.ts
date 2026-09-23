@@ -1,5 +1,5 @@
 import { type PeerCapability, DEFAULT_GRANTS } from './peer-capabilities';
-import { isTrustedProjectRoot, isTrustedPlanDir } from './trusted-roots';
+import { evictedHint, isTrustedProjectRoot, isTrustedPlanDir } from './trusted-roots';
 import type { McpProjectScope } from '../../shared/types/settings';
 
 /**
@@ -432,10 +432,13 @@ export function assertMcpProjectInScope(
   if (typeof candidate !== 'string' || candidate.trim().length === 0) return;
 
   if (!isTrustedProjectRoot(candidate)) {
+    const evicted = evictedHint(candidate);
     throw new McpAuthorizationError(
-      `"${tool}" named a project that is not open: "${candidate}". Project roots come from the ` +
-        'projects this app has opened, not from the request. Open it first, or set MCP project ' +
-        'scope to "anywhere" in Settings → MCP Server.',
+      `"${tool}" named a project that is not open: "${candidate}". ` +
+        (evicted
+          ? evicted
+          : 'Project roots come from the projects this app has opened, not from the request. ' +
+            'Open it first, or set MCP project scope to "anywhere" in Settings → MCP Server.'),
       null,
     );
   }
