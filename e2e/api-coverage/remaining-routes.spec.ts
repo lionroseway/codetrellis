@@ -127,16 +127,22 @@ test.describe('Import external plan', () => {
 
 test.describe('Recent projects management', () => {
   test('POST /api/recent-projects/pin pins a project', async ({ request }) => {
+    // Put back whatever state it was in. The setup project pins this
+    // repository so it stays trusted all run; unpinning it here "to clean
+    // up" let later specs evict it and be refused as "not open".
+    const list = await (await request.get(`${API}/recent-projects`)).json();
+    const entries: Array<{ path: string; pinned: boolean }> = Array.isArray(list) ? list : list.projects ?? [];
+    const wasPinned = entries.find((p) => p.path === PROJECT_PATH)?.pinned ?? false;
+
     const res = await request.post(`${API}/recent-projects/pin`, {
-      data: { projectPath: PROJECT_PATH, pinned: true },
+      data: { projectPath: PROJECT_PATH, pinned: !wasPinned },
     });
     expect(res.ok()).toBeTruthy();
     const data = await res.json();
     expect(data.ok).toBe(true);
 
-    // Unpin to clean up
     await request.post(`${API}/recent-projects/pin`, {
-      data: { projectPath: PROJECT_PATH, pinned: false },
+      data: { projectPath: PROJECT_PATH, pinned: wasPinned },
     });
   });
 
