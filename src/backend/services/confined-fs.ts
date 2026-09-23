@@ -214,6 +214,52 @@ export function readFileWithin(root: string, candidate: string, label = 'path'):
   }
 }
 
+/**
+ * Open a file inside `root` for streaming (Phase 31 §7.1).
+ *
+ * The same guarantees as `readFileWithin` — O_NOFOLLOW, then `fstat` on the
+ * descriptor we hold — but the bytes are streamed FROM THAT DESCRIPTOR, so
+ * the check and the read are the same open. Opening by path after checking
+ * it is the race this avoids: the path can be swapped for a link in between.
+ *
+ * `range` is inclusive, as in an HTTP Range header, for seeking in video.
+ * The caller owns the returned stream; it closes the descriptor when it ends
+ * or is destroyed.
+ */
+export function openReadStreamWithin(
+  root: string,
+  candidate: string,
+  opts: { start?: number; end?: number } = {},
+  label = 'path',
+): { stream: fs.ReadStream; size: number; mtimeMs: number } {
+  const target = resolveWithin(root, candidate, label);
+  const flags = HAS_NOFOLLOW
+    ? fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
+    : fs.constants.O_RDONLY;
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(target, flags);
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) {
+      throw new ConfinementError(`${label}: not a regular file`);
+    }
+    const stream = fs.createReadStream('', { fd, start: opts.start, end: opts.end, autoClose: true });
+    fd = null; // the stream owns it now
+    return { stream, size: st.size, mtimeMs: st.mtimeMs };
+  } catch (err) {
+    if (err instanceof ConfinementError) throw err;
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === 'ELOOP') {
+      throw new ConfinementError(`${label}: refused to follow a symbolic link`);
+    }
+    throw err;
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch { /* */ }
+    }
+  }
+}
+
 /** `readFileWithin` as UTF-8 text. */
 export function readTextWithin(root: string, candidate: string, label = 'path'): string {
   return readFileWithin(root, candidate, label).toString('utf-8');
