@@ -116,6 +116,14 @@ interface PlanItemsState {
   updateCriterion: (itemUid: string, criterionUid: string, changes: { text?: string; policy?: CriterionPolicy }) => Promise<string | null>;
   deleteCriterion: (itemUid: string, criterionUid: string) => Promise<string | null>;
   decideCriterion: (itemUid: string, criterionUid: string, decision: 'approved' | 'sent_back', note?: string) => Promise<string | null>;
+  /**
+   * A criterion being written, per item. Held here rather than in the
+   * block's own state: the canvas re-renders on every broadcast, and a
+   * remount must not throw away what a person was typing — nor should
+   * looking at another item and coming back. Present = the form is open.
+   */
+  criterionDrafts: Record<string, { text: string; kind: CriterionKind }>;
+  setCriterionDraft: (itemUid: string, draft: { text: string; kind: CriterionKind } | null) => void;
 }
 
 const HISTORY_CAP = 50;
@@ -128,6 +136,7 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
   selectedItemUid: null,
   history: { back: [], forward: [] },
   contextByUid: {},
+  criterionDrafts: {},
   activityDrawerOpen: true,
   historyDrawerItemUid: null,
   hydrating: false,
@@ -493,6 +502,14 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       });
     } catch { /* the WS event will bring it round again */ }
   },
+
+  setCriterionDraft: (itemUid, draft) =>
+    set((s) => {
+      const next = { ...s.criterionDrafts };
+      if (draft) next[itemUid] = draft;
+      else delete next[itemUid];
+      return { criterionDrafts: next };
+    }),
 
   addCriterion: (itemUid, input) =>
     criteriaWrite(`/api/items/${itemUid}/criteria`, 'POST', input, () => get().refreshCriteria(itemUid)),

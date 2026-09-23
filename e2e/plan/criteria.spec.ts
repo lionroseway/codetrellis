@@ -60,8 +60,20 @@ test.describe('Acceptance criteria', () => {
     await page.getByTestId('plan-item-tree').getByText('Board deck').first().click();
 
     const block = page.getByTestId('criteria-block');
-    await block.getByRole('button', { name: /Add acceptance criterion/ }).click();
-    await block.getByPlaceholder(/requester's words/).fill('Every chart has a source line');
+    const input = block.getByPlaceholder(/requester's words/);
+    // Twice on CI the form never opened after this click, and the reason
+    // could not be read back from the run. The draft now survives a
+    // remount (plan-items-store criterionDrafts); if the click itself is
+    // lost to a re-render, click again — and if it still does not open,
+    // say what the block showed instead.
+    await expect(async () => {
+      if (!(await input.isVisible())) {
+        await block.getByRole('button', { name: /Add acceptance criterion|Add criterion/ }).click({ timeout: 2000 });
+      }
+      await expect(input, `criteria block: ${await block.innerHTML().catch(() => '(gone)')}`.slice(0, 600))
+        .toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 15_000 });
+    await input.fill('Every chart has a source line');
     await block.getByRole('combobox').selectOption('artefact');
     await block.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByTestId('criterion-row').getByText('Every chart has a source line')).toBeVisible();

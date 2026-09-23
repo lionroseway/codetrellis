@@ -44,9 +44,16 @@ export function CriteriaBlock({
   attachments?: TaskAttachment[];
 }) {
   const addCriterion = usePlanItemsStore((s) => s.addCriterion);
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [kind, setKind] = useState<CriterionKind>('manual');
+  // The unfinished criterion lives in the store, keyed by item, so a
+  // remount of this block keeps it (see criterionDrafts).
+  const pending = usePlanItemsStore((s) => s.criterionDrafts[itemUid]);
+  const setPending = usePlanItemsStore((s) => s.setCriterionDraft);
+  const adding = pending !== undefined;
+  const draft = pending?.text ?? '';
+  const kind: CriterionKind = pending?.kind ?? 'manual';
+  const setAdding = (open: boolean) => setPending(itemUid, open ? { text: draft, kind } : null);
+  const setDraft = (text: string) => setPending(itemUid, { text, kind });
+  const setKind = (k: CriterionKind) => setPending(itemUid, { text: draft, kind: k });
   const [error, setError] = useState<string | null>(null);
 
   const met = criteria.filter((c) => c.state === 'met').length;
@@ -55,7 +62,7 @@ export function CriteriaBlock({
     if (!draft.trim()) return;
     const err = await addCriterion(itemUid, { text: draft.trim(), kind });
     setError(err);
-    if (!err) { setDraft(''); setAdding(false); }
+    if (!err) setPending(itemUid, null);
   };
 
   if (criteria.length === 0 && !adding) {
@@ -102,7 +109,7 @@ export function CriteriaBlock({
               ))}
             </select>
             <div className="flex-1" />
-            <button onClick={() => { setAdding(false); setDraft(''); setError(null); }} className="text-foreground-subtle hover:text-foreground">Cancel</button>
+            <button onClick={() => { setPending(itemUid, null); setError(null); }} className="text-foreground-subtle hover:text-foreground">Cancel</button>
             <button
               onClick={submit}
               disabled={!draft.trim()}
