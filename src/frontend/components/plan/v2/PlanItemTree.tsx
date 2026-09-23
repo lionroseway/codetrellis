@@ -153,7 +153,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   };
 
   return (
-    <div className="h-full flex flex-col border-r border-white/[0.06] bg-[#080915] min-w-0">
+    <div data-testid="plan-item-tree" className="h-full flex flex-col border-r border-white/[0.06] bg-[#080915] min-w-0">
       <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-white/[0.06]">
         <FileText size={13} className="text-foreground-subtle shrink-0" />
         <span className="text-[12px] font-semibold text-foreground uppercase tracking-wider">
