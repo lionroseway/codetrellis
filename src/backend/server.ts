@@ -1136,7 +1136,8 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     }
 
     try {
-      startPlanFileWatcher(projectPath);
+      // Awaited, like startWatching above — see startPlanFileWatcher.
+      await startPlanFileWatcher(projectPath);
     } catch (err) {
       console.warn('[Scan] Plan file watcher failed to start:', err);
     }
@@ -4467,7 +4468,7 @@ function rearmProjectWatchers(): void {
       if (!fs.existsSync(path.join(proj.path, '.codetrellis'))) continue;
       startProjectConfigWatcher(proj.path);
       try {
-        startPlanFileWatcher(proj.path);
+        void startPlanFileWatcher(proj.path);
       } catch {
         // plan-file watcher may need a project scan to be useful;
         // best-effort.

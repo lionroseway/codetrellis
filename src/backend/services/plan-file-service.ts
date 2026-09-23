@@ -857,11 +857,23 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
  * `docs/*.md` file, re-import the parent plan directory. Skips files
  * we just wrote ourselves (see `recentSelfWrites`) so the
  * write-through-then-watcher doesn't ping-pong.
+ *
+ * Resolves once chokidar has finished its initial walk (bounded), for the
+ * same reason `startWatching` does: the scan response is what tells a
+ * caller the project is live, and the first thing that follows is often a
+ * plan export. A directory created before chokidar has attached to its
+ * parent is never watched at all — so an export racing an unready watcher
+ * left that plan's `channels/` invisible for the rest of the session, and
+ * a teammate's event arriving by `git pull` was never imported.
  */
 const watchersByProject = new Map<string, FSWatcher>();
+const watcherReady = new Map<string, Promise<void>>();
+const PLAN_WATCHER_READY_TIMEOUT_MS = 10_000;
 
-export function startPlanFileWatcher(projectRoot: string): void {
-  if (watchersByProject.has(projectRoot)) return; // already watching
+export function startPlanFileWatcher(projectRoot: string): Promise<void> {
+  if (watchersByProject.has(projectRoot)) {
+    return watcherReady.get(projectRoot) ?? Promise.resolve(); // already watching
+  }
 
   const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
 
@@ -975,7 +987,24 @@ export function startPlanFileWatcher(projectRoot: string): void {
   });
 
   watchersByProject.set(projectRoot, watcher);
+  const ready = new Promise<void>((resolve) => {
+    let settled = false;
+    const done = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      resolve();
+    };
+    const guard = setTimeout(() => {
+      console.warn(`[Auto-sync] Plan watcher still starting after ${PLAN_WATCHER_READY_TIMEOUT_MS}ms — continuing`);
+      done();
+    }, PLAN_WATCHER_READY_TIMEOUT_MS);
+    guard.unref?.();
+    watcher.once('ready', done);
+  });
+  watcherReady.set(projectRoot, ready);
   console.log(`[Auto-sync] Watching ${plansRoot}`);
+  return ready;
 }
 
 export function stopPlanFileWatcher(projectRoot: string): void {
@@ -983,6 +1012,7 @@ export function stopPlanFileWatcher(projectRoot: string): void {
   if (w) {
     w.close().catch(() => {});
     watchersByProject.delete(projectRoot);
+    watcherReady.delete(projectRoot);
   }
 }
 
