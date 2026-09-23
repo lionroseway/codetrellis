@@ -140,7 +140,10 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   },
   await_user_input: { intent: 'ask', mutating: false, phrase: () => 'Waiting for your answer' },
   await_ack: { intent: 'ask', mutating: false, phrase: () => 'Waiting for acknowledgement' },
-  approve_gate: { intent: 'ask', mutating: true, phrase: (a) => `Requested approval for ${subject(a, 'gate', 'name')}` },
+  // It CLEARS a gate — it does not ask for anything. The old phrase read
+  // "Requested approval for …" from arguments the tool does not take, so an
+  // agent approving its own gate looked, in the Timeline, like it had asked.
+  approve_gate: { intent: 'write', mutating: true, phrase: (a) => `Cleared the approval gate on ${subject(a, 'uid')}` },
 
   // ── Reading ───────────────────────────────────────────────────────
   search_symbols: { intent: 'read', mutating: false, phrase: (a) => `Looked for \`${String(a.query ?? '')}\`` },

@@ -53,7 +53,7 @@ const planItemEdgeSchema = z.object({
 const planItemKindEnum = z.enum(['object', 'action']);
 const taskStatusEnum = z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']);
 const itemCommentKindEnum = z.enum(['note', 'blocker', 'progress', 'question']);
-const attachmentKindEnum = z.enum(['url', 'image', 'file_ref', 'code_block', 'transcript']);
+const attachmentKindEnum = z.enum(['url', 'image', 'video', 'file_ref', 'code_block', 'transcript']);
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- add_item ---
