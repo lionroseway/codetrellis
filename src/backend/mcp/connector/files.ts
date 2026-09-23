@@ -7,14 +7,20 @@
  * instance walks forward to the next free port.
  *
  * This module is imported by the stdio connector, which ships as its own
- * bundle and runs outside the app. So it may use Node built-ins and nothing
- * from the backend: pulling in `persistence` or `settings-service` would drag
- * the database layer into a process that must start in milliseconds.
+ * bundle and runs outside the app. So it may use Node built-ins and
+ * `confined-fs` (itself built-ins only) and nothing else from the backend:
+ * pulling in `persistence` or `settings-service` would drag the database
+ * layer into a process that must start in milliseconds.
+ *
+ * Every read and write goes through `confined-fs`, per the Phase 19 rule for
+ * sensitive files: one of these holds the token, and the other decides where
+ * the token is sent. A link planted at either name is refused, not followed.
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { readTextWithin, removeWithin, writeFileWithin } from '../../services/confined-fs';
 
 export const TOKEN_FILE = 'capability-token';
 export const ENDPOINT_FILE = 'mcp-endpoint.json';
@@ -67,10 +73,7 @@ export function isLoopbackSseUrl(raw: string): boolean {
  */
 export function writeEndpointFile(dataDir: string, endpoint: McpEndpoint): void {
   fs.mkdirSync(dataDir, { recursive: true });
-  const target = path.join(dataDir, ENDPOINT_FILE);
-  const tmp = `${target}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(endpoint), { encoding: 'utf-8', mode: 0o600 });
-  fs.renameSync(tmp, target);
+  writeFileWithin(dataDir, ENDPOINT_FILE, JSON.stringify(endpoint), 'MCP endpoint file');
 }
 
 /**
@@ -79,20 +82,19 @@ export function writeEndpointFile(dataDir: string, endpoint: McpEndpoint): void 
  * on the way out would strand every connector pointed at the survivor.
  */
 export function removeEndpointFile(dataDir: string, pid: number): void {
-  const target = path.join(dataDir, ENDPOINT_FILE);
   const current = readEndpoint(dataDir);
   if (current && current.pid !== pid) return;
   try {
-    fs.unlinkSync(target);
+    removeWithin(dataDir, ENDPOINT_FILE);
   } catch {
-    /* already gone */
+    /* already gone, or not ours to touch */
   }
 }
 
 /** The published endpoint, or null if it is missing, malformed or not loopback. */
 export function readEndpoint(dataDir: string): McpEndpoint | null {
   try {
-    const parsed = JSON.parse(fs.readFileSync(path.join(dataDir, ENDPOINT_FILE), 'utf-8')) as Partial<McpEndpoint>;
+    const parsed = JSON.parse(readTextWithin(dataDir, ENDPOINT_FILE, 'MCP endpoint file')) as Partial<McpEndpoint>;
     if (typeof parsed.url !== 'string' || !isLoopbackSseUrl(parsed.url)) return null;
     return {
       url: parsed.url,
@@ -107,7 +109,7 @@ export function readEndpoint(dataDir: string): McpEndpoint | null {
 /** This launch's token, or null if the app has never run with this data dir. */
 export function readToken(dataDir: string): string | null {
   try {
-    const token = fs.readFileSync(path.join(dataDir, TOKEN_FILE), 'utf-8').trim();
+    const token = readTextWithin(dataDir, TOKEN_FILE, 'capability token').trim();
     return token.length >= 16 ? token : null;
   } catch {
     return null;
@@ -138,8 +140,8 @@ export function readConnectTarget(dataDir: string): ConnectTarget {
   const endpoint = readEndpoint(dataDir);
   if (!endpoint) return { ok: false, reason: 'the app has not published its MCP endpoint yet' };
   try {
-    const tokenAt = fs.statSync(path.join(dataDir, TOKEN_FILE)).mtimeMs;
-    const endpointAt = fs.statSync(path.join(dataDir, ENDPOINT_FILE)).mtimeMs;
+    const tokenAt = fs.lstatSync(path.join(dataDir, TOKEN_FILE)).mtimeMs;
+    const endpointAt = fs.lstatSync(path.join(dataDir, ENDPOINT_FILE)).mtimeMs;
     if (endpointAt < tokenAt) return { ok: false, reason: 'the app is still starting' };
   } catch {
     return { ok: false, reason: 'the app is still starting' };

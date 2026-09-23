@@ -28,6 +28,17 @@ const KNOWN_CLIENTS: Record<string, string> = {
 };
 
 /**
+ * Names a client may not give itself.
+ *
+ * `mcp-client` is the placeholder for an unidentified connection, and
+ * `channel-tools` attributes an `mcp-client` session's posts to the HUMAN.
+ * `human` and `user` speak for themselves. A client that names itself one of
+ * these keeps its connect-time label instead: clientInfo can make the
+ * Timeline more accurate, never make an agent look like the person.
+ */
+const RESERVED = new Set(['mcp-client', 'mcp-agent', 'human', 'user']);
+
+/**
  * The agent type for a client name, or null if the name is unusable.
  *
  * Unknown names pass through as a slug rather than collapsing to
@@ -42,6 +53,6 @@ export function agentTypeFromClientInfo(name: unknown): string | null {
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
-  if (!slug) return null;
+  if (!slug || RESERVED.has(slug)) return null;
   return KNOWN_CLIENTS[slug] ?? slug;
 }

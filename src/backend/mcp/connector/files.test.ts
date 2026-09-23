@@ -95,6 +95,18 @@ describe('endpoint file', () => {
     assert.deepEqual(readConnectTarget(dir), { ok: true, url: 'http://127.0.0.1:19433/sse', token });
   });
 
+  test('a link planted at either file is refused, not followed', { skip: process.platform === 'win32' }, () => {
+    const elsewhere = path.join(dir, 'elsewhere');
+    fs.writeFileSync(elsewhere, 'c'.repeat(64));
+    fs.symlinkSync(elsewhere, path.join(dir, TOKEN_FILE));
+    assert.equal(readToken(dir), null, 'the token is not read through a link');
+
+    fs.writeFileSync(path.join(dir, 'victim'), 'untouched');
+    fs.symlinkSync(path.join(dir, 'victim'), path.join(dir, ENDPOINT_FILE));
+    assert.throws(() => writeEndpointFile(dir, { url: 'http://127.0.0.1:1/sse', pid: 1, startedAt: 1 }));
+    assert.equal(fs.readFileSync(path.join(dir, 'victim'), 'utf-8'), 'untouched', 'nothing written through the link');
+  });
+
   test('the connector sends the header the server checks', () => {
     // Two constants because the connector cannot import the server's module
     // (it would drag the database layer into a process that must start fast).
@@ -173,6 +185,13 @@ describe('client identity', () => {
     assert.equal(agentTypeFromClientInfo('claude-code'), 'claude-code');
     assert.equal(agentTypeFromClientInfo('claude-ai'), 'claude-desktop');
     assert.equal(agentTypeFromClientInfo('cursor-vscode'), 'cursor');
+  });
+
+  test('a client cannot name itself into the human\'s seat', () => {
+    // channel-tools attributes an mcp-client session to the human.
+    for (const name of ['mcp-client', 'MCP Client', 'human', 'user', 'mcp-agent']) {
+      assert.equal(agentTypeFromClientInfo(name), null, name);
+    }
   });
 
   test('unknown clients keep their own name rather than collapsing to mcp-client', () => {
