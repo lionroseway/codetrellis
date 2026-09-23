@@ -181,7 +181,7 @@ export async function seedPlan(
   const projectPath = opts.projectPath ?? PROJECT_PATH;
 
   // Create the plan
-  const planRes = await request.post(`${API}/plans`, {
+  const createPlan = () => request.post(`${API}/plans`, {
     headers: authHeaders(),
     data: {
       title,
@@ -189,7 +189,17 @@ export async function seedPlan(
       projectPath,
     },
   });
-  expect(planRes.ok()).toBeTruthy();
+  let planRes = await createPlan();
+  // Plans can only be created in an OPENED project. global-setup opens and
+  // pins the suite's projects, but a spec can still leave the server with
+  // the project not open; say so in the log, open it, and retry once
+  // rather than fail with a bare "expected truthy".
+  if (planRes.status() === 403 && /not an opened project/.test(await planRes.text())) {
+    console.warn(`[seedPlan] ${projectPath} was not open; opening it and retrying`);
+    await request.post(`${API}/project/scan`, { headers: authHeaders(), data: { projectPath } });
+    planRes = await createPlan();
+  }
+  expect(planRes.ok(), `POST /api/plans -> ${planRes.status()} ${(await planRes.text()).slice(0, 300)}`).toBeTruthy();
   const plan = await planRes.json();
 
   // Add action items
