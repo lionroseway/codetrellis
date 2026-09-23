@@ -33,5 +33,16 @@ export default async function globalSetup(): Promise<void> {
     if (!res.ok) {
       throw new Error(`global setup: could not open ${projectPath} (HTTP ${res.status}): ${(await res.text()).slice(0, 200)}`);
     }
+    // PIN it. "Opened" means "in the recent projects", which keeps only
+    // the 12 most recent unpinned entries. The live-agent specs open a
+    // fresh temp copy of the fixture per test, and a dozen of those
+    // evicted this repo mid-run: every later API/MCP spec on it was
+    // refused again. Pinned entries are never evicted.
+    const pin = await fetch('http://localhost:3001/api/recent-projects/pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-codetrellis-token': token },
+      body: JSON.stringify({ projectPath, pinned: true }),
+    });
+    if (!pin.ok) throw new Error(`global setup: could not pin ${projectPath} (HTTP ${pin.status})`);
   }
 }

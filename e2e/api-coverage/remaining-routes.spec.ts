@@ -134,10 +134,10 @@ test.describe('Recent projects management', () => {
     const data = await res.json();
     expect(data.ok).toBe(true);
 
-    // Unpin to clean up
-    await request.post(`${API}/recent-projects/pin`, {
-      data: { projectPath: PROJECT_PATH, pinned: false },
-    });
+    // Left pinned on purpose: e2e/global-setup.ts pins the suite's
+    // projects so a run's temp fixtures cannot evict them from the recent
+    // list (which is what "opened" means). Unpinning here broke every
+    // later spec that seeds plans or calls MCP tools on this project.
   });
 
   test('DELETE /api/recent-projects removes a project entry', async ({ request }) => {
