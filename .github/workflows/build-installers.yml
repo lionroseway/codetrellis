@@ -44,9 +44,14 @@ jobs:
           fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # .nvmrc, like every test workflow: the installers must be built on
+          # the Node the suites passed on and production runs (26), not 20.
+          node-version-file: .nvmrc
+          cache: npm
       - name: Install deps
-        run: npm install --legacy-peer-deps
+        # The lockfile exactly, from clean — a node_modules built up by
+        # successive installs once packaged an app that hung at boot.
+        run: npm ci
       - name: Build NSIS installer + portable exe
         run: npm run package:win -- --publish never
       - name: Verify the build stamp
@@ -70,9 +75,14 @@ jobs:
           fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # .nvmrc, like every test workflow: the installers must be built on
+          # the Node the suites passed on and production runs (26), not 20.
+          node-version-file: .nvmrc
+          cache: npm
       - name: Install deps
-        run: npm install --legacy-peer-deps
+        # The lockfile exactly, from clean — a node_modules built up by
+        # successive installs once packaged an app that hung at boot.
+        run: npm ci
       - name: Install rpm tooling
         # ubuntu-latest has dpkg/fakeroot for .deb, but not rpmbuild for .rpm.
         run: sudo apt-get update && sudo apt-get install -y rpm
@@ -99,9 +109,14 @@ jobs:
           fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # .nvmrc, like every test workflow: the installers must be built on
+          # the Node the suites passed on and production runs (26), not 20.
+          node-version-file: .nvmrc
+          cache: npm
       - name: Install deps
-        run: npm install --legacy-peer-deps
+        # The lockfile exactly, from clean — a node_modules built up by
+        # successive installs once packaged an app that hung at boot.
+        run: npm ci
       - name: Install rpm tooling
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Build AppImage + .deb + .rpm (arm64)
