@@ -42,7 +42,8 @@ test.describe('Status bar', () => {
     const connected = page.getByText('Connected').first();
     const watching = page.getByText('Watching').first();
     const either = connected.or(watching);
-    await expect(either).toBeVisible({ timeout: 5000 });
+    // Both can be on screen at once; either answers the question.
+    await expect(either.first()).toBeVisible({ timeout: 5000 });
   });
 
   test('git status API returns file changes', async ({ request }) => {

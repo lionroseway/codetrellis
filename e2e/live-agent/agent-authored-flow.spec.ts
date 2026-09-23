@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 import { gotoWithProject, cleanupPlans, API } from '../helpers/setup';
 import {
   FIXTURE_PATH,
-  createTempFixture,
+  openTempFixture,
   cleanupTempFixture,
 } from './helpers/fixture-reset';
 import { promptAuthorAndExec } from './helpers/prompts';
@@ -34,7 +34,7 @@ test.describe('Agent-authored plan flow (Prompt B)', () => {
   let tempFixture: string;
 
   test.beforeEach(async () => {
-    tempFixture = createTempFixture();
+    tempFixture = await openTempFixture();
     wsCollector = await createWsCollector();
   });
 

@@ -10,6 +10,7 @@
 
 import { test, expect } from '@playwright/test';
 import { gotoWithProject, cleanupPlans, API, PROJECT_PATH } from '../helpers/setup';
+import { createMcpClient } from '../helpers/mcp-client';
 
 /** Discover the actual MCP port from the running server. */
 async function getMcpPort(request: any): Promise<number> {
@@ -19,75 +20,30 @@ async function getMcpPort(request: any): Promise<number> {
 }
 
 /**
- * Lightweight MCP client — connects via SSE, sends JSON-RPC tool calls.
- * Returns a helper object with callTool() and disconnect().
+ * The simulated agent runs in the TEST PROCESS, not in the page.
+ *
+ * It used to open an EventSource from inside the browser page. That is
+ * precisely the caller Phase 19 shut out: the MCP server answers no
+ * cross-origin requests ("MCP clients are processes, not pages"), so from
+ * the page every connect failed with "SSE connection failed". A real agent
+ * is a process, so the test's agent is one too (`createMcpClient`, which
+ * authenticates). The page stays for what this spec is about: the UI
+ * reflecting what the agent did. Signatures kept so the tests read as before.
  */
-async function connectMcpAgent(page: any, port: number) {
-  // Connect to SSE and extract sessionId, then call tools via POST /messages
-  const result = await page.evaluate(async (mcpPort: number) => {
-    return new Promise<{ sessionId: string; error?: string }>((resolve) => {
-      const timeout = setTimeout(() => resolve({ sessionId: '', error: 'SSE connect timeout' }), 8000);
+let agent: Awaited<ReturnType<typeof createMcpClient>> | null = null;
 
-      const es = new EventSource(`http://127.0.0.1:${mcpPort}/sse`);
-      (window as any).__mcp_es = es;
-
-      es.addEventListener('endpoint', (event: MessageEvent) => {
-        clearTimeout(timeout);
-        // The endpoint event data contains the POST URL with sessionId
-        const url = event.data;
-        const sessionId = new URL(url, `http://127.0.0.1:${mcpPort}`).searchParams.get('sessionId') || '';
-        (window as any).__mcp_sessionId = sessionId;
-        (window as any).__mcp_endpoint = url.startsWith('http')
-          ? url
-          : `http://127.0.0.1:${mcpPort}${url}`;
-        resolve({ sessionId });
-      });
-
-      es.onerror = () => {
-        clearTimeout(timeout);
-        resolve({ sessionId: '', error: 'SSE connection failed' });
-      };
-    });
-  }, port);
-
-  return result;
+async function connectMcpAgent(_page: unknown, _port: number): Promise<{ sessionId: string; error?: string }> {
+  try {
+    agent = await createMcpClient();
+    return { sessionId: agent.sessionId };
+  } catch (err) {
+    return { sessionId: '', error: String(err) };
+  }
 }
 
-/** Call an MCP tool via the connected session. */
-async function callMcpTool(page: any, toolName: string, args: Record<string, unknown>, reqId: number = 1) {
-  return page.evaluate(async ({ toolName, args, reqId }: any) => {
-    const endpoint = (window as any).__mcp_endpoint;
-    if (!endpoint) return { error: 'No MCP endpoint — call connectMcpAgent first' };
-
-    const body = {
-      jsonrpc: '2.0',
-      id: reqId,
-      method: 'tools/call',
-      params: { name: toolName, arguments: args },
-    };
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      return { status: res.status, ok: res.ok };
-    } catch (err) {
-      return { error: String(err) };
-    }
-  }, { toolName, args, reqId });
-}
-
-/** Disconnect the MCP EventSource. */
-async function disconnectMcpAgent(page: any) {
-  await page.evaluate(() => {
-    const es = (window as any).__mcp_es;
-    if (es) es.close();
-    delete (window as any).__mcp_es;
-    delete (window as any).__mcp_sessionId;
-    delete (window as any).__mcp_endpoint;
-  });
+async function disconnectMcpAgent(_page: unknown): Promise<void> {
+  agent?.close();
+  agent = null;
 }
 
 test.describe('MCP agent flow — golden chain', () => {

@@ -20,7 +20,7 @@ import {
   injectPrompt,
 } from '../live-agent/helpers/agent-harness';
 import {
-  createTempFixture,
+  openTempFixture,
   cleanupTempFixture,
 } from '../live-agent/helpers/fixture-reset';
 
@@ -39,7 +39,7 @@ test.describe('Video: Full experience', () => {
   let termId: string | null = null;
 
   test.beforeAll(async ({ request }) => {
-    tempFixture = createTempFixture();
+    tempFixture = await openTempFixture();
     await request.post(`${API}/project/scan`, {
       data: { projectPath: tempFixture },
     });

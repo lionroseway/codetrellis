@@ -68,6 +68,8 @@ const storageState = {
 
 export default defineConfig({
   testDir: './e2e',
+  // Opens the projects the specs work in (fresh data dir: nothing is open).
+  globalSetup: './e2e/global-setup.ts',
   // Two specs regenerate COMMITTED images: marketing/ (marketing-assets/)
   // and screenshots/ (screenshots/*.png). In a normal run they silently
   // rewrote them with whatever test data was loaded. Opt in with
