@@ -20,6 +20,7 @@ import path from 'node:path';
 import { readFileWithin, resolveWithin } from './confined-fs';
 import { listZipEntries, readZipEntry, type ZipEntry } from '../lib/zip-entries';
 import type { Artefact } from './artefact-service';
+import { decodeXml, parseWorkbookSheets, sheetDimension } from '../../shared/lib/xlsx-xml';
 import type { CheckFinding, CriterionCheck, CriterionKind } from '../../shared/types';
 
 /** Past this, a file is not read for a check — the finding says so. */
@@ -75,13 +76,6 @@ const extOf = (p: string) => path.extname(p).slice(1).toLowerCase();
 
 // ── Office parts ──────────────────────────────────────────────────────
 
-function decodeXml(s: string): string {
-  return s
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&amp;/g, '&');
-}
 
 function zipText(buf: Buffer, name: string, entries: ZipEntry[]): string | null {
   const b = readZipEntry(buf, name, { entries });
@@ -96,26 +90,10 @@ export function workbookSheets(buf: Buffer): Sheet[] {
   const workbook = zipText(buf, 'xl/workbook.xml', entries);
   if (!workbook) throw new Error('no xl/workbook.xml');
   const rels = zipText(buf, 'xl/_rels/workbook.xml.rels', entries) ?? '';
-  const targets = new Map<string, string>();
-  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
-    const id = m[0].match(/\bId="([^"]+)"/)?.[1];
-    const target = m[0].match(/\bTarget="([^"]+)"/)?.[1];
-    if (id && target) targets.set(id, target.replace(/^\/?(xl\/)?/, 'xl/'));
-  }
-  const sheets: Sheet[] = [];
-  for (const m of workbook.matchAll(/<sheet\b[^>]*>/g)) {
-    const name = m[0].match(/\bname="([^"]*)"/)?.[1];
-    if (name === undefined) continue;
-    const rid = m[0].match(/\br:id="([^"]+)"/)?.[1];
-    let dimension: string | null = null;
-    const file = rid ? targets.get(rid) : undefined;
-    if (file) {
-      const xml = zipText(buf, file, entries);
-      dimension = xml?.match(/<dimension\b[^>]*\bref="([^"]+)"/)?.[1] ?? null;
-    }
-    sheets.push({ name: decodeXml(name), dimension });
-  }
-  return sheets;
+  return parseWorkbookSheets(workbook, rels).map((s) => {
+    const xml = s.part ? zipText(buf, s.part, entries) : null;
+    return { name: s.name, dimension: xml ? sheetDimension(xml) : null };
+  });
 }
 
 /** Visible text of a docx, pptx or xlsx (shared strings), for a {text} locator. */
