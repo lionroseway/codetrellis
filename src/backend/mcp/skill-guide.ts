@@ -94,6 +94,12 @@ anchors from the item's text.
 something stops you, because a blocked item the user can see beats a
 silent stall.
 
+When the user points you at something — "task 9f2c41ab isn't right, I've
+left notes" — call \`resolve_reference\` with exactly what they gave you:
+it returns the task, its plan and the notes they left. Every tool that
+takes a uid also accepts these references (\`task 9f2c41ab\`, or the bare
+8 characters), so you never need to look the full uid up first.
+
 ### 4. Start from a ticket
 "We already have this in Jira / Linear / GitHub."
 \`create_plan_from_external\` imports an epic and its children as a plan,
@@ -355,6 +361,7 @@ edges.
 |------|-------------|
 | \`add_item_comment(uid, kind, body)\` | Leave a note / blocker / progress / question |
 | \`list_item_comments(uid)\` | Read all comments chronologically |
+| \`resolve_reference(ref)\` | What "task 9f2c41ab" (or plan/page/comment …) is: plan, status, latest notes |
 | \`delete_item_comment(comment_uid)\` | Remove a comment |
 | \`update_item_progress(uid, percent, message?)\` | Progress heartbeat (updates item + emits comment) |
 | \`set_item_blocked(uid, reason)\` | Mark blocked with reason (status + comment) |

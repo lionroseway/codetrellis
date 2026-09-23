@@ -23,6 +23,7 @@ import { NextUpStrip } from './NextUpStrip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { PlanReviewPanel } from './PlanReviewPanel';
 import { ContextRail } from './ContextRail';
+import { CopyRef } from './CopyRef';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
 import { DriftIndicator } from './DriftIndicator';
@@ -235,6 +236,7 @@ function ItemChannelBand({ itemUid }: { itemUid: string }) {
  */
 function ItemHeaderProperties({ item }: { item: PlanItem }) {
   const updateItem = usePlanItemsStore((s) => s.updateItem);
+  const plan = usePlanStore((s) => s.activePlan);
   const openHistoryDrawer = usePlanItemsStore((s) => s.openHistoryDrawer);
   const addToast = useToastStore((s) => s.addToast);
   const projectRoot = useProjectStore((s) => s.root);
@@ -317,6 +319,12 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
       <span className="text-[11.5px] uppercase tracking-wider font-medium px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02]">
         {isAction ? 'Task' : 'Page'}
       </span>
+      <CopyRef
+        kind={isAction ? 'task' : 'page'}
+        uid={item.uid}
+        title={item.title}
+        within={plan ? { kind: 'plan', uid: plan.uid, title: plan.title } : null}
+      />
 
       {isAction && (
         <>
@@ -1171,6 +1179,7 @@ function CommentsBlock({
                   <span>·</span>
                   <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
                   <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
+                  <CopyRef kind="comment" uid={c.uid} within={{ kind: isAction ? 'task' : 'page', uid: itemUid }} />
                   <button
                     onClick={() => {
                       if (confirm('Delete this comment?')) removeItemComment(itemUid, c.uid);

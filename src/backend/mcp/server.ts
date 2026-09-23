@@ -72,6 +72,7 @@ import {
   connectorConfig,
 } from './connector/command';
 import fs from 'node:fs';
+import { resolveReferenceArgs, AmbiguousReferenceError } from '../services/reference-service';
 
 // ── Tool & resource modules ─────────────────────────────────────────
 
@@ -394,10 +395,16 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     // is visible in the Timeline rather than disappearing.
     try {
       assertMcpMayCall(name, grantedMcpCapabilities());
+      // References — `task 9f2c41ab` — become full uids here, once, so every
+      // tool accepts what a person pastes (see reference-service). After the
+      // capability check, so a refused tool never queries anything; before
+      // the scope check and the handler, so both see the real uid. A
+      // reference grants nothing: the tool still enforces its own checks.
+      args = resolveReferenceArgs(args);
       assertMcpProjectInScope(name, args, mcpProjectScope());
     } catch (err) {
-      if (err instanceof McpAuthorizationError) {
-        console.warn(`[MCP][Authz] REFUSED ${name} — ${err.message}`);
+      if (err instanceof McpAuthorizationError || err instanceof AmbiguousReferenceError) {
+        console.warn(`[MCP]${err instanceof McpAuthorizationError ? '[Authz] REFUSED' : ' Ambiguous reference in'} ${name} — ${err.message}`);
         broadcastToolEvent({
           tool: name,
           args: summarizeArgs(args),

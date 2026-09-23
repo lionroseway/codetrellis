@@ -151,6 +151,7 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   get_drift_report: { intent: 'read', mutating: false, phrase: () => 'Checked for drift' },
   get_next_item: { intent: 'read', mutating: false, phrase: () => 'Asked what to work on next' },
   get_item: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')}` },
+  resolve_reference: { intent: 'read', mutating: false, phrase: (a) => `Looked up ${subject(a, 'ref')}` },
   read_item_full: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')} in full` },
   get_plan: { intent: 'read', mutating: false, phrase: (a) => `Read plan ${subject(a, 'title', 'plan_uid')}` },
   list_items: { intent: 'read', mutating: false, phrase: () => 'Listed plan items' },

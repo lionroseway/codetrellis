@@ -161,6 +161,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   restore_item_version: 'write',
   list_item_versions: 'read',
   list_item_comments: 'read',
+  resolve_reference: 'read',
   add_item_comment: 'write',
   update_item_progress: 'write',
   set_item_blocked: 'write',
