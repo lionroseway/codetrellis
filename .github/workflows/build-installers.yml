@@ -40,6 +40,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
@@ -47,6 +49,9 @@ jobs:
         run: npm install --legacy-peer-deps
       - name: Build NSIS installer + portable exe
         run: npm run package:win -- --publish never
+      - name: Verify the build stamp
+        shell: bash
+        run: node scripts/verify-build-stamp.js out/make/win-unpacked/resources/app.asar
       - name: Stage installers on the CI release
         shell: bash
         env:
@@ -61,6 +66,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
@@ -71,6 +78,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Build AppImage + .deb + .rpm (x64)
         run: npm run package:linux -- AppImage deb rpm --publish never
+      - name: Verify the build stamp
+        run: node scripts/verify-build-stamp.js out/make/*-unpacked/resources/app.asar
       - name: Stage installers on the CI release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -86,6 +95,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
@@ -95,6 +106,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Build AppImage + .deb + .rpm (arm64)
         run: npm run package:linux -- AppImage deb rpm --publish never
+      - name: Verify the build stamp
+        run: node scripts/verify-build-stamp.js out/make/*-unpacked/resources/app.asar
       - name: Stage installers on the CI release
         env:
           GH_TOKEN: ${{ github.token }}

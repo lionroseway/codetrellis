@@ -70,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0   # build-info uses `git rev-list --count HEAD`
+          fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
 
       - uses: actions/setup-node@v7
         with:
@@ -99,6 +99,11 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: npm run ${{ matrix.package_script }}
+
+      - name: Verify the build stamp
+        shell: bash
+        # A fresh runner, so every app.asar under out/make is from this build.
+        run: node scripts/verify-build-stamp.js $(find out/make -name app.asar)
 
       - name: Upload build artefacts
         uses: actions/upload-artifact@v7

@@ -447,6 +447,14 @@ How the script is shaped, and why (see [`saif-desktop-app-releases`]):
   `*.deb`). An unpinned glob sweeps a stale build from a previous run
   into the release and nothing about the result looks wrong until a user
   reports the wrong version.
+- **Every packaged app is checked for the version it will report**
+  (`scripts/verify-build-stamp.js`, in `release.sh` and every CI build
+  job). The updater's "current" version is in the bundled code, not
+  `Info.plist`: it is imported from `package.json`, and commit / build
+  number are stamped by `electron.vite.config.ts`. Before that, a
+  `prepackage` hook that no real build script triggered left
+  v0.1.10–v0.1.13 reporting 0.1.9, and v0.1.15 offering itself as an
+  update. Don't reintroduce a committed, generated version file.
 - **Signing identity comes from the environment**
   (`CSC_NAME="…" npm run package:mac`), never the build config — a
   machine with no certificate still produces a build instead of failing.

@@ -3665,15 +3665,10 @@ app.get('/api/logs/path', (_req, res) => {
 // --- Build info (so Settings → About can show what's actually running) ---
 
 /**
- * In dev (running from source) the committed `BUILD_INFO` constant
- * goes stale fast — every version bump in `package.json` would
- * require re-running `scripts/generate-build-info.js`. The user
- * reported the panel showing v0.1.0 when the repo was actually at
- * v0.1.3 because the committed snapshot pre-dated the version bumps.
- *
- * Fix: recompute live from `package.json` + `git` on every request
- * when we can. In packaged Electron (no source tree), `git` and the
- * source `package.json` both fail; we fall through to BUILD_INFO.
+ * Running from source there is no bundler stamp, so `BUILD_INFO` has
+ * the version but no commit or build number (see shared/build-info.ts).
+ * Read those live from `git` when we can. In packaged Electron (no
+ * source tree) this returns null and the stamped `BUILD_INFO` answers.
  *
  * Cheap: a few git invocations per Settings → About open. No caching
  * needed at this volume.

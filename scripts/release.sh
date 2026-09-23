@@ -94,6 +94,18 @@ if [[ "$SKIP_BUILD" -eq 0 ]]; then
   npm run package:mac:signed
 fi
 
+# --- Prove the macOS apps know what they are --------------------------------
+#
+# The version the app reports to the updater lives in the bundled code, not in
+# Info.plist, and nothing else checks it: v0.1.10–v0.1.13 shipped reporting
+# 0.1.9 and v0.1.15 reported 0.1.14, past typecheck and every test. Also runs
+# with --skip-build, so re-publishing artifacts built from another commit
+# fails here instead of claiming a commit they were not built from.
+log "Verifying the build stamp in the macOS apps…"
+node "${REPO_ROOT}/scripts/verify-build-stamp.js" \
+  "${OUT_DIR}/mac-arm64/CodeTrellis.app/Contents/Resources/app.asar" \
+  "${OUT_DIR}/mac/CodeTrellis.app/Contents/Resources/app.asar"
+
 # --- Sign + notarize + staple the DMGs themselves --------------------------
 #
 # electron-builder notarizes the .app but leaves the disk image unsigned, so
