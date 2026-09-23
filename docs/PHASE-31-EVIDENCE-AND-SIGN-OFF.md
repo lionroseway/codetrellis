@@ -1,7 +1,10 @@
 # Phase 31 — Evidence and sign-off
 
 > Drafted: 2026-09-23
-> Status: **designed.** Nothing here is built.
+> Status: **designed.** 31.A (the connector) is in #66; nothing else is built.
+> Revised 2026-09-23: §8 (loops) and §9 (references) added after the
+> analysts' follow-up — checking has to be something they can run again,
+> and "task 9f2c41ab isn't right" has to be something they can say.
 > Written against `main` at `a9d09f6` (#64, the review loop, merged).
 > Depends on: [Phase 24](PHASE-24-SDLC-INTAKE.md) §C, which this
 > **supersedes** — criteria stop being markdown; [Phase 25](PHASE-25-REVIEW-AND-PLAYBACK.md)
@@ -81,6 +84,14 @@ nothing; "`Q3-summary.docx` says EMEA rose 12%, citing
 `Q3-sales.xlsx` Regional!C14, hash `9f2c…` at the time you approved it"
 proves something.
 
+### Checking is something you run, not a moment
+
+A sign-off is true when it is given. The workbook it rests on changes on
+Tuesday; Claude's second attempt lands on Wednesday; the weekly report is
+due again on Monday. Every check here is therefore a **loop** — run by the
+agent before it claims, by the person when they verify, and by the app
+whenever the ground moves — and every run leaves a record (§8).
+
 ### Files stay where they are
 
 We record, hash, display and watch artefacts. We do not store, version,
@@ -102,7 +113,7 @@ features that drift.
 | Attachments (`attachments`, `ContextRail` `AttachmentRow`) | Screenshots, links, code blocks | **Materials** and **outputs** | extended with a role and a hash (§4.2) |
 | `fileSpecs` | "This item changes these files" | "This task produces `Q3-summary.docx`" | reused — a `file add` spec is already "this file will exist" |
 | `plan-changes-service` satisfaction | Change landed | Output exists / changed | extended to non-code files (§4.4) |
-| Verdicts: `aligned · drifted · outstanding` (`line-verdict.ts`), `landed · partial · untouched` (`plan-review-service`) | Did the code do what the plan said | Did the task produce what the brief asked | **same words internally**; the Brief maps labels (§8.3) |
+| Verdicts: `aligned · drifted · outstanding` (`line-verdict.ts`), `landed · partial · untouched` (`plan-review-service`) | Did the code do what the plan said | Did the task produce what the brief asked | **same words internally**; the Brief maps labels (§10.3) |
 | `deviation-service` `unexpected_file` | Changed, and no item claimed it | "A workbook changed that no task mentions" | works once the watcher sees documents (§4.4) |
 | Freeze (`freeze-service`, `FreezeBar`) | Code freeze | Period-end close | reused as is |
 | Checkpoints / baselines (`snapshot-compare-service`) | Compare two points in the code | The evidence set as it was at sign-off | sign-off records the hashes directly (§4.3) |
@@ -110,22 +121,22 @@ features that drift.
 | `requiresApproval` + `approve_gate` (17.K) | Gate before the next sibling | Needs your sign-off | **replaced** by criterion policies (§4.3) |
 | Comment types `approval` / `concern` | Review comments | **Approve** / **Send back** notes | reused as the human-readable half of a sign-off |
 | Channel `need-decision` / `steer` | Agent asks / human steers | "Waiting for you" / "Sent back" | reused; pushes to the phone already |
-| Budget sweep (`budget-service` notify-once) | Ceiling warning at 80% | — | its *pattern* is how pending and stale sign-offs notify (§10) |
-| Templates + `publish_plan_as_template` | Plan templates | **Playbooks** ("how we do a quarterly report") | reused; one new built-in (§12) |
+| Budget sweep (`budget-service` notify-once) | Ceiling warning at 80% | — | its *pattern* is how pending and stale sign-offs notify (§12) |
+| Templates + `publish_plan_as_template` | Plan templates | **Playbooks** ("how we do a quarterly report") | reused; one new built-in (§14) |
 | Intake (`create_plan_from_external`, `acceptance[]`) | Ticket → plan | Brief from a pasted list | criteria land as rows, not markdown (§4.1) |
-| `get_pr_draft` / `renderReviewMarkdown` | PR description | **Sign-off pack** | one renderer, two outputs (§11) |
-| `tool-phrasing.ts`, `AgentTurnList` | Timeline | "What Claude is doing" | reused with a second phrase table (§8.5) |
+| `get_pr_draft` / `renderReviewMarkdown` | PR description | **Sign-off pack** | one renderer, two outputs (§13) |
+| `tool-phrasing.ts`, `AgentTurnList` | Timeline | "What Claude is doing" | reused with a second phrase table (§10.5) |
 | `open-file-at.ts` (#64) | Code → item → back to the line | Report → cited source → back | generalised to artefacts with a locator (§7.5) |
-| `demo.ts` `shot(label, expectFile, expectVerdict)` | Screenshot must show what it claims | — | the model for evidence checks, and for the Brief demo journey (§14) |
+| `demo.ts` `shot(label, expectFile, expectVerdict)` | Screenshot must show what it claims | — | the model for evidence checks, and for the Brief demo journey (§16) |
 | `ui_ready` `openFile` (`data-code-file`) | "Which file is the window showing" | "Which artefact is the viewer showing" | viewer sets its own attribute (§7) |
 | Pantry (`pantry-resolution-service`, `PantryPlaceholder`) | Team-only attachment not on this machine | Material that lives on someone else's drive | reused for artefacts that do not resolve locally |
-| `ProjectConfig.repoRole` (`planning · code · mixed`) | What kind of repo this is | — | a sibling setting picks the default surface (§8.1) |
+| `ProjectConfig.repoRole` (`planning · code · mixed`) | What kind of repo this is | — | a sibling setting picks the default surface (§10.1) |
 
 Two rows are worth pulling out because they cross in *both* directions:
 
 - **Analyst → developer.** A Brief's criteria are exactly the acceptance
   criteria a developer plan needs when a report becomes a feature request.
-  Copied with lineage (§9), the analyst who wrote them can sign off the
+  Copied with lineage (§11), the analyst who wrote them can sign off the
   delivered feature from a screenshot or recording in their own Brief —
   without reading code and without a meeting.
 - **Developer → analyst.** Drift, freeze, templates, intake and budgets
@@ -150,7 +161,7 @@ New table `item_criteria`:
 | `policy` | `agent` · `propose` · `human` — who may mark it met (§4.3) |
 | `state` | `open` · `submitted` · `met` · `sent_back` · `stale` — **derived**, cached for listing |
 | `author`, `author_type`, `created_at` | who wrote the criterion |
-| `origin_uid` | the criterion this was copied from, across plans (§9) |
+| `origin_uid` | the criterion this was copied from, across plans (§11) |
 
 Kinds, and what each checks mechanically:
 
@@ -320,8 +331,12 @@ entry — the coverage test refuses the server otherwise.
 | `list_materials(plan_uid)` | `read` | Materials across the plan, for the agent that is orienting. |
 | `read_material(attachment_uid, locator?)` | `files` | Returns the material's content as text the agent can use: CSV per sheet for xlsx, markdown for docx, text per page for PDF, the image itself for images. Logged against the item. (§5.1) |
 | `record_artefact(item_uid, path, role, note?)` | `write` | Records a file inside the item's project as a material, output or evidence; hashes it. Refuses links, paths outside the project, and types off the allowlist. |
-| `submit_criterion(criterion_uid, evidence[], note)` | `write` | Offers evidence — each entry an artefact uid plus an optional locator. Result depends on policy (§4.3). |
+| `submit_criterion(criterion_uid, evidence[], note)` | `write` | Offers evidence — each entry an artefact uid plus an optional locator. Refused if a mechanical check fails (§8.1); otherwise the result depends on policy (§4.3). |
 | `add_criterion(item_uid, text, kind)` | `write` | Starts at `propose`; §4.3. |
+| `check_criterion(criterion_uid)` | `read` | Runs the criterion's mechanical checks and says what failed (§8.1). |
+| `get_worklist(plan_uid)` | `read` | Everything the agent owes: sent back (note, anchor, reference), stale, unmet (§8.2). |
+| `run_checks(plan_uid)` | `read` | A check run over the whole plan; recorded (§8.3). |
+| `resolve_reference(ref)` | `read` | "What is `task 9f2c41ab`?" — kind, plan, state, latest notes (§9). |
 | `save_screenshot_as_evidence(item_uid, caption, expect?)` | `capture` | Persists what `screenshot` today returns and discards, through `writeFileWithin`, as a `role: evidence` attachment. With `expect`, it is refused unless `ui_ready` reports the window showing what the caption claims — `shot()`'s check, made a product feature. `capture` stays off by default. |
 
 And two existing tools gain targets:
@@ -354,7 +369,7 @@ nothing in the backend acts on it.
 
 Without this section, nothing above reaches an analyst — and it turned
 out to be broken for developers too. **It ships first, on its own, ahead
-of the rest of the phase** (§14, 31.A).
+of the rest of the phase** (§16, 31.A).
 
 What is true today:
 
@@ -555,14 +570,167 @@ sibling, `open-artefact-at.ts`, with the same shape:
 - Clicking a citation in an output opens the cited material beside it,
   scrolled and highlighted to the locator, and remembers where you were.
   The way back names where it goes.
-- The same function serves the phone (§10) and `navigate_to`.
+- The same function serves the phone (§12) and `navigate_to`.
 
 That turns "grounded" into one click: **the claim and the cell it came
 from, side by side.**
 
-## 8. The Brief
+## 8. Loops: checking is something you run, not a moment
 
-### 8.1 Where it plugs in
+The analysts' follow-up sharpened the ask. Not "show me once that Claude
+did it", but a check they can **run again** — after Claude's second
+attempt, after the source workbook is refreshed, every Monday for the
+weekly report — and trust each time. Marketing asked for the same shape
+unprompted: every asset in a campaign checked against the brand guide, and
+checked again the day the guide changes.
+
+Three loops, all over the records in §4, and nothing else:
+
+```
+ agent:   work ─► check_criterion ─► fix ─┐        (8.1: before it claims)
+            ▲                             │
+            └─────────── until pass ◄─────┘
+                          │ submit_criterion
+                          ▼
+ person:  viewer ─► approve ──────────────────────► met
+            │                                        │
+            └─► send back, anchored ─► get_worklist ─┘ (8.2: agent resumes)
+                                                     │
+ app:     material changed / Run checks / schedule ─► check run ─► stale ─► worklist
+                                                                  (8.3)
+```
+
+### 8.1 The agent's loop: check before you claim
+
+`check_criterion(criterion)` (`read`) runs every **mechanical** check a
+criterion has, and says what failed in words:
+
+- an `artefact` output exists inside the project, is a type on the
+  allowlist, and changed after the item started;
+- a `citation` resolves: the cited material is one of the plan's
+  materials, and the locator exists — the sheet and range are in the
+  workbook, the page is within the PDF, the timestamp within the video;
+- the cited material was read through `read_material` in this item's
+  window (reported, not required — see §5.1);
+- a `code` criterion's changes are satisfied (`plan-changes-service`);
+- a `test` report is newer than the item's last target change, and its
+  JUnit counts are green where it has them.
+
+`submit_criterion` runs the same checks and **refuses** evidence that
+fails one, returning the list. The guide and `get_brief`'s own text tell
+the agent to loop — work, check, fix, until clean, then submit. What
+reaches a person is therefore already mechanically sound, and their time
+goes on the one thing only they can do: judgement.
+
+### 8.2 The person's loop: verify, send back, re-verify
+
+The viewer (§7) is where this happens, which is why it is the centre of
+the phase rather than a convenience.
+
+- **Verify** — each criterion waiting for you opens its evidence at the
+  cited place, beside the source it cites.
+- **Send back from the exact place** — select the cell, page, paragraph or
+  moment that is wrong, and write the note there. The note becomes a
+  `sent_back` sign-off *anchored* to that artefact and locator, and a
+  comment on the task. "The EMEA figure is wrong" arrives as "the EMEA
+  figure — `Q3-summary.docx`, paragraph 4, citing `Q3-sales.xlsx`
+  Regional!C14 — is wrong", which is a note an agent can act on without a
+  conversation.
+- **Re-verify what changed, not everything** — when the agent resubmits,
+  the criterion comes back to "waiting for you" showing what moved: the
+  evidence's hash before and after, the region of the document that
+  changed, and the agent's reply to your note.
+
+`get_worklist(plan)` (`read`) is the agent's side: everything it owes, in
+order — criteria sent back (with the note, the anchor and a reference,
+§9), criteria gone stale, criteria not yet met. One call is the loop's
+input. This is how "go back to the agent and say this isn't right" works
+*without* copying anything: the note is already in the worklist. §9
+covers the other case, where the person is in a chat with the agent and
+wants to point at something.
+
+### 8.3 The check run: the whole brief, on demand or when the ground moves
+
+**Run checks** on a brief or plan (a button; `run_checks` over MCP,
+`read`; a phone action) re-hashes every piece of evidence and every
+material, re-runs every criterion's mechanical checks, and records the
+result as a **check run** — append-only table `check_runs` (`uid`,
+`plan_uid`, `trigger`, `started_at`, `by`, per-criterion outcome and
+reason). The result reads as a list and, more usefully, as a difference
+from the last run: *"2 went stale since Monday — `Q3-sales.xlsx`
+changed"*.
+
+Triggers:
+
+- **manual** — the button, the phone, or an agent;
+- **material changed** — the artefact watcher (§4.4) runs checks for the
+  affected criteria only;
+- **scheduled** — a playbook (§14) may carry a cadence ("every Monday
+  09:00"). Local and best-effort: it runs while the app is running, on the
+  sweep pattern the budget service already uses. No cloud scheduler, no
+  service holding a credential — the Phase 24 rule.
+
+A check run **never approves anything**. It can move `met` to `stale`
+and report failures; only a person, or a policy the person set, moves
+anything to `met`.
+
+**Marketing, read through the same model.** A campaign brief: twelve
+assets — images, a landing page exported as HTML, a copy deck. Criteria:
+"uses the brand palette" (`manual`), "every claim cites an approved
+source" (`citation`), "matches brand guide v3" (`citation` to the guide).
+Guide v4 arrives: the check run marks every criterion citing the guide
+`stale`, the worklist hands the agent those assets with the note "guide
+updated", and the loop runs again.
+
+**Developers, read through the same model.** A check run is `review_plan`
+plus criteria: the same button in the plan workspace, and a `code`
+criterion signed off last week goes `stale` when its target files change.
+
+### 8.4 What keeps the loops cheap enough to repeat
+
+- **No model calls inside CodeTrellis.** Checks are mechanical, local and
+  fast; the reasoning is the agent's, on the agent's account. A loop that
+  cost money per run would stop being run.
+- **Every run is kept**, so a brief can say "passed its last three runs"
+  — the closest thing to trust this data can honestly support.
+
+## 9. References you can paste
+
+Everything a person might point an agent at has a short reference and a
+copy button: plan, task, guide page, criterion, comment, artefact, check
+run. It works identically in the developer workspace and the Brief.
+
+- **Form.** `<kind> <first 8 hex of the uid>` — `task 9f2c41ab`. The copy
+  button puts a sentence-ready line on the clipboard:
+  `task 9f2c41ab "Q3 revenue summary" (plan "Board pack")`, or
+  `comment 1a2b3c4d on task 9f2c41ab`. A person types "task 9f2c41ab isn't
+  right — I've left notes" into any agent chat and it is enough.
+- **Agents accept them everywhere.** Every MCP tool that takes a uid
+  accepts a full uid, an 8+ character prefix, or a `kind prefix` pair. The
+  resolution happens **once, at the single interception in
+  `mcp/server.ts`** — the same place authorisation happens — never per
+  tool, so a tool added later gets it for free. An ambiguous prefix fails
+  with the candidates named; an unknown one reaches the tool unchanged and
+  gets its ordinary "not found".
+- **`resolve_reference(ref)`** (`read`) answers "what is this?": kind, full
+  uid, title, plan, state, and the latest human notes on it — the first
+  call an agent makes when it is handed "task 9f2c41ab isn't right".
+- **In the interface**, a quiet `#9f2c41ab` chip — Phase 29's register:
+  `text-[10px]`, `text-foreground-subtle` — in the task header, the plan
+  header, on each comment, criterion and artefact row. Click copies. On
+  the phone, long-press copies.
+- **A reference is not a capability.** Resolving one grants nothing: the
+  tool it is passed to still checks its capability and project scope, and
+  a prefix only matches rows the caller could already name by full uid.
+
+Eight hex characters is four billion values; inside one data directory a
+collision is rare enough that the resolver's "ambiguous — which of these?"
+is the right way to meet it, rather than a longer reference everyone has
+to read aloud.
+
+## 10. The Brief
+
+### 10.1 Where it plugs in
 
 `WorkspaceMode` becomes `'graph' | 'plan' | 'docs' | 'code' | 'brief'`.
 It follows the code mode's pattern exactly, because code mode already
@@ -581,7 +749,7 @@ The plug points:
 | `ProjectConfig` | `defaultSurface: 'graph' \| 'code' \| 'brief'` — opening a folder of documents lands in the Brief. `repoRole` keeps its meaning. |
 | `reachable.test.ts` | new components are imported on a chain from `App.tsx`, or the test fails — which is the point of it |
 
-### 8.2 The page
+### 10.2 The page
 
 ```
 ┌ Tasks ───────────┬ Q3 regional revenue summary ─────────────┬ What good looks like ────┐
@@ -613,7 +781,7 @@ material and output rows, `CommentsBlock` for send-back notes,
 Left out on purpose: targets, routing, drift badges, the readiness ring,
 the review comparand picker — all correct, all about code.
 
-### 8.3 Words
+### 10.3 Words
 
 There is no string table in the frontend today; statuses print raw and
 drift/freeze wording is inline in about two dozen places. This phase does
@@ -639,13 +807,13 @@ Internal names do not change. #64 chose `aligned · drifted · outstanding`
 precisely because they are the same question at different scales, and a
 second vocabulary in the data would break that.
 
-### 8.4 States are glyphs and words, never colour alone
+### 10.4 States are glyphs and words, never colour alone
 
 The rule `line-verdict.ts` set for the code reader: ○ not yet, ◐ waiting
 for you, ✓ met, ↩ sent back, ⚠ changed since approved. Each carries its
 label in text; colour is the third carrier, not the first.
 
-### 8.5 "What Claude is doing"
+### 10.5 "What Claude is doing"
 
 `AgentTurnList` and `useAgentTurns` today render only inside `PlanPanel`,
 under the graph — so not in plan, code or brief mode. The Brief renders
@@ -655,7 +823,7 @@ Regional" and `submit_criterion` reads "Offered evidence for …". Both
 tables live in `tool-phrasing.ts`, so a tool added to one without the
 other is visible in one diff.
 
-### 8.6 A folder that is not a codebase
+### 10.6 A folder that is not a codebase
 
 - The scanner change in §4.4 is what makes documents appear at all.
 - The welcome state in brief mode speaks about briefs, not architecture;
@@ -668,7 +836,7 @@ other is visible in one diff.
   Desktop, starting a brief from the playbook, approving from the phone.
   `guide-content.test.ts` checks every tool name it mentions exists.
 
-### 8.7 Not in this phase: a light theme
+### 10.7 Not in this phase: a light theme
 
 Business users will ask for one. The app is dark-only by construction —
 tokens in `globals.css` with no light variant, around 90 hard-coded hex
@@ -676,7 +844,7 @@ colours and several hundred `white/[…]` classes. Doing it for the Brief
 alone would fork the design register Phase 29 §3 insists on matching.
 It is its own phase.
 
-## 9. What each side gains
+## 11. What each side gains
 
 **Developers get:**
 
@@ -689,7 +857,7 @@ It is its own phase.
 - Sign-offs that go stale when the code under them changes after
   approval — the `code` kind hashes the item's target files into the
   sign-off like any other evidence.
-- A criteria table in the PR draft (§11).
+- A criteria table in the PR draft (§13).
 
 **Analysts get** everything in the table in §3 that was code-only for no
 reason: drift, freeze, templates as playbooks, intake, budgets.
@@ -704,7 +872,7 @@ reason: drift, freeze, templates as playbooks, intake, budgets.
 - Intake (Phase 24) and this copy are the same path: an agent with a
   Jira MCP and a BA with a Brief both produce criteria rows with lineage.
 
-## 10. The phone
+## 12. The phone
 
 The phone today can read a review (`plan-review.tsx`) and answer an input
 request, and cannot approve anything: `plan.item.update` accepts status,
@@ -733,7 +901,7 @@ exists.
   release to ship with desktop. These RPCs should ride that release rather
   than force a second one.
 
-## 11. The sign-off pack
+## 13. The sign-off pack
 
 The PR draft and the sign-off pack are one renderer with two outputs,
 beside `renderReviewMarkdown` in `plan-review-service`:
@@ -753,7 +921,7 @@ beside `renderReviewMarkdown` in `plan-review-service`:
   not in this phase — the release manifest key is for releases and must
   not be reused, and a per-install key is its own design.
 
-## 12. Playbooks
+## 14. Playbooks
 
 "How we do a quarterly report" is a published template: the Brief is
 built from the Object items (the guide) and Action items (the steps),
@@ -769,7 +937,7 @@ chooser is pointed at `/api/plan-templates` in the same change —
 otherwise the new playbook is visible in one picker and not the other,
 which is the Phase 20–28 failure mode exactly.
 
-## 13. Boundaries
+## 15. Boundaries
 
 - **No MCP tool records a human decision.** Structural, tested (§4.3).
 - **Artefacts are addressed by uid.** A path is never taken from a request,
@@ -792,7 +960,7 @@ which is the Phase 20–28 failure mode exactly.
 - **Anything this phase turns up that is exploitable today goes to the
   Phase 19 register in `docs/private/`**, not into this document.
 
-## 14. Build order
+## 16. Build order
 
 Each slice ships on its own and leaves the product consistent.
 
@@ -801,6 +969,11 @@ stdio connector, the endpoint file, `clientInfo` identity, and the
 Settings / guide / `getMcpSetup` copy surfaces leading with it. It fixes
 reconnection for every client that uses CodeTrellis today, needs nothing
 else from this phase, and is released on its own.
+
+**31.B — references, shipped ahead of the phase.** §9: the copy chip in
+both workspaces, reference resolution at the MCP interception, and
+`resolve_reference`. Needs nothing else from this phase and helps anyone
+steering an agent today.
 
 **31.0 — things found on the way, fixed first.** Small, and each one would
 otherwise be built on:
@@ -812,7 +985,7 @@ otherwise be built on:
   accepts.
 - Deleting an attachment tells the user "the file on disk will also be
   deleted"; `deleteAttachment` removes only the row.
-- `docs/PLAN-EXPORT.md` §9 says comments are not exported; `serializeItem`
+- `docs/PLAN-EXPORT.md` §11 says comments are not exported; `serializeItem`
   exports them.
 - **Confirm on a packaged build** whether `ContextRail` image previews
   load (§7.1). The answer decides whether 31.3 is a feature or a fix.
@@ -828,9 +1001,15 @@ users who already have plans.
 `lib/sha256-file.ts`, `openReadStreamWithin`, the scanner listing
 documents, the artefact watcher, `stale`.
 
+**31.2a — the loops' engine.** §8: `check_criterion` and the refusal in
+`submit_criterion`, `get_worklist`, `run_checks` and the `check_runs`
+table, the material-changed trigger. A "Run checks" button in the plan
+workspace; the Brief's comes with 31.5.
+
 **31.3 — the viewer.** Transport first (`ct-artefact:` and the REST twin),
 then images, video, PDF, CSV/XLSX, Markdown; then DOCX; then the PPTX
-preview; the HTML view last because it is the only new process.
+preview; the HTML view last because it is the only new process. Send back
+from the exact place (§8.2) lands with the first format that has a locator.
 
 **31.4 — Claude Desktop, the rest.** "Add to Claude Desktop" and the
 Desktop-specific guide section. The connector itself ships in 31.A.
@@ -853,7 +1032,7 @@ from the desktop, edit the source, watch it go stale. Its `shot()` gains
 an `expectCriterion` check read from `ui_ready`, so the scene cannot
 claim a state the window is not showing.
 
-## 15. Dependencies
+## 17. Dependencies
 
 New: `pdfjs-dist`, SheetJS (CDN tarball, pinned), `mammoth`,
 `dompurify`, and a small zip reader (`fflate`) for PPTX thumbnails.
@@ -874,7 +1053,7 @@ closing or a coordinated bump, and should not block this phase. #58 is an
 Electron patch release; the rule in CLAUDE.md stands — a packaged build
 is the only proof.
 
-## 16. Tests
+## 18. Tests
 
 1. The migration turns every `## Acceptance criteria` checklist into rows,
    verbatim, and running it twice changes nothing.
@@ -904,9 +1083,20 @@ is the only proof.
 12. The PR draft includes the criteria table and warns on unmet and stale
     criteria; the sign-off pack lists self-approvals separately.
 13. `reachable.test.ts` passes with every Brief component wired in.
+13a. `submit_criterion` refuses evidence whose citation names a sheet the
+     workbook does not have; `check_criterion` says so in words.
+13b. A send-back note anchored to a cell comes back in `get_worklist` with
+     the artefact, the locator and a reference.
+13c. Changing a material after sign-off makes the next check run report
+     the criterion `stale`, with the file named; a check run never moves
+     anything to `met`.
+13d. Every MCP tool that takes a uid accepts `task 9f2c41ab`, an 8-char
+     prefix and a full uid alike; an ambiguous prefix names its
+     candidates; resolving a reference to a project outside
+     `mcp.projectScope` is still refused by the tool.
 14. The `brief` demo scene runs clean against a packaged build.
 
-## 17. Done when
+## 19. Done when
 
 - **An analyst with Claude Desktop, a folder of spreadsheets and PDFs, and
   no git** can connect once and stay connected across restarts; start a
@@ -918,12 +1108,19 @@ is the only proof.
 - **A developer** has the same criteria on every plan, a gate no agent can
   clear, evidence that is kept and checked, and a PR draft that carries
   all of it.
+- **The loop runs end to end, twice.** Claude submits, the analyst sends
+  one criterion back from the cell that is wrong, Claude picks it up from
+  its worklist with no copy-paste, resubmits, the analyst approves; the
+  source workbook is refreshed; the next check run marks it stale; the
+  loop runs again.
+- Anyone can copy a reference to a task, comment or criterion from either
+  workspace and paste it to any agent, and the agent can act on it.
 - The viewer is verified on a **packaged** build — it is the one part of
   this phase no CI job can prove.
 - No surface this phase adds to the developer workspace is louder than
   `StatusBar`.
 
-## 18. Decisions to confirm before 31.1
+## 20. Decisions to confirm before 31.1
 
 These change the build, and are the product owner's to make:
 
