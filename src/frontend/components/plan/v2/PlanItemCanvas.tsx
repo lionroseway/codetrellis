@@ -22,6 +22,7 @@ import { PlanVersionHistory } from './PlanVersionHistory';
 import { NextUpStrip } from './NextUpStrip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { PlanReviewPanel } from './PlanReviewPanel';
+import { PlanCheckRunPanel } from './PlanCheckRunPanel';
 import { ContextRail } from './ContextRail';
 import { CopyRef } from './CopyRef';
 import { TargetsStrip } from './TargetsStrip';
@@ -631,6 +632,11 @@ function PlanHomePage() {
 
               Order is the cheapest signal of what a page is for. */}
           <PlanReviewPanel planUid={plan.uid} />
+
+          {/* Phase 31 §8.3 — the loop a person runs: re-check every
+              criterion, and see what moved since last time. Beside the
+              review because a code criterion's check IS the review. */}
+          <PlanCheckRunPanel planUid={plan.uid} />
 
           {/* Plan diff — what's planned vs what's landed. Shown
               when there's something to diff (any Action with intent). */}

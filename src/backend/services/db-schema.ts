@@ -393,6 +393,25 @@ export const SCHEMA_PLAN_ITEMS = `
     migrated_at INTEGER NOT NULL
   );
 
+  -- Phase 31 §8.3 — a check run: every criterion's mechanical checks
+  -- re-run and recorded. Append-only; a run never approves anything, so a
+  -- plan can say "passed its last three runs" and mean it.
+  CREATE TABLE IF NOT EXISTS check_runs (
+    uid          TEXT PRIMARY KEY,
+    plan_uid     TEXT NOT NULL,
+    trigger      TEXT NOT NULL,
+    by_actor     TEXT NOT NULL,
+    by_type      TEXT NOT NULL,
+    -- JSON array of item uids when the run covered only some items
+    -- (a material changed); NULL for the whole plan.
+    scope        TEXT,
+    outcomes     TEXT NOT NULL,
+    since_last   TEXT NOT NULL DEFAULT '[]',
+    started_at   INTEGER NOT NULL,
+    finished_at  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_check_runs_plan ON check_runs(plan_uid, started_at);
+
   -- Phase 23 — time and cost. One row per closed TURN (see
   -- budget-service), not per tool call: an agent's wall-clock is mostly
   -- model thinking between calls, so summing tool durations would

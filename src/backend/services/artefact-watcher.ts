@@ -9,7 +9,8 @@
  *
  * The watcher is for promptness, not correctness. Files change while the
  * app is closed, so every read re-checks (`refreshArtefactHashes`); this
- * only means nobody has to open the item to find out.
+ * only means nobody has to open the item to find out. Each change also
+ * records a check run over the affected item (Phase 31 §8.3).
  */
 
 import * as _lazy____server from '../server';
@@ -23,6 +24,7 @@ import {
   type Artefact,
 } from './artefact-service';
 import { listCriteria } from './criteria-service';
+import { runCheckRun } from './criterion-loop-service';
 import { postChannelEvent } from './channel-event-service';
 import { getDb } from './database';
 import { resolveTrustedProjectRoot } from './trusted-roots';
@@ -59,10 +61,23 @@ async function onArtefactChanged(w: ProjectWatch, absPath: string): Promise<void
       _lazy____server.broadcast('plan-item-criteria-changed', { planUid: planUidOf(itemUid), itemUid });
     } catch { /* the server may not be up in a unit test */ }
 
-    // Once per criterion, on the transition from met to stale — a second
-    // edit to an already-stale file says nothing new.
     const planUid = planUidOf(itemUid);
     if (!planUid) continue;
+
+    // §8.3 — the material-changed trigger: a check run over the affected
+    // item only, recorded like any other, so the plan's run history shows
+    // when the ground moved and what it did to the criteria.
+    try {
+      const run = await runCheckRun({
+        planUid, trigger: 'material_changed', by: 'codetrellis', byType: 'system', itemUids: [itemUid],
+      });
+      _lazy____server.broadcast('plan-check-run', { planUid, runUid: run.uid });
+    } catch (err) {
+      console.warn('[Artefacts] Check run after a change failed:', err);
+    }
+
+    // Once per criterion, on the transition from met to stale — a second
+    // edit to an already-stale file says nothing new.
     for (const c of nowStale) {
       try {
         postChannelEvent({

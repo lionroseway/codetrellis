@@ -71,3 +71,73 @@ export interface ItemCriterion {
   /** The most recent decision, if any. */
   latestSignoff: CriterionSignoff | null;
 }
+
+// ── Phase 31 §8 — the loops ────────────────────────────────────────────
+
+/**
+ * One mechanical check. `unverified` means we could not tell — a format we
+ * cannot read yet, a file past the size cap — and never refuses anything:
+ * only `fail` does.
+ */
+export interface CheckFinding {
+  status: 'pass' | 'fail' | 'unverified';
+  /** Said in words, naming the file and the place (§8.1). */
+  message: string;
+  /** The attachment the finding is about, when there is one. */
+  attachmentUid?: string | null;
+}
+
+export interface CriterionCheck {
+  criterionUid: string;
+  itemUid: string;
+  /** False when any finding failed. A criterion with nothing mechanical to check is ok. */
+  ok: boolean;
+  findings: CheckFinding[];
+}
+
+export type CheckRunTrigger = 'manual' | 'material_changed' | 'scheduled';
+
+/** One criterion's line in a check run (§8.3). */
+export interface CheckRunOutcome {
+  criterionUid: string;
+  itemUid: string;
+  text: string;
+  state: CriterionState;
+  ok: boolean;
+  /** The failed findings' messages. */
+  failures: string[];
+  /** For a stale criterion: the evidence files that changed since approval. */
+  changedFiles: string[];
+}
+
+export interface CheckRun {
+  uid: string;
+  planUid: string;
+  trigger: CheckRunTrigger;
+  by: string;
+  byType: string;
+  startedAt: number;
+  finishedAt: number;
+  outcomes: CheckRunOutcome[];
+  /** Against the plan's previous run, in words: "2 went stale — Q3-sales.xlsx changed". */
+  sinceLast: string[];
+}
+
+/** What an agent owes on a plan, in the order it should work (§8.2). */
+export interface WorklistEntry {
+  reason: 'sent_back' | 'stale' | 'failing' | 'open';
+  criterionUid: string;
+  itemUid: string;
+  itemTitle: string;
+  /** A reference the agent can quote back, e.g. `task 9f2c41ab`. */
+  itemRef: string;
+  text: string;
+  kind: CriterionKind;
+  policy: CriterionPolicy;
+  /** The person's note, for sent_back. */
+  note: string | null;
+  /** Where the note points: the evidence it was taken on, with its locator. */
+  anchors: Array<{ attachmentUid: string | null; path: string | null; locator: unknown }>;
+  /** For stale: which files changed. For failing: what the check said. */
+  details: string[];
+}

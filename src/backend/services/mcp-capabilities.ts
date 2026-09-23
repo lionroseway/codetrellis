@@ -161,6 +161,11 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   record_artefact: 'write',
   add_criterion: 'write',
   submit_criterion: 'write',
+  // Phase 31 §8 — the loops. Reads: they report, and a check run is a
+  // record of what was found, never a decision.
+  check_criterion: 'read',
+  get_worklist: 'read',
+  run_checks: 'read',
   list_items: 'read',
   search_items: 'read',
   get_plan_timeline: 'read',

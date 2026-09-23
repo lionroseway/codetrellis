@@ -92,9 +92,14 @@ anchors from the item's text.
 \`get_next_item\` → \`claim_item\` → \`update_item_progress\` → mark done.
 Before you say an item is done, \`list_criteria\` shows what it is judged
 on; \`record_artefact\` records the file you produced, and
-\`submit_criterion\` offers it as evidence for each. You cannot approve
-your own work — a person signs off, in CodeTrellis or on their phone, and
-may send it back with a note (it shows as \`sent_back_note\`). \`add_criterion\`
+\`submit_criterion\` offers it as evidence for each. Loop first: work,
+\`check_criterion\` with the evidence you mean to submit, fix what it
+names, and repeat until it says ok — a submission that fails a check is
+refused. You cannot approve your own work — a person signs off, in
+CodeTrellis or on their phone, and may send it back with a note (it shows
+as \`sent_back_note\`). When you come back to a plan, \`get_worklist\` is
+everything you owe, sent-back notes first; \`run_checks\` re-checks the
+whole plan and says what went stale. \`add_criterion\`
 records one the user asks for, in their words. \`set_item_blocked\` when
 something stops you, because a blocked item the user can see beats a
 silent stall.
@@ -355,7 +360,10 @@ edges.
 | \`record_artefact(item_uid, path, role)\` | Record a file the item read (material), produced (output) or captured (evidence); hashed so approvals notice changes |
 | \`list_criteria(item_uid)\` | The item's acceptance criteria: kind, policy, state, any send-back note |
 | \`add_criterion(item_uid, text, kind?)\` | Add a criterion, verbatim; starts at \`propose\` |
-| \`submit_criterion(criterion_uid, evidence?, note?)\` | Offer evidence; a person decides unless policy is \`agent\` |
+| \`check_criterion(criterion_uid, evidence?)\` | Run the criterion's mechanical checks on what you would submit; says what fails |
+| \`submit_criterion(criterion_uid, evidence?, note?)\` | Offer evidence; refused if a check fails; a person decides unless policy is \`agent\` |
+| \`get_worklist(plan_uid)\` | Everything you owe: sent back (with note and place), stale, failing, not started |
+| \`run_checks(plan_uid)\` | Re-check the whole plan and record it; says what moved since the last run |
 | \`approve_gate(uid)\` | Retired — refuses. Sign-off is a person's, not a tool's |
 | \`list_items(plan_uid, ...)\` | Query items by parent / kind / status / title |
 | \`search_items(plan_uid, query)\` | Full-text search across titles and bodies |
