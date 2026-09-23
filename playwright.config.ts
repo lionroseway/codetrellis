@@ -74,11 +74,15 @@ export default defineConfig({
   // E2E_MARKETING=1.
   testIgnore: process.env.E2E_MARKETING ? [] : ['**/marketing/**', '**/screenshots/**'],
   timeout: 30000,
-  // Playwright's default is half the CPU cores. Every test opens and scans
-  // this whole repository in its own Chromium against ONE backend, so on a
-  // laptop the default drove swap to 6.5 of 8 GB and filled the disk.
-  // Two is what a developer machine carries; CI or a big box can raise it.
-  workers: Number(process.env.E2E_WORKERS) || 2,
+  // ONE worker. Every test shares one backend, and the app broadcasts UI
+  // commands to every connected page: an MCP spec calling set_active_plan
+  // navigates ALL open pages into the plan workspace. With 2 workers that
+  // flipped the other worker's page mid-test and failed 29 graph/inspector
+  // specs at random, once the MCP specs could authenticate (PR #65). It
+  // also keeps memory down: Playwright's default (half the cores) drove a
+  // laptop's swap to 6.5 of 8 GB. E2E_WORKERS overrides for a spec subset
+  // known not to drive the UI.
+  workers: Number(process.env.E2E_WORKERS) || 1,
   retries: 0,
   use: {
     baseURL: 'http://localhost:5173',

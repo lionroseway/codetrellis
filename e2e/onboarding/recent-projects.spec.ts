@@ -72,6 +72,7 @@ test.describe('Recent projects', () => {
     const openAnother = page.getByText('Open another');
     const openProject = page.getByRole('button', { name: 'Open Project' }).first();
     // One of these should be visible depending on recents state
-    await expect(openAnother.or(openProject)).toBeVisible({ timeout: 5000 });
+    // Either affordance will do, and both can be present at once.
+    await expect(openAnother.or(openProject).first()).toBeVisible({ timeout: 5000 });
   });
 });

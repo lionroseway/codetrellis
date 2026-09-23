@@ -6,14 +6,14 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, firstClickableNode } from '../helpers/setup';
 
 test.describe('Node context menu', () => {
   test('right-clicking a node opens context menu', async ({ page }) => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await expect(firstNode).toBeVisible();
 
     await firstNode.click({ button: 'right' });
@@ -28,7 +28,7 @@ test.describe('Node context menu', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await firstNode.click({ button: 'right' });
     await page.waitForTimeout(300);
 
@@ -39,7 +39,7 @@ test.describe('Node context menu', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await firstNode.click({ button: 'right' });
     await page.waitForTimeout(300);
 
@@ -51,7 +51,7 @@ test.describe('Node context menu', () => {
 
     await page.waitForTimeout(2000);
     // Default depth is Clusters, so nodes should be package/directory type
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await firstNode.click({ button: 'right' });
     await page.waitForTimeout(300);
 
@@ -62,7 +62,7 @@ test.describe('Node context menu', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await firstNode.click({ button: 'right' });
     await page.waitForTimeout(300);
 
@@ -86,7 +86,7 @@ test.describe('Node context menu', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await firstNode.click({ button: 'right' });
     await page.waitForTimeout(300);
 

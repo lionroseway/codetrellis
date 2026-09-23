@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { type Page, type APIRequestContext, expect } from '@playwright/test';
+import { type Page, type Locator, type APIRequestContext, expect } from '@playwright/test';
 
 export const API = 'http://localhost:3001/api';
 export const PROJECT_PATH = process.cwd();
@@ -301,4 +301,36 @@ export async function getStoreState(page: Page, storeName: string) {
     // Zustand stores attach to the window in dev mode for debugging
     return (window as any).__ZUSTAND_STORES__?.[name]?.getState();
   }, storeName);
+}
+
+/**
+ * The first graph node a person could actually click.
+ *
+ * `.react-flow__node` `.first()` is whichever node sorts first, and the
+ * graph toolbar (modes, card style, baseline, filters, export) overlays
+ * the top of the canvas. When the first node landed under it, every click
+ * retried "element intercepts pointer events" until the test timed out -
+ * which is what happened when a new import made `e2e/helpers/setup.ts`
+ * a hub and a `setup` cluster sorted first. Pick by hit-test instead.
+ */
+export async function firstClickableNode(page: Page, selector = '.react-flow__node'): Promise<Locator> {
+  const [index = 0] = await clickableNodeIndices(page, selector);
+  return page.locator(selector).nth(index);
+}
+
+/** Indices (into `selector`'s matches) of nodes whose centre is really that node. */
+export async function clickableNodeIndices(page: Page, selector = '.react-flow__node'): Promise<number[]> {
+  await page.locator(selector).first().waitFor({ timeout: 10_000 });
+  return page.evaluate((sel) => {
+    const out: number[] = [];
+    Array.from(document.querySelectorAll(sel)).forEach((n, i) => {
+      const r = n.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return;
+      const hit = document.elementFromPoint(x, y);
+      if (hit && n.contains(hit)) out.push(i);
+    });
+    return out;
+  }, selector);
 }

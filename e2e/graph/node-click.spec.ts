@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, firstClickableNode } from '../helpers/setup';
 
 test.describe('Node click', () => {
   /** Scope selectors to the right-side inspector panel */
@@ -17,7 +17,7 @@ test.describe('Node click', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await expect(firstNode).toBeVisible();
 
     await firstNode.click();
@@ -71,7 +71,7 @@ test.describe('Node click', () => {
     await gotoWithProject(page);
 
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await firstNode.click();
     await page.waitForTimeout(500);
 

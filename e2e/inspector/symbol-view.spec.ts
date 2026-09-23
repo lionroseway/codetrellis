@@ -10,7 +10,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, firstClickableNode } from '../helpers/setup';
 
 test.describe('Inspector symbol view', () => {
   /** Scope selectors to the right-side inspector panel (border-l) */
@@ -20,7 +20,7 @@ test.describe('Inspector symbol view', () => {
   /** Navigate to file view by clicking a cluster then its first file */
   async function navigateToFileView(page: import('@playwright/test').Page) {
     await page.waitForTimeout(2000);
-    const firstNode = page.locator('.react-flow__node').first();
+    const firstNode = await firstClickableNode(page);
     await firstNode.click();
     await page.waitForTimeout(1000);
 
