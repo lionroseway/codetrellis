@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, Hash } from 'lucide-react';
-import { formatReferenceLine, shortId, type ReferenceKind } from '@shared/lib/references';
+import { formatReference, formatReferenceLine, shortId, type ReferenceKind } from '@shared/lib/references';
 
 /**
  * A reference you can paste to an agent — `#9f2c41ab`, click to copy.
@@ -44,7 +44,10 @@ export function CopyRef({
     <button
       type="button"
       onClick={copy}
-      title={`Copy a reference to this ${kind} for an agent:\n${line}`}
+      // The tooltip names the reference only, not the item's title: a title
+      // attribute carrying user text would match any `[title*=…]` lookup
+      // aimed at the controls beside it. The full line is in `data-ref`.
+      title={`Copy a reference to this ${kind} for an agent: ${formatReference(kind, uid)}`}
       data-testid={`copy-ref-${kind}`}
       data-ref={line}
       className={`inline-flex items-center gap-0.5 font-mono text-[10px] text-foreground-subtle hover:text-foreground rounded px-1 py-0.5 hover:bg-white/[0.05] transition-colors ${className}`}
