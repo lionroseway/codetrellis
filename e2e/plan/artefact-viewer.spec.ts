@@ -113,7 +113,7 @@ import zlib from 'node:zlib';
 
 /** A real .xlsx: deflated parts, as Office writes them. */
 function makeXlsx(): Buffer {
-  const parts: Record<string, string> = {
+  return makeZip({
     'xl/workbook.xml':
       '<workbook xmlns:r="r"><sheets><sheet name="Summary" sheetId="1" r:id="rId1"/><sheet name="Regional" sheetId="2" r:id="rId2"/></sheets></workbook>',
     'xl/_rels/workbook.xml.rels':
@@ -127,12 +127,16 @@ function makeXlsx(): Buffer {
       '<row r="3"><c r="A3" t="s"><v>3</v></c><c r="C3"><v>80</v></c></row>' +
       '<row r="4"><c r="A4" t="s"><v>4</v></c><c r="C4"><v>95</v></c><c r="D4"><f>C4*2</f><v>190</v></c></row>' +
       '</sheetData></worksheet>',
-  };
+  });
+}
+
+/** A zip with every part deflated. */
+function makeZip(parts: Record<string, string | Buffer>): Buffer {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
-  for (const [name, text] of Object.entries(parts)) {
-    const raw = Buffer.from(text);
+  for (const [name, content] of Object.entries(parts)) {
+    const raw = Buffer.isBuffer(content) ? content : Buffer.from(content);
     const data = zlib.deflateRawSync(raw);
     const n = Buffer.from(name);
     const local = Buffer.alloc(30);
@@ -244,5 +248,112 @@ test.describe('Artefact viewer — spreadsheets and PDFs', () => {
     const owed = (await (await request.get(`${API}/plans/${plan.uid}/worklist`)).json())
       .entries.find((e: { criterionUid: string }) => e.criterionUid === criterion.uid);
     expect(owed.anchors[0]).toMatchObject({ attachmentUid: sheetUid, locator: { sheet: 'Regional', range: 'C4' } });
+  });
+});
+
+// ── Phase 31.3c — Word documents ───────────────────────────────────────
+
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+
+/** A real .docx: a heading, paragraphs, a table, an embedded image and an external link. */
+function makeDocx(): Buffer {
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+  const para = (text: string, style?: string) =>
+    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+  const image =
+    '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="95250" cy="95250"/><wp:docPr id="1" name="Chart" descr="Regional chart"/>' +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>' +
+    '<pic:nvPicPr><pic:cNvPr id="1" name="chart.png"/><pic:cNvPicPr/></pic:nvPicPr>' +
+    '<pic:blipFill><a:blip r:embed="rIdImg"/></pic:blipFill><pic:spPr/></pic:pic></a:graphicData></a:graphic>' +
+    '</wp:inline></w:drawing></w:r></w:p>';
+  const link = '<w:p><w:r><w:t xml:space="preserve">Figures from </w:t></w:r><w:hyperlink r:id="rIdLink"><w:r><w:t>the source</w:t></w:r></w:hyperlink></w:p>';
+  const table =
+    '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Region</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Total</w:t></w:r></w:p></w:tc></w:tr>' +
+    '<w:tr><w:tc><w:p><w:r><w:t>APAC</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>80</w:t></w:r></w:p></w:tc></w:tr></w:tbl>';
+  return makeZip({
+    '[Content_Types].xml':
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    '_rels/.rels':
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    'word/_rels/document.xml.rels':
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/chart.png"/>' +
+      '<Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/source" TargetMode="External"/>' +
+      '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+    'word/styles.xml':
+      `<w:styles ${W}><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style></w:styles>`,
+    'word/document.xml':
+      `<w:document ${W}><w:body>` +
+      para('Q3 summary', 'Heading1') +
+      para('EMEA revenue rose 12% on the quarter.') +
+      para('The restated total is 1,240.') +
+      table + image + link +
+      '</w:body></w:document>',
+    'word/media/chart.png': PNG_1PX,
+  });
+}
+
+test.describe('Artefact viewer — Word documents', () => {
+  const RUN = Math.random().toString(36).slice(2, 7);
+  const TITLE = `E2E Viewer Docx ${RUN}`;
+  const dir = path.join(PROJECT_PATH, '.codetrellis', 'e2e-artefacts', RUN);
+
+  test.afterEach(async ({ request }) => {
+    await cleanupPlans(request, TITLE);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('a document opens on the cited words, reads as text, and goes back from the words that are wrong', async ({ page, request }) => {
+    const plan = await seedPlan(request, { title: TITLE, actions: [{ title: 'Write the summary', body: 'Q3 summary for the board.' }] });
+    const item = plan.actionUids[0];
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'q3-summary.docx'), makeDocx());
+
+    const agent = await createMcpClient();
+    const docUid = JSON.parse((await agent.callTool('record_artefact', {
+      item_uid: item, path: path.relative(PROJECT_PATH, path.join(dir, 'q3-summary.docx')), role: 'material', note: 'the summary',
+    })).content[0].text).attachment_uid as string;
+    const criterion = await (await request.post(`${API}/items/${item}/criteria`, {
+      data: { text: 'The total is the restated one', kind: 'citation' },
+    })).json();
+    const submitted = await agent.callTool('submit_criterion', {
+      criterion_uid: criterion.uid,
+      evidence: [{ attachment_uid: docUid, locator: { text: 'restated total is 1,240' } }],
+      note: 'Paragraph 2 gives the restated figure',
+    });
+    expect(submitted.isError, submitted.content?.[0]?.text).toBeFalsy();
+    agent.close();
+
+    await gotoWithProject(page);
+    await openPlan(page, TITLE);
+    await page.getByTestId('plan-item-tree').getByText('Write the summary').first().click();
+    await page.getByTestId('evidence-link').filter({ hasText: 'restated total' }).click();
+
+    const doc = page.getByTestId('artefact-viewer').getByTestId('artefact-docx');
+    await expect(doc.getByRole('heading', { name: 'Q3 summary' })).toBeVisible({ timeout: 15_000 });
+    await expect(doc.locator('[data-cited="true"]')).toHaveText('The restated total is 1,240.');
+    await expect(doc.getByRole('cell', { name: 'APAC' })).toBeVisible();
+    // The image, from bytes the worker read — never a data: URI in the document's HTML.
+    await expect(doc.locator('img')).toHaveAttribute('src', /^blob:/);
+    // A link keeps its words and shows where it goes, but cannot navigate the app.
+    const link = doc.locator('a', { hasText: 'the source' });
+    await expect(link).toHaveAttribute('title', 'https://example.com/source');
+    await expect(link).not.toHaveAttribute('href', /.+/);
+
+    // Select the words that are wrong, and send back from them.
+    await doc.getByText('EMEA revenue rose 12% on the quarter.').click({ clickCount: 3 });
+    const bar = page.getByTestId('artefact-viewer').getByTestId('send-back-bar');
+    await bar.getByRole('button', { name: /Send back from here/ }).click();
+    await bar.getByPlaceholder(/What isn't right at “EMEA revenue/).fill('EMEA rose 9% after the restatement');
+    await bar.getByRole('button', { name: 'Send back', exact: true }).click();
+    await expect(bar.getByText(/↩ Sent back from “EMEA revenue/)).toBeVisible();
+
+    const owed = (await (await request.get(`${API}/plans/${plan.uid}/worklist`)).json())
+      .entries.find((e: { criterionUid: string }) => e.criterionUid === criterion.uid);
+    expect(owed.anchors[0]).toMatchObject({ attachmentUid: docUid, locator: { text: 'EMEA revenue rose 12% on the quarter.' } });
   });
 });

@@ -5,7 +5,9 @@ import { useArtefactViewStore, type ArtefactView } from '../../stores/artefact-v
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { artefactSrcUrl } from '../../lib/artefact-src';
 import { describeLocator, openArtefactAt } from '../../lib/open-artefact-at';
+import DOMPurify from 'dompurify';
 import type { XlsxReply } from '../../workers/xlsx-worker';
+import type { DocxReply } from '../../workers/docx-worker';
 
 /**
  * Phase 31 §7 — the artefact viewer.
@@ -18,7 +20,8 @@ import type { XlsxReply } from '../../workers/xlsx-worker';
  * Formats: images (SVG only ever through `<img>` — an inlined SVG is a
  * document that can run script), video with seeking, text with line
  * numbers, CSV and .xlsx as a grid (the workbook read in a capped worker),
- * PDF drawn by pdf.js. Word documents and the sandboxed HTML view arrive
+ * PDF drawn by pdf.js, Word documents converted in a capped worker and
+ * sanitised before they reach the DOM. The sandboxed HTML view arrives
  * later; anything not shown gets a card saying what it is, and Show in
  * Finder. There is no "Open" (§7.4).
  */
@@ -38,7 +41,7 @@ interface Meta {
   viewable: boolean;
 }
 
-type Selection = { lines: string } | { range: string; sheet?: string } | { page: number } | null;
+type Selection = { lines: string } | { range: string; sheet?: string } | { page: number } | { text: string } | null;
 
 const IMAGE = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
 const VIDEO = new Set(['mp4', 'webm', 'mov']);
@@ -49,6 +52,9 @@ const MAX_CSV_ROWS = 2000;
 /** §7.2 caps: bytes in, per format. Parsed output is capped in the worker. */
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const MAX_SHEET_BYTES = 25 * 1024 * 1024;
+const MAX_DOCX_BYTES = 25 * 1024 * 1024;
+/** A quote picked for a send-back: enough to find it again, small enough to store. */
+const MAX_QUOTE_CHARS = 300;
 const MAX_PDF_PAGES = 300;
 const PARSE_TIMEOUT_MS = 15_000;
 
@@ -161,6 +167,9 @@ function ViewerDialog({ view }: { view: ArtefactView }) {
             : ext === 'xlsx' || ext === 'xlsm' ? ((meta.size ?? 0) > MAX_SHEET_BYTES ? <TooBig meta={meta} /> : (
               <XlsxView uid={view.uid} meta={meta} locator={view.locator} selection={selection} onSelect={setSelection} />
             ))
+            : ext === 'docx' ? ((meta.size ?? 0) > MAX_DOCX_BYTES ? <TooBig meta={meta} /> : (
+              <DocxView uid={view.uid} meta={meta} locator={view.locator} onSelect={setSelection} />
+            ))
             : ext === 'csv' ? (tooBig(meta) ? <TooBig meta={meta} /> : (
               <CsvView uid={view.uid} locator={view.locator} selection={selection} onSelect={setSelection} />
             ))
@@ -251,7 +260,7 @@ function SendBackBar({ view, selection }: { view: ArtefactView; selection: Selec
         ) : !writing ? (
           <>
             <span className="text-foreground-subtle">
-              {place ? `Selected ${place}` : 'Select lines or cells to point at the problem'}
+              {place ? `Selected ${place}` : 'Select the lines, cells, page or words that are wrong to point at them'}
             </span>
             <button
               onClick={() => setWriting(true)}
@@ -417,37 +426,14 @@ function CsvView({ uid, locator, selection, onSelect }: {
 function XlsxView({ uid, meta, locator, selection, onSelect }: {
   uid: string; meta: Meta; locator: unknown; selection: Selection; onSelect: (s: Selection) => void;
 }) {
-  const [book, setBook] = useState<XlsxReply | null>(null);
   const wanted = (locator as { sheet?: unknown } | null)?.sheet;
   const [sheet, setSheet] = useState<string | null>(typeof wanted === 'string' ? wanted : null);
 
-  useEffect(() => {
-    let live = true;
-    let worker: Worker | null = null;
-    const timer = setTimeout(() => {
-      worker?.terminate();
-      if (live) setBook({ ok: false, reason: `Reading this workbook took longer than ${PARSE_TIMEOUT_MS / 1000}s, so it was stopped.` });
-    }, PARSE_TIMEOUT_MS);
-    fetch(artefactSrcUrl(uid))
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); })
-      .then((buffer) => {
-        if (!live) return;
-        worker = new Worker(new URL('../../workers/xlsx-worker.ts', import.meta.url), { type: 'module' });
-        worker.onmessage = (e: MessageEvent<XlsxReply>) => {
-          clearTimeout(timer);
-          worker?.terminate();
-          if (live) setBook(e.data);
-        };
-        worker.onerror = () => {
-          clearTimeout(timer);
-          worker?.terminate();
-          if (live) setBook({ ok: false, reason: 'The workbook could not be read.' });
-        };
-        worker.postMessage({ buffer }, [buffer]);
-      })
-      .catch((err) => { clearTimeout(timer); if (live) setBook({ ok: false, reason: String(err) }); });
-    return () => { live = false; clearTimeout(timer); worker?.terminate(); };
-  }, [uid]);
+  const book = useWorkerParse<XlsxReply>(
+    uid,
+    () => new Worker(new URL('../../workers/xlsx-worker.ts', import.meta.url), { type: 'module' }),
+    'workbook',
+  );
 
   if (!book) return <p className="p-6 text-[12px] text-foreground-subtle">Reading the workbook…</p>;
   if (!book.ok) return <Card title={meta.path ?? meta.name} lines={[book.reason]} icon />;
@@ -674,14 +660,161 @@ function CanvasHost({ canvas }: { canvas: HTMLCanvasElement }) {
   return <div ref={ref} className="bg-white" />;
 }
 
+/**
+ * Fetch an attachment's bytes and hand them to a parsing worker, under the
+ * time limit. The worker is terminated when it answers, errors, runs out of
+ * time, or the view goes away — whichever is first.
+ */
+function useWorkerParse<R>(uid: string, spawn: () => Worker, noun: string): R | { ok: false; reason: string } | null {
+  const [reply, setReply] = useState<R | { ok: false; reason: string } | null>(null);
+  const spawnRef = useRef(spawn);
+  useEffect(() => {
+    let live = true;
+    let worker: Worker | null = null;
+    setReply(null);
+    const fail = (reason: string) => { if (live) setReply({ ok: false, reason }); };
+    const timer = setTimeout(() => {
+      worker?.terminate();
+      fail(`Reading this ${noun} took longer than ${PARSE_TIMEOUT_MS / 1000}s, so it was stopped.`);
+    }, PARSE_TIMEOUT_MS);
+    fetch(artefactSrcUrl(uid))
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); })
+      .then((buffer) => {
+        if (!live) return;
+        worker = spawnRef.current();
+        worker.onmessage = (e: MessageEvent<R>) => {
+          clearTimeout(timer);
+          worker?.terminate();
+          if (live) setReply(e.data);
+        };
+        worker.onerror = () => {
+          clearTimeout(timer);
+          worker?.terminate();
+          fail(`The ${noun} could not be read.`);
+        };
+        worker.postMessage({ buffer }, [buffer]);
+      })
+      .catch((err) => { clearTimeout(timer); fail(String(err)); });
+    return () => { live = false; clearTimeout(timer); worker?.terminate(); };
+  }, [uid, noun]);
+  return reply;
+}
+
+const squash = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** The blocks a quote is looked for in, and marked on. */
+const DOCX_BLOCKS = 'p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote';
+
+/**
+ * A Word document, read (§7.2): headings, paragraphs, lists, tables and
+ * images; not its page layout. mammoth's HTML is sanitised by DOMPurify
+ * before it reaches the DOM, with ids prefixed so a document cannot shadow
+ * the app's own. Images become blob: URLs made here from bytes the worker
+ * read. Links keep their text and show their target, but lead nowhere —
+ * following one would navigate the app window — except a footnote's, which
+ * scrolls within the document. A cited `{text}` marks the paragraph that
+ * holds it; selecting words picks them for a send-back.
+ */
+function DocxView({ uid, meta, locator, onSelect }: {
+  uid: string; meta: Meta; locator: unknown; onSelect: (s: Selection) => void;
+}) {
+  const doc = useWorkerParse<DocxReply>(
+    uid,
+    () => new Worker(new URL('../../workers/docx-worker.ts', import.meta.url), { type: 'module' }),
+    'document',
+  );
+  const host = useRef<HTMLDivElement>(null);
+  const [missing, setMissing] = useState(false);
+  const wantText = typeof (locator as { text?: unknown } | null)?.text === 'string'
+    ? (locator as { text: string }).text : null;
+
+  useEffect(() => {
+    const el = host.current;
+    if (!el || !doc || !doc.ok) return;
+    const fragment = DOMPurify.sanitize(doc.html, {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed', 'svg', 'math'],
+      FORBID_ATTR: ['style', 'srcset', 'target'],
+      SANITIZE_NAMED_PROPS: true,
+      RETURN_DOM_FRAGMENT: true,
+    });
+    const urls: string[] = [];
+    for (const img of Array.from(fragment.querySelectorAll('img'))) {
+      const image = doc.images[Number(img.getAttribute('data-ct-img'))];
+      if (!image) { img.replaceWith('[image not shown]'); continue; }
+      const url = URL.createObjectURL(new Blob([image.bytes as Uint8Array<ArrayBuffer>], { type: image.contentType }));
+      urls.push(url);
+      img.setAttribute('src', url);
+    }
+    for (const a of Array.from(fragment.querySelectorAll('a'))) {
+      const href = a.getAttribute('href') ?? '';
+      if (href.startsWith('#')) continue;
+      a.removeAttribute('href');
+      if (href) a.setAttribute('title', href);
+    }
+    el.replaceChildren(fragment);
+
+    setMissing(false);
+    if (wantText) {
+      const quote = squash(wantText);
+      const hits = Array.from(el.querySelectorAll<HTMLElement>(DOCX_BLOCKS))
+        .filter((b) => squash(b.textContent ?? '').includes(quote));
+      // The innermost block that holds it: a table cell's paragraph, not the whole row.
+      const cited = hits.find((b) => !hits.some((o) => o !== b && b.contains(o)));
+      if (cited) {
+        cited.setAttribute('data-cited', 'true');
+        cited.scrollIntoView({ block: 'center' });
+      } else {
+        setMissing(true);
+      }
+    }
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [doc, wantText]);
+
+  if (!doc) return <p className="p-6 text-[12px] text-foreground-subtle">Reading the document…</p>;
+  if (!doc.ok) return <Card title={meta.path ?? meta.name} lines={[doc.reason]} icon />;
+
+  const pickText = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !host.current?.contains(sel.anchorNode)) return;
+    const text = sel.toString().replace(/\s+/g, ' ').trim().slice(0, MAX_QUOTE_CHARS);
+    if (text) onSelect({ text });
+  };
+  const followFootnote = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest('a');
+    const href = a?.getAttribute('href');
+    if (!a || !href?.startsWith('#')) return;
+    e.preventDefault();
+    const id = `user-content-${decodeURIComponent(href.slice(1))}`;
+    host.current?.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'center' });
+  };
+
+  return (
+    <div className="px-8 py-6">
+      <p className="text-[11px] text-foreground-subtle mb-4">
+        Read as text — headings, tables, lists and images, not Word's page layout.
+        {doc.imagesOmitted > 0 && ` ${doc.imagesOmitted} image${doc.imagesOmitted === 1 ? '' : 's'} in a format the viewer does not show.`}
+        {missing && ' The cited words were not found as written.'}
+      </p>
+      <div
+        ref={host}
+        data-testid="artefact-docx"
+        onMouseUp={pickText}
+        onClick={followFootnote}
+        className="docx-body max-w-3xl text-[13px] leading-6 text-foreground-muted select-text"
+      />
+    </div>
+  );
+}
+
 function NotYet({ meta, ext }: { meta: Meta; ext: string }) {
   const why =
     ext === 'html' || ext === 'htm'
       ? 'HTML is a program, so it gets its own sandboxed view — that has not shipped yet.'
       : ext === 'xls'
         ? 'This is an old-format (.xls) workbook, which the viewer does not read. Save it as .xlsx to preview it.'
-      : ext === 'docx' || ext === 'pptx'
-        ? `Previewing .${ext} files arrives with its parser — not in this version.`
+      : ext === 'pptx'
+        ? 'Previewing slide decks arrives with its parser — not in this version.'
         : `.${ext || '?'} files are not previewed.`;
   return <Card title={meta.path ?? meta.name} lines={[why, 'Show in Finder to look at it — the viewer never opens files with another app.']} icon />;
 }
