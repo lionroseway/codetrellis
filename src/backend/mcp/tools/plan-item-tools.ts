@@ -10,6 +10,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { noteItemFocus } from '../../services/budget-service';
+import { describeReference, findReferenceMatches } from '../../services/reference-service';
+import { parseReference, formatReference } from '../../../shared/lib/references';
 import { resultWithMeta, authorFromExtra } from '../helpers';
 
 // ── Reusable schemas ──────────────────────────────────────────────────
@@ -651,6 +653,45 @@ export function register(server: McpServer, deps: ToolDeps): void {
   );
 
   // --- Item Comments ---
+
+  // What a person pasted. "task 9f2c41ab isn't right — I've left notes" is
+  // how people steer agents; this is the call that turns it into the thing
+  // and the notes. Every other tool also accepts references directly (they
+  // are resolved in mcp/server.ts), so this is for orientation, not a
+  // required first step.
+  server.registerTool(
+    'resolve_reference',
+    {
+      description:
+        'Look up a CodeTrellis reference a person gave you — e.g. "task 9f2c41ab", "plan 1c0d9e22", "comment 7b3a…" '
+        + 'or a bare 8+ character id — and get what it is: kind, full uid, title, its plan, its status, and the most recent '
+        + 'notes people left on it. Use this first when someone says a task is not done right. Every other tool also accepts '
+        + 'these references wherever it takes a uid.',
+      inputSchema: {
+        ref: z.string().describe('The reference as given, e.g. "task 9f2c41ab".'),
+      },
+    },
+    async ({ ref }) => {
+      const parsed = parseReference(ref);
+      if (!parsed) {
+        const text = `"${ref}" is not a reference. References look like "task 9f2c41ab": a kind and at least 8 hex characters.`;
+        return { content: [{ type: 'text' as const, text }], isError: true };
+      }
+      const matches = findReferenceMatches(parsed);
+      if (matches.length === 0) {
+        return { content: [{ type: 'text' as const, text: `Nothing matches "${ref}".` }], isError: true };
+      }
+      if (matches.length > 1) {
+        const text = JSON.stringify({
+          ambiguous: true,
+          candidates: matches.map((m) => ({ reference: formatReference(m.kind, m.uid), uid: m.uid, title: m.title })),
+          hint: 'Ask which one is meant, or use the full uid.',
+        }, null, 2);
+        return { content: [{ type: 'text' as const, text }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(describeReference(matches[0]), null, 2) }] };
+    },
+  );
 
   server.registerTool(
     'list_item_comments',

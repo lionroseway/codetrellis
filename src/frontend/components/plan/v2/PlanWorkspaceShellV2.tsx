@@ -19,6 +19,7 @@ import { FreezeBar } from './FreezeBar';
 import { ManifestConflictBar } from './ManifestConflictBar';
 import { ContributionPanel } from './ContributionPanel';
 import { PlanSwitcher } from './PlanSwitcher';
+import { CopyRef } from './CopyRef';
 import { peekCodeReturn, returnToCode, type CodeReturn } from '../../../lib/open-file-at';
 
 /**
@@ -189,6 +190,7 @@ export function PlanWorkspaceShellV2() {
         >
           {plan.title}
         </button>
+        <CopyRef kind="plan" uid={plan.uid} title={plan.title} />
         <PlanSwitcher />
         <span className="text-[11px] uppercase tracking-wider text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30">
           V2
