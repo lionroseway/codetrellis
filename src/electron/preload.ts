@@ -110,6 +110,11 @@ const electronAPI = {
    */
   revealUpdateDownload: (): Promise<string | null> => ipcRenderer.invoke('updates:reveal'),
   getLogPath: (): Promise<string> => ipcRenderer.invoke('logs:get-path'),
+  /**
+   * Phase 31 §7.4 — show an attachment's file in Finder / Explorer. Takes
+   * the attachment uid, never a path; there is deliberately no "open".
+   */
+  revealArtefact: (uid: string): Promise<boolean> => ipcRenderer.invoke('artefacts:reveal', uid),
 };
 
 contextBridge.exposeInMainWorld('codetrellisIpc', codetrellisIpc);

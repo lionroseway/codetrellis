@@ -381,7 +381,11 @@ export const SCHEMA_PLAN_ITEMS = `
     channel         TEXT NOT NULL,
     note            TEXT,
     evidence_hashes TEXT NOT NULL DEFAULT '{}',
-    created_at      INTEGER NOT NULL
+    created_at      INTEGER NOT NULL,
+    -- Phase 31 §8.2: a send-back taken from the exact place — the file and
+    -- the locator (cell, lines, page) the note is about.
+    anchor_attachment_uid TEXT,
+    anchor_locator        TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_criterion_signoffs_criterion ON criterion_signoffs(criterion_uid, created_at);
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, TaskAttachment } from '@shared/types';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { describeLocator, openArtefactAt } from '../../../lib/open-artefact-at';
 
 /**
  * Phase 31 §4.1–4.3 — what this item is judged on, and where each
@@ -159,10 +160,16 @@ function CriterionRow({
       : `${c.latestSignoff.actor} (agent)`
     : null;
   const evidenceNote = c.latestSubmission.find((e) => e.note)?.note ?? null;
-  const evidenceFiles = c.latestSubmission
-    .map((e) => attachments.find((a) => a.uid === e.attachmentUid))
-    .filter((a): a is TaskAttachment => !!a);
-  const evidenceCount = c.latestSubmission.filter((e) => e.attachmentUid).length;
+  // Each piece of evidence with the place it cites, opened in the viewer
+  // there (§7.5) — the claim and where it came from, one click apart.
+  const evidence = c.latestSubmission
+    .filter((e) => e.attachmentUid)
+    .map((e) => ({ e, a: attachments.find((a) => a.uid === e.attachmentUid) ?? null }));
+  const evidenceCount = evidence.length;
+  const open = (attachmentUid: string, locator: unknown) =>
+    openArtefactAt(attachmentUid, locator, { criterionUid: c.uid, itemUid });
+  const anchor = c.state === 'sent_back' ? c.latestSignoff?.anchor ?? null : null;
+  const anchorFile = anchor ? attachments.find((a) => a.uid === anchor.attachmentUid) : null;
 
   return (
     <li
@@ -199,9 +206,19 @@ function CriterionRow({
               {evidenceCount > 0 && (
                 <span className="text-foreground-subtle">
                   {evidenceNote ? ' · ' : ''}
-                  {evidenceFiles.length > 0
-                    ? evidenceFiles.map((a) => a.label || a.value).join(', ')
-                    : `${evidenceCount} file${evidenceCount === 1 ? '' : 's'} offered`}
+                  {evidence.map(({ e, a }, i) => (
+                    <span key={e.uid}>
+                      {i > 0 && ', '}
+                      <button
+                        onClick={() => open(e.attachmentUid!, e.locator)}
+                        data-testid="evidence-link"
+                        className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                        title="Open it at the place it cites"
+                      >
+                        {a ? a.label || a.value : 'a file'}{describeLocator(e.locator) ? ` · ${describeLocator(e.locator)}` : ''}
+                      </button>
+                    </span>
+                  ))}
                 </span>
               )}
             </p>
@@ -210,7 +227,22 @@ function CriterionRow({
             <p className="text-[11px] text-amber-300/90 mt-1">⚠ A file this was approved on has changed since. Look again.</p>
           )}
           {c.state === 'sent_back' && c.latestSignoff?.note && (
-            <p className="text-[11px] text-red-300/90 mt-1">↩ {c.latestSignoff.note}</p>
+            <p className="text-[11px] text-red-300/90 mt-1">
+              ↩ {c.latestSignoff.note}
+              {anchor && (
+                <>
+                  {' — '}
+                  <button
+                    onClick={() => open(anchor.attachmentUid, anchor.locator)}
+                    className="underline decoration-dotted underline-offset-2 hover:text-red-200"
+                    title="Open the place this was sent back from"
+                  >
+                    {anchorFile ? anchorFile.label || anchorFile.value : 'the file'}
+                    {describeLocator(anchor.locator) ? `, ${describeLocator(anchor.locator)}` : ''}
+                  </button>
+                </>
+              )}
+            </p>
           )}
         </div>
         {c.source !== 'gate' && (

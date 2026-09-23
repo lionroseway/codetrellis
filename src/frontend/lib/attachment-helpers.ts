@@ -6,6 +6,7 @@
  */
 
 import type { AttachmentKind } from '@shared/types';
+import { artefactSrcUrl } from './artefact-src';
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif']);
 const VIDEO_EXTS = new Set(['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v']);
@@ -86,11 +87,13 @@ export function isInlinePreviewable(kind: AttachmentKind): boolean {
 
 /**
  * URL the frontend uses to fetch the bytes of an inline attachment.
- * Goes through the backend's file-serving endpoint so both Electron
- * and dev-web work uniformly.
+ *
+ * Was always `/api/attachments/<uid>/file`, which in a packaged build is a
+ * `file://` URL that loads nothing — the previews in ContextRail did not
+ * show there. Now the same transport as the artefact viewer (§7.1).
  */
 export function attachmentSrcUrl(uid: string): string {
-  return `/api/attachments/${uid}/file`;
+  return artefactSrcUrl(uid);
 }
 
 /**

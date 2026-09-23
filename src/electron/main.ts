@@ -6,10 +6,12 @@ import {
   shell,
   powerMonitor,
   powerSaveBlocker,
+  protocol,
   session,
   type WebContents,
 } from 'electron';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
   initializeBackend,
@@ -31,6 +33,35 @@ import {
   stopPowerSignals,
 } from '../backend/services/power-signals';
 import { getSettings } from '../backend/services/settings-service';
+import {
+  resolveServable,
+  serveFile,
+  absolutePathOf,
+  isAttachmentUid,
+} from '../backend/services/artefact-content-service';
+
+// Phase 31 §7.1 — the packaged renderer is a file:// document: its fetch is
+// shimmed over IPC as UTF-8 and its <img>/<video> reach neither the shim nor
+// a server, so image, video and every binary artefact need a scheme of their
+// own. Registered before `ready`, as Electron requires. The URL carries an
+// attachment uid and nothing else; everything else is resolved in main.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ct-artefact', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+]);
+
+function installArtefactProtocol(): void {
+  protocol.handle('ct-artefact', async (request) => {
+    const uid = new URL(request.url).hostname;
+    const file = isAttachmentUid(uid) ? await resolveServable(uid) : null;
+    if (!file) return new Response('Not a file that can be shown', { status: 404 });
+    const served = serveFile(file, request.headers.get('range'));
+    if (!served.stream) return new Response(served.error ?? 'Not found', { status: served.status, headers: served.headers });
+    return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, {
+      status: served.status,
+      headers: served.headers,
+    });
+  });
+}
 
 // Mirror console.* to <dataDir>/logs/<YYYY-MM-DD>.log so the
 // packaged app produces a discoverable trail when no terminal is
@@ -181,10 +212,12 @@ const RENDERER_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // ct-artefact: — Phase 31 §7.1, the only way bytes reach the viewer in
+  // the packaged app. Added to img/media/connect and nowhere else.
+  "img-src 'self' data: blob: ct-artefact:",
   "font-src 'self' data:",
-  "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*",
-  "media-src 'self' blob: data:",
+  "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:* ct-artefact:",
+  "media-src 'self' blob: data: ct-artefact:",
   "frame-src 'none'",
   "object-src 'none'",
   "base-uri 'self'",
@@ -323,6 +356,7 @@ app.whenReady().then(async () => {
   // error banner rather than a dangling Dock icon.
   // Before any window exists, so no document is ever served without it.
   installContentSecurityPolicy();
+  installArtefactProtocol();
 
   const backendOk = await bootstrap();
   createWindow(backendOk);
@@ -539,6 +573,27 @@ ipcMain.handle('logs:get-path', async () => getCurrentLogPath());
  * been verified against the signed manifest. A renderer-supplied path
  * would make this an arbitrary "open anything in Finder" primitive.
  */
+/**
+ * Phase 31 §7.4 — Show in Finder / Explorer. Never "open": `shell.openPath`
+ * hands a file to whatever the OS associates with it, and an agent that can
+ * record a file plus a person who clicks Open is an agent that can run a
+ * `.command`, an `.app` or a macro-enabled workbook. Revealing runs nothing.
+ *
+ * Takes an attachment uid, never a path: the path is resolved and confined
+ * here, as `updates:reveal` does, so this cannot reveal an arbitrary file.
+ */
+ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {
+  if (!isAttachmentUid(uid)) return false;
+  const file = await resolveServable(uid);
+  if (!file) return false;
+  try {
+    shell.showItemInFolder(absolutePathOf(file));
+    return true;
+  } catch {
+    return false;
+  }
+});
+
 ipcMain.handle('updates:reveal', async () => {
   const state = getUpdateDownloadState();
   if (state.phase !== 'ready' || !state.filePath) return null;

@@ -29,7 +29,7 @@ import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
 import { isSafeGitRef } from './services/git-safety';
-import { readFileWithin, isWithin, isInside, ConfinementError, openReadStreamWithin } from './services/confined-fs';
+import { readFileWithin, isWithin, isInside, ConfinementError } from './services/confined-fs';
 
 /** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
 const MAX_BROWSE_ENTRIES = 1000;
@@ -80,6 +80,7 @@ import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
+import * as artefactContent from './services/artefact-content-service';
 import * as artefactService from './services/artefact-service';
 import * as _lazy___services_artefact_watcher from './services/artefact-watcher';
 const startArtefactWatching = (a: Parameters<typeof _lazy___services_artefact_watcher.startArtefactWatching>[0]) =>
@@ -2522,7 +2523,7 @@ app.post('/api/criteria/:uid/decide', async (req, res) => {
     const before = criteriaService.getCriterion(req.params.uid);
     if (before) await artefactService.refreshArtefactHashes(before.itemUid).catch(() => []);
     const criterion = criteriaService.decideCriterion(
-      req.params.uid, { decision: body.decision, note: body.note }, desktopDecision(),
+      req.params.uid, { decision: body.decision, note: body.note, anchor: body.anchor }, desktopDecision(),
     );
     criteriaChanged(criterion.itemUid);
     res.json(criterion);
@@ -2859,80 +2860,62 @@ app.post('/api/items/:uid/attachments', (req, res) => {
  * The endpoint exists so the renderer doesn't need direct filesystem
  * access — works in both Electron and dev/web mode.
  */
-app.get('/api/attachments/:uid/file', (req, res) => {
-  // Phase 31 §4.2 / §7.1. Every property this route relies on is derived
-  // here, never taken from the request or trusted from the row:
-  //  - the project root comes from the item's plan and is re-checked
-  //    against the projects this app has opened;
-  //  - the path is confined to that root (or to this item's own upload
-  //    folder) and opened ONCE — the stream reads the descriptor that was
-  //    checked, so it cannot be swapped for a link in between;
-  //  - the type comes from the extension, not the stored content_type;
-  //  - errors never carry a path.
-  const db = getDb();
-  const row = db.exec(`SELECT value, target_uid FROM attachments WHERE uid = ?`, [req.params.uid])[0]?.values[0];
-  if (!row) { res.status(404).json({ error: 'Attachment not found' }); return; }
-  const value = row[0] as string;
-  const targetUid = row[1] as string;
-
-  let trustedRoot: string | null = null;
-  const projectPath = db.exec(
-    `SELECT p.project_path FROM plan_items i JOIN plans p ON p.uid = i.plan_uid WHERE i.uid = ?`,
-    [targetUid],
-  )[0]?.values[0]?.[0] as string | undefined;
-  if (projectPath) {
-    try { trustedRoot = resolveTrustedProjectRoot(projectPath, 'attachment project'); } catch { trustedRoot = null; }
-  }
-
-  const location = taskAttachmentsService.resolveAttachmentLocation(value, targetUid, trustedRoot);
-  const contentType = location ? taskAttachmentsService.servedContentType(location.rel) : null;
-  if (!location || !contentType) {
-    res.status(404).json({ error: 'This attachment is not a file that can be shown' });
+async function sendAttachmentContent(req: express.Request, res: express.Response): Promise<void> {
+  // Phase 31 §7.1 — the same resolver the packaged app's `ct-artefact:`
+  // scheme uses. See artefact-content-service for what it guarantees.
+  const file = await artefactContent.resolveServable(req.params.uid);
+  if (!file) { res.status(404).json({ error: 'This attachment is not a file that can be shown' }); return; }
+  const served = artefactContent.serveFile(file, typeof req.headers.range === 'string' ? req.headers.range : null);
+  if (!served.stream) {
+    for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+    res.status(served.status).json({ error: served.error });
     return;
   }
-
-  // A single inclusive byte range, so video can seek.
-  let range: { start: number; end?: number } | undefined;
-  const header = typeof req.headers.range === 'string' ? req.headers.range : '';
-  const m = header.match(/^bytes=(\d+)-(\d*)$/);
-  if (m) range = { start: Number(m[1]), end: m[2] ? Number(m[2]) : undefined };
-
-  let opened: ReturnType<typeof openReadStreamWithin>;
-  try {
-    opened = openReadStreamWithin(location.root, location.rel, range ?? {}, 'attachment');
-  } catch {
-    res.status(404).json({ error: 'Attachment file not found' });
-    return;
-  }
-  const { stream, size } = opened;
-
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  // Files change (a recorded output is edited), so nothing is cached.
-  res.setHeader('Cache-Control', 'no-store');
-  // Harmless for <img>/<video>; stops an SVG opened directly from running
-  // script in this origin.
-  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
-  res.setHeader('Accept-Ranges', 'bytes');
-  if (range) {
-    const end = Math.min(range.end ?? size - 1, size - 1);
-    if (range.start > end) {
-      stream.destroy();
-      res.status(416).setHeader('Content-Range', `bytes */${size}`).end();
-      return;
-    }
-    res.status(206);
-    res.setHeader('Content-Range', `bytes ${range.start}-${end}/${size}`);
-    res.setHeader('Content-Length', String(end - range.start + 1));
-  } else {
-    res.setHeader('Content-Length', String(size));
-  }
+  res.status(served.status);
+  for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+  const stream = served.stream;
   stream.on('error', () => {
     if (!res.headersSent) res.status(500).json({ error: 'Could not read the attachment' });
     else res.destroy();
   });
   res.on('close', () => stream.destroy());
   stream.pipe(res);
+}
+
+app.get('/api/attachments/:uid/file', (req, res) => { void sendAttachmentContent(req, res); });
+app.get('/api/artefacts/:uid/content', (req, res) => { void sendAttachmentContent(req, res); });
+
+/**
+ * What the viewer shows around the bytes: name, role, size, hash, who
+ * recorded it. Never the absolute path — the project-relative one is
+ * what a person recognises and what a locator is written against.
+ */
+app.get('/api/artefacts/:uid', async (req, res) => {
+  const file = await artefactContent.resolveServable(req.params.uid);
+  const row = getDb().exec(
+    `SELECT uid, target_uid, value, label, kind, role, sha256, size, mtime, recorded_by, recorded_by_type, author, created_at
+     FROM attachments WHERE uid = ?`,
+    [req.params.uid],
+  )[0]?.values[0];
+  if (!row) { res.status(404).json({ error: 'Attachment not found' }); return; }
+  const value = row[2] as string;
+  res.json({
+    uid: row[0],
+    itemUid: row[1],
+    path: file ? file.rel.split(path.sep).join('/') : null,
+    name: path.basename(value.replace(/^userdata:\/\//, '')),
+    label: row[3] ?? null,
+    kind: row[4],
+    role: row[5] ?? null,
+    sha256: row[6] ?? null,
+    size: row[7] ?? null,
+    mtime: row[8] ?? null,
+    recordedBy: row[9] ?? row[11] ?? null,
+    recordedByType: row[10] ?? null,
+    createdAt: row[12],
+    contentType: file?.contentType ?? null,
+    viewable: !!file,
+  });
 });
 
 
