@@ -107,9 +107,12 @@ export default defineConfig({
     },
   ],
   projects: [
+    // Opens the project under test once — see e2e/project.setup.ts.
+    { name: 'setup', testMatch: /project\.setup\.ts$/ },
     {
       name: 'chromium',
       use: { browserName: 'chromium' },
+      dependencies: ['setup'],
     },
   ],
 });
