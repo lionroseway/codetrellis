@@ -12,7 +12,7 @@ test.describe('Status bar', () => {
   test('shows "Ready" after project scan', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByText('Ready').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Ready', { exact: true }).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('shows project path in monospace', async ({ page }) => {

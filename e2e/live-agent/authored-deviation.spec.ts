@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
 import { cleanupPlans, API } from '../helpers/setup';
 import {
   FIXTURE_PATH,
-  createTempFixture,
+  openTempFixture,
   cleanupTempFixture,
 } from './helpers/fixture-reset';
 import { promptAuthorAndDeviate } from './helpers/prompts';
@@ -32,7 +32,7 @@ test.describe('Agent-authored plan deviation (Prompt C)', () => {
   let tempFixture: string;
 
   test.beforeEach(async () => {
-    tempFixture = createTempFixture();
+    tempFixture = await openTempFixture();
     wsCollector = await createWsCollector();
   });
 

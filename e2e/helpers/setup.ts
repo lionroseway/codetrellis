@@ -54,6 +54,35 @@ export function authHeaders(): Record<string, string> {
  * Skips all onboarding (Learn Trellis + Getting Started) by default.
  * Waits for the ReactFlow canvas to render.
  */
+/**
+ * Open a project the way the app does — `POST /api/project/scan` — and
+ * make sure it actually opened.
+ *
+ * Phase 19 derives project roots from opened projects, so a spec that
+ * creates a plan or calls a path-taking MCP tool needs its project opened
+ * first. The backend runs one scan at a time and answers a second with
+ * 200 plus an `astError` ("already in progress") — the file tree comes
+ * back, but the project is NOT recorded as opened. Parallel workers hit
+ * that constantly, so this retries until the scan really ran.
+ */
+export async function openProject(projectPath: string, timeoutMs = 110_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let last = '';
+  while (Date.now() < deadline) {
+    const res = await fetch(`${API}/project/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ projectPath }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { astError?: string | null; error?: string };
+    if (res.ok && !body.astError) return;
+    last = `HTTP ${res.status}: ${body.astError ?? body.error ?? ''}`;
+    if (res.ok && !/already in progress/i.test(body.astError ?? '')) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`could not open ${projectPath} — ${last}`);
+}
+
 export async function gotoWithProject(
   page: Page,
   opts: {

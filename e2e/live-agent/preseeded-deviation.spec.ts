@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
 import { seedPlan, cleanupPlans, API } from '../helpers/setup';
 import {
   FIXTURE_PATH,
-  createTempFixture,
+  openTempFixture,
   cleanupTempFixture,
 } from './helpers/fixture-reset';
 import { promptExecPreseededWithDeviation } from './helpers/prompts';
@@ -31,7 +31,7 @@ test.describe('Pre-seeded plan deviation (Prompt D)', () => {
   let tempFixture: string;
 
   test.beforeEach(async () => {
-    tempFixture = createTempFixture();
+    tempFixture = await openTempFixture();
     wsCollector = await createWsCollector();
   });
 

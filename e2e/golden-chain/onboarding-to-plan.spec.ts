@@ -36,7 +36,7 @@ test.describe('Onboarding → Plan journey', () => {
     expect(nodeCount).toBeGreaterThan(0);
 
     // --- Step 4: Status bar shows "Ready" ---
-    await expect(page.getByText('Ready').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Ready', { exact: true }).first()).toBeVisible({ timeout: 5000 });
 
     // --- Step 5: Create a plan via UI ---
     await page.getByRole('button', { name: 'Plans', exact: true }).click();

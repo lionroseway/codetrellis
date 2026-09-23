@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
 import { gotoWithProject, seedPlan, cleanupPlans, API } from '../helpers/setup';
 import {
   FIXTURE_PATH,
-  createTempFixture,
+  openTempFixture,
   cleanupTempFixture,
 } from './helpers/fixture-reset';
 import { promptExecPreseeded } from './helpers/prompts';
@@ -35,7 +35,7 @@ test.describe('Pre-seeded plan execution (Prompt A)', () => {
   let tempFixture: string;
 
   test.beforeEach(async () => {
-    tempFixture = createTempFixture();
+    tempFixture = await openTempFixture();
     wsCollector = await createWsCollector();
   });
 

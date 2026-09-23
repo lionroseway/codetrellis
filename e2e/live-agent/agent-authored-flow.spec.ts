@@ -2,7 +2,7 @@
  * Prompt B — Agent authors a plan from scratch, then executes it.
  *
  * Tests the full authoring → execution loop: create_plan, add_item,
- * add_plan_doc, add_plan_phase, then claim → edit → progress → done.
+ * page and phase Object items, then claim → edit → progress → done.
  *
  * Supports both real Claude (CODETRELLIS_REAL_AGENT=1) and mock agent.
  */
@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 import { gotoWithProject, cleanupPlans, API } from '../helpers/setup';
 import {
   FIXTURE_PATH,
-  createTempFixture,
+  openTempFixture,
   cleanupTempFixture,
 } from './helpers/fixture-reset';
 import { promptAuthorAndExec } from './helpers/prompts';
@@ -34,7 +34,7 @@ test.describe('Agent-authored plan flow (Prompt B)', () => {
   let tempFixture: string;
 
   test.beforeEach(async () => {
-    tempFixture = createTempFixture();
+    tempFixture = await openTempFixture();
     wsCollector = await createWsCollector();
   });
 
@@ -64,26 +64,30 @@ test.describe('Agent-authored plan flow (Prompt B)', () => {
     expect(actions.every((i: any) => i.status === 'done')).toBe(true);
   });
 
-  test('mock agent creates plan doc via MCP', async ({ request }) => {
+  // The summary page and the phase are Object items since the unified item
+  // model replaced plan docs and phases; these read them back as items.
+  test('mock agent creates a summary page via MCP', async ({ request }) => {
     test.skip(USE_REAL_CLAUDE, 'This test uses the mock agent');
 
     const planUid = await runMockAgentAuthored(tempFixture);
 
-    const docsRes = await request.get(`${API}/plans/${planUid}/docs`);
-    expect(docsRes.ok()).toBeTruthy();
-    const docs = await docsRes.json();
-    expect(docs.length).toBeGreaterThan(0);
+    const itemsRes = await request.get(`${API}/plans/${planUid}/items`);
+    expect(itemsRes.ok()).toBeTruthy();
+    const items = await itemsRes.json();
+    const page = items.find((i: any) => i.title === 'Error Handling Improvement');
+    expect(page?.kind).toBe('object');
   });
 
-  test('mock agent creates plan phase via MCP', async ({ request }) => {
+  test('mock agent creates a phase via MCP', async ({ request }) => {
     test.skip(USE_REAL_CLAUDE, 'This test uses the mock agent');
 
     const planUid = await runMockAgentAuthored(tempFixture);
 
-    const phasesRes = await request.get(`${API}/plans/${planUid}/phases`);
-    expect(phasesRes.ok()).toBeTruthy();
-    const phases = await phasesRes.json();
-    expect(phases.length).toBeGreaterThan(0);
+    const itemsRes = await request.get(`${API}/plans/${planUid}/items`);
+    expect(itemsRes.ok()).toBeTruthy();
+    const items = await itemsRes.json();
+    const phase = items.find((i: any) => i.title === 'Phase 1: Core error handling');
+    expect(phase?.kind).toBe('object');
   });
 
   test('plan-created broadcast fires when agent creates plan', async ({ request }) => {

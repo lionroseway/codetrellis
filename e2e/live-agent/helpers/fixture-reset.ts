@@ -11,6 +11,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { openProject } from '../../helpers/setup';
 
 /** Root of the codetrellis repo (parent of e2e/). */
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -53,6 +54,21 @@ export function resetFixture(): void {
 export function createTempFixture(): string {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-fixture-'));
   execSync(`cp -R "${FIXTURE_PATH}/." "${tmpDir}/"`, { stdio: 'pipe' });
+  return tmpDir;
+}
+
+/**
+ * Create a temp fixture AND open it, as a user would before pointing an
+ * agent at it.
+ *
+ * Phase 19 derives project roots from opened projects: `create_plan`,
+ * `POST /api/plans` and every path-taking MCP tool refuse a path the app
+ * has not opened. A fresh temp copy has never been opened, so a test that
+ * only copies it gets refusals it then misreads as unparseable results.
+ */
+export async function openTempFixture(): Promise<string> {
+  const tmpDir = createTempFixture();
+  await openProject(tmpDir);
   return tmpDir;
 }
 

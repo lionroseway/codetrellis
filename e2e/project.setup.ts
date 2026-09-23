@@ -12,15 +12,15 @@
  * unparseable MCP results) that moved around between runs.
  */
 
-import { test as setup, expect } from '@playwright/test';
-import { API, PROJECT_PATH, authHeaders } from './helpers/setup';
+import { test as setup } from '@playwright/test';
+import { PROJECT_PATH, openProject } from './helpers/setup';
+import { FIXTURE_PATH } from './live-agent/helpers/fixture-reset';
 
-setup('open the project under test', async ({ request }) => {
-  setup.setTimeout(120_000);
-  const res = await request.post(`${API}/project/scan`, {
-    headers: authHeaders(),
-    data: { projectPath: PROJECT_PATH },
-    timeout: 110_000,
+// This repository, and the shared sample app that the agent specs drive.
+// Per-test temp copies open themselves (`openTempFixture`).
+for (const projectPath of [PROJECT_PATH, FIXTURE_PATH]) {
+  setup(`open ${projectPath}`, async () => {
+    setup.setTimeout(120_000);
+    await openProject(projectPath);
   });
-  expect(res.ok(), `scan of ${PROJECT_PATH} failed: HTTP ${res.status()}`).toBeTruthy();
-});
+}

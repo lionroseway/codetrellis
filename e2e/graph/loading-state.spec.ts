@@ -15,7 +15,7 @@ test.describe('Loading state', () => {
     // After gotoWithProject completes, the graph should be visible
     await expect(page.locator('.react-flow')).toBeVisible();
     // Status bar should show "Ready"
-    await expect(page.getByText('Ready')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Ready', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
   test('scanning state shows progress indicators', async ({ page }) => {
