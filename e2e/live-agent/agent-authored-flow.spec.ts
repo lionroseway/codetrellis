@@ -112,15 +112,19 @@ test.describe('Agent-authored plan flow (Prompt B)', () => {
     expect(evt).toBeTruthy();
   });
 
-  test('plan-doc-created broadcast fires for doc', async ({ request }) => {
+  // A summary page is an Object item now, so it arrives as
+  // plan-item-created; there is no plan-doc-created any more.
+  test('plan-item-created broadcast fires for the summary page', async ({ request }) => {
     test.skip(USE_REAL_CLAUDE, 'This test uses the mock agent');
-
-    const eventPromise = wsCollector.waitForEvent('plan-doc-created', {}, 15_000);
 
     await runMockAgentAuthored(tempFixture);
 
-    const evt = await eventPromise;
-    expect(evt).toBeTruthy();
+    await expect.poll(() => wsCollector.getEvents().some((e) => {
+      const item = (e.payload as { item?: { kind?: string; title?: string } }).item;
+      return e.type === 'plan-item-created'
+        && item?.kind === 'object'
+        && item.title === 'Error Handling Improvement';
+    }), { timeout: 15_000 }).toBe(true);
   });
 
   test('fixture files are modified by agent', async ({ request }) => {
