@@ -12,28 +12,29 @@
   "main": "out/main/main.js",
   "scripts": {
     "postinstall": "patch-package",
-    "predev": "bash scripts/free-dev-ports.sh && npm run build:connector",
+    "predev": "bash scripts/free-dev-ports.sh && npm run build:connector && npm run build:rendition",
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "predev:frontend": "bash scripts/free-dev-ports.sh 5173",
     "dev:frontend": "vite --config vite.web.config.ts",
     "predev:backend": "bash scripts/free-dev-ports.sh 19432 3001",
     "dev:backend": "tsx watch --watch-path=src/backend --watch-path=src/shared src/backend/index.ts",
-    "predev:electron": "npm run build:connector",
+    "predev:electron": "npm run build:connector && npm run build:rendition",
     "dev:electron": "electron-vite dev",
     "check:bundle": "bash scripts/check-no-relative-require.sh",
     "prepackage": "node scripts/build-icons.js",
-    "package": "npm run check:bundle && electron-vite build && npm run build:connector && electron-builder",
-    "package:mac": "npm run check:bundle && electron-vite build && npm run build:connector && electron-builder --mac --arm64",
-    "package:mac-x64": "npm run check:bundle && electron-vite build && npm run build:connector && electron-builder --mac --x64",
-    "package:mac-universal": "npm run check:bundle && electron-vite build && npm run build:connector && electron-builder --mac",
+    "package": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder",
+    "package:mac": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac --arm64",
+    "package:mac-x64": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac --x64",
+    "package:mac-universal": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac",
     "package:mac:signed": "npm run check:bundle && electron-vite build && npm run build:connector && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
-    "package:win": "npm run check:bundle && electron-vite build && npm run build:connector && electron-builder --win --x64",
-    "package:linux": "npm run check:bundle && electron-vite build && npm run build:connector && electron-builder --linux",
-    "package:all": "npm run check:bundle && electron-vite build && npm run build:connector && electron-builder --mac --arm64 --win --x64 --linux",
+    "package:win": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --win --x64",
+    "package:linux": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --linux",
+    "package:all": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac --arm64 --win --x64 --linux",
     "release": "bash scripts/release.sh",
     "release:dry-run": "bash scripts/release.sh --dry-run",
     "build:icons": "node scripts/build-icons.js",
     "build:connector": "vite build --config vite.connector.config.ts",
+    "build:rendition": "vite build --config vite.rendition.config.ts",
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",
     "test": "playwright test",
     "test:unit": "node --import tsx --test 'src/**/*.test.ts'",
@@ -166,6 +167,13 @@
         "to": "connector",
         "filter": [
           "mcp-connector.cjs"
+        ]
+      },
+      {
+        "from": "out/rendition",
+        "to": "rendition",
+        "filter": [
+          "engine-child.cjs"
         ]
       },
       {

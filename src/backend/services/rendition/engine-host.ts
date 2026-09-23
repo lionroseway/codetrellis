@@ -1,0 +1,219 @@
+/**
+ * Phase 31 §7.6 — the conversion engine, mounted only when needed.
+ *
+ * Nothing runs at launch. The first conversion starts the engine's own
+ * process; it serves conversions one at a time, is killed when one runs past
+ * its time, and is stopped after a few idle minutes (it holds over a
+ * gigabyte while warm). A conversion that cannot happen — no engine, an
+ * engine that does not match its hashes, a runtime that cannot confine it —
+ * rejects with `EngineUnavailable`, and the viewer falls back.
+ *
+ * The process runs on this binary in Node mode under the permission model:
+ * it may read only the engine and its own script, may not write, start
+ * processes or load addons, and — where the runtime can deny it (Node 25+)
+ * — may not reach the network. It is given bytes, never a path, and an
+ * environment with nothing of ours in it.
+ */
+
+import { fork, type ChildProcess } from 'node:child_process';
+import { verifyEngine, type EngineCheck, type EnginePin } from './engine-manifest';
+
+export class EngineUnavailable extends Error {}
+export class ConversionFailed extends Error {}
+/** The engine hung and was killed; a fresh one may well succeed. */
+export class ConversionTimedOut extends ConversionFailed {}
+
+export interface EngineHostOptions {
+  engineDir: string;
+  /** The built child entry (`engine-child.cjs`). */
+  childScript: string;
+  /**
+   * The hashes the engine must match, pinned in this build. Without them the
+   * engine's own manifest is trusted — acceptable only for a source run.
+   */
+  pinned?: EnginePin | null;
+  idleMs?: number;
+  timeoutMs?: number;
+  startTimeoutMs?: number;
+  maxOutputBytes?: number;
+  /** Extra directories the child may read (tests). */
+  allowRead?: string[];
+  /**
+   * The rule in §7.6: an engine the runtime cannot keep off the network does
+   * not run. Only tests on an older runtime turn this off.
+   */
+  requireNetworkDenial?: boolean;
+}
+
+/** What this runtime can take away from a child process. */
+export function runtimeIsolation(): { fs: boolean; net: boolean } {
+  const flags = process.allowedNodeEnvironmentFlags;
+  return { fs: flags.has('--permission'), net: flags.has('--allow-net') };
+}
+
+interface Pending {
+  resolve: (pdf: Uint8Array) => void;
+  reject: (err: Error) => void;
+  timer: NodeJS.Timeout;
+}
+
+export class EngineHost {
+  private child: ChildProcess | null = null;
+  private starting: Promise<ChildProcess> | null = null;
+  private version: string | null = null;
+  private seq = 0;
+  private readonly pending = new Map<number, Pending>();
+  private queue: Promise<unknown> = Promise.resolve();
+  private idleTimer: NodeJS.Timeout | null = null;
+  private stderrTail = '';
+
+  constructor(private readonly opts: EngineHostOptions) {}
+
+  get running(): boolean { return this.child !== null; }
+  /** The running engine's version, once it has started. */
+  get engineVersion(): string | null { return this.version; }
+
+  /** The engine's check, without starting it — its version keys the cache. */
+  async check(): Promise<EngineCheck> {
+    return verifyEngine(this.opts.engineDir, this.opts.pinned ?? undefined);
+  }
+
+  convert(bytes: Uint8Array, ext: string): Promise<Uint8Array> {
+    const run = this.queue.then(() => this.convertNow(bytes, ext));
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  stop(): void {
+    this.clearIdle();
+    const child = this.child;
+    this.child = null;
+    if (child && child.exitCode === null) child.kill('SIGKILL');
+  }
+
+  private async convertNow(bytes: Uint8Array, ext: string): Promise<Uint8Array> {
+    this.clearIdle();
+    const child = await this.start();
+    const id = ++this.seq;
+    const timeoutMs = this.opts.timeoutMs ?? 30_000;
+    try {
+      return await new Promise<Uint8Array>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          console.warn(`[rendition] a .${ext} conversion ran past ${timeoutMs}ms; stopping the engine`);
+          this.pending.delete(id);
+          reject(new ConversionTimedOut(`The conversion took longer than ${Math.round(timeoutMs / 1000)}s, so it was stopped`));
+          this.stop();
+        }, timeoutMs);
+        this.pending.set(id, { resolve, reject, timer });
+        child.send({ type: 'convert', id, bytes, ext });
+      });
+    } finally {
+      this.armIdle();
+    }
+  }
+
+  private start(): Promise<ChildProcess> {
+    if (this.child) return Promise.resolve(this.child);
+    if (!this.starting) this.starting = this.spawn().finally(() => { this.starting = null; });
+    return this.starting;
+  }
+
+  private async spawn(): Promise<ChildProcess> {
+    const isolation = runtimeIsolation();
+    if (!isolation.fs) throw new EngineUnavailable('this runtime cannot confine the conversion engine');
+    if (!isolation.net && this.opts.requireNetworkDenial !== false) {
+      throw new EngineUnavailable('this runtime cannot keep the conversion engine off the network');
+    }
+    const checked = await this.check();
+    if (!checked.ok) throw new EngineUnavailable(checked.reason);
+
+    const startedAt = Date.now();
+    const read = [this.opts.engineDir, this.opts.childScript, ...(this.opts.allowRead ?? [])];
+    const child = fork(this.opts.childScript, [this.opts.engineDir], {
+      execPath: process.execPath,
+      // Its own directory — never the directory the app was started from.
+      cwd: this.opts.engineDir,
+      // Omitting --allow-net, --allow-child-process, --allow-addons and every
+      // --allow-fs-write is the point.
+      execArgv: ['--permission', ...read.map((p) => `--allow-fs-read=${p}`), '--allow-worker'],
+      // Nothing of ours — no capability token, no data dir, no paths.
+      env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+      serialization: 'advanced',
+    });
+    this.stderrTail = '';
+    child.stderr?.on('data', (d: Buffer) => { this.stderrTail = (this.stderrTail + d.toString()).slice(-2000); });
+
+    await new Promise<void>((resolve, reject) => {
+      const fail = (why: string) => {
+        clearTimeout(timer);
+        if (child.exitCode === null) child.kill('SIGKILL');
+        console.warn(`[rendition] engine did not start: ${why}\n${this.stderrTail}`);
+        reject(new EngineUnavailable('the conversion engine could not start'));
+      };
+      const timer = setTimeout(() => fail('timed out'), this.opts.startTimeoutMs ?? 60_000);
+      child.once('error', (err) => fail(err.message));
+      child.once('exit', (code) => fail(`exited with ${code}`));
+      child.on('message', function ready(msg: { type?: string; version?: string }) {
+        if (msg?.type !== 'ready') return;
+        child.off('message', ready);
+        clearTimeout(timer);
+        child.removeAllListeners('exit');
+        child.removeAllListeners('error');
+        resolve();
+      });
+    });
+
+    this.version = checked.manifest.version;
+    console.log(`[rendition] engine ${checked.manifest.version} started in ${Date.now() - startedAt}ms`);
+    child.on('message', (msg) => this.onMessage(msg as { type: string; id: number; pdf?: Uint8Array; message?: string }));
+    child.on('exit', () => this.onExit(child));
+    this.child = child;
+    return child;
+  }
+
+  private onMessage(msg: { type: string; id: number; pdf?: Uint8Array; message?: string }): void {
+    const p = this.pending.get(msg.id);
+    if (!p) return;
+    this.pending.delete(msg.id);
+    clearTimeout(p.timer);
+    if (msg.type === 'result' && msg.pdf) {
+      const pdf = new Uint8Array(msg.pdf.buffer, msg.pdf.byteOffset, msg.pdf.byteLength);
+      if (pdf.byteLength > (this.opts.maxOutputBytes ?? 200 * 1024 * 1024)) {
+        p.reject(new ConversionFailed('The converted document is larger than the viewer will show'));
+      } else if (!startsWithPdf(pdf)) {
+        p.reject(new ConversionFailed('The engine did not produce a PDF'));
+      } else {
+        p.resolve(pdf);
+      }
+    } else {
+      console.warn(`[rendition] conversion failed: ${msg.message ?? 'unknown'}`);
+      p.reject(new ConversionFailed('The document could not be converted'));
+    }
+  }
+
+  private onExit(child: ChildProcess): void {
+    if (this.child === child) this.child = null;
+    for (const [id, p] of this.pending) {
+      clearTimeout(p.timer);
+      p.reject(new ConversionFailed('The conversion engine stopped unexpectedly'));
+      this.pending.delete(id);
+    }
+  }
+
+  private armIdle(): void {
+    this.clearIdle();
+    if (!this.child || this.pending.size > 0) return;
+    this.idleTimer = setTimeout(() => this.stop(), this.opts.idleMs ?? 3 * 60_000);
+    this.idleTimer.unref();
+  }
+
+  private clearIdle(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+}
+
+function startsWithPdf(bytes: Uint8Array): boolean {
+  return bytes.byteLength > 5 && String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-';
+}

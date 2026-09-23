@@ -13,3 +13,15 @@ export function artefactSrcUrl(uid: string): string {
     ? `ct-artefact://${encodeURIComponent(uid)}`
     : `/api/artefacts/${encodeURIComponent(uid)}/content`;
 }
+
+/**
+ * Phase 31 §7.6 — an Office file as it looks, converted to PDF by the engine
+ * in its own process. A non-2xx answer carries `{ error, fallback: true }`,
+ * and the viewer shows the packaged fallback instead.
+ */
+export function artefactRenditionUrl(uid: string): string {
+  const inElectron = typeof window !== 'undefined' && !!(window as unknown as { codetrellisIpc?: unknown }).codetrellisIpc;
+  return inElectron
+    ? `ct-artefact://${encodeURIComponent(uid)}?rendition=pdf`
+    : `/api/artefacts/${encodeURIComponent(uid)}/rendition`;
+}

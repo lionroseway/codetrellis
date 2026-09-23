@@ -333,7 +333,10 @@ test.describe('Artefact viewer — Word documents', () => {
     await page.getByTestId('plan-item-tree').getByText('Write the summary').first().click();
     await page.getByTestId('evidence-link').filter({ hasText: 'restated total' }).click();
 
-    const doc = page.getByTestId('artefact-viewer').getByTestId('artefact-docx');
+    // No conversion engine in this build: the text view, saying why (§7.6).
+    const fallback = page.getByTestId('artefact-viewer').getByTestId('rendition-fallback');
+    await expect(fallback.getByText(/Shown as text, not as its pages — /)).toBeVisible({ timeout: 15_000 });
+    const doc = fallback.getByTestId('artefact-docx');
     await expect(doc.getByRole('heading', { name: 'Q3 summary' })).toBeVisible({ timeout: 15_000 });
     await expect(doc.locator('[data-cited="true"]')).toHaveText('The restated total is 1,240.');
     await expect(doc.getByRole('cell', { name: 'APAC' })).toBeVisible();
@@ -355,5 +358,52 @@ test.describe('Artefact viewer — Word documents', () => {
     const owed = (await (await request.get(`${API}/plans/${plan.uid}/worklist`)).json())
       .entries.find((e: { criterionUid: string }) => e.criterionUid === criterion.uid);
     expect(owed.anchors[0]).toMatchObject({ attachmentUid: docUid, locator: { text: 'EMEA revenue rose 12% on the quarter.' } });
+  });
+});
+
+test.describe('Artefact viewer — Office files without the engine', () => {
+  const RUN = Math.random().toString(36).slice(2, 7);
+  const TITLE = `E2E Viewer Deck ${RUN}`;
+  const dir = path.join(PROJECT_PATH, '.codetrellis', 'e2e-artefacts', RUN);
+
+  test.afterEach(async ({ request }) => {
+    await cleanupPlans(request, TITLE);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('a deck asks for its rendition, is told why there is none, and says so', async ({ page, request }) => {
+    const plan = await seedPlan(request, { title: TITLE, actions: [{ title: 'Board deck', body: 'The deck.' }] });
+    const item = plan.actionUids[0];
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'board.pptx'), makeZip({ 'ppt/presentation.xml': '<p:presentation/>' }));
+    const agent = await createMcpClient();
+    const uid = JSON.parse((await agent.callTool('record_artefact', {
+      item_uid: item, path: path.relative(PROJECT_PATH, path.join(dir, 'board.pptx')), role: 'material', note: 'board.pptx',
+    })).content[0].text).attachment_uid as string;
+    const criterion = await (await request.post(`${API}/items/${item}/criteria`, {
+      data: { text: 'The deck is the one the board saw', kind: 'manual' },
+    })).json();
+    const submitted = await agent.callTool('submit_criterion', {
+      criterion_uid: criterion.uid, evidence: [{ attachment_uid: uid }], note: 'the deck',
+    });
+    expect(submitted.isError, submitted.content?.[0]?.text).toBeFalsy();
+    agent.close();
+
+    // The route: a 503 with a sentence and the fallback flag, never a path.
+    const res = await request.get(`${API}/artefacts/${uid}/rendition`);
+    expect(res.status()).toBe(503);
+    const body = await res.json();
+    expect(body.fallback).toBe(true);
+    expect(body.error).toMatch(/engine/);
+    expect(JSON.stringify(body)).not.toContain(PROJECT_PATH);
+    // A file the engine does not convert is not sent to it.
+    expect((await request.get(`${API}/artefacts/not-a-real-uid/rendition`)).status()).toBe(404);
+
+    await gotoWithProject(page);
+    await openPlan(page, TITLE);
+    await page.getByTestId('plan-item-tree').getByText('Board deck').first().click();
+    await page.getByTestId('evidence-link').filter({ hasText: 'board.pptx' }).click();
+    const viewer = page.getByTestId('artefact-viewer');
+    await expect(viewer.getByTestId('rendition-fallback').getByText(/This deck cannot be shown as slides here — /)).toBeVisible({ timeout: 15_000 });
   });
 });
