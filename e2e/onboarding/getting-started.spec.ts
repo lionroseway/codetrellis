@@ -64,7 +64,10 @@ test.describe('Getting Started checklist', () => {
     await page.waitForTimeout(1500);
 
     // Counter format: "N/4"
-    await expect(page.getByText(/^\d+\/\d+$/)).toBeVisible();
+    // Scoped to the checklist: criteria counts ("0/1") use the same format.
+    await expect(
+      page.getByRole('button', { name: /^Getting started/ }).getByText(/^\d+\/\d+$/),
+    ).toBeVisible();
   });
 
   test('"Show MCP setup" link opens MCP guide modal', async ({ page }) => {

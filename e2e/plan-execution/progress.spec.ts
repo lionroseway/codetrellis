@@ -49,7 +49,7 @@ test.describe('Progress reporting', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    await page.getByText('UI Progress Task').first().click();
+    await page.getByTestId('plan-item-tree').getByText('UI Progress Task').first().click();
     await page.waitForTimeout(1000);
 
     // The 75% should be visible somewhere

@@ -4,8 +4,30 @@
  * Seeds recent projects via the API then verifies UI interactions.
  */
 
-import { test, expect } from '@playwright/test';
-import { gotoWelcome, API, PROJECT_PATH } from '../helpers/setup';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { test, expect, type Page } from '@playwright/test';
+import { gotoWelcome, openProject, API, PROJECT_PATH } from '../helpers/setup';
+
+/**
+ * A project of this test's own to pin or remove.
+ *
+ * These tests used to act on the FIRST row. The setup project pins this
+ * repository so it stays trusted all run, and pinned rows sort first — so
+ * "remove" removed the repository from Recent Projects, withdrawing its trust
+ * while specs on the other worker were creating plans in it.
+ */
+async function throwawayProject(label: string): Promise<string> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `ct-recents-${label}-`));
+  fs.writeFileSync(path.join(dir, 'index.ts'), 'export const x = 1;\n');
+  await openProject(dir);
+  return dir;
+}
+
+function rowFor(page: Page, dir: string) {
+  return page.locator('div.group').filter({ has: page.locator('.font-mono', { hasText: dir }) });
+}
 
 test.describe('Recent projects', () => {
   // Ensure at least one recent project exists by scanning
@@ -32,36 +54,32 @@ test.describe('Recent projects', () => {
     await expect(rows.first()).toBeVisible({ timeout: 5000 });
   });
 
-  test('pin button toggles to "Unpin"', async ({ page }) => {
-    await gotoWelcome(page, { skipLearnTrellis: true });
-    await page.waitForTimeout(1000);
-
-    // Find pin button and click it
-    const pinBtn = page.locator('button[title="Pin to top"]').first();
-    if (await pinBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await pinBtn.click();
-      // Should now show Unpin
-      await expect(page.locator('button[title="Unpin"]').first()).toBeVisible();
+  test('pin button toggles to "Unpin"', async ({ page, request }) => {
+    const dir = await throwawayProject('pin');
+    try {
+      await gotoWelcome(page, { skipLearnTrellis: true });
+      const row = rowFor(page, dir);
+      await row.hover();
+      await row.locator('button[title="Pin to top"]').click();
+      await expect(row.locator('button[title="Unpin"]')).toBeVisible();
+    } finally {
+      await request.delete(`${API}/recent-projects`, { data: { projectPath: dir } });
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
   test('remove button removes project from list', async ({ page, request }) => {
-    // Seed a throwaway path into recents
-    await request.post(`${API}/project/scan`, {
-      data: { projectPath: PROJECT_PATH },
-    });
-
-    await gotoWelcome(page, { skipLearnTrellis: true });
-    await page.waitForTimeout(1000);
-
-    const removeBtn = page.locator('button[title="Remove from recents"]').first();
-    if (await removeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const countBefore = await page.locator('button[title="Remove from recents"]').count();
-      await removeBtn.click();
-      await page.waitForTimeout(500);
-      const countAfter = await page.locator('button[title="Remove from recents"]').count();
-      // One fewer remove button means one fewer row
-      expect(countAfter).toBeLessThanOrEqual(countBefore);
+    const dir = await throwawayProject('remove');
+    try {
+      await gotoWelcome(page, { skipLearnTrellis: true });
+      const row = rowFor(page, dir);
+      await expect(row).toHaveCount(1, { timeout: 5000 });
+      await row.hover();
+      await row.locator('button[title="Remove from recents"]').click();
+      await expect(row).toHaveCount(0, { timeout: 5000 });
+    } finally {
+      await request.delete(`${API}/recent-projects`, { data: { projectPath: dir } });
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
