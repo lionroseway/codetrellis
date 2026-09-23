@@ -26,17 +26,21 @@ test.describe('Terminal empty state', () => {
     expect(sessions.length).toBe(0);
   });
 
-  test('"New terminal" button visible when panel opened with no sessions', async ({ page }) => {
+  // Opening the panel with no sessions starts a shell (terminal-store's
+  // togglePanel), so the empty state is what you see after closing the
+  // last one — not on first open, which is what this used to expect.
+  test('"New terminal" shows once the last session is closed', async ({ page, request }) => {
     await gotoWithProject(page);
 
-    // Open terminal panel
-    // By its title: "a button containing Terminal" also matches the file
-    // tree's e2e/terminal/ folder, which comes first in the page.
-    const termToggle = page.locator('button[title^="Toggle terminal"]');
-    await termToggle.click();
-    await page.waitForTimeout(1000);
+    await page.locator('button[title^="Toggle terminal"]').click();
+    const close = page.getByRole('button', { name: /^Close Terminal/ }).first();
+    await expect(close).toBeAttached({ timeout: 10_000 });
 
-    // Empty state should show "New terminal" text
+    await close.click({ force: true }); // it only shows on hover
     await expect(page.getByText('New terminal').first()).toBeVisible({ timeout: 5000 });
+
+    // Nothing left running for the next spec.
+    const left = await (await request.get(`${API}/terminals`)).json();
+    expect(left.length).toBe(0);
   });
 });

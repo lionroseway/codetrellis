@@ -30,11 +30,15 @@ test.describe('Welcome screen', () => {
     await page.goto('/');
     await page.waitForTimeout(1500);
 
-    // These cards may not show if recents exist — check conditionally
+    // Which of three the screen leads with depends on shared state: the
+    // step cards (nothing yet), recent projects, or — when an agent is
+    // live on a project, as another spec's session may be — "an agent is
+    // working here", which takes that project out of recents and hides
+    // the cards. It must lead with one of them.
     const openCard = page.getByText('Open a project', { exact: true });
     const recentSection = page.getByText('Recent projects', { exact: true });
-    // Either cards or recents should be visible
-    await expect(openCard.or(recentSection).first()).toBeVisible({ timeout: 5000 });
+    const liveAgents = page.getByText(/^(An agent is|Agents are) working here$/);
+    await expect(openCard.or(recentSection).or(liveAgents).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('TopBar renders with depth selector', async ({ page }) => {

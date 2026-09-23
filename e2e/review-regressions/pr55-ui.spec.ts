@@ -224,8 +224,16 @@ test.describe('Plan template picker (M26)', () => {
     // `Feature: {{feature}}` in here and sent it verbatim.
     await expect(titleInput).toHaveValue('');
 
-    await page.getByRole('button', { name: /Create plan/ }).click();
-    await expect(page.getByText('Plan created')).toBeVisible({ timeout: 20_000 });
+    // The plan this click created, read off the picker's own request. The
+    // toast was not a reliable signal — on a shared backend other specs'
+    // "New plan created" toasts can push it out of the five-toast list —
+    // and "the newest plan in the project" can be another worker's.
+    const [created] = await Promise.all([
+      page.waitForResponse((r) => r.url().includes('/api/plans/from-template') && r.request().method() === 'POST'),
+      page.getByRole('button', { name: /Create plan/ }).click(),
+    ]);
+    expect(created.ok(), `POST /api/plans/from-template -> ${created.status()}`).toBeTruthy();
+    const newest = ((await created.json()) as { plan: { uid: string; title: string } }).plan;
 
     // The picker prefilled `titleDraft` with the RAW defaultTitle and sent
     // it verbatim, so `applyTemplate`'s `input.title ?? template.defaultTitle`
@@ -233,15 +241,13 @@ test.describe('Plan template picker (M26)', () => {
     // one click, the default path — always produced a plan named
     // "Feature: {{feature}}". `mass-refactor` was worse: its
     // `.replace('{name}', input.title)` substituted the title into itself.
-    const res = await request.get(`${API}/plans?project=${encodeURIComponent(PROJECT_PATH)}`, {
-      headers: authHeaders(),
-    });
-    expect(res.ok(), `GET /api/plans -> ${res.status()}`).toBeTruthy();
-    const plans = (await res.json()) as Array<{ uid: string; title: string; createdAt: number }>;
-    const newest = plans.sort((a, b) => b.createdAt - a.createdAt)[0];
+    // Read back from the server, so this is what was stored, not what was sent.
+    const res = await request.get(`${API}/plans/${newest.uid}`, { headers: authHeaders() });
+    expect(res.ok(), `GET /api/plans/:uid -> ${res.status()}`).toBeTruthy();
+    const stored = (await res.json()) as { title: string };
 
-    expect(newest.title, 'the title still carries template syntax').not.toMatch(/\{\{|\}\}|\{name\}/);
-    expect(newest.title).not.toMatch(/Mass refactor: Mass refactor/);
+    expect(stored.title, 'the title still carries template syntax').not.toMatch(/\{\{|\}\}|\{name\}/);
+    expect(stored.title).not.toMatch(/Mass refactor: Mass refactor/);
 
     await request.delete(`${API}/plans/${newest.uid}`, { headers: authHeaders() });
   });

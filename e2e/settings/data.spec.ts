@@ -29,6 +29,7 @@ test.describe('Settings data', () => {
     await page.waitForTimeout(300);
 
     // Should mention restart
-    await expect(page.getByText('restart').first()).toBeVisible({ timeout: 3000 });
+    // Scoped: unscoped, 'restart' first matched a hidden commit-message option.
+    await expect(page.getByRole('dialog', { name: 'Settings' }).getByText('restart').first()).toBeVisible({ timeout: 3000 });
   });
 });
