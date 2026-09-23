@@ -40,7 +40,7 @@ test.describe('Agent-authored plan flow (Prompt B)', () => {
 
   test.afterEach(async ({ request }) => {
     wsCollector?.close();
-    await cleanupPlans(request, 'E2E');
+    await cleanupPlans(request, 'E2E Agent-Authored');
     cleanupTempFixture(tempFixture);
   });
 

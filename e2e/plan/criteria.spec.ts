@@ -11,7 +11,9 @@ import { test, expect } from '@playwright/test';
 import { gotoWithProject, seedPlan, openPlan, cleanupPlans } from '../helpers/setup';
 
 test.describe('Acceptance criteria', () => {
-  const PLAN_TITLE = 'E2E Criteria Plan';
+  // Unique per test: openPlan clicks the first plan with this title, and on a
+  // shared backend with parallel workers a fixed title can be another test's.
+  const planTitle = () => `E2E Criteria ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   test.afterEach(async ({ request }) => {
     await cleanupPlans(request, 'E2E Criteria');
@@ -19,6 +21,7 @@ test.describe('Acceptance criteria', () => {
 
   test('a body checklist becomes criteria a person can approve and send back', async ({ page, request }) => {
     await gotoWithProject(page);
+    const PLAN_TITLE = planTitle();
     await seedPlan(request, {
       title: PLAN_TITLE,
       actions: [{
@@ -45,11 +48,13 @@ test.describe('Acceptance criteria', () => {
     await send.click();
     await expect(page.getByTestId('criterion-row').first()).toHaveAttribute('data-state', 'sent_back');
     // Scoped to the rows: for a moment the composer still holds the same words.
-    await expect(page.getByTestId('criterion-row').getByText('EMEA excludes the Nordics restatement')).toBeVisible();
+    // The ↩ line, not the composer: for a moment both hold the same words.
+    await expect(page.getByTestId('criterion-row').getByText(/^↩ EMEA excludes the Nordics restatement/)).toBeVisible();
   });
 
   test('adding a criterion, and the gate standing for one', async ({ page, request }) => {
     await gotoWithProject(page);
+    const PLAN_TITLE = planTitle();
     await seedPlan(request, { title: PLAN_TITLE, actions: [{ title: 'Board deck', body: 'Build it.' }] });
     await openPlan(page, PLAN_TITLE);
     await page.getByText('Board deck').first().click();

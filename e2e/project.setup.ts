@@ -12,9 +12,24 @@
  * unparseable MCP results) that moved around between runs.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { test as setup } from '@playwright/test';
 import { PROJECT_PATH, openProject } from './helpers/setup';
 import { FIXTURE_PATH } from './live-agent/helpers/fixture-reset';
+
+// Specs that export plans write them into this repository's
+// .codetrellis/plans/ (gitignored). They piled up run after run — 91 of
+// them — and the app offers each as an import in the Plans panel, burying
+// the plan a spec is looking for. Only directories named the way specs name
+// them are removed; a person's own plans are never touched.
+setup('clear plan directories earlier runs exported', () => {
+  const plansDir = path.join(PROJECT_PATH, '.codetrellis', 'plans');
+  if (!fs.existsSync(plansDir)) return;
+  for (const name of fs.readdirSync(plansDir)) {
+    if (/^(e2e-|mcp-e2e-)/.test(name)) fs.rmSync(path.join(plansDir, name), { recursive: true, force: true });
+  }
+});
 
 // This repository, and the shared sample app that the agent specs drive.
 // Per-test temp copies open themselves (`openTempFixture`).

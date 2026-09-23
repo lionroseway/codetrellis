@@ -133,7 +133,7 @@ export async function runMockAgentDeviation(fixture: string): Promise<string> {
   // Author the same plan
   const planResult = await client.callTool('create_plan', {
     tasks: [],
-    title: 'E2E Agent-Authored: Error Handling',
+    title: 'E2E Agent-Deviation: Error Handling',
     project_path: fixture,
   });
   const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;

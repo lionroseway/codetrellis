@@ -9,10 +9,10 @@ import { test, expect } from '@playwright/test';
 import { seedPlan, cleanupPlans, API } from '../helpers/setup';
 
 test.describe('Drift indicator', () => {
-  const PLAN_TITLE = 'E2E Drift Plan';
+  const PLAN_TITLE = 'E2E Drift Indicator Plan';
 
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Drift');
+    await cleanupPlans(request, 'E2E Drift Indicator');
   });
 
   test('deviations endpoint returns without error', async ({ request }) => {

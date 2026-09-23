@@ -55,11 +55,13 @@ test.describe('Screenshot capture', () => {
 
   test('06 - Inspector with file selected', async ({ page }) => {
     await gotoWithProject(page);
-    const file = page.locator('text=server.ts').first();
-    if (await file.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await file.click();
-      await page.waitForTimeout(800);
-    }
+    // From the explorer: "text=server.ts" first matched a graph node
+    // (pairing-server.ts) sitting under the toolbar panel, so the click
+    // never landed. Any file shows the Inspector; the root package.json is
+    // always in view.
+    const file = page.locator('.glass-panel.border-r').getByRole('button', { name: 'package.json', exact: true }).first();
+    await file.click();
+    await page.waitForTimeout(800);
     await page.screenshot({ path: shot('06-inspector.png'), fullPage: true });
   });
 

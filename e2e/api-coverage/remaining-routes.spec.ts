@@ -13,12 +13,12 @@ import { seedPlan, cleanupPlans, API, PROJECT_PATH } from '../helpers/setup';
 
 test.describe('Attachment management', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Attach');
+    await cleanupPlans(request, 'E2E Routes Attach');
   });
 
   test('DELETE /api/attachments/:uid removes attachment', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Attach Plan',
+      title: 'E2E Routes Attach Plan',
       actions: [{ title: 'Attach Target', body: 'Has attachment' }],
     });
 
@@ -35,7 +35,7 @@ test.describe('Attachment management', () => {
 
   test('GET /api/attachments/:uid/file returns 404 for url-type attachment', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Attach Plan',
+      title: 'E2E Routes Attach Plan',
       actions: [{ title: 'File Attach', body: 'body' }],
     });
 
@@ -52,12 +52,12 @@ test.describe('Attachment management', () => {
 
 test.describe('Single proposed change', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Change');
+    await cleanupPlans(request, 'E2E Routes Change');
   });
 
   test('GET /api/plans/:uid/changes/:changeId returns 404 for missing change', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Change Plan',
+      title: 'E2E Routes Change Plan',
       actions: [{ title: 'Change Action', body: 'body', fileSpecs: [{ path: 'src/backend/server.ts', action: 'modify' }] }],
     });
 
@@ -67,7 +67,7 @@ test.describe('Single proposed change', () => {
 
   test('GET /api/plans/:uid/changes then fetch single change by id', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Change Plan',
+      title: 'E2E Routes Change Plan',
       actions: [{ title: 'Modify Server', body: 'body', fileSpecs: [{ path: 'src/backend/server.ts', action: 'modify' }] }],
     });
 
@@ -91,7 +91,7 @@ test.describe('Single proposed change', () => {
 
 test.describe('Import external plan', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Import');
+    await cleanupPlans(request, 'E2E Routes Import');
   });
 
   test('POST /api/plans/import-external rejects missing source', async ({ request }) => {
@@ -180,7 +180,7 @@ test.describe('Terminal inject', () => {
 
 test.describe('Plan from template', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Template');
+    await cleanupPlans(request, 'E2E Routes Template');
   });
 
   test('GET /api/plan-templates returns available templates', async ({ request }) => {
@@ -201,7 +201,7 @@ test.describe('Plan from template', () => {
       const res = await request.post(`${API}/plans/from-template`, {
         data: {
           templateId: tmpl.id || tmpl.uid || tmpl.slug,
-          title: 'E2E Template Plan',
+          title: 'E2E Routes Template Plan',
           projectPath: PROJECT_PATH,
         },
       });
@@ -212,12 +212,12 @@ test.describe('Plan from template', () => {
 
 test.describe('External references', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Refs');
+    await cleanupPlans(request, 'E2E Routes Refs');
   });
 
   test('POST then GET /api/items/:uid/refs manages external refs', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Refs Plan',
+      title: 'E2E Routes Refs Plan',
       actions: [{ title: 'Ref Action', body: 'Has refs' }],
     });
 
@@ -240,7 +240,7 @@ test.describe('External references', () => {
 
   test('GET /api/plans/:uid/refs lists plan-level refs', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Refs Plan',
+      title: 'E2E Routes Refs Plan',
       actions: [{ title: 'Action', body: 'body' }],
     });
 
@@ -252,7 +252,7 @@ test.describe('External references', () => {
 
   test('PUT and DELETE /api/refs/:uid update and remove ref', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Refs Plan',
+      title: 'E2E Routes Refs Plan',
       actions: [{ title: 'Ref Target', body: 'body' }],
     });
 

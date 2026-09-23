@@ -254,10 +254,15 @@ export async function openPlan(page: Page, planTitle: string) {
   // Click Plans tab — use .first() because 'Plans' may appear in
   // both the PlanPanel tab bar and other contexts.
   await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
-  // Click the plan row
-  await page.locator(`text=${planTitle}`).first().click();
-  // Wait for workspace to load
-  await page.waitForTimeout(1500);
+  // Click the plan row once it is listed — a plan seeded a moment ago may
+  // arrive after the list first renders.
+  const row = page.locator(`text=${planTitle}`).first();
+  await row.waitFor({ timeout: 10_000 });
+  await row.click();
+  // Wait for the workspace itself (its plan reference chip), not a fixed
+  // sleep: a click that did not open the plan should fail HERE, not three
+  // steps later as an item that cannot be found.
+  await page.getByTestId('copy-ref-plan').first().waitFor({ timeout: 10_000 });
 }
 
 /**
@@ -278,8 +283,12 @@ export async function cleanupPlans(
   const body = await res.json();
   const plans: Array<{ uid: string; title: string; status: string }> =
     Array.isArray(body) ? body : (body?.plans ?? []);
+  // A title PREFIX, not a substring. Workers share one backend, so a
+  // broad pattern ("E2E", or "E2E Change" inside "MCP E2E Changes …")
+  // deleted other spec files' plans while they were being used — which
+  // presented as clicks on elements that had just been detached.
   for (const p of plans) {
-    if (p.title.includes(titlePattern) && p.status !== 'archived') {
+    if (p.title.startsWith(titlePattern) && p.status !== 'archived') {
       await request.delete(`${API}/plans/${p.uid}`, { headers: authHeaders() });
     }
   }

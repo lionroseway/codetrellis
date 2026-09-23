@@ -88,7 +88,7 @@ Do NOT improvise beyond these instructions.
 
 STEP 1 — BUILD THE PLAN:
 Use \`create_plan\` with these exact parameters:
-  - title: "E2E Agent-Authored: Error Handling"
+  - title: "E2E Agent-Deviation: Error Handling"
   - project_path: "${projectPath}"
   - tasks: []
 

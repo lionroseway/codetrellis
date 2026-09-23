@@ -53,12 +53,12 @@ async function newItem(
 
 test.describe('MCP pages, comments, attachments, refs', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'MCP E2E');
+    await cleanupPlans(request, 'MCP E2E Items ');
   });
 
   test('page (object item): add → get → list → update → search', async () => {
     const client = await createMcpClient();
-    const planUid = await newPlan(client, 'MCP E2E Docs Plan');
+    const planUid = await newPlan(client, 'MCP E2E Items Docs Plan');
 
     const docUid = await newItem(client, planUid, {
       kind: 'object',
@@ -84,7 +84,7 @@ test.describe('MCP pages, comments, attachments, refs', () => {
 
   test('phase (object with children): nest → list children → move out → delete', async () => {
     const client = await createMcpClient();
-    const planUid = await newPlan(client, 'MCP E2E Phases Plan');
+    const planUid = await newPlan(client, 'MCP E2E Items Phases Plan');
 
     const phaseUid = await newItem(client, planUid, { kind: 'object', title: 'Phase 1: Setup' });
     const stepUid = await newItem(client, planUid, { title: 'Install deps', parent_uid: phaseUid });
@@ -109,7 +109,7 @@ test.describe('MCP pages, comments, attachments, refs', () => {
 
   test('add_item_comment → list_item_comments → delete_item_comment', async () => {
     const client = await createMcpClient();
-    const planUid = await newPlan(client, 'MCP E2E Item Comments Plan');
+    const planUid = await newPlan(client, 'MCP E2E Items Item Comments Plan');
     const itemUid = await newItem(client, planUid, { title: 'Commentable Item' });
 
     const comment = await ok(client, 'add_item_comment', {
@@ -131,7 +131,7 @@ test.describe('MCP pages, comments, attachments, refs', () => {
 
   test('add_item_attachment attaches URL', async () => {
     const client = await createMcpClient();
-    const planUid = await newPlan(client, 'MCP E2E Attach Plan');
+    const planUid = await newPlan(client, 'MCP E2E Items Attach Plan');
     const itemUid = await newItem(client, planUid, { title: 'Attachable Item' });
 
     await ok(client, 'add_item_attachment', {
@@ -148,7 +148,7 @@ test.describe('MCP pages, comments, attachments, refs', () => {
 
   test('add_external_ref → list → remove', async () => {
     const client = await createMcpClient();
-    const planUid = await newPlan(client, 'MCP E2E Refs Plan');
+    const planUid = await newPlan(client, 'MCP E2E Items Refs Plan');
     const itemUid = await newItem(client, planUid, { title: 'Ref Item' });
 
     const ref = await ok(client, 'add_external_ref', {
