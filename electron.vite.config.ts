@@ -150,7 +150,8 @@ export default defineConfig({
     // Lazy-loaded by the artefact viewer, or imported only by its workers,
     // which Vite's startup scan does not follow. Bundled up front so the
     // first PDF or Word document opened in dev doesn't make Vite
-    // re-optimise and reload the page.
+    // re-optimise and reload the page. Keep in step with vite.web.config.ts,
+    // which serves `npm run dev` and the browser suite.
     optimizeDeps: {
       include: ['pdfjs-dist/legacy/build/pdf.mjs', 'mammoth'],
     },
