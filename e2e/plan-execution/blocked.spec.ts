@@ -44,7 +44,10 @@ test.describe('Blocked status', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    await page.getByText('Blocked UI Task').first().click();
+    // Scoped to the tree: a blocked plan also shows the review panel, which
+    // lists every item as a button — disabled when it touches no files — and
+    // comes first in the page, so an unscoped `.first()` waited on that.
+    await page.getByTestId('plan-item-tree').getByText('Blocked UI Task').first().click();
     await page.waitForTimeout(1000);
 
     // The blocked reason should be visible as a banner

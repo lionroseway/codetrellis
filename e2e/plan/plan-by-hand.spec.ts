@@ -73,7 +73,7 @@ test.describe('planning by hand', () => {
 
     // ── name the task, the way a person would ─────────────────────
     const action = items.find((i) => i.kind === 'action')!;
-    await page.getByText(action.title).first().click();
+    await page.getByTestId('plan-item-tree').getByText(action.title).first().click();
     await page.waitForTimeout(500);
     const itemTitle = page.locator('input[placeholder="Untitled"]').first();
     await expect(itemTitle).toBeVisible({ timeout: 5000 });

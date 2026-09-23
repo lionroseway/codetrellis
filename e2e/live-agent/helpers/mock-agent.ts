@@ -54,17 +54,19 @@ export async function runMockAgentAuthored(fixture: string): Promise<string> {
   });
   const item2Uid = JSON.parse(item2.content?.[0]?.text || '{}').uid;
 
-  await client.callTool('add_plan_doc', {
+  // A summary page and a phase — Object items, which replaced the old
+  // add_plan_doc / add_plan_phase tools.
+  await client.callTool('add_item', {
     plan_uid: planUid,
-    doc_type: 'executive',
+    kind: 'object',
     title: 'Error Handling Improvement',
     body: 'This plan adds error handling to the web frontend.',
   });
 
-  await client.callTool('add_plan_phase', {
+  await client.callTool('add_item', {
     plan_uid: planUid,
+    kind: 'object',
     title: 'Phase 1: Core error handling',
-    phase_number: 1,
   });
 
   // Execute
@@ -131,7 +133,7 @@ export async function runMockAgentDeviation(fixture: string): Promise<string> {
   // Author the same plan
   const planResult = await client.callTool('create_plan', {
     tasks: [],
-    title: 'E2E Agent-Authored: Error Handling',
+    title: 'E2E Agent-Deviation: Error Handling',
     project_path: fixture,
   });
   const planUid = JSON.parse(planResult.content?.[0]?.text || '{}').uid;

@@ -80,13 +80,15 @@ test.describe('Folder picker modal', () => {
     await page.getByRole('button', { name: 'Open Project' }).first().click();
     await page.waitForTimeout(1000);
 
-    // Should have at least one directory entry (from default browsed path)
-    const dirItems = page.locator('button').filter({ has: page.locator('svg') }).filter({
+    // Scoped to the picker: unscoped, "a button with an icon and text"
+    // also matched the TopBar's own Open button.
+    const picker = page.getByRole('dialog', { name: 'Open Project' });
+    const dirItems = picker.locator('button').filter({ has: page.locator('svg') }).filter({
       hasText: /.+/,
     });
     // Either we see directories or the "No subdirectories" message
-    const noSubdirs = page.getByText('No subdirectories');
-    await expect(dirItems.first().or(noSubdirs)).toBeVisible({ timeout: 3000 });
+    const noSubdirs = picker.getByText('No subdirectories');
+    await expect(dirItems.or(noSubdirs).first()).toBeVisible({ timeout: 3000 });
   });
 
   test('Open button exists in footer', async ({ page }) => {

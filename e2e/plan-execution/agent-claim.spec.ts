@@ -45,7 +45,7 @@ test.describe('Agent claim', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    await page.getByText('Claimed UI Task').first().click();
+    await page.getByTestId('plan-item-tree').getByText('Claimed UI Task').first().click();
     await page.waitForTimeout(1000);
 
     // Agent name should appear somewhere in the canvas

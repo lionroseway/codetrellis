@@ -3,6 +3,7 @@
  * projects, filesystem browse, logs.
  */
 
+import os from 'node:os';
 import { test, expect } from '@playwright/test';
 import { API, PROJECT_PATH } from '../helpers/setup';
 
@@ -41,7 +42,10 @@ test.describe('Git advanced APIs', () => {
   });
 
   test('GET /api/fs/browse returns directory listing', async ({ request }) => {
-    const res = await request.get(`${API}/fs/browse?path=${encodeURIComponent(PROJECT_PATH)}`);
+    // Browsing is confined to the home directory (the folder picker's
+    // contract). The checkout is not always under it — a container's
+    // often isn't — so list home itself rather than the repo.
+    const res = await request.get(`${API}/fs/browse?path=${encodeURIComponent(os.homedir())}`);
     expect(res.ok()).toBeTruthy();
     const data = await res.json();
     expect(data.current).toBeTruthy();

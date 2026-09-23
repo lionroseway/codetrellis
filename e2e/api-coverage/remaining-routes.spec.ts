@@ -13,12 +13,12 @@ import { seedPlan, cleanupPlans, API, PROJECT_PATH } from '../helpers/setup';
 
 test.describe('Attachment management', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Attach');
+    await cleanupPlans(request, 'E2E Routes Attach');
   });
 
   test('DELETE /api/attachments/:uid removes attachment', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Attach Plan',
+      title: 'E2E Routes Attach Plan',
       actions: [{ title: 'Attach Target', body: 'Has attachment' }],
     });
 
@@ -35,7 +35,7 @@ test.describe('Attachment management', () => {
 
   test('GET /api/attachments/:uid/file returns 404 for url-type attachment', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Attach Plan',
+      title: 'E2E Routes Attach Plan',
       actions: [{ title: 'File Attach', body: 'body' }],
     });
 
@@ -52,12 +52,12 @@ test.describe('Attachment management', () => {
 
 test.describe('Single proposed change', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Change');
+    await cleanupPlans(request, 'E2E Routes Change');
   });
 
   test('GET /api/plans/:uid/changes/:changeId returns 404 for missing change', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Change Plan',
+      title: 'E2E Routes Change Plan',
       actions: [{ title: 'Change Action', body: 'body', fileSpecs: [{ path: 'src/backend/server.ts', action: 'modify' }] }],
     });
 
@@ -67,7 +67,7 @@ test.describe('Single proposed change', () => {
 
   test('GET /api/plans/:uid/changes then fetch single change by id', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Change Plan',
+      title: 'E2E Routes Change Plan',
       actions: [{ title: 'Modify Server', body: 'body', fileSpecs: [{ path: 'src/backend/server.ts', action: 'modify' }] }],
     });
 
@@ -91,7 +91,7 @@ test.describe('Single proposed change', () => {
 
 test.describe('Import external plan', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Import');
+    await cleanupPlans(request, 'E2E Routes Import');
   });
 
   test('POST /api/plans/import-external rejects missing source', async ({ request }) => {
@@ -127,6 +127,10 @@ test.describe('Import external plan', () => {
 
 test.describe('Recent projects management', () => {
   test('POST /api/recent-projects/pin pins a project', async ({ request }) => {
+    // Pin only, never unpin. The setup project pins this repository so it
+    // stays trusted all run; toggling it off, even briefly, opens a window in
+    // which specs on the other worker opening temp projects can evict it, and
+    // plan creation there is then refused as "not an opened project".
     const res = await request.post(`${API}/recent-projects/pin`, {
       data: { projectPath: PROJECT_PATH, pinned: true },
     });
@@ -134,10 +138,9 @@ test.describe('Recent projects management', () => {
     const data = await res.json();
     expect(data.ok).toBe(true);
 
-    // Unpin to clean up
-    await request.post(`${API}/recent-projects/pin`, {
-      data: { projectPath: PROJECT_PATH, pinned: false },
-    });
+    const list = await (await request.get(`${API}/recent-projects`)).json();
+    const entry = (list.projects as Array<{ path: string; pinned: boolean }>).find((p) => p.path === PROJECT_PATH);
+    expect(entry?.pinned).toBe(true);
   });
 
   test('DELETE /api/recent-projects removes a project entry', async ({ request }) => {
@@ -180,7 +183,7 @@ test.describe('Terminal inject', () => {
 
 test.describe('Plan from template', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Template');
+    await cleanupPlans(request, 'E2E Routes Template');
   });
 
   test('GET /api/plan-templates returns available templates', async ({ request }) => {
@@ -201,7 +204,7 @@ test.describe('Plan from template', () => {
       const res = await request.post(`${API}/plans/from-template`, {
         data: {
           templateId: tmpl.id || tmpl.uid || tmpl.slug,
-          title: 'E2E Template Plan',
+          title: 'E2E Routes Template Plan',
           projectPath: PROJECT_PATH,
         },
       });
@@ -212,12 +215,12 @@ test.describe('Plan from template', () => {
 
 test.describe('External references', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Refs');
+    await cleanupPlans(request, 'E2E Routes Refs');
   });
 
   test('POST then GET /api/items/:uid/refs manages external refs', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Refs Plan',
+      title: 'E2E Routes Refs Plan',
       actions: [{ title: 'Ref Action', body: 'Has refs' }],
     });
 
@@ -240,7 +243,7 @@ test.describe('External references', () => {
 
   test('GET /api/plans/:uid/refs lists plan-level refs', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Refs Plan',
+      title: 'E2E Routes Refs Plan',
       actions: [{ title: 'Action', body: 'body' }],
     });
 
@@ -252,7 +255,7 @@ test.describe('External references', () => {
 
   test('PUT and DELETE /api/refs/:uid update and remove ref', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Refs Plan',
+      title: 'E2E Routes Refs Plan',
       actions: [{ title: 'Ref Target', body: 'body' }],
     });
 

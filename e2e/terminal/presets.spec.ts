@@ -23,7 +23,7 @@ test.describe('Terminal presets', () => {
     await gotoWithProject(page);
 
     // Open terminal panel
-    const termToggle = page.locator('button').filter({ hasText: 'Terminal' }).first();
+    const termToggle = page.locator('button[title^="Toggle terminal"]');
     await termToggle.click();
     await page.waitForTimeout(1000);
 

@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
 import { cleanupPlans, API } from '../helpers/setup';
 import {
   FIXTURE_PATH,
-  createTempFixture,
+  openTempFixture,
   cleanupTempFixture,
 } from './helpers/fixture-reset';
 import { promptAuthorAndDeviate } from './helpers/prompts';
@@ -24,7 +24,7 @@ import {
 import { runMockAgentDeviation } from './helpers/mock-agent';
 
 const USE_REAL_CLAUDE = process.env.CODETRELLIS_REAL_AGENT === '1';
-const PLAN_TITLE = 'E2E Agent-Authored: Error Handling';
+const PLAN_TITLE = 'E2E Agent-Deviation: Error Handling';
 
 test.describe('Agent-authored plan deviation (Prompt C)', () => {
   test.describe.configure({ mode: 'serial' });
@@ -32,13 +32,13 @@ test.describe('Agent-authored plan deviation (Prompt C)', () => {
   let tempFixture: string;
 
   test.beforeEach(async () => {
-    tempFixture = createTempFixture();
+    tempFixture = await openTempFixture();
     wsCollector = await createWsCollector();
   });
 
   test.afterEach(async ({ request }) => {
     wsCollector?.close();
-    await cleanupPlans(request, 'E2E');
+    await cleanupPlans(request, 'E2E Agent-Deviation');
     cleanupTempFixture(tempFixture);
   });
 

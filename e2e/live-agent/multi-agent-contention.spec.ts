@@ -27,7 +27,7 @@ test.describe('Multi-agent contention', () => {
 
   test.afterEach(async ({ request }) => {
     wsCollector?.close();
-    await cleanupPlans(request, 'E2E');
+    await cleanupPlans(request, 'E2E Contention');
   });
 
   test('two agents can register simultaneously', async () => {
@@ -54,7 +54,7 @@ test.describe('Multi-agent contention', () => {
 
   test('two agents can claim different items', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Multi-agent Plan',
+      title: 'E2E Contention Multi-agent Plan',
       projectPath: FIXTURE_PATH,
       actions: [
         { title: 'Task A', body: 'First task' },
@@ -147,7 +147,7 @@ test.describe('Multi-agent contention', () => {
 
   test('plan-item-claimed broadcast fires', async ({ request }) => {
     const plan = await seedPlan(request, {
-      title: 'E2E Claim Broadcast Plan',
+      title: 'E2E Contention Claim Broadcast Plan',
       projectPath: FIXTURE_PATH,
       actions: [
         { title: 'Claimable', body: 'Test' },

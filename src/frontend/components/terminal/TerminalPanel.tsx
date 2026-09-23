@@ -119,7 +119,9 @@ export function TerminalPanel() {
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); killSession(s.id); }}
-                className="opacity-0 group-hover:opacity-100 text-foreground-subtle hover:text-red-400 transition-all ml-0.5"
+                aria-label={`Close ${s.title}`}
+                title={`Close ${s.title}`}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-foreground-subtle hover:text-red-400 transition-all ml-0.5"
               >
                 <X size={10} />
               </button>

@@ -27,7 +27,7 @@ test.describe('Terminal panel', () => {
     await gotoWithProject(page);
 
     // Click the Terminal toggle in the tab bar area
-    const termToggle = page.locator('button').filter({ hasText: 'Terminal' }).first();
+    const termToggle = page.locator('button[title^="Toggle terminal"]');
     await termToggle.click();
     await page.waitForTimeout(1000);
 
