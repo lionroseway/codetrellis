@@ -3,7 +3,7 @@ import { ArrowLeft, FolderOpen, X, FileQuestion } from 'lucide-react';
 import type { ItemCriterion } from '@shared/types';
 import { useArtefactViewStore, type ArtefactView } from '../../stores/artefact-view-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
-import { artefactSrcUrl } from '../../lib/artefact-src';
+import { artefactRenditionUrl, artefactSrcUrl } from '../../lib/artefact-src';
 import { describeLocator, openArtefactAt } from '../../lib/open-artefact-at';
 import DOMPurify from 'dompurify';
 import type { XlsxReply } from '../../workers/xlsx-worker';
@@ -53,6 +53,7 @@ const MAX_CSV_ROWS = 2000;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const MAX_SHEET_BYTES = 25 * 1024 * 1024;
 const MAX_DOCX_BYTES = 25 * 1024 * 1024;
+const MAX_DECK_BYTES = 100 * 1024 * 1024;
 /** A quote picked for a send-back: enough to find it again, small enough to store. */
 const MAX_QUOTE_CHARS = 300;
 const MAX_PDF_PAGES = 300;
@@ -167,8 +168,11 @@ function ViewerDialog({ view }: { view: ArtefactView }) {
             : ext === 'xlsx' || ext === 'xlsm' ? ((meta.size ?? 0) > MAX_SHEET_BYTES ? <TooBig meta={meta} /> : (
               <XlsxView uid={view.uid} meta={meta} locator={view.locator} selection={selection} onSelect={setSelection} />
             ))
-            : ext === 'docx' ? ((meta.size ?? 0) > MAX_DOCX_BYTES ? <TooBig meta={meta} /> : (
-              <DocxView uid={view.uid} meta={meta} locator={view.locator} onSelect={setSelection} />
+            : ext === 'docx' || ext === 'xls' ? ((meta.size ?? 0) > MAX_DOCX_BYTES ? <TooBig meta={meta} /> : (
+              <OfficeView uid={view.uid} meta={meta} ext={ext} locator={view.locator} selection={selection} onSelect={setSelection} />
+            ))
+            : ext === 'pptx' ? ((meta.size ?? 0) > MAX_DECK_BYTES ? <TooBig meta={meta} /> : (
+              <OfficeView uid={view.uid} meta={meta} ext={ext} locator={view.locator} selection={selection} onSelect={setSelection} />
             ))
             : ext === 'csv' ? (tooBig(meta) ? <TooBig meta={meta} /> : (
               <CsvView uid={view.uid} locator={view.locator} selection={selection} onSelect={setSelection} />
@@ -554,8 +558,10 @@ function Grid({ rows, target, picked, onPick, footer }: {
  * (script-src 'self', no unsafe-eval) would refuse one; XFA forms are off. `{page}` scrolls there; `{text}` finds the
  * page that has the quote. Clicking a page picks it to send back from.
  */
-function PdfView({ uid, meta, locator, selection, onSelect }: {
+function PdfView({ uid, meta, locator, selection, onSelect, data: given }: {
   uid: string; meta: Meta; locator: unknown; selection: Selection; onSelect: (s: Selection) => void;
+  /** The PDF's bytes, when they are already here (an Office file's rendition). */
+  data?: Uint8Array;
 }) {
   const [pages, setPages] = useState<HTMLCanvasElement[] | null>(null);
   const [cited, setCited] = useState<number | null>(null);
@@ -578,9 +584,15 @@ function PdfView({ uid, meta, locator, selection, onSelect }: {
           import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
         ]);
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-        const res = await fetch(artefactSrcUrl(uid));
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = new Uint8Array(await res.arrayBuffer());
+        let data: Uint8Array;
+        if (given) {
+          // pdf.js takes ownership of what it is given; keep the original for a re-render.
+          data = given.slice();
+        } else {
+          const res = await fetch(artefactSrcUrl(uid));
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          data = new Uint8Array(await res.arrayBuffer());
+        }
         const task = pdfjs.getDocument({ data, enableXfa: false });
         destroy = () => { void task.destroy(); };
         const doc = await task.promise;
@@ -610,7 +622,7 @@ function PdfView({ uid, meta, locator, selection, onSelect }: {
       }
     })();
     return () => { live = false; destroy?.(); };
-  }, [uid, wantPage, wantText]);
+  }, [uid, wantPage, wantText, given]);
 
   useEffect(() => {
     if (!pages || cited === null) return;
@@ -807,14 +819,76 @@ function DocxView({ uid, meta, locator, onSelect }: {
   );
 }
 
+type Rendition = { kind: 'loading' } | { kind: 'pdf'; data: Uint8Array } | { kind: 'fallback'; reason: string };
+
+/**
+ * An Office file as it looks (§7.6): converted to PDF by the engine in its
+ * own process, and shown by the PDF view — pages as Word lays them out,
+ * slides as PowerPoint draws them, citations by page or by words. The
+ * engine starts on the first one opened, so that first look takes a few
+ * seconds; after that it is warm, and a file seen before comes from the
+ * cache. When it cannot convert — no engine in this build, a runtime that
+ * cannot confine it, a document it cannot read — the packaged fallback is
+ * shown, and says why.
+ */
+function OfficeView({ uid, meta, ext, locator, selection, onSelect }: {
+  uid: string; meta: Meta; ext: string; locator: unknown; selection: Selection; onSelect: (s: Selection) => void;
+}) {
+  const [state, setState] = useState<Rendition>({ kind: 'loading' });
+
+  useEffect(() => {
+    let live = true;
+    setState({ kind: 'loading' });
+    (async () => {
+      try {
+        const res = await fetch(artefactRenditionUrl(uid));
+        if (res.ok) {
+          const data = new Uint8Array(await res.arrayBuffer());
+          if (live) setState({ kind: 'pdf', data });
+          return;
+        }
+        const body = await res.json().catch(() => null) as { error?: string } | null;
+        if (live) setState({ kind: 'fallback', reason: body?.error ?? `HTTP ${res.status}` });
+      } catch {
+        if (live) setState({ kind: 'fallback', reason: 'the document could not be converted' });
+      }
+    })();
+    return () => { live = false; };
+  }, [uid]);
+
+  if (state.kind === 'loading') {
+    return <p data-testid="rendition-loading" className="p-6 text-[12px] text-foreground-subtle">Preparing preview…</p>;
+  }
+  if (state.kind === 'pdf') {
+    return <PdfView uid={uid} meta={meta} locator={locator} selection={selection} onSelect={onSelect} data={state.data} />;
+  }
+  const why = state.reason.replace(/\.$/, '');
+  if (ext === 'docx') {
+    return (
+      <div data-testid="rendition-fallback">
+        <p className="px-8 pt-4 text-[11px] text-amber-300/80">Shown as text, not as its pages — {why}.</p>
+        <DocxView uid={uid} meta={meta} locator={locator} onSelect={onSelect} />
+      </div>
+    );
+  }
+  return (
+    <div data-testid="rendition-fallback" className="h-full">
+      <Card
+        title={meta.path ?? meta.name}
+        lines={[
+          ext === 'pptx' ? `This deck cannot be shown as slides here — ${why}.` : `This workbook cannot be shown here — ${why}.`,
+          ext === 'xls' ? 'Saving it as .xlsx shows its cells in the viewer.' : 'Show in Finder to look at it — the viewer never opens files with another app.',
+        ]}
+        icon
+      />
+    </div>
+  );
+}
+
 function NotYet({ meta, ext }: { meta: Meta; ext: string }) {
   const why =
     ext === 'html' || ext === 'htm'
       ? 'HTML is a program, so it gets its own sandboxed view — that has not shipped yet.'
-      : ext === 'xls'
-        ? 'This is an old-format (.xls) workbook, which the viewer does not read. Save it as .xlsx to preview it.'
-      : ext === 'pptx'
-        ? 'Previewing slide decks arrives with its parser — not in this version.'
         : `.${ext || '?'} files are not previewed.`;
   return <Card title={meta.path ?? meta.name} lines={[why, 'Show in Finder to look at it — the viewer never opens files with another app.']} icon />;
 }

@@ -39,6 +39,7 @@ import {
   absolutePathOf,
   isAttachmentUid,
 } from '../backend/services/artefact-content-service';
+import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
 
 // Phase 31 §7.1 — the packaged renderer is a file:// document: its fetch is
 // shimmed over IPC as UTF-8 and its <img>/<video> reach neither the shim nor
@@ -51,7 +52,22 @@ protocol.registerSchemesAsPrivileged([
 
 function installArtefactProtocol(): void {
   protocol.handle('ct-artefact', async (request) => {
-    const uid = new URL(request.url).hostname;
+    const url = new URL(request.url);
+    const uid = url.hostname;
+    // `?rendition=pdf` — an Office file as it looks (§7.6), converted by the
+    // engine in its own process; a 503 sends the viewer to its fallback.
+    if (url.searchParams.get('rendition') === 'pdf') {
+      if (!isAttachmentUid(uid)) return new Response('Not a file that can be shown', { status: 404 });
+      const result = await renditionOf(uid);
+      if (!result.ok) {
+        return new Response(JSON.stringify({ error: result.reason, fallback: true }), {
+          status: result.status, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const served = serveFile(result.file, request.headers.get('range'));
+      if (!served.stream) return new Response(served.error ?? 'Not found', { status: served.status, headers: served.headers });
+      return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, { status: served.status, headers: served.headers });
+    }
     const file = isAttachmentUid(uid) ? await resolveServable(uid) : null;
     if (!file) return new Response('Not a file that can be shown', { status: 404 });
     const served = serveFile(file, request.headers.get('range'));
@@ -390,6 +406,8 @@ app.on('window-all-closed', () => {
 // (cosmetic) and a `caffeinate` child can orphan briefly.
 app.on('before-quit', () => {
   teardownPowerControl();
+  // The conversion engine is a child process holding a gigabyte; it goes too.
+  stopEngine();
 });
 
 // =============================================================
@@ -454,6 +472,9 @@ function wirePowerControl(): void {
   // plug/unplug and on battery exhaustion.
   powerMonitor.on('on-battery', () => setAcState('battery'));
   powerMonitor.on('on-ac', () => setAcState('plugged'));
+  // Phase 31 §7.6 — the conversion engine holds a gigabyte while warm; it is
+  // not kept through a sleep. The next Office file opened starts it again.
+  powerMonitor.on('suspend', () => stopEngine());
 
   // Boot the state machine + signal wiring.
   startPowerService();

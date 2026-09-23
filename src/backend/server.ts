@@ -81,6 +81,7 @@ import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './se
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
+import * as rendition from './services/rendition/rendition-service';
 import * as artefactService from './services/artefact-service';
 import * as _lazy___services_artefact_watcher from './services/artefact-watcher';
 const startArtefactWatching = (a: Parameters<typeof _lazy___services_artefact_watcher.startArtefactWatching>[0]) =>
@@ -2884,6 +2885,30 @@ async function sendAttachmentContent(req: express.Request, res: express.Response
 
 app.get('/api/attachments/:uid/file', (req, res) => { void sendAttachmentContent(req, res); });
 app.get('/api/artefacts/:uid/content', (req, res) => { void sendAttachmentContent(req, res); });
+
+/**
+ * Phase 31 §7.6 — an Office file as it looks, converted to PDF by the
+ * engine in its own process. Found and read exactly as `/content` is; a
+ * conversion that cannot happen is a 503 with a sentence, and the viewer
+ * shows the packaged fallback.
+ */
+app.get('/api/artefacts/:uid/rendition', async (req, res) => {
+  if (!artefactContent.isAttachmentUid(req.params.uid)) { res.status(404).json({ error: 'Attachment not found' }); return; }
+  const result = await rendition.renditionOf(req.params.uid);
+  if (!result.ok) { res.status(result.status).json({ error: result.reason, fallback: true }); return; }
+  const served = artefactContent.serveFile(result.file, typeof req.headers.range === 'string' ? req.headers.range : null);
+  if (!served.stream) {
+    for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+    res.status(served.status).json({ error: served.error, fallback: true });
+    return;
+  }
+  res.status(served.status);
+  for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+  const stream = served.stream;
+  stream.on('error', () => { if (!res.headersSent) res.status(500).json({ error: 'Could not read the rendition' }); else res.destroy(); });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
+});
 
 /**
  * What the viewer shows around the bytes: name, role, size, hash, who
