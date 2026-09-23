@@ -1,6 +1,15 @@
 import { test } from '@playwright/test';
 import { gotoWithProject, gotoWelcome, seedPlan, API, PROJECT_PATH } from '../helpers/setup';
 
+/**
+ * Where a capture goes. `screenshots/` is committed, and every run used to
+ * rewrite it with whatever test data happened to be loaded — so a plain
+ * test run left a dirty tree. Refresh the committed set with
+ * E2E_SCREENSHOTS=1; otherwise captures land in test-results/.
+ */
+const shot = (name: string) =>
+  process.env.E2E_SCREENSHOTS ? `screenshots/${name}` : `test-results/screenshots/${name}`;
+
 test.describe('Screenshot capture', () => {
   test.setTimeout(60000);
 
@@ -12,12 +21,12 @@ test.describe('Screenshot capture', () => {
   test('01 - Welcome screen', async ({ page }) => {
     await gotoWelcome(page, { skipLearnTrellis: true });
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: 'screenshots/01-welcome.png', fullPage: true });
+    await page.screenshot({ path: shot('01-welcome.png'), fullPage: true });
   });
 
   test('02 - Map view packages', async ({ page }) => {
     await gotoWithProject(page);
-    await page.screenshot({ path: 'screenshots/02-map-packages.png', fullPage: true });
+    await page.screenshot({ path: shot('02-map-packages.png'), fullPage: true });
   });
 
   test('03 - Tree view packages', async ({ page }) => {
@@ -27,21 +36,21 @@ test.describe('Screenshot capture', () => {
       await btn.click();
       await page.waitForTimeout(1500);
     }
-    await page.screenshot({ path: 'screenshots/03-tree-packages.png', fullPage: true });
+    await page.screenshot({ path: shot('03-tree-packages.png'), fullPage: true });
   });
 
   test('04 - Map view files', async ({ page }) => {
     await gotoWithProject(page);
     await page.locator('button:has-text("Files")').first().click();
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: 'screenshots/04-map-files.png', fullPage: true });
+    await page.screenshot({ path: shot('04-map-files.png'), fullPage: true });
   });
 
   test('05 - Map view symbols', async ({ page }) => {
     await gotoWithProject(page);
     await page.locator('button:has-text("Symbols")').first().click();
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: 'screenshots/05-map-symbols.png', fullPage: true });
+    await page.screenshot({ path: shot('05-map-symbols.png'), fullPage: true });
   });
 
   test('06 - Inspector with file selected', async ({ page }) => {
@@ -51,14 +60,14 @@ test.describe('Screenshot capture', () => {
       await file.click();
       await page.waitForTimeout(800);
     }
-    await page.screenshot({ path: 'screenshots/06-inspector.png', fullPage: true });
+    await page.screenshot({ path: shot('06-inspector.png'), fullPage: true });
   });
 
   test('07 - Plans list', async ({ page }) => {
     await gotoWithProject(page);
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: 'screenshots/07-plans-list.png', fullPage: true });
+    await page.screenshot({ path: shot('07-plans-list.png'), fullPage: true });
   });
 
   test('08 - Plan with projection', async ({ page, request }) => {
@@ -78,7 +87,7 @@ test.describe('Screenshot capture', () => {
       await plan.click();
       await page.waitForTimeout(3000);
     }
-    await page.screenshot({ path: 'screenshots/08-plan-projection.png', fullPage: true });
+    await page.screenshot({ path: shot('08-plan-projection.png'), fullPage: true });
   });
 
   test('09 - Comments', async ({ page, request }) => {
@@ -99,7 +108,7 @@ test.describe('Screenshot capture', () => {
     }
     await page.locator('button:has-text("Comments")').first().click();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: 'screenshots/09-comments.png', fullPage: true });
+    await page.screenshot({ path: shot('09-comments.png'), fullPage: true });
   });
 
   test('10 - MCP guide', async ({ page }) => {
@@ -107,7 +116,7 @@ test.describe('Screenshot capture', () => {
     await page.waitForTimeout(500);
     await page.locator('button:has-text("Connect Agent")').first().click();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: 'screenshots/10-mcp-guide.png', fullPage: true });
+    await page.screenshot({ path: shot('10-mcp-guide.png'), fullPage: true });
   });
 
   test('11 - Create plan modal', async ({ page }) => {
@@ -119,13 +128,13 @@ test.describe('Screenshot capture', () => {
       await newBtn.click();
       await page.waitForTimeout(500);
     }
-    await page.screenshot({ path: 'screenshots/11-create-plan.png', fullPage: true });
+    await page.screenshot({ path: shot('11-create-plan.png'), fullPage: true });
   });
 
   test('12 - Timeline', async ({ page }) => {
     await gotoWithProject(page);
     await page.locator('button:has-text("Timeline")').first().click();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: 'screenshots/12-timeline.png', fullPage: true });
+    await page.screenshot({ path: shot('12-timeline.png'), fullPage: true });
   });
 });
