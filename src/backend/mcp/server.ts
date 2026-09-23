@@ -42,6 +42,13 @@ import * as terminalService from '../services/terminal-service';
 import * as planImportService from '../services/plan-import-service';
 import * as presenceService from '../services/presence-service';
 import * as projectConfigService from '../services/project-config-service';
+import {
+  listCriteria,
+  getCriterion,
+  addCriterionAsAgent,
+  submitCriterion,
+  CriterionError,
+} from '../services/criteria-service';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
@@ -72,6 +79,7 @@ import {
   connectorConfig,
 } from './connector/command';
 import fs from 'node:fs';
+import { resolveReferenceArgs, AmbiguousReferenceError } from '../services/reference-service';
 
 // ── Tool & resource modules ─────────────────────────────────────────
 
@@ -254,6 +262,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     planImportService,
     presenceService,
     projectConfigService,
+    // An agent's view of criteria only — see ToolDeps.criteriaService.
+    criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, submitCriterion, CriterionError },
 
     // Specific functions
     applyTemplate,
@@ -394,10 +404,16 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     // is visible in the Timeline rather than disappearing.
     try {
       assertMcpMayCall(name, grantedMcpCapabilities());
+      // References — `task 9f2c41ab` — become full uids here, once, so every
+      // tool accepts what a person pastes (see reference-service). After the
+      // capability check, so a refused tool never queries anything; before
+      // the scope check and the handler, so both see the real uid. A
+      // reference grants nothing: the tool still enforces its own checks.
+      args = resolveReferenceArgs(args);
       assertMcpProjectInScope(name, args, mcpProjectScope());
     } catch (err) {
-      if (err instanceof McpAuthorizationError) {
-        console.warn(`[MCP][Authz] REFUSED ${name} — ${err.message}`);
+      if (err instanceof McpAuthorizationError || err instanceof AmbiguousReferenceError) {
+        console.warn(`[MCP]${err instanceof McpAuthorizationError ? '[Authz] REFUSED' : ' Ambiguous reference in'} ${name} — ${err.message}`);
         broadcastToolEvent({
           tool: name,
           args: summarizeArgs(args),

@@ -10,6 +10,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { noteItemFocus } from '../../services/budget-service';
+import { describeReference, findReferenceMatches } from '../../services/reference-service';
+import { parseReference, formatReference } from '../../../shared/lib/references';
 import { resultWithMeta, authorFromExtra } from '../helpers';
 
 // ── Reusable schemas ──────────────────────────────────────────────────
@@ -51,7 +53,7 @@ const planItemEdgeSchema = z.object({
 const planItemKindEnum = z.enum(['object', 'action']);
 const taskStatusEnum = z.enum(['pending', 'assigned', 'in_progress', 'done', 'blocked', 'skipped']);
 const itemCommentKindEnum = z.enum(['note', 'blocker', 'progress', 'question']);
-const attachmentKindEnum = z.enum(['url', 'image', 'file_ref', 'code_block', 'transcript']);
+const attachmentKindEnum = z.enum(['url', 'image', 'video', 'file_ref', 'code_block', 'transcript']);
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- add_item ---
@@ -203,7 +205,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'read_item_full',
     {
       description:
-        'One round-trip context bundle: item + parent (if any) + immediate children + attachments + comments + recent versions. ' +
+        'One round-trip context bundle: item + parent (if any) + immediate children + attachments + comments + acceptance criteria + recent versions. ' +
         'Use this when picking up an Action so you don\'t need separate calls for context.',
       inputSchema: { uid: z.string() },
     },
@@ -215,10 +217,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const attachments = deps.taskAttachmentsService.listItemAttachments(uid);
       const comments = deps.commentService.listItemComments(uid);
       const versions = deps.planItemService.listItemVersions(uid).slice(0, 10);
+      const criteria = criteriaForAgent(deps, uid);
       return {
         content: [{
           type: 'text' as const,
-          text: JSON.stringify({ item, parent, children, attachments, comments, versions }, null, 2),
+          text: JSON.stringify({ item, parent, children, attachments, comments, criteria, versions }, null, 2),
         }],
       };
     },
@@ -428,7 +431,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const message = result.conflicts
         ? `Item claimed. WARNING: ${result.conflicts.join('; ')}`
         : `Item ${args.uid} claimed.`;
-      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments }, n);
+      const criteria = item ? criteriaForAgent(deps, item.uid) : [];
+      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments, criteria }, n);
     },
   );
 
@@ -481,28 +485,103 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'approve_gate',
     {
       description:
-        'Human-only: approve an approval gate on a completed item, allowing the next sibling to be claimed. ' +
-        'This clears the gate by marking the item as approved (sets requiresApproval to false after review).',
+        'Retired. Sign-off is a person\'s decision, taken in CodeTrellis or on a paired phone — no MCP tool can make it. ' +
+        'Use submit_criterion to offer evidence against the item\'s criteria; the person approves or sends it back.',
       inputSchema: {
-        uid: z.string().describe('The uid of the completed item whose gate should be cleared.'),
+        uid: z.string().describe('The item uid. Ignored — this tool always refuses.'),
+      },
+    },
+    async () => ({
+      content: [{
+        type: 'text' as const,
+        text:
+          'approve_gate is retired: sign-off happens in CodeTrellis or on a paired phone, never over MCP. ' +
+          'Call list_criteria to see what this item is judged on, and submit_criterion to offer evidence for each.',
+      }],
+      isError: true,
+    }),
+  );
+
+  // --- Phase 31 §4.1–4.3: acceptance criteria ---
+
+  server.registerTool(
+    'list_criteria',
+    {
+      description:
+        'The acceptance criteria an item is judged on: verbatim text, kind (what evidence satisfies it), policy ' +
+        '(agent = your submission marks it met; propose / human = a person decides), state, and — when a person sent it ' +
+        'back — their note. Read this before you claim an item is done.',
+      inputSchema: { item_uid: z.string() },
+    },
+    async ({ item_uid }) => {
+      if (!deps.planItemService.getItem(item_uid)) {
+        return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(criteriaForAgent(deps, item_uid), null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'add_criterion',
+    {
+      description:
+        'Add an acceptance criterion to an item, in the requester\'s own words — do not reword what they asked for. ' +
+        'It starts at policy "propose" (a person decides; "manual" ones are always a person\'s), and only a person can change that.',
+      inputSchema: {
+        item_uid: z.string(),
+        text: z.string().describe('The criterion, verbatim.'),
+        kind: z.enum(['manual', 'artefact', 'citation', 'code', 'test']).optional()
+          .describe('What evidence satisfies it. Default manual (a judgement).'),
       },
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
-      const item = deps.planItemService.getItem(args.uid);
-      if (!item) return { content: [{ type: 'text' as const, text: 'Item not found.' }] };
-      if (!item.requiresApproval) {
-        return { content: [{ type: 'text' as const, text: 'This item does not have an approval gate.' }] };
+      try {
+        const criterion = deps.criteriaService.addCriterionAsAgent(
+          args.item_uid, { text: args.text, kind: args.kind }, { author: id.author, authorType: id.authorType },
+        );
+        const n = broadcastCriteria(deps, args.item_uid);
+        deps.saveNow(() => deps.exportDatabase());
+        return resultWithMeta(slimCriterion(criterion), n);
+      } catch (err) {
+        return criterionError(deps, err);
       }
-      deps.planItemService.updateItem(args.uid, {
-        requiresApproval: false,
-        author: id.author,
-        authorType: id.authorType,
-        changeSummary: 'Approval gate cleared',
-      });
-      const n = deps.broadcast('plan-item-updated', { planUid: item.planUid, itemUid: args.uid, changes: { requiresApproval: false } });
-      deps.saveNow(() => deps.exportDatabase());
-      return resultWithMeta({ ok: true, itemUid: args.uid, title: item.title, gateCleared: true }, n);
+    },
+  );
+
+  server.registerTool(
+    'submit_criterion',
+    {
+      description:
+        'Offer evidence that a criterion is met: attachments on the same item (add them with add_item_attachment first), ' +
+        'each with an optional locator — {page}, {sheet, range}, {t}, {lines} or {text} — plus a note saying what shows it. ' +
+        'On an "agent"-policy criterion this marks it met; otherwise it waits for a person, who approves or sends it back with a note.',
+      inputSchema: {
+        criterion_uid: z.string(),
+        evidence: z.array(z.object({
+          attachment_uid: z.string(),
+          locator: z.record(z.string(), z.unknown()).optional(),
+        })).optional(),
+        note: z.string().optional().describe('What in the evidence shows this criterion is met.'),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(deps, extra);
+      try {
+        const criterion = deps.criteriaService.submitCriterion(
+          args.criterion_uid,
+          {
+            evidence: (args.evidence ?? []).map((e) => ({ attachmentUid: e.attachment_uid, locator: e.locator })),
+            note: args.note ?? null,
+          },
+          { author: id.author, authorType: id.authorType },
+        );
+        const n = broadcastCriteria(deps, criterion.itemUid);
+        deps.saveNow(() => deps.exportDatabase());
+        return resultWithMeta(slimCriterion(criterion), n);
+      } catch (err) {
+        return criterionError(deps, err);
+      }
     },
   );
 
@@ -651,6 +730,45 @@ export function register(server: McpServer, deps: ToolDeps): void {
   );
 
   // --- Item Comments ---
+
+  // What a person pasted. "task 9f2c41ab isn't right — I've left notes" is
+  // how people steer agents; this is the call that turns it into the thing
+  // and the notes. Every other tool also accepts references directly (they
+  // are resolved in mcp/server.ts), so this is for orientation, not a
+  // required first step.
+  server.registerTool(
+    'resolve_reference',
+    {
+      description:
+        'Look up a CodeTrellis reference a person gave you — e.g. "task 9f2c41ab", "plan 1c0d9e22", "comment 7b3a…" '
+        + 'or a bare 8+ character id — and get what it is: kind, full uid, title, its plan, its status, and the most recent '
+        + 'notes people left on it. Use this first when someone says a task is not done right. Every other tool also accepts '
+        + 'these references wherever it takes a uid.',
+      inputSchema: {
+        ref: z.string().describe('The reference as given, e.g. "task 9f2c41ab".'),
+      },
+    },
+    async ({ ref }) => {
+      const parsed = parseReference(ref);
+      if (!parsed) {
+        const text = `"${ref}" is not a reference. References look like "task 9f2c41ab": a kind and at least 8 hex characters.`;
+        return { content: [{ type: 'text' as const, text }], isError: true };
+      }
+      const matches = findReferenceMatches(parsed);
+      if (matches.length === 0) {
+        return { content: [{ type: 'text' as const, text: `Nothing matches "${ref}".` }], isError: true };
+      }
+      if (matches.length > 1) {
+        const text = JSON.stringify({
+          ambiguous: true,
+          candidates: matches.map((m) => ({ reference: formatReference(m.kind, m.uid), uid: m.uid, title: m.title })),
+          hint: 'Ask which one is meant, or use the full uid.',
+        }, null, 2);
+        return { content: [{ type: 'text' as const, text }], isError: true };
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(describeReference(matches[0]), null, 2) }] };
+    },
+  );
 
   server.registerTool(
     'list_item_comments',
@@ -1110,4 +1228,37 @@ export function register(server: McpServer, deps: ToolDeps): void {
       };
     },
   );
+}
+
+// ── criteria helpers ──────────────────────────────────────────────────
+
+type AgentCriterion = ReturnType<ToolDeps['criteriaService']['listCriteria']>[number];
+
+/** What an agent needs from a criterion — no internal bookkeeping. */
+function slimCriterion(c: AgentCriterion) {
+  return {
+    uid: c.uid,
+    text: c.text,
+    kind: c.kind,
+    policy: c.policy,
+    state: c.state,
+    sent_back_note: c.state === 'sent_back' ? c.latestSignoff?.note ?? null : null,
+    decided_by: c.latestSignoff ? { actor: c.latestSignoff.actor, actor_type: c.latestSignoff.actorType } : null,
+  };
+}
+
+function criteriaForAgent(deps: ToolDeps, itemUid: string) {
+  return deps.criteriaService.listCriteria(itemUid).map(slimCriterion);
+}
+
+function broadcastCriteria(deps: ToolDeps, itemUid: string): number {
+  const item = deps.planItemService.getItem(itemUid);
+  return deps.broadcast('plan-item-criteria-changed', { planUid: item?.planUid ?? null, itemUid });
+}
+
+function criterionError(deps: ToolDeps, err: unknown) {
+  if (err instanceof deps.criteriaService.CriterionError) {
+    return { content: [{ type: 'text' as const, text: err.message }], isError: true };
+  }
+  throw err;
 }

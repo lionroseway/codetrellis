@@ -262,7 +262,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         note: 'What to say after clearing a full context, or on a different machine.',
       },
     ],
-    tools: ['get_next_item', 'claim_item', 'update_item_progress', 'set_item_blocked', 'approve_gate', 'copy_plan_as_prompt'],
+    tools: ['get_next_item', 'claim_item', 'update_item_progress', 'set_item_blocked', 'list_criteria', 'submit_criterion', 'copy_plan_as_prompt'],
   },
   {
     id: 'review',

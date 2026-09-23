@@ -29,7 +29,7 @@ import { detectMonorepo } from './services/monorepo-detector';
 import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
 import { isSafeGitRef } from './services/git-safety';
-import { readFileWithin, isWithin, isInside, ConfinementError } from './services/confined-fs';
+import { readFileWithin, isWithin, isInside, ConfinementError, openReadStreamWithin } from './services/confined-fs';
 
 /** Cap on /api/fs/browse output — a huge directory must not stall the backend. */
 const MAX_BROWSE_ENTRIES = 1000;
@@ -78,6 +78,8 @@ import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } 
 import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
+import * as criteriaService from './services/criteria-service';
+import { issueHumanDecision } from './services/human-decision';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
 import { getDeviations, resolveDeviation } from './services/deviation-service';
@@ -2420,12 +2422,125 @@ app.get('/api/items/:uid/full', (req, res) => {
   const attachments = taskAttachmentsService.listItemAttachments(req.params.uid);
   const comments = commentService.listItemComments(req.params.uid);
   const versions = planItemService.listItemVersions(req.params.uid).slice(0, 10);
-  res.json({ item, parent, children, attachments, comments, versions });
+  const criteria = criteriaService.listCriteria(req.params.uid);
+  res.json({ item, parent, children, attachments, comments, criteria, versions });
 });
 
-/** Update any field on an item. */
+// ── Phase 31 §4.1–4.3: acceptance criteria and sign-off ──────────────
+//
+// This is the desktop's route to a person's decision: each handler below
+// that changes how work is judged issues a HumanDecision, which is the
+// only thing criteria-service accepts for it. MCP tools cannot reach
+// these operations at all (human-decision.test.ts).
+
+function desktopDecision() {
+  return issueHumanDecision('desktop', getAuthorKey('human'));
+}
+
+function criteriaChanged(itemUid: string): void {
+  const item = planItemService.getItem(itemUid);
+  broadcast('plan-item-criteria-changed', { planUid: item?.planUid ?? null, itemUid });
+  saveNow(() => exportDatabase());
+}
+
+function sendCriterionError(res: express.Response, err: unknown): void {
+  if (err instanceof criteriaService.CriterionError) {
+    res.status(err.status).json({ error: err.message });
+    return;
+  }
+  res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+}
+
+app.get('/api/items/:uid/criteria', (req, res) => {
+  if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(criteriaService.listCriteria(req.params.uid));
+});
+
+app.post('/api/items/:uid/criteria', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.addCriterionAsHuman(
+      req.params.uid, { text: body.text, kind: body.kind, policy: body.policy }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.status(201).json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.put('/api/criteria/:uid', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.updateCriterion(
+      req.params.uid, { text: body.text, policy: body.policy, sortOrder: body.sortOrder }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.delete('/api/criteria/:uid', (req, res) => {
+  try {
+    const before = criteriaService.getCriterion(req.params.uid);
+    if (!before || !criteriaService.deleteCriterion(req.params.uid, desktopDecision())) {
+      res.status(404).json({ error: 'Criterion not found' });
+      return;
+    }
+    criteriaChanged(before.itemUid);
+    res.json({ ok: true });
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+/** Approve, or send back with a note. */
+app.post('/api/criteria/:uid/decide', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.decideCriterion(
+      req.params.uid, { decision: body.decision, note: body.note }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.get('/api/criteria/:uid/signoffs', (req, res) => {
+  if (!criteriaService.getCriterion(req.params.uid)) { res.status(404).json({ error: 'Criterion not found' }); return; }
+  res.json(criteriaService.listSignoffs(req.params.uid));
+});
+
+/**
+ * Update any field on an item.
+ *
+ * Every field the item editor sends has to be named here — a field left
+ * out is dropped without an error, and the store then renders the
+ * server's unchanged copy. That is how the approval gate toggle, the
+ * routing panel (skills, claim policy, execution config, constraints),
+ * symbol targets and visibility all appeared to save and never did.
+ */
+const CASCADE_MODES = new Set(['inherit', 'replace', 'none']);
+const ITEM_VISIBILITIES = new Set(['shared', 'local']);
+
 app.put('/api/items/:uid', (req, res) => {
   const body = req.body ?? {};
+  // These are written to the row as given, so refuse a value the reader
+  // would not understand rather than store it.
+  for (const key of ['skillsMode', 'claimPolicyMode', 'executionConfigMode', 'constraintsMode']) {
+    if (body[key] !== undefined && !CASCADE_MODES.has(body[key])) {
+      res.status(400).json({ error: `${key} must be one of: ${[...CASCADE_MODES].join(', ')}` });
+      return;
+    }
+  }
+  if (body.visibility !== undefined && !ITEM_VISIBILITIES.has(body.visibility)) {
+    res.status(400).json({ error: 'visibility must be shared or local' });
+    return;
+  }
   const item = planItemService.updateItem(req.params.uid, {
     title: body.title,
     body: body.body,
@@ -2436,9 +2551,21 @@ app.put('/api/items/:uid', (req, res) => {
     blockedReason: body.blockedReason,
     scopePath: body.scopePath,
     fileSpecs: body.fileSpecs,
+    symbolSpecs: body.symbolSpecs,
     newConnections: body.newConnections,
     removedConnections: body.removedConnections,
     dependencies: body.dependencies,
+    skills: body.skills,
+    skillsMode: body.skillsMode,
+    claimPolicy: body.claimPolicy,
+    claimPolicyMode: body.claimPolicyMode,
+    executionConfig: body.executionConfig,
+    executionConfigMode: body.executionConfigMode,
+    constraints: body.constraints,
+    constraintsMode: body.constraintsMode,
+    requiresApproval: typeof body.requiresApproval === 'boolean' ? body.requiresApproval : undefined,
+    visibility: body.visibility,
+    overrideParentVisibility: body.overrideParentVisibility,
     parentUid: body.parentUid,
     sortOrder: body.sortOrder,
     changeSummary: body.changeSummary,
@@ -2641,41 +2768,81 @@ app.post('/api/items/:uid/attachments', (req, res) => {
  * access — works in both Electron and dev/web mode.
  */
 app.get('/api/attachments/:uid/file', (req, res) => {
+  // Phase 31 §4.2 / §7.1. Every property this route relies on is derived
+  // here, never taken from the request or trusted from the row:
+  //  - the project root comes from the item's plan and is re-checked
+  //    against the projects this app has opened;
+  //  - the path is confined to that root (or to this item's own upload
+  //    folder) and opened ONCE — the stream reads the descriptor that was
+  //    checked, so it cannot be swapped for a link in between;
+  //  - the type comes from the extension, not the stored content_type;
+  //  - errors never carry a path.
   const db = getDb();
-  const r = db.exec(
-    `SELECT value, target_uid, content_type FROM attachments WHERE uid = ?`,
-    [req.params.uid],
-  );
-  const row = r[0]?.values[0];
+  const row = db.exec(`SELECT value, target_uid FROM attachments WHERE uid = ?`, [req.params.uid])[0]?.values[0];
   if (!row) { res.status(404).json({ error: 'Attachment not found' }); return; }
   const value = row[0] as string;
   const targetUid = row[1] as string;
-  const contentType = (row[2] as string | null) ?? 'application/octet-stream';
 
-  // Resolve project root from the parent item -> plan -> project_path.
-  // Cheap join — runs once per attachment fetch.
-  let projectRoot: string | undefined;
-  const parent = db.exec(
+  let trustedRoot: string | null = null;
+  const projectPath = db.exec(
     `SELECT p.project_path FROM plan_items i JOIN plans p ON p.uid = i.plan_uid WHERE i.uid = ?`,
     [targetUid],
-  );
-  const projectPath = parent[0]?.values[0]?.[0] as string | undefined;
-  if (projectPath) projectRoot = projectPath;
+  )[0]?.values[0]?.[0] as string | undefined;
+  if (projectPath) {
+    try { trustedRoot = resolveTrustedProjectRoot(projectPath, 'attachment project'); } catch { trustedRoot = null; }
+  }
 
-  const abs = taskAttachmentsService.resolveAttachmentAbsPath(value, projectRoot);
-  if (!abs) {
-    res.status(404).json({ error: 'Attachment value is not a file', value });
+  const location = taskAttachmentsService.resolveAttachmentLocation(value, targetUid, trustedRoot);
+  const contentType = location ? taskAttachmentsService.servedContentType(location.rel) : null;
+  if (!location || !contentType) {
+    res.status(404).json({ error: 'This attachment is not a file that can be shown' });
     return;
   }
-  if (!fs.existsSync(abs)) {
-    res.status(404).json({ error: 'Attachment file missing on disk', path: abs });
+
+  // A single inclusive byte range, so video can seek.
+  let range: { start: number; end?: number } | undefined;
+  const header = typeof req.headers.range === 'string' ? req.headers.range : '';
+  const m = header.match(/^bytes=(\d+)-(\d*)$/);
+  if (m) range = { start: Number(m[1]), end: m[2] ? Number(m[2]) : undefined };
+
+  let opened: ReturnType<typeof openReadStreamWithin>;
+  try {
+    opened = openReadStreamWithin(location.root, location.rel, range ?? {}, 'attachment');
+  } catch {
+    res.status(404).json({ error: 'Attachment file not found' });
     return;
   }
-  // Caching is fine — the file is immutable (uid in the path).
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  const { stream, size } = opened;
+
   res.setHeader('Content-Type', contentType);
-  fs.createReadStream(abs).pipe(res);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Files change (a recorded output is edited), so nothing is cached.
+  res.setHeader('Cache-Control', 'no-store');
+  // Harmless for <img>/<video>; stops an SVG opened directly from running
+  // script in this origin.
+  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+  res.setHeader('Accept-Ranges', 'bytes');
+  if (range) {
+    const end = Math.min(range.end ?? size - 1, size - 1);
+    if (range.start > end) {
+      stream.destroy();
+      res.status(416).setHeader('Content-Range', `bytes */${size}`).end();
+      return;
+    }
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${range.start}-${end}/${size}`);
+    res.setHeader('Content-Length', String(end - range.start + 1));
+  } else {
+    res.setHeader('Content-Length', String(size));
+  }
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(500).json({ error: 'Could not read the attachment' });
+    else res.destroy();
+  });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
 });
+
 
 // Plan versions
 app.get('/api/plans/:uid/versions', (req, res) => {

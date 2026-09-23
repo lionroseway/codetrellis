@@ -37,6 +37,7 @@ import * as planDocsService from './plan-documents-service';
 import * as planItemService from './plan-item-service';
 import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
+import * as criteriaService from './criteria-service';
 import { getDb } from './database';
 import { readTextWithin } from './confined-fs';
 import type {
@@ -49,7 +50,6 @@ import type {
   TaskStatus,
   TaskAttachment,
   Comment,
-  AttachmentKind,
   CommentKind,
   CommentSource,
   CommentType,
@@ -519,7 +519,7 @@ function upsertItem(
   planUid: string,
   parentUid: string | null,
   raw: any,
-  _warnings: string[],
+  warnings: string[],
 ): PlanItem | null {
   const uid = String(raw.uid);
   const existing = planItemService.getItem(uid);
@@ -609,19 +609,33 @@ function upsertItem(
   if (Array.isArray(raw.attachments)) {
     for (const a of raw.attachments) {
       if (!a?.uid || !a?.kind || a?.value == null) continue;
-      taskAttachmentsService.upsertAttachment({
+      // A plan file is untrusted input: its attachments are validated as if
+      // an agent had submitted them, and never re-home another item's.
+      const valid = taskAttachmentsService.validateImportedAttachment(a, uid);
+      if ('refused' in valid) {
+        warnings.push(`Skipped attachment ${String(a.uid)} on item ${uid}: ${valid.refused}`);
+        continue;
+      }
+      const stored = taskAttachmentsService.upsertAttachment({
         uid: String(a.uid),
         targetType: 'item',
         targetUid: uid,
-        kind: String(a.kind) as AttachmentKind,
-        value: String(a.value),
-        label: a.label ?? null,
-        contentType: a.contentType ?? null,
+        kind: valid.kind,
+        value: valid.value,
+        label: typeof a.label === 'string' ? a.label : null,
+        contentType: valid.contentType,
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
       });
+      if (!stored) warnings.push(`Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
+  }
+
+  // Phase 31 — criteria, under the rules for untrusted input (a file can
+  // add or reword, never weaken; see criteria-service.importCriteria).
+  if (item && Array.isArray(raw.criteria)) {
+    criteriaService.importCriteria(item.uid, raw.criteria);
   }
 
   // Inline comments
@@ -1163,6 +1177,11 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
     }));
   }
 
+  // Phase 31 — acceptance criteria. The criteria only, never the
+  // decisions: a sign-off read back from a file is whatever the file says.
+  const criteria = criteriaService.criteriaForExport(item.uid);
+  if (criteria.length) obj.criteria = criteria;
+
   return obj;
 }
 
@@ -1456,18 +1475,24 @@ function upsertTask(planUid: string, raw: any): void {
   if (Array.isArray(raw.attachments)) {
     for (const a of raw.attachments) {
       if (!a?.uid || !a?.kind || a?.value == null) continue;
-      taskAttachmentsService.upsertAttachment({
+      const valid = taskAttachmentsService.validateImportedAttachment(a, String(raw.uid));
+      if ('refused' in valid) {
+        console.warn(`[Import] Skipped attachment ${String(a.uid)} on task ${String(raw.uid)}: ${valid.refused}`);
+        continue;
+      }
+      const stored = taskAttachmentsService.upsertAttachment({
         uid: String(a.uid),
         targetType: 'task',
         targetUid: String(raw.uid),
-        kind: String(a.kind) as AttachmentKind,
-        value: String(a.value),
-        label: a.label ?? null,
-        contentType: a.contentType ?? null,
+        kind: valid.kind,
+        value: valid.value,
+        label: typeof a.label === 'string' ? a.label : null,
+        contentType: valid.contentType,
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
       });
+      if (!stored) console.warn(`[Import] Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
   }
   if (Array.isArray(raw.comments)) {

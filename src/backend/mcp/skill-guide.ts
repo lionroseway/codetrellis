@@ -90,9 +90,19 @@ anchors from the item's text.
 
 ### 3. Work a plan
 \`get_next_item\` → \`claim_item\` → \`update_item_progress\` → mark done.
-\`approve_gate\` where a human has to sign off. \`set_item_blocked\` when
+Before you say an item is done, \`list_criteria\` shows what it is judged
+on; \`submit_criterion\` offers your evidence for each. You cannot approve
+your own work — a person signs off, in CodeTrellis or on their phone, and
+may send it back with a note (it shows as \`sent_back_note\`). \`add_criterion\`
+records one the user asks for, in their words. \`set_item_blocked\` when
 something stops you, because a blocked item the user can see beats a
 silent stall.
+
+When the user points you at something — "task 9f2c41ab isn't right, I've
+left notes" — call \`resolve_reference\` with exactly what they gave you:
+it returns the task, its plan and the notes they left. Every tool that
+takes a uid also accepts these references (\`task 9f2c41ab\`, or the bare
+8 characters), so you never need to look the full uid up first.
 
 ### 4. Start from a ticket
 "We already have this in Jira / Linear / GitHub."
@@ -341,7 +351,10 @@ edges.
 | \`delete_item(uid, cascade?)\` | Soft-delete with subtree snapshot for restore |
 | \`claim_item(uid, ...)\` | Atomically claim an Action; returns full context + file conflicts |
 | \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates |
-| \`approve_gate(uid)\` | Clear an approval gate on a completed item |
+| \`list_criteria(item_uid)\` | The item's acceptance criteria: kind, policy, state, any send-back note |
+| \`add_criterion(item_uid, text, kind?)\` | Add a criterion, verbatim; starts at \`propose\` |
+| \`submit_criterion(criterion_uid, evidence?, note?)\` | Offer evidence; a person decides unless policy is \`agent\` |
+| \`approve_gate(uid)\` | Retired — refuses. Sign-off is a person's, not a tool's |
 | \`list_items(plan_uid, ...)\` | Query items by parent / kind / status / title |
 | \`search_items(plan_uid, query)\` | Full-text search across titles and bodies |
 | \`restore_item_version(uid, version)\` | Roll back to a prior version |
@@ -355,6 +368,7 @@ edges.
 |------|-------------|
 | \`add_item_comment(uid, kind, body)\` | Leave a note / blocker / progress / question |
 | \`list_item_comments(uid)\` | Read all comments chronologically |
+| \`resolve_reference(ref)\` | What "task 9f2c41ab" (or plan/page/comment …) is: plan, status, latest notes |
 | \`delete_item_comment(comment_uid)\` | Remove a comment |
 | \`update_item_progress(uid, percent, message?)\` | Progress heartbeat (updates item + emits comment) |
 | \`set_item_blocked(uid, reason)\` | Mark blocked with reason (status + comment) |
@@ -899,8 +913,9 @@ that proposes the change.
 For critical work, Actions can have:
 - **Dependencies** — other Actions that must complete first (DAG
   ordering via \`get_next_item\`)
-- **Approval gates** — \`requiresApproval: true\` means a human must
-  call \`approve_gate(uid)\` before the next sibling can be claimed.
+- **Approval gates** — \`requiresApproval: true\` adds a "Reviewed and
+  approved" criterion that only a person can meet. Until they sign it off
+  in CodeTrellis, \`get_next_item\` will not hand out the next sibling.
   Perfect for checkpoints where human review is essential.
 
 ## Plan templates
@@ -1239,7 +1254,7 @@ The claim system prevents two agents from grabbing the same Action.
 4. Sub-agent calls \`claim_item\` to lock the Action
 5. Sub-agent works, reports \`update_item_progress\`
 6. Sub-agent marks the Action as \`done\` via \`update_item(uid, status='done')\`
-7. If there's a gate: human calls \`approve_gate(uid)\`
+7. If there's a gate: the sub-agent calls \`submit_criterion\`, and a person signs off in CodeTrellis
 8. Next sub-agent picks up the next available Action
 
 ## Handoff between agents
@@ -1282,8 +1297,9 @@ terminal — only your own host terminal is protected.
 - **Dependencies**: Actions can list other Action UIDs they depend on.
   \`get_next_item\` only returns Actions whose dependencies are all done.
 - **Approval gates**: \`requiresApproval: true\` on an Action means
-  a human must call \`approve_gate(uid)\` before the next sibling
-  can be claimed. Use this for critical checkpoints.
+  a person must sign off its "Reviewed and approved" criterion in
+  CodeTrellis before the next sibling can be claimed. No tool can do
+  that for them. Use this for critical checkpoints.
 
 ## Tips
 
