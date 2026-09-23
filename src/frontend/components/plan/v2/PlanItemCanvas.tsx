@@ -28,6 +28,7 @@ import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
 import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
+import { CriteriaBlock } from './CriteriaBlock';
 import { PlanTemplateChooser } from './PlanTemplateChooser';
 import { PlanImportModal } from './PlanImportModal';
 import { PlanShareMenu } from './PlanShareMenu';
@@ -142,6 +143,7 @@ export function PlanItemCanvas() {
           <ItemChannelBand itemUid={item.uid} />
           <BodyEditor key={item.uid} item={item} />
           <TargetsStrip item={item} />
+          <CriteriaBlock itemUid={item.uid} criteria={ctx?.criteria ?? []} />
           <ItemRoutingPanel item={item} />
           <ItemLevelNudge item={item} attachments={ctx?.attachments ?? []} />
           <ContextRail item={item} attachments={ctx?.attachments ?? []} />
@@ -377,7 +379,7 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
                 : 'border-white/[0.08] bg-white/[0.02] text-foreground-subtle hover:text-foreground-muted'
             }`}
             title={item.requiresApproval
-              ? 'Approval gate ON — agent must wait for human approval after completing this item'
+              ? 'Approval gate ON — the next task waits until you approve "Reviewed and approved" under Acceptance criteria'
               : 'No approval gate — click to require human approval before next task starts'}
           >
             {item.requiresApproval ? '🔒' : '🔓'}

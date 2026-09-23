@@ -2,7 +2,7 @@
  * MCP plan lifecycle — create_plan, get_plan, update_plan, list_plans,
  * add_item, get_item, update_item, list_items, delete_item, move_item,
  * claim_item, get_next_item, read_item_full, restore_item_version,
- * update_item_progress, set_item_blocked, approve_gate,
+ * update_item_progress, set_item_blocked, approve_gate (retired: refuses),
  * get_plan_timeline, report_plan.
  */
 
@@ -312,7 +312,10 @@ test.describe('MCP plan lifecycle', () => {
     client.close();
   });
 
-  test('approve_gate clears completion gate', async () => {
+  // Phase 31.1: sign-off is a person's, taken in CodeTrellis or on a
+  // paired phone. The tool stays registered for one release so an agent
+  // that learned it is told where to go instead.
+  test('approve_gate refuses and points at submit_criterion', async () => {
     const client = await createMcpClient();
 
     const planResult = await client.callTool('create_plan', {
@@ -330,17 +333,9 @@ test.describe('MCP plan lifecycle', () => {
     });
     const itemUid = JSON.parse(itemResult.content?.[0]?.text || '{}').uid;
 
-    // Mark as done first
-    await client.callTool('update_item', {
-      item_uid: itemUid,
-      status: 'done',
-    });
-
-    // Approve gate — may succeed or be a no-op if no gate is set
-    const gateResult = await client.callTool('approve_gate', {
-      uid: itemUid,
-    });
-    expect(gateResult).toBeTruthy();
+    const gateResult = await client.callTool('approve_gate', { uid: itemUid });
+    expect(gateResult.isError).toBe(true);
+    expect(gateResult.content?.[0]?.text).toMatch(/submit_criterion/);
 
     client.close();
   });

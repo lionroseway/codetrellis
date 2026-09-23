@@ -37,6 +37,7 @@ import * as planDocsService from './plan-documents-service';
 import * as planItemService from './plan-item-service';
 import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
+import * as criteriaService from './criteria-service';
 import { getDb } from './database';
 import { readTextWithin } from './confined-fs';
 import type {
@@ -624,6 +625,12 @@ function upsertItem(
     }
   }
 
+  // Phase 31 — criteria, under the rules for untrusted input (a file can
+  // add or reword, never weaken; see criteria-service.importCriteria).
+  if (item && Array.isArray(raw.criteria)) {
+    criteriaService.importCriteria(item.uid, raw.criteria);
+  }
+
   // Inline comments
   if (Array.isArray(raw.comments)) {
     for (const c of raw.comments) {
@@ -1132,6 +1139,11 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
       createdAt: new Date(c.createdAt).toISOString(),
     }));
   }
+
+  // Phase 31 — acceptance criteria. The criteria only, never the
+  // decisions: a sign-off read back from a file is whatever the file says.
+  const criteria = criteriaService.criteriaForExport(item.uid);
+  if (criteria.length) obj.criteria = criteria;
 
   return obj;
 }
