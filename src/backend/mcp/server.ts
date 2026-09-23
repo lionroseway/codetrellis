@@ -49,6 +49,13 @@ import {
   submitCriterion,
   CriterionError,
 } from '../services/criteria-service';
+import {
+  recordArtefact,
+  refreshArtefactHashes,
+  listArtefacts,
+  ArtefactError,
+} from '../services/artefact-service';
+import { startArtefactWatching } from '../services/artefact-watcher';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
@@ -264,6 +271,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     projectConfigService,
     // An agent's view of criteria only — see ToolDeps.criteriaService.
     criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, submitCriterion, CriterionError },
+    artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, ArtefactError },
+    startArtefactWatching,
 
     // Specific functions
     applyTemplate,

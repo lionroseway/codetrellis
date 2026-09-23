@@ -91,7 +91,8 @@ anchors from the item's text.
 ### 3. Work a plan
 \`get_next_item\` → \`claim_item\` → \`update_item_progress\` → mark done.
 Before you say an item is done, \`list_criteria\` shows what it is judged
-on; \`submit_criterion\` offers your evidence for each. You cannot approve
+on; \`record_artefact\` records the file you produced, and
+\`submit_criterion\` offers it as evidence for each. You cannot approve
 your own work — a person signs off, in CodeTrellis or on their phone, and
 may send it back with a note (it shows as \`sent_back_note\`). \`add_criterion\`
 records one the user asks for, in their words. \`set_item_blocked\` when
@@ -351,6 +352,7 @@ edges.
 | \`delete_item(uid, cascade?)\` | Soft-delete with subtree snapshot for restore |
 | \`claim_item(uid, ...)\` | Atomically claim an Action; returns full context + file conflicts |
 | \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates |
+| \`record_artefact(item_uid, path, role)\` | Record a file the item read (material), produced (output) or captured (evidence); hashed so approvals notice changes |
 | \`list_criteria(item_uid)\` | The item's acceptance criteria: kind, policy, state, any send-back note |
 | \`add_criterion(item_uid, text, kind?)\` | Add a criterion, verbatim; starts at \`propose\` |
 | \`submit_criterion(criterion_uid, evidence?, note?)\` | Offer evidence; a person decides unless policy is \`agent\` |

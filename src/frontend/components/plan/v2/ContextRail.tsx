@@ -887,6 +887,24 @@ function AttachmentRow({ itemUid, attachment }: { itemUid: string; attachment: T
                 {attachment.label && (
                   <div className="text-[13.5px] font-medium text-foreground truncate">{attachment.label}</div>
                 )}
+                {attachment.role && (
+                  <span
+                    data-testid="artefact-role"
+                    className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 bg-accent/10 text-accent border border-accent/20"
+                    title={
+                      attachment.role === 'material' ? 'Material — something this work was given to use'
+                        : attachment.role === 'output' ? 'Output — something this work produced'
+                        : 'Evidence — captured to prove a point'
+                    }
+                  >
+                    {attachment.role}
+                  </span>
+                )}
+                {attachment.role && attachment.sha256 === null && (
+                  <span className="text-[10px] text-amber-300 shrink-0" title="The file is missing, or has become a link — it cannot be read">
+                    ⚠ missing
+                  </span>
+                )}
                 {(attachment.kind === 'image' || attachment.kind === 'video' || attachment.kind === 'file_ref') && (
                   <span
                     className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${

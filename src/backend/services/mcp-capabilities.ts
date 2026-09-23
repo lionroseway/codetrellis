@@ -158,6 +158,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   // learned it gets a direction rather than a missing tool.
   approve_gate: 'read',
   list_criteria: 'read',
+  record_artefact: 'write',
   add_criterion: 'write',
   submit_criterion: 'write',
   list_items: 'read',

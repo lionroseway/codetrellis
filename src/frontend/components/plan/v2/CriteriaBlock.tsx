@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion } from '@shared/types';
+import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, TaskAttachment } from '@shared/types';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 
 /**
@@ -35,7 +35,14 @@ const POLICY_LABEL: Record<CriterionPolicy, string> = {
   human: 'only you',
 };
 
-export function CriteriaBlock({ itemUid, criteria }: { itemUid: string; criteria: ItemCriterion[] }) {
+export function CriteriaBlock({
+  itemUid, criteria, attachments = [],
+}: {
+  itemUid: string;
+  criteria: ItemCriterion[];
+  /** The item's attachments, so a submission can name the files it cites. */
+  attachments?: TaskAttachment[];
+}) {
   const addCriterion = usePlanItemsStore((s) => s.addCriterion);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
@@ -70,7 +77,7 @@ export function CriteriaBlock({ itemUid, criteria }: { itemUid: string; criteria
         Acceptance criteria <span className="opacity-60">· {met}/{criteria.length} met</span>
       </h3>
       <ul className="space-y-2">
-        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} />)}
+        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} />)}
       </ul>
 
       {adding ? (
@@ -118,7 +125,13 @@ export function CriteriaBlock({ itemUid, criteria }: { itemUid: string; criteria
   );
 }
 
-function CriterionRow({ itemUid, criterion: c }: { itemUid: string; criterion: ItemCriterion }) {
+function CriterionRow({
+  itemUid, criterion: c, attachments,
+}: {
+  itemUid: string;
+  criterion: ItemCriterion;
+  attachments: TaskAttachment[];
+}) {
   const decideCriterion = usePlanItemsStore((s) => s.decideCriterion);
   const updateCriterion = usePlanItemsStore((s) => s.updateCriterion);
   const deleteCriterion = usePlanItemsStore((s) => s.deleteCriterion);
@@ -139,6 +152,9 @@ function CriterionRow({ itemUid, criterion: c }: { itemUid: string; criterion: I
       : `${c.latestSignoff.actor} (agent)`
     : null;
   const evidenceNote = c.latestSubmission.find((e) => e.note)?.note ?? null;
+  const evidenceFiles = c.latestSubmission
+    .map((e) => attachments.find((a) => a.uid === e.attachmentUid))
+    .filter((a): a is TaskAttachment => !!a);
   const evidenceCount = c.latestSubmission.filter((e) => e.attachmentUid).length;
 
   return (
@@ -170,10 +186,21 @@ function CriterionRow({ itemUid, criterion: c }: { itemUid: string; criterion: I
               </select>
             )}
           </p>
-          {c.state === 'submitted' && (evidenceNote || evidenceCount > 0) && (
+          {(c.state === 'submitted' || c.state === 'stale') && (evidenceNote || evidenceCount > 0) && (
             <p className="text-[11px] text-foreground-muted mt-1">
-              {evidenceNote}{evidenceCount > 0 && <span className="text-foreground-subtle"> · {evidenceCount} file{evidenceCount === 1 ? '' : 's'} offered</span>}
+              {evidenceNote}
+              {evidenceCount > 0 && (
+                <span className="text-foreground-subtle">
+                  {evidenceNote ? ' · ' : ''}
+                  {evidenceFiles.length > 0
+                    ? evidenceFiles.map((a) => a.label || a.value).join(', ')
+                    : `${evidenceCount} file${evidenceCount === 1 ? '' : 's'} offered`}
+                </span>
+              )}
             </p>
+          )}
+          {c.state === 'stale' && (
+            <p className="text-[11px] text-amber-300/90 mt-1">⚠ A file this was approved on has changed since. Look again.</p>
           )}
           {c.state === 'sent_back' && c.latestSignoff?.note && (
             <p className="text-[11px] text-red-300/90 mt-1">↩ {c.latestSignoff.note}</p>

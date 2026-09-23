@@ -44,6 +44,11 @@ export interface CriterionSignoff {
   channel: SignoffChannel;
   note: string | null;
   createdAt: number;
+  /**
+   * For an approval: the hash of every file it was taken on, at that
+   * moment. A file whose hash no longer matches makes the criterion stale.
+   */
+  evidenceHashes?: Record<string, string | null>;
 }
 
 export interface ItemCriterion {

@@ -79,6 +79,10 @@ import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkP
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
 import * as criteriaService from './services/criteria-service';
+import * as artefactService from './services/artefact-service';
+import * as _lazy___services_artefact_watcher from './services/artefact-watcher';
+const startArtefactWatching = (a: Parameters<typeof _lazy___services_artefact_watcher.startArtefactWatching>[0]) =>
+  _lazy___services_artefact_watcher.startArtefactWatching(a);
 import { issueHumanDecision } from './services/human-decision';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
@@ -1141,6 +1145,15 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       startPlanFileWatcher(projectPath);
     } catch (err) {
       console.warn('[Scan] Plan file watcher failed to start:', err);
+    }
+
+    // Phase 31 §4.4 — the recorded artefacts, so an approval taken on a
+    // file notices when the file changes.
+    try {
+      const { startArtefactWatcherForProject } = _lazy___services_artefact_watcher;
+      startArtefactWatcherForProject(projectPath);
+    } catch (err) {
+      console.warn('[Scan] Artefact watcher failed to start:', err);
     }
 
     try {
@@ -2413,9 +2426,11 @@ app.get('/api/items/:uid', (req, res) => {
 });
 
 /** Read full bundle: item + parent + children + attachments + comments + recent versions. */
-app.get('/api/items/:uid/full', (req, res) => {
+app.get('/api/items/:uid/full', async (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  // Criteria below are derived against the artefacts' current hashes.
+  await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
   const parent = item.parentUid ? planItemService.getItem(item.parentUid) : null;
   const children = planItemService.getChildren(item.planUid, req.params.uid);
   const attachments = taskAttachmentsService.listItemAttachments(req.params.uid);
@@ -2450,8 +2465,10 @@ function sendCriterionError(res: express.Response, err: unknown): void {
   res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
 }
 
-app.get('/api/items/:uid/criteria', (req, res) => {
+app.get('/api/items/:uid/criteria', async (req, res) => {
   if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  // The authoritative check (§4.4): files change while the app is closed.
+  await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
   res.json(criteriaService.listCriteria(req.params.uid));
 });
 
@@ -2496,9 +2513,12 @@ app.delete('/api/criteria/:uid', (req, res) => {
 });
 
 /** Approve, or send back with a note. */
-app.post('/api/criteria/:uid/decide', (req, res) => {
+app.post('/api/criteria/:uid/decide', async (req, res) => {
   try {
     const body = req.body ?? {};
+    // A decision records the hashes of what it was taken on — take them fresh.
+    const before = criteriaService.getCriterion(req.params.uid);
+    if (before) await artefactService.refreshArtefactHashes(before.itemUid).catch(() => []);
     const criterion = criteriaService.decideCriterion(
       req.params.uid, { decision: body.decision, note: body.note }, desktopDecision(),
     );
@@ -2513,6 +2533,38 @@ app.get('/api/criteria/:uid/signoffs', (req, res) => {
   if (!criteriaService.getCriterion(req.params.uid)) { res.status(404).json({ error: 'Criterion not found' }); return; }
   res.json(criteriaService.listSignoffs(req.params.uid));
 });
+// ── Phase 31 §4.2: artefacts — files an item read, produced or captured ──
+
+app.get('/api/items/:uid/artefacts', async (req, res) => {
+  if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
+  res.json(artefactService.listArtefacts(req.params.uid));
+});
+
+/**
+ * A person records a file. The path is resolved inside the item's own
+ * project (from its plan, never the request), links are refused, and the
+ * type comes from the extension allowlist.
+ */
+app.post('/api/items/:uid/artefacts', async (req, res) => {
+  const body = req.body ?? {};
+  try {
+    const artefact = await artefactService.recordArtefact({
+      itemUid: req.params.uid,
+      path: body.path,
+      role: body.role,
+      note: typeof body.note === 'string' ? body.note : null,
+      actor: { author: getAuthorKey('human'), authorType: 'human' },
+    });
+    startArtefactWatching(artefact);
+    criteriaChanged(req.params.uid);
+    res.status(201).json(artefact);
+  } catch (err) {
+    if (err instanceof artefactService.ArtefactError) { res.status(err.status).json({ error: err.message }); return; }
+    res.status(500).json({ error: 'Could not record the artefact' });
+  }
+});
+
 
 /**
  * Update any field on an item.

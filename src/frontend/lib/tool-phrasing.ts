@@ -141,6 +141,7 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   await_user_input: { intent: 'ask', mutating: false, phrase: () => 'Waiting for your answer' },
   await_ack: { intent: 'ask', mutating: false, phrase: () => 'Waiting for acknowledgement' },
   approve_gate: { intent: 'error', mutating: false, phrase: (a) => `Tried to clear the approval gate on ${subject(a, 'uid')} — refused, sign-off is yours` },
+  record_artefact: { intent: 'write', mutating: true, phrase: (a) => `Recorded ${({ material: 'a material', output: 'an output', evidence: 'evidence' } as Record<string, string>)[String(a.role)] ?? 'a file'}: ${subject(a, 'path')}` },
   list_criteria: { intent: 'read', mutating: false, phrase: (a) => `Read the criteria for ${subject(a, 'item_uid')}` },
   add_criterion: { intent: 'write', mutating: true, phrase: (a) => `Added a criterion: ${subject(a, 'text')}` },
   submit_criterion: { intent: 'ask', mutating: true, phrase: (a) => `Submitted evidence for ${subject(a, 'criterion_uid')}` },

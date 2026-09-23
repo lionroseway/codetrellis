@@ -143,7 +143,7 @@ export function PlanItemCanvas() {
           <ItemChannelBand itemUid={item.uid} />
           <BodyEditor key={item.uid} item={item} />
           <TargetsStrip item={item} />
-          <CriteriaBlock itemUid={item.uid} criteria={ctx?.criteria ?? []} />
+          <CriteriaBlock itemUid={item.uid} criteria={ctx?.criteria ?? []} attachments={ctx?.attachments ?? []} />
           <ItemRoutingPanel item={item} />
           <ItemLevelNudge item={item} attachments={ctx?.attachments ?? []} />
           <ContextRail item={item} attachments={ctx?.attachments ?? []} />

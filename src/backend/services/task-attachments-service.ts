@@ -280,7 +280,7 @@ export function listTaskAttachments(taskUid: string): TaskAttachment[] {
  */
 export function listItemAttachments(itemUid: string): TaskAttachment[] {
   const result = getDb().exec(
-    `SELECT uid, target_uid, kind, value, label, content_type, author, author_type, created_at
+    `SELECT uid, target_uid, kind, value, label, content_type, author, author_type, created_at, role, sha256
      FROM attachments
      WHERE target_uid = ? AND target_type IN ('item', 'task', 'plan_doc')
      ORDER BY created_at ASC`,
@@ -297,6 +297,8 @@ export function listItemAttachments(itemUid: string): TaskAttachment[] {
     author: r[6] as string,
     authorType: r[7] as string,
     createdAt: r[8] as number,
+    role: (r[9] as TaskAttachment['role']) ?? null,
+    sha256: (r[10] as string | null) ?? null,
   }));
 }
 
