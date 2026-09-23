@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Copy, Check, Sparkles, Plug } from 'lucide-react';
 import { GUIDE_SECTIONS, GUIDE_GROUPS } from './guide-content';
-import { configText, copyText, fetchMcpSetup, maskToken, tokenOf, type McpSetup } from '../../lib/mcp-setup';
+import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 
 /**
  * The in-app guide — rail on the left, one topic at a time on the right.
@@ -218,7 +218,7 @@ function McpConfigBlock({ setup }: { setup: McpSetup | null }) {
   const [copied, setCopied] = useState<'config' | 'agent' | null>(null);
   const copy = async (what: 'config' | 'agent') => {
     if (!setup) return;
-    if (await copyText(what === 'config' ? configText(setup) : setup.agentPrompt)) {
+    if (await copyText(what === 'config' ? recommendedConfigText(setup) : setup.agentPrompt)) {
       setCopied(what);
       setTimeout(() => setCopied(null), 1500);
     }
@@ -246,11 +246,20 @@ function McpConfigBlock({ setup }: { setup: McpSetup | null }) {
         </span>
       </div>
       <pre className="px-3 py-2 text-[10.5px] font-mono text-foreground-muted overflow-x-auto">
-        {setup ? maskToken(configText(setup), tokenOf(setup)) : 'Loading…'}
+        {setup ? (setup.connector ? recommendedConfigText(setup) : maskToken(configText(setup), tokenOf(setup))) : 'Loading…'}
       </pre>
       <p className="px-3 pb-2 text-[10px] text-foreground-subtle leading-relaxed">
-        Includes this launch&apos;s token (shown masked; copied in full). It changes every time CodeTrellis starts.
-        The agent instructions tell an LLM to read it from <code className="font-mono break-all">{setup?.tokenFile ?? '<data dir>/capability-token'}</code> itself.
+        {setup?.connector ? (
+          <>
+            The connector finds this app by itself: nothing secret in the config, and it keeps working when
+            CodeTrellis restarts. For Claude Code, Settings → MCP Server has a one-line command.
+          </>
+        ) : (
+          <>
+            Includes this launch&apos;s token (shown masked; copied in full). It changes every time CodeTrellis starts.
+            The agent instructions tell an LLM to read it from <code className="font-mono break-all">{setup?.tokenFile ?? '<data dir>/capability-token'}</code> itself.
+          </>
+        )}
       </p>
     </div>
   );

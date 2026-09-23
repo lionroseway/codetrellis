@@ -113,3 +113,26 @@ export function stopSessionSweep(): void {
     sweepTimer = null;
   }
 }
+
+/**
+ * Re-label a session's agent type, but only if it still carries the type it
+ * was given at connect time. Used to replace the user-agent guess with the
+ * client's own `clientInfo.name`; the guard means an explicit
+ * `register_session` — which may have run first — is never overwritten.
+ *
+ * Returns true if the row changed.
+ */
+export function retypeSession(sessionId: string, fromType: string, toType: string): boolean {
+  const before = getDb().exec(
+    `SELECT agent_type FROM agent_sessions WHERE session_id = ?`,
+    [sessionId],
+  );
+  const current = before[0]?.values?.[0]?.[0];
+  if (current !== fromType) return false;
+  getDb().run(
+    `UPDATE agent_sessions SET agent_type = ? WHERE session_id = ? AND agent_type = ?`,
+    [toType, sessionId, fromType],
+  );
+  markDirty();
+  return true;
+}

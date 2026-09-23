@@ -40,6 +40,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { getDataDir, ensureDataDir } from './persistence';
+import { TOKEN_FILE } from '../mcp/connector/files';
 
 /** Header clients should send. `Authorization: Bearer <token>` also works. */
 export const TOKEN_HEADER = 'x-codetrellis-token';
@@ -62,7 +63,8 @@ let token: string | null = null;
 
 /** Absolute path of the token file. Clients read this to authenticate. */
 export function getTokenFilePath(): string {
-  return path.join(getDataDir(), 'capability-token');
+  // One name, shared with the stdio connector that reads it (connector/files).
+  return path.join(getDataDir(), TOKEN_FILE);
 }
 
 /**

@@ -180,7 +180,11 @@ a tagged candidate and on packaged artifacts.
   (binary PTY), `audio` (WebM/Opus). mDNS discovery via
   `_codetrellis._tcp`.
 - **Agent comms**: Local MCP server (SSE on `:19432`) — every tool call
-  from any agent is broadcast as `tool_call` / `tool_error`. Claude
+  from any agent is broadcast as `tool_call` / `tool_error`. Agents
+  connect through the **stdio connector**, which re-reads the per-launch
+  token on every connect so a config survives restarts — see
+  `docs/claude/mcp-tools.md`. A config carrying the token itself stops
+  working at the next launch; never make that the default again. Claude
   Code session-JSONL watcher tails `~/.claude/sessions/<id>.jsonl`
   for chat-derived plan heuristics.
 - **Cross-system extraction**: per-language callsite extractors

@@ -5,7 +5,7 @@ import { useAgentStore } from '../../stores/agent-store';
 import { useTerminalStore } from '../../stores/terminal-store';
 import { CoverageChip } from './CoverageChip';
 import { useUiStore } from '../../stores/ui-store';
-import { configText, copyText, fetchMcpSetup } from '../../lib/mcp-setup';
+import { copyText, fetchMcpSetup, recommendedConfigText } from '../../lib/mcp-setup';
 
 export function StatusBar() {
   const scanStatus = useProjectStore((s) => s.scanStatus);
@@ -18,8 +18,10 @@ export function StatusBar() {
   const handleCopyMcpConfig = async () => {
     // No hard-coded fallback: a config without this launch's token is
     // refused by the server, so copying one would only look like success.
+    // The connector's config needs no token and survives restarts, so it is
+    // what gets copied whenever it exists.
     const setup = await fetchMcpSetup();
-    if (setup && (await copyText(configText(setup)))) {
+    if (setup && (await copyText(recommendedConfigText(setup)))) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }

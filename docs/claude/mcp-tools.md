@@ -2,6 +2,41 @@
 
 CodeTrellis exposes its capabilities to AI agents through a local MCP server (SSE on `:19432`). Any MCP-speaking client — Claude Code, Codex, Cursor, aider, Claude Desktop, custom — can connect; each call is attributed to its originating agent and broadcast on the `tool_call` / `tool_error` channel for the timeline.
 
+## How agents connect: the stdio connector
+
+The server needs this launch's capability token, and the token is minted
+fresh on **every** launch. So a config that carries the token — a URL plus
+an `x-codetrellis-token` header — stops working the next time CodeTrellis
+starts, and the agent is refused with 401 until someone re-copies it.
+
+Agents therefore connect through the **connector** (`src/backend/mcp/connector/`):
+a stdio MCP server the agent launches, which reads `<dataDir>/capability-token`
+and `<dataDir>/mcp-endpoint.json` (the port actually bound) on every connect
+and proxies to the SSE server.
+
+- The config names a command, not a URL and a secret. Nothing in it is
+  sensitive, and it survives restarts and a port that walked forward.
+- Packaged, it runs on the app's own binary with `ELECTRON_RUN_AS_NODE=1`
+  from `<resources>/connector/mcp-connector.cjs` — no Node install, no
+  window. `resolveConnectorCommand` (`connector/command.ts`) works out the
+  command for packaged, Electron-from-source and web-dev runs.
+- When the app restarts, the connector re-sends the client's original
+  `initialize` and tells the client its tool list changed. When the app is
+  not running, it still completes the handshake and answers every call with
+  one sentence saying to open the app.
+- It is a client, not an authority: capability checks, project scope and
+  the Timeline are all still the server's. The client's `clientInfo`
+  passes through untouched, and the server names the session from it
+  (`client-identity.ts`), because through the connector the SSE user-agent
+  is always the connector's.
+- Built by `npm run build:connector` (its own Vite config, one
+  self-contained file). Every `package:*` script and `predev` run it.
+
+`getMcpSetup` (`/api/mcp/setup`) returns the connector's command, JSON and
+`claude mcp add` line; Settings, the guide and the status bar all copy the
+connector's config first. The direct, token-carrying config is still
+offered for clients that can only take a URL, labelled for what it is.
+
 Tools are organised into 18 files under `src/backend/mcp/tools/`. Each file groups a domain.
 
 ## Tool categories
