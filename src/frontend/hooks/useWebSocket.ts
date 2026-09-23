@@ -344,6 +344,11 @@ export function useWebSocket() {
               useChannelsStore.getState().onEventImported(payload?.uid, payload?.planUid);
             })();
           }
+          // --- Phase 31 §8.3: a check run was recorded (a person, an
+          // agent, or a material that changed). PlanCheckRunPanel re-reads.
+          if (type === 'plan-check-run') {
+            window.dispatchEvent(new CustomEvent('plan-check-run', { detail: payload }));
+          }
           // --- Cross-repo pointers (CDev Phase 3.5) ---
           if (type === 'external-pointers-changed' || type === 'plan-scope-changed') {
             // The stitched view in PlanList re-fetches on these DOM

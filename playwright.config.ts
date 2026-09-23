@@ -69,19 +69,22 @@ const storageState = {
 const MARKETING_IGNORE = process.env.E2E_MARKETING ? [] : ['**/marketing/**'];
 
 /**
- * Named spec files on the command line. A full run orders the ui-driving
+ * Named spec files on the command line. A full run orders the serial
  * project after everything else; a targeted one just runs what was named.
  */
 const TARGETED = process.argv.some((a) => /\.(spec|setup)\.ts(:\d+)*$/.test(a) || /(^|\/)e2e\/[^-]/.test(a));
 
-/** Specs whose agents navigate every open page — see the `ui-driving` project. */
-const UI_DRIVING_SPECS = [
+/** Specs that need the backend to themselves — see the `serial` project. */
+const SERIAL_SPECS = [
+  // Their agents navigate every open page.
   '**/live-agent/preseeded-execution.spec.ts',
   '**/live-agent/preseeded-deviation.spec.ts',
   '**/live-agent/authored-deviation.spec.ts',
   '**/live-agent/agent-authored-flow.spec.ts',
   '**/golden-chain/mcp-agent-flow.spec.ts',
   '**/mcp-tools/changes-drift-templates.spec.ts',
+  // They read the graph of whichever project was scanned last.
+  '**/parsers/**',
 ];
 
 export default defineConfig({
@@ -126,7 +129,7 @@ export default defineConfig({
   ],
   projects: [
     // Opens the project under test once — see e2e/project.setup.ts.
-    // Its `teardown` is the ui-driving project below: Playwright runs a
+    // Its `teardown` is the serial project below: Playwright runs a
     // teardown after every project that depends on setup has finished, and
     // runs it even when some of their tests failed. As an ordinary dependent
     // of `chromium` it would be skipped outright by one failing UI spec.
@@ -134,25 +137,28 @@ export default defineConfig({
     // Not on a targeted run (`npx playwright test e2e/plan/x.spec.ts`): a
     // teardown ignores the file filter, so every targeted run also ran all
     // 39 agent specs, while running one of THOSE files alone skipped setup.
-    // Targeted, ui-driving depends on setup like everything else.
-    { name: 'setup', testMatch: /project\.setup\.ts$/, ...(TARGETED ? {} : { teardown: 'ui-driving' }) },
+    // Targeted, serial depends on setup like everything else.
+    { name: 'setup', testMatch: /project\.setup\.ts$/, ...(TARGETED ? {} : { teardown: 'serial' }) },
     {
       name: 'chromium',
       use: { browserName: 'chromium' },
       dependencies: ['setup'],
       // A project's testIgnore REPLACES the top-level one, so repeat it.
-      testIgnore: [...MARKETING_IGNORE, ...UI_DRIVING_SPECS],
+      testIgnore: [...MARKETING_IGNORE, ...SERIAL_SPECS],
     },
-    // After every other spec, one at a time. These call MCP tools that steer
-    // the UI (`set_active_plan`, `open_plan`, `navigate_to`), which broadcast
-    // `ui-navigate` to EVERY connected page — by design, so the app follows
-    // the agent. Run beside the UI specs, they switched another worker's page
-    // to their plan mid-test: the canvas dropped the selected item, and the
-    // Plans tab sat under a workspace nobody in that test had opened.
+    // After every other spec, one at a time, for two reasons:
+    //  - Some call MCP tools that steer the UI (`set_active_plan`,
+    //    `open_plan`, `navigate_to`), which broadcast `ui-navigate` to EVERY
+    //    connected page — by design, so the app follows the agent. Beside the
+    //    UI specs they switched another worker's page to their plan mid-test.
+    //  - The parser specs read `/api/cross-system`, symbols and stats, which
+    //    are the graph of whichever project was scanned LAST. Any other
+    //    worker's scan between their scan and their read replaced it, and
+    //    "the fixture has an HTTP pairing" read zero edges.
     {
-      name: 'ui-driving',
+      name: 'serial',
       use: { browserName: 'chromium' },
-      testMatch: UI_DRIVING_SPECS,
+      testMatch: SERIAL_SPECS,
       ...(TARGETED ? { dependencies: ['setup'] } : {}),
       workers: 1,
     },

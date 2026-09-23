@@ -598,9 +598,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'submit_criterion',
     {
       description:
-        'Offer evidence that a criterion is met: attachments on the same item (add them with add_item_attachment first), ' +
-        'each with an optional locator — {page}, {sheet, range}, {t}, {lines} or {text} — plus a note saying what shows it. ' +
-        'On an "agent"-policy criterion this marks it met; otherwise it waits for a person, who approves or sends it back with a note.',
+        'Offer evidence that a criterion is met: files recorded on the same item with record_artefact, each with an ' +
+        'optional locator — {sheet, range}, {page}, {t}, {lines} or {text} — plus a note saying what shows it. ' +
+        'The criterion\'s mechanical checks run first and a submission that fails one is refused with the list, so ' +
+        'call check_criterion with the same evidence until it passes. On an "agent"-policy criterion a passing ' +
+        'submission marks it met; otherwise it waits for a person, who approves or sends it back with a note.',
       inputSchema: {
         criterion_uid: z.string(),
         evidence: z.array(z.object({
@@ -613,10 +615,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
       try {
-        // Evidence is recorded with the hash it has now.
-        const target = deps.criteriaService.getCriterion(args.criterion_uid);
-        if (target) await deps.artefactService.refreshArtefactHashes(target.itemUid).catch(() => []);
-        const criterion = deps.criteriaService.submitCriterion(
+        const { criterion } = await deps.criterionLoop.submitChecked(
           args.criterion_uid,
           {
             evidence: (args.evidence ?? []).map((e) => ({ attachmentUid: e.attachment_uid, locator: e.locator })),
@@ -630,6 +629,105 @@ export function register(server: McpServer, deps: ToolDeps): void {
       } catch (err) {
         return criterionError(deps, err);
       }
+    },
+  );
+
+  // --- Phase 31 §8: the loops ---
+
+  server.registerTool(
+    'check_criterion',
+    {
+      description:
+        'Run a criterion\'s mechanical checks and say, in words, what fails: an output file that is missing or older ' +
+        'than the item, a citation to a sheet, range, page, line or quote the file does not have, a test report that is ' +
+        'stale or red, code the item names that has not changed. Pass the evidence you are about to submit to check it ' +
+        'first; with none, it checks the latest submission and the item\'s recorded files. Loop — work, check, fix — ' +
+        'until ok is true, then submit_criterion. "unverified" findings are not failures. Nothing is recorded.',
+      inputSchema: {
+        criterion_uid: z.string(),
+        evidence: z.array(z.object({
+          attachment_uid: z.string(),
+          locator: z.record(z.string(), z.unknown()).optional(),
+        })).optional().describe('What you intend to submit. Omit to check what is already there.'),
+      },
+    },
+    async (args) => {
+      try {
+        const result = await deps.criterionLoop.checkCriterion(
+          args.criterion_uid,
+          args.evidence?.map((e) => ({ attachmentUid: e.attachment_uid, locator: e.locator })),
+        );
+        return { content: [{ type: 'text' as const, text: JSON.stringify({
+          ok: result.ok,
+          findings: result.findings.map((f) => ({ status: f.status, message: f.message })),
+        }, null, 2) }] };
+      } catch (err) {
+        return criterionError(deps, err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_worklist',
+    {
+      description:
+        'Everything you owe on a plan, in the order to work it: criteria a person sent back (their note, the evidence ' +
+        'and place it points at, and a reference such as "task 9f2c41ab" to quote), criteria gone stale because a file ' +
+        'changed after approval, submissions whose checks now fail, and criteria not started. Criteria waiting on a ' +
+        'person are counted, not listed. Call this when you resume work on a plan.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }) => {
+      if (!deps.planService.getPlan(plan_uid)) {
+        return { content: [{ type: 'text' as const, text: `Plan ${plan_uid} not found` }], isError: true };
+      }
+      const list = await deps.criterionLoop.getWorklist(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({
+        owed: list.entries.map((e) => ({
+          reason: e.reason,
+          criterion_uid: e.criterionUid,
+          item: e.itemRef,
+          item_title: e.itemTitle,
+          criterion: e.text,
+          kind: e.kind,
+          policy: e.policy,
+          ...(e.note ? { note: e.note } : {}),
+          ...(e.anchors.length ? { points_at: e.anchors.map((a) => ({ attachment_uid: a.attachmentUid, path: a.path, locator: a.locator })) } : {}),
+          ...(e.details.length ? { details: e.details } : {}),
+        })),
+        waiting_for_person: list.waitingForPerson,
+        met: list.met,
+        total: list.total,
+      }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'run_checks',
+    {
+      description:
+        'Re-hash every recorded file on a plan and re-run every criterion\'s checks, and record the run so it can be ' +
+        'compared with the next one. Says what moved since the last run ("2 went stale — Q3-sales.xlsx changed"). ' +
+        'A check run never approves anything: it can only report a criterion stale or failing.',
+      inputSchema: { plan_uid: z.string() },
+    },
+    async ({ plan_uid }, extra: any) => {
+      if (!deps.planService.getPlan(plan_uid)) {
+        return { content: [{ type: 'text' as const, text: `Plan ${plan_uid} not found` }], isError: true };
+      }
+      const id = authorFromExtra(deps, extra);
+      const run = await deps.criterionLoop.runCheckRun({
+        planUid: plan_uid, trigger: 'manual', by: id.author, byType: id.authorType,
+      });
+      const n = deps.broadcast('plan-check-run', { planUid: plan_uid, runUid: run.uid });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({
+        run_uid: run.uid,
+        since_last: run.sinceLast,
+        criteria: run.outcomes.length,
+        failing: run.outcomes.filter((o) => !o.ok).map((o) => ({ criterion_uid: o.criterionUid, criterion: o.text, failures: o.failures })),
+        stale: run.outcomes.filter((o) => o.state === 'stale').map((o) => ({ criterion_uid: o.criterionUid, criterion: o.text, changed: o.changedFiles })),
+      }, n);
     },
   );
 

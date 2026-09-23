@@ -38,6 +38,7 @@ export const ARTEFACT_EXTS = new Set([
   'xlsx', 'xls', 'xlsm', 'csv',
   'docx', 'pptx',
   'md', 'txt', 'json', 'log',
+  'xml', // JUnit reports — the evidence a `test` criterion reads (§8.1)
   'html', 'htm',
 ]);
 

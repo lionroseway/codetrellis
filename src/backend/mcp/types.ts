@@ -66,7 +66,16 @@ export interface ToolDeps {
    */
   criteriaService: Pick<
     typeof import('../services/criteria-service'),
-    'listCriteria' | 'getCriterion' | 'addCriterionAsAgent' | 'submitCriterion' | 'CriterionError'
+    'listCriteria' | 'getCriterion' | 'addCriterionAsAgent' | 'CriterionError'
+  >;
+  /**
+   * Phase 31 §8 — the loops. `submitChecked` is the agent's ONLY way to
+   * submit: it runs the mechanical checks and refuses evidence that fails
+   * one, so the raw `submitCriterion` is not in the Pick above.
+   */
+  criterionLoop: Pick<
+    typeof import('../services/criterion-loop-service'),
+    'checkCriterion' | 'submitChecked' | 'getWorklist' | 'runCheckRun'
   >;
   /** Phase 31 §4.2 — record a file that matters; hashes kept current. */
   artefactService: Pick<

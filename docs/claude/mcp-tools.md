@@ -44,7 +44,7 @@ Tools are organised into 18 files under `src/backend/mcp/tools/`. Each file grou
 | File | Domain | Purpose |
 |---|---|---|
 | `plan-tools.ts` | Plans | CRUD on plans; history, timelines, summaries, diffs at commits, templates, export/import, pointers, scope. |
-| `plan-item-tools.ts` | Plan items | CRUD on items; comments, attachments, claim, blocked, progress, dependencies, versions, restore, move; acceptance criteria (`list_criteria`, `add_criterion`, `submit_criterion` — an agent offers evidence, a person decides; `approve_gate` is retired and refuses). |
+| `plan-item-tools.ts` | Plan items | CRUD on items; comments, attachments, claim, blocked, progress, dependencies, versions, restore, move; acceptance criteria (`list_criteria`, `add_criterion`, `submit_criterion` — an agent offers evidence, a person decides; `approve_gate` is retired and refuses); the Phase 31 loops (`check_criterion` runs a criterion's mechanical checks, and `submit_criterion` refuses evidence that fails one; `get_worklist` is what the agent owes, sent-back notes first; `run_checks` records a check run and says what moved — it never approves). |
 | `channel-tools.ts` | Channel events | Post, list, resolve, thread, dismiss; per-plan/per-item discussion threads. |
 | `system-docs-tools.ts` | System docs | Author and version markdown system docs; freshness checks. |
 | `contribution-tools.ts` | Contributions | List proposed changes, accept contributions, promote to contribution, prepare contributor branch. |

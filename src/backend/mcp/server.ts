@@ -46,9 +46,9 @@ import {
   listCriteria,
   getCriterion,
   addCriterionAsAgent,
-  submitCriterion,
   CriterionError,
 } from '../services/criteria-service';
+import { checkCriterion, submitChecked, getWorklist, runCheckRun } from '../services/criterion-loop-service';
 import {
   recordArtefact,
   refreshArtefactHashes,
@@ -270,7 +270,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     presenceService,
     projectConfigService,
     // An agent's view of criteria only — see ToolDeps.criteriaService.
-    criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, submitCriterion, CriterionError },
+    criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, CriterionError },
+    criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun },
     artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, ArtefactError },
     startArtefactWatching,
 

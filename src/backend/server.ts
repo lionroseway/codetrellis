@@ -79,6 +79,7 @@ import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkP
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
 import * as criteriaService from './services/criteria-service';
+import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactService from './services/artefact-service';
 import * as _lazy___services_artefact_watcher from './services/artefact-watcher';
 const startArtefactWatching = (a: Parameters<typeof _lazy___services_artefact_watcher.startArtefactWatching>[0]) =>
@@ -2533,6 +2534,45 @@ app.post('/api/criteria/:uid/decide', async (req, res) => {
 app.get('/api/criteria/:uid/signoffs', (req, res) => {
   if (!criteriaService.getCriterion(req.params.uid)) { res.status(404).json({ error: 'Criterion not found' }); return; }
   res.json(criteriaService.listSignoffs(req.params.uid));
+});
+
+// ── Phase 31 §8: the loops — checks, the worklist, check runs ─────────
+//
+// Every handler takes the plan or criterion from the path and derives the
+// project from the stored plan; nothing here reads a root from a request.
+
+app.post('/api/criteria/:uid/check', async (req, res) => {
+  try {
+    res.json(await criterionLoop.checkCriterion(req.params.uid));
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.get('/api/plans/:uid/worklist', async (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(await criterionLoop.getWorklist(req.params.uid));
+});
+
+app.get('/api/plans/:uid/check-runs', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
+  res.json(criterionLoop.listCheckRuns(req.params.uid, limit));
+});
+
+/** "Run checks" — a person asks; the run records, and approves nothing. */
+app.post('/api/plans/:uid/check-runs', async (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  try {
+    const run = await criterionLoop.runCheckRun({
+      planUid: req.params.uid, trigger: 'manual', by: getAuthorKey('human'), byType: 'human',
+    });
+    broadcast('plan-check-run', { planUid: req.params.uid, runUid: run.uid });
+    saveNow(() => exportDatabase());
+    res.status(201).json(run);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
 });
 // ── Phase 31 §4.2: artefacts — files an item read, produced or captured ──
 
