@@ -147,6 +147,11 @@ export default defineConfig({
         '@shared': path.resolve(__dirname, 'src/shared'),
       },
     },
+    // Lazy-loaded by the artefact viewer. Bundled up front so the first PDF
+    // opened in dev doesn't make Vite re-optimise and reload the page.
+    optimizeDeps: {
+      include: ['pdfjs-dist/legacy/build/pdf.mjs'],
+    },
     build: {
       outDir: path.resolve(__dirname, 'out/renderer'),
       emptyOutDir: true,

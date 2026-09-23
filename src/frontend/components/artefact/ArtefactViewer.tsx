@@ -5,6 +5,7 @@ import { useArtefactViewStore, type ArtefactView } from '../../stores/artefact-v
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { artefactSrcUrl } from '../../lib/artefact-src';
 import { describeLocator, openArtefactAt } from '../../lib/open-artefact-at';
+import type { XlsxReply } from '../../workers/xlsx-worker';
 
 /**
  * Phase 31 §7 — the artefact viewer.
@@ -14,11 +15,12 @@ import { describeLocator, openArtefactAt } from '../../lib/open-artefact-at';
  * the file and the lines or cells the note is about (§8.2). The agent then
  * reads that place back from its worklist rather than from a conversation.
  *
- * Formats in this first cut need no parser: images (SVG only ever through
- * `<img>` — an inlined SVG is a document that can run script), video with
- * seeking, text with line numbers, CSV as a grid. PDF, spreadsheets and
- * Word documents arrive with their parsers; anything not shown yet gets a
- * card saying what it is, and Show in Finder. There is no "Open" (§7.4).
+ * Formats: images (SVG only ever through `<img>` — an inlined SVG is a
+ * document that can run script), video with seeking, text with line
+ * numbers, CSV and .xlsx as a grid (the workbook read in a capped worker),
+ * PDF drawn by pdf.js. Word documents and the sandboxed HTML view arrive
+ * later; anything not shown gets a card saying what it is, and Show in
+ * Finder. There is no "Open" (§7.4).
  */
 
 interface Meta {
@@ -36,7 +38,7 @@ interface Meta {
   viewable: boolean;
 }
 
-type Selection = { lines: string } | { range: string } | null;
+type Selection = { lines: string } | { range: string; sheet?: string } | { page: number } | null;
 
 const IMAGE = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
 const VIDEO = new Set(['mp4', 'webm', 'mov']);
@@ -44,6 +46,11 @@ const TEXT = new Set(['md', 'txt', 'log', 'json', 'xml']);
 /** Past this, text is not pulled into the page — the card says so. */
 const MAX_TEXT_BYTES = 5 * 1024 * 1024;
 const MAX_CSV_ROWS = 2000;
+/** §7.2 caps: bytes in, per format. Parsed output is capped in the worker. */
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
+const MAX_SHEET_BYTES = 25 * 1024 * 1024;
+const MAX_PDF_PAGES = 300;
+const PARSE_TIMEOUT_MS = 15_000;
 
 const extOf = (name: string) => name.split('.').pop()?.toLowerCase() ?? '';
 
@@ -148,6 +155,12 @@ function ViewerDialog({ view }: { view: ArtefactView }) {
           {meta?.viewable && (
             IMAGE.has(ext) ? <ImageView uid={view.uid} name={name} />
             : VIDEO.has(ext) ? <VideoView uid={view.uid} locator={view.locator} />
+            : ext === 'pdf' ? ((meta.size ?? 0) > MAX_PDF_BYTES ? <TooBig meta={meta} /> : (
+              <PdfView uid={view.uid} meta={meta} locator={view.locator} selection={selection} onSelect={setSelection} />
+            ))
+            : ext === 'xlsx' || ext === 'xlsm' ? ((meta.size ?? 0) > MAX_SHEET_BYTES ? <TooBig meta={meta} /> : (
+              <XlsxView uid={view.uid} meta={meta} locator={view.locator} selection={selection} onSelect={setSelection} />
+            ))
             : ext === 'csv' ? (tooBig(meta) ? <TooBig meta={meta} /> : (
               <CsvView uid={view.uid} locator={view.locator} selection={selection} onSelect={setSelection} />
             ))
@@ -383,17 +396,115 @@ function CsvView({ uid, locator, selection, onSelect }: {
 }) {
   const { text, error } = useText(uid);
   const rows = useMemo(() => (text === null ? [] : parseCsv(text)), [text]);
-  const target = parseRange((locator as { range?: unknown } | null)?.range);
-  const picked = selection && 'range' in selection ? parseRange(selection.range) : null;
-  const anchor = useRef<{ col: number; row: number } | null>(null);
-  const firstHit = useRef<HTMLTableCellElement>(null);
-
-  useEffect(() => { firstHit.current?.scrollIntoView({ block: 'center', inline: 'center' }); }, [text]);
-
   if (error) return <Card title="Could not read the file" lines={[error]} />;
   if (text === null) return <p className="p-6 text-[12px] text-foreground-subtle">Loading…</p>;
-  const shown = rows.slice(0, MAX_CSV_ROWS);
-  const cols = Math.max(0, ...shown.map((r) => r.length));
+  return (
+    <Grid
+      rows={rows.slice(0, MAX_CSV_ROWS)}
+      target={parseRange((locator as { range?: unknown } | null)?.range)}
+      picked={selection && 'range' in selection ? parseRange(selection.range) : null}
+      onPick={(range) => onSelect({ range })}
+      footer={rows.length > MAX_CSV_ROWS ? `Showing the first ${MAX_CSV_ROWS} of ${rows.length} rows.` : null}
+    />
+  );
+}
+
+/**
+ * An .xlsx / .xlsm, read in a worker with caps (§7.2): values and layout;
+ * charts and conditional formatting are not shown, and macros are never
+ * run — an .xlsm says so. Past a cap or the time limit: the card.
+ */
+function XlsxView({ uid, meta, locator, selection, onSelect }: {
+  uid: string; meta: Meta; locator: unknown; selection: Selection; onSelect: (s: Selection) => void;
+}) {
+  const [book, setBook] = useState<XlsxReply | null>(null);
+  const wanted = (locator as { sheet?: unknown } | null)?.sheet;
+  const [sheet, setSheet] = useState<string | null>(typeof wanted === 'string' ? wanted : null);
+
+  useEffect(() => {
+    let live = true;
+    let worker: Worker | null = null;
+    const timer = setTimeout(() => {
+      worker?.terminate();
+      if (live) setBook({ ok: false, reason: `Reading this workbook took longer than ${PARSE_TIMEOUT_MS / 1000}s, so it was stopped.` });
+    }, PARSE_TIMEOUT_MS);
+    fetch(artefactSrcUrl(uid))
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); })
+      .then((buffer) => {
+        if (!live) return;
+        worker = new Worker(new URL('../../workers/xlsx-worker.ts', import.meta.url), { type: 'module' });
+        worker.onmessage = (e: MessageEvent<XlsxReply>) => {
+          clearTimeout(timer);
+          worker?.terminate();
+          if (live) setBook(e.data);
+        };
+        worker.onerror = () => {
+          clearTimeout(timer);
+          worker?.terminate();
+          if (live) setBook({ ok: false, reason: 'The workbook could not be read.' });
+        };
+        worker.postMessage({ buffer }, [buffer]);
+      })
+      .catch((err) => { clearTimeout(timer); if (live) setBook({ ok: false, reason: String(err) }); });
+    return () => { live = false; clearTimeout(timer); worker?.terminate(); };
+  }, [uid]);
+
+  if (!book) return <p className="p-6 text-[12px] text-foreground-subtle">Reading the workbook…</p>;
+  if (!book.ok) return <Card title={meta.path ?? meta.name} lines={[book.reason]} icon />;
+  const current = book.sheets.find((s) => s.name === sheet) ?? book.sheets[0];
+  if (!current) return <Card title={meta.path ?? meta.name} lines={['This workbook has no sheets.']} icon />;
+  const targetSheet = typeof wanted === 'string' ? wanted : book.sheets[0]?.name;
+  const pickedSheet = selection && 'range' in selection ? (selection as { sheet?: string }).sheet ?? null : null;
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-white/[0.04] text-[11px]" role="tablist" aria-label="Sheets">
+        {book.sheets.map((s) => (
+          <button
+            key={s.name}
+            role="tab"
+            aria-selected={s.name === current.name}
+            onClick={() => setSheet(s.name)}
+            className={`px-2 py-0.5 rounded font-mono ${s.name === current.name
+              ? 'bg-white/[0.08] text-foreground'
+              : 'text-foreground-subtle hover:text-foreground'}`}
+          >
+            {s.name}
+          </button>
+        ))}
+        <div className="flex-1" />
+        {(book.macros || extOf(meta.path ?? meta.name) === 'xlsm') && (
+          <span data-testid="macro-badge" className="px-1.5 py-0.5 rounded border border-amber-400/30 text-amber-300">
+            contains macros — not run
+          </span>
+        )}
+        <span className="text-foreground-subtle ml-2">values as last saved · charts not shown</span>
+      </div>
+      <div className="flex-1 min-h-0 overflow-auto">
+        <Grid
+          rows={current.rows}
+          target={current.name === targetSheet ? parseRange((locator as { range?: unknown } | null)?.range) : null}
+          picked={pickedSheet === current.name && selection && 'range' in selection ? parseRange(selection.range) : null}
+          onPick={(range) => onSelect({ sheet: current.name, range } as Selection)}
+          footer={current.truncated ? 'This sheet is larger than the viewer shows; the rest is not displayed.' : null}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Cells as a grid — always text, never markup. Click or shift-click to pick a range. */
+function Grid({ rows, target, picked, onPick, footer }: {
+  rows: string[][];
+  target: ReturnType<typeof parseRange>;
+  picked: ReturnType<typeof parseRange>;
+  onPick: (range: string) => void;
+  footer: string | null;
+}) {
+  const anchor = useRef<{ col: number; row: number } | null>(null);
+  const firstHit = useRef<HTMLTableCellElement>(null);
+  useEffect(() => { firstHit.current?.scrollIntoView({ block: 'center', inline: 'center' }); }, [rows, target]);
+  const cols = Math.max(0, ...rows.map((r) => r.length));
 
   const pick = (col: number, row: number, extend: boolean) => {
     const from = extend && anchor.current ? anchor.current : { col, row };
@@ -401,7 +512,7 @@ function CsvView({ uid, locator, selection, onSelect }: {
     const a = { col: Math.min(from.col, col), row: Math.min(from.row, row) };
     const b = { col: Math.max(from.col, col), row: Math.max(from.row, row) };
     const ref = (c: { col: number; row: number }) => `${colName(c.col)}${c.row}`;
-    onSelect({ range: a.col === b.col && a.row === b.row ? ref(a) : `${ref(a)}:${ref(b)}` });
+    onPick(a.col === b.col && a.row === b.row ? ref(a) : `${ref(a)}:${ref(b)}`);
   };
   const inside = (r: ReturnType<typeof parseRange>, col: number, row: number) =>
     !!r && col >= r.from.col && col <= r.to.col && row >= r.from.row && row <= r.to.row;
@@ -419,7 +530,7 @@ function CsvView({ uid, locator, selection, onSelect }: {
           </tr>
         </thead>
         <tbody>
-          {shown.map((r, ri) => (
+          {rows.map((r, ri) => (
             <tr key={ri}>
               <td className="px-2 text-right text-foreground-subtle/70 select-none">{ri + 1}</td>
               {Array.from({ length: cols }, (_, ci) => {
@@ -438,7 +549,6 @@ function CsvView({ uid, locator, selection, onSelect }: {
                     className={`border border-white/[0.06] px-2 py-0.5 whitespace-nowrap cursor-cell ${
                       sel ? 'bg-red-400/20' : hit ? 'bg-amber-400/20 text-foreground' : 'text-foreground-muted'}`}
                   >
-                    {/* Cells are text, always — never markup. */}
                     {r[ci] ?? ''}
                   </td>
                 );
@@ -447,18 +557,130 @@ function CsvView({ uid, locator, selection, onSelect }: {
           ))}
         </tbody>
       </table>
-      {rows.length > MAX_CSV_ROWS && (
-        <p className="p-2 text-[11px] text-foreground-subtle">Showing the first {MAX_CSV_ROWS} of {rows.length} rows.</p>
+      {footer && <p className="p-2 text-[11px] text-foreground-subtle">{footer}</p>}
+    </div>
+  );
+}
+
+/**
+ * A PDF, drawn by pdf.js (§7.2), lazily loaded so it costs nothing until a
+ * PDF is opened. pdf.js 6 has no eval path at all, and the app's CSP
+ * (script-src 'self', no unsafe-eval) would refuse one; XFA forms are off. `{page}` scrolls there; `{text}` finds the
+ * page that has the quote. Clicking a page picks it to send back from.
+ */
+function PdfView({ uid, meta, locator, selection, onSelect }: {
+  uid: string; meta: Meta; locator: unknown; selection: Selection; onSelect: (s: Selection) => void;
+}) {
+  const [pages, setPages] = useState<HTMLCanvasElement[] | null>(null);
+  const [cited, setCited] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const holder = useRef<HTMLDivElement>(null);
+  const loc = (locator ?? {}) as { page?: unknown; text?: unknown };
+  const wantPage = typeof loc.page === 'number' ? loc.page : null;
+  const wantText = typeof loc.text === 'string' ? loc.text : null;
+
+  useEffect(() => {
+    let live = true;
+    let destroy: (() => void) | null = null;
+    (async () => {
+      try {
+        // The legacy build: pdf.js 6 calls Map#getOrInsertComputed, which
+        // the browser-served build cannot count on, and this one polyfills.
+        const [pdfjs, worker] = await Promise.all([
+          import('pdfjs-dist/legacy/build/pdf.mjs'),
+          import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
+        ]);
+        pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+        const res = await fetch(artefactSrcUrl(uid));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = new Uint8Array(await res.arrayBuffer());
+        const task = pdfjs.getDocument({ data, enableXfa: false });
+        destroy = () => { void task.destroy(); };
+        const doc = await task.promise;
+        if (!live) return;
+        setTotal(doc.numPages);
+        let hit: number | null = wantPage;
+        const quote = wantText ? wantText.replace(/\s+/g, ' ').trim().toLowerCase() : null;
+        const canvases: HTMLCanvasElement[] = [];
+        const count = Math.min(doc.numPages, MAX_PDF_PAGES);
+        for (let n = 1; n <= count && live; n++) {
+          const page = await doc.getPage(n);
+          if (quote && hit === null) {
+            const content = await page.getTextContent();
+            const text = content.items.map((i) => ('str' in i ? i.str : '')).join(' ').replace(/\s+/g, ' ').toLowerCase();
+            if (text.includes(quote)) hit = n;
+          }
+          const viewport = page.getViewport({ scale: 1.3 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvas, viewport }).promise;
+          canvases.push(canvas);
+        }
+        if (live) { setPages(canvases); setCited(hit); }
+      } catch (err) {
+        if (live) setError((err as Error).message);
+      }
+    })();
+    return () => { live = false; destroy?.(); };
+  }, [uid, wantPage, wantText]);
+
+  useEffect(() => {
+    if (!pages || cited === null) return;
+    holder.current?.querySelector(`[data-page="${cited}"]`)?.scrollIntoView({ block: 'start' });
+  }, [pages, cited]);
+
+  if (error) return <Card title={meta.path ?? meta.name} lines={[`This PDF could not be shown (${error}).`]} icon />;
+  if (!pages) return <p className="p-6 text-[12px] text-foreground-subtle">Drawing the PDF…</p>;
+  const picked = selection && 'page' in selection ? (selection as { page: number }).page : null;
+
+  return (
+    <div ref={holder} data-testid="artefact-pdf" className="flex flex-col items-center gap-3 p-4 bg-black/20">
+      {pages.map((canvas, i) => {
+        const n = i + 1;
+        return (
+          <div
+            key={n}
+            data-page={n}
+            data-cited={n === cited ? 'true' : undefined}
+            onClick={() => onSelect({ page: n } as Selection)}
+            className={`relative cursor-pointer ring-2 ${picked === n ? 'ring-red-400/70' : n === cited ? 'ring-amber-400/70' : 'ring-transparent'}`}
+            title={`Page ${n} — click to point at it`}
+          >
+            <CanvasHost canvas={canvas} />
+            <span className="absolute top-1 right-2 text-[10px] text-black/60 bg-white/70 px-1 rounded">{n}</span>
+          </div>
+        );
+      })}
+      {total > MAX_PDF_PAGES && (
+        <p className="text-[11px] text-foreground-subtle">Showing the first {MAX_PDF_PAGES} of {total} pages.</p>
       )}
     </div>
   );
+}
+
+/** Mounts a canvas pdf.js already drew. */
+function CanvasHost({ canvas }: { canvas: HTMLCanvasElement }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    canvas.style.maxWidth = '100%';
+    canvas.style.height = 'auto';
+    el.appendChild(canvas);
+    return () => { if (canvas.parentNode === el) el.removeChild(canvas); };
+  }, [canvas]);
+  return <div ref={ref} className="bg-white" />;
 }
 
 function NotYet({ meta, ext }: { meta: Meta; ext: string }) {
   const why =
     ext === 'html' || ext === 'htm'
       ? 'HTML is a program, so it gets its own sandboxed view — that has not shipped yet.'
-      : ext === 'pdf' || ext === 'xlsx' || ext === 'xlsm' || ext === 'xls' || ext === 'docx' || ext === 'pptx'
+      : ext === 'xls'
+        ? 'This is an old-format (.xls) workbook, which the viewer does not read. Save it as .xlsx to preview it.'
+      : ext === 'docx' || ext === 'pptx'
         ? `Previewing .${ext} files arrives with its parser — not in this version.`
         : `.${ext || '?'} files are not previewed.`;
   return <Card title={meta.path ?? meta.name} lines={[why, 'Show in Finder to look at it — the viewer never opens files with another app.']} icon />;

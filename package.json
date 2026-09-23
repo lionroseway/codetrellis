@@ -126,6 +126,7 @@
     "ignore": "^7.0.5",
     "lucide-react": "^0.460.0",
     "node-pty": "^1.2.0-beta.13",
+    "pdfjs-dist": "^6.3.289",
     "prism-react-renderer": "^2.4.1",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
@@ -153,7 +154,9 @@
       "out/main/**/*",
       "out/preload/**/*",
       "out/renderer/**/*",
-      "package.json"
+      "package.json",
+      "!**/node_modules/pdfjs-dist/**",
+      "!**/node_modules/@napi-rs/canvas*/**"
     ],
     "extraResources": [
       {
