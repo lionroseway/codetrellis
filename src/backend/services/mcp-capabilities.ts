@@ -154,7 +154,12 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   delete_item: 'write',
   claim_item: 'write',
   get_next_item: 'read',
-  approve_gate: 'write',
+  // Retired in Phase 31.1 — it refuses. Kept one release so an agent that
+  // learned it gets a direction rather than a missing tool.
+  approve_gate: 'read',
+  list_criteria: 'read',
+  add_criterion: 'write',
+  submit_criterion: 'write',
   list_items: 'read',
   search_items: 'read',
   get_plan_timeline: 'read',

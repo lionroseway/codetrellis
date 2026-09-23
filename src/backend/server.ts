@@ -78,6 +78,8 @@ import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } 
 import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
+import * as criteriaService from './services/criteria-service';
+import { issueHumanDecision } from './services/human-decision';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
 import { getDeviations, resolveDeviation } from './services/deviation-service';
@@ -2419,7 +2421,97 @@ app.get('/api/items/:uid/full', (req, res) => {
   const attachments = taskAttachmentsService.listItemAttachments(req.params.uid);
   const comments = commentService.listItemComments(req.params.uid);
   const versions = planItemService.listItemVersions(req.params.uid).slice(0, 10);
-  res.json({ item, parent, children, attachments, comments, versions });
+  const criteria = criteriaService.listCriteria(req.params.uid);
+  res.json({ item, parent, children, attachments, comments, criteria, versions });
+});
+
+// ── Phase 31 §4.1–4.3: acceptance criteria and sign-off ──────────────
+//
+// This is the desktop's route to a person's decision: each handler below
+// that changes how work is judged issues a HumanDecision, which is the
+// only thing criteria-service accepts for it. MCP tools cannot reach
+// these operations at all (human-decision.test.ts).
+
+function desktopDecision() {
+  return issueHumanDecision('desktop', getAuthorKey('human'));
+}
+
+function criteriaChanged(itemUid: string): void {
+  const item = planItemService.getItem(itemUid);
+  broadcast('plan-item-criteria-changed', { planUid: item?.planUid ?? null, itemUid });
+  saveNow(() => exportDatabase());
+}
+
+function sendCriterionError(res: express.Response, err: unknown): void {
+  if (err instanceof criteriaService.CriterionError) {
+    res.status(err.status).json({ error: err.message });
+    return;
+  }
+  res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+}
+
+app.get('/api/items/:uid/criteria', (req, res) => {
+  if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(criteriaService.listCriteria(req.params.uid));
+});
+
+app.post('/api/items/:uid/criteria', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.addCriterionAsHuman(
+      req.params.uid, { text: body.text, kind: body.kind, policy: body.policy }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.status(201).json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.put('/api/criteria/:uid', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.updateCriterion(
+      req.params.uid, { text: body.text, policy: body.policy, sortOrder: body.sortOrder }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.delete('/api/criteria/:uid', (req, res) => {
+  try {
+    const before = criteriaService.getCriterion(req.params.uid);
+    if (!before || !criteriaService.deleteCriterion(req.params.uid, desktopDecision())) {
+      res.status(404).json({ error: 'Criterion not found' });
+      return;
+    }
+    criteriaChanged(before.itemUid);
+    res.json({ ok: true });
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+/** Approve, or send back with a note. */
+app.post('/api/criteria/:uid/decide', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.decideCriterion(
+      req.params.uid, { decision: body.decision, note: body.note }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.get('/api/criteria/:uid/signoffs', (req, res) => {
+  if (!criteriaService.getCriterion(req.params.uid)) { res.status(404).json({ error: 'Criterion not found' }); return; }
+  res.json(criteriaService.listSignoffs(req.params.uid));
 });
 
 /**

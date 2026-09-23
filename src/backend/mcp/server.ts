@@ -42,6 +42,13 @@ import * as terminalService from '../services/terminal-service';
 import * as planImportService from '../services/plan-import-service';
 import * as presenceService from '../services/presence-service';
 import * as projectConfigService from '../services/project-config-service';
+import {
+  listCriteria,
+  getCriterion,
+  addCriterionAsAgent,
+  submitCriterion,
+  CriterionError,
+} from '../services/criteria-service';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
@@ -255,6 +262,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     planImportService,
     presenceService,
     projectConfigService,
+    // An agent's view of criteria only — see ToolDeps.criteriaService.
+    criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, submitCriterion, CriterionError },
 
     // Specific functions
     applyTemplate,

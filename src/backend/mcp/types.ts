@@ -58,6 +58,16 @@ export interface ToolDeps {
   planImportService: typeof import('../services/plan-import-service');
   presenceService: typeof import('../services/presence-service');
   projectConfigService: typeof import('../services/project-config-service');
+  /**
+   * Criteria, as an AGENT may use them: read, add (at `propose`), submit.
+   * Deliberately a Pick — deciding, rewording, re-policying and deleting
+   * need a person's `HumanDecision`, and are not reachable from here at
+   * all (Phase 31 §4.3; human-decision.test.ts).
+   */
+  criteriaService: Pick<
+    typeof import('../services/criteria-service'),
+    'listCriteria' | 'getCriterion' | 'addCriterionAsAgent' | 'submitCriterion' | 'CriterionError'
+  >;
 
   // Specific function imports (not full modules)
   applyTemplate: typeof import('../services/plan-templates-service').applyTemplate;
