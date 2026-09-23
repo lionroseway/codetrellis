@@ -147,10 +147,13 @@ export default defineConfig({
         '@shared': path.resolve(__dirname, 'src/shared'),
       },
     },
-    // Lazy-loaded by the artefact viewer. Bundled up front so the first PDF
-    // opened in dev doesn't make Vite re-optimise and reload the page.
+    // Lazy-loaded by the artefact viewer, or imported only by its workers,
+    // which Vite's startup scan does not follow. Bundled up front so the
+    // first PDF or Word document opened in dev doesn't make Vite
+    // re-optimise and reload the page. Keep in step with vite.web.config.ts,
+    // which serves `npm run dev` and the browser suite.
     optimizeDeps: {
-      include: ['pdfjs-dist/legacy/build/pdf.mjs'],
+      include: ['pdfjs-dist/legacy/build/pdf.mjs', 'mammoth'],
     },
     build: {
       outDir: path.resolve(__dirname, 'out/renderer'),

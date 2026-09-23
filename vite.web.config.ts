@@ -52,6 +52,14 @@ export default defineConfig({
     },
     dedupe: ['react', 'react-dom'],
   },
+  // Lazy-loaded by the artefact viewer, or imported only by its workers,
+  // which Vite's startup scan does not follow. Discovered later, each makes
+  // Vite re-optimise and reload EVERY open page — in the browser suite,
+  // that is whatever test the other worker is running. Keep in step with
+  // the renderer's list in electron.vite.config.ts.
+  optimizeDeps: {
+    include: ['pdfjs-dist/legacy/build/pdf.mjs', 'mammoth'],
+  },
   server: {
     port: 5173,
     headers: {

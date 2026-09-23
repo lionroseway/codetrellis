@@ -229,3 +229,23 @@ body {
 .graph-perf .react-flow__node * {
   filter: none !important;
 }
+
+/*
+ * A Word document in the artefact viewer (Phase 31 §7.2). Its HTML is
+ * sanitised and carries no styles of its own; this gives back the
+ * structure preflight took away — headings, lists, tables — and marks the
+ * paragraph a citation points at.
+ */
+.docx-body h1 { font-size: 1.5em; font-weight: 600; margin: 1.2em 0 0.5em; color: var(--color-foreground); }
+.docx-body h2 { font-size: 1.25em; font-weight: 600; margin: 1.1em 0 0.4em; color: var(--color-foreground); }
+.docx-body h3, .docx-body h4, .docx-body h5, .docx-body h6 { font-weight: 600; margin: 1em 0 0.3em; color: var(--color-foreground); }
+.docx-body p { margin: 0.5em 0; }
+.docx-body ul { list-style: disc; padding-left: 1.5em; margin: 0.5em 0; }
+.docx-body ol { list-style: decimal; padding-left: 1.5em; margin: 0.5em 0; }
+.docx-body table { border-collapse: collapse; margin: 0.75em 0; }
+.docx-body td, .docx-body th { border: 1px solid rgb(255 255 255 / 0.1); padding: 0.25em 0.6em; vertical-align: top; }
+.docx-body img { max-width: 100%; height: auto; display: inline-block; }
+.docx-body a { text-decoration: underline; text-decoration-style: dotted; }
+.docx-body strong { font-weight: 600; }
+.docx-body em { font-style: italic; }
+.docx-body [data-cited='true'] { background: rgb(251 191 36 / 0.15); border-radius: 3px; }
