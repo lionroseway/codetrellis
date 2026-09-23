@@ -44,6 +44,10 @@ test.describe('planning by hand', () => {
   });
 
   test('a person can plan a change and put it in the repo', async ({ page }) => {
+    // One whole journey — create, anchor, rename, share, read back — not one
+    // step. Its own waits add up past the default 30s, and on a CI runner
+    // shared with a second worker it has taken 38s while every step passed.
+    test.setTimeout(90_000);
     await gotoWithProject(page, { projectPath: PROJECT });
 
     // ── create ────────────────────────────────────────────────────
