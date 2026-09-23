@@ -985,7 +985,7 @@ otherwise be built on:
   accepts.
 - Deleting an attachment tells the user "the file on disk will also be
   deleted"; `deleteAttachment` removes only the row.
-- `docs/PLAN-EXPORT.md` §11 says comments are not exported; `serializeItem`
+- `docs/PLAN-EXPORT.md` §9 says comments are not exported; `serializeItem`
   exports them.
 - **Confirm on a packaged build** whether `ContextRail` image previews
   load (§7.1). The answer decides whether 31.3 is a feature or a fix.
