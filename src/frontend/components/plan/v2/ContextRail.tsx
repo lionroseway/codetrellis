@@ -823,7 +823,11 @@ function AttachmentRow({ itemUid, attachment }: { itemUid: string; attachment: T
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     const noun = isUploadedCopy ? 'uploaded copy' : 'reference';
-    if (!confirm(`Remove this ${attachment.kind} ${noun}?${isUploadedCopy ? '\n\nThe file on disk will also be deleted.' : ''}`)) return;
+    // Removing an attachment removes the row only. The copy on disk stays —
+    // this used to promise it would be deleted, and it never was. Deleting
+    // it would mean deleting a path an attachment names, which for an
+    // imported plan is a path someone else wrote; it is not worth that.
+    if (!confirm(`Remove this ${attachment.kind} ${noun}?${isUploadedCopy ? '\n\nThe copy on disk is kept — delete it yourself if you no longer need it.' : ''}`)) return;
     removeItemAttachment(itemUid, attachment.uid);
   };
 

@@ -2422,9 +2422,32 @@ app.get('/api/items/:uid/full', (req, res) => {
   res.json({ item, parent, children, attachments, comments, versions });
 });
 
-/** Update any field on an item. */
+/**
+ * Update any field on an item.
+ *
+ * Every field the item editor sends has to be named here — a field left
+ * out is dropped without an error, and the store then renders the
+ * server's unchanged copy. That is how the approval gate toggle, the
+ * routing panel (skills, claim policy, execution config, constraints),
+ * symbol targets and visibility all appeared to save and never did.
+ */
+const CASCADE_MODES = new Set(['inherit', 'replace', 'none']);
+const ITEM_VISIBILITIES = new Set(['shared', 'local']);
+
 app.put('/api/items/:uid', (req, res) => {
   const body = req.body ?? {};
+  // These are written to the row as given, so refuse a value the reader
+  // would not understand rather than store it.
+  for (const key of ['skillsMode', 'claimPolicyMode', 'executionConfigMode', 'constraintsMode']) {
+    if (body[key] !== undefined && !CASCADE_MODES.has(body[key])) {
+      res.status(400).json({ error: `${key} must be one of: ${[...CASCADE_MODES].join(', ')}` });
+      return;
+    }
+  }
+  if (body.visibility !== undefined && !ITEM_VISIBILITIES.has(body.visibility)) {
+    res.status(400).json({ error: 'visibility must be shared or local' });
+    return;
+  }
   const item = planItemService.updateItem(req.params.uid, {
     title: body.title,
     body: body.body,
@@ -2435,9 +2458,21 @@ app.put('/api/items/:uid', (req, res) => {
     blockedReason: body.blockedReason,
     scopePath: body.scopePath,
     fileSpecs: body.fileSpecs,
+    symbolSpecs: body.symbolSpecs,
     newConnections: body.newConnections,
     removedConnections: body.removedConnections,
     dependencies: body.dependencies,
+    skills: body.skills,
+    skillsMode: body.skillsMode,
+    claimPolicy: body.claimPolicy,
+    claimPolicyMode: body.claimPolicyMode,
+    executionConfig: body.executionConfig,
+    executionConfigMode: body.executionConfigMode,
+    constraints: body.constraints,
+    constraintsMode: body.constraintsMode,
+    requiresApproval: typeof body.requiresApproval === 'boolean' ? body.requiresApproval : undefined,
+    visibility: body.visibility,
+    overrideParentVisibility: body.overrideParentVisibility,
     parentUid: body.parentUid,
     sortOrder: body.sortOrder,
     changeSummary: body.changeSummary,
