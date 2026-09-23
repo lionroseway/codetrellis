@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { isHumanDecision, type HumanDecision } from './human-decision';
+import { currentHashes } from './artefact-service';
 import type {
   CriterionEvidence,
   CriterionKind,
@@ -102,6 +103,10 @@ function toEvidence(r: Row): CriterionEvidence {
 }
 
 function toSignoff(r: Row): CriterionSignoff {
+  let evidenceHashes: Record<string, string | null> = {};
+  if (typeof r[8] === 'string') {
+    try { evidenceHashes = JSON.parse(r[8]) ?? {}; } catch { evidenceHashes = {}; }
+  }
   return {
     uid: r[0] as string,
     criterionUid: r[1] as string,
@@ -111,6 +116,7 @@ function toSignoff(r: Row): CriterionSignoff {
     channel: r[5] as CriterionSignoff['channel'],
     note: (r[6] as string | null) ?? null,
     createdAt: r[7] as number,
+    evidenceHashes,
   };
 }
 
@@ -131,7 +137,7 @@ function latestSubmissionOf(criterionUid: string): CriterionEvidence[] {
 
 function latestSignoffOf(criterionUid: string): CriterionSignoff | null {
   const r = rows(
-    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at
+    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes
      FROM criterion_signoffs WHERE criterion_uid = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     [criterionUid],
   )[0];
@@ -148,6 +154,12 @@ export function deriveState(
   submission: CriterionEvidence[],
   signoff: CriterionSignoff | null,
   since: number | null = null,
+  /**
+   * Phase 31 §4.3 — a file the approval was taken on has changed (or
+   * gone) since. The approval was of something else, so it is `stale`:
+   * never silently still `met`.
+   */
+  evidenceChanged = false,
 ): CriterionState {
   if (since !== null) {
     if (signoff && signoff.createdAt < since) signoff = null;
@@ -155,7 +167,8 @@ export function deriveState(
   }
   const submittedAt = submission[0]?.submittedAt ?? null;
   if (signoff && (submittedAt === null || signoff.createdAt >= submittedAt)) {
-    return signoff.decision === 'approved' ? 'met' : 'sent_back';
+    if (signoff.decision === 'approved') return evidenceChanged ? 'stale' : 'met';
+    return 'sent_back';
   }
   if (submittedAt !== null) return 'submitted';
   return 'open';
@@ -177,10 +190,27 @@ function toCriterion(r: Row): ItemCriterion {
     authorType: r[8] as string,
     createdAt: r[9] as number,
     updatedAt: r[10] as number,
-    state: deriveState(latestSubmission, latestSignoff, (r[11] as number | null) ?? null),
+    state: deriveState(
+      latestSubmission, latestSignoff, (r[11] as number | null) ?? null,
+      latestSignoff ? evidenceHasChanged(latestSignoff) : false,
+    ),
     latestSubmission,
     latestSignoff,
   };
+}
+
+/**
+ * Has any file this approval was taken on changed since? Compared against
+ * the hash the attachment row holds now — which `refreshArtefactHashes`
+ * brings up to date at read time and the artefact watcher keeps current.
+ * A file that has gone has no hash, and that counts as changed.
+ */
+function evidenceHasChanged(signoff: CriterionSignoff): boolean {
+  const recorded = signoff.evidenceHashes ?? {};
+  const uids = Object.keys(recorded);
+  if (uids.length === 0) return false;
+  const now = currentHashes(uids);
+  return uids.some((uid) => recorded[uid] !== now[uid]);
 }
 
 export function getCriterion(uid: string): ItemCriterion | null {
@@ -199,7 +229,7 @@ export function listCriteria(itemUid: string): ItemCriterion[] {
 
 export function listSignoffs(criterionUid: string): CriterionSignoff[] {
   return rows(
-    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at
+    `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes
      FROM criterion_signoffs WHERE criterion_uid = ? ORDER BY created_at, rowid`,
     [criterionUid],
   ).map(toSignoff);
@@ -439,11 +469,12 @@ export function submitCriterion(
       `INSERT INTO criterion_evidence
          (uid, criterion_uid, submission_uid, attachment_uid, locator, note, sha256_at_submit,
           submitted_by, submitted_by_type, submitted_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         randomUUID(), criterionUid, submissionUid, e?.attachmentUid ?? null,
         e?.locator === undefined || e?.locator === null ? null : JSON.stringify(e.locator),
-        note, actor.author, actor.authorType, at,
+        note, e ? currentHashes([e.attachmentUid])[e.attachmentUid] : null,
+        actor.author, actor.authorType, at,
       ],
     );
   }
@@ -486,11 +517,20 @@ function appendSignoff(
   channel: CriterionSignoff['channel'],
   note: string | null,
 ): void {
+  // An approval records the hash of every file it was taken on, so a later
+  // edit to any of them shows as `stale` rather than silently still `met`.
+  let evidenceHashes: Record<string, string | null> = {};
+  if (decision === 'approved') {
+    const uids = latestSubmissionOf(criterionUid)
+      .map((e) => e.attachmentUid)
+      .filter((u): u is string => !!u);
+    evidenceHashes = currentHashes(uids);
+  }
   getDb().run(
     `INSERT INTO criterion_signoffs
        (uid, criterion_uid, decision, actor, actor_type, channel, note, evidence_hashes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)`,
-    [randomUUID(), criterionUid, decision, actor, actorType, channel, note, tick()],
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [randomUUID(), criterionUid, decision, actor, actorType, channel, note, JSON.stringify(evidenceHashes), tick()],
   );
 }
 

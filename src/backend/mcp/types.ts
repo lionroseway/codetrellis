@@ -68,6 +68,12 @@ export interface ToolDeps {
     typeof import('../services/criteria-service'),
     'listCriteria' | 'getCriterion' | 'addCriterionAsAgent' | 'submitCriterion' | 'CriterionError'
   >;
+  /** Phase 31 §4.2 — record a file that matters; hashes kept current. */
+  artefactService: Pick<
+    typeof import('../services/artefact-service'),
+    'recordArtefact' | 'refreshArtefactHashes' | 'listArtefacts' | 'ArtefactError'
+  >;
+  startArtefactWatching: typeof import('../services/artefact-watcher').startArtefactWatching;
 
   // Specific function imports (not full modules)
   applyTemplate: typeof import('../services/plan-templates-service').applyTemplate;

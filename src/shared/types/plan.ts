@@ -151,6 +151,13 @@ export interface TaskAttachment {
   author: string;
   authorType: string;
   createdAt: number;
+  /**
+   * Phase 31 §4.2 — set when the attachment is an artefact: a file the item
+   * read (material), produced (output) or captured (evidence).
+   */
+  role?: 'material' | 'output' | 'evidence' | null;
+  /** The file's hash when last taken; null when it has gone or is a link. */
+  sha256?: string | null;
 }
 
 export interface Task {

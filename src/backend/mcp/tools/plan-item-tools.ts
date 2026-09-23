@@ -212,6 +212,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async ({ uid }) => {
       const item = deps.planItemService.getItem(uid);
       if (!item) return { content: [{ type: 'text' as const, text: `Item ${uid} not found` }] };
+      await deps.artefactService.refreshArtefactHashes(uid).catch(() => []);
       const parent = item.parentUid ? deps.planItemService.getItem(item.parentUid) : null;
       const children = deps.planItemService.getChildren(item.planUid, uid);
       const attachments = deps.taskAttachmentsService.listItemAttachments(uid);
@@ -505,6 +506,48 @@ export function register(server: McpServer, deps: ToolDeps): void {
   // --- Phase 31 §4.1–4.3: acceptance criteria ---
 
   server.registerTool(
+    'record_artefact',
+    {
+      description:
+        'Record a file that matters to an item: a "material" it was given (a spreadsheet, a guide), an "output" the work ' +
+        'produced (the report you wrote), or "evidence" captured to prove something. The path must be a file inside the ' +
+        'item\'s project (absolute or relative); it is hashed, so a person\'s approval later notices if it changes. ' +
+        'Types: pdf, images, video, xlsx/xls/xlsm/csv, docx, pptx, md/txt/json/log, html. Returns the attachment uid ' +
+        'to cite in submit_criterion.',
+      inputSchema: {
+        item_uid: z.string(),
+        path: z.string().describe('A file inside the item\'s project.'),
+        role: z.enum(['material', 'output', 'evidence']),
+        note: z.string().optional().describe('A label for the file, e.g. what it is.'),
+      },
+    },
+    async (args, extra: any) => {
+      const id = authorFromExtra(deps, extra);
+      try {
+        const artefact = await deps.artefactService.recordArtefact({
+          itemUid: args.item_uid,
+          path: args.path,
+          role: args.role,
+          note: args.note ?? null,
+          actor: { author: id.author, authorType: id.authorType },
+        });
+        deps.startArtefactWatching(artefact);
+        const item = deps.planItemService.getItem(args.item_uid);
+        const n = deps.broadcast('plan-item-criteria-changed', { planUid: item?.planUid ?? null, itemUid: args.item_uid });
+        deps.saveNow(() => deps.exportDatabase());
+        return resultWithMeta({
+          attachment_uid: artefact.uid, path: artefact.path, role: artefact.role, sha256: artefact.sha256, size: artefact.size,
+        }, n);
+      } catch (err) {
+        if (err instanceof deps.artefactService.ArtefactError) {
+          return { content: [{ type: 'text' as const, text: err.message }], isError: true };
+        }
+        throw err;
+      }
+    },
+  );
+
+  server.registerTool(
     'list_criteria',
     {
       description:
@@ -517,6 +560,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!deps.planItemService.getItem(item_uid)) {
         return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
       }
+      // A criterion approved on a file that has since changed reads `stale`.
+      await deps.artefactService.refreshArtefactHashes(item_uid).catch(() => []);
       return { content: [{ type: 'text' as const, text: JSON.stringify(criteriaForAgent(deps, item_uid), null, 2) }] };
     },
   );
@@ -568,6 +613,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
       try {
+        // Evidence is recorded with the hash it has now.
+        const target = deps.criteriaService.getCriterion(args.criterion_uid);
+        if (target) await deps.artefactService.refreshArtefactHashes(target.itemUid).catch(() => []);
         const criterion = deps.criteriaService.submitCriterion(
           args.criterion_uid,
           {

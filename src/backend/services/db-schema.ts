@@ -266,7 +266,18 @@ export const SCHEMA_ATTACHMENTS = `
     content_type TEXT,
     author TEXT NOT NULL,
     author_type TEXT NOT NULL DEFAULT 'human',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    -- Phase 31 §4.2 — an artefact is an attachment with a role and a hash.
+    -- role: 'material' (input) · 'output' (produced by the work) ·
+    -- 'evidence' (captured to prove something) · NULL for everything else.
+    -- sha256/size/mtime are taken when recorded and re-taken whenever the
+    -- file's size or mtime moves, so a decision can notice the file changed.
+    role TEXT,
+    sha256 TEXT,
+    size INTEGER,
+    mtime INTEGER,
+    recorded_by TEXT,
+    recorded_by_type TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_attachments_target ON attachments(target_uid);
   CREATE INDEX IF NOT EXISTS idx_attachments_target_type ON attachments(target_type, target_uid);
