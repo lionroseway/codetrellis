@@ -608,11 +608,18 @@ footer, bullets, a styled table, an image, a page break):
 | LibreOffice WASM, **browser worker** | text, tables, charts correct; **hangs on any autoshape** — a threading defect of the browser build | best of the three |
 | LibreOffice WASM, **Node process** | **everything**, including themed table, chevrons, shadow | same |
 
-**Where it runs: its own process, never the page.** An Electron
-`utilityProcess` in the packaged app, a forked Node process in dev and
-the test harness, behind one `services/rendition/engine-host.ts`. The
-browser build is not used (above), and a separate process means the
-engine's memory and any crash are not the window's.
+**Where it runs: its own process, never the page.** The app's own binary
+forked in Node mode (`ELECTRON_RUN_AS_NODE`) in the packaged app, a
+forked Node process in dev and the test harness, behind one
+`services/rendition/engine-host.ts`, under Node's permission model with
+an empty environment and its own directory as `cwd`. The browser build is
+not used (above), and a separate process means the engine's memory and
+any crash are not the window's. The driver is ours
+(`tools/rendition-engine/runtime/adapter.cjs`), not the npm wrapper's —
+that one starts a subprocess, which the permission model refuses. It
+parses XML on the calling thread (`SAX_DISABLE_THREADS`): the threaded
+parser's file reads are proxied back to the thread waiting on them, and
+about one load in two stalled for ~80 s.
 
 **Mounted only when needed.** Measured, Node, 4-core Linux:
 
@@ -649,19 +656,25 @@ parses untrusted files, so it is treated as hostile:
 | It must not | Enforced by | Proved by (§18) |
 |---|---|---|
 | read or write the user's files | receives bytes over IPC; its filesystem is Emscripten's in-memory FS; launched with Node's permission model: file read only in its own asset directory, no write, no child processes, no native addons | a document linking `file:///etc/hosts` (or a Windows path) as an image converts without its contents |
-| reach the network | nothing in the conversion path needs it; the process is denied egress where the runtime supports it — **the build contains TLS code** ("no CA bundle" at start), so absence of a network stack is not assumed | a document with remote images, a remote template and an OLE link converts while a local listener records **zero** connections |
+| reach the network | nothing in the conversion path needs it. **Our build has none**: curl off, the Fetch API not linked, Node-only glue, and every socket syscall and name lookup linked to a stub that fails (`tools/rendition-engine/no-network.js`). The process loader refuses network modules and `fetch`; where the runtime can (Node 25+) the permission model also denies it the network | CI's network proof (`network-proof.ts`: every network-capable import of the wasm is a constant-returning stub, the glue has no socket FS, WebSocket, XHR or fetch), and documents with remote images, a remote template, remote fields, an external workbook and a macro converting on **Node 24 and Node 26** while a local listener records **zero** connections |
 | run macros | LibreOfficeKit load with macro execution disabled; a converter has no reason to run code | `.docm` / `.pptm` / `.xlsm` with auto-run macros that would write a file and open a socket: nothing happens |
 | exhaust the machine | input caps per format (as §7.2); a 30 s per-conversion timeout that **kills the process**; WASM memory fixed at build time; output capped | a zip bomb and a pathological document each end in the fallback and a sentence, and the app stays responsive |
 | outlive its use | idle stop, power-save stop, stopped with the app | the process is gone 3 idle minutes after the last conversion |
-| be someone else's binary | built **from LibreOffice's own source** at a pinned tag with a pinned Emscripten, in CI; `resources/rendition/README.md` records the sha256 and exact source of every file, as `resources/tree-sitter/` does for grammars | CI rebuilds and compares hashes; the app refuses an engine whose hash does not match |
+| be someone else's binary | built **from LibreOffice's own source** at a pinned commit with a pinned Emscripten, in CI (`rendition-engine.yml`); `tools/rendition-engine/README.md` records the source, patch and licence; the sha256 of every file is pinned in `engine-lock.json`, compiled into the app | packaging refuses an archive or file whose hash does not match, and the app refuses to start an engine that does not match its pin or contains a link |
 
 The npm packages used in the spike (`@bentopdf/libreoffice-wasm`,
 `@matbee/libreoffice-converter` — the same build) are **not** shipped.
 LibreOffice is MPL-2.0; the licence is recorded with the artefacts.
 
-If a platform's runtime cannot deny the engine egress, that is recorded
-in the Phase 19 register and the platform ships with the fallback only
-until it can — the table above is the bar, not an aspiration.
+**Where the runtime cannot deny egress.** Electron 44 bundles Node 24,
+whose permission model has no network switch. There the host runs an
+engine only if its compiled-in pin says `networkFree: true`, and CI
+writes that only for an engine that passed the network proof and the
+hostile documents on Node 24 — the build itself is the control. That is
+recorded in the Phase 19 register and closes when Electron's Node denies
+egress itself, which the host then uses without a change. An engine
+without that attestation does not run there: the fallback views do.
+The table above is the bar, not an aspiration.
 
 **Packaging.** About 77 MB compressed, 247 MB installed, shipped
 uncompressed inside the app's resources — read-only and, on macOS,
