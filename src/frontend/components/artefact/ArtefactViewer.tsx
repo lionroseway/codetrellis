@@ -8,6 +8,7 @@ import { describeLocator, openArtefactAt } from '../../lib/open-artefact-at';
 import DOMPurify from 'dompurify';
 import type { XlsxReply } from '../../workers/xlsx-worker';
 import type { DocxReply } from '../../workers/docx-worker';
+import type { PptxReply } from '../../workers/pptx-worker';
 
 /**
  * Phase 31 §7 — the artefact viewer.
@@ -822,6 +823,101 @@ function DocxView({ uid, meta, locator, onSelect }: {
   );
 }
 
+/**
+ * A PowerPoint deck read as words (§7.6 fallback): each slide's title and
+ * text in presentation order, and the thumbnail PowerPoint saved inside the
+ * file. Shown when the engine cannot draw the slides, and labelled so. A
+ * cited `{page}` or `{text}` marks its slide; clicking a slide points at it,
+ * selecting words quotes them.
+ */
+function PptxView({ uid, meta, locator, selection, onSelect }: {
+  uid: string; meta: Meta; locator: unknown; selection: Selection; onSelect: (s: Selection) => void;
+}) {
+  const deck = useWorkerParse<PptxReply>(
+    uid,
+    () => new Worker(new URL('../../workers/pptx-worker.ts', import.meta.url), { type: 'module' }),
+    'deck',
+  );
+  const holder = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<string | null>(null);
+  const loc = (locator ?? {}) as { page?: unknown; text?: unknown };
+  const wantPage = typeof loc.page === 'number' ? loc.page : null;
+  const wantText = typeof loc.text === 'string' ? squash(loc.text) : null;
+
+  const cited = useMemo(() => {
+    if (!deck || !deck.ok) return null;
+    if (wantPage !== null) return deck.slides.some((s) => s.n === wantPage) ? wantPage : null;
+    if (wantText) {
+      return deck.slides.find((s) => squash([s.title ?? '', ...s.paragraphs].join(' ')).includes(wantText))?.n ?? null;
+    }
+    return null;
+  }, [deck, wantPage, wantText]);
+
+  useEffect(() => {
+    if (!deck || !deck.ok || !deck.thumbnail) return;
+    const url = URL.createObjectURL(new Blob([deck.thumbnail.bytes as Uint8Array<ArrayBuffer>], { type: deck.thumbnail.contentType }));
+    setThumb(url);
+    return () => { URL.revokeObjectURL(url); setThumb(null); };
+  }, [deck]);
+
+  // Again once the thumbnail is in: it lands above the slides and would push the cited one away.
+  useEffect(() => {
+    if (cited === null) return;
+    holder.current?.querySelector(`[data-page="${cited}"]`)?.scrollIntoView({ block: 'center' });
+  }, [cited, thumb]);
+
+  if (!deck) return <p className="p-6 text-[12px] text-foreground-subtle">Reading the deck…</p>;
+  if (!deck.ok) return <Card title={meta.path ?? meta.name} lines={[deck.reason]} icon />;
+
+  const picked = selection && 'page' in selection ? (selection as { page: number }).page : null;
+  const pickText = (e: React.MouseEvent) => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !holder.current?.contains(sel.anchorNode)) return;
+    const text = sel.toString().replace(/\s+/g, ' ').trim().slice(0, MAX_QUOTE_CHARS);
+    if (text) { e.stopPropagation(); onSelect({ text }); }
+  };
+  const missing = (wantPage !== null || wantText !== null) && cited === null;
+
+  return (
+    <div ref={holder} data-testid="artefact-pptx" className="px-8 py-6 max-w-3xl">
+      <p className="text-[11px] text-foreground-subtle mb-4">
+        Read as text — each slide's title and words, not its layout.
+        {deck.slidesOmitted > 0 && ` Showing the first ${deck.slides.length} slides; ${deck.slidesOmitted} more are not listed.`}
+        {missing && (wantPage !== null ? ` The deck has no slide ${wantPage}.` : ' The cited words were not found as written.')}
+      </p>
+      {thumb && (
+        <figure className="mb-5">
+          <img
+            src={thumb}
+            alt="The deck's first slide, as saved in the file"
+            onLoad={() => { if (cited !== null) holder.current?.querySelector(`[data-page="${cited}"]`)?.scrollIntoView({ block: 'center' }); }}
+            className="max-w-xs rounded border border-white/10"
+          />
+          <figcaption className="text-[10.5px] text-foreground-subtle mt-1">The first slide, as PowerPoint saved it in the file.</figcaption>
+        </figure>
+      )}
+      <ol className="space-y-2">
+        {deck.slides.map((s) => (
+          <li
+            key={s.n}
+            data-page={s.n}
+            data-cited={s.n === cited ? 'true' : undefined}
+            onClick={() => { if (window.getSelection()?.isCollapsed !== false) onSelect({ page: s.n } as Selection); }}
+            onMouseUp={pickText}
+            title={`Slide ${s.n} — click to point at it`}
+            className={`cursor-pointer rounded-md px-3 py-2 border select-text ${picked === s.n ? 'border-red-400/70' : s.n === cited ? 'border-amber-400/70 bg-amber-400/[0.04]' : 'border-white/[0.06]'}`}
+          >
+            <div className="text-[10px] uppercase tracking-wide text-foreground-subtle">Slide {s.n}</div>
+            {s.title && <div className="text-[13px] font-medium text-foreground">{s.title}</div>}
+            {s.paragraphs.map((p, i) => <p key={i} className="text-[12.5px] leading-6 text-foreground-muted">{p}</p>)}
+            {!s.title && s.paragraphs.length === 0 && <p className="text-[12px] italic text-foreground-subtle">No text on this slide.</p>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 type Rendition = { kind: 'loading' } | { kind: 'pdf'; data: Uint8Array } | { kind: 'fallback'; reason: string };
 
 /**
@@ -874,14 +970,19 @@ function OfficeView({ uid, meta, ext, locator, selection, onSelect }: {
       </div>
     );
   }
+  if (ext === 'pptx') {
+    return (
+      <div data-testid="rendition-fallback">
+        <p className="px-8 pt-4 text-[11px] text-amber-300/80">Shown as text, not as its slides — {why}.</p>
+        <PptxView uid={uid} meta={meta} locator={locator} selection={selection} onSelect={onSelect} />
+      </div>
+    );
+  }
   return (
     <div data-testid="rendition-fallback" className="h-full">
       <Card
         title={meta.path ?? meta.name}
-        lines={[
-          ext === 'pptx' ? `This deck cannot be shown as slides here — ${why}.` : `This workbook cannot be shown here — ${why}.`,
-          ext === 'xls' ? 'Saving it as .xlsx shows its cells in the viewer.' : 'Show in Finder to look at it — the viewer never opens files with another app.',
-        ]}
+        lines={[`This workbook cannot be shown here — ${why}.`, 'Saving it as .xlsx shows its cells in the viewer.']}
         icon
       />
     </div>

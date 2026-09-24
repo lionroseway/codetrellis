@@ -412,11 +412,20 @@ test.describe('Artefact viewer — Office files without the engine', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test('a deck asks for its rendition, is told why there is none, and says so', async ({ page, request }) => {
+  test('a deck asks for its rendition, is told why there is none, and is read as its slides\' words', async ({ page, request }) => {
     const plan = await seedPlan(request, { title: TITLE, actions: [{ title: 'Board deck', body: 'The deck.' }] });
     const item = plan.actionUids[0];
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'board.pptx'), makeZip({ 'ppt/presentation.xml': '<p:presentation/>' }));
+    // Two slides, the second file moved to the front: slide 1 is slide2.xml.
+    const slide = (title: string, body: string) =>
+      `<p:sld><p:cSld><p:spTree><p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>${title}</a:t></a:r></a:p></p:txBody></p:sp>`
+      + `<p:sp><p:txBody><a:p><a:r><a:t>${body}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
+    fs.writeFileSync(path.join(dir, 'board.pptx'), makeZip({
+      'ppt/presentation.xml': '<p:presentation><p:sldIdLst><p:sldId id="256" r:id="rId3"/><p:sldId id="257" r:id="rId2"/></p:sldIdLst></p:presentation>',
+      'ppt/_rels/presentation.xml.rels': '<Relationships><Relationship Id="rId2" Target="slides/slide1.xml"/><Relationship Id="rId3" Target="slides/slide2.xml"/></Relationships>',
+      'ppt/slides/slide1.xml': slide('Regional totals', 'North leads at 1,240'),
+      'ppt/slides/slide2.xml': slide('Board pack', 'Agenda for the quarter'),
+    }));
     const agent = await createMcpClient();
     const uid = JSON.parse((await agent.callTool('record_artefact', {
       item_uid: item, path: path.relative(PROJECT_PATH, path.join(dir, 'board.pptx')), role: 'material', note: 'board.pptx',
@@ -425,7 +434,7 @@ test.describe('Artefact viewer — Office files without the engine', () => {
       data: { text: 'The deck is the one the board saw', kind: 'manual' },
     })).json();
     const submitted = await agent.callTool('submit_criterion', {
-      criterion_uid: criterion.uid, evidence: [{ attachment_uid: uid }], note: 'the deck',
+      criterion_uid: criterion.uid, evidence: [{ attachment_uid: uid, locator: { page: 2 } }], note: 'the deck',
     });
     expect(submitted.isError, submitted.content?.[0]?.text).toBeFalsy();
     agent.close();
@@ -445,6 +454,13 @@ test.describe('Artefact viewer — Office files without the engine', () => {
     await page.getByTestId('plan-item-tree').getByText('Board deck').first().click();
     await page.getByTestId('evidence-link').filter({ hasText: 'board.pptx' }).click();
     const viewer = page.getByTestId('artefact-viewer');
-    await expect(viewer.getByTestId('rendition-fallback').getByText(/This deck cannot be shown as slides here — /)).toBeVisible({ timeout: 15_000 });
+    const fallback = viewer.getByTestId('rendition-fallback');
+    await expect(fallback.getByText(/Shown as text, not as its slides — /)).toBeVisible({ timeout: 15_000 });
+    // Slide 2 in PowerPoint's order is slide1.xml, and it is the one cited.
+    const cited = fallback.locator('[data-page="2"]');
+    await expect(cited).toHaveAttribute('data-cited', 'true', { timeout: 15_000 });
+    await expect(cited).toContainText('Regional totals');
+    await expect(cited).toContainText('North leads at 1,240');
+    await expect(fallback.locator('[data-page="1"]')).toContainText('Board pack');
   });
 });
