@@ -47,11 +47,11 @@ exports.create = async () => ({
 });
 `;
 
-function writeEngine(version = '1.0.0'): Record<string, string> {
-  fs.mkdirSync(engineDir, { recursive: true });
-  fs.writeFileSync(path.join(engineDir, 'adapter.cjs'), ADAPTER);
+function writeEngine(version = '1.0.0', dir = engineDir, networkFree?: boolean): Record<string, string> {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'adapter.cjs'), ADAPTER);
   const files = { 'adapter.cjs': createHash('sha256').update(ADAPTER).digest('hex') };
-  fs.writeFileSync(path.join(engineDir, 'engine.json'), JSON.stringify({ name: 'stand-in', version, adapter: 'adapter.cjs', files }));
+  fs.writeFileSync(path.join(dir, 'engine.json'), JSON.stringify({ name: 'stand-in', version, adapter: 'adapter.cjs', files, networkFree }));
   return files;
 }
 
@@ -133,14 +133,26 @@ describe('what the engine may not do', () => {
     delete process.env.CODETRELLIS_CAPABILITY_TOKEN_TEST;
   });
 
-  test('where the runtime cannot keep it off the network, it does not run at all', async () => {
-    const h = host({ requireNetworkDenial: true });
+  test('where the runtime cannot keep it off the network, only an engine proven network-free runs', async () => {
+    const unproven = host({ requireNetworkDenial: true });
+    const provenDir = path.join(tmp, 'proven');
+    const files = writeEngine('1.0.0', provenDir, true);
+    const proven = host({ engineDir: provenDir, requireNetworkDenial: true });
     if (runtimeIsolation().net) {
-      assert.equal(text(await h.convert(Buffer.from('ok'), 'docx')), '%PDF-1.4 ok');
+      assert.equal(text(await unproven.convert(Buffer.from('ok'), 'docx')), '%PDF-1.4 ok');
     } else {
-      await assert.rejects(h.convert(Buffer.from('ok'), 'docx'), (e: Error) => e instanceof EngineUnavailable && /off the network/.test(e.message));
-      assert.equal(h.running, false);
+      await assert.rejects(unproven.convert(Buffer.from('ok'), 'docx'), (e: Error) => e instanceof EngineUnavailable && /not proven network-free/.test(e.message));
+      assert.equal(unproven.running, false);
     }
+    assert.equal(text(await proven.convert(Buffer.from('ok'), 'docx')), '%PDF-1.4 ok');
+
+    // Packaged, the pin decides — an engine's own manifest cannot claim it.
+    const pinnedWithoutProof = host({ engineDir: provenDir, requireNetworkDenial: true, pinned: { version: '1.0.0', files } });
+    if (!runtimeIsolation().net) {
+      await assert.rejects(pinnedWithoutProof.convert(Buffer.from('ok'), 'docx'), /not proven network-free/);
+    }
+    const pinnedWithProof = host({ engineDir: provenDir, requireNetworkDenial: true, pinned: { version: '1.0.0', files, networkFree: true } });
+    assert.equal(text(await pinnedWithProof.convert(Buffer.from('ok'), 'docx')), '%PDF-1.4 ok');
   });
 });
 

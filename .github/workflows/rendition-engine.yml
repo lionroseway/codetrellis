@@ -1,0 +1,284 @@
+name: Rendition engine
+
+# Phase 31 §7.6 — build the Office conversion engine (LibreOffice → WebAssembly)
+# from source, prove it has no network, and publish it for packaging to pin.
+#
+# WHY IT IS BUILT HERE
+#
+# The engine is LibreOffice at a pinned commit, compiled by a pinned
+# Emscripten, with our no-network stubs linked in (tools/rendition-engine/).
+# Building it ourselves is what lets us say what is in it: a prebuilt engine
+# from elsewhere could not be proven network-free, and the app runs an engine
+# on Electron 44's Node 24 — which cannot deny a process the network — only
+# if it was.
+#
+# WHY IT RESUMES
+#
+# A full build is 50 GB of disk and many CPU-hours; a standard runner has four
+# cores and six hours. So compiler output is cached (ccache, which
+# LibreOffice's configure picks up by itself) along with LibreOffice's
+# third-party source tarballs, `make` stops itself well before the job's limit
+# so the cache is always saved, and a run that did not finish dispatches the
+# next one. Each run compiles what the last did not. `vars.ENGINE_RUNNER` names
+# a larger runner if one is ever wanted; nothing else changes.
+#
+# WHAT IT PUBLISHES
+#
+# Only an engine that passed the network proof, whose hostile documents
+# reached nothing on Node 24 and Node 26, goes out — as a prerelease on this
+# repository tagged `rendition-engine-<version>`. The job summary carries the
+# exact `engine-lock.json` to commit; the app runs nothing until that commit
+# lands, and then only files matching those hashes.
+#
+# PRIVILEGE
+#
+# The build runs third-party build scripts, so it holds a read-only token and
+# no persisted credentials. Only `publish` can write to releases, and only
+# `continue` can start a run; neither executes anything the build produced.
+
+on:
+  workflow_dispatch:
+    inputs:
+      continue_runs:
+        description: 'Runs this may chain if the build does not finish in one'
+        required: true
+        default: '8'
+      publish:
+        description: 'Publish the engine as a prerelease when it is built'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rendition-engine-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ${{ fromJSON(vars.ENGINE_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 355
+    outputs:
+      status: ${{ steps.build.outputs.status }}
+      version: ${{ steps.assemble.outputs.version }}
+    steps:
+      - name: Start the clock
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Make room
+        # A standard runner has ~14 GB free; the build needs over 50. Remove
+        # toolchains this job does not use, and give the final link swap.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift /usr/local/share/powershell
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          # The largest disk holds the build; the path must not change between
+          # runs, or the caches would not be found.
+          if mountpoint -q /mnt; then base=/mnt; else base="$HOME"; fi
+          sudo mkdir -p "$base/rendition" && sudo chown "$(id -u):$(id -g)" "$base/rendition"
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile
+          sudo fallocate -l 16G "$base/rendition.swap"
+          sudo chmod 600 "$base/rendition.swap" && sudo mkswap "$base/rendition.swap" >/dev/null && sudo swapon "$base/rendition.swap"
+          {
+            echo "WORK=$base/rendition"
+            echo "TARBALLS=$base/rendition/tarballs"
+            echo "CCACHE_DIR=$base/rendition/ccache"
+            echo "CCACHE_BASEDIR=$base/rendition"
+            echo "CCACHE_NOHASHDIR=true"
+            echo "CCACHE_COMPRESS=true"
+            echo "CCACHE_MAXSIZE=7G"
+          } >> "$GITHUB_ENV"
+          df -h / "$base"; free -h
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            build-essential git cmake ninja-build python3 python3-dev \
+            autoconf automake bison ccache flex gawk gettext gperf nasm \
+            libarchive-dev libfontconfig1-dev libfreetype6-dev libglib2.0-dev \
+            libharfbuzz-dev libicu-dev libjpeg-dev liblcms2-dev libpng-dev \
+            libssl-dev libtool libxml2-dev libxml2-utils libxslt1-dev \
+            pkg-config uuid-dev xsltproc zip unzip wget curl ca-certificates xz-utils
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: rendition-ccache-${{ hashFiles('tools/rendition-engine/build.sh', 'tools/rendition-engine/autogen.input', 'tools/rendition-engine/no-network.js', 'tools/rendition-engine/patches/**') }}-${{ github.run_id }}
+          # Any earlier cache helps: ccache is keyed by content, so an entry
+          # from another recipe is simply never hit.
+          restore-keys: |
+            rendition-ccache-${{ hashFiles('tools/rendition-engine/build.sh', 'tools/rendition-engine/autogen.input', 'tools/rendition-engine/no-network.js', 'tools/rendition-engine/patches/**') }}-
+            rendition-ccache-
+
+      - name: Restore third-party sources
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.TARBALLS }}
+          key: rendition-tarballs-${{ hashFiles('tools/rendition-engine/build.sh') }}-${{ github.run_id }}
+          restore-keys: rendition-tarballs-
+
+      - name: Build
+        id: build
+        run: |
+          ccache --zero-stats >/dev/null
+          # Stop make with 50 minutes of the job left: saving the caches,
+          # assembling, the proofs and the upload all have to fit after it.
+          budget=$(( JOB_START + 355 * 60 - 50 * 60 - $(date +%s) ))
+          set +e
+          MAKE_BUDGET="$budget" bash tools/rendition-engine/build.sh
+          code=$?
+          set -e
+          ccache --show-stats || true
+          case "$code" in
+            0)  echo "status=done" >> "$GITHUB_OUTPUT" ;;
+            75) echo "status=partial" >> "$GITHUB_OUTPUT"
+                echo "::notice::The build did not finish in this run; its compiler cache carries the work to the next." ;;
+            *)  echo "status=failed" >> "$GITHUB_OUTPUT"; exit "$code" ;;
+          esac
+
+      - name: Save the compiler cache
+        if: always() && steps.build.outputs.status != ''
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: rendition-ccache-${{ hashFiles('tools/rendition-engine/build.sh', 'tools/rendition-engine/autogen.input', 'tools/rendition-engine/no-network.js', 'tools/rendition-engine/patches/**') }}-${{ github.run_id }}
+
+      - name: Save third-party sources
+        if: always() && steps.build.outputs.status != ''
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.TARBALLS }}
+          key: rendition-tarballs-${{ hashFiles('tools/rendition-engine/build.sh') }}-${{ github.run_id }}
+
+      # ── Only a finished build goes further ─────────────────────────────────
+      - uses: actions/setup-node@v7
+        if: steps.build.outputs.status == 'done'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install and build the engine's host
+        if: steps.build.outputs.status == 'done'
+        run: npm ci && npm run build:rendition
+
+      - name: Assemble, and prove it has no network
+        id: assemble
+        if: steps.build.outputs.status == 'done'
+        # assemble.ts writes networkFree from the proof and exits 1 if it
+        # failed; nothing after this runs for an engine that is not proven.
+        run: |
+          npx tsx tools/rendition-engine/assemble.ts "$WORK/out" "$WORK/engine"
+          npx tsx tools/rendition-engine/prove-network-free.ts "$WORK/engine"
+          echo "version=$(node -p "require('$WORK/engine/engine.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Hostile documents, Node 26 (the runtime denies the network too)
+        if: steps.build.outputs.status == 'done'
+        run: npx tsx tools/rendition-engine/hostile.ts "$WORK/engine"
+
+      - uses: actions/setup-node@v7
+        if: steps.build.outputs.status == 'done'
+        with:
+          node-version: 24
+      - name: Hostile documents, Node 24 (Electron 44's runtime; only the build keeps it off the network)
+        if: steps.build.outputs.status == 'done'
+        run: |
+          node --version
+          node --import tsx tools/rendition-engine/hostile.ts "$WORK/engine"
+
+      - name: Package
+        if: steps.build.outputs.status == 'done'
+        run: |
+          mkdir -p dist-engine
+          name="rendition-engine-${{ steps.assemble.outputs.version }}.tar.gz"
+          tar -czf "dist-engine/$name" -C "$WORK/engine" .
+          cp "$WORK/engine/engine.json" dist-engine/engine.json
+          (cd dist-engine && sha256sum "$name" > "$name.sha256" && cat "$name.sha256")
+
+      - uses: actions/upload-artifact@v7
+        if: steps.build.outputs.status == 'done'
+        with:
+          name: rendition-engine
+          path: dist-engine/
+          retention-days: 3
+          compression-level: 0
+
+  publish:
+    needs: build
+    if: needs.build.outputs.status == 'done' && inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v8
+        with:
+          name: rendition-engine
+          path: dist-engine
+      - name: Publish the prerelease, and the pin to commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          tag="rendition-engine-$VERSION"
+          name="$tag.tar.gz"
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$name"
+          # A published engine is never replaced: an app already pinned to its
+          # hashes would stop verifying it. A changed recipe is a new version.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::$tag is already published. Change the recipe (tools/rendition-engine/) to build a new version."
+            exit 1
+          fi
+          mkdir engine && tar -xzf "dist-engine/$name" -C engine
+          npx -y tsx tools/rendition-engine/assemble.ts --lock engine "dist-engine/$name" "$url" > engine-lock.json
+          node -e "const l=require('./engine-lock.json'); if(!l.networkFree){console.error('not network-free');process.exit(1)}"
+          {
+            echo "LibreOffice compiled to WebAssembly for CodeTrellis's document viewer (Phase 31 §7.6)."
+            echo
+            echo "Built by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID from $GITHUB_SHA."
+            echo "Source: LibreOffice (MPL-2.0) at the commit in engine.json, with tools/rendition-engine/ at that commit applied."
+            echo
+            echo '```json'
+            cat engine-lock.json
+            echo '```'
+          } > notes.md
+          gh release create "$tag" "dist-engine/$name" "dist-engine/$name.sha256" dist-engine/engine.json \
+            --prerelease --target "$GITHUB_SHA" --title "Rendition engine $VERSION" --notes-file notes.md
+          {
+            echo "## Rendition engine $VERSION published"
+            echo
+            echo "Commit this as \`src/backend/services/rendition/engine-lock.json\`:"
+            echo
+            echo '```json'
+            cat engine-lock.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  continue:
+    needs: build
+    if: needs.build.outputs.status == 'partial' && fromJSON(inputs.continue_runs) > 0
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start the next run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEFT: ${{ inputs.continue_runs }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          gh workflow run rendition-engine.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f continue_runs="$(( LEFT - 1 ))" -f publish="$PUBLISH"
+          echo "Started the next run ($(( LEFT - 1 )) more allowed)." >> "$GITHUB_STEP_SUMMARY"
