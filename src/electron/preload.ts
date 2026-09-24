@@ -120,6 +120,15 @@ const electronAPI = {
    * given rectangle of this window. By attachment uid; scripts off unless
    * asked. `hide` removes the view and clears its session.
    */
+  /**
+   * Phase 31 §6.1 — add the connector to Claude Desktop's config. `preview`
+   * returns the diff and the hash of the file shown; `apply` writes only if
+   * the file is still that one, keeping a backup.
+   */
+  claudeDesktop: {
+    preview: (): Promise<unknown> => ipcRenderer.invoke('claude-desktop:preview'),
+    apply: (shownHash: string): Promise<unknown> => ipcRenderer.invoke('claude-desktop:apply', shownHash),
+  },
   htmlReport: {
     show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean): Promise<{ ok: boolean; reason?: string }> =>
       ipcRenderer.invoke('artefacts:html:show', uid, bounds, scripts),

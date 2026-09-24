@@ -25,11 +25,13 @@ import type { McpProjectScope } from '../../shared/types/settings';
  *
  * The usual defence is that an MCP client is a local process that could run
  * commands itself, so gating them is theatre. That fails here, for a reason
- * the product states about itself: CodeTrellis is agent-agnostic on purpose
- * and names Claude Desktop among its clients. Claude Desktop has no shell.
- * Neither does a hosted or sandboxed runtime. For any client that cannot
- * already execute, CodeTrellis was a privilege-escalation route — connect
- * it, and it gains a shell it did not have.
+ * the product states about itself: CodeTrellis is agent-agnostic on purpose,
+ * and not every client it serves can execute on its own — a chat session
+ * with no shell tool enabled, a hosted or sandboxed runtime. For any client
+ * that cannot already execute, CodeTrellis was a privilege-escalation route
+ * — connect it, and it gains a shell it did not have. The grants below are
+ * the same for every client; what differs is only what a client could
+ * already do without us.
  *
  * DENY BY DEFAULT
  *

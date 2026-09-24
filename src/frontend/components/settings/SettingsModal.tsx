@@ -26,6 +26,7 @@ import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
+import { AddToClaudeDesktop } from './AddToClaudeDesktop';
 
 // --- Per-device access (Phase 19, finding 15) -------------------------------
 
@@ -581,6 +582,7 @@ function McpSection({
           disabled={!setup}
           onCopy={copy}
         />
+        {setup?.connector && <AddToClaudeDesktop />}
         {setup?.connector && (
           <details className="mt-2 group">
             <summary className="cursor-pointer text-[10.5px] text-foreground-subtle hover:text-foreground-muted">
@@ -609,9 +611,9 @@ function McpSection({
       </Field>
 
       <p className="text-[10px] text-foreground-subtle leading-relaxed">
-        Claude Code: run the command. Claude Desktop: paste the JSON into its{' '}
-        <code className="font-mono">claude_desktop_config.json</code> under <code className="font-mono">mcpServers</code>,
-        then restart it. Cursor: <code className="font-mono">~/.cursor/mcp.json</code>. Or paste the instructions into
+        Claude Code: run the command. Claude Desktop: <strong>Add to Claude Desktop</strong> in the desktop app, or paste
+        the JSON into its <code className="font-mono">claude_desktop_config.json</code> under{' '}
+        <code className="font-mono">mcpServers</code>; then quit and reopen it. Cursor: <code className="font-mono">~/.cursor/mcp.json</code>. Or paste the instructions into
         your agent and let it set itself up.
       </p>
     </>
