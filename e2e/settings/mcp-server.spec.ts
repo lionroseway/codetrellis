@@ -87,6 +87,21 @@ test.describe('Add to Claude Desktop', () => {
   });
 
   test('shows the change first, writes only on Add, and re-shows a file that changed underneath', async ({ page }) => {
+    // The button needs a connector to offer. CI's checkout never builds one
+    // (`npm run build:connector`), and the entry itself is main's business,
+    // so the setup this page reads is given one.
+    await page.route('**/api/mcp/setup', async (route) => {
+      const response = await route.fetch();
+      const setup = await response.json();
+      setup.connector ??= {
+        command: '/Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis',
+        args: ['/Applications/CodeTrellis.app/Contents/Resources/connector/mcp-connector.cjs'],
+        env: { ELECTRON_RUN_AS_NODE: '1' },
+        config: { codetrellis: { command: '/Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis' } },
+        claudeCodeCommand: 'claude mcp add codetrellis -- /Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis',
+      };
+      await route.fulfill({ response, json: setup });
+    });
     await page.addInitScript(() => {
       const calls: string[] = [];
       let previews = 0;
