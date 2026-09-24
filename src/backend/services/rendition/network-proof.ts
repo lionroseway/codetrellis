@@ -22,13 +22,29 @@
 
 const NETWORK_IMPORT = /^(__syscall_(socket|socketpair|connect|bind|listen|accept4?|getsockname|getpeername|getsockopt|setsockopt|sendto|recvfrom|sendmsg|recvmsg|shutdown)|getaddrinfo|getnameinfo|gethostbyname2?|gethostbyaddr|_emscripten_lookup_name)$|fetch|websocket|xhr/i;
 
-const FORBIDDEN_IN_GLUE: Array<[string, RegExp]> = [
-  ['SOCKFS', /\bSOCKFS\b/],
-  ['WebSocket', /\bWebSocket\b/],
-  ['XMLHttpRequest', /\bXMLHttpRequest\b/],
-  ['a network module', /require\(\s*["'](?:node:)?(?:net|tls|http|https|http2|dgram|dns|ws)["']\s*\)/],
-  ['fetch()', /\bfetch\s*\(/],
+/**
+ * Machinery that fails the proof wherever it appears. The last element is
+ * the global that, when the engine's adapter takes it away before the glue
+ * loads, leaves the code nothing to call — Emscripten keeps a `fetch()` and
+ * an `XMLHttpRequest` for other environments that are dead under Node, and
+ * those are accepted only then. A socket filesystem or a network module is
+ * never accepted.
+ */
+const FORBIDDEN_IN_GLUE: Array<[string, RegExp, string | null]> = [
+  ['SOCKFS', /\bSOCKFS\b/, null],
+  ['WebSocket', /\bWebSocket\b/, 'WebSocket'],
+  ['XMLHttpRequest', /\bXMLHttpRequest\b/, 'XMLHttpRequest'],
+  ['a network module', /require\(\s*["'](?:node:)?(?:net|tls|http|https|http2|dgram|dns|ws)["']\s*\)/, null],
+  ['fetch()', /\bfetch\s*\(/, 'fetch'],
 ];
+
+/** The globals the adapter takes away before loading the glue (runtime/adapter.cjs). */
+export function removedGlobals(adapter: string | null | undefined): Set<string> {
+  const list = adapter?.match(/const\s+NETWORK_GLOBALS\s*=\s*\[([^\]]*)\]/)?.[1];
+  // Declared is not enough: the adapter must call the removal before loading.
+  if (!list || !/async function load\([^)]*\)\s*\{\s*withoutNetworkGlobals\(\);/.test(adapter ?? '')) return new Set();
+  return new Set(Array.from(list.matchAll(/['"]([A-Za-z]+)['"]/g), (m) => m[1]));
+}
 
 export interface NetworkProof {
   imports: number;
@@ -39,16 +55,22 @@ export interface NetworkProof {
   failures: string[];
 }
 
-/** The glue's definition of an import: `var ___name = () => -N;`, or the function / minified form. */
+/**
+ * The glue's definition of an import: `var ___name = () => -N;`, or the
+ * function / minified form. With memory past 2 GB, Emscripten wraps an
+ * import that takes pointers and makes each one unsigned first —
+ * `function ___syscall_connect(fd, addr, …) { addr >>>= 0; …; return -40; }`
+ * — so exactly that prologue, and nothing else, may come before the return.
+ */
 function stubValue(glue: string, importName: string): number | null {
   const js = `_${importName}`.replace(/\$/g, '\\$');
   const arrow = new RegExp(`(?:var|let|const)\\s+${js}\\s*=\\s*\\([^)]*\\)\\s*=>\\s*(-?\\d+)\\s*[;,\\n]`);
-  const fn = new RegExp(`function\\s+${js}\\s*\\([^)]*\\)\\s*\\{\\s*return\\s+(-?\\d+)\\s*;?\\s*\\}`);
+  const fn = new RegExp(`function\\s+${js}\\s*\\([^)]*\\)\\s*\\{\\s*(?:[A-Za-z_$][\\w$]*\\s*>>>=\\s*0\\s*;\\s*)*return\\s+(-?\\d+)\\s*;?\\s*\\}`);
   const m = glue.match(arrow) ?? glue.match(fn);
   return m ? Number(m[1]) : null;
 }
 
-export function proveNetworkFree(wasm: Uint8Array, glue: string): NetworkProof {
+export function proveNetworkFree(wasm: Uint8Array, glue: string, adapter?: string | null): NetworkProof {
   const imports = WebAssembly.Module.imports(new WebAssembly.Module(wasm as Uint8Array<ArrayBuffer>)).filter((i) => i.kind === 'function');
   const networkImports = imports.filter((i) => NETWORK_IMPORT.test(i.name)).map((i) => i.name);
   const failures: string[] = [];
@@ -58,8 +80,9 @@ export function proveNetworkFree(wasm: Uint8Array, glue: string): NetworkProof {
     if (value === null) failures.push(`${name} is imported and is not a no-network stub`);
     else stubs[name] = value;
   }
-  for (const [what, re] of FORBIDDEN_IN_GLUE) {
-    if (re.test(glue)) failures.push(`the glue contains ${what}`);
+  const removed = removedGlobals(adapter);
+  for (const [what, re, global] of FORBIDDEN_IN_GLUE) {
+    if (re.test(glue) && !(global && removed.has(global))) failures.push(`the glue contains ${what}`);
   }
   return { imports: imports.length, networkImports, stubs, networkFree: failures.length === 0, failures };
 }

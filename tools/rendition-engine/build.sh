@@ -51,6 +51,14 @@ fi
 source "$EMSDK/emsdk_env.sh" >/dev/null
 emcc --version | head -1
 
+# The stubs first: a stub that does not fit its call only fails at the final
+# link, hours in. Linked with memory past 2 GB, as LibreOffice's is, which is
+# what makes Emscripten wrap every pointer-taking import (stub-check.c).
+log "Network stubs"
+emcc "$HERE/stub-check.c" -O1 -s ENVIRONMENT=node -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s WASM_BIGINT=1 \
+  --js-library "$HERE/no-network.js" -o "$WORK/stub-check.mjs"
+"$EMSDK_NODE" --input-type=module -e "const m = await import('$WORK/stub-check.mjs'); await m.default();"
+
 # ── LibreOffice source, pinned ───────────────────────────────────────────
 log "LibreOffice $LIBREOFFICE_COMMIT"
 if [ ! -d "$LO/.git" ]; then
