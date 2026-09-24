@@ -61,6 +61,13 @@ export function PlanSyncChip({ plan }: { plan: Plan }) {
       const res = await fetch(path, { method: 'POST' });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      // The answer says where the plan now lives, so say it now. This
+      // waited on a second request to re-read the status, and a scan
+      // holding the backend kept a plan that was already shared reading
+      // "Local", disabled, for as long as the scan took. The re-read
+      // still runs, to confirm, but nothing waits on it.
+      setLinked(!linked);
+      setPlanDir(linked ? null : data?.planDir ?? null);
       addToast(
         linked
           ? {
@@ -74,7 +81,7 @@ export function PlanSyncChip({ plan }: { plan: Plan }) {
               message: `Written to ${data?.planDir ?? '.codetrellis/plans/'} — commit it to share.`,
             },
       );
-      await load();
+      void load();
     } catch (err) {
       addToast({
         type: 'error',
