@@ -8,15 +8,31 @@
  * confined by the permission model, has no environment, and cannot load
  * network or process modules.
  *
- * Nothing global is patched: the engine binary and its filesystem image are
- * read from this directory and handed to Emscripten directly (`wasmBinary`,
- * `getPreloadedPackage`), so the glue never fetches anything. The document
- * lives only in the engine's in-memory filesystem, and is removed after.
+ * The engine binary and its filesystem image are read from this directory
+ * and handed to Emscripten directly (`wasmBinary`, `getPreloadedPackage`),
+ * so the glue never fetches anything. The document lives only in the
+ * engine's in-memory filesystem, and is removed after.
+ *
+ * One thing global IS changed, before the glue loads: the browser network
+ * APIs are taken away (NETWORK_GLOBALS). Emscripten's glue keeps code for
+ * other environments — a `fetch()` behind `!ENVIRONMENT_IS_NODE`, an
+ * `XMLHttpRequest` in `FS.createLazyFile` — that is dead under Node, and
+ * Node 22+ has a global `fetch` and `WebSocket` it could otherwise reach.
+ * With these gone that code has nothing to call, which is what lets the
+ * network proof (network-proof.ts) accept it being there.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+
+const NETWORK_GLOBALS = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource'];
+
+function withoutNetworkGlobals() {
+  for (const name of NETWORK_GLOBALS) {
+    Object.defineProperty(globalThis, name, { value: undefined, writable: false, configurable: false, enumerable: false });
+  }
+}
 
 /**
  * Start the engine. The glue is either an ES module factory (`soffice.mjs`,
@@ -24,6 +40,7 @@ const { pathToFileURL } = require('node:url');
  * from a global `Module`; both get the same settings object.
  */
 async function load(dir) {
+  withoutNetworkGlobals();
   const wasm = fs.readFileSync(path.join(dir, 'soffice.wasm'));
   const data = fs.readFileSync(path.join(dir, 'soffice.data'));
   const quiet = () => {};
