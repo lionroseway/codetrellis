@@ -18,7 +18,8 @@ import {
   app as expressApp,
   addBroadcastTarget,
 } from '../backend/server';
-import { setElectronScreenshotCapture } from '../backend/mcp/server';
+import { setElectronScreenshotCapture, getMcpSetup } from '../backend/mcp/server';
+import { applyClaudeDesktop, previewClaudeDesktop, thisMachine } from '../backend/services/claude-desktop-config';
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
@@ -609,6 +610,27 @@ ipcMain.handle('logs:get-path', async () => getCurrentLogPath());
  * Takes an attachment uid, never a path: the path is resolved and confined
  * here, as `updates:reveal` does, so this cannot reveal an arbitrary file.
  */
+/**
+ * Phase 31 §6.1 — "Add to Claude Desktop". Writes another application's
+ * config file, so it is reachable from this window only (never HTTP or MCP,
+ * which an agent can reach), the entry is the connector this app resolved
+ * itself, and nothing is written that the person was not shown: `apply`
+ * takes the hash of the file they previewed. See claude-desktop-config.ts.
+ */
+function claudeDesktopEntry(): Record<string, unknown> | null {
+  const setup = getMcpSetup();
+  return (setup.connector?.config as { codetrellis?: Record<string, unknown> } | undefined)?.codetrellis ?? null;
+}
+ipcMain.handle('claude-desktop:preview', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return previewClaudeDesktop(thisMachine(), claudeDesktopEntry());
+});
+ipcMain.handle('claude-desktop:apply', (e, shownHash: unknown) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  if (typeof shownHash !== 'string' || !/^[0-9a-f]{64}$/.test(shownHash)) return { ok: false, reason: 'Preview the change first.' };
+  return applyClaudeDesktop(thisMachine(), claudeDesktopEntry(), shownHash);
+});
+
 ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {
   if (!isAttachmentUid(uid)) return false;
   const file = await resolveServable(uid);
