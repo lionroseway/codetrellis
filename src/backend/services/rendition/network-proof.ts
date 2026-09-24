@@ -38,6 +38,16 @@ const FORBIDDEN_IN_GLUE: Array<[string, RegExp, string | null]> = [
   ['fetch()', /\bfetch\s*\(/, 'fetch'],
 ];
 
+/**
+ * The glue without the lists of library symbol NAMES that ASSERTIONS builds
+ * carry for their error messages (`var unexportedSymbols = [ "run", …,
+ * "SOCKFS" ];`). A name in such a list is a string, not code. A list is
+ * removed only when it holds nothing but quoted names.
+ */
+export function withoutSymbolLists(glue: string): string {
+  return glue.replace(/\bvar\s+(?:unexportedSymbols|missingLibrarySymbols)\s*=\s*\[(?:\s*"[\w$]+"\s*,?)*\s*\]\s*;?/g, '');
+}
+
 /** The globals the adapter takes away before loading the glue (runtime/adapter.cjs). */
 export function removedGlobals(adapter: string | null | undefined): Set<string> {
   const list = adapter?.match(/const\s+NETWORK_GLOBALS\s*=\s*\[([^\]]*)\]/)?.[1];
@@ -57,15 +67,19 @@ export interface NetworkProof {
 
 /**
  * The glue's definition of an import: `var ___name = () => -N;`, or the
- * function / minified form. With memory past 2 GB, Emscripten wraps an
- * import that takes pointers and makes each one unsigned first —
- * `function ___syscall_connect(fd, addr, …) { addr >>>= 0; …; return -40; }`
- * — so exactly that prologue, and nothing else, may come before the return.
+ * function / minified form. Two prologues Emscripten writes may come before
+ * the constant return, and nothing else:
+ *  - with pthreads, a proxy that runs the same function on the main thread:
+ *    `if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(5, 0, 1, fd, addr, …);`
+ *  - with memory past 2 GB, each pointer made unsigned: `addr >>>= 0;`.
  */
 function stubValue(glue: string, importName: string): number | null {
   const js = `_${importName}`.replace(/\$/g, '\\$');
   const arrow = new RegExp(`(?:var|let|const)\\s+${js}\\s*=\\s*\\([^)]*\\)\\s*=>\\s*(-?\\d+)\\s*[;,\\n]`);
-  const fn = new RegExp(`function\\s+${js}\\s*\\([^)]*\\)\\s*\\{\\s*(?:[A-Za-z_$][\\w$]*\\s*>>>=\\s*0\\s*;\\s*)*return\\s+(-?\\d+)\\s*;?\\s*\\}`);
+  const ident = '[A-Za-z_$][\\w$]*';
+  const proxy = `if\\s*\\(\\s*ENVIRONMENT_IS_PTHREAD\\s*\\)\\s*return\\s+proxyToMainThread\\(\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*[01]\\s*(?:,\\s*${ident}\\s*)*\\)\\s*;\\s*`;
+  const unsigned = `(?:${ident}\\s*>>>=\\s*0\\s*;\\s*)*`;
+  const fn = new RegExp(`function\\s+${js}\\s*\\([^)]*\\)\\s*\\{\\s*(?:${proxy})?${unsigned}return\\s+(-?\\d+)\\s*;?\\s*\\}`);
   const m = glue.match(arrow) ?? glue.match(fn);
   return m ? Number(m[1]) : null;
 }
@@ -81,8 +95,9 @@ export function proveNetworkFree(wasm: Uint8Array, glue: string, adapter?: strin
     else stubs[name] = value;
   }
   const removed = removedGlobals(adapter);
+  const code = withoutSymbolLists(glue);
   for (const [what, re, global] of FORBIDDEN_IN_GLUE) {
-    if (re.test(glue) && !(global && removed.has(global))) failures.push(`the glue contains ${what}`);
+    if (re.test(code) && !(global && removed.has(global))) failures.push(`the glue contains ${what}`);
   }
   return { imports: imports.length, networkImports, stubs, networkFree: failures.length === 0, failures };
 }
