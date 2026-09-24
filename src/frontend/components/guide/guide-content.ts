@@ -96,17 +96,17 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: 'claude-desktop',
     group: 'Getting started',
     label: 'Claude Desktop',
-    title: 'Working with Claude Desktop, not a terminal',
+    title: 'Connecting Claude Desktop',
     blurb:
-      'Claude Desktop has no shell, so it reaches CodeTrellis through the connector — a small command it runs itself, '
-      + 'which finds this app on every start. Once connected, it works against the same plans, criteria and evidence as '
-      + 'any other agent, and everything it does shows on the Timeline.',
+      'Claude Desktop — its chat or its Code tab — connects through the connector, a small command it runs itself that '
+      + 'finds this app on every start. It is the same MCP server every agent uses, with the same full tool set: '
+      + 'nothing is different because the client is Claude Desktop, and everything it does shows on the Timeline.',
     points: [
       'In the desktop app: Settings → MCP Server → "Add to Claude Desktop…". You see the exact change to Claude Desktop\'s own config file first; the previous file is kept beside it, and nothing is written unless you click Add.',
       'Then quit Claude Desktop completely and reopen it. CodeTrellis appears among its tools. Restarting CodeTrellis later needs nothing — the connector reconnects by itself.',
       'If CodeTrellis is not running, Claude Desktop is told so in a sentence and the connector keeps trying; open CodeTrellis and carry on.',
-      'Claude Desktop gets the same permissions as every other agent (Settings → MCP Server), and the same limit to projects you have opened.',
-      'It cannot see your files unless you give it a folder. Evidence it records is checked here, against the file on disk, before it can ask you to sign anything off.',
+      'Permissions are per installation, not per client: whatever you allow in Settings → MCP Server — running commands, screen capture and the rest — Claude Desktop has too, and so does every other agent.',
+      'Evidence it records is checked here, against the file on disk, before it can ask you to sign anything off.',
     ],
     asks: [
       {
