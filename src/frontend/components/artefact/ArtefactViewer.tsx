@@ -181,6 +181,9 @@ function ViewerDialog({ view }: { view: ArtefactView }) {
             : TEXT.has(ext) ? (tooBig(meta) ? <TooBig meta={meta} /> : (
               <TextView uid={view.uid} locator={view.locator} selection={selection} onSelect={setSelection} />
             ))
+            : ext === 'html' || ext === 'htm' ? (
+              <HtmlView uid={view.uid} meta={meta} locator={view.locator} selection={selection} onSelect={setSelection} />
+            )
             : <NotYet meta={meta} ext={ext} />
           )}
         </div>
@@ -986,12 +989,79 @@ function OfficeView({ uid, meta, ext, locator, selection, onSelect }: {
   );
 }
 
+/** Per artefact, for this session: a person who ran a report's scripts once need not ask again. */
+const scriptsOn = new Set<string>();
+
+type HtmlReportApi = NonNullable<Window['electronAPI']>['htmlReport'];
+
+/**
+ * An HTML report (§7.3). HTML is a program, so it never runs in this
+ * window: on the desktop it is shown in its own sandboxed view, laid over
+ * this box — its own session, no network, scripts off unless turned on for
+ * this artefact. Where there is no such view (the browser build) its source
+ * is shown as text, and says so.
+ */
+function HtmlView({ uid, meta, locator, selection, onSelect }: {
+  uid: string; meta: Meta; locator: unknown; selection: Selection; onSelect: (s: Selection) => void;
+}) {
+  const api: HtmlReportApi | undefined = (window as unknown as { electronAPI?: { htmlReport?: HtmlReportApi } }).electronAPI?.htmlReport;
+  const box = useRef<HTMLDivElement>(null);
+  const [scripts, setScripts] = useState(() => scriptsOn.has(uid));
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!api || !el) return;
+    let live = true;
+    const rect = () => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, width: r.width, height: r.height };
+    };
+    setProblem(null);
+    void api.show(uid, rect(), scripts).then((res) => { if (live && !res.ok) setProblem(res.reason ?? 'This report cannot be shown here.'); });
+    const follow = () => { void api.move(rect()); };
+    const observer = new ResizeObserver(follow);
+    observer.observe(el);
+    window.addEventListener('resize', follow);
+    return () => {
+      live = false;
+      observer.disconnect();
+      window.removeEventListener('resize', follow);
+      void api.hide();
+    };
+  }, [api, uid, scripts]);
+
+  if (!api) {
+    return (
+      <div data-testid="artefact-html-source">
+        <p className="px-4 pt-3 text-[11px] text-amber-300/80">
+          HTML is a program, so it runs only in its own sandboxed view in the desktop app. Shown here as its source.
+        </p>
+        <TextView uid={uid} locator={locator} selection={selection} onSelect={onSelect} />
+      </div>
+    );
+  }
+  const toggle = () => {
+    if (scripts) scriptsOn.delete(uid); else scriptsOn.add(uid);
+    setScripts(!scripts);
+  };
+  return (
+    <div className="flex flex-col h-full" data-testid="artefact-html">
+      <div className="flex items-center gap-3 px-4 py-1.5 border-b border-white/[0.04] text-[11px] text-foreground-subtle">
+        <span>Sandboxed · offline · {scripts ? "this page's scripts are running" : 'scripts off'}</span>
+        <button onClick={toggle} className="ml-auto px-2 py-0.5 rounded border border-white/10 hover:border-accent/40 hover:text-foreground">
+          {scripts ? 'Stop its scripts' : "Run this page's scripts"}
+        </button>
+      </div>
+      {problem
+        ? <Card title={meta.path ?? meta.name} lines={[problem]} icon />
+        : <div ref={box} className="flex-1 min-h-0 bg-white" aria-label="HTML report (shown in its own sandboxed view)" />}
+    </div>
+  );
+}
+
 function NotYet({ meta, ext }: { meta: Meta; ext: string }) {
-  const why =
-    ext === 'html' || ext === 'htm'
-      ? 'HTML is a program, so it gets its own sandboxed view — that has not shipped yet.'
-        : `.${ext || '?'} files are not previewed.`;
-  return <Card title={meta.path ?? meta.name} lines={[why, 'Show in Finder to look at it — the viewer never opens files with another app.']} icon />;
+  return <Card title={meta.path ?? meta.name} lines={[`.${ext || '?'} files are not previewed.`, 'Show in Finder to look at it — the viewer never opens files with another app.']} icon />;
 }
 
 function TooBig({ meta }: { meta: Meta }) {

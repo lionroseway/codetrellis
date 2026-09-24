@@ -27,6 +27,12 @@ interface ElectronAPI {
   revealUpdateDownload?: () => Promise<string | null>;
   /** Phase 31 §7.4 — reveal an attachment's file by uid; there is no "open". */
   revealArtefact?: (uid: string) => Promise<boolean>;
+  /** Phase 31 §7.3 — an HTML report in its own sandboxed view (desktop only). */
+  htmlReport?: {
+    show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean) => Promise<{ ok: boolean; reason?: string }>;
+    move: (bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
+    hide: () => Promise<boolean>;
+  };
   /** Absolute path of the current day's log file. */
   getLogPath: () => Promise<string>;
 }

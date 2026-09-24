@@ -181,6 +181,47 @@ function makePdf(): Buffer {
   return Buffer.from(out, 'latin1');
 }
 
+test.describe('Artefact viewer — HTML', () => {
+  const RUN = Math.random().toString(36).slice(2, 7);
+  const TITLE = `E2E Viewer HTML ${RUN}`;
+  const dir = path.join(PROJECT_PATH, '.codetrellis', 'e2e-artefacts', RUN);
+
+  test.afterEach(async ({ request }) => {
+    await cleanupPlans(request, TITLE);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('an HTML report never runs in the app: without the sandboxed view, its source is shown as text', async ({ page, request }) => {
+    const plan = await seedPlan(request, { title: TITLE, actions: [{ title: 'Test report', body: 'The run.' }] });
+    const item = plan.actionUids[0];
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'report.html'),
+      '<!doctype html><title>run</title><h1>12 passed</h1>\n<script>window.__reportRan = true; document.title = "ran"</script>\n');
+    const agent = await createMcpClient();
+    const uid = JSON.parse((await agent.callTool('record_artefact', {
+      item_uid: item, path: path.relative(PROJECT_PATH, path.join(dir, 'report.html')), role: 'material', note: 'report.html',
+    })).content[0].text).attachment_uid as string;
+    const criterion = await (await request.post(`${API}/items/${item}/criteria`, { data: { text: 'The suite passed', kind: 'manual' } })).json();
+    const submitted = await agent.callTool('submit_criterion', { criterion_uid: criterion.uid, evidence: [{ attachment_uid: uid }], note: 'the report' });
+    expect(submitted.isError, submitted.content?.[0]?.text).toBeFalsy();
+    agent.close();
+
+    // The route sends HTML as text, sandboxed, never as a page.
+    const res = await request.get(`${API}/artefacts/${uid}/content`);
+    expect(res.headers()['content-type']).toMatch(/^text\/plain/);
+    expect(res.headers()['content-security-policy']).toMatch(/sandbox/);
+
+    await gotoWithProject(page);
+    await openPlan(page, TITLE);
+    await page.getByTestId('plan-item-tree').getByText('Test report').first().click();
+    await page.getByTestId('evidence-link').filter({ hasText: 'report.html' }).click();
+    const source = page.getByTestId('artefact-viewer').getByTestId('artefact-html-source');
+    await expect(source.getByText(/runs only in its own sandboxed view in the desktop app/)).toBeVisible({ timeout: 15_000 });
+    await expect(source.getByText('<h1>12 passed</h1>')).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __reportRan?: boolean }).__reportRan)).toBeUndefined();
+  });
+});
+
 test.describe('Artefact viewer — spreadsheets and PDFs', () => {
   const RUN = Math.random().toString(36).slice(2, 7);
   const TITLE = `E2E Viewer Office ${RUN}`;
