@@ -548,13 +548,25 @@ rather than a place in the renderer:
   serving only files inside the report's own folder, confined as §7.1.
 - A CSP of `default-src 'none'` plus what the report's own files need;
   no `connect-src`. `webRequest` cancels anything that is not the
-  scheme. Permission requests are denied. Navigation, `window.open` and
-  `<webview>` attachment are refused.
+  scheme. Permission requests are denied. Navigation off the report,
+  `window.open`, `<webview>` attachment and handing a URL to another app
+  are refused; moving between pages of the same report (a coverage
+  report's file pages) is allowed, since the scheme can only reach that
+  report's folder.
 - A per-artefact **Run this page's scripts** toggle for reports that draw
   charts with JavaScript. The network stays blocked either way.
 
 The main window's CSP keeps `frame-src 'none'`: nothing here needs a
-frame.
+frame. The browser build has no such view, so there the report's source
+is shown as text.
+
+**Proved by** `tools/html-view-hostile/`, in CI on every PR: the real view
+in real Electron, Chromium's sandbox on, handed a report that tries remote
+loads, fetch, XHR, sockets, beacons, a form, pop-ups, navigation to the
+web and to another report, `file:`, path traversal, the camera, the
+clipboard and `mailto:`/custom schemes — scripts off, then on. A listener
+must count zero connections, and a stand-in for the OS opener (with a
+control proving it sees a real launch) must see none.
 
 ### 7.4 Show in Finder. Never open.
 
