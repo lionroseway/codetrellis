@@ -47,10 +47,10 @@ exports.create = async () => ({
 });
 `;
 
-function writeEngine(version = '1.0.0', dir = engineDir, networkFree?: boolean): Record<string, string> {
+function writeEngine(version = '1.0.0', dir = engineDir, networkFree?: boolean, adapter = ADAPTER): Record<string, string> {
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'adapter.cjs'), ADAPTER);
-  const files = { 'adapter.cjs': createHash('sha256').update(ADAPTER).digest('hex') };
+  fs.writeFileSync(path.join(dir, 'adapter.cjs'), adapter);
+  const files = { 'adapter.cjs': createHash('sha256').update(adapter).digest('hex') };
   fs.writeFileSync(path.join(dir, 'engine.json'), JSON.stringify({ name: 'stand-in', version, adapter: 'adapter.cjs', files, networkFree }));
   return files;
 }
@@ -120,6 +120,25 @@ describe('a conversion that goes wrong ends, and the next one starts clean', () 
     await assert.rejects(h.convert(Buffer.from('NOT-PDF'), 'docx'), /did not produce a PDF/);
     await assert.rejects(h.convert(Buffer.from('this output is long'), 'docx'), /larger than/);
     await assert.rejects(h.convert(Buffer.from('THROW'), 'docx'), (e: Error) => !/secret/.test(e.message));
+  });
+});
+
+describe('an engine starts settled', () => {
+  test('one that hangs on its warm-up is replaced, and one that always does is unavailable, in words', async () => {
+    // The stand-in hangs on the warm-up document (RTF) and nothing else.
+    const stuckDir = path.join(tmp, 'stuck');
+    writeEngine('1.0.0', stuckDir, undefined, ADAPTER.replace("const text = Buffer.from(bytes).toString('utf8');", "const text = Buffer.from(bytes).toString('utf8');\n    if (text.startsWith('{\\\\rtf')) return new Promise(() => {});"));
+    const h = host({ engineDir: stuckDir, warmUpMs: 500 });
+    const started = Date.now();
+    await assert.rejects(h.convert(Buffer.from('hello'), 'docx'), (err: Error) =>
+      err instanceof EngineUnavailable && /did not settle after starting/.test(err.message));
+    // Two tries, each stopped at the warm-up's deadline — not the conversion's.
+    assert.ok(Date.now() - started < 4_000, `${Date.now() - started}ms`);
+    assert.equal(h.running, false);
+
+    // The ordinary stand-in answers its warm-up, and real work follows.
+    const ok = host({ warmUpMs: 5_000 });
+    assert.equal(text(await ok.convert(Buffer.from('hello'), 'docx')), '%PDF-1.4 hello');
   });
 });
 
