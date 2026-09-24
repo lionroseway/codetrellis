@@ -47,7 +47,7 @@ function fixture(port: number): { root: string; rel: string } {
 <script>
 document.title = 'scripts-ran';
 const results = {};
-const attempt = async (name, fn) => { try { const r = await fn(); results[name] = 'allowed:' + String(r).slice(0, 80); } catch (e) { results[name] = 'blocked'; } };
+const attempt = async (name, fn) => { try { const r = await Promise.race([fn(), new Promise((_, no) => setTimeout(() => no(new Error('no-answer')), 4000))]); results[name] = 'allowed:' + String(r).slice(0, 80); } catch (e) { results[name] = e && e.message === 'no-answer' ? 'no-answer' : 'blocked'; } };
 (async () => {
   await attempt('fetch-net', () => fetch('${net}/fetch').then((r) => r.status));
   await attempt('fetch-traversal', () => fetch('../../secret.txt').then((r) => r.text()));
@@ -100,10 +100,16 @@ app.whenReady().then(async () => {
   await wait(3000);
   wc = currentReportView()!.webContents;
   check(wc.getTitle() === 'scripts-ran', `with scripts on, the page's script ran (title "${wc.getTitle()}")`);
-  const results = JSON.parse(await wc.executeJavaScript('document.body.dataset.results || "{}"'));
+  // Every attempt answers or gives up after 4s; wait for the page to report them all.
+  let results: Record<string, string> = {};
+  for (let i = 0; i < 60 && Object.keys(results).length === 0; i++) {
+    results = JSON.parse(await wc.executeJavaScript('document.body.dataset.results || "{}"'));
+    if (Object.keys(results).length === 0) await wait(500);
+  }
   for (const [name, outcome] of Object.entries(results)) {
     // A beacon is queued and then dropped; whether it left is the listener's to say (below).
-    check(outcome === 'blocked' || (name === 'beacon' && outcome === 'allowed:queued'), `${name}: ${outcome}`);
+    // "no-answer" is a request that never completed; whether anything left is the listener's to say.
+    check(outcome === 'blocked' || outcome === 'no-answer' || (name === 'beacon' && outcome === 'allowed:queued'), `${name}: ${outcome}`);
   }
   check(Object.keys(results).length >= 10, `every attempt reported (${Object.keys(results).length})`);
   const body = await wc.executeJavaScript('document.body.innerText');
