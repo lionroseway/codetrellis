@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Activity, CheckCircle2, Loader2, 
-  Pencil, Plus, Move, Trash2, RotateCcw, Hash, ListPlus, Zap, Users,
+  Pencil, Plus, Move, Trash2, RotateCcw, Hash, ListPlus, Zap, Users, BookOpen,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { ExecutionDashboard } from './ExecutionDashboard';
@@ -19,6 +19,7 @@ const EVENT_META: Record<PlanEventType, { Icon: typeof Activity; tint: string; l
   status_changed:      { Icon: Loader2,        tint: 'text-accent',        label: 'Status' },
   kind_transmuted:     { Icon: Hash,           tint: 'text-foreground-muted', label: 'Kind changed' },
   plan_status_changed: { Icon: CheckCircle2,   tint: 'text-green-300',     label: 'Plan status' },
+  material_read:       { Icon: BookOpen,       tint: 'text-foreground-muted', label: 'Read' },
 };
 
 /**

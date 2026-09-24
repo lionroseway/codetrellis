@@ -18,8 +18,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { getDataDir } from '../persistence';
-import { openReadStreamWithin, removeWithin, resolveWithin, writeFileWithin } from '../confined-fs';
-import { resolveServable, type ServableFile } from '../artefact-content-service';
+import { removeWithin, resolveWithin, writeFileWithin } from '../confined-fs';
+import { readServableCapped, resolveServable, type ServableFile } from '../artefact-content-service';
 import { isPackagedElectron } from '../../mcp/connector/command';
 import { ENGINE_PIN } from './engine-lock';
 import { EngineHost, EngineUnavailable, ConversionFailed, ConversionTimedOut } from './engine-host';
@@ -79,24 +79,6 @@ function cacheRoot(): string {
   return root;
 }
 
-function readCapped(file: ServableFile, cap: number): Promise<Buffer | null> {
-  const { stream, size } = openReadStreamWithin(file.root, file.rel, {}, 'attachment');
-  if (size > cap) { stream.destroy(); return Promise.resolve(null); }
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let read = 0;
-    stream.on('data', (chunk: string | Buffer) => {
-      const c = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      read += c.length;
-      // The file grew after it was measured.
-      if (read > cap) { stream.destroy(); resolve(null); return; }
-      chunks.push(c);
-    });
-    stream.on('error', reject);
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-  });
-}
-
 /** Oldest-first, until the cache is under its cap. */
 function prune(root: string): void {
   const entries = fs.readdirSync(root, { withFileTypes: true })
@@ -124,7 +106,7 @@ export async function renditionOf(uid: string, host: EngineHost | null = getEngi
   if (!checked.ok) return { ok: false, status: 503, reason: checked.reason };
 
   let bytes: Buffer | null;
-  try { bytes = await readCapped(file, cap); } catch {
+  try { bytes = await readServableCapped(file, cap); } catch {
     return { ok: false, status: 404, reason: 'The file is not there, or is not a regular file in the project' };
   }
   if (!bytes) return { ok: false, status: 413, reason: 'This file is larger than the viewer will convert' };

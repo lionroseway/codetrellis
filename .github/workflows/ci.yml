@@ -168,6 +168,11 @@ jobs:
       # hermetic (plain node:test over the service layer, no subprocess, no
       # browser), so they can block — which they cannot do sitting inside an
       # advisory job.
+      # The material reader's bundle — what ships — so the unit tests read
+      # through it under the permission model, not only through the source.
+      - name: Build (material reader)
+        run: npm run build:reader
+
       - name: Unit tests
         run: npm run test:unit
 
