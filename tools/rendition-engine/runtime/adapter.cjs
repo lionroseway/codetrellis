@@ -51,6 +51,15 @@ async function load(dir) {
     wasmBinary: wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength),
     getPreloadedPackage: () => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
     locateFile: (file) => path.join(dir, path.basename(file)),
+    // LibreOffice's own main() must not run. The build exports it, and
+    // without this Emscripten starts it on a worker (PROXY_TO_PTHREAD) the
+    // moment the runtime is ready — a whole soffice start-up, racing the
+    // LibreOfficeKit start-up we do below on this thread. When the race went
+    // the wrong way the first document load never returned — anywhere from
+    // one start in seven to one in two, by machine — which is the "first
+    // conversion hangs" the host's warm-up was replacing engines for.
+    // Nothing here needs main(); LibreOfficeKit initialises what it uses.
+    noInitialRun: true,
     print: quiet,
     printErr: quiet,
     onRuntimeInitialized: () => {
