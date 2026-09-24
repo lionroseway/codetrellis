@@ -11,8 +11,10 @@
  * The process runs on this binary in Node mode under the permission model:
  * it may read only the engine and its own script, may not write, start
  * processes or load addons, and — where the runtime can deny it (Node 25+)
- * — may not reach the network. It is given bytes, never a path, and an
- * environment with nothing of ours in it.
+ * — may not reach the network. Where the runtime cannot, the engine runs
+ * only if it was proven network-free when it was built (network-proof.ts),
+ * as its pin records. It is given bytes, never a path, and an environment
+ * with nothing of ours in it.
  */
 
 import { fork, type ChildProcess } from 'node:child_process';
@@ -39,8 +41,8 @@ export interface EngineHostOptions {
   /** Extra directories the child may read (tests). */
   allowRead?: string[];
   /**
-   * The rule in §7.6: an engine the runtime cannot keep off the network does
-   * not run. Only tests on an older runtime turn this off.
+   * The rule in §7.6: an engine the runtime cannot keep off the network runs
+   * only if it is proven network-free. Only tests turn this off.
    */
   requireNetworkDenial?: boolean;
 }
@@ -121,11 +123,14 @@ export class EngineHost {
   private async spawn(): Promise<ChildProcess> {
     const isolation = runtimeIsolation();
     if (!isolation.fs) throw new EngineUnavailable('this runtime cannot confine the conversion engine');
-    if (!isolation.net && this.opts.requireNetworkDenial !== false) {
-      throw new EngineUnavailable('this runtime cannot keep the conversion engine off the network');
-    }
     const checked = await this.check();
     if (!checked.ok) throw new EngineUnavailable(checked.reason);
+    // §7.6: the network is denied by the runtime where it can (Node 25+).
+    // Where it cannot — Electron 44's Node 24 — the engine runs only if it
+    // was proven network-free when it was built, and that proof is pinned.
+    if (!isolation.net && checked.manifest.networkFree !== true && this.opts.requireNetworkDenial !== false) {
+      throw new EngineUnavailable('this runtime cannot keep the conversion engine off the network, and this engine is not proven network-free');
+    }
 
     const startedAt = Date.now();
     const read = [this.opts.engineDir, this.opts.childScript, ...(this.opts.allowRead ?? [])];

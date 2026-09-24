@@ -21,11 +21,19 @@ export interface EngineManifest {
   version: string;
   adapter: string;
   files: Record<string, string>;
+  /**
+   * The engine passed the network proof when it was built (network-proof.ts):
+   * every network-capable import is a stub that fails, and its glue carries no
+   * network machinery. Written by CI, never by hand.
+   */
+  networkFree?: boolean;
 }
 
 export interface EnginePin {
   version: string;
   files: Record<string, string>;
+  /** As EngineManifest.networkFree — for a packaged build, only the pin's word counts. */
+  networkFree?: boolean;
 }
 
 export type EngineCheck = { ok: true; manifest: EngineManifest } | { ok: false; reason: string };
@@ -70,7 +78,7 @@ export async function verifyEngine(dir: string, pin?: EnginePin): Promise<Engine
   if (pin) {
     if (read.version !== pin.version) return { ok: false, reason: `the engine is ${read.version}; this build expects ${pin.version}` };
     if (!(read.adapter in pin.files)) return { ok: false, reason: 'the engine\'s adapter is not one this build pinned' };
-    manifest = { ...read, files: pin.files };
+    manifest = { ...read, files: pin.files, networkFree: pin.networkFree === true };
   }
 
   const stats: string[] = [];
@@ -80,8 +88,9 @@ export async function verifyEngine(dir: string, pin?: EnginePin): Promise<Engine
     if (!st.isFile()) return { ok: false, reason: `the engine's ${rel} is not a regular file` };
     stats.push(`${rel}:${st.size}:${st.mtimeMs}`);
   }
-  // Keyed by what is expected as well as what is on disk: a different pin is a different question.
-  const stamp = `${JSON.stringify(manifest.files)}|${manifest.version}|${stats.join('|')}`;
+  // Keyed by everything that decides the answer — what is expected, what it
+  // attests, and what is on disk: a different pin is a different question.
+  const stamp = `${JSON.stringify(manifest.files)}|${manifest.version}|${manifest.networkFree === true}|${stats.join('|')}`;
   const cached = verified.get(dir);
   if (cached && cached.stamp === stamp) return cached.result;
 

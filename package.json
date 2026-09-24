@@ -22,19 +22,20 @@
     "dev:electron": "electron-vite dev",
     "check:bundle": "bash scripts/check-no-relative-require.sh",
     "prepackage": "node scripts/build-icons.js",
-    "package": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder",
-    "package:mac": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac --arm64",
-    "package:mac-x64": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac --x64",
-    "package:mac-universal": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac",
-    "package:mac:signed": "npm run check:bundle && electron-vite build && npm run build:connector && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
-    "package:win": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --win --x64",
-    "package:linux": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --linux",
-    "package:all": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && electron-builder --mac --arm64 --win --x64 --linux",
+    "package": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && electron-builder",
+    "package:mac": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && electron-builder --mac --arm64",
+    "package:mac-x64": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && electron-builder --mac --x64",
+    "package:mac-universal": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && electron-builder --mac",
+    "package:mac:signed": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
+    "package:win": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && electron-builder --win --x64",
+    "package:linux": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && electron-builder --linux",
+    "package:all": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run fetch:rendition-engine && electron-builder --mac --arm64 --win --x64 --linux",
     "release": "bash scripts/release.sh",
     "release:dry-run": "bash scripts/release.sh --dry-run",
     "build:icons": "node scripts/build-icons.js",
     "build:connector": "vite build --config vite.connector.config.ts",
     "build:rendition": "vite build --config vite.rendition.config.ts",
+    "fetch:rendition-engine": "node scripts/fetch-rendition-engine.mjs",
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",
     "test": "playwright test",
     "test:unit": "node --import tsx --test 'src/**/*.test.ts'",
@@ -174,6 +175,13 @@
         "to": "rendition",
         "filter": [
           "engine-child.cjs"
+        ]
+      },
+      {
+        "from": "resources/rendition/engine",
+        "to": "rendition/engine",
+        "filter": [
+          "**/*"
         ]
       },
       {
