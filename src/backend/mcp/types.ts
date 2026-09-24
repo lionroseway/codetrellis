@@ -83,6 +83,9 @@ export interface ToolDeps {
     'recordArtefact' | 'refreshArtefactHashes' | 'listArtefacts' | 'ArtefactError'
   >;
   startArtefactWatching: typeof import('../services/artefact-watcher').startArtefactWatching;
+  /** Phase 31 §5 — the Brief, and reading a material through us (§5.1). */
+  briefService: Pick<typeof import('../services/brief-service'), 'getBrief' | 'listMaterials'>;
+  readMaterial: typeof import('../services/material-reader/reader-host').readMaterial;
 
   // Specific function imports (not full modules)
   applyTemplate: typeof import('../services/plan-templates-service').applyTemplate;

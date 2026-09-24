@@ -56,6 +56,8 @@ import {
   ArtefactError,
 } from '../services/artefact-service';
 import { startArtefactWatching } from '../services/artefact-watcher';
+import { getBrief, listMaterials } from '../services/brief-service';
+import { readMaterial } from '../services/material-reader/reader-host';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
@@ -274,6 +276,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun },
     artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, ArtefactError },
     startArtefactWatching,
+    briefService: { getBrief, listMaterials },
+    readMaterial,
 
     // Specific functions
     applyTemplate,

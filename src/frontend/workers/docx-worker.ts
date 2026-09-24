@@ -14,7 +14,7 @@
  * the HTML, so the page decides what becomes an image source.
  */
 import mammoth from 'mammoth';
-import { CapError, listEntries, readEntry, type InflateBudget } from './zip-reader';
+import { CapError, listEntries, readEntry, type InflateBudget } from '../../shared/lib/zip-reader';
 
 export interface DocxRequest { buffer: ArrayBuffer }
 export interface DocxImage { contentType: string; bytes: Uint8Array }

@@ -19,7 +19,7 @@ import {
   parseWorkbookSheets,
   sheetDimension,
 } from '../../shared/lib/xlsx-xml';
-import { CapError, listEntries, readText, type InflateBudget } from './zip-reader';
+import { CapError, listEntries, readText, type InflateBudget } from '../../shared/lib/zip-reader';
 
 export interface XlsxRequest { buffer: ArrayBuffer }
 export interface XlsxSheet { name: string; dimension: string | null; rows: string[][]; truncated: boolean }

@@ -77,6 +77,21 @@ function itemStartedAt(item: PlanItem): number {
   return Number.isFinite(created) ? created : 0;
 }
 
+/** Attachments on the item read through `read_material` since `since`. */
+function materialsReadSince(itemUid: string, since: number): Set<string> {
+  const read = new Set<string>();
+  for (const r of rows(
+    `SELECT after_state FROM plan_events WHERE item_uid = ? AND event_type = 'material_read' AND created_at >= ?`,
+    [itemUid, since],
+  )) {
+    try {
+      const uid = (JSON.parse(String(r[0])) as { attachmentUid?: unknown }).attachmentUid;
+      if (typeof uid === 'string') read.add(uid);
+    } catch { /* a malformed row names nothing */ }
+  }
+  return read;
+}
+
 /** The newest mtime among the item's target files that exist. */
 function lastTargetChangeAt(item: PlanItem, root: string | null): number | null {
   if (!root) return null;
@@ -136,13 +151,15 @@ function check(
       ? { unavailable: v.unavailable }
       : (v as CodeVerdicts).get(item.uid) ?? { unavailable: 'the item is not in the plan review' };
   }
+  const startedAt = itemStartedAt(item);
   return runChecks({
     criterion: { uid: criterion.uid, itemUid: criterion.itemUid, kind: criterion.kind },
     root,
-    itemStartedAt: itemStartedAt(item),
+    itemStartedAt: startedAt,
     lastTargetChangeAt: lastTargetChangeAt(item, root),
     evidence: evidenceFacts(criterion, offered),
     itemArtefacts: listArtefacts(item.uid),
+    materialsRead: criterion.kind === 'citation' ? materialsReadSince(item.uid, startedAt) : undefined,
     code,
   });
 }

@@ -1,9 +1,10 @@
 /**
- * Phase 31 §7.2 — reading a zip in a viewer worker, with caps.
+ * Phase 31 §7.2 — reading a zip in a worker, with caps: the viewer's
+ * workers, and the worker that reads materials for agents (§5.1).
  *
  * An .xlsx or .docx is a zip, and a zip can be a bomb: a few megabytes
- * that inflate to gigabytes. A worker shares the renderer's process, so
- * running out of memory here takes the window with it. Every part is
+ * that inflate to gigabytes. A worker shares its process — the window's,
+ * or the backend's — so running out of memory here takes that with it. Every part is
  * inflated as a stream and its real output counted — never the size the
  * archive declares — and abandoned the moment it passes the budget.
  */
@@ -48,11 +49,11 @@ export async function readEntry(view: DataView, e: ZipEntry, budget: InflateBudg
   if (e.method === 0) {
     budget.used += raw.byteLength;
     if (raw.byteLength > budget.maxPart || budget.used > budget.maxTotal) {
-      throw new CapError(`${e.name} is larger than the viewer will read`);
+      throw new CapError(`${e.name} is larger than CodeTrellis will read`);
     }
     return raw;
   }
-  if (e.method !== 8) throw new Error(`${e.name} uses a compression this viewer does not read`);
+  if (e.method !== 8) throw new Error(`${e.name} uses a compression CodeTrellis does not read`);
   const reader = new Blob([raw as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -63,7 +64,7 @@ export async function readEntry(view: DataView, e: ZipEntry, budget: InflateBudg
     budget.used += value.byteLength;
     if (size > budget.maxPart || budget.used > budget.maxTotal) {
       await reader.cancel();
-      throw new CapError(`${e.name} expands past what the viewer will read`);
+      throw new CapError(`${e.name} expands past what CodeTrellis will read`);
     }
     chunks.push(value);
   }
