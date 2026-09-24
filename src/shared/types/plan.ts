@@ -701,7 +701,9 @@ export type PlanEventType =
   | 'reordered'
   | 'status_changed'
   | 'kind_transmuted'
-  | 'plan_status_changed';
+  | 'plan_status_changed'
+  /** Phase 31 §5.1 — an agent read a material through read_material. */
+  | 'material_read';
 
 export interface PlanEvent {
   id: number;

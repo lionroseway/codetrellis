@@ -21,12 +21,12 @@ import { readFileWithin, resolveWithin } from './confined-fs';
 import { listZipEntries, readZipEntry, type ZipEntry } from '../lib/zip-entries';
 import type { Artefact } from './artefact-service';
 import { decodeXml, parseWorkbookSheets, sheetDimension } from '../../shared/lib/xlsx-xml';
+import { parseRange, toSpan, TEXT_EXTS } from '../../shared/lib/locator';
 import type { CheckFinding, CriterionCheck, CriterionKind } from '../../shared/types';
 
 /** Past this, a file is not read for a check — the finding says so. */
 export const MAX_CHECK_READ_BYTES = 50 * 1024 * 1024;
 
-const TEXT_EXTS = new Set(['md', 'txt', 'json', 'log', 'csv', 'html', 'htm', 'xml', 'svg']);
 
 export interface EvidenceFact {
   attachmentUid: string | null;
@@ -47,6 +47,12 @@ export interface CheckContext {
   evidence: EvidenceFact[];
   /** Every artefact on the item, for a check with no evidence offered yet. */
   itemArtefacts: Artefact[];
+  /**
+   * Attachments read through `read_material` since the item started — a
+   * `citation` reports whether what it cites was actually opened (§5.1).
+   * Reported, never required: undefined when not gathered.
+   */
+  materialsRead?: ReadonlySet<string>;
   /** A `code` criterion's review verdict; undefined when not computed. */
   code?: { verdict: 'landed' | 'partial' | 'untouched' | 'no-targets'; missing: string[] } | { unavailable: string };
 }
@@ -140,24 +146,6 @@ export function mp4DurationSeconds(buf: Buffer): number | null {
 
 // ── Cell references ───────────────────────────────────────────────────
 
-function colNumber(letters: string): number {
-  let n = 0;
-  for (const ch of letters.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
-  return n;
-}
-
-function parseCell(ref: string): { col: number; row: number } | null {
-  const m = ref.replace(/\$/g, '').match(/^([A-Za-z]{1,3})(\d+)$/);
-  return m ? { col: colNumber(m[1]), row: Number(m[2]) } : null;
-}
-
-function parseRange(ref: string): { from: { col: number; row: number }; to: { col: number; row: number } } | null {
-  const [a, b] = ref.split(':');
-  const from = parseCell(a ?? '');
-  const to = b === undefined ? from : parseCell(b);
-  return from && to ? { from, to } : null;
-}
-
 function rangeInside(range: string, dimension: string): boolean {
   const r = parseRange(range);
   const d = parseRange(dimension);
@@ -173,18 +161,6 @@ function toSeconds(t: unknown): number | null {
   const parts = t.trim().split(':').map(Number);
   if (parts.some((n) => !Number.isFinite(n))) return null;
   return parts.reduce((acc, n) => acc * 60 + n, 0);
-}
-
-function toLineSpan(lines: unknown): { start: number; end: number } | null {
-  if (typeof lines === 'number' && Number.isInteger(lines)) return { start: lines, end: lines };
-  if (Array.isArray(lines) && lines.length === 2 && lines.every((n) => Number.isInteger(n))) {
-    return { start: lines[0] as number, end: lines[1] as number };
-  }
-  if (typeof lines === 'string') {
-    const m = lines.trim().match(/^(\d+)(?:\s*[-–]\s*(\d+))?$/);
-    if (m) return { start: Number(m[1]), end: Number(m[2] ?? m[1]) };
-  }
-  return null;
 }
 
 const squash = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -275,7 +251,7 @@ export function checkLocator(root: string, a: Artefact, locator: unknown): Check
     }
 
     if ('lines' in loc) {
-      const span = toLineSpan(loc.lines);
+      const span = toSpan(loc.lines);
       if (!span || span.start < 1 || span.end < span.start) {
         out.push(fail(`lines must be a line number or a span such as "10-20" — got ${JSON.stringify(loc.lines)}`, a.uid));
       } else if (!TEXT_EXTS.has(ext)) {
@@ -393,6 +369,11 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
       for (const e of cited) {
         if (e.locator === null || e.locator === undefined) {
           findings.push(fail(`Citing ${e.artefact!.path} needs a locator saying where in it`, e.artefact!.uid));
+        }
+        if (ctx.materialsRead) {
+          findings.push(ctx.materialsRead.has(e.artefact!.uid)
+            ? pass(`${e.artefact!.path} was read through read_material while this item was under way`, e.artefact!.uid)
+            : unverified(`${e.artefact!.path} was not read through read_material while this item was under way, so nothing shows it was opened`, e.artefact!.uid));
         }
       }
       break;

@@ -168,6 +168,11 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   check_criterion: 'read',
   get_worklist: 'read',
   run_checks: 'read',
+  // Phase 31 §5 — the Brief. Reading a material hands over a file's
+  // contents, so it is `files`, as reading any project file is.
+  get_brief: 'read',
+  list_materials: 'read',
+  read_material: 'files',
   list_items: 'read',
   search_items: 'read',
   get_plan_timeline: 'read',

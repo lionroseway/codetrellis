@@ -96,6 +96,28 @@ export async function resolveServable(uid: unknown): Promise<ServableFile | null
   return { root: location.root, rel: location.rel, contentType, itemUid };
 }
 
+/**
+ * The whole file, or null when it is (or grows) larger than `cap` — for
+ * readers that need every byte: the conversion engine, the material reader.
+ */
+export function readServableCapped(file: ServableFile, cap: number): Promise<Buffer | null> {
+  const { stream, size } = openReadStreamWithin(file.root, file.rel, {}, 'attachment');
+  if (size > cap) { stream.destroy(); return Promise.resolve(null); }
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let read = 0;
+    stream.on('data', (chunk: string | Buffer) => {
+      const c = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      read += c.length;
+      // The file grew after it was measured.
+      if (read > cap) { stream.destroy(); resolve(null); return; }
+      chunks.push(c);
+    });
+    stream.on('error', reject);
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
 /** The absolute path, confined — for "Show in Finder", never for opening. */
 export function absolutePathOf(file: ServableFile): string {
   return resolveWithin(file.root, file.rel, 'attachment');

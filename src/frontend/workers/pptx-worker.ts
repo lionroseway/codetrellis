@@ -9,7 +9,7 @@
  * page labels this as a fallback. Every part read is inflated under the
  * budget (zip-reader.ts).
  */
-import { CapError, listEntries, readEntry, readText, type InflateBudget } from './zip-reader';
+import { CapError, listEntries, readEntry, readText, type InflateBudget } from '../../shared/lib/zip-reader';
 import { slideOrder, slideText, thumbnailPart, type SlideText } from '../../shared/lib/pptx-xml';
 
 export interface PptxRequest { buffer: ArrayBuffer }
