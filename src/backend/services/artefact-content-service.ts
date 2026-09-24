@@ -30,6 +30,7 @@ import { openReadStreamWithin, resolveWithin } from './confined-fs';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 import { resolveAttachmentLocation } from './task-attachments-service';
 import { refreshArtefactHashes } from './artefact-service';
+import { serveReportFile } from './html-view-policy';
 
 /**
  * What the viewer can be sent (§7.2), by extension. Formats parsed in the
@@ -146,4 +147,15 @@ export function serveFile(file: ServableFile, rangeHeader?: string | null): Serv
   headers['Content-Range'] = `bytes ${range.start}-${end}/${size}`;
   headers['Content-Length'] = String(end - range.start + 1);
   return { status: 206, headers, stream };
+}
+
+/**
+ * Phase 31 §7.3 — a file of an HTML report, for the sandboxed view's
+ * `ct-html://<uid>/<path>` scheme: the attachment resolved as every read is
+ * (§7.1), then served from that report's own folder (html-view-policy).
+ */
+export async function serveReportAsset(uid: unknown, urlPath: string, scripts: boolean): Promise<ServedResponse> {
+  const report = isAttachmentUid(uid) ? await resolveServable(uid) : null;
+  if (!report) return { status: 404, headers: {}, stream: null, error: 'Not part of this report' };
+  return serveReportFile(report, urlPath, scripts);
 }

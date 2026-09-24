@@ -115,6 +115,18 @@ const electronAPI = {
    * the attachment uid, never a path; there is deliberately no "open".
    */
   revealArtefact: (uid: string): Promise<boolean> => ipcRenderer.invoke('artefacts:reveal', uid),
+  /**
+   * Phase 31 §7.3 — an HTML report in its own sandboxed view, laid over the
+   * given rectangle of this window. By attachment uid; scripts off unless
+   * asked. `hide` removes the view and clears its session.
+   */
+  htmlReport: {
+    show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean): Promise<{ ok: boolean; reason?: string }> =>
+      ipcRenderer.invoke('artefacts:html:show', uid, bounds, scripts),
+    move: (bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> =>
+      ipcRenderer.invoke('artefacts:html:bounds', bounds),
+    hide: (): Promise<boolean> => ipcRenderer.invoke('artefacts:html:hide'),
+  },
 };
 
 contextBridge.exposeInMainWorld('codetrellisIpc', codetrellisIpc);

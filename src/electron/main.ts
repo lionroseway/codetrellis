@@ -40,6 +40,7 @@ import {
   isAttachmentUid,
 } from '../backend/services/artefact-content-service';
 import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
+import { installHtmlView, closeHtmlView } from './html-view';
 
 // Phase 31 §7.1 — the packaged renderer is a file:// document: its fetch is
 // shimmed over IPC as UTF-8 and its <img>/<video> reach neither the shim nor
@@ -48,6 +49,9 @@ import { renditionOf, stopEngine } from '../backend/services/rendition/rendition
 // attachment uid and nothing else; everything else is resolved in main.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'ct-artefact', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+  // §7.3 — HTML reports' own scheme. Handled ONLY on the report view's
+  // session (html-view.ts), so the app's window cannot load it at all.
+  { scheme: 'ct-html', privileges: { standard: true, secure: true, stream: true } },
 ]);
 
 function installArtefactProtocol(): void {
@@ -362,6 +366,7 @@ function createWindow(backendOk: boolean): void {
   }
 
   mainWindow.on('closed', () => {
+    closeHtmlView(null);
     mainWindow = null;
   });
 }
@@ -373,6 +378,7 @@ app.whenReady().then(async () => {
   // Before any window exists, so no document is ever served without it.
   installContentSecurityPolicy();
   installArtefactProtocol();
+  installHtmlView(() => mainWindow);
 
   const backendOk = await bootstrap();
   createWindow(backendOk);
