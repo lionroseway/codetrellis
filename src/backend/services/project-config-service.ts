@@ -106,6 +106,8 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
     sensors: mergeSensorConfig(current.sensors, patch.sensors),
     // Phase 3.6 — repoRole is a flat scalar; patch wins when present.
     repoRole: patch.repoRole !== undefined ? patch.repoRole : current.repoRole,
+    // Phase 31 §10.1 — also a flat scalar.
+    defaultSurface: patch.defaultSurface !== undefined ? patch.defaultSurface : current.defaultSurface,
     // Phase 6.5 — freeze periods: replace wholesale when present.
     freeze: patch.freeze !== undefined ? patch.freeze : current.freeze,
     updatedAt: new Date().toISOString(),
@@ -131,6 +133,10 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   // `undefined` and `mixed` identically and strip both from disk.
   if (next.repoRole === undefined || next.repoRole === 'mixed') {
     delete next.repoRole;
+  }
+  // The graph is the default, so it is never written down either.
+  if (next.defaultSurface === undefined || next.defaultSurface === 'graph') {
+    delete next.defaultSurface;
   }
 
   saveProjectConfig(key, next);
@@ -411,6 +417,11 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
   // UI treats absence as "mixed" too.
   if (r.repoRole === 'planning' || r.repoRole === 'code' || r.repoRole === 'mixed') {
     result.repoRole = r.repoRole;
+  }
+
+  // Phase 31 §10.1 — where opening the folder lands.
+  if (r.defaultSurface === 'code' || r.defaultSurface === 'brief') {
+    result.defaultSurface = r.defaultSurface;
   }
 
   // Phase 6.5 — freeze periods.

@@ -8,6 +8,7 @@ import { usePlanStore } from './stores/plan-store';
 import { Sidebar } from './components/layout/Sidebar';
 import { MainCanvas } from './components/layout/MainCanvas';
 import { CodeWorkspace } from './components/layout/CodeWorkspace';
+import { BriefWorkspace } from './components/brief/BriefWorkspace';
 import { InspectorPanel } from './components/layout/InspectorPanel';
 import { PlanPanel } from './components/layout/PlanPanel';
 import { StatusBar } from './components/layout/StatusBar';
@@ -113,15 +114,36 @@ export function App() {
   const prevPlanUidRef = useRef<string | null>(null);
   useEffect(() => {
     const prev = prevPlanUidRef.current;
+    // Phase 31 §10.1 — in the Brief, opening or clearing a brief is part of
+    // reading it: the person stays where they are.
+    const inBrief = useUiStore.getState().workspaceMode === 'brief';
     if (activePlanUid && activePlanUid !== prev) {
       // New plan opened — fly into takeover.
-      setWorkspaceMode('plan');
+      if (!inBrief) setWorkspaceMode('plan');
     } else if (!activePlanUid && prev) {
       // Plan cleared — return to graph.
-      setWorkspaceMode('graph');
+      if (!inBrief) setWorkspaceMode('graph');
     }
     prevPlanUidRef.current = activePlanUid;
   }, [activePlanUid, setWorkspaceMode]);
+
+  // Phase 31 §10.1 — a folder says where opening it lands: a folder of
+  // documents opens in the Brief. Once per folder opened, and only from the
+  // graph, so it never pulls someone out of where they chose to be.
+  const projectRoot = useProjectStore((s) => s.root);
+  useEffect(() => {
+    if (!projectRoot) return;
+    let live = true;
+    fetch(`/api/project-config?project=${encodeURIComponent(projectRoot)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((config: { defaultSurface?: string } | null) => {
+        const surface = config?.defaultSurface;
+        if (!live || (surface !== 'brief' && surface !== 'code')) return;
+        if (useUiStore.getState().workspaceMode === 'graph') setWorkspaceMode(surface);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [projectRoot, setWorkspaceMode]);
 
   // Test hook: allow e2e tests to open a project programmatically
   useEffect(() => {
@@ -261,7 +283,7 @@ export function App() {
                     inside MainCanvas, because hooks run before a return —
                     the layout would still be computed, just thrown away.
                     The Allotment stays mounted so pane sizes survive. */}
-                {workspaceMode !== 'code' && <MainCanvas />}
+                {workspaceMode !== 'code' && workspaceMode !== 'brief' && <MainCanvas />}
               </Allotment.Pane>
               {/* Collapses when the panel is hidden. PlanPanel returns null
                   in that state, and the pane used to keep its full height
@@ -312,6 +334,14 @@ export function App() {
                 <CodeWorkspace />
               </Allotment.Pane>
             </Allotment>
+          </div>
+        )}
+
+        {/* Phase 31 §10 — the Brief. Like code mode, the graph is not
+            mounted behind it (see the pane above). */}
+        {workspaceMode === 'brief' && (
+          <div className="absolute inset-0 z-30 bg-background">
+            <BriefWorkspace />
           </div>
         )}
 

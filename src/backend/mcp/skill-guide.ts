@@ -505,7 +505,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | Tool | What it does |
 |------|-------------|
 | \`ui_ready()\` | **Call this first.** Is the window usable — shell mounted, nothing blocking it? Every other tool answers from the backend and will succeed happily while the user is looking at something else |
-| \`navigate_to(target, plan_uid?, file_path?, line?)\` | Switch to plan / graph / split / timeline / code view. For \`code\`, pass \`file_path\` (and optionally \`line\`) to open the reader on it |
+| \`navigate_to(target, plan_uid?, file_path?, line?, item_uid?, attachment_uid?, locator?)\` | Switch to plan / graph / split / timeline / code / brief view, or open a recorded file. For \`code\`, pass \`file_path\` (and optionally \`line\`); for \`brief\`, optionally \`item_uid\` for the task; for \`artefact\`, \`attachment_uid\` and the \`locator\` you cite |
 | \`open_plan(plan_uid, split_view?)\` | Open a specific plan |
 | \`select_item(item_uid, plan_uid?)\` | Navigate to a specific item in the plan tree |
 | \`navigate_item_back()\` | Go back in item selection history (Cmd+[) |

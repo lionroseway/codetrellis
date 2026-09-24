@@ -6,7 +6,7 @@ import {
 import {
   groupIntoTurns, formatDuration, formatRelative, type AgentTurn,
 } from '../../lib/agent-turns';
-import { phraseEvent, rawPayloadText, type EventIntent } from '../../lib/tool-phrasing';
+import { phraseEvent, rawPayloadText, type EventIntent, type PhraseVocabulary } from '../../lib/tool-phrasing';
 import type { AgentEvent, AgentPlan } from '@shared/types';
 
 /**
@@ -52,9 +52,9 @@ const INTENT_COLOR: Record<EventIntent, string> = {
 };
 
 /** One event row inside an expanded turn. */
-function EventRow({ event }: { event: AgentEvent }) {
+function EventRow({ event, vocabulary }: { event: AgentEvent; vocabulary: PhraseVocabulary }) {
   const [showRaw, setShowRaw] = useState(false);
-  const phrased = phraseEvent(event);
+  const phrased = phraseEvent(event, vocabulary);
   const Icon = INTENT_ICON[phrased.intent] ?? Circle;
 
   return (
@@ -80,8 +80,8 @@ function EventRow({ event }: { event: AgentEvent }) {
 }
 
 /** One turn card. Collapsed by default — the summary is the point. */
-function TurnCard({ turn }: { turn: AgentTurn }) {
-  const [expanded, setExpanded] = useState(false);
+function TurnCard({ turn, vocabulary, initiallyExpanded = false }: { turn: AgentTurn; vocabulary: PhraseVocabulary; initiallyExpanded?: boolean }) {
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const Chevron = expanded ? ChevronDown : ChevronRight;
 
   return (
@@ -124,7 +124,7 @@ function TurnCard({ turn }: { turn: AgentTurn }) {
       {expanded && (
         <div className="pb-1">
           {turn.events.map((event) => (
-            <EventRow key={event.id} event={event} />
+            <EventRow key={event.id} event={event} vocabulary={vocabulary} />
           ))}
         </div>
       )}
@@ -137,9 +137,9 @@ function TurnCard({ turn }: { turn: AgentTurn }) {
  * on its tab without grouping a second time — the count on the tab and
  * the rows in the body have to be the same number.
  */
-export function useAgentTurns(events: AgentEvent[]): AgentTurn[] {
+export function useAgentTurns(events: AgentEvent[], vocabulary: PhraseVocabulary = 'code'): AgentTurn[] {
   // Newest first for display; the grouper works oldest-first.
-  return useMemo(() => groupIntoTurns(events.slice(-400)).reverse(), [events]);
+  return useMemo(() => groupIntoTurns(events.slice(-400), undefined, vocabulary).reverse(), [events, vocabulary]);
 }
 
 /**
@@ -199,16 +199,24 @@ export function AgentTurnList({
   turns,
   status,
   detectedPlan,
+  vocabulary = 'code',
+  emptyText = 'No agent events yet',
+  expandLatest = false,
 }: {
   turns: AgentTurn[];
   status: string;
   detectedPlan?: AgentPlan | null;
+  /** Phase 31 §10.5 — the Brief says the same events in its own words. */
+  vocabulary?: PhraseVocabulary;
+  emptyText?: string;
+  /** Open the newest turn: in the Brief, what Claude is doing now is the point. */
+  expandLatest?: boolean;
 }) {
   const lastTurn = turns[0] ?? null;
 
   if (turns.length === 0 && !detectedPlan) {
     return (
-      <div className="text-foreground-subtle py-6 text-center">No agent events yet</div>
+      <div className="text-foreground-subtle py-6 text-center">{emptyText}</div>
     );
   }
 
@@ -225,7 +233,7 @@ export function AgentTurnList({
       )}
       <div className="space-y-px">
         {turns.map((turn) => (
-          <TurnCard key={turn.id} turn={turn} />
+          <TurnCard key={turn.id} turn={turn} vocabulary={vocabulary} initiallyExpanded={expandLatest && turn === turns[0]} />
         ))}
       </div>
     </>

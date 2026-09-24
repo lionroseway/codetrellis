@@ -194,3 +194,35 @@ describe('formatting', () => {
     assert.equal(formatRelative(now - 48 * 60 * 60_000, now), '2 days ago');
   });
 });
+
+describe('the Brief says the same events in its own words (Phase 31 §10.5)', () => {
+  test('read_material names the file it read, from what the tool said', () => {
+    const read = toolCall('read_material', { attachment_uid: 'a1b2c3d4-0000' }, 1000, 's1', { summary: 'Read Q3-sales.xlsx — sheet "Regional"' });
+    assert.equal(phraseEvent(read, 'brief').text, 'Read Q3-sales.xlsx — sheet "Regional"');
+    assert.equal(phraseEvent(read).text, 'Read Q3-sales.xlsx — sheet "Regional"');
+    // An older event with no summary still reads as a sentence.
+    assert.equal(phraseEvent(toolCall('read_material', { attachment_uid: 'a1b2c3d4-0000' }, 1000), 'brief').text, 'Read a material');
+  });
+
+  test('outputs are written, evidence is offered — tasks, not items', () => {
+    const wrote = toolCall('record_artefact', { item_uid: 'x', path: 'Reports/Q3/Q3-summary.docx', role: 'output' }, 1000);
+    assert.equal(phraseEvent(wrote, 'brief').text, 'Wrote Q3-summary.docx');
+    assert.equal(phraseEvent(wrote).text, 'Recorded an output: "Reports/Q3/Q3-summary.docx"');
+    assert.match(phraseEvent(toolCall('submit_criterion', { criterion_uid: 'c1' }, 1000), 'brief').text, /^Offered evidence for /);
+    assert.equal(phraseEvent(toolCall('list_criteria', { item_uid: 'x' }, 1000), 'brief').text, 'Read what good looks like');
+  });
+
+  test('a tool the Brief has no words for falls back to the code phrasing', () => {
+    const e = toolCall('search_items', { query: 'EMEA' }, 1000);
+    assert.equal(phraseEvent(e, 'brief').text, phraseEvent(e).text);
+  });
+
+  test('turns grouped for the Brief are summarised in its words', () => {
+    const turns = groupIntoTurns([
+      toolCall('get_brief', { item_uid: 'x' }, 1000),
+      toolCall('record_artefact', { item_uid: 'x', path: 'out/summary.docx', role: 'output' }, 2000),
+    ], undefined, 'brief');
+    assert.equal(turns.length, 1);
+    assert.match(turns[0].summary, /Wrote summary\.docx/);
+  });
+});

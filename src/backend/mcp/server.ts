@@ -183,6 +183,13 @@ interface ToolEventPayload {
   agentType: string | null;
   agentModel: string | null;
   error?: string;
+  /**
+   * What the call did, in words, when the args alone cannot say it — a
+   * tool puts it in its result's `_meta.summary`. `read_material` is given
+   * an attachment uid and names the file it read ("Read Q3-sales.xlsx —
+   * sheet Regional"); the Timeline would otherwise show the uid.
+   */
+  summary?: string;
 }
 
 function broadcastToolEvent(payload: ToolEventPayload): void {
@@ -444,6 +451,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
 
     try {
       const result = await handler(args, extra);
+      const summary = result?._meta?.summary;
       broadcastToolEvent({
         tool: name,
         args: summarizeArgs(args),
@@ -452,6 +460,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
         sessionId,
         agentType: agentInfo.type,
         agentModel: agentInfo.model,
+        ...(typeof summary === 'string' && !result?.isError ? { summary: summary.slice(0, 200) } : {}),
       });
       return result;
     } catch (err) {

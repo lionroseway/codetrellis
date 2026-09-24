@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, TaskAttachment } from '@shared/types';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { describeLocator, openArtefactAt } from '../../../lib/open-artefact-at';
+import { BRIEF_WORDS, briefState } from '../../../lib/brief-vocabulary';
 
 /**
  * Phase 31 §4.1–4.3 — what this item is judged on, and where each
@@ -37,12 +38,16 @@ const POLICY_LABEL: Record<CriterionPolicy, string> = {
 };
 
 export function CriteriaBlock({
-  itemUid, criteria, attachments = [],
+  itemUid, criteria, attachments = [], vocabulary = 'plan', you = null,
 }: {
   itemUid: string;
   criteria: ItemCriterion[];
   /** The item's attachments, so a submission can name the files it cites. */
   attachments?: TaskAttachment[];
+  /** Phase 31 §10.3 — in the Brief, the same block in the Brief's words. */
+  vocabulary?: 'plan' | 'brief';
+  /** Who "you" are — the desktop's identity — so a decision you took reads "met — you, 14:10". */
+  you?: string | null;
 }) {
   const addCriterion = usePlanItemsStore((s) => s.addCriterion);
   // The unfinished criterion lives in the store, keyed by item, so a
@@ -73,7 +78,7 @@ export function CriteriaBlock({
           onClick={() => setAdding(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] rounded-md border border-dashed border-white/[0.1] text-foreground-subtle hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-colors"
         >
-          <Plus size={12} /> Add acceptance criterion
+          <Plus size={12} /> {vocabulary === 'brief' ? 'Say what good looks like' : 'Add acceptance criterion'}
         </button>
       </section>
     );
@@ -82,10 +87,10 @@ export function CriteriaBlock({
   return (
     <section data-testid="criteria-block">
       <h3 className="text-[12px] uppercase tracking-[0.1em] text-foreground-subtle font-semibold mb-3">
-        Acceptance criteria <span className="opacity-60">· {met}/{criteria.length} met</span>
+        {vocabulary === 'brief' ? BRIEF_WORDS.criteria : 'Acceptance criteria'} <span className="opacity-60">· {met}/{criteria.length} met</span>
       </h3>
       <ul className="space-y-2">
-        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} />)}
+        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} />)}
       </ul>
 
       {adding ? (
@@ -125,7 +130,7 @@ export function CriteriaBlock({
           onClick={() => setAdding(true)}
           className="mt-2 flex items-center gap-1 text-[11px] text-foreground-subtle hover:text-foreground"
         >
-          <Plus size={11} /> Add criterion
+          <Plus size={11} /> {vocabulary === 'brief' ? 'Add another' : 'Add criterion'}
         </button>
       )}
       {error && <p role="alert" className="mt-2 text-[11px] text-red-300">{error}</p>}
@@ -134,11 +139,13 @@ export function CriteriaBlock({
 }
 
 function CriterionRow({
-  itemUid, criterion: c, attachments,
+  itemUid, criterion: c, attachments, vocabulary, you,
 }: {
   itemUid: string;
   criterion: ItemCriterion;
   attachments: TaskAttachment[];
+  vocabulary: 'plan' | 'brief';
+  you: string | null;
 }) {
   const decideCriterion = usePlanItemsStore((s) => s.decideCriterion);
   const updateCriterion = usePlanItemsStore((s) => s.updateCriterion);
@@ -182,8 +189,16 @@ function CriterionRow({
         <div className="flex-1 min-w-0">
           <p className="text-[13px] leading-5 whitespace-pre-wrap">{c.text}</p>
           <p className="text-[10px] text-foreground-subtle mt-0.5">
-            <span className={state.tone}>{state.label}</span>
-            {decidedBy && c.state !== 'submitted' && <> — {decidedBy}</>}
+            {vocabulary === 'brief' && c.state === 'met' ? (
+              <span className={state.tone}>
+                {briefState(c.state, c.latestSignoff ? { actor: c.latestSignoff.actor, actorType: c.latestSignoff.actorType, at: c.latestSignoff.createdAt } : null, you).words}
+              </span>
+            ) : (
+              <>
+                <span className={state.tone}>{state.label}</span>
+                {decidedBy && c.state !== 'submitted' && <> — {decidedBy}</>}
+              </>
+            )}
             {' · '}{KIND_LABEL[c.kind]}{' · '}
             {c.kind === 'manual' ? (
               <span title="A judgement — only a person can meet it">{POLICY_LABEL.human}</span>
