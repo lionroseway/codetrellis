@@ -38,6 +38,11 @@ export interface EngineHostOptions {
   timeoutMs?: number;
   startTimeoutMs?: number;
   maxOutputBytes?: number;
+  /**
+   * How long the warm-up conversion may take before the engine is judged
+   * stuck and replaced (WARM_UP). 0 skips the warm-up.
+   */
+  warmUpMs?: number;
   /** Extra directories the child may read (tests). */
   allowRead?: string[];
   /**
@@ -58,6 +63,16 @@ interface Pending {
   reject: (err: Error) => void;
   timer: NodeJS.Timeout;
 }
+
+/**
+ * The warm-up document: two lines of RTF. The first conversion after the
+ * engine starts hangs about one time in two (measured on the spike engine,
+ * whatever the document — a start-up race, not the document), and was
+ * costing the first person to open a file a 60-second wait for the retry.
+ * The host converts this first, under a short deadline, and replaces an
+ * engine that hangs on it — so real conversions start on a settled engine.
+ */
+const WARM_UP = new TextEncoder().encode('{\\rtf1\\ansi CodeTrellis warm-up.\\par}');
 
 export class EngineHost {
   private child: ChildProcess | null = null;
@@ -120,7 +135,45 @@ export class EngineHost {
     return this.starting;
   }
 
+  /** Start an engine and warm it; one that hangs on the warm-up is replaced, once. */
   private async spawn(): Promise<ChildProcess> {
+    for (let attempt = 1; ; attempt++) {
+      const child = await this.spawnOnce();
+      if (await this.warmUp(child)) {
+        child.on('message', (msg) => this.onMessage(msg as { type: string; id: number; pdf?: Uint8Array; message?: string }));
+        child.on('exit', () => this.onExit(child));
+        this.child = child;
+        return child;
+      }
+      if (child.exitCode === null) child.kill('SIGKILL');
+      if (attempt >= 2) throw new EngineUnavailable('the conversion engine did not settle after starting');
+      console.warn('[rendition] the engine hung on its warm-up; starting a fresh one');
+    }
+  }
+
+  /** True when the engine answered the warm-up — with a PDF or an error — in time. */
+  private warmUp(child: ChildProcess): Promise<boolean> {
+    const ms = this.opts.warmUpMs ?? 20_000;
+    if (ms <= 0) return Promise.resolve(true);
+    const startedAt = Date.now();
+    return new Promise<boolean>((resolve) => {
+      const done = (ok: boolean) => {
+        clearTimeout(timer);
+        child.off('message', onMessage);
+        child.off('exit', onExit);
+        if (ok) console.log(`[rendition] engine warmed in ${Date.now() - startedAt}ms`);
+        resolve(ok);
+      };
+      const onMessage = (msg: { id?: number }) => { if (msg?.id === 0) done(true); };
+      const onExit = () => done(false);
+      const timer = setTimeout(() => done(false), ms);
+      child.on('message', onMessage);
+      child.once('exit', onExit);
+      child.send({ type: 'convert', id: 0, bytes: WARM_UP, ext: 'rtf' });
+    });
+  }
+
+  private async spawnOnce(): Promise<ChildProcess> {
     const isolation = runtimeIsolation();
     if (!isolation.fs) throw new EngineUnavailable('this runtime cannot confine the conversion engine');
     const checked = await this.check();
@@ -171,9 +224,6 @@ export class EngineHost {
 
     this.version = checked.manifest.version;
     console.log(`[rendition] engine ${checked.manifest.version} started in ${Date.now() - startedAt}ms`);
-    child.on('message', (msg) => this.onMessage(msg as { type: string; id: number; pdf?: Uint8Array; message?: string }));
-    child.on('exit', () => this.onExit(child));
-    this.child = child;
     return child;
   }
 

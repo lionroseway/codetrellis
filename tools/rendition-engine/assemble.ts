@@ -52,7 +52,11 @@ function assemble(buildOut: string, engineDir: string): void {
   for (const f of parts) fs.copyFileSync(path.join(buildOut, f), path.join(engineDir, f));
   fs.copyFileSync(path.join(HERE, 'runtime', 'adapter.cjs'), path.join(engineDir, 'adapter.cjs'));
 
-  const proof = proveNetworkFree(fs.readFileSync(path.join(engineDir, 'soffice.wasm')), fs.readFileSync(path.join(engineDir, glue), 'utf8'));
+  const proof = proveNetworkFree(
+    fs.readFileSync(path.join(engineDir, 'soffice.wasm')),
+    fs.readFileSync(path.join(engineDir, glue), 'utf8'),
+    fs.readFileSync(path.join(engineDir, 'adapter.cjs'), 'utf8'),
+  );
   const files: Record<string, string> = {};
   for (const f of [...parts, 'adapter.cjs'].sort()) files[f] = sha256(fs.readFileSync(path.join(engineDir, f)));
 

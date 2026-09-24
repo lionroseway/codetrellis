@@ -14,6 +14,11 @@ if (!dir) { console.error('usage: prove-network-free.ts <engine-dir>'); process.
 const gluePath = ['soffice.mjs', 'soffice.cjs'].map((f) => path.join(dir, f)).find((f) => fs.existsSync(f));
 if (!gluePath) { console.error(`no glue (soffice.mjs / soffice.cjs) in ${dir}`); process.exit(2); }
 
-const proof = proveNetworkFree(fs.readFileSync(path.join(dir, 'soffice.wasm')), fs.readFileSync(gluePath, 'utf8'));
+const adapterPath = path.join(dir, 'adapter.cjs');
+const proof = proveNetworkFree(
+  fs.readFileSync(path.join(dir, 'soffice.wasm')),
+  fs.readFileSync(gluePath, 'utf8'),
+  fs.existsSync(adapterPath) ? fs.readFileSync(adapterPath, 'utf8') : null,
+);
 console.log(JSON.stringify({ engine: dir, glue: path.basename(gluePath), ...proof }, null, 2));
 process.exit(proof.networkFree ? 0 : 1);
