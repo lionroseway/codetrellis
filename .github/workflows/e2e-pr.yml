@@ -95,6 +95,17 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Browser suite
         run: npx playwright test --reporter=list,html
+      - name: What each failing page showed
+        # The page snapshot Playwright writes beside every failure, in the log
+        # itself: readable wherever the log is, without downloading the report.
+        if: failure()
+        run: |
+          for f in test-results/*/error-context.md; do
+            [ -f "$f" ] || continue
+            echo "::group::$(dirname "$f")"
+            head -c 20000 "$f"
+            echo "::endgroup::"
+          done
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v7
