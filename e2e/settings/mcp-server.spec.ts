@@ -66,3 +66,79 @@ test.describe('Settings MCP server', () => {
     await expect(page.getByText('19432').first()).toBeVisible({ timeout: 3000 });
   });
 });
+
+/**
+ * Phase 31 §6.1 — "Add to Claude Desktop". The file work is main-process
+ * only (unit-tested in claude-desktop-config.test.ts); here the page is
+ * driven against a stand-in for that IPC, to prove the person sees the diff
+ * before anything is written and that a stale preview is shown again.
+ */
+test.describe('Add to Claude Desktop', () => {
+  const openMcp = async (page: import('@playwright/test').Page) => {
+    await gotoWithProject(page);
+    await page.locator('button[title*="Settings"]').click();
+    await page.getByRole('button', { name: 'MCP Server' }).click();
+  };
+
+  test('is not offered outside the desktop app', async ({ page }) => {
+    await openMcp(page);
+    await expect(page.getByTestId('mcp-config-snippet')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /Add to Claude Desktop/ })).toHaveCount(0);
+  });
+
+  test('shows the change first, writes only on Add, and re-shows a file that changed underneath', async ({ page }) => {
+    // The button needs a connector to offer. CI's checkout never builds one
+    // (`npm run build:connector`), and the entry itself is main's business,
+    // so the setup this page reads is given one.
+    await page.route('**/api/mcp/setup', async (route) => {
+      const response = await route.fetch();
+      const setup = await response.json();
+      setup.connector ??= {
+        command: '/Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis',
+        args: ['/Applications/CodeTrellis.app/Contents/Resources/connector/mcp-connector.cjs'],
+        env: { ELECTRON_RUN_AS_NODE: '1' },
+        config: { codetrellis: { command: '/Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis' } },
+        claudeCodeCommand: 'claude mcp add codetrellis -- /Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis',
+      };
+      await route.fulfill({ response, json: setup });
+    });
+    await page.addInitScript(() => {
+      const calls: string[] = [];
+      let previews = 0;
+      (window as unknown as { __cdCalls: string[] }).__cdCalls = calls;
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        claudeDesktop: {
+          preview: async () => {
+            calls.push('preview');
+            previews += 1;
+            return {
+              ok: true, status: 'add', exists: true, path: '/Users/me/Library/Application Support/Claude/claude_desktop_config.json',
+              beforeHash: previews === 1 ? 'a'.repeat(64) : 'b'.repeat(64),
+              diff: [{ op: ' ', text: '{' }, { op: '+', text: `  "codetrellis": { "command": "/Applications/CodeTrellis.app" }${previews > 1 ? ' ' : ''}` }, { op: ' ', text: '}' }],
+            };
+          },
+          apply: async (hash: string) => {
+            calls.push(`apply:${hash[0]}`);
+            return hash === 'a'.repeat(64)
+              ? { ok: false, changed: true, reason: "Claude Desktop's config changed after you looked at it. Here is the change again, against the file as it is now." }
+              : { ok: true, status: 'add', path: '/x/claude_desktop_config.json', backupPath: '/x/claude_desktop_config.before-codetrellis-1.json' };
+          },
+        },
+      };
+    });
+    await openMcp(page);
+    const panel = page.getByTestId('add-to-claude-desktop');
+    await panel.getByRole('button', { name: 'Add to Claude Desktop…' }).click();
+    await expect(panel.getByText('claude_desktop_config.json', { exact: false }).first()).toBeVisible();
+    await expect(panel.getByTestId('claude-desktop-diff')).toContainText('+   "codetrellis"');
+    expect(await page.evaluate(() => (window as unknown as { __cdCalls: string[] }).__cdCalls)).toEqual(['preview']);
+
+    // The file changed after the preview: nothing written, the new diff shown.
+    await panel.getByRole('button', { name: 'Add to Claude Desktop', exact: true }).click();
+    await expect(panel.getByText(/changed after you looked at it/)).toBeVisible();
+    await panel.getByRole('button', { name: 'Add to Claude Desktop', exact: true }).click();
+    await expect(panel.getByText(/Added\. Quit and reopen Claude Desktop/)).toBeVisible();
+    await expect(panel.getByText(/before-codetrellis-1\.json/)).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __cdCalls: string[] }).__cdCalls)).toEqual(['preview', 'apply:a', 'preview', 'apply:b']);
+  });
+});
