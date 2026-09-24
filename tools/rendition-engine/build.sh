@@ -51,13 +51,36 @@ fi
 source "$EMSDK/emsdk_env.sh" >/dev/null
 emcc --version | head -1
 
-# The stubs first: a stub that does not fit its call only fails at the final
-# link, hours in. Linked with memory past 2 GB, as LibreOffice's is, which is
-# what makes Emscripten wrap every pointer-taking import (stub-check.c).
+# The stubs first, twice, before hours of compiling:
+#  - linked plainly and RUN: every socket call and lookup must fail;
+#  - linked with LibreOffice's own link flags (pthreads proxying syscalls to
+#    the main thread, ASSERTIONS, memory past 2 GB — see the patch's
+#    EMSCRIPTEN_INTEL_GCC.mk) and PROVEN: the network proof reads that glue
+#    exactly as it will read the engine's, so a stub or a proof that does
+#    not fit fails here, in minutes, and not after the final link.
+# (stub-check.c. The proof needs the repository's node_modules; CI installs
+# them before this step and sets REQUIRE_STUB_PROOF.)
 log "Network stubs"
 emcc "$HERE/stub-check.c" -O1 -s ENVIRONMENT=node -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s WASM_BIGINT=1 \
   --js-library "$HERE/no-network.js" -o "$WORK/stub-check.mjs"
-"$EMSDK_NODE" --input-type=module -e "const m = await import('$WORK/stub-check.mjs'); await m.default();"
+printf "const m = await import('%s');\nawait m.default();\n" "$WORK/stub-check.mjs" > "$WORK/stub-check-run.mjs"
+"$EMSDK_NODE" "$WORK/stub-check-run.mjs" | tee "$WORK/stub-check.log"
+grep -qx 'every network call failed' "$WORK/stub-check.log"
+
+rm -rf "$WORK/stub-proof" && mkdir -p "$WORK/stub-proof"
+emcc "$HERE/stub-check.c" -O1 -pthread -s PROXY_TO_PTHREAD=1 -s ASSERTIONS=1 -s FORCE_FILESYSTEM=1 -s EXIT_RUNTIME=0 \
+  -s ENVIRONMENT=node -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s WASM_BIGINT=1 \
+  --js-library "$HERE/no-network.js" -o "$WORK/stub-proof/soffice.mjs" 2>&1 | grep -v 'pthreads-mem-growth\|issues/1271' || true
+test -f "$WORK/stub-proof/soffice.wasm"
+cp "$HERE/runtime/adapter.cjs" "$WORK/stub-proof/adapter.cjs"
+REPO="$(cd "$HERE/../.." && pwd)"
+if [ -x "$REPO/node_modules/.bin/tsx" ]; then
+  (cd "$REPO" && node_modules/.bin/tsx tools/rendition-engine/prove-network-free.ts "$WORK/stub-proof")
+elif [ "${REQUIRE_STUB_PROOF:-}" = "1" ]; then
+  echo "the network proof needs the repository's node_modules (npm ci)" >&2; exit 1
+else
+  log "Network proof on the stubs skipped: no node_modules (run npm ci to include it)"
+fi
 
 # ── LibreOffice source, pinned ───────────────────────────────────────────
 log "LibreOffice $LIBREOFFICE_COMMIT"

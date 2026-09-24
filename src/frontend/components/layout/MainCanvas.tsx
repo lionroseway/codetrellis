@@ -49,6 +49,12 @@ const edgeTypes = {
 };
 
 const DIRTY_STATE_CLEAR_CONFIRMATIONS = 3;
+
+/** Structurally equal. Cheap next to a layout, which is what a new identity costs here. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
 const recentCommitsCache = new Map<string, Array<{
   commitHash: string;
   shortCommitHash: string;
@@ -96,10 +102,17 @@ export function MainCanvas() {
   } | null>(null);
 
   // Dependency edges from backend
-  const [depEdges, setDepEdges] = useState<DependencyEdge[]>([]);
+  const [depEdges, setDepEdgesRaw] = useState<DependencyEdge[]>([]);
+  // A new array, even an identical one, re-runs the whole layout — a
+  // synchronous force simulation. The working-tree poll refetches these
+  // every 10s whenever the tree is dirty, which on a large project froze
+  // the window for seconds at a time, behind the plan workspace too.
+  const setDepEdges = useCallback((next: DependencyEdge[]) => {
+    setDepEdgesRaw((prev) => (sameJson(prev, next) ? prev : next));
+  }, []);
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [symbolsMap, setSymbolsMap] = useState<Map<string, FileSymbol[]>>(new Map());
-  const [diffData, setDiffData] = useState<{
+  const [diffData, setDiffDataRaw] = useState<{
     addedFiles: string[];
     removedFiles: string[];
     modifiedFiles: string[];
@@ -117,6 +130,14 @@ export function MainCanvas() {
       shortCommitHash?: string | null;
     } | null;
   } | null>(null);
+  // Same reason as `setDepEdges`: the diff feeds the layout, and the poll
+  // rebuilds it as a fresh object on every tick.
+  const setDiffData = useCallback((update: typeof diffData | ((prev: typeof diffData) => typeof diffData)) => {
+    setDiffDataRaw((prev) => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      return sameJson(prev, next) ? prev : next;
+    });
+  }, []);
   const [snapshotDiff, setSnapshotDiff] = useState<{
     addedFiles: string[];
     removedFiles: string[];
@@ -355,9 +376,18 @@ export function MainCanvas() {
   // effect below has a reason to run again. Without it, `[scanStatus,
   // root]` never change while you sit on a project and a single empty
   // result is permanent.
+  //
+  // Only for THIS window's project. The event goes to every window, and
+  // the backend holds one project's graph at a time — so a window on
+  // project A that refetched when B was scanned drew B's graph under A's
+  // name, and on a large B spent seconds of main thread doing it.
   const [graphDataToken, setGraphDataToken] = useState(0);
   useEffect(() => {
-    const onChanged = () => setGraphDataToken((n) => n + 1);
+    const onChanged = (e: Event) => {
+      const changed = (e as CustomEvent<{ projectPath?: string } | undefined>).detail?.projectPath;
+      if (changed && changed !== useProjectStore.getState().root) return;
+      setGraphDataToken((n) => n + 1);
+    };
     window.addEventListener('graph-data-changed', onChanged);
     return () => window.removeEventListener('graph-data-changed', onChanged);
   }, []);
@@ -554,7 +584,7 @@ export function MainCanvas() {
         }
       })
       .catch(() => {});
-  }, [scanStatus, root, setProjectGitStatus, baselineMode, baselineCommitHash, captureBaseline, bumpRefreshVersion]);
+  }, [scanStatus, root, setProjectGitStatus, setDepEdges, setDiffData, baselineMode, baselineCommitHash, captureBaseline, bumpRefreshVersion]);
 
   useEffect(() => {
     if (scanStatus !== 'ready' || !root) return;

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { proveNetworkFree, removedGlobals } from './network-proof';
+import { proveNetworkFree, removedGlobals, withoutSymbolLists } from './network-proof';
 
 /** A WebAssembly module that imports the named functions from `env`. */
 function moduleImporting(names: string[]): Uint8Array {
@@ -75,4 +75,34 @@ test('Emscripten\'s dead fetch() and XMLHttpRequest pass only when the adapter t
   assert.equal(removedGlobals(adapter.replace('  withoutNetworkGlobals();\n', '')).size, 0);
   // A socket filesystem is never accepted, whatever the adapter does.
   assert.deepEqual(proveNetworkFree(wasm, `${glue}\nvar SOCKFS = {};`, adapter).failures, ['the glue contains SOCKFS']);
+});
+
+test('with pthreads a stub is proxied to the main thread, and is still a stub; a proxy to anything else is not', () => {
+  // What Emscripten emits with PROXY_TO_PTHREAD and memory past 2 GB, as LibreOffice links.
+  const proxied = `function ___syscall_connect(fd, addr, addrlen, d1, d2, d3) {
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(5, 0, 1, fd, addr, addrlen, d1, d2, d3);
+  addr >>>= 0;
+  addrlen >>>= 0;
+  return -40;
+}
+function ___syscall_listen(fd, backlog, d1, d2, d3, d4) {
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(10, 0, 1, fd, backlog, d1, d2, d3, d4);
+  return -57;
+}`;
+  const ok = proveNetworkFree(moduleImporting(['__syscall_connect', '__syscall_listen']), proxied);
+  assert.equal(ok.networkFree, true, ok.failures.join('; '));
+  assert.deepEqual(ok.stubs, { __syscall_connect: -40, __syscall_listen: -57 });
+
+  const elsewhere = proxied.replace('return proxyToMainThread(10, 0, 1, fd, backlog, d1, d2, d3, d4);', 'return sendToSocket(fd);');
+  assert.deepEqual(proveNetworkFree(moduleImporting(['__syscall_listen']), elsewhere).failures, ['__syscall_listen is imported and is not a no-network stub']);
+});
+
+test('SOCKFS named in ASSERTIONS\' symbol lists is a string, not a socket filesystem', () => {
+  const lists = `var missingLibrarySymbols = [ "writeI53ToI64", "SOCKFS" ];\nvar unexportedSymbols = [ "run",\n  "SOCKFS", "addOnPostRun" ];`;
+  assert.equal(proveNetworkFree(moduleImporting(['__syscall_socket']), `${STUBBED}\n${lists}`).networkFree, true);
+  // The real thing still fails, list or no list.
+  assert.deepEqual(proveNetworkFree(moduleImporting(['__syscall_socket']), `${STUBBED}\n${lists}\nvar SOCKFS = { mount() {} };`).failures, ['the glue contains SOCKFS']);
+  // A list with anything but names in it is left in place, and read.
+  const tampered = 'var unexportedSymbols = [ "run", SOCKFS.mount() ];';
+  assert.equal(withoutSymbolLists(tampered), tampered);
 });
