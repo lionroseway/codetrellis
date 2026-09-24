@@ -565,6 +565,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!read.ok) return { content: [{ type: 'text' as const, text: read.reason }], isError: true };
 
       const where = read.kind === 'text' ? read.reply.where : null;
+      const summary = `Read ${read.name}${where ? ` — ${where}` : ''}`;
       const item = deps.planItemService.getItem(read.itemUid);
       let n = 0;
       if (item) {
@@ -574,7 +575,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           itemUid: item.uid,
           eventType: 'material_read',
           afterState: { attachmentUid: attachment_uid, name: read.name, locator: locator ?? null, where },
-          summary: `Read ${read.name}${where ? ` — ${where}` : ''}`,
+          summary,
           author: id.author,
           authorType: id.authorType,
         });
@@ -591,12 +592,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
         _meta: { broadcast: true, subscribers: n },
       };
       if (read.kind === 'image') {
-        return { content: [
+        return { _meta: { summary }, content: [
           { type: 'text' as const, text: JSON.stringify(header, null, 2) },
           { type: 'image' as const, data: read.base64, mimeType: read.mimeType },
         ] };
       }
-      return { content: [
+      return { _meta: { summary }, content: [
         { type: 'text' as const, text: JSON.stringify(header, null, 2) },
         { type: 'text' as const, text: quoteMaterial(read.name, read.reply.format, read.reply.sections) },
       ] };
@@ -723,7 +724,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         );
         const n = broadcastCriteria(deps, criterion.itemUid);
         deps.saveNow(() => deps.exportDatabase());
-        return resultWithMeta(slimCriterion(criterion), n);
+        // The Timeline names the criterion, not its uid (server.ts, summary).
+        return { ...resultWithMeta(slimCriterion(criterion), n), _meta: { summary: `Offered evidence for ${quoteText(criterion.text)}` } };
       } catch (err) {
         return criterionError(deps, err);
       }
@@ -755,10 +757,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
           args.criterion_uid,
           args.evidence?.map((e) => ({ attachmentUid: e.attachment_uid, locator: e.locator })),
         );
-        return { content: [{ type: 'text' as const, text: JSON.stringify({
-          ok: result.ok,
-          findings: result.findings.map((f) => ({ status: f.status, message: f.message })),
-        }, null, 2) }] };
+        const checked = deps.criteriaService.getCriterion(args.criterion_uid);
+        return {
+          ...(checked ? { _meta: { summary: `Checked its evidence for ${quoteText(checked.text)}${result.ok ? ' — passes' : ' — not yet'}` } } : {}),
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            ok: result.ok,
+            findings: result.findings.map((f) => ({ status: f.status, message: f.message })),
+          }, null, 2) }],
+        };
       } catch (err) {
         return criterionError(deps, err);
       }
@@ -1475,6 +1481,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
 }
 
 // ── criteria helpers ──────────────────────────────────────────────────
+
+/** A criterion's words, quoted and short, for a Timeline sentence. */
+function quoteText(text: string): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return `"${t.length > 60 ? `${t.slice(0, 57)}…` : t}"`;
+}
 
 type AgentCriterion = ReturnType<ToolDeps['criteriaService']['listCriteria']>[number];
 

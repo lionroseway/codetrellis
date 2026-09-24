@@ -135,14 +135,27 @@ export function runReader(
     }), timeoutMs);
     child.once('message', (reply: ReadReply) => done(reply));
     child.once('error', (err) => done({ ok: false, reason: `${req.name} could not be read (${err.message})` }));
-    child.once('exit', () => {
-      // Let stderr drain: the heap-limit message arrives just before the exit.
-      setImmediate(() => done({
-        ok: false,
-        reason: /heap limit|out of memory/i.test(stderr)
-          ? `${req.name} needs more memory to read than CodeTrellis allows. Ask for a smaller part of it.`
-          : `${req.name} could not be read (the reader stopped)`,
-      }));
+    child.once('exit', (code, signal) => {
+      // 'exit' can arrive before the reply the child sent just before it: a
+      // message still on the IPC channel is delivered before 'disconnect', so
+      // only a child that has gone AND whose channel is empty has failed. The
+      // wait is capped, and stderr (the heap-limit message) drains meanwhile.
+      const judge = () => setImmediate(() => {
+        if (settled) return;
+        const outOfMemory = /heap limit|out of memory/i.test(stderr);
+        if (!outOfMemory) {
+          console.warn(`[reader] stopped without answering (code ${code}, signal ${signal}): ${stderr.trim().split('\n').slice(-5).join(' | ') || 'no output'}`);
+        }
+        done({
+          ok: false,
+          reason: outOfMemory
+            ? `${req.name} needs more memory to read than CodeTrellis allows. Ask for a smaller part of it.`
+            : `${req.name} could not be read (the reader stopped)`,
+        });
+      });
+      if (!child.connected) { judge(); return; }
+      const cap = setTimeout(judge, 2_000);
+      child.once('disconnect', () => { clearTimeout(cap); judge(); });
     });
     child.send({ ...req, bytes: req.bytes });
   });

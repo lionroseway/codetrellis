@@ -162,14 +162,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
               '"mixed" / absent = the historical default; plans and code coexist here. ' +
               'The UI uses this to soften "no plans here yet" nudges in code repos that delegate planning elsewhere.',
           ),
+        defaultSurface: z
+          .enum(['graph', 'code', 'brief'])
+          .optional()
+          .describe(
+            'Phase 31 — where opening this folder lands. "brief" for a folder of documents (an analyst\'s work: ' +
+              'tasks, materials, what good looks like), "code" for the code reader, "graph" (the default) for the dependency graph.',
+          ),
       },
     },
-    async ({ project_root, plans, channels, sensors, repoRole }) => {
+    async ({ project_root, plans, channels, sensors, repoRole, defaultSurface }) => {
       const patch: any = {};
       if (plans) patch.plans = plans;
       if (channels) patch.channels = channels;
       if (sensors) patch.sensors = sensors;
       if (repoRole !== undefined) patch.repoRole = repoRole;
+      if (defaultSurface !== undefined) patch.defaultSurface = defaultSurface;
       const updated = deps.projectConfigService.updateProjectConfig(project_root, patch);
       deps.broadcast('project-config-changed', { projectRoot: project_root, config: updated });
       return {

@@ -107,6 +107,11 @@ function ViewerDialog({ view }: { view: ArtefactView }) {
       aria-modal="true"
       aria-label="Artefact viewer"
       data-testid="artefact-viewer"
+      // What the viewer SHOWS, for ui_ready (Phase 31 §5): the file once its
+      // details have arrived, and the place it was opened at.
+      data-artefact={meta ? view.uid : undefined}
+      data-artefact-name={meta ? name : undefined}
+      data-artefact-locator={meta && view.locator ? JSON.stringify(view.locator) : undefined}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
       onClick={close}
     >

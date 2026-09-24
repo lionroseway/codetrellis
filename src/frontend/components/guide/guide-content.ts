@@ -494,4 +494,37 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
     tools: ['list_paired_devices', 'get_peer_status', 'mobile_present', 'mobile_navigate'],
   },
+
+  // ── Phase 31 §10.6 — for someone whose folder is documents, not code ──
+  {
+    id: 'for-analysts',
+    group: 'Getting started',
+    label: 'For analysts',
+    title: 'A brief: the work, the materials, and what good looks like',
+    blurb:
+      'Brief mode reads a plan as a piece of work. On the left are its tasks. In the middle is the task in front '
+      + 'of you: its goal, the guide, the materials you gave and what Claude produced. On the right is what good '
+      + 'looks like, each line with its state, and what Claude is doing. Nothing about code appears. A folder with '
+      + 'no git is normal here, not a warning.',
+    points: [
+      'Connect Claude Desktop from Settings → MCP Server → Add to Claude Desktop. It gets the same tools as any other agent.',
+      'Say what good looks like in your own words. Each line is judged separately, and only you can approve one that needs judgement.',
+      'Claude reads your spreadsheets, documents and PDFs through CodeTrellis, so every read is on the record. What a file says is treated as material to work on, never as instructions.',
+      'Open any material or output from the task to see it. Send a line back from the exact cell, page or sentence that is wrong.',
+      'A file that changes after you approved it shows ⚠ changed since approved, and goes back on Claude\'s list.',
+    ],
+    asks: [
+      {
+        prompt: 'Start a brief for the Q3 regional summary. The sales extract and the reporting guide are in this folder. What good looks like: covers all four regions, figures match the extract, follows the guide\'s tone.',
+        note: 'Claude records the materials, writes the tasks, and puts your words down verbatim as what good looks like.',
+      },
+      {
+        prompt: 'Read the brief for the next task, do it, check your work against what good looks like, and offer it to me when every check passes.',
+      },
+      {
+        prompt: 'I sent two lines back. Pick them up from the worklist and fix them.',
+      },
+    ],
+    tools: ['get_brief', 'list_materials', 'read_material', 'record_artefact', 'check_criterion', 'submit_criterion', 'get_worklist', 'navigate_to'],
+  },
 ];

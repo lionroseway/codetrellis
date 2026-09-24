@@ -80,9 +80,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'navigate_to',
     {
-      description: 'Navigate the CodeTrellis UI to a specific view. Use this to show the user what you are working on — open the plan workspace, switch to graph view, or enable split view.',
+      description: 'Navigate the CodeTrellis UI to a specific view. Use this to show the user what you are working on — open the plan workspace, switch to graph view, enable split view, open the Brief on a task, or open a file you cite at the place you cite.',
       inputSchema: {
-        target: z.enum(['plan', 'graph', 'split', 'timeline', 'code']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open, "code" = the code reader on a file'),
+        target: z.enum(['plan', 'graph', 'split', 'timeline', 'code', 'brief', 'artefact']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open, "code" = the code reader on a file, "brief" = the Brief (the plan as tasks, materials and what good looks like), "artefact" = a recorded file in the viewer, at a locator'),
         plan_uid: z.string().optional().describe('If navigating to plan/split/timeline, which plan to show. If omitted, keeps the current active plan.'),
         // `code` was missing entirely, so an agent could show someone the
         // graph, a plan, a split and a timeline — and never the code,
@@ -90,10 +90,27 @@ export function register(server: McpServer, deps: ToolDeps): void {
         // "look at what changed" could not make that happen.
         file_path: z.string().optional().describe('For target "code": absolute path of the file to open.'),
         line: z.number().int().optional().describe('For target "code": line to scroll to and mark.'),
+        // Phase 31 §5 — an agent that says "look at the figure I cited" can
+        // put it on screen, and one working a brief can show the task.
+        item_uid: z.string().optional().describe('For target "brief": the task to show.'),
+        attachment_uid: z.string().optional().describe('For target "artefact": the recorded file to open (from get_brief or record_artefact).'),
+        locator: z.object({
+          sheet: z.string().optional(),
+          range: z.string().optional(),
+          page: z.union([z.number().int(), z.string()]).optional(),
+          lines: z.union([z.number().int(), z.string()]).optional(),
+          text: z.string().optional(),
+          t: z.union([z.number(), z.string()]).optional(),
+        }).strict().optional().describe('For target "artefact": where in the file — {sheet, range}, {page}, {lines}, {text} or {t}.'),
       },
     },
-    async ({ target, plan_uid, file_path, line }) => {
-      deps.broadcast('ui-navigate', { target, planUid: plan_uid, filePath: file_path, line });
+    async ({ target, plan_uid, file_path, line, item_uid, attachment_uid, locator }) => {
+      if (target === 'artefact' && !attachment_uid) {
+        return { content: [{ type: 'text' as const, text: 'target "artefact" needs attachment_uid' }], isError: true };
+      }
+      deps.broadcast('ui-navigate', {
+        target, planUid: plan_uid, filePath: file_path, line, itemUid: item_uid, attachmentUid: attachment_uid, locator: locator ?? null,
+      });
       return { content: [{ type: 'text' as const, text: `Navigated to ${target}${plan_uid ? ` (plan ${plan_uid})` : ''}` }] };
     },
   );

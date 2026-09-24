@@ -264,6 +264,20 @@ export function useWebSocket() {
               } else {
                 useUiStore.getState().setWorkspaceMode('code');
               }
+            } else if (target === 'brief') {
+              // Phase 31 §5 — the Brief, on a task when one is named.
+              (async () => {
+                if (planUid) await usePlanStore.getState().setActivePlan(planUid);
+                useUiStore.getState().setWorkspaceMode('brief');
+                const itemUid = payload?.itemUid as string | undefined;
+                if (itemUid) usePlanItemsStore.getState().selectItem(itemUid);
+              })();
+            } else if (target === 'artefact') {
+              // A recorded file in the viewer, at the place the agent cites.
+              const attachmentUid = payload?.attachmentUid as string | undefined;
+              if (attachmentUid) {
+                void import('../lib/open-artefact-at').then((m) => m.openArtefactAt(attachmentUid, payload?.locator ?? null));
+              }
             } else if (target === 'split') {
               (async () => {
                 if (planUid) {
@@ -667,6 +681,7 @@ export function useWebSocket() {
                 let scanStatus = 'unknown';
                 let graphNodes = 0;
                 let openFile: string | null = null;
+                let openArtefact: { uid: string; name: string | null; locator: unknown } | null = null;
                 const verdicts: Record<string, number> = {};
                 const visibleVerdicts: Record<string, number> = {};
                 try {
@@ -694,6 +709,18 @@ export function useWebSocket() {
                   // file and the screen shows the old one — the precise
                   // disagreement this check exists to catch.
                   openFile = document.querySelector('[data-code-file]')?.getAttribute('data-code-file') ?? null;
+                  // Phase 31 §5 — the recorded file the viewer is showing, and
+                  // where, read from the viewer's own attributes as openFile is.
+                  const viewer = document.querySelector('[data-artefact]');
+                  if (viewer) {
+                    let locator: unknown = null;
+                    try { locator = JSON.parse(viewer.getAttribute('data-artefact-locator') ?? 'null'); } catch { /* none */ }
+                    openArtefact = {
+                      uid: viewer.getAttribute('data-artefact') ?? '',
+                      name: viewer.getAttribute('data-artefact-name'),
+                      locator,
+                    };
+                  }
                   // And what the reader actually marked on it. The right
                   // file with no marks is the failure a screenshot hides
                   // best: it looks like a clean file.
@@ -733,6 +760,7 @@ export function useWebSocket() {
                       scanStatus,
                       graphNodes,
                       openFile,
+                      openArtefact,
                       verdicts,
                       visibleVerdicts,
                     }),
