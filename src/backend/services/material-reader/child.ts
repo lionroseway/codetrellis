@@ -11,5 +11,8 @@ import { readMaterialBytes, type ReadRequest } from './read';
 process.once('message', (req: ReadRequest) => {
   readMaterialBytes(req)
     .catch((err: unknown) => ({ ok: false as const, reason: `The file could not be read (${(err as Error).message})` }))
-    .then((reply) => process.send?.(reply, () => process.exit(0)));
+    // Disconnect once the reply is flushed, and let the process end on its
+    // own: the host kills it on reply anyway, and exiting here could beat the
+    // reply to the parent.
+    .then((reply) => process.send?.(reply, () => process.disconnect()));
 });
