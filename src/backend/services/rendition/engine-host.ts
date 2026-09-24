@@ -66,11 +66,13 @@ interface Pending {
 
 /**
  * The warm-up document: two lines of RTF. The first conversion after the
- * engine starts hangs about one time in two (measured on the spike engine,
- * whatever the document — a start-up race, not the document), and was
- * costing the first person to open a file a 60-second wait for the retry.
- * The host converts this first, under a short deadline, and replaces an
- * engine that hangs on it — so real conversions start on a settled engine.
+ * engine started used to hang, whatever the document: LibreOffice's own
+ * main() was starting on a worker and racing the adapter's start-up, and
+ * the adapter now stops it running (`noInitialRun`). The warm-up stays as
+ * the check that a new engine converts at all before it takes real work —
+ * about half a second — and an engine that hangs on it is still replaced,
+ * once, so a start-up problem we have not met yet costs 20s, not a person's
+ * first document.
  */
 const WARM_UP = new TextEncoder().encode('{\\rtf1\\ansi CodeTrellis warm-up.\\par}');
 
