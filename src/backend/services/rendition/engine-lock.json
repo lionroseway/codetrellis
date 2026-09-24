@@ -1,6 +1,14 @@
 {
-  "version": null,
-  "networkFree": false,
-  "archive": null,
-  "files": {}
+  "version": "24.8-d1c9e0e4e1-fb2575f33e82",
+  "networkFree": true,
+  "archive": {
+    "url": "https://github.com/lionroseway/codetrellis/releases/download/rendition-engine-24.8-d1c9e0e4e1-fb2575f33e82/rendition-engine-24.8-d1c9e0e4e1-fb2575f33e82.tar.gz",
+    "sha256": "b751353127f71c75f605e180963eff9fae52351c02994d8c4d45732fde18aa14"
+  },
+  "files": {
+    "adapter.cjs": "3385951f56a3c5b1ad8a689eac16d66cf631a0b70da9f1c41853e74a7afde831",
+    "soffice.data": "5fa78496011c4c2392e736a4cb869a3964e62b8138e3e70f4149bdb8945554d9",
+    "soffice.mjs": "22c4c073474ee2029dd55f32ee46ce0e40ccbc8eb0f078abd48a63233456e395",
+    "soffice.wasm": "d6b4f176a73925db14ea53bec8525e4fc3b92def1e0cb73b0ed84cf698349222"
+  }
 }

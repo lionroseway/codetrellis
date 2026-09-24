@@ -114,7 +114,16 @@ export default defineConfig({
     {
       command: 'npx tsx src/backend/index.ts',
       port: 3001,
-      env: { CODETRELLIS_DATA_DIR: E2E_DATA_DIR, CODETRELLIS_CAPABILITY_TOKEN: E2E_TOKEN },
+      env: {
+        CODETRELLIS_DATA_DIR: E2E_DATA_DIR,
+        CODETRELLIS_CAPABILITY_TOKEN: E2E_TOKEN,
+        // No conversion engine unless a run asks for one (pw.local.config.ts
+        // does). From source the backend otherwise uses resources/rendition/
+        // engine, which packaging fills with the pinned engine — so the same
+        // specs saw no engine in CI and a real one on a machine that had
+        // packaged, and the "without the engine" specs failed only there.
+        CODETRELLIS_RENDITION_ENGINE: process.env.CODETRELLIS_RENDITION_ENGINE || path.join(E2E_DATA_DIR, 'no-rendition-engine'),
+      },
       // Reusing whatever is on :3001 meant testing against the developer's
       // dev backend and its real data, with a token this run does not
       // hold. A busy port now fails loudly; opt back in explicitly.
