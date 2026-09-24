@@ -23,13 +23,13 @@ test('without a usable order, the file names\' numbers decide, numerically', () 
   assert.deepEqual(slideOrder(dangling, RELS, parts), ['ppt/slides/slide1.xml', 'ppt/slides/slide2.xml', 'ppt/slides/slide10.xml']);
 });
 
-test('the title placeholder is the title; every other paragraph is text, tables included', () => {
+test('the title placeholder is the title; every other paragraph is text, and a table row is one line', () => {
   const xml = `<p:sld><p:cSld><p:spTree>
     <p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>Q3 </a:t></a:r><a:r><a:t>results</a:t></a:r></a:p></p:txBody></p:sp>
     <p:sp><p:nvSpPr><p:nvPr><p:ph idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:p><a:pPr lvl="0"/><a:r><a:t>Revenue &amp; margin</a:t></a:r></a:p><a:p/><a:p><a:r><a:t xml:space="preserve">Up </a:t></a:r><a:br/><a:r><a:t>12%</a:t></a:r></a:p></p:txBody></p:sp>
-    <p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>North</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>
+    <p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Region</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Q3</a:t></a:r></a:p></a:txBody></a:tc></a:tr><a:tr><a:tc><a:txBody><a:p><a:r><a:t>North</a:t></a:r></a:p></a:txBody></a:tc><a:tc/><a:tc><a:txBody><a:p><a:r><a:t>120</a:t></a:r></a:p></a:txBody></a:tc></a:tr><a:tr><a:tc/></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>
   </p:spTree></p:cSld></p:sld>`;
-  assert.deepEqual(slideText(2, xml), { n: 2, title: 'Q3 results', paragraphs: ['Revenue & margin', 'Up 12%', 'North'] });
+  assert.deepEqual(slideText(2, xml), { n: 2, title: 'Q3 results', paragraphs: ['Revenue & margin', 'Up 12%', 'Region · Q3', 'North ·  · 120'] });
 });
 
 test('a slide with no title placeholder has no title, and its words are still read', () => {

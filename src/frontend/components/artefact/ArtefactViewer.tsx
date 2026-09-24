@@ -857,10 +857,11 @@ function PptxView({ uid, meta, locator, selection, onSelect }: {
     return () => { URL.revokeObjectURL(url); setThumb(null); };
   }, [deck]);
 
+  // Again once the thumbnail is in: it lands above the slides and would push the cited one away.
   useEffect(() => {
     if (cited === null) return;
     holder.current?.querySelector(`[data-page="${cited}"]`)?.scrollIntoView({ block: 'center' });
-  }, [cited]);
+  }, [cited, thumb]);
 
   if (!deck) return <p className="p-6 text-[12px] text-foreground-subtle">Reading the deck…</p>;
   if (!deck.ok) return <Card title={meta.path ?? meta.name} lines={[deck.reason]} icon />;
@@ -883,7 +884,12 @@ function PptxView({ uid, meta, locator, selection, onSelect }: {
       </p>
       {thumb && (
         <figure className="mb-5">
-          <img src={thumb} alt="The deck's first slide, as saved in the file" className="max-w-xs rounded border border-white/10" />
+          <img
+            src={thumb}
+            alt="The deck's first slide, as saved in the file"
+            onLoad={() => { if (cited !== null) holder.current?.querySelector(`[data-page="${cited}"]`)?.scrollIntoView({ block: 'center' }); }}
+            className="max-w-xs rounded border border-white/10"
+          />
           <figcaption className="text-[10.5px] text-foreground-subtle mt-1">The first slide, as PowerPoint saved it in the file.</figcaption>
         </figure>
       )}

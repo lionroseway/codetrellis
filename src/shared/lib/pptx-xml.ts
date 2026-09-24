@@ -13,7 +13,7 @@ export interface SlideText {
   /** 1-based, in presentation order. */
   n: number;
   title: string | null;
-  /** Every other paragraph with text, in document order: body, tables, shapes. */
+  /** Every other paragraph with text, in document order: body and shapes; a table row is one line. */
   paragraphs: string[];
 }
 
@@ -65,9 +65,16 @@ export function slideText(n: number, slideXml: string): SlideText {
   for (const m of slideXml.matchAll(/<p:(sp|graphicFrame)\b[\s\S]*?<\/p:\1>/g)) {
     const shape = m[0];
     const isTitle = /<p:ph\b[^>]*\btype="(title|ctrTitle)"/.test(shape);
-    const texts = Array.from(shape.matchAll(/<a:p\b[\s\S]*?<\/a:p>|<a:p\/>/g))
+    const paragraphsOf = (xml: string) => Array.from(xml.matchAll(/<a:p\/>|<a:p(?:\s[^>]*[^/])?>[\s\S]*?<\/a:p>/g))
       .map((p) => paragraphText(p[0]))
       .filter(Boolean);
+    // A table reads as rows, one line each, its cells in order: "EMEA · 107 · 120".
+    const rows = Array.from(shape.matchAll(/<a:tr(?:\s[^>]*)?>[\s\S]*?<\/a:tr>/g));
+    const texts = rows.length > 0
+      ? rows
+        .map((r) => Array.from(r[0].matchAll(/<a:tc(?:\s[^>]*)?\/>|<a:tc(?:\s[^>]*[^/])?>[\s\S]*?<\/a:tc>/g)).map((c) => paragraphsOf(c[0]).join(' ')).join(' · '))
+        .filter((line) => line.replace(/[\s·]/g, '') !== '')
+      : paragraphsOf(shape);
     if (isTitle && title === null && texts.length > 0) title = texts.join(' ');
     else paragraphs.push(...texts);
   }
