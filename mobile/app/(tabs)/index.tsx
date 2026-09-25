@@ -6,7 +6,7 @@
  * from the Zustand store (populated from the v2 snapshot).
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   useActiveProject,
   useRecentProjects,
@@ -27,6 +27,7 @@ import {
   useSnapshot,
 } from '../../lib/store';
 import { rpc } from '../../lib/rpc';
+import { listAwaiting, type AwaitingEntry } from '../../lib/approvals';
 
 export default function HomeTab() {
   const router = useRouter();
@@ -48,6 +49,17 @@ export default function HomeTab() {
 
   const [openingProject, setOpeningProject] = useState<string | null>(null);
 
+  // Phase 31 §12 — work waiting for this person's approval. Re-read when
+  // the tab comes into view and whenever the count of decision notices
+  // moves (an agent submitted, or an approval went stale).
+  const [awaiting, setAwaiting] = useState<AwaitingEntry[]>([]);
+  const refreshAwaiting = useCallback(() => {
+    if (connState !== 'connected') return;
+    listAwaiting().then(setAwaiting).catch(() => undefined);
+  }, [connState]);
+  useFocusEffect(refreshAwaiting);
+  useEffect(refreshAwaiting, [refreshAwaiting, needDecision.length]);
+
   const openProject = useCallback(async (projectPath: string) => {
     setOpeningProject(projectPath);
     try {
@@ -65,7 +77,8 @@ export default function HomeTab() {
     deviationCounts.pending > 0 ||
     stuckEvents.length > 0 ||
     needDecision.length > 0 ||
-    pendingInputs.length > 0;
+    pendingInputs.length > 0 ||
+    awaiting.length > 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -132,6 +145,30 @@ export default function HomeTab() {
       {hasAttention && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>NEEDS ATTENTION</Text>
+
+          {awaiting.length > 0 && (
+            <TouchableOpacity
+              style={[styles.attentionCard, styles.attentionApproval]}
+              onPress={() => {
+                const only = awaiting.length === 1 ? awaiting[0] : null;
+                if (only) {
+                  router.push(`/approval?criterionUid=${encodeURIComponent(only.uid)}&itemUid=${encodeURIComponent(only.itemUid)}`);
+                } else {
+                  router.push('/approvals');
+                }
+              }}
+            >
+              <Text style={styles.attentionIcon}>✓</Text>
+              <View style={styles.attentionBody}>
+                <Text style={styles.attentionTitle}>
+                  {awaiting.length} waiting for your approval
+                </Text>
+                <Text style={styles.attentionSub} numberOfLines={1}>
+                  {awaiting[0]?.text}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
 
           {deviationCounts.pending > 0 && (
             <TouchableOpacity
@@ -428,6 +465,9 @@ const styles = StyleSheet.create({
   },
   attentionDecision: {
     borderColor: '#8b5cf640',
+  },
+  attentionApproval: {
+    borderColor: '#22c55e50',
   },
   attentionInput: {
     borderColor: '#3b82f640',

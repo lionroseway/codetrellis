@@ -43,6 +43,7 @@ Routes are file-based under `mobile/app/`, with `_layout.tsx` driving a Stack at
 - `terminal-detail` — remote PTY via xterm.js
 - `event-detail`, `changes`, `graph-file-detail` — event/diff viewers
 - `input-request` *(modal)* — user input requested by an agent
+- `approvals`, `approval` — work waiting on the person, and approving or sending back one criterion (Phase 31 §12; see below)
 - `body-editor` *(modal)* — content editor
 - `connection-switcher` *(modal)* — switch between paired desktops
 - `doc-viewer` — document rendering
@@ -56,6 +57,24 @@ The mobile app does not speak HTTP to the desktop. All communication is over Web
 - `mobile/lib/connection.ts` — connection lifecycle, channel routing, MCP command dispatch.
 - `mobile/lib/rpc.ts` — JSON-RPC request/response correlation by id; default 30s timeout, user-tunable in Settings.
 - `mobile/lib/bridge.ts` — forwards state snapshots/patches into an embedded WebView; captures `postMessage` events back.
+
+## Approving from the phone (Phase 31 §12)
+
+The person can approve an agent's work, or send it back, from the phone. How it fits together:
+
+- **Where it starts.** A push titled "Approval needed" carries `criterionUid` and `itemUid`, and `routeForNotification` opens `/approval` directly. The home tab's "waiting for your approval" card and an item's CRITERIA section open the same screen.
+- **What it calls.** `mobile/lib/approvals.ts` wraps four RPCs:
+  - `criteria.awaiting` (read);
+  - `criteria.list` (read);
+  - `criterion.decide` (write — it also needs a pairing confirmed on the desktop, because the sign-off is recorded as the person's);
+  - `artefact.preview` (files).
+  The desktop half is `src/backend/services/mobile-approvals.ts`.
+- **How previews arrive.** They are streamed, not returned, because one control message is capped at 64 KB. The phone picks a transfer id, and the desktop sends `preview.chunk` messages under it to that phone only. `mobile/lib/preview-transfer.ts` takes chunks only for ids it is waiting on, and it fails a transfer that changes its declared shape, passes its caps, or stalls.
+- **What a preview shows.** It is what `read_material` reads, at the cited place:
+  - a sheet's cells, with context rows and columns and the cited cells marked;
+  - a document's page;
+  - lines of a file;
+  - or an image, which Electron scales down for the phone.
 
 ## State sync
 

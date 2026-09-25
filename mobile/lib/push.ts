@@ -168,6 +168,9 @@ export interface NotificationData {
   planUid?: string;
   requestId?: string;  // input request id
   eventType?: string;
+  /** Phase 31 §12 — a notice about a criterion opens its approval. */
+  criterionUid?: string;
+  itemUid?: string;
 }
 
 function extract(data: Record<string, unknown> | undefined): NotificationData {
@@ -177,11 +180,18 @@ function extract(data: Record<string, unknown> | undefined): NotificationData {
     planUid: data?.planUid as string | undefined,
     requestId: data?.requestId as string | undefined,
     eventType: data?.eventType as string | undefined,
+    criterionUid: data?.criterionUid as string | undefined,
+    itemUid: data?.itemUid as string | undefined,
   };
 }
 
 /** Map a notification payload to the Expo Router path it should open, or null. */
 export function routeForNotification(d: NotificationData): string | null {
+  // Straight to the approval: the person was told what to judge, so the
+  // tap opens that, not the event about it.
+  if (d.criterionUid && d.itemUid) {
+    return `/approval?criterionUid=${encodeURIComponent(d.criterionUid)}&itemUid=${encodeURIComponent(d.itemUid)}`;
+  }
   if (d.type === 'input-request' && d.requestId) {
     return `/input-request?requestId=${encodeURIComponent(d.requestId)}`;
   }

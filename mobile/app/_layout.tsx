@@ -126,6 +126,20 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="approvals"
+          options={{
+            title: 'Waiting for you',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="approval"
+          options={{
+            title: 'Approval',
+            headerStyle: { backgroundColor: '#111113' },
+          }}
+        />
+        <Stack.Screen
           name="changes"
           options={{
             title: 'Changes',

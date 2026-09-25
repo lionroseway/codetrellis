@@ -38,7 +38,8 @@ import { PeerAuthorizationError } from './peer-capabilities';
 import { recordPeerAudit } from './peer-audit-service';
 import { readMaterial, type MaterialRead } from './material-reader/reader-host';
 import type { MaterialLocator } from './material-reader/read';
-import { describeLocator } from '../../shared/lib/locator';
+import { describeLocator, parseRange, type CellRange } from '../../shared/lib/locator';
+import { colLetters } from '../../shared/lib/xlsx-xml';
 import type { CriterionEvidence, ItemCriterion } from '../../shared/types';
 
 // ── Shapes the phone receives ─────────────────────────────────────────
@@ -89,6 +90,11 @@ export type PhonePreview =
     outline: string;
     sections: Array<{ heading: string; body: string }>;
     notes: string[];
+    /**
+     * For a sheet: where the cells shown start (1-based), so the phone can
+     * label columns and rows, and the cells the evidence cited, to mark.
+     */
+    grid?: { firstRow: number; firstCol: number; cited: CellRange | null };
   }
   | { kind: 'unavailable'; name: string | null; reason: string };
 
@@ -100,6 +106,8 @@ export const PREVIEW_TEXT_CHARS = 40_000;
 export const PREVIEW_IMAGE_BYTES = 3 * 1024 * 1024;
 /** Characters per `preview.chunk` — well under the phone's 64 KB message cap. */
 export const PREVIEW_CHUNK_CHARS = 16_000;
+/** Rows and columns of context shown around a cited range on a sheet. */
+export const SHEET_CONTEXT = { rows: 6, cols: 3 };
 /** The phone chose it; it is echoed back and never looked up. */
 const TRANSFER_ID = /^[A-Za-z0-9-]{8,64}$/;
 
@@ -255,8 +263,28 @@ export async function buildPreview(
   const artefact = getArtefact(attachmentUid);
   const ext = artefact ? path.extname(artefact.path).slice(1).toLowerCase() : '';
   const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext);
+
+  // A cited cell on its own ("10") tells a person nothing; the rows and
+  // columns around it do. Read a little more than was cited, and say which
+  // cells were, so the phone marks them as the desktop viewer does.
+  let readAt = isImage ? null : locator;
+  let grid: { firstRow: number; firstCol: number; cited: CellRange | null } | undefined;
+  if ((ext === 'xlsx' || ext === 'xlsm') && locator) {
+    const cited = locator.range ? parseRange(String(locator.range)) : null;
+    if (cited) {
+      const firstRow = Math.max(1, cited.from.row - SHEET_CONTEXT.rows);
+      const firstCol = Math.max(1, cited.from.col - SHEET_CONTEXT.cols);
+      const lastRow = cited.to.row + SHEET_CONTEXT.rows;
+      const lastCol = cited.to.col + SHEET_CONTEXT.cols;
+      readAt = { ...locator, range: `${colLetters(firstCol)}${firstRow}:${colLetters(lastCol)}${lastRow}` };
+      grid = { firstRow, firstCol, cited };
+    } else if (!locator.text) {
+      grid = { firstRow: 1, firstCol: 1, cited: null };
+    }
+  }
+
   // An image is read whole; a locator on one is refused by the reader.
-  const result: MaterialRead = await read(attachmentUid, isImage ? null : locator);
+  const result: MaterialRead = await read(attachmentUid, readAt);
   if (!result.ok) return { kind: 'unavailable', name: result.name ?? null, reason: result.reason };
 
   if (result.kind === 'image') {
@@ -290,6 +318,17 @@ export async function buildPreview(
   }
   if (sections.length < reply.sections.length && !notes.some((n) => n.startsWith('Cut short'))) {
     notes.push('Cut short for the phone — the whole of it is on the desktop.');
+  }
+  if (grid) {
+    return {
+      kind: 'text', name: result.name, format: reply.format,
+      // The place that was cited, not the wider area read around it.
+      where: describeLocator(locator) || reply.where,
+      outline: reply.outline,
+      sections: sections.map((sec) => ({ ...sec, heading: sec.heading.replace(/,\s*[A-Z]+\d+:[A-Z]+\d+$/, '').replace(/ from A1$/, '') })),
+      notes,
+      grid,
+    };
   }
   return {
     kind: 'text', name: result.name, format: reply.format, where: reply.where, outline: reply.outline, sections, notes,
