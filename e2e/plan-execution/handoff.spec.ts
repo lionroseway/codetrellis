@@ -24,9 +24,13 @@ test.describe('Handoff button', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    // HandoffButton renders when pending actions exist
+    // HandoffButton renders once the plan's items are in and one is pending.
+    // openPlan waits for the workspace, not its items, and opening a plan over
+    // the whole repo's graph is ~1.5 s of main thread on a dev machine — past
+    // 5 s on a shared CI runner. Wait for the task itself, then the button.
+    await expect(page.getByTestId('plan-item-tree').getByText('Pending Handoff Task').first()).toBeVisible({ timeout: 15_000 });
     const handoff = page.getByText('Hand off').first();
-    await expect(handoff).toBeVisible({ timeout: 5000 });
+    await expect(handoff).toBeVisible({ timeout: 10_000 });
   });
 
   test('Hand off button not visible when all actions are done', async ({ page, request }) => {
