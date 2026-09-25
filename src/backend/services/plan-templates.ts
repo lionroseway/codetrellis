@@ -60,6 +60,29 @@ export interface PlanTemplatePlaceholder {
 
 export type PlanTemplateSource = 'builtin' | 'project' | 'user';
 
+/**
+ * Phase 31 §14 — a criterion a template brings for an item: the words, the
+ * kind of evidence that satisfies it, and who may mark it met. Never a
+ * decision. Seeded under the plan-file rule (criteria-service
+ * `seedTemplateCriteria`): only a `code` criterion may be left to the agent.
+ */
+export interface PlanTemplateCriterion {
+  text: string;
+  kind?: 'manual' | 'artefact' | 'citation' | 'code' | 'test';
+  policy?: 'agent' | 'propose' | 'human';
+}
+
+/** One item of a V2 template's tree — an Object (a page) or an Action (a step). */
+export interface PlanTemplateItem {
+  kind: 'object' | 'action';
+  title: string;
+  body?: string;
+  bodyPath?: string;
+  requiresApproval?: boolean;
+  criteria?: PlanTemplateCriterion[];
+  children?: PlanTemplateItem[];
+}
+
 export interface PlanTemplate {
   id: string;
   label: string;
@@ -78,6 +101,8 @@ export interface PlanTemplate {
   source?: PlanTemplateSource;
   /** §C: optional user-fillable placeholders. */
   placeholders?: PlanTemplatePlaceholder[];
+  /** V2: the plan as items — a guide, materials, and the steps. */
+  items?: PlanTemplateItem[];
 }
 
 const MASS_REFACTOR_OVERVIEW = `# Mass refactor — executive overview
@@ -630,6 +655,78 @@ What the ticket explicitly does NOT cover. Writing it down is what stops
 the plan quietly growing.
 `;
 
+const ANALYSIS_GUIDE = `# How we do the {{report}}
+
+> The guide an agent reads before it starts, and a new analyst reads on day one.
+> Replace each prompt with how your team actually does it.
+
+## Who it is for
+
+> The audience, what they decide with it, and what they already know.
+
+## Sources we trust
+
+> Which systems or files are the source of truth for each figure, and which are not.
+
+## House rules
+
+> Rounding, units, currency, period definitions, how to label a restatement.
+
+## What "done" looks like
+
+> Each task's acceptance criteria say it precisely — this is the short version.
+`;
+
+const ANALYSIS_MATERIALS = `# Materials
+
+Attach what this {{report}} is built from — record each file as a **material** on this page:
+
+- the source data for {{period}} (exports, ledgers, the workbook itself);
+- last period's report, for comparison and tone;
+- the style guide or template the output must follow.
+
+An agent reads these through \`read_material\` and cites the exact place — the sheet and cell,
+the page, the line — for every figure it uses.
+`;
+
+const REFACTOR_DESCRIPTION = `## What are you refactoring?
+
+> Describe the code you want to change. What module, class, or pattern is being restructured?
+
+## Why refactor now?
+
+> What's wrong with the current structure? Is it causing bugs, slowing development, or creating confusion?
+
+## From → To
+
+> What does the current structure look like? What should it look like after?
+
+## Constraints
+
+> What must NOT change? Public APIs? Database schemas? Test expectations?
+`;
+
+const API_CHANGE_DESCRIPTION = `## Endpoint(s)
+
+> Which endpoints are changing? Method, path, purpose.
+
+## Current contract
+
+> What does the API accept/return today?
+
+## New contract
+
+> What should it accept/return after?
+
+## Consumers
+
+> Who calls this API? Frontend components? Other services? External clients?
+
+## Migration strategy
+
+> How do you handle existing clients? Versioning? Deprecation period?
+`;
+
 export const PLAN_TEMPLATES: PlanTemplate[] = [
   {
     id: 'from-ticket',
@@ -873,6 +970,104 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
       { key: 'verify', orderHint: '03', docType: 'testing', title: 'Verification', body: PERF_VERIFY },
     ],
   },
+  {
+    id: 'analysis-report',
+    label: 'Analysis report',
+    shortDescription: 'Gather → Analyse → Draft → Review, with a guide, the materials, and criteria for each step.',
+    longDescription:
+      'A playbook for a report built from data — a quarterly pack, a board paper, a regional review. ' +
+      'The guide page says how your team does it; the materials page holds what it is built from; ' +
+      'four steps carry acceptance criteria that show each kind of evidence once: a recorded output, ' +
+      'a figure that cites its cell, the analysis code, its tests, and a person\'s sign-off. ' +
+      'Publish your own version of this plan as a template once it fits how you work.',
+    defaultTitle: '{{report}} — {{period}}',
+    defaultPlanDescription:
+      'Read the guide first, then the materials. Every figure in the draft cites the place it came from; ' +
+      'the Review step is signed off by a person.',
+    placeholders: [
+      { key: 'report', label: 'Report', default: 'Quarterly report' },
+      { key: 'period', label: 'Period', default: 'Q3' },
+    ],
+    phases: [],
+    docs: [],
+    items: [
+      { kind: 'object', title: 'Guide — how we do the {{report}}', body: ANALYSIS_GUIDE },
+      { kind: 'object', title: 'Materials', body: ANALYSIS_MATERIALS },
+      {
+        kind: 'action',
+        title: 'Gather',
+        body: 'Collect the {{period}} source data and record each file as a material. Note anything missing or late.',
+        criteria: [
+          { text: 'Every source file used for {{period}} is recorded as a material', kind: 'artefact' },
+        ],
+      },
+      {
+        kind: 'action',
+        title: 'Analyse',
+        body: 'Work the figures. Any calculation is a script in the repo, not a hand edit in a copy of the data.',
+        criteria: [
+          { text: 'Every figure in the analysis cites the sheet and cell it came from', kind: 'citation' },
+          { text: 'The analysis script is committed where the plan says', kind: 'code' },
+          { text: 'The analysis script\'s tests pass', kind: 'test' },
+        ],
+      },
+      {
+        kind: 'action',
+        title: 'Draft',
+        body: 'Write the {{report}} to the house style in the guide, and record it as this step\'s output.',
+        criteria: [
+          { text: 'The draft {{report}} is recorded as an output', kind: 'artefact' },
+        ],
+      },
+      {
+        kind: 'action',
+        title: 'Review',
+        body: 'The report owner reads the draft against the materials and signs it off — on the desktop or the phone.',
+        criteria: [
+          { text: 'Reviewed and approved by the report owner', kind: 'manual' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'refactor',
+    label: 'Refactor',
+    shortDescription: 'Rename, move, or restructure existing code.',
+    longDescription:
+      'A light, three-step refactor: prepare, migrate, verify. For a long multi-agent modernisation, ' +
+      'use Mass refactor instead.',
+    defaultTitle: 'Refactor: {name}',
+    defaultPlanDescription: REFACTOR_DESCRIPTION,
+    phases: [],
+    docs: [],
+    items: [
+      { kind: 'object', title: 'Context & Analysis', body: '## Current structure\n\n> Describe the existing code\n\n## Problems\n\n> What specific issues exist?' },
+      { kind: 'action', title: 'Phase 1: Prepare', body: 'Set up any scaffolding, create new files, update imports that need to change.' },
+      { kind: 'action', title: 'Phase 2: Migrate', body: 'Move/rename the core code. Update all callers.' },
+      {
+        kind: 'action',
+        title: 'Phase 3: Verify & Clean up',
+        body: 'Run tests, remove old code, update docs.',
+        criteria: [{ text: 'The test suite passes after the move', kind: 'test' }],
+      },
+    ],
+  },
+  {
+    id: 'api-change',
+    label: 'API change',
+    shortDescription: 'Add, modify, or deprecate API endpoints.',
+    longDescription: 'The contract first, then the handlers, then every consumer — and the tests and docs that describe it.',
+    defaultTitle: 'API change: {name}',
+    defaultPlanDescription: API_CHANGE_DESCRIPTION,
+    phases: [],
+    docs: [],
+    items: [
+      { kind: 'object', title: 'API Design', body: '## Endpoints\n\n| Method | Path | Change |\n|--------|------|--------|\n| | | |\n\n## Request/Response schemas\n\n> ...' },
+      { kind: 'action', title: 'Backend changes', body: 'Update route handlers, validation, database queries.' },
+      { kind: 'action', title: 'Update consumers', body: 'Update all clients/callers of the changed endpoints.' },
+      { kind: 'action', title: 'Tests & documentation', body: 'Update API tests and any API documentation.' },
+    ],
+  },
 ];
 
 /**
@@ -881,7 +1076,7 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
  * came from. Project-local wins when an id collides — lets a team
  * override a built-in or a global template per-project.
  */
-export function listTemplates(projectRoot?: string): Array<Pick<PlanTemplate, 'id' | 'label' | 'shortDescription' | 'longDescription' | 'defaultTitle' | 'source' | 'placeholders'> & { phaseCount: number; docCount: number; version?: number; itemCount?: number }> {
+export function listTemplates(projectRoot?: string): Array<Pick<PlanTemplate, 'id' | 'label' | 'shortDescription' | 'longDescription' | 'defaultTitle' | 'source' | 'placeholders'> & { phaseCount: number; docCount: number; version?: number; itemCount?: number; criteriaCount?: number }> {
   const all = collectTemplates(projectRoot);
   return all.map((t) => {
     const tplAny = t as any;
@@ -896,9 +1091,19 @@ export function listTemplates(projectRoot?: string): Array<Pick<PlanTemplate, 'i
       placeholders: t.placeholders,
       phaseCount: t.phases.length,
       docCount: t.docs.length,
-      ...(isV2 ? { version: 2, itemCount: countTemplateItems(tplAny.items) } : {}),
+      ...(isV2 ? { version: 2, itemCount: countTemplateItems(tplAny.items), criteriaCount: countTemplateCriteria(tplAny.items) } : {}),
     };
   });
+}
+
+/** Recursively count the criteria a V2 template brings (§14). */
+function countTemplateCriteria(items: any[]): number {
+  let count = 0;
+  for (const item of items) {
+    if (Array.isArray(item.criteria)) count += item.criteria.length;
+    if (Array.isArray(item.children)) count += countTemplateCriteria(item.children);
+  }
+  return count;
 }
 
 /** Recursively count items in a V2 template tree. */
@@ -1124,6 +1329,15 @@ function substituteItemPlaceholders(
     if (typeof result.title === 'string') result.title = sub(result.title) ?? result.title;
     if (typeof result.body === 'string') result.body = sub(result.body) ?? result.body;
     if (typeof result.scopePath === 'string') result.scopePath = sub(result.scopePath) ?? result.scopePath;
+    if (Array.isArray(result.criteria)) {
+      result.criteria = result.criteria.map((c: unknown) => {
+        if (typeof c === 'string') return sub(c) ?? c;
+        if (c && typeof c === 'object' && typeof (c as { text?: unknown }).text === 'string') {
+          return { ...(c as object), text: sub((c as { text: string }).text) };
+        }
+        return c;
+      });
+    }
     if (Array.isArray(result.children)) {
       result.children = substituteItemPlaceholders(result.children, sub);
     }

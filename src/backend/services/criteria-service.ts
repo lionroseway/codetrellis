@@ -698,6 +698,57 @@ export function importCriteria(itemUid: string, raw: unknown): number {
   return n;
 }
 
+/**
+ * Phase 31 §14 — criteria a playbook brings with it.
+ *
+ * A template is a file, so it gets a file's rule (the same one
+ * `importCriteria` applies to a new row): it chooses the words, the kind
+ * and how strictly each is judged, except that it cannot make anything
+ * but a `code` criterion approvable by the agent alone. It never brings
+ * decisions — a template says what good looks like, not that it was done.
+ * Unknown fields are ignored, and a row with no words is skipped.
+ */
+export function seedTemplateCriteria(itemUid: string, raw: unknown, templateId: string): number {
+  if (!Array.isArray(raw)) return 0;
+  let n = 0;
+  for (const entry of raw.slice(0, MAX_TEMPLATE_CRITERIA)) {
+    const c = typeof entry === 'string' ? { text: entry } : entry;
+    if (!c || typeof c !== 'object') continue;
+    const row = c as Record<string, unknown>;
+    if (typeof row.text !== 'string' || !row.text.trim()) continue;
+    const kind: CriterionKind = isKind(row.kind) ? row.kind : 'manual';
+    let policy: CriterionPolicy = isPolicy(row.policy) ? row.policy : defaultPolicy(kind);
+    if (policy === 'agent' && kind !== 'code') policy = 'propose';
+    insertCriterion({
+      itemUid, text: row.text.trim().slice(0, MAX_CRITERION_TEXT), kind, policy, source: 'template',
+      author: `template:${templateId}`, authorType: 'template',
+    });
+    n++;
+  }
+  if (n > 0) {
+    // The template carries the criteria; a `## Acceptance criteria`
+    // section in the item's body must not be read into a second copy.
+    getDb().run(`INSERT OR IGNORE INTO item_criteria_migrated (item_uid, migrated_at) VALUES (?, ?)`, [itemUid, Date.now()]);
+    markDirty();
+  }
+  return n;
+}
+
+/** What a template may bring per item, and how long each may be. */
+const MAX_TEMPLATE_CRITERIA = 50;
+const MAX_CRITERION_TEXT = 2000;
+
+/**
+ * The criteria a published template carries for an item: words, kind and
+ * policy only. Never decisions, never evidence, and not the approval gate —
+ * `requiresApproval` travels on the item and makes that one itself.
+ */
+export function criteriaForTemplate(itemUid: string): Array<{ text: string; kind: CriterionKind; policy: CriterionPolicy }> {
+  return listCriteria(itemUid)
+    .filter((c) => c.source !== 'gate')
+    .map((c) => ({ text: c.text, kind: c.kind, policy: c.policy }));
+}
+
 // ── helpers ───────────────────────────────────────────────────────────
 
 function assertHuman(decision: HumanDecision): void {

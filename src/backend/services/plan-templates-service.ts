@@ -10,14 +10,15 @@
  */
 
 import type { Plan, PlanDocument, PlanItem, PlanPhase, Task } from '../../shared/types';
-import { createPlan } from './plan-service';
+import { createPlan, getPlan, updatePlan } from './plan-service';
 import { createPhase } from './plan-phases-service';
 import { createPlanDocument } from './plan-documents-service';
 import { updateTask } from './plan-service';
 import { getTasksByPlan } from './plan-service';
 import * as planItemService from './plan-item-service';
 import { migratePlan } from './plan-migrate-service';
-import { getTemplate, substitutePlaceholders } from './plan-templates';
+import { getTemplate, substitutePlaceholders, type PlanTemplate } from './plan-templates';
+import { seedTemplateCriteria } from './criteria-service';
 
 export interface ApplyTemplateInput {
   templateId: string;
@@ -55,23 +56,7 @@ export interface ApplyTemplateResult {
 export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
   // Look up the template, including disk-installed ones at the
   // project's `.codetrellis/templates/` and `~/.codetrellis/templates/`.
-  const rawTemplate = getTemplate(input.templateId, input.projectPath);
-  if (!rawTemplate) {
-    throw new Error(`Unknown plan template: ${input.templateId}`);
-  }
-
-  // Build the placeholder map: caller-provided values + per-placeholder
-  // defaults. Empty string is a valid value (means "explicitly blank");
-  // only undefined falls through to the default.
-  const values: Record<string, string> = {};
-  for (const p of rawTemplate.placeholders ?? []) {
-    if (input.placeholderValues && input.placeholderValues[p.key] !== undefined) {
-      values[p.key] = input.placeholderValues[p.key];
-    } else if (p.default !== undefined) {
-      values[p.key] = p.default;
-    }
-  }
-  const template = substitutePlaceholders(rawTemplate, values);
+  const template = resolveTemplate(input.templateId, input.projectPath, input.placeholderValues);
 
   const author = input.author ?? 'human';
   const authorType = input.authorType ?? 'human';
@@ -96,50 +81,52 @@ export function applyTemplate(input: ApplyTemplateInput): ApplyTemplateResult {
   return applyV1Template(template, title, description, author, authorType, input);
 }
 
-/** V2 path — create plan metadata + V2 items from nested `items` tree. */
-function applyV2Template(
-  template: any,
-  title: string,
-  description: string,
-  author: string,
-  authorType: string,
-  input: ApplyTemplateInput,
-): ApplyTemplateResult {
-  // Create plan container (no V1 tasks).
-  const plan = createPlan(
-    { title, description, tasks: [] },
-    author, authorType, input.projectPath,
-  );
+/**
+ * A template, found where the project keeps its own and the user keeps
+ * theirs, with its `{{placeholders}}` filled: caller-provided values, then
+ * each placeholder's default. Empty string is a valid value (explicitly
+ * blank); only undefined falls through to the default.
+ */
+function resolveTemplate(
+  templateId: string,
+  projectPath: string,
+  placeholderValues?: Record<string, string>,
+): PlanTemplate {
+  const rawTemplate = getTemplate(templateId, projectPath);
+  if (!rawTemplate) throw new Error(`Unknown plan template: ${templateId}`);
+  const values: Record<string, string> = {};
+  for (const p of rawTemplate.placeholders ?? []) {
+    if (placeholderValues && placeholderValues[p.key] !== undefined) {
+      values[p.key] = placeholderValues[p.key];
+    } else if (p.default !== undefined) {
+      values[p.key] = p.default;
+    }
+  }
+  return substitutePlaceholders(rawTemplate, values);
+}
 
-  // Recursively create V2 items from the template's items tree.
-  const createdItems: PlanItem[] = [];
-
-  function createItemsRecursive(
-    templateItems: any[],
-    parentUid: string | null,
-    sortBase: number,
-  ): void {
+/**
+ * Create a template's item tree in a plan, and the criteria each item
+ * brings (§14) — under the file rule, never with decisions.
+ */
+function createTemplateItems(
+  planUid: string,
+  items: any[],
+  opts: { author: string; authorType: string; templateId: string; sortStart?: number },
+): PlanItem[] {
+  const created: PlanItem[] = [];
+  const walk = (templateItems: any[], parentUid: string | null, sortBase: number): void => {
     for (let i = 0; i < templateItems.length; i++) {
       const t = templateItems[i];
       const kind = t.kind === 'object' ? 'object' : 'action';
-
-      // Resolve bodyPath if body is in a separate file
-      const body = t.body ?? '';
-      if (t.bodyPath && input.projectPath) {
-        // bodyPath is relative to the template directory. Since we
-        // don't have the template dir here, we rely on the body having
-        // been inlined by substitutePlaceholders or the loader.
-        // For disk templates, the loader reads bodyPath.
-        // Fallback: use whatever body we have.
-      }
-
       const item = planItemService.createItem({
-        planUid: plan.uid,
+        planUid,
         parentUid,
         sortOrder: sortBase + i,
         kind,
         title: String(t.title ?? ''),
-        body,
+        // A disk template's `bodyPath` was read, confined, by the loader.
+        body: t.body ?? '',
         template: t.template ?? null,
         // Action defaults — template items start as pending
         status: kind === 'action' ? 'pending' : undefined,
@@ -157,20 +144,80 @@ function applyV2Template(
         constraints: t.constraints ?? null,
         constraintsMode: t.constraintsMode ?? 'inherit',
         requiresApproval: t.requiresApproval === true,
-        author,
-        authorType,
+        author: opts.author,
+        authorType: opts.authorType,
       });
-
-      createdItems.push(item);
-
-      // Recurse into children
-      if (Array.isArray(t.children) && t.children.length > 0) {
-        createItemsRecursive(t.children, item.uid, 0);
-      }
+      created.push(item);
+      seedTemplateCriteria(item.uid, t.criteria, opts.templateId);
+      if (Array.isArray(t.children) && t.children.length > 0) walk(t.children, item.uid, 0);
     }
+  };
+  walk(items, null, opts.sortStart ?? 0);
+  return created;
+}
+
+export interface ApplyTemplateToPlanInput {
+  planUid: string;
+  templateId: string;
+  placeholderValues?: Record<string, string>;
+  author?: string;
+  authorType?: string;
+}
+
+/**
+ * Fill an EXISTING, empty plan from a template — what "Start from a
+ * template" on an empty plan does. The project comes from the plan, never
+ * from the request (Phase 19). The plan's own description is kept if it
+ * has one. A template that seeds legacy tasks can only start a new plan.
+ */
+export function applyTemplateToPlan(input: ApplyTemplateToPlanInput): { items: PlanItem[]; version: 1 | 2 } {
+  const plan = getPlan(input.planUid);
+  if (!plan) throw new Error(`Plan ${input.planUid} not found`);
+  if (!plan.projectPath) throw new Error('This plan is not associated with a project');
+  if (planItemService.listAllItems(plan.uid).length > 0) {
+    throw new Error('This plan already has items — a template starts an empty plan');
+  }
+  const template = resolveTemplate(input.templateId, plan.projectPath, input.placeholderValues);
+  const author = input.author ?? 'human';
+  const authorType = input.authorType ?? 'human';
+  if (!plan.description?.trim() && template.defaultPlanDescription) {
+    updatePlan(plan.uid, { description: template.defaultPlanDescription }, author);
   }
 
-  createItemsRecursive(template.items, null, 0);
+  const templateAny = template as any;
+  if (Array.isArray(templateAny.items) && templateAny.items.length > 0) {
+    return {
+      items: createTemplateItems(plan.uid, templateAny.items, { author, authorType, templateId: input.templateId }),
+      version: 2,
+    };
+  }
+
+  if (template.phases.some((p) => (p.tasks ?? []).length > 0)) {
+    throw new Error('This template seeds tasks, so it starts a new plan — use it from "New plan"');
+  }
+  seedPhasesAndDocs(plan.uid, template, author, authorType);
+  migratePlan(plan.uid, { dryRun: false, author, authorType });
+  return { items: planItemService.listAllItems(plan.uid), version: 1 };
+}
+
+/** V2 path — create plan metadata + V2 items from nested `items` tree. */
+function applyV2Template(
+  template: any,
+  title: string,
+  description: string,
+  author: string,
+  authorType: string,
+  input: ApplyTemplateInput,
+): ApplyTemplateResult {
+  // Create plan container (no V1 tasks).
+  const plan = createPlan(
+    { title, description, tasks: [] },
+    author, authorType, input.projectPath,
+  );
+
+  const createdItems = createTemplateItems(plan.uid, template.items, {
+    author, authorType, templateId: input.templateId,
+  });
 
   return {
     plan,
@@ -216,22 +263,8 @@ function applyV1Template(
     author, authorType, input.projectPath,
   );
 
-  // 2. Phases
-  const phases: PlanPhase[] = [];
-  const phaseByNumber = new Map<number, PlanPhase>();
-  for (const p of template.phases) {
-    const created = createPhase({
-      planUid: plan.uid,
-      phaseNumber: p.phaseNumber,
-      title: p.title,
-      scope: p.scope,
-      prerequisites: p.prerequisites,
-      acceptanceCriteria: p.acceptanceCriteria,
-      status: p.status ?? 'pending',
-    });
-    phases.push(created);
-    phaseByNumber.set(p.phaseNumber, created);
-  }
+  // 2 + 4. Phases and spec docs.
+  const { phases, docs, phaseByNumber } = seedPhasesAndDocs(plan.uid, template, author, authorType);
 
   // 3. Bind seed tasks to their phase.
   const dbTasks = getTasksByPlan(plan.uid);
@@ -242,25 +275,6 @@ function applyV1Template(
     if (phase && dbTask) {
       updateTask(dbTask.uid, { phaseUid: phase.uid });
     }
-  }
-
-  // 4. Spec docs
-  const docs: PlanDocument[] = [];
-  const docByKey = new Map<string, PlanDocument>();
-  for (const d of template.docs) {
-    const parent = d.parentKey ? docByKey.get(d.parentKey) ?? null : null;
-    const created = createPlanDocument({
-      planUid: plan.uid,
-      docType: d.docType,
-      title: d.title,
-      body: d.body,
-      author,
-      authorType,
-      orderHint: d.orderHint ?? null,
-      parentDocUid: parent?.uid ?? null,
-    });
-    docs.push(created);
-    if (d.key) docByKey.set(d.key, created);
   }
 
   // 5. Project the legacy rows into `plan_items`.
@@ -289,4 +303,47 @@ function applyV1Template(
     items: planItemService.listAllItems(plan.uid),
     version: 1,
   };
+}
+
+/** A legacy template's phases and spec docs, created in a plan. */
+function seedPhasesAndDocs(
+  planUid: string,
+  template: PlanTemplate,
+  author: string,
+  authorType: string,
+): { phases: PlanPhase[]; docs: PlanDocument[]; phaseByNumber: Map<number, PlanPhase> } {
+  const phases: PlanPhase[] = [];
+  const phaseByNumber = new Map<number, PlanPhase>();
+  for (const p of template.phases) {
+    const created = createPhase({
+      planUid,
+      phaseNumber: p.phaseNumber,
+      title: p.title,
+      scope: p.scope,
+      prerequisites: p.prerequisites,
+      acceptanceCriteria: p.acceptanceCriteria,
+      status: p.status ?? 'pending',
+    });
+    phases.push(created);
+    phaseByNumber.set(p.phaseNumber, created);
+  }
+
+  const docs: PlanDocument[] = [];
+  const docByKey = new Map<string, PlanDocument>();
+  for (const d of template.docs) {
+    const parent = d.parentKey ? docByKey.get(d.parentKey) ?? null : null;
+    const created = createPlanDocument({
+      planUid,
+      docType: d.docType,
+      title: d.title,
+      body: d.body,
+      author,
+      authorType,
+      orderHint: d.orderHint ?? null,
+      parentDocUid: parent?.uid ?? null,
+    });
+    docs.push(created);
+    if (d.key) docByKey.set(d.key, created);
+  }
+  return { phases, docs, phaseByNumber };
 }

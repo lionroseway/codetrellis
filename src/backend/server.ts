@@ -92,7 +92,7 @@ import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot }
 import { computeProjection } from './services/projection-service';
 import { getDeviations, resolveDeviation } from './services/deviation-service';
 import * as presenceService from './services/presence-service';
-import { applyTemplate } from './services/plan-templates-service';
+import { applyTemplate, applyTemplateToPlan } from './services/plan-templates-service';
 import { listTemplates } from './services/plan-templates';
 import { publishPlanAsTemplate } from './services/plan-template-publish-service';
 import {
@@ -3572,6 +3572,34 @@ app.post('/api/plans/from-template', (req, res) => {
     broadcast('plan-created', { plan: result.plan });
     for (const phase of result.phases) broadcast('plan-phase-created', { phase });
     for (const doc of result.docs) broadcast('plan-doc-created', { doc });
+    saveNow(() => exportDatabase());
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * Phase 31 §14 — fill an existing, empty plan from a template: what "Start
+ * from a template" on an empty plan does. The project is the plan's own;
+ * nothing about a location is taken from the request.
+ */
+app.post('/api/plans/:uid/apply-template', (req, res) => {
+  const { templateId, placeholderValues } = req.body || {};
+  if (typeof templateId !== 'string' || !templateId) {
+    res.status(400).json({ error: 'templateId is required' });
+    return;
+  }
+  try {
+    const result = applyTemplateToPlan({
+      planUid: req.params.uid,
+      templateId,
+      placeholderValues: placeholderValues && typeof placeholderValues === 'object' ? placeholderValues : undefined,
+      author: getAuthorKey('human'),
+      authorType: 'human',
+    });
+    for (const item of result.items) broadcast('plan-item-created', { planUid: req.params.uid, item });
+    broadcast('plan-updated', { planUid: req.params.uid });
     saveNow(() => exportDatabase());
     res.json(result);
   } catch (err) {

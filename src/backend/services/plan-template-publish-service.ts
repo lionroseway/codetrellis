@@ -23,6 +23,7 @@
  * parameterise the template. Keeps the publish flow simple.
  */
 
+import { criteriaForTemplate } from './criteria-service';
 import fs from 'node:fs';
 import path from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
@@ -143,6 +144,12 @@ function publishV2Template(
       if (item.constraintsMode && item.constraintsMode !== 'inherit') obj.constraintsMode = item.constraintsMode;
     }
     if (item.requiresApproval) obj.requiresApproval = true;
+
+    // Phase 31 §14 — what good looks like travels with the playbook: each
+    // criterion's words, kind and policy. Never a decision or evidence —
+    // those belong to the plan that did the work, not the next one.
+    const criteria = criteriaForTemplate(item.uid);
+    if (criteria.length > 0) obj.criteria = criteria;
 
     // Scrub runtime fields: status, assignee, progressPercent, blockedReason,
     // newConnections, removedConnections — these are project-specific.
