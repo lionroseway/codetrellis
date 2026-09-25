@@ -1,0 +1,2 @@
+Every existing pairing stops working and must be redone.
+The device list offers 'Pair again' and explains why; it is not a bug.
