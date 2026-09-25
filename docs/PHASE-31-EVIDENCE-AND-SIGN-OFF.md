@@ -701,6 +701,47 @@ egress itself, which the host then uses without a change. An engine
 without that attestation does not run there: the fallback views do.
 The table above is the bar, not an aspiration.
 
+*As built (the engine, #86 #88 #89 #90):* four builds to the first that
+passed everything, each failing a stage further on than the last:
+
+- **The stubs take their parameters.** With memory past 2 GB, Emscripten
+  wraps every pointer-taking import using the real call's signature, and
+  a stub declaring fewer parameters fails the final link. Each stub now
+  takes the parameters of the call it replaces. `stub-check.c` links them
+  with LibreOffice's memory settings and calls every one.
+- **The proof reads what Emscripten really emits.** It accepts the
+  unsigned-pointer prologue (`addr >>>= 0;`) and the pthread proxy line
+  (`if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(…)`) before the
+  constant return, and nothing else. It also reads the glue without the
+  lists of symbol names an `ASSERTIONS` build carries for its error
+  messages, where `SOCKFS` appears as a string; a real `var SOCKFS` still
+  fails. The glue keeps a dead `fetch()` and `XMLHttpRequest` for other
+  environments. The adapter removes `fetch`, `XMLHttpRequest`, `WebSocket`
+  and `EventSource` from `globalThis` before loading it, and the proof
+  accepts that code only when the adapter it ships with does so.
+- **The proof runs before the build.** `build.sh` links the stub check
+  with LibreOffice's own flags and runs the proof on it before the
+  multi-hour compile, so this class of failure costs minutes, not a build.
+- **The first-conversion hang was a start-up race.** The build exports
+  `main()`, and unless told not to, Emscripten starts it on a worker
+  (`PROXY_TO_PTHREAD`) as soon as the runtime is ready. That is a whole
+  soffice start-up racing the LibreOfficeKit start-up the adapter does on
+  the main thread. The first document load then never returned — from one
+  start in seven to one in two, depending on the machine. It was not
+  worker-pool exhaustion: no extra worker was ever created. The adapter
+  sets `noInitialRun`, and start-up fell from 1.6 s to 1.1 s. The host
+  still converts two lines of RTF before real work (20 s deadline,
+  replacing a hung engine once), now as a check rather than a workaround.
+- **Pinned:** `24.8-d1c9e0e4e1-fb2575f33e82`, from run 36057036168. The
+  network proof passed with all twelve network imports stubs. The hostile
+  documents converted on Node 26 and Node 24 with zero connections, and
+  the engine warmed first time on both (≈ 0.65 s). Packaging fetches it
+  and checks the archive and every file against the lock.
+- **The browser suite runs without an engine** unless
+  `CODETRELLIS_RENDITION_ENGINE` names one. From source the backend
+  otherwise reads `resources/rendition/engine`, which packaging fills, and
+  the "without the engine" specs failed only on machines that had packaged.
+
 **Packaging.** About 77 MB compressed, 247 MB installed, shipped
 uncompressed inside the app's resources — read-only and, on macOS,
 covered by the code signature — rather than unpacked into a writable data
@@ -719,6 +760,20 @@ depends on the engine to be *usable*, only to look right.
 are fast and need no engine. Where a rendition exists, its PDF text is
 what `read_material` returns for DOCX and PPTX, so an agent reads the
 words the person sees on the page.
+
+*As built (#91):* "exists" means already made — `read_material` never
+converts and never starts the engine. It looks for the viewer's cached
+PDF of those exact bytes by the current engine, through the same
+confined read. If there is none, or the engine does not check out, the
+document is read as before.
+- A Word document reads as its pages, with `{page}` and `{text}` on them.
+  `{lines}` are the markdown's own lines, so they still read the markdown.
+  A Word `{page}` citation stays *unverified*, because pages depend on
+  layout, and the reply still says to cite by quote.
+- A deck reads from its rendition only when the PDF has a page for every
+  slide. LibreOffice leaves hidden slides out, and then page 3 is not
+  slide 3 — the number an agent cites and the checker counts. Such a deck
+  is read from its slides, and the reply says why.
 
 **The phone.** §12's preview is rendered on the desktop; for Office files
 it is now the rendition's pages as downscaled JPEG — the phone shows the
@@ -992,6 +1047,31 @@ tokens in `globals.css` with no light variant, around 90 hard-coded hex
 colours and several hundred `white/[…]` classes. Doing it for the Brief
 alone would fork the design register Phase 29 §3 insists on matching.
 It is its own phase.
+
+### 10.8 As built (31.5b)
+
+- **Reuse.** `BodyRenderer` renders the goal and guide, `CriteriaBlock`
+  the criteria (in Brief words), and `AgentTurnList` the feed. The task
+  column, the material and output rows and the brief picker are the
+  Brief's own. `PlanItemTree`, `ContextRail`'s rows and `PlanSwitcher`
+  carry code-only affordances that would have needed hiding one by one.
+- **Guide pages** load their body from the item bundle, because the plan's
+  item list omits bodies — a guide read from the list rendered empty.
+- **The feed says what happened.** A tool can put one line in its
+  result's `_meta.summary`. The MCP interception copies it, up to 200
+  characters and never from an error, onto the `tool_call` broadcast.
+  `submit_criterion` and `check_criterion` name the criterion there.
+  `subject()` drops a bare UUID, so a line never reads "Checked
+  3f2c…". Without these the feed read "Session started" and raw uids.
+- **Mode.** `App.tsx` renders the Brief as an overlay with `MainCanvas`
+  unmounted, and the plan-open effect no longer forces `'plan'` while
+  the Brief is showing. `ProjectConfig.defaultSurface` (settable through
+  `update_project_config`) picks the surface a project opens on.
+  `navigate_to` gained `brief` and `artefact` targets, and `ui_ready`
+  reports the open artefact. Because `navigate_to` reaches every open
+  window, the spec that drives it runs serially.
+- "You" in a criterion's state is the identity email from settings.
+- The guide gained the "For analysts" page.
 
 ## 11. What each side gains
 
