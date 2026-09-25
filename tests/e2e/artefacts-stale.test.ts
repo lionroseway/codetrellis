@@ -48,10 +48,14 @@ test.describe('Phase 31.2 — artefacts and stale approvals', () => {
       const c = await (await h.client.raw('POST', `/api/items/${item}/criteria`, {
         text: 'EMEA revenue matches the ledger', kind: 'artefact',
       })).json();
-      await agent.callTool('submit_criterion', {
+      const sub = await agent.callTool('submit_criterion', {
         criterion_uid: c.uid, evidence: [{ attachment_uid: recorded.attachment_uid, locator: { range: 'B2' } }],
         note: 'EMEA in B2',
       });
+      // Checked, not assumed: a refused submission leaves nothing for the
+      // approval to record, and the rest of this test then fails far from
+      // the cause (it did — a coarse filesystem clock, criterion-checks).
+      expect(sub.isError, sub.text).toBeFalsy();
       const approved = await (await h.client.raw('POST', `/api/criteria/${c.uid}/decide`, { decision: 'approved' })).json();
       expect(approved.state).toBe('met');
 
@@ -73,12 +77,19 @@ test.describe('Phase 31.2 — artefacts and stale approvals', () => {
       // 4. A second edit to an already-stale file says nothing new.
       fs.writeFileSync(output, 'region,revenue\nEMEA,127\n');
       await new Promise((r) => setTimeout(r, 1500));
-      const events = await (await h.client.raw('GET', `/api/plans/${plan.uid}/channels`)).json() as Array<{ eventType: string }>;
-      expect(events.filter((e) => e.eventType === 'need-decision')).toHaveLength(1);
+      type Notice = { eventType: string; status: string; payload: { criterionUid?: string; reason?: string } };
+      const notices = async () => ((await (await h.client.raw('GET', `/api/plans/${plan.uid}/channels`)).json()) as Notice[])
+        .filter((e) => e.eventType === 'need-decision' && e.payload.criterionUid === c.uid);
+      const events = await notices();
+      expect(events.filter((e) => e.payload.reason === 'stale')).toHaveLength(1);
+      // The submission asked for the first decision (§12); approving it answered that one.
+      expect(events.filter((e) => e.payload.reason === 'submitted').map((e) => e.status)).toEqual(['resolved']);
 
-      // 5. The person looks again and approves what is there now.
+      // 5. The person looks again and approves what is there now — which
+      //    answers the stale notice too.
       const reapproved = await (await h.client.raw('POST', `/api/criteria/${c.uid}/decide`, { decision: 'approved' })).json();
       expect(reapproved.state).toBe('met');
+      expect((await notices()).every((e) => e.status === 'resolved')).toBe(true);
     } finally {
       await h.teardown();
     }

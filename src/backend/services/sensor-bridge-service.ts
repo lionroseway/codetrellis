@@ -19,7 +19,7 @@
 
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy___system_docs_service from './system-docs-service';
-import { postChannelEvent, type PostChannelEventInput } from './channel-event-service';
+import { postChannelEvent, listChannelEvents, setChannelEventStatus, type PostChannelEventInput } from './channel-event-service';
 import { exportChannelEvent } from './channel-event-file-service';
 import { getPlan } from './plan-service';
 import { getLinkedPlanDir } from './plan-file-service';
@@ -109,14 +109,41 @@ export function postCriterionNotice(opts: {
   planUid: string;
   itemUid: string;
   criterionUid: string;
+  /** Why a person is needed: work to judge, or an approval whose files changed. */
+  reason: 'submitted' | 'stale';
   message: string;
 }): ChannelEvent | null {
   return postSensorEvent({
     planUid: opts.planUid,
     itemUid: opts.itemUid,
     eventType: 'need-decision',
-    payload: { message: opts.message, criterionUid: opts.criterionUid },
+    payload: { message: opts.message, criterionUid: opts.criterionUid, reason: opts.reason },
   });
+}
+
+/**
+ * A person decided: the notices that asked them to are answered. Without
+ * this they stay open, and "needs decision" on the phone and desktop keeps
+ * counting work nobody is waiting on. Returns how many were resolved.
+ */
+export function resolveCriterionNotices(planUid: string, criterionUid: string): number {
+  let resolved = 0;
+  try {
+    const open = listChannelEvents(planUid, { eventTypes: ['need-decision'], status: 'open', limit: 500 });
+    for (const e of open) {
+      if (e.payload?.criterionUid !== criterionUid) continue;
+      const updated = setChannelEventStatus(e.uid, 'resolved');
+      resolved++;
+      try {
+        const plan = getPlan(updated.planUid);
+        if (plan && getLinkedPlanDir(updated.planUid, plan.projectPath)) exportChannelEvent(updated, plan.projectPath);
+      } catch { /* best-effort */ }
+      broadcastFn?.('channel-event-status-changed', { uid: updated.uid, planUid: updated.planUid, status: updated.status });
+    }
+  } catch (err) {
+    console.warn('[SensorBridge] Could not resolve criterion notices:', err);
+  }
+  return resolved;
 }
 
 // --- Drift → channel bridge (Phase 4.2) -------------------------------------

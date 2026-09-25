@@ -35,6 +35,16 @@ export interface EvidenceFact {
   artefact: Artefact | null;
 }
 
+/**
+ * How far a file's mtime may fall short of a moment and still count as
+ * after it. The filesystem stamps mtime, not us: from a coarse kernel clock
+ * that runs a few milliseconds behind Date.now(), and at 1 s resolution on
+ * HFS+ and 2 s on FAT/exFAT. Without this, output written in the same
+ * moment an item started read as "before this item started" and a real
+ * submission was refused.
+ */
+export const MTIME_SLACK_MS = 2_000;
+
 export interface CheckContext {
   criterion: { uid: string; itemUid: string; kind: CriterionKind };
   /** The item's trusted project root, or null when that project is not open. */
@@ -352,7 +362,7 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
         findings.push(fail('No output file is recorded for this item — record_artefact(path, role: "output") the file the work produced'));
       }
       for (const a of outputs) {
-        if (a.mtime !== null && a.mtime < ctx.itemStartedAt) {
+        if (a.mtime !== null && a.mtime < ctx.itemStartedAt - MTIME_SLACK_MS) {
           findings.push(fail(`${a.path} was last changed ${when(a.mtime)}, before this item started (${when(ctx.itemStartedAt)}) — it is not this work's output`, a.uid));
         } else {
           findings.push(pass(`${a.path} is in the project and changed since the item started`, a.uid));
@@ -385,7 +395,7 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
         findings.push(fail('Attach the test report as evidence (a JUnit .xml, or the run\'s log)'));
       }
       for (const a of reports) {
-        if (ctx.lastTargetChangeAt !== null && a.mtime !== null && a.mtime < ctx.lastTargetChangeAt) {
+        if (ctx.lastTargetChangeAt !== null && a.mtime !== null && a.mtime < ctx.lastTargetChangeAt - MTIME_SLACK_MS) {
           findings.push(fail(`${a.path} is older than the last change to this item's files (${when(ctx.lastTargetChangeAt)}) — run the tests again`, a.uid));
           continue;
         }

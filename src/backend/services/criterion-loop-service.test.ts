@@ -209,6 +209,21 @@ describe('the agent\'s loop — check before you claim (§8.1)', () => {
     assert.equal((await loop.checkCriterion(c.uid, [{ attachmentUid: out.uid }])).ok, true);
   });
 
+  test('output written in the same moment the item started is this work\'s — the filesystem\'s clock is coarse', async () => {
+    // A filesystem stamps mtime from a coarse clock (and at 1–2 s resolution
+    // on HFS+ and FAT), so a file written as the item starts can read a
+    // little before it. That was refusing real submissions.
+    const file = path.join(project, 'out', 'same-moment.csv');
+    fs.writeFileSync(file, 'region,total\nEMEA,1\n');
+    const item = (await import('./plan-item-service')).getItem(ITEM)!;
+    const started = typeof item.createdAt === 'number' ? item.createdAt : Date.parse(String(item.createdAt));
+    const justBefore = new Date(started - 1_000);
+    fs.utimesSync(file, justBefore, justBefore);
+    const out = await artefacts.recordArtefact({ itemUid: ITEM, path: 'out/same-moment.csv', role: 'output', actor: AGENT });
+    const c = criteria.addCriterionAsHuman(ITEM, { text: 'Totals written', kind: 'artefact' }, person());
+    assert.equal((await loop.checkCriterion(c.uid, [{ attachmentUid: out.uid }])).ok, true);
+  });
+
   test('a red test report fails; a green one passes; a log is unverified, not failed', async () => {
     const c = criteria.addCriterionAsHuman(ITEM, { text: 'Tests pass', kind: 'test' }, person());
     fs.writeFileSync(path.join(project, 'out', 'junit.xml'), '<testsuites tests="3" failures="1" errors="0"></testsuites>');

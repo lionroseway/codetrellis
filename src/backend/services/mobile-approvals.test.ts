@@ -139,8 +139,13 @@ describe('what is waiting on a person', () => {
     const notice = channels.listChannelEvents(PLAN).find((e) => e.payload.criterionUid === criterion.uid);
     assert.ok(notice, 'a notice was posted');
     assert.equal(notice!.eventType, 'need-decision');
+    assert.equal(notice!.payload.reason, 'submitted');
     assert.equal(notice!.itemUid, ITEM);
     assert.match(notice!.payload.message, /AMER ties to the ledger/);
+
+    // Deciding answers it, so "needs decision" stops counting it.
+    await approvals.handleApprovalMethod('criterion.decide', { criterionUid: criterion.uid, decision: 'approved' }, peer(CONFIRMED).ctx);
+    assert.equal(channels.getChannelEvent(notice!.uid)!.status, 'resolved');
   });
 });
 

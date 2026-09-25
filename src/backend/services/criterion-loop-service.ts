@@ -223,6 +223,7 @@ export async function submitChecked(
         planUid: item.planUid,
         itemUid: item.uid,
         criterionUid: criterion.uid,
+        reason: 'submitted',
         message: `${actor.author} submitted "${criterion.text}" on ${item.title} — approve it or send it back.`,
       });
     }

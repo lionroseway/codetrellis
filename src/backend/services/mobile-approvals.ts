@@ -36,6 +36,7 @@ import { getAuthorKey } from './settings-service';
 import { getPairedDevice } from './paired-device-service';
 import { PeerAuthorizationError } from './peer-capabilities';
 import { recordPeerAudit } from './peer-audit-service';
+import { resolveCriterionNotices } from './sensor-bridge-service';
 import { readMaterial, type MaterialRead } from './material-reader/reader-host';
 import type { MaterialLocator } from './material-reader/read';
 import { describeLocator } from '../../shared/lib/locator';
@@ -208,7 +209,9 @@ async function decide(
     method: 'criterion.decide',
     detail: `${params.decision === 'approved' ? 'approved' : 'sent back'} criterion ${criterionUid}`,
   });
-  peer.broadcast?.('plan-item-criteria-changed', { planUid: getItem(criterion.itemUid)?.planUid ?? null, itemUid: criterion.itemUid });
+  const planUid = getItem(criterion.itemUid)?.planUid ?? null;
+  if (planUid) resolveCriterionNotices(planUid, criterionUid);
+  peer.broadcast?.('plan-item-criteria-changed', { planUid, itemUid: criterion.itemUid });
   return { criterion: toPhone(criterion) };
 }
 
