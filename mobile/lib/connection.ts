@@ -18,6 +18,7 @@ import { webrtc, isRepairRequired } from './webrtc';
 import { recordConnect, mergeCandidateAddresses } from './storage';
 import { useWorkspaceStore } from './store';
 import { handleRpcResponse, cancelAllPendingRpc, rpc } from './rpc';
+import { previewTransfers } from './approvals';
 import { getDiscoveredDesktops } from './discovery';
 import { notePushAck } from './push';
 import { log as diagLog } from './diagnostics';
@@ -121,6 +122,7 @@ class ConnectionManager {
     if (this.unsubState) { this.unsubState(); this.unsubState = null; }
 
     cancelAllPendingRpc();
+    previewTransfers.cancelAll();
     webrtc.disconnect();
     this.target = null;
   }
@@ -371,6 +373,9 @@ class ConnectionManager {
         notePushAck();
         return;
       }
+      // A piece of a preview we asked for (Phase 31 §12). Only ids we are
+      // waiting on are taken; anything else falls through and is ignored.
+      if (msg && msg.mcp && previewTransfers.accept(msg)) return;
       // Desktop → mobile command (MCP drives the phone): navigate / screenshot.
       if (msg && msg.mcp && typeof msg.cmd === 'string') {
         void handleMobileCommand(msg);

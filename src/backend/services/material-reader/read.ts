@@ -19,7 +19,7 @@
 
 import mammoth from 'mammoth';
 import { CapError, listEntries, readEntry, readText, type InflateBudget } from '../../../shared/lib/zip-reader';
-import { parseDateStyles, parseSharedStrings, parseSheetGrid, parseWorkbookSheets, sheetDimension } from '../../../shared/lib/xlsx-xml';
+import { colLetters, parseDateStyles, parseSharedStrings, parseSheetGrid, parseWorkbookSheets, sheetDimension } from '../../../shared/lib/xlsx-xml';
 import { slideOrder, slideText } from '../../../shared/lib/pptx-xml';
 import { parseRange, toSpan, TEXT_EXTS, type CellRange } from '../../../shared/lib/locator';
 import { docxHtmlToMarkdown } from './docx-markdown';
@@ -175,12 +175,6 @@ function toCsv(rows: string[][]): string {
     return w;
   }));
   return rows.slice(0, lastRow).map((r) => Array.from({ length: width }, (_, i) => csvField(r[i] ?? '')).join(',')).join('\n');
-}
-
-function colLetters(n: number): string {
-  let s = '';
-  for (let x = n; x > 0; x = Math.floor((x - 1) / 26)) s = String.fromCharCode(65 + ((x - 1) % 26)) + s;
-  return s;
 }
 
 async function readWorkbook(req: ReadRequest, locator: MaterialLocator): Promise<ReadReply> {

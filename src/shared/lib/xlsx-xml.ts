@@ -92,6 +92,13 @@ export function colNumber(letters: string): number {
   return n;
 }
 
+/** The column letters for a 1-based column number: 1 → A, 28 → AB. */
+export function colLetters(n: number): string {
+  let s = '';
+  for (let x = n; x > 0; x = Math.floor((x - 1) / 26)) s = String.fromCharCode(65 + ((x - 1) % 26)) + s;
+  return s;
+}
+
 /** An Excel serial date as YYYY-MM-DD (with the time when it has one). */
 export function serialToDate(serial: number): string {
   const ms = Math.round((serial - 25569) * 86400 * 1000);

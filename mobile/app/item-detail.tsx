@@ -23,6 +23,7 @@ import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
 import CommentComposer from '../components/CommentComposer';
 import ItemCreator from '../components/ItemCreator';
+import { listItemCriteria, stateColour, stateLabel, type PhoneCriterion } from '../lib/approvals';
 
 // --- Types -------------------------------------------------------------------
 
@@ -116,6 +117,7 @@ export default function ItemDetailScreen() {
   const [comments, setComments] = useState<ItemComment[]>([]);
   const [externalRefs, setExternalRefs] = useState<ItemExternalRef[]>([]);
   const [attachments, setAttachments] = useState<ItemAttachment[]>([]);
+  const [criteria, setCriteria] = useState<PhoneCriterion[]>([]);
   const [saving, setSaving] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [editField, setEditField] = useState<null | 'assignee' | 'blocked'>(null);
@@ -139,6 +141,9 @@ export default function ItemDetailScreen() {
       setComments(Array.isArray(wrapped.comments) ? wrapped.comments : []);
       setExternalRefs(Array.isArray(wrapped.externalRefs) ? wrapped.externalRefs : []);
       setAttachments(Array.isArray(wrapped.attachments) ? wrapped.attachments : []);
+      // What the item is judged on (Phase 31 §12). A desktop from before
+      // the phone could approve does not have the method — show none.
+      listItemCriteria(uid).then((r) => setCriteria(r.criteria ?? [])).catch(() => setCriteria([]));
 
       // Fetch children (subtasks)
       if (planUid) {
@@ -647,6 +652,33 @@ export default function ItemDetailScreen() {
         )}
       </View>
 
+      {/* Acceptance criteria — tap one to approve or send it back */}
+      {criteria.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>
+            CRITERIA ({criteria.filter((c) => c.state === 'met').length}/{criteria.length} met)
+          </Text>
+          {criteria.map((c) => (
+            <TouchableOpacity
+              key={c.uid}
+              style={styles.refCard}
+              activeOpacity={0.7}
+              onPress={() => router.push(
+                `/approval?criterionUid=${encodeURIComponent(c.uid)}&itemUid=${encodeURIComponent(c.itemUid)}`,
+              )}
+            >
+              <View style={[styles.criterionDot, { backgroundColor: stateColour(c.state) }]} />
+              <View style={styles.refBody}>
+                <Text style={styles.refTitle} numberOfLines={2}>{c.text}</Text>
+                <Text style={[styles.refUrl, { color: stateColour(c.state) }]} numberOfLines={1}>
+                  {stateLabel(c.state)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {/* Attachments */}
       {attachments.length > 0 && (
         <View style={styles.section}>
@@ -721,6 +753,13 @@ function ItemCommentThread({
 // --- Styles ------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  criterionDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 12,
+    alignSelf: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: 'transparent',

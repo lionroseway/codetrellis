@@ -253,11 +253,80 @@ describe('previewing evidence', () => {
     }
   });
 
+  test('a cited cell comes with the rows and columns around it, and says which cells were cited', async () => {
+    fs.writeFileSync(path.join(project, 'out', 'ledger.xlsx'), 'not read — the reader is stubbed');
+    const { attachmentUid } = await submitted('EMEA in C14', 'out/ledger.xlsx', { sheet: 'Regional', range: 'C14' });
+    let asked: unknown = null;
+    const preview = await approvals.buildPreview(attachmentUid, { sheet: 'Regional', range: 'C14' }, async (_uid, at) => {
+      asked = at;
+      return {
+        ok: true, kind: 'text', name: 'ledger.xlsx', itemUid: ITEM,
+        reply: {
+          ok: true, format: 'csv', where: 'sheet "Regional", A8:F20', outline: 'Sheets: Regional (A1:F40)',
+          sections: [{ heading: 'Sheet "Regional", A8:F20', body: 'a,b\n1,2' }], notes: [],
+        },
+      };
+    });
+    assert.deepEqual(asked, { sheet: 'Regional', range: 'A8:F20' }, 'six rows and three columns either side, clamped at A1');
+    assert.equal(preview.kind, 'text');
+    const text = preview as Extract<import('./mobile-approvals').PhonePreview, { kind: 'text' }>;
+    assert.deepEqual(text.grid, { firstRow: 8, firstCol: 1, cited: { from: { col: 3, row: 14 }, to: { col: 3, row: 14 } } });
+    assert.equal(text.where, 'Regional!C14', 'the place cited, not the area read around it');
+    assert.equal(text.sections[0].heading, 'Sheet "Regional"');
+  });
+
   test('a locator carries only the fields the reader narrows by', () => {
     assert.deepEqual(
       approvals.sanitiseLocator({ sheet: 'Regional', range: 'C14', lines: [4, 6], path: '/etc/passwd', page: { x: 1 } }),
       { sheet: 'Regional', range: 'C14', lines: '4-6' },
     );
     assert.equal(approvals.sanitiseLocator('B2'), null);
+  });
+});
+
+describe('the phone receives what the desktop sends (both halves of the protocol)', () => {
+  test('the desktop\'s real chunks, out of order and with a repeat, assemble on the phone\'s real receiver', async () => {
+    const { PreviewTransfers } = await import('../../../mobile/lib/preview-transfer');
+    const rows = Array.from({ length: 3000 }, (_, i) => `r${i},${i * 7}`).join('\n');
+    fs.writeFileSync(path.join(project, 'out', 'round-trip.csv'), `k,v\n${rows}\n`);
+    const { attachmentUid } = await submitted('Round trip', 'out/round-trip.csv', null);
+
+    const phone = new PreviewTransfers({ timeoutMs: 5_000, maxChunks: 800, maxChars: 12_000_000 });
+    const body = phone.expect('phone-transfer-0003');
+    const p = peer(CONFIRMED);
+    const answer = await approvals.handleApprovalMethod(
+      'artefact.preview', { attachmentUid, transferId: 'phone-transfer-0003' }, p.ctx,
+    ) as { total: number };
+    assert.ok(answer.total > 2, 'enough to be split');
+
+    const messages = p.sent.map((s) => s.message).reverse();
+    assert.equal(phone.accept({ ...messages[0], id: 'someone-elses-id' }), false, 'an id nobody asked for is not taken');
+    for (const m of [messages[0], ...messages]) assert.equal(phone.accept(m), true);
+    const preview = JSON.parse(await body);
+    assert.equal(preview.kind, 'text');
+    assert.equal(preview.name, 'round-trip.csv');
+    assert.equal(phone.waiting, 0);
+  });
+
+  test('a transfer that breaks its shape, or its cap, fails instead of assembling', async () => {
+    const { PreviewTransfers } = await import('../../../mobile/lib/preview-transfer');
+    const phone = new PreviewTransfers({ timeoutMs: 5_000, maxChunks: 4, maxChars: 10 });
+
+    const changing = phone.expect('changing-total-01');
+    phone.accept({ cmd: 'preview.chunk', id: 'changing-total-01', seq: 0, total: 2, data: 'a' });
+    phone.accept({ cmd: 'preview.chunk', id: 'changing-total-01', seq: 1, total: 3, data: 'b' });
+    await assert.rejects(changing, /malformed/);
+
+    const tooMany = phone.expect('too-many-chunks-1');
+    phone.accept({ cmd: 'preview.chunk', id: 'too-many-chunks-1', seq: 0, total: 5, data: 'a' });
+    await assert.rejects(tooMany, /malformed/);
+
+    const tooBig = phone.expect('too-big-transfer1');
+    phone.accept({ cmd: 'preview.chunk', id: 'too-big-transfer1', seq: 0, total: 2, data: '123456' });
+    phone.accept({ cmd: 'preview.chunk', id: 'too-big-transfer1', seq: 1, total: 2, data: '789012' });
+    await assert.rejects(tooBig, /larger than the phone accepts/);
+
+    const slow = new PreviewTransfers({ timeoutMs: 20, maxChunks: 4, maxChars: 100 }).expect('never-arrives-01');
+    await assert.rejects(slow, /did not arrive in time/);
   });
 });
