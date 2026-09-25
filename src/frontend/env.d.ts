@@ -27,6 +27,8 @@ interface ElectronAPI {
   revealUpdateDownload?: () => Promise<string | null>;
   /** Phase 31 §7.4 — reveal an attachment's file by uid; there is no "open". */
   revealArtefact?: (uid: string) => Promise<boolean>;
+  /** Phase 31 §13 — save a plan's sign-off pack as a PDF (desktop only). */
+  exportSignoffPdf?: (planUid: string) => Promise<{ ok: boolean; path?: string; reason?: string }>;
   /** Phase 31 §6.1 — add the connector to Claude Desktop's config (desktop only). */
   claudeDesktop?: {
     preview: () => Promise<ClaudeDesktopPreview>;

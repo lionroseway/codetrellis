@@ -12,6 +12,7 @@ import {
   type WebContents,
 } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
@@ -43,6 +44,8 @@ import {
 } from '../backend/services/artefact-content-service';
 import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
 import { setPreviewImageScaler } from '../backend/services/mobile-approvals';
+import { buildSignoffPack, renderPackHtml } from '../backend/services/signoff-pack';
+import { htmlToPdf } from './signoff-pdf';
 import { installHtmlView, closeHtmlView } from './html-view';
 import { ARTEFACT_SCHEME, installArtefactTransport } from './artefact-transport';
 
@@ -653,6 +656,31 @@ ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {
     return true;
   } catch {
     return false;
+  }
+});
+
+/**
+ * Phase 31 §13 — save a plan's sign-off pack as a PDF. Only the app's own
+ * window may ask, by plan uid; where it is saved is the person's choice in
+ * the save dialog, never a path from the renderer.
+ */
+ipcMain.handle('signoff:export-pdf', async (event, planUid: unknown) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, reason: 'Not allowed' };
+  if (typeof planUid !== 'string' || !/^[A-Za-z0-9_-]{3,64}$/.test(planUid)) return { ok: false, reason: 'No plan' };
+  try {
+    const pack = buildSignoffPack(planUid);
+    const pdf = await htmlToPdf(renderPackHtml(pack));
+    const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
+    const choice = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save sign-off pack',
+      defaultPath: `sign-off-pack-${safe}.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (choice.canceled || !choice.filePath) return { ok: false, reason: 'cancelled' };
+    fs.writeFileSync(choice.filePath, pdf);
+    return { ok: true, path: choice.filePath };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
 });
 

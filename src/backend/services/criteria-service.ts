@@ -120,6 +120,7 @@ function toSignoff(r: Row): CriterionSignoff {
     anchor: typeof r[9] === 'string'
       ? { attachmentUid: r[9] as string, locator: parseJson(r[10]) }
       : null,
+    device: (r[11] as string | null) ?? null,
   };
 }
 
@@ -146,7 +147,7 @@ function latestSubmissionOf(criterionUid: string): CriterionEvidence[] {
 function latestSignoffOf(criterionUid: string): CriterionSignoff | null {
   const r = rows(
     `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes,
-            anchor_attachment_uid, anchor_locator
+            anchor_attachment_uid, anchor_locator, device
      FROM criterion_signoffs WHERE criterion_uid = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     [criterionUid],
   )[0];
@@ -280,7 +281,7 @@ export function listAwaitingPerson(limit = 100): AwaitingCriterion[] {
 export function listSignoffs(criterionUid: string): CriterionSignoff[] {
   return rows(
     `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes,
-            anchor_attachment_uid, anchor_locator
+            anchor_attachment_uid, anchor_locator, device
      FROM criterion_signoffs WHERE criterion_uid = ? ORDER BY created_at, rowid`,
     [criterionUid],
   ).map(toSignoff);
@@ -557,7 +558,7 @@ export function decideCriterion(
     throw new CriterionError('Say what is wrong — a send-back note is what the agent reads next.');
   }
   const anchor = input.decision === 'sent_back' ? parseAnchor(input.anchor, criterion.itemUid) : null;
-  appendSignoff(criterionUid, input.decision, decision.actor, 'human', decision.channel, note, anchor);
+  appendSignoff(criterionUid, input.decision, decision.actor, 'human', decision.channel, note, anchor, decision.device ?? null);
   markDirty();
   return getCriterion(criterionUid)!;
 }
@@ -590,6 +591,7 @@ function appendSignoff(
   channel: CriterionSignoff['channel'],
   note: string | null,
   anchor: { attachmentUid: string; locator: unknown } | null = null,
+  device: string | null = null,
 ): void {
   // An approval records the hash of every file it was taken on, so a later
   // edit to any of them shows as `stale` rather than silently still `met`.
@@ -603,11 +605,11 @@ function appendSignoff(
   getDb().run(
     `INSERT INTO criterion_signoffs
        (uid, criterion_uid, decision, actor, actor_type, channel, note, evidence_hashes, created_at,
-        anchor_attachment_uid, anchor_locator)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        anchor_attachment_uid, anchor_locator, device)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       randomUUID(), criterionUid, decision, actor, actorType, channel, note, JSON.stringify(evidenceHashes), tick(),
-      anchor?.attachmentUid ?? null, anchor ? JSON.stringify(anchor.locator) : null,
+      anchor?.attachmentUid ?? null, anchor ? JSON.stringify(anchor.locator) : null, device,
     ],
   );
 }

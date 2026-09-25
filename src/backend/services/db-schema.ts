@@ -385,7 +385,10 @@ export const SCHEMA_PLAN_ITEMS = `
     -- Phase 31 §8.2: a send-back taken from the exact place — the file and
     -- the locator (cell, lines, page) the note is about.
     anchor_attachment_uid TEXT,
-    anchor_locator        TEXT
+    anchor_locator        TEXT,
+    -- Phase 31 §13: which device a person decided on — a paired phone's
+    -- alias. NULL for the desktop and for anything decided before this.
+    device                TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_criterion_signoffs_criterion ON criterion_signoffs(criterion_uid, created_at);
 
