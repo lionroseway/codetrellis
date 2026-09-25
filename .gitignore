@@ -78,3 +78,9 @@ resources/rendition/engine/
 # A local engine build (tools/rendition-engine/build.sh) and its packaged output.
 .rendition-build/
 dist-engine/
+# The bundled config electron-vite (and Vite) write beside the config while
+# loading it. It exists during the build, so the build stamp's
+# `git status --porcelain` saw it and stamped every build "dirty" — the badge
+# in Settings → About — even from a clean release tree.
+electron.vite.config.*.mjs
+*.config.ts.timestamp-*.mjs

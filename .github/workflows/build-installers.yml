@@ -51,7 +51,12 @@ jobs:
       - name: Install deps
         # The lockfile exactly, from clean — a node_modules built up by
         # successive installs once packaged an app that hung at boot.
-        run: npm ci
+        # --ignore-scripts: npm 11 already skips install scripts, and the x64
+        # and Windows jobs build with none run — electron-builder rebuilds the
+        # native modules the app loads. The arm64 runner ran one anyway, for a
+        # grammar package kept only as the source of a committed .wasm, and
+        # node-gyp failed on its nested path. Say it, so no runner differs.
+        run: npm ci --ignore-scripts
       - name: Build NSIS installer + portable exe
         run: npm run package:win -- --publish never
       - name: Verify the build stamp
@@ -82,7 +87,12 @@ jobs:
       - name: Install deps
         # The lockfile exactly, from clean — a node_modules built up by
         # successive installs once packaged an app that hung at boot.
-        run: npm ci
+        # --ignore-scripts: npm 11 already skips install scripts, and the x64
+        # and Windows jobs build with none run — electron-builder rebuilds the
+        # native modules the app loads. The arm64 runner ran one anyway, for a
+        # grammar package kept only as the source of a committed .wasm, and
+        # node-gyp failed on its nested path. Say it, so no runner differs.
+        run: npm ci --ignore-scripts
       - name: Install rpm tooling
         # ubuntu-latest has dpkg/fakeroot for .deb, but not rpmbuild for .rpm.
         run: sudo apt-get update && sudo apt-get install -y rpm
@@ -116,7 +126,12 @@ jobs:
       - name: Install deps
         # The lockfile exactly, from clean — a node_modules built up by
         # successive installs once packaged an app that hung at boot.
-        run: npm ci
+        # --ignore-scripts: npm 11 already skips install scripts, and the x64
+        # and Windows jobs build with none run — electron-builder rebuilds the
+        # native modules the app loads. The arm64 runner ran one anyway, for a
+        # grammar package kept only as the source of a committed .wasm, and
+        # node-gyp failed on its nested path. Say it, so no runner differs.
+        run: npm ci --ignore-scripts
       - name: Install rpm tooling
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Build AppImage + .deb + .rpm (arm64)

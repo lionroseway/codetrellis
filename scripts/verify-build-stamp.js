@@ -53,7 +53,11 @@ for (const archive of archives) {
   }
 
   const pkg = JSON.parse(asar.extractFile(archive, 'package.json').toString('utf-8'));
-  const main = asar.extractFile(archive, pkg.main.replace(/^\.\//, '')).toString('utf-8');
+  // @electron/asar looks entries up by the OS separator, so on Windows
+  // "out/main/main.js" is not found — the first Windows run of this check
+  // failed a good build. Split `main` and rejoin it the native way.
+  const mainEntry = path.join(...pkg.main.replace(/^\.\//, '').split('/'));
+  const main = asar.extractFile(archive, mainEntry).toString('utf-8');
 
   if (pkg.version !== expectedVersion) {
     problems.push(`packaged package.json is ${pkg.version}, expected ${expectedVersion}`);
