@@ -24,6 +24,7 @@
  */
 
 import { BUILD_INFO } from '../../shared/build-info';
+import { getSettings } from './settings-service';
 
 // --- Public types ---
 
@@ -154,12 +155,18 @@ export async function checkForUpdate(opts: { force?: boolean } = {}): Promise<Up
  */
 export function startUpdatePolling(): void {
   if (pollTimer) return;
+  // Read on every tick, not once: turning the setting off must stop the
+  // next check without a restart, and turning it on must resume them.
+  const autoCheck = () => getSettings().updates.autoCheck;
   // Best-effort initial check. Don't await — boot shouldn't be
   // gated on reaching a remote server.
-  checkForUpdate().catch(() => {
-    /* error already captured in state */
-  });
+  if (autoCheck()) {
+    checkForUpdate().catch(() => {
+      /* error already captured in state */
+    });
+  }
   pollTimer = setInterval(() => {
+    if (!autoCheck()) return;
     checkForUpdate().catch(() => {
       /* same */
     });

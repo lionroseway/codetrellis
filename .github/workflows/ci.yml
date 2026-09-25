@@ -248,6 +248,12 @@ jobs:
       - name: Sign-off pack PDF
         run: npx tsx tools/signoff-pdf-check/run.ts
 
+      # Chromium downloads Hunspell dictionaries from Google unless one is
+      # already in place. The app ships its own; this is the only test that
+      # none is ever fetched.
+      - name: Spell-check dictionaries bundled
+        run: npx tsx tools/spellcheck-check/run.ts
+
   # ---------------------------------------------------------------------------
   # THE ONLY CONTEXT BRANCH PROTECTION PINS.
   #

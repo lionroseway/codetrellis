@@ -193,6 +193,15 @@
         ]
       },
       {
+        "from": "resources/spellcheck",
+        "to": "spellcheck",
+        "filter": [
+          "*.bdic",
+          "COPYING*",
+          "LICENSE"
+        ]
+      },
+      {
         "from": "resources/tree-sitter",
         "to": "tree-sitter",
         "filter": [
