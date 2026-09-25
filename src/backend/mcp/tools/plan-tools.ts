@@ -391,7 +391,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
           }],
         };
       } catch (err) {
-        return { content: [{ type: 'text' as const, text: `Failed to apply template: ${err instanceof Error ? err.message : String(err)}` }] };
+        // A failure is an error. Returned plain, an agent (or the demo) read
+        // "Failed to apply template" as a successful call with odd text.
+        return { content: [{ type: 'text' as const, text: `Failed to apply template: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },
   );

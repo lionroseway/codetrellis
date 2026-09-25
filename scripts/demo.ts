@@ -22,6 +22,8 @@
  *   npm run demo -- --project=/path/to/repo
  *   npm run demo -- --port=19433 --api-port=3002   # a second instance
  *   npm run demo -- --shots=/tmp/ct-shots          # one PNG per scene
+ *   npm run demo -- --scene=brief --approve        # approve for you (dev only)
+ *   npm run demo -- --scene=brief --connector=out/connector/mcp-connector.cjs
  *
  * It needs the app running (packaged or `npm run dev`) with its MCP server
  * up, and the `capture` capability granted if you want it to screenshot.
@@ -44,10 +46,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createMcpClient, type ScriptedMcp } from '../tests/harness/mcp-client';
 import {
   repoWithHistory, monorepoPackage, noGitDirectory, repoWithNoCommits,
-  repoWithPlanConflict, cleanupFixtures, fixtureRoot,
+  repoWithPlanConflict, briefFolder, regionalWorkbook, analysisDocx,
+  cleanupFixtures, fixtureRoot,
 } from './demo-fixtures';
 
 // ── options ──────────────────────────────────────────────────────────
@@ -70,8 +75,34 @@ const MCP_PORT = Number(flag('port') ?? 19432);
 const API_PORT = Number(flag('api-port') ?? 3001);
 const ONLY = flag('scene');
 const SHOTS = flag('shots');
+// The brief scene needs a person to approve in the window: MCP cannot, by
+// design. `--approve` stands in for them through the desktop's own HTTP
+// route — which a packaged build does not serve, so there it waits.
+const APPROVE = has('approve');
+const APPROVE_WAIT_S = Number(flag('approve-wait') ?? 180);
+// The connector bundle a packaged app ships. Without it, the connector
+// runs from source — the same code, against the same running app.
+const CONNECTOR = flag('connector');
 
 // ── plumbing ─────────────────────────────────────────────────────────
+
+/** What a shot must see on screen before it is taken. */
+interface ShotExpect {
+  /** The reader must be RENDERING this file (not merely have it selected). */
+  file?: string;
+  /** At least one VISIBLE line on the file carries this verdict. */
+  verdict?: 'aligned' | 'drifted' | 'outstanding';
+  /** A criterion row a person can see, whose text includes `text`, in this state. */
+  criterion?: { text: string; state: 'open' | 'submitted' | 'met' | 'sent_back' | 'stale' };
+  /** The recorded-file viewer is showing a file whose name ends with this. */
+  artefact?: string;
+}
+
+/** An agent connected the way Claude Desktop is: through the stdio connector. */
+interface Bridge {
+  call(tool: string, args?: Record<string, unknown>): Promise<{ ok: boolean; text: string }>;
+  json(tool: string, args?: Record<string, unknown>): Promise<any>;
+}
 
 interface Ctx {
   call(tool: string, args?: Record<string, unknown>): Promise<{ ok: boolean; text: string }>;
@@ -80,22 +111,16 @@ interface Ctx {
   say(title: string, text: string, tone?: 'neutral' | 'success' | 'warning' | 'question'): Promise<void>;
   beat(multiplier?: number): Promise<void>;
   /**
-   * Capture the window.
-   *
-   * `expectFile` names the file the shot is supposed to be OF. A
-   * screenshot that cannot say what it is a picture of is not evidence:
-   * this scene once captured `app.rb` under a caption claiming it showed
-   * `money.go`, and nothing anywhere disagreed.
-   */
-  /**
    * Capture the window — but only once it shows what the shot claims to.
    *
-   * `expectFile`: the reader must be RENDERING this file (not merely have
-   * it selected). `expectVerdict`: at least one line on it must carry this
-   * verdict. A shot that cannot meet its own caption is flagged and not
-   * saved, because an image of the wrong thing is worse than no image.
+   * A screenshot that cannot say what it is a picture of is not evidence:
+   * this scene once captured `app.rb` under a caption claiming it showed
+   * `money.go`, and nothing anywhere disagreed. So a shot names its
+   * subject (`ShotExpect`), waits for `ui_ready` to report it on screen,
+   * and is flagged and not saved when it never is — an image of the wrong
+   * thing is worse than no image.
    */
-  shot(label: string, expectFile?: string, expectVerdict?: 'aligned' | 'drifted' | 'outstanding'): Promise<void>;
+  shot(label: string, expect?: ShotExpect): Promise<void>;
   /** Edit a file; it is restored when the demo ends, however it ends. */
   edit(relative: string, mutate: (src: string) => string): void;
   /** A second (third…) connected agent, for contention journeys. */
@@ -105,7 +130,9 @@ interface Ctx {
    * Some journeys are about what a panel is shown, and the panel does not
    * go through MCP.
    */
-  api(pathAndQuery: string): Promise<any>;
+  api(pathAndQuery: string, body?: unknown): Promise<any>;
+  /** Connect an agent through the stdio connector, as a person's own agent would. */
+  bridge(clientName: string): Promise<Bridge>;
   /**
    * A call that SHOULD be refused. Same as `call`, but a refusal is the
    * pass and is not flagged — otherwise the refusal journey reports the
@@ -127,6 +154,64 @@ interface Scene {
 const flagged: string[] = [];
 const edited = new Map<string, string>();
 const extraAgents: ScriptedMcp[] = [];
+const bridges: Client[] = [];
+
+const collapse = (text: string, n = 220) => text.replace(/\s+/g, ' ').trim().slice(0, n);
+
+/** What `ui_ready` says is on screen, in the terms a shot can ask for. */
+interface Seen {
+  openFile: string | null;
+  marks: Record<string, number>;
+  criteria: Array<{ text: string; state: string }>;
+  artefact: string | null;
+}
+
+function seenFrom(text: string): Seen {
+  try {
+    const parsed = JSON.parse(text);
+    return {
+      openFile: parsed.openFile ?? null,
+      // Visible marks only. Counting what is merely in the DOM let a shot
+      // pass whose aligned lines were under the terminal drawer.
+      marks: parsed.visibleVerdicts ?? {},
+      criteria: Array.isArray(parsed.criteria) ? parsed.criteria : [],
+      artefact: parsed.openArtefact?.name ?? null,
+    };
+  } catch {
+    return { openFile: null, marks: {}, criteria: [], artefact: null };
+  }
+}
+
+function meets(want: ShotExpect, seen: Seen): boolean {
+  if (want.file && !(seen.openFile?.endsWith(want.file) ?? false)) return false;
+  if (want.verdict && !((seen.marks[want.verdict] ?? 0) > 0)) return false;
+  if (want.criterion && !seen.criteria.some((c) => c.text.includes(want.criterion!.text) && c.state === want.criterion!.state)) return false;
+  if (want.artefact && !(seen.artefact?.endsWith(want.artefact) ?? false)) return false;
+  return true;
+}
+
+function describeWant(want: ShotExpect): string {
+  const parts: string[] = [];
+  if (want.file || want.verdict) parts.push(`${want.file ?? 'any file'}${want.verdict ? ` with ${want.verdict} lines` : ''}`);
+  if (want.criterion) parts.push(`the criterion "${want.criterion.text}" ${want.criterion.state}`);
+  if (want.artefact) parts.push(`${want.artefact} in the viewer`);
+  return parts.join(' and ');
+}
+
+function describeSeen(want: ShotExpect, seen: Seen): string {
+  const parts: string[] = [];
+  if (want.file || want.verdict) {
+    const marks = Object.entries(seen.marks).map(([k, n]) => `${n} ${k}`).join(', ') || 'no VISIBLE marked lines';
+    parts.push(`${seen.openFile ?? 'no file'} with ${marks}`);
+  }
+  if (want.criterion) {
+    parts.push(seen.criteria.length
+      ? `criteria ${seen.criteria.map((c) => `"${collapse(c.text, 40)}" ${c.state}`).join(', ')}`
+      : 'no criteria visible');
+  }
+  if (want.artefact) parts.push(seen.artefact ? `${seen.artefact} in the viewer` : 'no file in the viewer');
+  return parts.join('; ');
+}
 
 // ── the scenes ───────────────────────────────────────────────────────
 
@@ -272,7 +357,7 @@ const SCENES: Scene[] = [
       const abs = path.join(PROJECT, 'services/shared-go/money/money.go');
       await c.call('navigate_to', { target: 'code', file_path: abs, line: 25 });
       await c.beat(2);
-      await c.shot('04-trace', 'services/shared-go/money/money.go', 'aligned');
+      await c.shot('04-trace', { file: 'services/shared-go/money/money.go', verdict: 'aligned' });
     },
   },
 
@@ -299,7 +384,7 @@ const SCENES: Scene[] = [
       await c.call('navigate_to', { target: 'code', file_path: unplanned, line: 9 });
       await c.beat(2);
       console.log('    unplanned edit in config.py — expect ◆ drifted');
-      await c.shot('14-verdict-drift', 'services/api/app/config.py', 'drifted');
+      await c.shot('14-verdict-drift', { file: 'services/api/app/config.py', verdict: 'drifted' });
 
       // The Go file was edited in `work` AND is targeted by an item.
       const planned = path.join(PROJECT, 'services/shared-go/money/money.go');
@@ -321,7 +406,7 @@ const SCENES: Scene[] = [
         console.log('    money.go differs from its pre-edit state — the gutter should mark it');
       }
       console.log('    planned + changed in money.go — expect ✓ aligned');
-      await c.shot('15-verdict-aligned', 'services/shared-go/money/money.go', 'aligned');
+      await c.shot('15-verdict-aligned', { file: 'services/shared-go/money/money.go', verdict: 'aligned' });
     },
   },
 
@@ -340,7 +425,7 @@ const SCENES: Scene[] = [
       await c.beat(2);
       // The file, with the marker naming the item — this is the half a
       // screenshot can actually show.
-      await c.shot('16a-roundtrip-from-code', 'services/shared-go/money/money.go', 'aligned');
+      await c.shot('16a-roundtrip-from-code', { file: 'services/shared-go/money/money.go', verdict: 'aligned' });
 
       // `select_item` is NOT the journey. It jumps to the item without
       // going through the code reader's banner, so no breadcrumb is left
@@ -845,6 +930,132 @@ const SCENES: Scene[] = [
   },
 
   {
+    id: 'brief',
+    title: 'A brief with no code in it',
+    watch: 'the Brief on "Analyse": its criterion goes waiting → approved → stale when the spreadsheet changes',
+    async run(c) {
+      const folder = briefFolder();
+      const abs = (rel: string) => path.join(folder.path, rel);
+      const cite = `${folder.cited.sheet}!${folder.cited.range}`;
+      await c.say(
+        'Work that is not code',
+        'A folder with a spreadsheet and a guide in it — no git, no source. The same loop: a brief, evidence, and a person signing it off.',
+      );
+      if (!(await c.call('open_project', { path: folder.path })).ok) return;
+
+      const made = await c.json('create_plan_from_template', {
+        template_id: 'analysis-report',
+        project_path: folder.path,
+        placeholder_values: { report: 'Regional review', period: 'Q3' },
+      });
+      const planUid: string | undefined = made?.plan?.uid;
+      if (!planUid) { c.flag('the analysis-report playbook made no plan'); return; }
+      c.state.briefPlan = planUid;
+      const items: Array<{ uid: string; title: string }> = (await c.json('list_items', { plan_uid: planUid }))?.items ?? [];
+      const analyse = items.find((i) => i.title === 'Analyse');
+      if (!analyse) { c.flag(`the playbook has no "Analyse" step — it has ${items.map((i) => i.title).join(', ')}`); return; }
+
+      // What a person hands over: the data, and how the team writes it up.
+      const workbook = await c.json('record_artefact', { item_uid: analyse.uid, path: folder.workbook, role: 'material', note: 'Q3 figures by region' });
+      await c.json('record_artefact', { item_uid: analyse.uid, path: folder.guide, role: 'material', note: 'How we write the review' });
+      if (!workbook?.attachment_uid) return;
+      await c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
+
+      // The agent, connected the way Claude Desktop connects: through the
+      // stdio connector, as `claude-ai`. Everything from here is its work.
+      const agent = await c.bridge('claude-ai');
+      await c.say('An agent picks it up', 'Connected through the bridge, the way Claude Desktop is. It starts where any agent should: the brief.');
+      const brief = await agent.json('get_brief', { item_uid: analyse.uid });
+      if (!brief) return;
+      console.log(`    brief: ${brief.item?.title} · ${brief.guide?.length ?? 0} guide page(s) · ${brief.materials?.length ?? 0} material(s) · ${brief.criteria?.length ?? 0} criteria`);
+      const criterion = (brief.criteria ?? []).find((x: { kind: string }) => x.kind === 'citation');
+      if (!criterion) { c.flag('the Analyse step carries no citation criterion'); return; }
+      if (criterion.policy === 'agent') c.flag('a citation criterion from a playbook is agent-approved — a file must not grant that');
+      await agent.call('claim_item', { uid: analyse.uid });
+
+      const read = await agent.call('read_material', {
+        attachment_uid: workbook.attachment_uid,
+        locator: { sheet: folder.cited.sheet, range: 'A1:C4' },
+      });
+      if (!read.ok) return;
+      if (!read.text.includes(String(folder.cited.value))) c.flag(`read_material did not return ${cite} (${folder.cited.value})`);
+      console.log(`    read ${folder.workbook} ${folder.cited.sheet}!A1:C4 — EMEA Q3 is ${folder.cited.value}`);
+
+      // Its output: a Word document that states the figure and cites it.
+      fs.mkdirSync(path.dirname(abs(folder.output)), { recursive: true });
+      fs.writeFileSync(abs(folder.output), analysisDocx(folder.cited.value, cite));
+      const output = await agent.json('record_artefact', { item_uid: analyse.uid, path: folder.output, role: 'output', note: 'The analysis' });
+      if (!output?.attachment_uid) return;
+
+      await c.say('It offers its evidence', `The figure, and the cell it came from: ${cite}. The checks run first; then it waits for a person.`);
+      const submitted = await agent.call('submit_criterion', {
+        criterion_uid: criterion.uid,
+        evidence: [
+          { attachment_uid: workbook.attachment_uid, locator: { sheet: folder.cited.sheet, range: folder.cited.range } },
+          { attachment_uid: output.attachment_uid },
+        ],
+        note: `EMEA Q3 is ${folder.cited.value} — ${cite}`,
+      });
+      if (!submitted.ok) return;
+      await c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
+      await c.shot('18a-brief-submitted', { criterion: { text: criterion.text, state: 'submitted' } });
+
+      // A person decides. MCP cannot approve — by design, not omission —
+      // so the scene waits for someone to, rather than faking it.
+      const stateOf = async (): Promise<string | null> => {
+        const list = await c.json('list_criteria', { item_uid: analyse.uid });
+        return (Array.isArray(list) ? list : []).find((x: { uid: string }) => x.uid === criterion.uid)?.state ?? null;
+      };
+      const until = async (want: string[], seconds: number): Promise<string | null> => {
+        const deadline = Date.now() + seconds * 1000;
+        let now = await stateOf();
+        while (!(now && want.includes(now)) && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 1000));
+          now = await stateOf();
+        }
+        return now;
+      };
+
+      if (APPROVE) {
+        await c.say('Approving for you', 'Through the desktop\'s own route — the one the Approve button uses. It stands in for a person; it is not the agent approving itself.', 'warning');
+        await c.api(`/api/criteria/${criterion.uid}/decide`, { decision: 'approved' });
+      } else {
+        await c.say('Your turn', `Approve "${criterion.text}" in the window — or send it back with a note. Waiting up to ${APPROVE_WAIT_S}s.`, 'question');
+      }
+      const decided = await until(['met', 'sent_back'], APPROVE ? 15 : APPROVE_WAIT_S);
+      if (decided === 'sent_back') {
+        console.log('    sent back — the agent would read the note in get_brief and try again');
+        return;
+      }
+      if (decided !== 'met') {
+        c.flag(`nobody approved "${criterion.text}" (it is ${decided ?? 'unknown'}) — run with --approve on a dev build, or approve it in the window`);
+        return;
+      }
+      await c.shot('18b-brief-approved', { criterion: { text: criterion.text, state: 'met' } });
+
+      // The data changes after sign-off. The approval was of THAT file, so
+      // it no longer vouches for this one — and the Brief says so.
+      await c.say('The spreadsheet changes', `A late correction to ${cite}. The approval was given on the file as it was, so it goes stale.`, 'warning');
+      fs.writeFileSync(abs(folder.workbook), regionalWorkbook(folder.cited.value + 9));
+      const after = await until(['stale'], 20);
+      if (after !== 'stale') { c.flag(`editing the cited workbook left the criterion ${after ?? 'unknown'}, not stale`); return; }
+      await c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
+      await c.shot('18c-brief-stale', { criterion: { text: criterion.text, state: 'stale' } });
+
+      // And the place it cited, as it is now.
+      await c.call('navigate_to', {
+        target: 'artefact',
+        attachment_uid: workbook.attachment_uid,
+        locator: { sheet: folder.cited.sheet, range: folder.cited.range },
+      });
+      await c.shot('18d-brief-cited-cell', { artefact: path.basename(folder.workbook) });
+      // Close the viewer: it is a modal, and left open it blocks the next
+      // run's preflight — which is how this step was found missing.
+      await c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
+    },
+  },
+
+  {
     id: 'finish',
     title: 'Hand back to the human',
     watch: 'the card with a Got it button — the agent waits for you',
@@ -900,7 +1111,7 @@ async function main() {
       // Collapse rather than take the first line: an error whose body is
       // pretty-printed JSON has "{" as its first line, and a flag reading
       // `review_plan: {` says nothing at all.
-      if (r.isError) ctx.flag(`${tool}: ${r.text.replace(/\s+/g, ' ').trim().slice(0, 220)}`);
+      if (r.isError) ctx.flag(`${tool}: ${collapse(r.text)}`);
       return { ok: !r.isError, text: r.text };
     },
     async refuse(tool, args = {}) {
@@ -915,43 +1126,24 @@ async function main() {
       await client.callTool('present', { title, text, tone }).catch(() => {});
       await ctx.beat();
     },
-    async shot(label, expectFile, expectVerdict) {
+    async shot(label, want = {}) {
       if (!SHOTS) return;
 
       // Wait for the window to actually be showing the subject, rather
       // than photographing whatever happens to be there when the beat
       // elapses. Navigation is async and a fixed pause is a guess.
-      if (expectFile || expectVerdict) {
-        let onScreen: string | null = null;
-        let marks: Record<string, number> = {};
-        const satisfied = () =>
-          (!expectFile || (onScreen?.endsWith(expectFile) ?? false))
-          && (!expectVerdict || (marks[expectVerdict] ?? 0) > 0);
-
+      if (Object.keys(want).length > 0) {
+        let seen = seenFrom('');
         for (let attempt = 0; attempt < 16; attempt += 1) {
-          const state = await client.callTool('ui_ready', {});
-          try {
-            const parsed = JSON.parse(state.text);
-            onScreen = parsed.openFile ?? null;
-            // Visible marks only. Counting what is merely in the DOM let a
-            // shot pass whose aligned lines were under the terminal drawer.
-            marks = parsed.visibleVerdicts ?? {};
-          } catch { onScreen = null; marks = {}; }
-          if (satisfied()) break;
+          seen = seenFrom((await client.callTool('ui_ready', {})).text);
+          if (meets(want, seen)) break;
           await new Promise((r) => setTimeout(r, 500));
         }
-
-        if (!satisfied()) {
-          const seen = Object.entries(marks).map(([k, n]) => `${n} ${k}`).join(', ') || 'no VISIBLE marked lines';
-          ctx.flag(
-            `shot "${label}" wanted ${expectFile ?? 'any file'}${expectVerdict ? ` with ${expectVerdict} lines` : ''}; `
-            + `the window showed ${onScreen ?? 'no file'} with ${seen} — not captured`,
-          );
+        if (!meets(want, seen)) {
+          ctx.flag(`shot "${label}" wanted ${describeWant(want)}; the window showed ${describeSeen(want, seen)} — not captured`);
           return;
         }
-        if (expectVerdict) {
-          console.log(`    on screen: ${onScreen?.split('/').pop()} · ${Object.entries(marks).map(([k, n]) => `${n} ${k}`).join(', ')}`);
-        }
+        console.log(`    on screen: ${describeSeen(want, seen)}`);
       }
 
       const r = await client.callTool('screenshot', {});
@@ -991,12 +1183,17 @@ async function main() {
       extraAgents.push(extra);
       return extra;
     },
-    async api(pathAndQuery) {
+    async api(pathAndQuery, body) {
+      const method = body === undefined ? 'GET' : 'POST';
       try {
-        const res = await fetch(`http://127.0.0.1:${API_PORT}${pathAndQuery}`, {
-          headers: { 'x-codetrellis-token': token },
-        });
-        if (!res.ok) { ctx.flag(`GET ${pathAndQuery} -> ${res.status}`); return null; }
+        const res = await fetch(`http://127.0.0.1:${API_PORT}${pathAndQuery}`, body === undefined
+          ? { headers: { 'x-codetrellis-token': token } }
+          : {
+            method,
+            headers: { 'x-codetrellis-token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        if (!res.ok) { ctx.flag(`${method} ${pathAndQuery} -> ${res.status}`); return null; }
         return await res.json();
       } catch (err) {
         // A packaged build serves the renderer over IPC and binds no TCP
@@ -1008,9 +1205,33 @@ async function main() {
           console.log(`    (no HTTP API on :${API_PORT} — packaged builds are IPC-only; skipping this check)`);
           return null;
         }
-        ctx.flag(`GET ${pathAndQuery} failed: ${msg}`);
+        ctx.flag(`${method} ${pathAndQuery} failed: ${msg}`);
         return null;
       }
+    },
+    async bridge(clientName) {
+      // The connector reads the port and the token from the data dir on
+      // every connect, exactly as it does for Claude Desktop — so this is
+      // the path a person's own agent takes, not the demo's shortcut.
+      const args = CONNECTOR
+        ? [path.resolve(CONNECTOR), '--data-dir', DATA_DIR]
+        : ['--import', 'tsx', path.join(REPO, 'src/backend/mcp/connector/main.ts'), '--data-dir', DATA_DIR];
+      const bridged = new Client({ name: clientName, version: 'demo' }, { capabilities: {} });
+      await bridged.connect(new StdioClientTransport({ command: process.execPath, args, cwd: REPO, stderr: 'pipe' }));
+      bridges.push(bridged);
+      const call: Bridge['call'] = async (tool, a = {}) => {
+        const r = await bridged.callTool({ name: tool, arguments: a }) as { isError?: boolean; content?: Array<{ type: string; text?: string }> };
+        const text = (r.content ?? []).filter((x) => x.type === 'text').map((x) => x.text ?? '').join('\n');
+        if (r.isError) ctx.flag(`${clientName} ${tool}: ${collapse(text)}`);
+        return { ok: !r.isError, text };
+      };
+      return {
+        call,
+        async json(tool, a) {
+          const r = await call(tool, a);
+          try { return JSON.parse(r.text); } catch { return null; }
+        },
+      };
     },
   };
 
@@ -1071,6 +1292,11 @@ async function main() {
     if (ctx.state.historyPlan) {
       await client.callTool('delete_plan', { plan_uid: ctx.state.historyPlan }).catch(() => {});
     }
+    if (ctx.state.briefPlan) {
+      await client.callTool('delete_plan', { plan_uid: ctx.state.briefPlan }).catch(() => {});
+      console.log('   deleted the brief plan');
+    }
+    for (const b of bridges) await b.close().catch(() => {});
     if (ctx.state.doc) {
       await client.callTool('delete_system_doc', { uid: ctx.state.doc }).catch(() => {});
       console.log('   deleted the demo system doc');
