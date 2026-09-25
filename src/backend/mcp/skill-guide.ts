@@ -365,7 +365,7 @@ edges.
 | \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates |
 | \`get_brief(item_uid)\` | One read: the item, the guide, its materials, each criterion and what it still needs, any note sent back |
 | \`list_materials(plan_uid)\` | Every recorded file on a plan, and how read_material returns each |
-| \`read_material(attachment_uid, locator?)\` | A material's content as quoted text — CSV per sheet, markdown, text per page or slide, numbered lines — or the image itself; logged on the item |
+| \`read_material(attachment_uid, locator?)\` | A material's content as quoted text — CSV per sheet, markdown, text per page or slide, numbered lines — or the image itself; a Word document or deck already opened in CodeTrellis reads as the pages the person saw; logged on the item |
 | \`record_artefact(item_uid, path, role)\` | Record a file the item read (material), produced (output) or captured (evidence); hashed so approvals notice changes |
 | \`list_criteria(item_uid)\` | The item's acceptance criteria: kind, policy, state, any send-back note |
 | \`add_criterion(item_uid, text, kind?)\` | Add a criterion, verbatim; starts at \`propose\` |

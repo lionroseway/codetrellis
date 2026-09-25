@@ -45,7 +45,8 @@ export function readAs(ext: string): string {
   switch (ext) {
     case 'xlsx': case 'xlsm': return 'CSV per sheet';
     case 'xls': return 'not read as text (old-format workbook)';
-    case 'docx': return 'markdown';
+    // §5.1: once the viewer has rendered one, its pages as the person saw them.
+    case 'docx': return 'markdown, or its pages once opened in CodeTrellis';
     case 'pptx': return 'words per slide';
     case 'pdf': return 'text per page';
     case 'png': case 'jpg': case 'jpeg': case 'gif': case 'webp': return 'the image itself';

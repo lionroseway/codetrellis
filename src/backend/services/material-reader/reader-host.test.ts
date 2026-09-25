@@ -9,7 +9,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { makeDeck, makeDocx, makePdf, makeWorkbook } from './fixtures.test-helper';
+import type { EngineHost } from '../rendition/engine-host';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-reader-'));
 process.env.CODETRELLIS_DATA_DIR = path.join(tmp, 'data');
@@ -92,6 +94,33 @@ describe('read_material through the reader process', () => {
   test('a video is said not to be readable as text', async () => {
     const r = await host.readMaterial((await record('in/walkthrough.mp4')).uid, null);
     assert.equal(!r.ok && r.status, 415);
+  });
+
+  test('a Word document the viewer has rendered reads as that rendition; one it has not, as the document', async () => {
+    const docx = makeDocx(['# Highlights', 'EMEA rose.']);
+    fs.writeFileSync(path.join(project, 'in', 'summary.docx'), docx);
+    const a = await record('in/summary.docx');
+    // What the viewer leaves behind: the PDF, named by the bytes and the engine.
+    const engine = { check: async () => ({ ok: true, manifest: { version: 'test-engine-1' } }) } as unknown as EngineHost;
+    const light = await host.readMaterial(a.uid, null, { engine });
+    assert.ok(light.ok && light.kind === 'text' && light.reply.format === 'markdown', 'no rendition yet: the document itself');
+
+    const renditions = path.join(process.env.CODETRELLIS_DATA_DIR!, 'renditions');
+    fs.mkdirSync(renditions, { recursive: true });
+    const sha = createHash('sha256').update(docx).digest('hex');
+    fs.writeFileSync(path.join(renditions, `${sha}-test-engine-1.pdf`), makePdf(['Highlights', 'EMEA rose.']));
+    const r = await host.readMaterial(a.uid, { page: 2 }, { engine });
+    assert.ok(r.ok && r.kind === 'text', JSON.stringify(r));
+    assert.equal(r.reply.where, 'page 2');
+    assert.equal(r.reply.sections[0].body, 'EMEA rose.');
+
+    // A different engine made none of these; an engine that does not check out, none at all.
+    const other = await host.readMaterial(a.uid, null, { engine: { check: async () => ({ ok: true, manifest: { version: 'other' } }) } as unknown as EngineHost });
+    assert.ok(other.ok && other.kind === 'text' && other.reply.format === 'markdown');
+    const off = await host.readMaterial(a.uid, null, { engine: { check: async () => ({ ok: false, reason: 'no engine' }) } as unknown as EngineHost });
+    assert.ok(off.ok && off.kind === 'text' && off.reply.format === 'markdown');
+    const broken = await host.readMaterial(a.uid, null, { engine: { check: async () => { throw new Error('EIO'); } } as unknown as EngineHost });
+    assert.ok(broken.ok && broken.kind === 'text' && broken.reply.format === 'markdown', 'an engine that cannot be checked costs nothing');
   });
 
   test('an unknown uid, and a file swapped for a link after it was recorded, are not read', async () => {
