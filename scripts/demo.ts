@@ -154,6 +154,8 @@ interface Scene {
 
 const flagged: string[] = [];
 const edited = new Map<string, string>();
+/** Projects the demo opened, so the throwaway ones leave the recent list with their folders. */
+const opened = new Set<string>();
 const extraAgents: ScriptedMcp[] = [];
 const bridges: Client[] = [];
 
@@ -1169,6 +1171,7 @@ async function main() {
     flag: (m) => { flagged.push(m); console.log(`    ⚠  ${m}`); },
     beat: (mult = 1) => new Promise((r) => setTimeout(r, BEAT * mult)),
     async call(tool, args = {}) {
+      if (tool === 'open_project' && typeof args.path === 'string') opened.add(args.path);
       const r = await client.callTool(tool, args);
       // Collapse rather than take the first line: an error whose body is
       // pretty-printed JSON has "{" as its first line, and a flag reading
@@ -1369,6 +1372,13 @@ async function main() {
     // started before the fixtures are deleted underneath the app.
     await client.callTool('open_project', { path: PROJECT }).catch(() => {});
     await client.callTool('rescan_project', { project_path: PROJECT }).catch(() => {});
+    // And forget them. The folders are deleted below, and each run used to
+    // leave a recent project pointing at one — three runs, three dead
+    // `q3-regional-review` entries in the list a person opens projects from.
+    const throwaway = fixtureRoot();
+    for (const p of opened) {
+      if (throwaway && p.startsWith(throwaway)) await client.callTool('remove_recent_project', { project_path: p }).catch(() => {});
+    }
     await client.disconnect().catch(() => {});
     if (fixtureRoot()) console.log('   removed the throwaway fixtures');
     cleanupFixtures();
