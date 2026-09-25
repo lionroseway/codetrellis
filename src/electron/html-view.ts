@@ -22,8 +22,9 @@
  * uid; the path is resolved in main, as everywhere in §7.1.
  */
 
-import { ipcMain, session, WebContentsView, type BrowserWindow, type Session } from 'electron';
+import { ipcMain, nativeImage, screen, session, WebContentsView, type BrowserWindow, type NativeImage, type Session } from 'electron';
 import { Readable } from 'node:stream';
+import { overlay } from './composite';
 import { isAttachmentUid, resolveServable, serveReportAsset } from '../backend/services/artefact-content-service';
 import { isSameReport } from '../backend/services/html-view-policy';
 
@@ -135,6 +136,34 @@ export async function showReport(win: BrowserWindow, uid: unknown, bounds: unkno
 /** The view on screen, for the hostile-report test. */
 export function currentReportView(): WebContentsView | null {
   return view;
+}
+
+/**
+ * The window's capture as a PNG, with the report on screen painted in.
+ *
+ * `capturePage()` on the window sees only its own page, so without this a
+ * screenshot of an open report is the white box the view is laid over.
+ * The view is captured twice for the same reason the window is (main.ts):
+ * an occluded window hands back the previous frame on the first call.
+ */
+export async function pngWithReport(win: BrowserWindow, page: NativeImage): Promise<Buffer> {
+  const v = view;
+  if (!v || v.webContents.isDestroyed()) return page.toPNG();
+  const scaleFactor = screen.getDisplayMatching(win.getBounds()).scaleFactor;
+  await v.webContents.capturePage();
+  await new Promise((r) => setTimeout(r, 120));
+  const report = await v.webContents.capturePage();
+
+  const base = { data: page.toBitmap({ scaleFactor }), ...page.getSize(scaleFactor) };
+  const top = { data: report.toBitmap({ scaleFactor }), ...report.getSize(scaleFactor) };
+  if (base.data.length !== base.width * base.height * 4 || top.data.length !== top.width * top.height * 4) {
+    return page.toPNG();
+  }
+  // Bounds are in the window's content coordinates; the bitmap is in pixels.
+  const scale = base.width / win.getContentBounds().width;
+  const at = v.getBounds();
+  const painted = overlay(base, top, at.x * scale, at.y * scale);
+  return nativeImage.createFromBitmap(painted, { width: base.width, height: base.height, scaleFactor }).toPNG({ scaleFactor });
 }
 
 export function installHtmlView(getWindow: () => BrowserWindow | null): void {
