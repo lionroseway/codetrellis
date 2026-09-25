@@ -181,13 +181,14 @@ function CriterionRow({
   return (
     <li
       data-testid="criterion-row"
+      data-criterion={c.uid}
       data-state={c.state}
       className="group rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2"
     >
       <div className="flex items-start gap-2">
         <span className={`${state.tone} text-[13px] leading-5 w-4 text-center`} aria-hidden>{state.glyph}</span>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] leading-5 whitespace-pre-wrap">{c.text}</p>
+          <p className="text-[13px] leading-5 whitespace-pre-wrap" data-criterion-text>{c.text}</p>
           <p className="text-[10px] text-foreground-subtle mt-0.5">
             {vocabulary === 'brief' && c.state === 'met' ? (
               <span className={state.tone}>

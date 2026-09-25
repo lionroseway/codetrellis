@@ -6,6 +6,7 @@ import { useToastStore } from '../stores/toast-store';
 import { useProjectStore } from '../stores/project-store';
 import { useTerminalStore } from '../stores/terminal-store';
 import { useUiStore } from '../stores/ui-store';
+import { useArtefactViewStore } from '../stores/artefact-view-store';
 import type { AgentEvent } from '../../shared/types';
 
 /**
@@ -15,9 +16,21 @@ import type { AgentEvent } from '../../shared/types';
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Counts ui-navigate messages, so an asynchronous step can tell whether a
+  // later navigation has arrived while it waited.
+  const navigationRef = useRef(0);
 
   useEffect(() => {
+    // Set by the cleanup. A socket closed BY the cleanup still fires
+    // `onclose` afterwards, and that used to schedule a reconnect nothing
+    // could cancel — so StrictMode's mount-unmount-mount left two live
+    // sockets three seconds later, and every broadcast was handled twice
+    // (two presence cards with one id, two navigations, two answers to a
+    // ui_ready request).
+    let disposed = false;
+
     function connect() {
+      if (disposed) return;
       const ws = new WebSocket(`ws://${window.location.host}/ws`);
       wsRef.current = ws;
 
@@ -240,6 +253,11 @@ export function useWebSocket() {
           if (type === 'ui-navigate') {
             const target = payload?.target as string | undefined;
             const planUid = payload?.planUid as string | undefined;
+            // The artefact viewer is a modal. Asked to show anything else,
+            // close it — otherwise "show the brief" leaves the brief under
+            // the file the agent opened last, and nothing on screen changes.
+            const navigation = ++navigationRef.current;
+            if (target !== 'artefact') useArtefactViewStore.getState().close();
             if (target === 'plan' || target === 'plans') {
               // Await setActivePlan so activePlanUid is set before the
               // workspace mode flips — otherwise the render condition
@@ -276,7 +294,12 @@ export function useWebSocket() {
               // A recorded file in the viewer, at the place the agent cites.
               const attachmentUid = payload?.attachmentUid as string | undefined;
               if (attachmentUid) {
-                void import('../lib/open-artefact-at').then((m) => m.openArtefactAt(attachmentUid, payload?.locator ?? null));
+                // Only if nothing has navigated since. The import is async, so
+                // "show the file, then show the brief" otherwise closed the
+                // viewer first and opened it after — over the brief.
+                void import('../lib/open-artefact-at').then((m) => {
+                  if (navigation === navigationRef.current) m.openArtefactAt(attachmentUid, payload?.locator ?? null);
+                });
               }
             } else if (target === 'split') {
               (async () => {
@@ -684,6 +707,10 @@ export function useWebSocket() {
                 let openArtefact: { uid: string; name: string | null; locator: unknown } | null = null;
                 const verdicts: Record<string, number> = {};
                 const visibleVerdicts: Record<string, number> = {};
+                // Phase 31.8 — the criteria a person can SEE, and in what
+                // state, so a demo cannot caption a shot "stale" while the
+                // row on screen still says approved.
+                const criteria: Array<{ uid: string; text: string; state: string }> = [];
                 try {
                   const { useProjectStore } = await import('../stores/project-store');
                   const { useUiStore } = await import('../stores/ui-store');
@@ -744,6 +771,22 @@ export function useWebSocket() {
                       visibleVerdicts[v] = (visibleVerdicts[v] ?? 0) + 1;
                     }
                   }
+                  // Visible as the verdicts are: in the viewport and not
+                  // under something else. The row's text is what the check
+                  // matches on — the uid is for a script that has it.
+                  for (const row of Array.from(document.querySelectorAll('[data-criterion]'))) {
+                    const r = row.getBoundingClientRect();
+                    if (r.height === 0 || r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) continue;
+                    const x = r.left + Math.min(24, r.width / 2);
+                    const y = r.top + Math.min(12, r.height / 2);
+                    const top = document.elementFromPoint(x, y);
+                    if (!top || !(top === row || row.contains(top))) continue;
+                    criteria.push({
+                      uid: row.getAttribute('data-criterion') ?? '',
+                      text: row.querySelector('[data-criterion-text]')?.textContent ?? '',
+                      state: row.getAttribute('data-state') ?? '',
+                    });
+                  }
                 } catch { /* stores unavailable — shellMounted already says so */ }
 
                 await fetch('/api/screenshot-response', {
@@ -763,6 +806,7 @@ export function useWebSocket() {
                       openArtefact,
                       verdicts,
                       visibleVerdicts,
+                      criteria,
                     }),
                   }),
                 }).catch(() => {});
@@ -928,6 +972,7 @@ export function useWebSocket() {
       };
 
       ws.onclose = () => {
+        if (disposed) return;
         console.log('[WS] Disconnected, reconnecting...');
         reconnectRef.current = setTimeout(connect, 3000);
       };
@@ -940,6 +985,7 @@ export function useWebSocket() {
     connect();
 
     return () => {
+      disposed = true;
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       wsRef.current?.close();
     };

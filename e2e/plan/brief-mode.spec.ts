@@ -4,7 +4,8 @@
  * A plan read as a piece of work: its tasks, the task's goal, the guide,
  * the materials, what good looks like, and what Claude is doing — in the
  * Brief's words, with the graph not mounted. An agent can put the brief
- * and a cited file on screen, and ui_ready says which file is showing.
+ * and a cited file on screen, and ui_ready says which file is showing and
+ * which criteria are visible, in what state.
  */
 
 import fs from 'node:fs';
@@ -60,6 +61,10 @@ test.describe('Brief mode', () => {
       await expect(criteria).toContainText('What good looks like');
       await expect(criteria.getByTestId('criterion-row')).toContainText('○');
       await expect(criteria.getByTestId('criterion-row')).toContainText('not yet');
+      // ui_ready reports the criteria a person can see, and their state —
+      // what a demo's shot checks before it claims a state in its caption.
+      const shown = JSON.parse((await agent.callTool('ui_ready', {})).content[0].text);
+      expect(shown.criteria).toEqual([expect.objectContaining({ text: 'Covers all four regions', state: 'open' })]);
 
       // The agent reads the material; the Brief says so in words, naming the file.
       await agent.callTool('read_material', { attachment_uid: material.attachment_uid, locator: { lines: '2-3' } });
@@ -79,6 +84,19 @@ test.describe('Brief mode', () => {
       const ready = JSON.parse((await agent.callTool('ui_ready', {})).content[0].text);
       expect(ready.workspaceMode).toBe('brief');
       expect(ready.openArtefact).toEqual({ uid: material.attachment_uid, name: expect.stringContaining('q3-sales.csv'), locator: { lines: '2' } });
+
+      // Asked to show the brief again, the viewer — a modal — closes, so
+      // what the agent asked for is what is on screen.
+      await agent.callTool('navigate_to', { target: 'brief', plan_uid: plan.uid, item_uid: task });
+      await expect(page.getByTestId('artefact-viewer')).toHaveCount(0);
+      await expect(brief.getByTestId('criteria-block')).toBeVisible();
+
+      // Back to back — the file, then the brief — the last one wins. The
+      // viewer's open is asynchronous, and it used to land after the close.
+      await agent.callTool('navigate_to', { target: 'artefact', attachment_uid: material.attachment_uid, locator: { lines: '2' } });
+      await agent.callTool('navigate_to', { target: 'brief', plan_uid: plan.uid, item_uid: task });
+      await page.waitForTimeout(1000);
+      await expect(page.getByTestId('artefact-viewer')).toHaveCount(0);
     } finally {
       agent.close();
     }

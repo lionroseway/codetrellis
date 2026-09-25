@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { makeWorkbook, makeDocx, makePdf } from '../src/backend/services/material-reader/fixtures.test-helper';
 
 let root: string | null = null;
 
@@ -57,7 +58,7 @@ function init(dir: string): void {
   git(dir, 'config', 'user.name', 'CodeTrellis demo');
 }
 
-function write(dir: string, rel: string, body: string): void {
+function write(dir: string, rel: string, body: string | Buffer): void {
   const abs = path.join(dir, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, body);
@@ -134,6 +135,71 @@ export function noGitDirectory(): string {
   fs.mkdirSync(dir, { recursive: true });
   write(dir, 'app.ts', 'export const app = () => "hello";\n');
   return dir;
+}
+
+export interface BriefFixture {
+  path: string;
+  /** Project-relative, as record_artefact takes them. */
+  workbook: string;
+  guide: string;
+  /** Where the agent writes its output — absent until it does. */
+  output: string;
+  /** The figure the agent cites, and where it lives. */
+  cited: { sheet: string; range: string; value: number };
+  /** The cell next to it — Q2, not Q3 — which the agent cites first, wrongly. */
+  misread: { range: string; value: number };
+}
+
+/**
+ * Work that is not code: a folder with a spreadsheet and a PDF guide in
+ * it, and no git. The Brief has to hold up with nothing to diff — the
+ * evidence is files and places in them, and a change to the data is what
+ * makes an approval stale.
+ *
+ * Real files, built by the same helper the reader's own tests use, so a
+ * locator the demo cites is checked against a workbook the product parses
+ * rather than one a script only claims to have written.
+ */
+export function briefFolder(): BriefFixture {
+  const dir = path.join(base(), 'q3-regional-review');
+  fs.mkdirSync(dir, { recursive: true });
+  const fixture: BriefFixture = {
+    path: dir,
+    workbook: 'data/q3-regional.xlsx',
+    guide: 'guide/how-we-write-the-review.pdf',
+    output: 'out/q3-analysis.docx',
+    cited: { sheet: 'Regional', range: 'C3', value: 342 },
+    misread: { range: 'B3', value: 318 },
+  };
+  write(dir, fixture.workbook, regionalWorkbook(fixture.cited.value));
+  write(dir, fixture.guide, makePdf([
+    'How we write the regional review',
+    'Every figure cites its sheet and cell, e.g. Regional!C3.',
+    'The report owner signs it off before it goes to the board.',
+  ]));
+  return fixture;
+}
+
+/** The workbook, with EMEA's Q3 figure (Regional!C3) set to `emeaQ3`. */
+export function regionalWorkbook(emeaQ3: number): Buffer {
+  return makeWorkbook({
+    Regional: [
+      ['Region', 'Q2', 'Q3'],
+      ['Americas', 410, 452],
+      ['EMEA', 318, emeaQ3],
+      ['APAC', 205, 231],
+    ],
+    Notes: [['Source: finance ledger export, 1 October']],
+  });
+}
+
+/** The agent's output: a short Word document that states and cites the figure. */
+export function analysisDocx(figure: number, citation: string): Buffer {
+  return makeDocx([
+    '# Q3 regional analysis',
+    `EMEA grew to ${figure} in Q3 (${citation}).`,
+    'Every figure here cites the sheet and cell it came from.',
+  ]);
 }
 
 /** `git init` and nothing committed — a real state on day one of a project. */
