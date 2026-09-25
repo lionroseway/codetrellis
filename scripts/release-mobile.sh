@@ -80,6 +80,32 @@ fi
 log() { printf '\033[1;36m[release-mobile]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[release-mobile]\033[0m %s\n' "$*" >&2; }
 
+# --- What testers must be told about THIS version ---------------------------
+#
+# Read from mobile/tester-notes/<version>.txt, printed verbatim when present.
+# Most versions need nothing, so a missing file is normal and says so.
+#
+# This used to be a hard-coded warning that every pairing breaks. That was true
+# of 0.1.14 (the Phase 19 pairing change) and false of every release after it,
+# so the script contradicted the release notes it was meant to back up. A note
+# keyed by version cannot outlive the version it describes.
+TESTER_NOTES_DIR="${MOBILE_DIR}/tester-notes"
+
+print_tester_note() {
+  local note="${TESTER_NOTES_DIR}/${MOBILE_VERSION}.txt"
+  log ""
+  if [[ -s "$note" ]]; then
+    log "TESTER NOTE FOR ${MOBILE_VERSION} — say it plainly to testers:"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      log "  ${line}"
+    done < "$note"
+  else
+    log "No tester note for ${MOBILE_VERSION}. If testers need to be told something"
+    log "(a forced re-pair, a changed permission), put it in"
+    log "mobile/tester-notes/${MOBILE_VERSION}.txt."
+  fi
+}
+
 case "$PLATFORM" in
   ios|android) ;;
   *) err "--platform must be ios or android (got '${PLATFORM}')"; exit 2 ;;
@@ -193,6 +219,7 @@ if [[ "$PLATFORM" == "android" ]]; then
   err "  ${ARTIFACT_PATH:-<the .aab from the build above>}"
   err "Adding a submit block here is the remaining gap — see"
   err "docs/claude/mobile-companion.md."
+  print_tester_note
   exit 0
 fi
 
@@ -206,7 +233,4 @@ fi
 
 log "Submitted. Apple processes the build before it appears in TestFlight —"
 log "usually minutes, occasionally much longer."
-log ""
-log "RELEASE NOTE FOR THIS VERSION — say it plainly to testers:"
-log "  every existing pairing stops working and must be redone."
-log "  The device list offers 'Pair again' and explains why; it is not a bug."
+print_tester_note
