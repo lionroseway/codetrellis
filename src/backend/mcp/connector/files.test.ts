@@ -18,7 +18,14 @@ import {
   writeEndpointFile,
   TOKEN_FILE,
 } from './files';
-import { claudeCodeConnectorCommand, connectorConfig, resolveConnectorCommand, shellQuote } from './command';
+import {
+  APPIMAGE_BOOTSTRAP,
+  PORTABLE_CAVEAT,
+  claudeCodeConnectorCommand,
+  connectorConfig,
+  resolveConnectorCommand,
+  shellQuote,
+} from './command';
 import { TOKEN_HEADER } from './sse-upstream';
 import { TOKEN_HEADER as SERVER_TOKEN_HEADER } from '../../services/capability-token';
 import { agentTypeFromClientInfo } from '../client-identity';
@@ -163,6 +170,142 @@ describe('connector command', () => {
     });
     assert.equal(cmd?.args[0], '/src/ct/out/connector/mcp-connector.cjs');
     assert.deepEqual(cmd?.env, { ELECTRON_RUN_AS_NODE: '1' });
+  });
+
+  describe('Linux AppImage', () => {
+    // What the AppImage runtime hands the app: a fresh mount every launch.
+    const mount = '/tmp/.mount_CodeTrA1b2C3';
+    const appImage = '/home/a/Apps/CodeTrellis-0.1.17-x86_64.AppImage';
+    const launched = {
+      ...base,
+      execPath: `${mount}/codetrellis`,
+      resourcesPath: `${mount}/resources`,
+      dataDir: '/home/a/.codetrellis',
+      env: { APPIMAGE: appImage, APPDIR: mount },
+    };
+    const onDisk = (p: string) => p === appImage || p === `${mount}/resources/connector/mcp-connector.cjs`;
+
+    test('the config names the AppImage file, never the mount', () => {
+      const cmd = resolveConnectorCommand({ ...launched, exists: onDisk });
+      assert.deepEqual(cmd, {
+        command: appImage,
+        args: ['-e', APPIMAGE_BOOTSTRAP, '--', '--data-dir', '/home/a/.codetrellis', '--no-sandbox'],
+        env: { ELECTRON_RUN_AS_NODE: '1' },
+      });
+      assert.ok(!JSON.stringify(cmd).includes('.mount_'), 'nothing in it dies with this launch');
+    });
+
+    test('two launches, two mounts, one config', () => {
+      const other = '/tmp/.mount_CodeTrZz9Yy8';
+      const again = resolveConnectorCommand({
+        ...launched,
+        execPath: `${other}/codetrellis`,
+        resourcesPath: `${other}/resources`,
+        env: { APPIMAGE: appImage, APPDIR: other },
+        exists: (p) => p === appImage || p === `${other}/resources/connector/mcp-connector.cjs`,
+      });
+      assert.deepEqual(again, resolveConnectorCommand({ ...launched, exists: onDisk }));
+    });
+
+    test('the bootstrap loads the connector this binary shipped, and nothing spliced in', () => {
+      assert.equal(
+        APPIMAGE_BOOTSTRAP,
+        "require(require('path').join(process.resourcesPath, 'connector', 'mcp-connector.cjs'))",
+      );
+    });
+
+    test('the arguments survive Node\'s option parser and AppRun\'s sandbox probe', () => {
+      const args = resolveConnectorCommand({ ...launched, exists: onDisk })!.args;
+      // Everything after `--` is the connector's; before it, only Node's own `-e`.
+      const end = args.indexOf('--');
+      assert.deepEqual(args.slice(0, end), ['-e', APPIMAGE_BOOTSTRAP]);
+      // AppRun prepends --no-sandbox unless an argument already is one;
+      // prepended, Node would exit with "bad option".
+      assert.ok(args.slice(end + 1).includes('--no-sandbox'));
+    });
+
+    test('shell-quoted for `claude mcp add`', () => {
+      const line = claudeCodeConnectorCommand(resolveConnectorCommand({ ...launched, exists: onDisk })!, 'linux');
+      assert.equal(
+        line,
+        'claude mcp add codetrellis --scope user -e ELECTRON_RUN_AS_NODE=1 -- '
+        + `${appImage} -e 'require(require('\\''path'\\'').join(process.resourcesPath, '\\''connector'\\'', '\\''mcp-connector.cjs'\\''))' `
+        + '-- --data-dir /home/a/.codetrellis --no-sandbox',
+      );
+    });
+
+    test('APPIMAGE alone does not redirect a .deb install', () => {
+      // An ordinary environment variable: only the mount the binary runs from counts.
+      const deb = {
+        ...base,
+        execPath: '/opt/CodeTrellis/codetrellis',
+        resourcesPath: '/opt/CodeTrellis/resources',
+        exists: (p: string) => p === appImage || p.startsWith('/opt/CodeTrellis/'),
+      };
+      for (const env of [
+        { APPIMAGE: appImage },
+        { APPIMAGE: appImage, APPDIR: mount },
+        { APPIMAGE: appImage, APPDIR: '/opt/CodeTrellis/..' },
+        { APPIMAGE: 'CodeTrellis.AppImage', APPDIR: '/opt/CodeTrellis' },
+      ]) {
+        const cmd = resolveConnectorCommand({ ...deb, env });
+        assert.equal(cmd?.command, '/opt/CodeTrellis/codetrellis', JSON.stringify(env));
+        assert.equal(cmd?.args[0], '/opt/CodeTrellis/resources/connector/mcp-connector.cjs');
+      }
+    });
+
+    test('an AppImage file that has gone is not offered', () => {
+      const cmd = resolveConnectorCommand({ ...launched, exists: (p) => p !== appImage && onDisk(`${p}`) });
+      assert.equal(cmd?.command, launched.execPath, 'falls back to this launch, which at least works now');
+    });
+
+    test('an AppImage that shipped no connector offers none', () => {
+      assert.equal(resolveConnectorCommand({ ...launched, exists: (p) => p === appImage }), null);
+    });
+
+    test('a checkout run never takes the AppImage path', () => {
+      const cmd = resolveConnectorCommand({
+        ...launched,
+        execPath: '/src/ct/node_modules/electron/dist/electron',
+        cwd: '/src/ct',
+        env: { APPIMAGE: appImage, APPDIR: '/src/ct/node_modules/electron/dist' },
+        exists: (p) => p === appImage || p === '/src/ct/out/connector/mcp-connector.cjs',
+      });
+      assert.equal(cmd?.command, '/src/ct/node_modules/electron/dist/electron');
+    });
+  });
+
+  describe('Windows portable', () => {
+    // electron-builder's portable launcher unpacks to %TEMP%\<build id> and
+    // runs the app from there; its own .exe cannot carry stdio (NSIS ExecWait
+    // hands the child no handles), so it is never the command.
+    const unpacked = 'C:\\Users\\A\\AppData\\Local\\Temp\\2mXk3Q9pZ8';
+    const portable = {
+      ...base,
+      execPath: `${unpacked}\\CodeTrellis.exe`,
+      resourcesPath: `${unpacked}\\resources`,
+      env: { PORTABLE_EXECUTABLE_FILE: 'C:\\Users\\A\\Downloads\\CodeTrellis-Portable-0.1.17.exe' },
+      exists: () => true,
+    };
+
+    test('runs the unpacked binary, and says when that stops working', () => {
+      const cmd = resolveConnectorCommand(portable);
+      assert.equal(cmd?.command, portable.execPath);
+      assert.deepEqual(cmd?.env, { ELECTRON_RUN_AS_NODE: '1' });
+      assert.equal(cmd?.caveat, PORTABLE_CAVEAT);
+      assert.notEqual(cmd?.command, portable.env.PORTABLE_EXECUTABLE_FILE);
+    });
+
+    test('the caveat is for the person, never part of the config', () => {
+      const cmd = resolveConnectorCommand(portable)!;
+      assert.ok(!JSON.stringify(connectorConfig(cmd)).includes('portable build'));
+      assert.ok(!claudeCodeConnectorCommand(cmd, 'win32').includes('portable build'));
+    });
+
+    test('an installed app carries no caveat', () => {
+      assert.equal(resolveConnectorCommand({ ...portable, env: {} })?.caveat, undefined);
+      assert.equal(resolveConnectorCommand({ ...base, exists: () => true })?.caveat, undefined);
+    });
   });
 
   test('the configs a user pastes carry no secret and survive paths with spaces', () => {

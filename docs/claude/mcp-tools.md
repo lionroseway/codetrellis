@@ -20,6 +20,15 @@ and proxies to the SSE server.
   from `<resources>/connector/mcp-connector.cjs` — no Node install, no
   window. `resolveConnectorCommand` (`connector/command.ts`) works out the
   command for packaged, Electron-from-source and web-dev runs.
+- Two packaged formats do not run from where they live. The **AppImage**
+  remounts at a new `/tmp/.mount_*` every launch, so its command is the
+  `.AppImage` file itself (`$APPIMAGE`), loading the script via `-e` from
+  whichever mount is running. The **Windows portable** `.exe` cannot be the
+  command (its NSIS launcher hands the app no stdin/stdout), so it names the
+  unpacked binary in `%TEMP%\<build id>` — the same for every launch of one
+  build, gone while the app is closed — and carries a `caveat` the copy
+  surfaces show. `.github/workflows/connector-packaged.yml` runs both
+  commands against the built artifacts (`scripts/smoke-connector-packaged.ts`).
 - When the app restarts, the connector re-sends the client's original
   `initialize` and tells the client its tool list changed. When the app is
   not running, it still completes the handshake and answers every call with
