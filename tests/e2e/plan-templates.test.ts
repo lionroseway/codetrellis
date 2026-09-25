@@ -41,9 +41,15 @@ test.describe('Plan templates', () => {
         expect(t.label.length).toBeGreaterThan(0);
         expect(t.shortDescription.length).toBeGreaterThan(0);
         expect(t.defaultTitle.length).toBeGreaterThan(0);
-        expect(t.phaseCount).toBeGreaterThan(0);
-        expect(t.docCount).toBeGreaterThan(0);
+        // Something to render: phases and docs for a legacy template,
+        // an item tree for a V2 one (a playbook, Phase 31 §14).
+        expect(t.phaseCount + t.docCount + (t.itemCount ?? 0)).toBeGreaterThan(0);
       }
+
+      // The playbook brings its criteria with it.
+      const report = templates.find((t) => t.id === 'analysis-report')!;
+      expect(report.itemCount).toBe(6);
+      expect(report.criteriaCount).toBe(6);
 
       // The lighter templates declare placeholders.
       const newFeature = templates.find((t) => t.id === 'new-feature')!;
