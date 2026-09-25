@@ -19,6 +19,7 @@
 
 import { fork, type ChildProcess } from 'node:child_process';
 import { verifyEngine, type EngineCheck, type EnginePin } from './engine-manifest';
+import { canonicalRoot } from '../confined-fs';
 
 export class EngineUnavailable extends Error {}
 export class ConversionFailed extends Error {}
@@ -188,11 +189,26 @@ export class EngineHost {
     }
 
     const startedAt = Date.now();
-    const read = [this.opts.engineDir, this.opts.childScript, ...(this.opts.allowRead ?? [])];
-    const child = fork(this.opts.childScript, [this.opts.engineDir], {
+    // Every path the child is started with, or granted, by its canonical name.
+    // Node checks the loader's walk of the entry path against the grants
+    // before following links, so a path through a symlink (macOS's /var →
+    // /private/var) dies reading "/var" however it is granted. The same
+    // files, named once — not a wider grant.
+    let engineDir: string;
+    let childScript: string;
+    let read: string[];
+    try {
+      engineDir = canonicalRoot(this.opts.engineDir);
+      childScript = canonicalRoot(this.opts.childScript);
+      read = [engineDir, childScript, ...(this.opts.allowRead ?? []).map((p) => canonicalRoot(p))];
+    } catch (err) {
+      console.warn(`[rendition] engine did not start: ${(err as Error).message}`);
+      throw new EngineUnavailable('the conversion engine could not start');
+    }
+    const child = fork(childScript, [engineDir], {
       execPath: process.execPath,
       // Its own directory — never the directory the app was started from.
-      cwd: this.opts.engineDir,
+      cwd: engineDir,
       // Omitting --allow-net, --allow-child-process, --allow-addons and every
       // --allow-fs-write is the point.
       execArgv: ['--permission', ...read.map((p) => `--allow-fs-read=${p}`), '--allow-worker'],

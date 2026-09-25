@@ -177,7 +177,10 @@ describe('a reader that misbehaves is stopped, and cannot reach out', () => {
       tryIt('write', () => require('node:fs').writeFileSync(${JSON.stringify(path.join(tmp, 'written.txt'))}, 'x'));
       tryIt('spawn', () => require('node:child_process').spawnSync('true'));
       tryIt('thread', () => new (require('node:worker_threads').Worker)('1', { eval: true }));
-      out.env = Object.keys(process.env).filter((k) => k !== 'ELECTRON_RUN_AS_NODE');
+      // ELECTRON_RUN_AS_NODE is the one variable we pass. __CF_USER_TEXT_ENCODING
+      // is not inherited: macOS CoreFoundation sets it inside every process at
+      // start (a child forked with env {} has it), so it is no leak of ours.
+      out.env = Object.keys(process.env).filter((k) => k !== 'ELECTRON_RUN_AS_NODE' && k !== '__CF_USER_TEXT_ENCODING');
       process.once('message', () => process.send({ ok: false, reason: JSON.stringify(out) }));
     `);
     const r = await host.runReader(req, { script: probe });
@@ -185,6 +188,21 @@ describe('a reader that misbehaves is stopped, and cannot reach out', () => {
     const out = JSON.parse((r as { reason: string }).reason);
     assert.deepEqual(out, { read: 'ERR_ACCESS_DENIED', write: 'ERR_ACCESS_DENIED', spawn: 'ERR_ACCESS_DENIED', thread: 'ERR_ACCESS_DENIED', env: [] });
     assert.equal(fs.existsSync(path.join(tmp, 'written.txt')), false);
+  });
+
+  test('a reader reached through a symlinked directory still starts, and is still confined', async () => {
+    // macOS keeps every temp dir under /var → /private/var, and a script
+    // started through a link died reading "/var" however it was granted. A
+    // link made here fails the same way on any OS, so CI on Linux catches it.
+    const real = fs.mkdtempSync(path.join(tmp, 'real-'));
+    const linked = path.join(tmp, 'linked-reader');
+    fs.symlinkSync(real, linked, 'junction');
+    fs.writeFileSync(path.join(real, 'probe.cjs'), `
+      let read; try { require('node:fs').readFileSync(${JSON.stringify(outside)}); read = 'allowed'; } catch (e) { read = e.code; }
+      process.once('message', () => process.send({ ok: false, reason: read }));
+    `);
+    const r = await host.runReader(req, { script: path.join(linked, 'probe.cjs') });
+    assert.equal((r as { reason: string }).reason, 'ERR_ACCESS_DENIED');
   });
 
   const bundle = path.resolve(__dirname, '..', '..', '..', '..', 'out', 'reader', 'material-reader.mjs');
