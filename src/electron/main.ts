@@ -42,6 +42,7 @@ import {
 } from '../backend/services/artefact-content-service';
 import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
 import { installHtmlView, closeHtmlView } from './html-view';
+import { ARTEFACT_SCHEME, installArtefactTransport } from './artefact-transport';
 
 // Phase 31 §7.1 — the packaged renderer is a file:// document: its fetch is
 // shimmed over IPC as UTF-8 and its <img>/<video> reach neither the shim nor
@@ -49,38 +50,37 @@ import { installHtmlView, closeHtmlView } from './html-view';
 // own. Registered before `ready`, as Electron requires. The URL carries an
 // attachment uid and nothing else; everything else is resolved in main.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'ct-artefact', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+  ARTEFACT_SCHEME,
   // §7.3 — HTML reports' own scheme. Handled ONLY on the report view's
   // session (html-view.ts), so the app's window cannot load it at all.
   { scheme: 'ct-html', privileges: { standard: true, secure: true, stream: true } },
 ]);
 
-function installArtefactProtocol(): void {
-  protocol.handle('ct-artefact', async (request) => {
-    const url = new URL(request.url);
-    const uid = url.hostname;
-    // `?rendition=pdf` — an Office file as it looks (§7.6), converted by the
-    // engine in its own process; a 503 sends the viewer to its fallback.
-    if (url.searchParams.get('rendition') === 'pdf') {
-      if (!isAttachmentUid(uid)) return new Response('Not a file that can be shown', { status: 404 });
-      const result = await renditionOf(uid);
-      if (!result.ok) {
-        return new Response(JSON.stringify({ error: result.reason, fallback: true }), {
-          status: result.status, headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      const served = serveFile(result.file, request.headers.get('range'));
-      if (!served.stream) return new Response(served.error ?? 'Not found', { status: served.status, headers: served.headers });
-      return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, { status: served.status, headers: served.headers });
+/** One answer for a `ct-artefact:` URL, by scheme or over IPC (artefact-transport.ts). */
+async function artefactResponse(requestUrl: string, range: string | null): Promise<Response> {
+  const url = new URL(requestUrl);
+  const uid = url.hostname;
+  // `?rendition=pdf` — an Office file as it looks (§7.6), converted by the
+  // engine in its own process; a 503 sends the viewer to its fallback.
+  if (url.searchParams.get('rendition') === 'pdf') {
+    if (!isAttachmentUid(uid)) return new Response('Not a file that can be shown', { status: 404 });
+    const result = await renditionOf(uid);
+    if (!result.ok) {
+      return new Response(JSON.stringify({ error: result.reason, fallback: true }), {
+        status: result.status, headers: { 'Content-Type': 'application/json' },
+      });
     }
-    const file = isAttachmentUid(uid) ? await resolveServable(uid) : null;
-    if (!file) return new Response('Not a file that can be shown', { status: 404 });
-    const served = serveFile(file, request.headers.get('range'));
+    const served = serveFile(result.file, range);
     if (!served.stream) return new Response(served.error ?? 'Not found', { status: served.status, headers: served.headers });
-    return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, {
-      status: served.status,
-      headers: served.headers,
-    });
+    return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, { status: served.status, headers: served.headers });
+  }
+  const file = isAttachmentUid(uid) ? await resolveServable(uid) : null;
+  if (!file) return new Response('Not a file that can be shown', { status: 404 });
+  const served = serveFile(file, range);
+  if (!served.stream) return new Response(served.error ?? 'Not found', { status: served.status, headers: served.headers });
+  return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, {
+    status: served.status,
+    headers: served.headers,
   });
 }
 
@@ -378,7 +378,7 @@ app.whenReady().then(async () => {
   // error banner rather than a dangling Dock icon.
   // Before any window exists, so no document is ever served without it.
   installContentSecurityPolicy();
-  installArtefactProtocol();
+  installArtefactTransport(artefactResponse, (sender) => sender === mainWindow?.webContents);
   installHtmlView(() => mainWindow);
 
   const backendOk = await bootstrap();

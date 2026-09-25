@@ -238,6 +238,10 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Hostile report
         run: npx tsx tools/html-view-hostile/run.ts
+      # A packaged renderer is a file:// page, which no browser spec runs:
+      # this is the only test of how artefact bytes reach it.
+      - name: Artefact bytes in a file:// renderer
+        run: npx tsx tools/artefact-transport-check/run.ts
 
   # ---------------------------------------------------------------------------
   # THE ONLY CONTEXT BRANCH PROTECTION PINS.

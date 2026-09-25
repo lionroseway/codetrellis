@@ -44,6 +44,13 @@ const codetrellisIpc = {
     ipcRenderer.invoke('codetrellis:api', req),
 
   /**
+   * Phase 31 §7.1 — a `ct-artefact:` URL's response, body as bytes. The
+   * renderer's fetch cannot reach that scheme from its `file://` page.
+   */
+  artefact: (url: string): Promise<{ status: number; headers: Record<string, string>; body: ArrayBuffer }> =>
+    ipcRenderer.invoke('codetrellis:artefact', url),
+
+  /**
    * Subscribe to backend broadcast events (the equivalent of
    * receiving a WebSocket message). Returns an unsubscribe fn.
    */
