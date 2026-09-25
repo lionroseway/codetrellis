@@ -1437,15 +1437,41 @@ that need a packaged build are listed at the end.
   the context rail was accent-coloured on every recorded file, and is now
   the rail's subtle grey.
 
-**Still open — needs a packaged build.** CI builds the web bundle and
-runs Node; these need the real app:
+**Verified on a packaged build** — macOS arm64, 2026-09-25, a fresh data
+dir, driven through the bundled connector:
 
-- The viewer on a packaged build (§19): PDF, workbook, Word and deck
-  renditions, the HTML view, send back from a cell.
-- The `brief` scene against the packaged app, through its bundled
-  connector — done-when #14.
-- Claude Desktop: add, restart both, still connected with the full tool
-  set.
-- Spell-check on a packaged Linux or Windows build fetches nothing
-  (`tools/spellcheck-check` proves it in Electron in CI; not packaged).
+- **The viewer (§19).** PDF pages render; a workbook and a CSV show as a
+  grid with the cited cell highlighted; a Word document and a
+  well-formed deck render as pages through the engine; an image shows;
+  an HTML report shows in its sandbox with scripts off. The MCP
+  screenshot of an open report came back blank — the report's view sits
+  over the window and the capture did not include it — fixed in #102.
+- **The sandboxed reader and engine** return the right text for xlsx,
+  docx and PDF. Launched from a path reached through a symlink (macOS
+  temp dirs are), both were refused by their own permission grants —
+  the packaged app escaped only because nothing in the `.app` is a link.
+  Fixed in #104, with a test that launches both through a symlinked
+  directory on every OS.
+- **The connector across a restart (§6).** The exact command "Add to
+  Claude Desktop" writes, with no token in it, saw all 186 tools, listed
+  recent projects and made a plan from the Analysis report playbook —
+  before and after CodeTrellis restarted with a new token.
+- **The `brief` scene** starts clean run after run — no viewer left open,
+  no plan left over — and its first shot (submitted, citing
+  `Regional!B3`) matches the window. Each run left a deleted fixture in
+  recent projects; fixed in #103.
+- **Spell-check on macOS** uses the system spellchecker: nothing is
+  bundled or fetched, as intended.
+
+**Still open — each needs a person at the window, or a Linux host:**
+
+- The rest of the `brief` scene on a packaged build (done-when #14):
+  send back from `B3`, approve, approve again after the refresh — shots
+  18b–18f.
+- Send back from a cell in the viewer, by hand.
+- Claude Desktop itself: click "Add to Claude Desktop", restart both
+  apps, and ask it to work — the connector underneath is verified above.
+- Spell-check on a packaged Linux build: the x64 AppImage carries all
+  four dictionaries, but has not been run (`tools/spellcheck-check`
+  proves the behaviour in Electron in CI).
 
