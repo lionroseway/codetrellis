@@ -24,9 +24,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fork } from 'node:child_process';
 import { readServableCapped, resolveServable, type ServableFile } from '../artefact-content-service';
+import { existingRendition } from '../rendition/rendition-service';
+import type { EngineHost } from '../rendition/engine-host';
 import { isPackagedElectron } from '../../mcp/connector/command';
 import { TEXT_EXTS } from '../../../shared/lib/locator';
-import type { MaterialLocator, ReadReply } from './read';
+import type { MaterialLocator, ReadReply, ReadRequest } from './read';
 
 /** The most of each kind of file that is read at all. */
 const READ_CAPS: Record<string, number> = {
@@ -94,7 +96,7 @@ export function readerLaunch(script: string, opts: { heapMb?: number } = {}): { 
 
 /** Run one read in a fresh process; it is killed on reply, error or deadline. */
 export function runReader(
-  req: { name: string; ext: string; bytes: Uint8Array; locator?: MaterialLocator | null },
+  req: ReadRequest,
   opts: { script?: string; timeoutMs?: number; heapMb?: number } = {},
 ): Promise<RunReply> {
   return new Promise((resolve) => {
@@ -172,7 +174,7 @@ async function readBytes(file: ServableFile, cap: number): Promise<Buffer | null
 export async function readMaterial(
   attachmentUid: string,
   locator: MaterialLocator | null | undefined,
-  opts: { script?: string; timeoutMs?: number } = {},
+  opts: { script?: string; timeoutMs?: number; engine?: EngineHost | null } = {},
 ): Promise<MaterialRead> {
   const file = await resolveServable(attachmentUid);
   if (!file) return { ok: false, status: 404, reason: 'No material with that uid is a file CodeTrellis can read' };
@@ -204,7 +206,10 @@ export async function readMaterial(
   if (bytes === 'missing') return { ok: false, status: 404, reason: `${name} is not there, or is not a regular file in the project`, ...base };
   if (!bytes) return { ok: false, status: 413, reason: `${name} is larger than the ${Math.round(cap / 1024 / 1024)} MB CodeTrellis reads of a .${ext} file`, ...base };
 
-  const reply = await runReader({ name, ext, bytes, locator }, opts);
+  // §5.1: a Word document or deck the viewer has already rendered is read
+  // as that rendition — the words on the pages the person sees.
+  const rendition = ext === 'docx' || ext === 'pptx' ? await existingRendition(bytes, ext, opts.engine) : null;
+  const reply = await runReader({ name, ext, bytes, locator, rendition }, opts);
   if (!reply.ok) return { ok: false, status: 'timedOut' in reply ? 504 : 422, reason: reply.reason, ...base };
   return { ok: true, kind: 'text', ...base, reply };
 }

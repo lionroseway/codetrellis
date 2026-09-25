@@ -42,6 +42,12 @@ export interface ReadRequest {
   ext: string;
   bytes: Uint8Array;
   locator?: MaterialLocator | null;
+  /**
+   * The PDF CodeTrellis already made of this DOCX or PPTX to show it (§7.6),
+   * when there is one. Read in its place, so an agent reads the words on the
+   * pages the person sees (§5.1).
+   */
+  rendition?: Uint8Array | null;
 }
 
 export interface ReadSection { heading: string; body: string }
@@ -254,6 +260,16 @@ async function readWorkbook(req: ReadRequest, locator: MaterialLocator): Promise
 // ── Word ──────────────────────────────────────────────────────────────
 
 async function readWord(req: ReadRequest, locator: MaterialLocator): Promise<ReadReply> {
+  // {lines} are this markdown's lines, so they are always read from it.
+  if (req.rendition && locator.lines === undefined) {
+    refuseKeys(locator, ['page', 'text', 'lines'], req);
+    const read = await readPdfPages(req.rendition, req.name, locator, 'page');
+    return pagesReply(read!, locator, 'page', [
+      'Read from the pages CodeTrellis shows: its rendition of this document, laid out as the person sees it.',
+      'To cite this document, quote it: {"text": "…"}. A {"page"} says where the words are on these pages, but is not checked — a Word document\'s pages depend on layout.',
+      'Ask for {"lines": "1-200"} to read it as markdown instead, with its headings and tables.',
+    ]);
+  }
   if (locator.page !== undefined) {
     throw new ReadError(`${req.name} is a Word document; its pages depend on layout. Ask for {"lines"} of what this returns, or {"text"}`);
   }
@@ -327,8 +343,20 @@ async function readDeck(req: ReadRequest, locator: MaterialLocator): Promise<Rea
     await readText(view, entries, 'ppt/_rels/presentation.xml.rels', budget),
     names,
   );
-  const span = pageSpan(locator, order.length, 'slide', req.name);
   const notes = ['Each slide\'s title and words in presentation order; pictures and charts are not described.'];
+  if (req.rendition) {
+    // A deck's PDF leaves hidden slides out, and then its page 3 is not
+    // slide 3 — the numbering an agent cites and the checker counts. Only a
+    // rendition with a page for every slide is read as the slides.
+    const read = await readPdfPages(req.rendition, req.name, locator, 'slide', order.length);
+    if (read) {
+      return pagesReply(read, locator, 'slide', [
+        'Read from the slides as CodeTrellis shows them: the words on each, laid out as the person sees it. Pictures are not described.',
+      ]);
+    }
+    notes.push('Read from the slides themselves: the view CodeTrellis shows leaves some out (hidden slides), so its pages are not numbered as the slides are.');
+  }
+  const span = pageSpan(locator, order.length, 'slide', req.name);
   const first = span?.start ?? 1;
   const last = Math.min(span?.end ?? order.length, MAX_SLIDES);
   if (order.length > MAX_SLIDES && !span) notes.push(`Only the first ${MAX_SLIDES} slides are read.`);
@@ -372,11 +400,25 @@ function loadPdfJs(): Promise<PdfJs> {
   return pdfjsLoaded;
 }
 
-async function readPdf(req: ReadRequest, locator: MaterialLocator): Promise<ReadReply> {
-  refuseKeys(locator, ['page', 'text'], req);
+interface PageRead {
+  count: number;
+  span: { start: number; end: number } | null;
+  sections: ReadSection[];
+  notes: string[];
+}
+
+/**
+ * A PDF's text, page by page. `noun` is what a page is called — a rendition
+ * of a deck has a page per slide. With `expectPages`, a PDF with any other
+ * number of pages is not read, and null comes back.
+ */
+async function readPdfPages(
+  bytes: Uint8Array, name: string, locator: MaterialLocator, noun: 'page' | 'slide', expectPages?: number,
+): Promise<PageRead | null> {
+  const Noun = noun === 'page' ? 'Page' : 'Slide';
   const pdfjs = await loadPdfJs();
   const task = pdfjs.getDocument({
-    data: req.bytes,
+    data: bytes,
     isEvalSupported: false,
     enableXfa: false,
     disableFontFace: true,
@@ -389,16 +431,17 @@ async function readPdf(req: ReadRequest, locator: MaterialLocator): Promise<Read
     try {
       doc = await task.promise;
     } catch (err) {
-      const name = (err as { name?: string }).name;
-      throw new ReadError(name === 'PasswordException'
-        ? `${req.name} is password-protected, so its text cannot be read`
-        : `${req.name} could not be read as a PDF (${(err as Error).message})`);
+      const errName = (err as { name?: string }).name;
+      throw new ReadError(errName === 'PasswordException'
+        ? `${name} is password-protected, so its text cannot be read`
+        : `${name} could not be read as a PDF (${(err as Error).message})`);
     }
-    const span = pageSpan(locator, doc.numPages, 'page', req.name);
+    if (expectPages !== undefined && doc.numPages !== expectPages) return null;
+    const span = pageSpan(locator, doc.numPages, noun, name);
     const notes: string[] = [];
     const first = span?.start ?? 1;
     const last = Math.min(span?.end ?? doc.numPages, first + MAX_PDF_PAGES - 1);
-    if (!span && doc.numPages > MAX_PDF_PAGES) notes.push(`Only the first ${MAX_PDF_PAGES} pages are read.`);
+    if (!span && doc.numPages > MAX_PDF_PAGES) notes.push(`Only the first ${MAX_PDF_PAGES} ${noun}s are read.`);
     const sections: ReadSection[] = [];
     let chars = 0;
     for (let n = first; n <= last; n++) {
@@ -406,26 +449,37 @@ async function readPdf(req: ReadRequest, locator: MaterialLocator): Promise<Read
       const content = await page.getTextContent();
       const body = content.items.map((it) => (it.str ?? '') + (it.hasEOL ? '\n' : '')).join('').replace(/[ \t]+\n/g, '\n').trim();
       page.cleanup();
-      sections.push({ heading: `Page ${n}`, body: body || '(no text on this page — it may be a scanned image)' });
+      sections.push({ heading: `${Noun} ${n}`, body: body || (noun === 'page' ? '(no text on this page — it may be a scanned image)' : '(no text on this slide — it may be a picture)') });
       chars += body.length;
       // Past what one read returns, further pages would only be cut.
       if (chars > MAX_OUTPUT_CHARS * 2 && locator.text === undefined) break;
     }
-    const shown = narrowByText(sections, locator, req.name);
-    const where = locator.text !== undefined
-      ? shown.map((s) => s.heading.toLowerCase()).join(', ')
-      : span ? `page${span.start === span.end ? '' : 's'} ${dash(span.start, span.end)}` : null;
-    return {
-      ok: true,
-      format: 'text',
-      where,
-      outline: `${doc.numPages} page${doc.numPages === 1 ? '' : 's'}`,
-      sections: fit(shown, notes, () => 'Ask for {"page": "N-M"} to read further pages.'),
-      notes,
-    };
+    return { count: doc.numPages, span, sections: narrowByText(sections, locator, name), notes };
   } finally {
     await task.destroy().catch(() => {});
   }
+}
+
+function pagesReply(read: PageRead, locator: MaterialLocator, noun: 'page' | 'slide', notes: string[]): ReadReply {
+  const { count, span, sections } = read;
+  const all = [...notes, ...read.notes];
+  const where = locator.text !== undefined
+    ? sections.map((s) => s.heading.toLowerCase()).join(', ')
+    : span ? `${noun}${span.start === span.end ? '' : 's'} ${dash(span.start, span.end)}` : null;
+  return {
+    ok: true,
+    format: 'text',
+    where,
+    outline: `${count} ${noun}${count === 1 ? '' : 's'}`,
+    sections: fit(sections, all, () => `Ask for {"page": "N-M"} to read further ${noun}s.`),
+    notes: all,
+  };
+}
+
+async function readPdf(req: ReadRequest, locator: MaterialLocator): Promise<ReadReply> {
+  refuseKeys(locator, ['page', 'text'], req);
+  const read = await readPdfPages(req.bytes, req.name, locator, 'page');
+  return pagesReply(read!, locator, 'page', []);
 }
 
 // ── Entry ─────────────────────────────────────────────────────────────
@@ -439,7 +493,8 @@ function refuseKeys(locator: MaterialLocator, allowed: Array<keyof MaterialLocat
 
 export async function readMaterialBytes(input: ReadRequest): Promise<ReadReply> {
   // A Buffer survives IPC as a Buffer, and pdf.js refuses one: a plain view.
-  const req = { ...input, bytes: new Uint8Array(input.bytes.buffer, input.bytes.byteOffset, input.bytes.byteLength) };
+  const view = (b: Uint8Array) => new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  const req = { ...input, bytes: view(input.bytes), rendition: input.rendition ? view(input.rendition) : null };
   const locator = req.locator ?? {};
   try {
     switch (req.ext) {

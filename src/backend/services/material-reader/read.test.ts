@@ -8,9 +8,9 @@ import assert from 'node:assert/strict';
 import { readMaterialBytes, MAX_OUTPUT_CHARS, type ReadReply } from './read';
 import { makeDeck, makeDocx, makePdf, makeWorkbook, makeZip } from './fixtures.test-helper';
 
-function read(name: string, bytes: Buffer | string, locator?: object) {
+function read(name: string, bytes: Buffer | string, locator?: object, rendition?: Buffer) {
   const buf = typeof bytes === 'string' ? Buffer.from(bytes, 'utf8') : bytes;
-  return readMaterialBytes({ name, ext: name.split('.').pop()!, bytes: new Uint8Array(buf), locator: locator ?? null });
+  return readMaterialBytes({ name, ext: name.split('.').pop()!, bytes: new Uint8Array(buf), locator: locator ?? null, rendition: rendition ? new Uint8Array(rendition) : null });
 }
 
 function ok(r: ReadReply): Extract<ReadReply, { ok: true }> {
@@ -113,6 +113,48 @@ describe('a deck reads as words per slide; a PDF as text per page', () => {
     const r = await read('broken.pdf', 'this is not a pdf at all');
     assert.equal(r.ok, false);
     assert.match((r as { reason: string }).reason, /broken\.pdf could not be read as a PDF/);
+  });
+});
+
+describe('a Word document or deck CodeTrellis has rendered reads as the pages the person sees', () => {
+  const DOC = makeDocx(['# Highlights', 'EMEA revenue rose 12% on the quarter.'], [['Region', 'Q3'], ['EMEA', '120']]);
+  const DOC_PAGES = makePdf(['Highlights', 'EMEA revenue rose 12% on the quarter.']);
+
+  test('a Word document: its rendition, page by page, with {page} and {text} on those pages', async () => {
+    const all = ok(await read('summary.docx', DOC, undefined, DOC_PAGES));
+    assert.equal(all.format, 'text');
+    assert.equal(all.outline, '2 pages');
+    assert.deepEqual(all.sections, [{ heading: 'Page 1', body: 'Highlights' }, { heading: 'Page 2', body: 'EMEA revenue rose 12% on the quarter.' }]);
+    assert.ok(all.notes.some((n) => /the pages CodeTrellis shows/.test(n)));
+    assert.ok(all.notes.some((n) => /quote it: \{"text"/.test(n) && /not checked/.test(n)), 'still says a quote is how to cite it');
+
+    const two = ok(await read('summary.docx', DOC, { page: 2 }, DOC_PAGES));
+    assert.equal(two.where, 'page 2');
+    assert.deepEqual(two.sections.map((x) => x.body), ['EMEA revenue rose 12% on the quarter.']);
+    assert.equal(ok(await read('summary.docx', DOC, { text: 'rose 12%' }, DOC_PAGES)).where, 'page 2');
+  });
+
+  test('{lines} of a Word document are its markdown\'s, so they are read from it', async () => {
+    const r = ok(await read('summary.docx', DOC, { lines: '1-3' }, DOC_PAGES));
+    assert.equal(r.format, 'markdown');
+    assert.equal(r.sections[0].body, '# Highlights\n\nEMEA revenue rose 12% on the quarter.');
+  });
+
+  test('a deck: its rendition, as its slides, when it has a page for every slide', async () => {
+    const DECK = makeDeck([['Q3 board pack', 'Restated figures'], ['Highlights', 'EMEA up 12%']]);
+    const r = ok(await read('board.pptx', DECK, { page: 2 }, makePdf(['Q3 board pack Restated figures', 'Highlights EMEA up 12%'])));
+    assert.equal(r.outline, '2 slides');
+    assert.equal(r.where, 'slide 2');
+    assert.deepEqual(r.sections, [{ heading: 'Slide 2', body: 'Highlights EMEA up 12%' }]);
+    assert.ok(r.notes.some((n) => /as CodeTrellis shows them/.test(n)));
+  });
+
+  test('a deck whose rendition left a slide out is read from the slides, and says why', async () => {
+    // A hidden slide is not in the PDF: its page 2 would be slide 3.
+    const DECK = makeDeck([['Cover', 'Q3'], ['Hidden', 'draft'], ['Totals', 'Ties to the ledger']]);
+    const r = ok(await read('board.pptx', DECK, { page: 3 }, makePdf(['Cover Q3', 'Totals Ties to the ledger'])));
+    assert.deepEqual(r.sections, [{ heading: 'Slide 3 — Totals', body: 'Ties to the ledger' }]);
+    assert.ok(r.notes.some((n) => /hidden slides/.test(n)));
   });
 });
 

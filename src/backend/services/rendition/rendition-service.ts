@@ -92,6 +92,37 @@ function prune(root: string): void {
   }
 }
 
+/** A rendition is named by the bytes converted and the engine that converted them. */
+function renditionName(bytes: Uint8Array, version: string): string {
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  return `${sha}-${version.replace(/[^A-Za-z0-9._-]/g, '_')}.pdf`;
+}
+
+/** The most of a rendition `read_material` reads (§5.1). */
+const RENDITION_READ_CAP = 100 * 1024 * 1024;
+
+/**
+ * Phase 31 §5.1 — the rendition already made of these exact bytes, as the
+ * person sees it in the viewer, or null. For `read_material`, so an agent
+ * reads the words on the page the person is looking at: it never converts
+ * and never starts the engine. An engine that no longer checks out has no
+ * renditions, as the viewer would not show them either.
+ */
+export async function existingRendition(bytes: Uint8Array, ext: string, host: EngineHost | null = getEngineHost()): Promise<Buffer | null> {
+  if (!host || !CONVERTIBLE[ext]) return null;
+  try {
+    const checked = await host.check();
+    if (!checked.ok) return null;
+    const rel = renditionName(bytes, checked.manifest.version);
+    return await readServableCapped({ root: cacheRoot(), rel, contentType: 'application/pdf', itemUid: '' }, RENDITION_READ_CAP);
+  } catch {
+    // Not made yet, not a regular file, or the engine could not be checked:
+    // the document itself is read instead, so a missing rendition never
+    // costs the agent its read.
+    return null;
+  }
+}
+
 const inFlight = new Map<string, Promise<RenditionResult>>();
 
 export async function renditionOf(uid: string, host: EngineHost | null = getEngineHost()): Promise<RenditionResult> {
@@ -111,8 +142,7 @@ export async function renditionOf(uid: string, host: EngineHost | null = getEngi
   }
   if (!bytes) return { ok: false, status: 413, reason: 'This file is larger than the viewer will convert' };
 
-  const sha = createHash('sha256').update(bytes).digest('hex');
-  const name = `${sha}-${checked.manifest.version.replace(/[^A-Za-z0-9._-]/g, '_')}.pdf`;
+  const name = renditionName(bytes, checked.manifest.version);
   const root = cacheRoot();
   const served = (): RenditionResult => ({ ok: true, file: { root, rel: name, contentType: 'application/pdf', itemUid: file.itemUid } });
 
