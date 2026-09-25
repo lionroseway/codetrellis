@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import { useProjectStore } from '../../../stores/project-store';
 import { openFileAt, absoluteFilePath } from '../../../lib/open-file-at';
+import { openArtefactAt } from '../../../lib/open-artefact-at';
+import { briefState } from '../../../lib/brief-vocabulary';
+import { decisionWords, stateWords, type SignoffRow } from '../../../../shared/lib/signoff';
 
 /**
  * Reviewing a plan against what actually landed — Phase 29 (surfacing
@@ -58,6 +61,8 @@ interface ReviewedItem {
   verdict: 'landed' | 'partial' | 'untouched' | 'no-targets';
   /** Phase 31 — where its acceptance criteria stand. */
   criteria?: { total: number; met: number; waiting: number; sentBack: number };
+  /** Phase 31 §13 — each criterion, with its evidence and who signed. */
+  signoffs?: SignoffRow[];
 }
 
 interface PlanReview {
@@ -363,12 +368,14 @@ function ReviewedItemRow({ item, root }: { item: ReviewedItem; root: string | nu
   const [open, setOpen] = useState(false);
   const v = VERDICT[item.verdict];
   const fileCount = item.landed.length + item.missing.length;
+  const signoffs = item.signoffs ?? [];
+  const expandable = fileCount > 0 || signoffs.length > 0;
 
   return (
     <li className="rounded-md hover:bg-white/[0.025] transition-colors">
       <button
         onClick={() => setOpen((o) => !o)}
-        disabled={fileCount === 0}
+        disabled={!expandable}
         className="w-full flex items-baseline gap-2 text-[11.5px] px-1.5 py-1 text-left disabled:cursor-default"
       >
         <v.Icon size={11} className={`${v.tint} shrink-0 translate-y-0.5`} />
@@ -394,8 +401,9 @@ function ReviewedItemRow({ item, root }: { item: ReviewedItem; root: string | nu
         <span className={`${v.tint} shrink-0 text-[10.5px]`}>{v.label}</span>
       </button>
 
-      {open && fileCount > 0 && (
+      {open && expandable && (
         <div className="pl-6 pr-2 pb-1.5 space-y-1.5">
+          {signoffs.length > 0 && <SignoffList rows={signoffs} />}
           {item.landed.length > 0 && (
             <div>
               <div className="text-[9.5px] uppercase tracking-[0.1em] text-emerald-300/70 mb-0.5">
@@ -419,5 +427,52 @@ function ReviewedItemRow({ item, root }: { item: ReviewedItem; root: string | nu
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Phase 31 §13 — each criterion as the PR draft's table and the sign-off
+ * pack show it: verbatim, where it stands, what it was judged on (click to
+ * open the file at the place cited), and who signed. A self-approval says
+ * so; it is never shown as a person's.
+ */
+function SignoffList({ rows }: { rows: SignoffRow[] }) {
+  return (
+    <div data-testid="review-signoffs">
+      <div className="text-[9.5px] uppercase tracking-[0.1em] text-foreground-subtle mb-0.5">
+        Acceptance criteria
+      </div>
+      <ul className="space-y-1">
+        {rows.map((r) => (
+          <li key={r.criterionUid} className="text-[11px] leading-snug">
+            <div className="flex items-baseline gap-1.5">
+              <span className="shrink-0" aria-hidden>{briefState(r.state).glyph}</span>
+              <span className="text-foreground-muted">{r.text}</span>
+            </div>
+            <div className="pl-4 text-[10px] text-foreground-subtle">
+              {stateWords(r)}
+              {r.decision && <> · {decisionWords(r)}</>}
+            </div>
+            {r.evidence.some((e) => e.attachmentUid) && (
+              <div className="pl-4 flex flex-wrap gap-x-2">
+                {r.evidence.filter((e) => e.attachmentUid).map((e, i) => (
+                  <button
+                    key={`${e.attachmentUid}-${i}`}
+                    onClick={() => openArtefactAt(e.attachmentUid!, e.locator, { criterionUid: r.criterionUid, itemUid: r.itemUid })}
+                    className="text-[10px] text-sky-300/80 hover:text-sky-200 truncate max-w-[16rem]"
+                    title={e.sha256AtSubmit ? `sha256 ${e.sha256AtSubmit.slice(0, 12)}… when offered` : undefined}
+                  >
+                    {e.path?.split('/').pop() ?? 'file'}{e.where ? ` · ${e.where}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            {r.changedFiles.length > 0 && (
+              <div className="pl-4 text-[10px] text-amber-300/80">changed since: {r.changedFiles.join(', ')}</div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

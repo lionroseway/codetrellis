@@ -5,6 +5,7 @@ import { compareSnapshots, listComparands, type ComparisonResult } from './snaps
 import { formatCost } from './pricing';
 import { getBudgetReport } from './budget-service';
 import { listCriteria } from './criteria-service';
+import { rowsForCriterion, type SignoffRow } from './signoff-rows';
 import type { PlanItem } from '../../shared/types';
 
 /**
@@ -41,6 +42,12 @@ export interface ReviewedItem {
    * what changed; this says whether anyone agreed it was what was asked.
    */
   criteria: CriteriaSummary;
+  /**
+   * Phase 31 §13 — each criterion, verbatim, with its evidence and who
+   * signed: the same rows the PR draft's table and the sign-off pack are
+   * rendered from.
+   */
+  signoffs: SignoffRow[];
 }
 
 export interface CriteriaSummary {
@@ -51,13 +58,16 @@ export interface CriteriaSummary {
   sentBack: number;
 }
 
-function criteriaSummary(itemUid: string): CriteriaSummary {
-  const all = listCriteria(itemUid);
+function criteriaOf(item: PlanItem): { criteria: CriteriaSummary; signoffs: SignoffRow[] } {
+  const all = listCriteria(item.uid);
   return {
-    total: all.length,
-    met: all.filter((c) => c.state === 'met').length,
-    waiting: all.filter((c) => c.state === 'submitted').length,
-    sentBack: all.filter((c) => c.state === 'sent_back').length,
+    criteria: {
+      total: all.length,
+      met: all.filter((c) => c.state === 'met').length,
+      waiting: all.filter((c) => c.state === 'submitted').length,
+      sentBack: all.filter((c) => c.state === 'sent_back').length,
+    },
+    signoffs: all.map((c) => rowsForCriterion(item, c)),
   };
 }
 
@@ -192,7 +202,7 @@ export function reviewPlan(params: {
         landed: [],
         missing: [],
         verdict: 'no-targets',
-        criteria: criteriaSummary(item.uid),
+        ...criteriaOf(item),
       };
     }
 
@@ -208,7 +218,7 @@ export function reviewPlan(params: {
 
     return {
       uid: item.uid, title: item.title, status: item.status ?? null, landed, missing, verdict,
-      criteria: criteriaSummary(item.uid),
+      ...criteriaOf(item),
     };
   });
 
