@@ -1382,3 +1382,70 @@ These change the build, and are the product owner's to make:
 4. **The Brief as a mode** in the existing window (as written) or a
    separate window an analyst can keep beside Excel.
 5. **PDF export of the pack** in this phase, or the page only.
+
+## 21. As built
+
+Phase 31 is built. Every slice below is merged to `main`; the checks
+that need a packaged build are listed at the end.
+
+| Slice | Merged |
+|---|---|
+| 31.A the connector | #66 |
+| 31.B references | #67 |
+| 31.0 things found on the way | #68 |
+| 31.1 criteria and sign-off | #69 |
+| 31.2 artefacts | #71 |
+| 31.2a the loops | #75 |
+| 31.3 the viewer — a/b/c, the engine d/e/f, the HTML view g | #77, #78, #79, #80, #81, #82, #83; engine fixes #86, #88, #89, #90; packaged transport #92 |
+| 31.4 Add to Claude Desktop | #84 |
+| 31.5 the Brief — tools, mode, renditions read as pages | #85, #87, #91 |
+| 31.6 the phone — desktop side, the approval screen | #94, #95 |
+| 31.7 packs and playbooks — PR draft table, playbooks, sign-off pack | #96, #97, #98 |
+| 31.8 the demo journey, looped twice | #99 |
+| Outside traffic — bundled spell-check dictionaries, update checks can be turned off | #100 |
+
+**§20, as decided.**
+
+1. **Default policy:** `propose` for a criterion an agent adds, and for a
+   person's by default — except `manual`, always `human`, and `code`,
+   `agent` (a compiler can decide it). A criterion that arrives from a
+   file (import, template) cannot be `agent` unless its kind is `code`.
+2. **Agents may add criteria**, at `propose`; only a person can change a
+   policy.
+3. **"Add to Claude Desktop" writes the config**, after showing the diff,
+   and keeps a timestamped backup of the file it replaced.
+4. **The Brief is a mode** in the existing window.
+5. **PDF export is in this phase**, printed in a hidden Electron window
+   with scripts off and every request blocked; the saved page carries its
+   own data so it can be verified later.
+
+**§19, how each is shown.**
+
+- *The analyst's journey, and the loop twice* — the `brief` demo scene
+  (`docs/DEMO-JOURNEYS.md`, B12): a no-git folder, the connector as
+  Claude Desktop, sent back from a cell, picked up from the worklist,
+  approved, stale on refresh, approved again — each state checked on
+  screen before it is captured. The phone's half is covered by
+  `mobile-approvals.test.ts` and B11's written steps.
+- *The developer's* — criteria on every plan (#69), the gate no agent can
+  clear (`HumanDecision`, a static test pins who may issue one), evidence
+  hashed and re-checked (#71, #75), the PR draft table (#96).
+- *References* — #67, and `resolve_reference` at the MCP interception.
+- *Quieter than `StatusBar`* — audited after 31.8. The Brief toggle
+  matches the TopBar toggles beside it; criteria controls and the check
+  run's progress appear only on interaction. The attachment role badge in
+  the context rail was accent-coloured on every recorded file, and is now
+  the rail's subtle grey.
+
+**Still open — needs a packaged build.** CI builds the web bundle and
+runs Node; these need the real app:
+
+- The viewer on a packaged build (§19): PDF, workbook, Word and deck
+  renditions, the HTML view, send back from a cell.
+- The `brief` scene against the packaged app, through its bundled
+  connector — done-when #14.
+- Claude Desktop: add, restart both, still connected with the full tool
+  set.
+- Spell-check on a packaged Linux or Windows build fetches nothing
+  (`tools/spellcheck-check` proves it in Electron in CI; not packaged).
+
