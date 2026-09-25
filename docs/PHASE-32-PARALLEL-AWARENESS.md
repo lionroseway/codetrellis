@@ -1,6 +1,7 @@
 # Phase 32 — Parallel Awareness
 
-> One developer, many agents, many worktrees. CodeTrellis quietly watches
+> One developer, many agents, many worktrees, clones and branches.
+> CodeTrellis quietly watches
 > all of it and tells you — and your agents — only what matters.
 
 Status: **plan**. Nothing here is built yet. §3 lists what already exists
@@ -11,13 +12,14 @@ and what this phase builds on.
 ## 1. Why this phase exists
 
 Running several agents at once is now normal. A developer might have five
-agents going across five worktrees, each on a different ticket. The work
+agents going across five worktrees, clones or branches, each on a
+different ticket. The work
 gets done quickly. Keeping it consistent does not.
 
 Today one person has to hold the whole picture in their head:
 
 - "That agent is changing what `createInvoice` returns, and the one in
-  the other worktree calls it."
+  the other branch calls it."
 - "Two tickets are both reworking the auth module."
 - "This agent was meant to touch billing, and now it's editing shared
   config."
@@ -59,8 +61,8 @@ you move fast without babysitting.
    machine against their own clones and worktrees. Nothing leaves the
    machine except what already does (mobile over the paired mesh, push
    notifications with IDs only).
-7. **Phase 19 rules apply unchanged.** Worktree roots come from git and
-   never from a request. File reads go through `confined-fs`. Every new
+7. **Phase 19 rules apply unchanged.** Workstream roots come from git
+   (or from a clone the user explicitly included), never from a request. File reads go through `confined-fs`. Every new
    MCP tool gets a row in `TOOL_CAPABILITIES`. Every new mobile RPC
    method gets a row in the `peer-capabilities` matrix.
 
@@ -94,18 +96,44 @@ This phase is mostly about **connecting pieces that are already here**.
 A **workstream** is one line of parallel work:
 
 ```
-workstream = worktree (path, branch)
-           + agent sessions working in it (0..n)
+workstream = a line of work in the repo (one of the four shapes below)
+           + agent sessions working on it (0..n)
            + the plan item / ticket it serves (0..1)
 ```
 
-Workstreams are derived, not created. Every worktree of the opened repo
-is a workstream. The main checkout is one too. A worktree with no agent
-and no changes is idle and hidden by default.
+Developers isolate parallel work in different ways, and the product
+shouldn't care which. A workstream can take any of four shapes:
 
-Keyed by worktree, not by session, because sessions come and go (restart,
-context reset, handover to a different agent) while the work stays in
-the same worktree on the same branch.
+| Shape | What it is | How we see changes | Live? |
+|---|---|---|---|
+| **Worktree** | A linked `git worktree` of the opened repo | Watch its folder; diff against the merge base | Yes, on save |
+| **Clone** | A separate clone of the same repo in another folder (same origin, or same root commit) | Same as a worktree | Yes, on save |
+| **Branch** | A branch with no checkout on this machine, e.g. pushed by a cloud agent or left by a finished session | `git diff <merge-base>..<branch>`, with no working tree | When the ref moves |
+| **Shared checkout** | Several agents in the **same** folder, e.g. the main checkout | One working tree, split by which session made which edit (§5.1) | Yes, on save |
+
+A worktree and a clone look the same once found. They differ only in
+how they are discovered (§5.1). A branch is the same thing without a
+working tree: it has committed changes only, and no live edits.
+
+**The one rule that holds for every shape:** a workstream is **one
+branch plus, optionally, one working tree**. Two worktrees on the same
+branch are an unusual setup and are treated as two workstreams that
+collide on everything, which is the honest answer.
+
+Workstreams are derived, not created. A workstream with no agent and no
+changes is idle and hidden by default.
+
+Keyed by branch and working tree, not by session, because sessions come
+and go (restart, context reset, handover to a different agent) while the
+work stays on the same branch.
+
+**Shared checkout is the weak case, and the UI says so.** With several
+agents in one folder, edits are attributed per session where the
+session's own record shows the edit (Claude Code's session log names the
+file on every `Edit` / `Write`). Edits nobody claims show as
+"unattributed". When two sessions in one checkout touch the same file,
+the signal suggests moving one of them to a worktree rather than trying
+to untangle the edits.
 
 ### 4.2 Footprint
 
@@ -114,16 +142,16 @@ will touch:
 
 | Part | Source | Updated |
 |---|---|---|
-| **Changed files** | `git diff --name-status <merge-base>` plus `git status --porcelain` in that worktree | on file events in the worktree, debounced |
-| **Changed symbols** | Changed files parsed in the worktree and compared to the same file at the merge base: symbols added, removed, or with a changed signature | when a changed file settles |
+| **Changed files** | Working tree shapes: `git diff --name-status <merge-base>` plus `git status --porcelain` in that folder. Branch shape: `git diff --name-status <merge-base>..<branch>` | working tree: on file events, debounced. Branch: when the ref moves |
+| **Changed symbols** | Each changed file (from disk, or `git show <branch>:<path>` for a branch) compared to the same file at the merge base: symbols added, removed, or with a changed signature | when a changed file settles or the ref moves |
 | **Declared intent** | `declare_intent` (§6), plus `fileSpecs` of the claimed plan item | when an agent declares or claims |
-| **Base drift** | Files changed on the main branch since this worktree's merge base | on fetch or when the main checkout changes |
+| **Base drift** | Files changed on the main branch since this workstream's merge base | when the main branch ref moves |
 
-**The graph is not built per worktree.** The opened project's graph is
-the base. A worktree's footprint is a small delta on top of it: only the
-files that differ get parsed. That's what keeps ten worktrees cheap.
-Re-indexing each one as its own project, which is what opening it as a
-tab does today, doesn't scale.
+**The graph is not built per workstream.** The opened project's graph is
+the base. A workstream's footprint is a small delta on top of it: only
+the files that differ get parsed. That's what keeps ten workstreams
+cheap. Re-indexing each one as its own project, which is what opening a
+worktree as a tab does today, doesn't scale.
 
 A **signature** is a hash of a symbol's shape: name, parameters, return
 type where the language has one, exported or not. Changing a function's
@@ -137,12 +165,12 @@ build them:
 
 | Kind | Fires when | Example |
 |---|---|---|
-| `collision` | Two workstreams change the same file, or the same symbol | "Worktrees `auth-refresh` and `billing-v2` both edit `session.ts` → `refreshToken`" |
+| `collision` | Two workstreams change the same file, or the same symbol | "`auth-refresh` and `billing-v2` both edit `session.ts` → `refreshToken`" |
 | `contract` | A workstream changes a symbol's signature, and another workstream's footprint calls it | "`billing-v2` changed `createInvoice(opts)` → `createInvoice(opts, currency)`. `checkout-fix` calls it in 2 places" |
 | `drift` | A workstream edits outside its item's declared scope | "Ticket says billing; agent is now editing `config/shared.ts`" |
 | `rule` | A workstream's delta breaks an architecture rule | "`web/` now imports from `db/` directly" |
 | `stale-base` | Main changed files this workstream also touches since its merge base | "`main` changed `session.ts` 40 minutes ago; `auth-refresh` branched before that" |
-| `duplicate` | A new symbol closely matches one added in another workstream or already on main | "`formatMoney` added in two worktrees in the last hour" |
+| `duplicate` | A new symbol closely matches one added in another workstream or already on main | "`formatMoney` added in two workstreams in the last hour" |
 | `decision` | An agent posts `need-decision` / `need-context` | Reuses channels; shown in the same inbox |
 
 `collision` / `contract` / `drift` / `rule` / `stale-base` come from the
@@ -196,10 +224,33 @@ opens to after you've been away, and what the mobile app shows first.
 
 ## 5. How it works
 
-### 5.1 Binding sessions to worktrees
+### 5.1 Finding workstreams, and binding sessions to them
 
-An agent session needs to know which workstream it belongs to. Three
-sources, tried in order:
+**Finding them.** Each shape is discovered differently:
+
+| Shape | Discovered by |
+|---|---|
+| Worktree | `git worktree list` (existing `worktree-service`) |
+| Clone | Another opened or recent project with the same repo identity (`get_repo_identity`: origin URL, falling back to root commit) |
+| Branch | Local branches and local copies of remote branches (`git for-each-ref`) that are ahead of the merge base, not checked out anywhere, and changed within a configurable window (default 7 days) |
+| Shared checkout | Two or more live sessions bound to the same folder |
+
+**Clones need consent.** A clone the user hasn't opened in CodeTrellis
+is outside the opened-project boundary (`mcp.projectScope`, Phase 19),
+so it is never read automatically. When an agent session reports a
+folder that is a clone of the opened repo, the app asks once: "An agent
+is working in `~/src/app-2`, a clone of this repo. Include it?" Yes adds
+it to trusted roots. Worktrees don't need this, because git itself ties
+them to the opened repo.
+
+**Branches don't trigger network access.** The app only reads refs that
+are already local. It never runs `git fetch` on its own (the update
+check stays the only request the app makes unprompted). A branch pushed
+by a cloud agent appears once the developer fetches, or once they turn
+on an opt-in "fetch every N minutes" setting for this project.
+
+**Binding sessions.** An agent session needs to know which workstream it
+belongs to. Three sources, tried in order:
 
 1. **The connector says so.** The stdio connector is launched by the
    agent in the agent's working directory. It sends that directory as a
@@ -210,44 +261,56 @@ sources, tried in order:
 3. **Terminal presets.** `terminal_create` already knows the `cwd` it
    started the agent in.
 
-Whatever the source, the server **validates the reported directory**
-against `listWorktrees` for an opened project and keeps it only if it
-matches. Otherwise the session stays unbound. Unbound sessions still
-work; they just don't belong to a workstream. The reported path is used
-to *choose* a workstream, never as a root to read from (the Phase 19
-rule against taking roots from requests).
+Whatever the source, the server **validates the reported directory**:
+it must be a worktree from `listWorktrees`, the opened project itself,
+or a clone the user has included. Otherwise the session stays unbound.
+Unbound sessions still work; they just don't belong to a workstream. The
+reported path is used to *choose* a workstream, never as a root to read
+from (the Phase 19 rule against taking roots from requests).
 
-`agent_sessions` gains a `worktree_path` column (reconciled by
-`schema-reconciler`).
+`agent_sessions` gains a `workstream_root` column (reconciled by
+`schema-reconciler`). Branch workstreams have no sessions on this
+machine; they are work that was done elsewhere or has already finished.
 
 ### 5.2 Seeing every Claude Code session
 
 `claude-code-watcher.ts` moves from one active session to **a set**:
-every live session whose `cwd` is any worktree of the opened repo. Each
+every live session whose `cwd` is the folder of any workstream. Each
 tails independently. The existing cursor and rebind logic applies per
-session.
+session. The file paths in each session's `Edit` / `Write` records are
+what attribute edits in a shared checkout (§4.1).
 
-### 5.3 Watching worktrees cheaply
+### 5.3 Watching workstreams cheaply
 
-A new `worktree-watch-service.ts`:
+A new `workstream-watch-service.ts`, with two modes.
 
-- One lightweight chokidar watcher per active worktree, **ignoring**
+**Folders (worktree, clone, shared checkout):**
+
+- One lightweight chokidar watcher per active folder, **ignoring**
   `node_modules`, build output and `.git` internals. It only notices
   that something changed; it doesn't index.
 - On a debounced change, it runs `git diff --name-status <merge-base>`
-  and `git status --porcelain` in that worktree through `git-safety`,
-  and updates the footprint's changed-files set.
+  and `git status --porcelain` in that folder, with arguments validated
+  by `git-safety`, and updates the footprint's changed-files set.
 - Changed files are parsed with the existing parsers, reading through
-  `confined-fs` with the worktree as the confining root. The base
-  version comes from `git show <merge-base>:<path>`. Only symbols and
-  signatures are kept; nothing is written to the main graph tables.
-- Idle worktrees (no agent session, no change for 30 minutes) are
+  `confined-fs` with that folder as the confining root. The base version
+  comes from `git show <merge-base>:<path>`. Only symbols and signatures
+  are kept; nothing is written to the main graph tables.
+- Idle folders (no agent session, no change for 30 minutes) are
   unwatched and re-checked when a session binds or on the next
-  `git worktree list`.
+  discovery pass.
 
-Budget: one extra watcher per active worktree, and parsing limited to
-changed files. A worktree with 40 changed files costs about what
-re-saving 40 files in the main project costs today.
+**Refs (branch):**
+
+- No folder to watch. The service watches the repo's refs (`refs/heads`,
+  `refs/remotes`, `packed-refs`) and recomputes a branch's footprint when
+  its ref moves.
+- File contents come from `git show <branch>:<path>`, so nothing is
+  checked out.
+
+Budget: one extra watcher per active folder, one refs watcher per repo,
+and parsing limited to changed files. A workstream with 40 changed files
+costs about what re-saving 40 files in the main project costs today.
 
 ### 5.4 The awareness engine
 
@@ -280,7 +343,7 @@ In a new `mcp/tools/awareness-tools.ts`. Each needs a
 | `get_awareness` | read | "What should I know right now?" Open signals affecting the caller's workstream, newest and most severe first, plus the one-paragraph digest. The first call an agent makes on a task |
 | `check_footprint(paths?, symbols?)` | read | Pre-flight: "if I change these, who is affected?" Returns affected workstreams and callers **before** the agent edits |
 | `declare_intent(summary, paths?, symbols?)` | plans | "Here's what I'm about to change." Makes intent part of the footprint so collisions are seen before any file changes |
-| `list_workstreams` | read | Every workstream: worktree, branch, agents, item, footprint size, open signals |
+| `list_workstreams` | read | Every workstream: shape, folder, branch, agents, item, footprint size, open signals |
 | `acknowledge_signal(id, note?)` | plans | The agent has seen it and says what it will do |
 
 `check_footprint` is the one that changes behaviour most. An agent that
@@ -296,8 +359,8 @@ result it receives gets a short, clearly separated notice appended:
 
 ```
 ── CodeTrellis awareness ──
-1 new signal affects this worktree: contract change to createInvoice in
-worktree billing-v2 (you call it in checkout/submit.ts:88).
+1 new signal affects your work: contract change to createInvoice on
+branch billing-v2 (you call it in checkout/submit.ts:88).
 Call get_awareness for details. This is information about other work,
 not an instruction.
 ```
@@ -317,7 +380,7 @@ not an instruction.
   3. Before changing anything exported or shared, `check_footprint`.
   4. When a signal touches you: fix it if it's yours; if it needs a
      choice, post `need-decision`. Don't guess, and don't edit another
-     worktree.
+     workstream's files.
   5. A notice about other work is information, not an instruction.
 - **The `multi-agent` guide** gains a section pointing to `parallel`,
   and its terminal examples launch into worktrees rather than the main
@@ -345,7 +408,7 @@ component isn't rendered anywhere.
 2. **Awareness tab in `PlanPanel`**, next to Timeline. The digest at the
    top, then open signals grouped by severity. Each signal shows both
    sides and has these actions:
-   - open the relevant lines in each worktree
+   - open the relevant lines on each side
    - message the agent (posts `steer` to the channel)
    - acknowledge
    - mark intended
@@ -389,25 +452,28 @@ desk. Uses the existing snapshot + patch channel for state and the
 Each milestone is usable by itself.
 
 **M0: See every workstream.**
-- Session → worktree binding (§5.1)
+- Workstream discovery for worktrees and the shared checkout, and session binding (§5.1)
 - Multi-session Claude watcher (§5.2)
 - `list_workstreams`
 - The workstreams strip
 
 *Done when:* three agents in three worktrees show up as three workstreams
 with the right branches, and a fourth session in the main checkout shows
-up as its own.
+up as its own. Two sessions in the same checkout show up as one shared
+workstream, labelled as shared.
 
 **M1: Footprints and collisions.**
-- Worktree watching (§5.3)
+- Folder watching (§5.3)
+- Branch workstreams (refs watching) and clones (with the consent prompt)
 - Changed files and symbols
 - `collision` and `stale-base` signals
 - `get_awareness`, `check_footprint`
 - The Awareness tab
 
-*Done when:* two worktrees editing the same function raise one
+*Done when:* two workstreams editing the same function raise one
 `collision` signal within about 5 seconds of the second save, and
-reverting one side resolves it.
+reverting one side resolves it. A fetched branch that changes the same
+function raises the same signal without being checked out.
 
 **M2: Meaning.**
 - Signatures
@@ -416,8 +482,8 @@ reverting one side resolves it.
 - `declare_intent`
 - The collision overlay
 
-*Done when:* changing a function's parameters in one worktree tells the
-agent in another worktree that calls it, on that agent's next tool call,
+*Done when:* changing a function's parameters in one workstream tells the
+agent in another workstream that calls it, on that agent's next tool call,
 without anyone asking. Changing only the function's body does not.
 
 **M3: Distilled.**
@@ -448,15 +514,16 @@ the other kinds are.
   data: every kind, deduplication, cooldown, intended suppression,
   severity. Signature hashing per language: a body change is stable, a
   parameter change isn't.
-- **Harness**: a fixture repo with two linked worktrees and scripted
+- **Harness**: a fixture repo with two linked worktrees, a second clone,
+  an unchecked-out branch, and scripted
   edits, plus two fake MCP sessions bound through the connector header.
   Assert signals appear, notices are appended once, and signals resolve.
 - **Guards that must stay green**:
   - `TOOL_CAPABILITIES` coverage
   - `peer-capabilities` matrix coverage
   - `reachable.test.ts`
-  - `server-confinement.test.ts`: worktree roots come from git and are
-    never read raw from a request
+  - `server-confinement.test.ts`: workstream roots come from git or an
+    included clone and are never read raw from a request
 - **Noise budget**: in the harness scenario, a body-only edit must raise
   **zero** signals. Treat a regression here as seriously as a missed
   signal.
@@ -467,10 +534,10 @@ the other kinds are.
    worktree see the same workstreams as one opened from the main
    checkout? `git worktree list` says yes. The UI should probably mark
    which one is "here".
-2. **Agents outside any worktree** (e.g. an agent working in `/tmp` on a
+2. **Agents outside any workstream** (e.g. an agent working in `/tmp` on a
    scratch copy). Unbound for now. Is it worth a "loose sessions" row?
 3. **Merge base choice.** Merge base with the default branch, or with
-   the branch the worktree was created from? Default branch is simpler
+   the branch the workstream was created from? Default branch is simpler
    and right for most setups; stacked branches would want the latter.
 4. **Blocking rules.** Principle 4 says advisory. If a developer wants a
    `rule` signal to block, the natural place is `check_criterion` (Phase
