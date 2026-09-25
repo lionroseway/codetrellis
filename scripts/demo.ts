@@ -22,7 +22,7 @@
  *   npm run demo -- --project=/path/to/repo
  *   npm run demo -- --port=19433 --api-port=3002   # a second instance
  *   npm run demo -- --shots=/tmp/ct-shots          # one PNG per scene
- *   npm run demo -- --scene=brief --approve        # approve for you (dev only)
+ *   npm run demo -- --scene=brief --decide         # decide for the person (dev only)
  *   npm run demo -- --scene=brief --connector=out/connector/mcp-connector.cjs
  *
  * It needs the app running (packaged or `npm run dev`) with its MCP server
@@ -75,11 +75,12 @@ const MCP_PORT = Number(flag('port') ?? 19432);
 const API_PORT = Number(flag('api-port') ?? 3001);
 const ONLY = flag('scene');
 const SHOTS = flag('shots');
-// The brief scene needs a person to approve in the window: MCP cannot, by
-// design. `--approve` stands in for them through the desktop's own HTTP
-// route — which a packaged build does not serve, so there it waits.
-const APPROVE = has('approve');
-const APPROVE_WAIT_S = Number(flag('approve-wait') ?? 180);
+// The brief scene needs a person to decide in the window — send back,
+// approve: MCP cannot, by design. `--decide` stands in for them through the
+// desktop's own HTTP route, which a packaged build does not serve, so
+// there it waits for a person.
+const DECIDE = has('decide');
+const PERSON_WAIT_S = Number(flag('person-wait') ?? 180);
 // The connector bundle a packaged app ships. Without it, the connector
 // runs from source — the same code, against the same running app.
 const CONNECTOR = flag('connector');
@@ -932,7 +933,7 @@ const SCENES: Scene[] = [
   {
     id: 'brief',
     title: 'A brief with no code in it',
-    watch: 'the Brief on "Analyse": its criterion goes waiting → approved → stale when the spreadsheet changes',
+    watch: 'the Brief on "Analyse": waiting → sent back from a cell → approved → stale when the workbook is refreshed → approved again',
     async run(c) {
       const folder = briefFolder();
       const abs = (rel: string) => path.join(folder.path, rel);
@@ -979,29 +980,26 @@ const SCENES: Scene[] = [
       });
       if (!read.ok) return;
       if (!read.text.includes(String(folder.cited.value))) c.flag(`read_material did not return ${cite} (${folder.cited.value})`);
-      console.log(`    read ${folder.workbook} ${folder.cited.sheet}!A1:C4 — EMEA Q3 is ${folder.cited.value}`);
 
-      // Its output: a Word document that states the figure and cites it.
+      // Its output: a Word document that states a figure and cites it.
+      // The first time, it takes the figure from the wrong column — Q2,
+      // not Q3 — so the person has something to send back.
       fs.mkdirSync(path.dirname(abs(folder.output)), { recursive: true });
-      fs.writeFileSync(abs(folder.output), analysisDocx(folder.cited.value, cite));
+      const misread = `${folder.cited.sheet}!${folder.misread.range}`;
+      fs.writeFileSync(abs(folder.output), analysisDocx(folder.misread.value, misread));
       const output = await agent.json('record_artefact', { item_uid: analyse.uid, path: folder.output, role: 'output', note: 'The analysis' });
       if (!output?.attachment_uid) return;
 
-      await c.say('It offers its evidence', `The figure, and the cell it came from: ${cite}. The checks run first; then it waits for a person.`);
-      const submitted = await agent.call('submit_criterion', {
+      const submit = async (range: string, value: number) => agent.call('submit_criterion', {
         criterion_uid: criterion.uid,
         evidence: [
-          { attachment_uid: workbook.attachment_uid, locator: { sheet: folder.cited.sheet, range: folder.cited.range } },
+          { attachment_uid: workbook.attachment_uid, locator: { sheet: folder.cited.sheet, range } },
           { attachment_uid: output.attachment_uid },
         ],
-        note: `EMEA Q3 is ${folder.cited.value} — ${cite}`,
+        note: `EMEA Q3 is ${value} — ${folder.cited.sheet}!${range}`,
       });
-      if (!submitted.ok) return;
-      await c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
-      await c.shot('18a-brief-submitted', { criterion: { text: criterion.text, state: 'submitted' } });
+      const show = () => c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
 
-      // A person decides. MCP cannot approve — by design, not omission —
-      // so the scene waits for someone to, rather than faking it.
       const stateOf = async (): Promise<string | null> => {
         const list = await c.json('list_criteria', { item_uid: analyse.uid });
         return (Array.isArray(list) ? list : []).find((x: { uid: string }) => x.uid === criterion.uid)?.state ?? null;
@@ -1016,31 +1014,95 @@ const SCENES: Scene[] = [
         return now;
       };
 
-      if (APPROVE) {
-        await c.say('Approving for you', 'Through the desktop\'s own route — the one the Approve button uses. It stands in for a person; it is not the agent approving itself.', 'warning');
-        await c.api(`/api/criteria/${criterion.uid}/decide`, { decision: 'approved' });
-      } else {
-        await c.say('Your turn', `Approve "${criterion.text}" in the window — or send it back with a note. Waiting up to ${APPROVE_WAIT_S}s.`, 'question');
-      }
-      const decided = await until(['met', 'sent_back'], APPROVE ? 15 : APPROVE_WAIT_S);
-      if (decided === 'sent_back') {
-        console.log('    sent back — the agent would read the note in get_brief and try again');
-        return;
-      }
-      if (decided !== 'met') {
-        c.flag(`nobody approved "${criterion.text}" (it is ${decided ?? 'unknown'}) — run with --approve on a dev build, or approve it in the window`);
-        return;
-      }
-      await c.shot('18b-brief-approved', { criterion: { text: criterion.text, state: 'met' } });
+      // A person decides. MCP cannot — by design, not omission — so the
+      // scene waits for someone to, or with --decide stands in for them
+      // through the desktop's own route (which only a dev build serves).
+      const person = async (ask: string, body: Record<string, unknown>): Promise<string | null> => {
+        if (DECIDE) {
+          await c.say('Deciding for you', `${ask} — through the desktop's own route, standing in for a person. The agent cannot do this.`, 'warning');
+          if (await c.api(`/api/criteria/${criterion.uid}/decide`, body)) return until(['met', 'sent_back'], 15);
+          console.log('    (could not decide for you — waiting for a person instead)');
+        }
+        await c.say('Your turn', `${ask} in the window. Waiting up to ${PERSON_WAIT_S}s.`, 'question');
+        return until(['met', 'sent_back'], PERSON_WAIT_S);
+      };
+      const nobody = (state: string | null) => c.flag(
+        `nobody decided "${criterion.text}" (it is ${state ?? 'unknown'}) — run with --decide on a dev build, or decide it in the window`,
+      );
 
-      // The data changes after sign-off. The approval was of THAT file, so
-      // it no longer vouches for this one — and the Brief says so.
-      await c.say('The spreadsheet changes', `A late correction to ${cite}. The approval was given on the file as it was, so it goes stale.`, 'warning');
-      fs.writeFileSync(abs(folder.workbook), regionalWorkbook(folder.cited.value + 9));
+      // ── Round one: submitted, sent back from the cell, fixed, approved ──
+      await c.say('It offers its evidence', `The figure, and the cell it came from: ${misread}. The checks run first; then it waits for a person.`);
+      if (!(await submit(folder.misread.range, folder.misread.value)).ok) return;
+      await show();
+      await c.shot('18a-brief-submitted', { criterion: { text: criterion.text, state: 'submitted' } });
+
+      const first = await person(`Send "${criterion.text}" back from ${misread} — that is Q2`, {
+        decision: 'sent_back',
+        note: `${misread} is the Q2 figure. Q3 is column C.`,
+        anchor: { attachmentUid: workbook.attachment_uid, locator: { sheet: folder.cited.sheet, range: folder.misread.range } },
+      });
+      if (first === 'sent_back') {
+        await show();
+        await c.shot('18b-brief-sent-back', { criterion: { text: criterion.text, state: 'sent_back' } });
+
+        // The agent resumes from its worklist: the note, and the place it
+        // points at, arrive there — nobody pastes anything to it.
+        await c.say('It picks up what was sent back', 'From its worklist: the note, and the cell it was sent back from. Nobody pastes anything to it.');
+        const worklist = await agent.json('get_worklist', { plan_uid: planUid });
+        const owed = (worklist?.owed ?? []).find((e: { criterion_uid: string }) => e.criterion_uid === criterion.uid);
+        const at = owed?.points_at?.[0];
+        if (owed?.reason !== 'sent_back') c.flag(`the worklist did not list the sent-back criterion (it said ${owed?.reason ?? 'nothing'})`);
+        else if (!owed.note) c.flag('the worklist listed the send-back without its note');
+        else if (at?.locator?.range !== folder.misread.range) c.flag(`the worklist did not point at ${misread} (it pointed at ${JSON.stringify(at?.locator ?? null)})`);
+        else console.log(`    worklist: sent back — "${owed.note}" at ${at.path} ${at.locator.sheet}!${at.locator.range}`);
+        // It reads the place it was pointed at, from the worklist itself.
+        if (at) await agent.call('read_material', { attachment_uid: at.attachment_uid, locator: at.locator });
+        const corrected = await agent.call('read_material', { attachment_uid: workbook.attachment_uid, locator: { sheet: folder.cited.sheet, range: folder.cited.range } });
+        if (!corrected.text.includes(String(folder.cited.value))) c.flag(`read_material did not return ${cite} (${folder.cited.value})`);
+        fs.writeFileSync(abs(folder.output), analysisDocx(folder.cited.value, cite));
+        if (!(await submit(folder.cited.range, folder.cited.value)).ok) return;
+
+        const second = await person(`Approve "${criterion.text}" — now ${cite}`, { decision: 'approved' });
+        if (second !== 'met') { nobody(second); return; }
+      } else if (first === 'met') {
+        console.log('    approved first time — the send-back leg was skipped');
+      } else {
+        nobody(first);
+        return;
+      }
+      await show();
+      await c.shot('18c-brief-approved', { criterion: { text: criterion.text, state: 'met' } });
+      // A check run now, so the next one has something to compare with.
+      await agent.call('run_checks', { plan_uid: planUid });
+
+      // ── The source is refreshed after sign-off ──
+      // The approval was of THAT file, so it no longer vouches for this one.
+      const refreshed = folder.cited.value + 9;
+      await c.say('The spreadsheet is refreshed', `A late correction to ${cite}. The approval was given on the file as it was, so it goes stale.`, 'warning');
+      fs.writeFileSync(abs(folder.workbook), regionalWorkbook(refreshed));
       const after = await until(['stale'], 20);
       if (after !== 'stale') { c.flag(`editing the cited workbook left the criterion ${after ?? 'unknown'}, not stale`); return; }
-      await c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
-      await c.shot('18c-brief-stale', { criterion: { text: criterion.text, state: 'stale' } });
+      // The next check run says what moved since the last one.
+      const run = await agent.json('run_checks', { plan_uid: planUid });
+      const staleInRun = (run?.stale ?? []).some((x: { criterion_uid: string }) => x.criterion_uid === criterion.uid);
+      console.log(`    check run: ${(run?.since_last ?? []).join(' · ') || 'nothing moved'}`);
+      if (!staleInRun) c.flag('the check run after the refresh did not list the criterion as stale');
+      await show();
+      await c.shot('18d-brief-stale', { criterion: { text: criterion.text, state: 'stale' } });
+
+      // ── Round two: the loop runs again ──
+      await c.say('The loop runs again', 'Stale is on the worklist like a send-back is. The agent re-reads the cell, updates its output, and asks again.');
+      const again = await agent.json('get_worklist', { plan_uid: planUid });
+      const staleEntry = (again?.owed ?? []).find((e: { criterion_uid: string }) => e.criterion_uid === criterion.uid);
+      if (staleEntry?.reason !== 'stale') c.flag(`the worklist did not list the stale criterion (it said ${staleEntry?.reason ?? 'nothing'})`);
+      const reread = await agent.call('read_material', { attachment_uid: workbook.attachment_uid, locator: { sheet: folder.cited.sheet, range: folder.cited.range } });
+      if (!reread.text.includes(String(refreshed))) c.flag(`after the refresh, read_material did not return ${cite} as ${refreshed}`);
+      fs.writeFileSync(abs(folder.output), analysisDocx(refreshed, cite));
+      if (!(await submit(folder.cited.range, refreshed)).ok) return;
+      const third = await person(`Approve "${criterion.text}" again — ${cite} is now ${refreshed}`, { decision: 'approved' });
+      if (third !== 'met') { nobody(third); return; }
+      await show();
+      await c.shot('18e-brief-approved-again', { criterion: { text: criterion.text, state: 'met' } });
 
       // And the place it cited, as it is now.
       await c.call('navigate_to', {
@@ -1048,10 +1110,10 @@ const SCENES: Scene[] = [
         attachment_uid: workbook.attachment_uid,
         locator: { sheet: folder.cited.sheet, range: folder.cited.range },
       });
-      await c.shot('18d-brief-cited-cell', { artefact: path.basename(folder.workbook) });
+      await c.shot('18f-brief-cited-cell', { artefact: path.basename(folder.workbook) });
       // Close the viewer: it is a modal, and left open it blocks the next
       // run's preflight — which is how this step was found missing.
-      await c.call('navigate_to', { target: 'brief', plan_uid: planUid, item_uid: analyse.uid });
+      await show();
     },
   },
 

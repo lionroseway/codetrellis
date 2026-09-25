@@ -146,6 +146,8 @@ export interface BriefFixture {
   output: string;
   /** The figure the agent cites, and where it lives. */
   cited: { sheet: string; range: string; value: number };
+  /** The cell next to it — Q2, not Q3 — which the agent cites first, wrongly. */
+  misread: { range: string; value: number };
 }
 
 /**
@@ -167,6 +169,7 @@ export function briefFolder(): BriefFixture {
     guide: 'guide/how-we-write-the-review.pdf',
     output: 'out/q3-analysis.docx',
     cited: { sheet: 'Regional', range: 'C3', value: 342 },
+    misread: { range: 'B3', value: 318 },
   };
   write(dir, fixture.workbook, regionalWorkbook(fixture.cited.value));
   write(dir, fixture.guide, makePdf([

@@ -16,6 +16,9 @@ import type { AgentEvent } from '../../shared/types';
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Counts ui-navigate messages, so an asynchronous step can tell whether a
+  // later navigation has arrived while it waited.
+  const navigationRef = useRef(0);
 
   useEffect(() => {
     // Set by the cleanup. A socket closed BY the cleanup still fires
@@ -253,6 +256,7 @@ export function useWebSocket() {
             // The artefact viewer is a modal. Asked to show anything else,
             // close it — otherwise "show the brief" leaves the brief under
             // the file the agent opened last, and nothing on screen changes.
+            const navigation = ++navigationRef.current;
             if (target !== 'artefact') useArtefactViewStore.getState().close();
             if (target === 'plan' || target === 'plans') {
               // Await setActivePlan so activePlanUid is set before the
@@ -290,7 +294,12 @@ export function useWebSocket() {
               // A recorded file in the viewer, at the place the agent cites.
               const attachmentUid = payload?.attachmentUid as string | undefined;
               if (attachmentUid) {
-                void import('../lib/open-artefact-at').then((m) => m.openArtefactAt(attachmentUid, payload?.locator ?? null));
+                // Only if nothing has navigated since. The import is async, so
+                // "show the file, then show the brief" otherwise closed the
+                // viewer first and opened it after — over the brief.
+                void import('../lib/open-artefact-at').then((m) => {
+                  if (navigation === navigationRef.current) m.openArtefactAt(attachmentUid, payload?.locator ?? null);
+                });
               }
             } else if (target === 'split') {
               (async () => {

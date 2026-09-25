@@ -23,7 +23,7 @@ npm run demo -- --list            # what exists
 npm run demo -- --project=/path   # against another codebase
 npm run demo -- --port=19433      # a second instance moved the MCP port
 npm run demo -- --shots=/tmp/ct   # save a screenshot per scene
-npm run demo -- --scene=brief --approve          # approve for you (dev build only)
+npm run demo -- --scene=brief --decide           # decide for the person (dev build only)
 npm run demo -- --scene=brief --connector=out/connector/mcp-connector.cjs
 ```
 
@@ -80,7 +80,7 @@ are about the repository rather than the code. This is `npm run demo` —
 | `scoping` | a package inside a monorepo shows none of its parent's churn |
 | `degrade` | no git and no commits both answer honestly |
 | `conflict` | a plan manifest conflict named per field, resolved without markers |
-| `brief` | a task with no code: waiting → approved → stale when the spreadsheet it cites changes |
+| `brief` | a task with no code, looped twice: sent back from a cell, fixed from the worklist, approved, stale on refresh, approved again |
 | `finish` | the agent waits for a human |
 
 Two scenes need more than the backend: `terminal` needs the `terminal`
@@ -202,27 +202,41 @@ every existing user and this journey is how that gets checked.
 **Watch for:** identity comes from the DTLS transport. If any step works
 after a fingerprint is edited in a request body, that is the finding.
 
-### B12. Work that is not code — *built*
+### B12. Work that is not code, looped twice — *built*
 
 Scene `brief`. A folder with no git in it — a workbook and a PDF guide —
 and a plan from the **Analysis report** playbook. The agent connects
 through the stdio connector as `claude-ai`, the way Claude Desktop does,
-not through the demo's own shortcut: it reads the brief, claims
-**Analyse**, reads `Regional!A1:C4` with `read_material`, writes a Word
-document as its output, and submits the citation criterion with the cell
-it rests on. A person approves it. Then the workbook changes, and the
-approval — given on the file as it was — goes stale.
+not through the demo's own shortcut. Then the loop from Phase 31's
+done-when, end to end, twice:
 
-MCP cannot approve, by design, so the scene waits for someone to
-(`--approve-wait`, 180s by default). `--approve` stands in for the person
-through the desktop's own HTTP route, which only a dev build serves; on a
-packaged build, approve it in the window. `--connector` runs the bundle a
-packaged app ships instead of the connector's source.
+1. It reads the brief, claims **Analyse**, reads `Regional!A1:C4`, writes a
+   Word document, and submits the citation criterion — citing `B3`, the Q2
+   figure, by mistake.
+2. The person sends it back **from that cell**, with a note.
+3. The agent calls `get_worklist`: the note and the cell arrive there, and
+   it reads the place it was pointed at — nobody pastes anything to it. It
+   corrects the output, resubmits on `C3`, and the person approves.
+4. The workbook is refreshed. The approval was of the file as it was, so it
+   goes stale, and the next `run_checks` says so: *1 went stale — …xlsx
+   changed*.
+5. The loop runs again: stale is on the worklist like a send-back is; the
+   agent re-reads the cell, updates its output, resubmits, and the person
+   approves the new figure.
+
+MCP cannot decide, by design, so the scene waits for a person
+(`--person-wait`, 180s by default). `--decide` stands in for them through
+the desktop's own HTTP route, which only a dev build serves; on a packaged
+build, decide in the window — send it back from `B3` when asked. If you
+approve instead, the scene carries on without the send-back leg and says
+so. `--connector` runs the bundle a packaged app ships instead of the
+connector's source.
 
 **Watch for:** the Brief's row for *Every figure… cites the sheet and
-cell* reading waiting, then approved, then stale — each shot checks the
-row on screen says so before it is taken. The playbook's citation
-criterion must not arrive agent-approved; a file cannot grant that.
+cell* reading waiting, sent back, approved, stale, approved — each shot
+checks the row on screen says so before it is taken. The playbook's
+citation criterion must not arrive agent-approved; a file cannot grant
+that.
 
 ## C. Fixtures
 

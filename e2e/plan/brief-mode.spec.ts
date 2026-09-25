@@ -90,6 +90,13 @@ test.describe('Brief mode', () => {
       await agent.callTool('navigate_to', { target: 'brief', plan_uid: plan.uid, item_uid: task });
       await expect(page.getByTestId('artefact-viewer')).toHaveCount(0);
       await expect(brief.getByTestId('criteria-block')).toBeVisible();
+
+      // Back to back — the file, then the brief — the last one wins. The
+      // viewer's open is asynchronous, and it used to land after the close.
+      await agent.callTool('navigate_to', { target: 'artefact', attachment_uid: material.attachment_uid, locator: { lines: '2' } });
+      await agent.callTool('navigate_to', { target: 'brief', plan_uid: plan.uid, item_uid: task });
+      await page.waitForTimeout(1000);
+      await expect(page.getByTestId('artefact-viewer')).toHaveCount(0);
     } finally {
       agent.close();
     }
