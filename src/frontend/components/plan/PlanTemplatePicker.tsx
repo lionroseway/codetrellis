@@ -52,6 +52,8 @@ export interface PlanTemplateSummary {
   /** Present only on V2 (item-tree) templates. */
   version?: number;
   itemCount?: number;
+  /** Phase 31 §14 — the acceptance criteria the template brings. */
+  criteriaCount?: number;
 }
 
 /**
@@ -95,6 +97,7 @@ export function describeTemplateShape(t: PlanTemplateSummary): string {
   if (t.itemCount) parts.push(`${t.itemCount} item${t.itemCount === 1 ? '' : 's'}`);
   if (t.phaseCount) parts.push(`${t.phaseCount} phase${t.phaseCount === 1 ? '' : 's'}`);
   if (t.docCount) parts.push(`${t.docCount} doc${t.docCount === 1 ? '' : 's'}`);
+  if (t.criteriaCount) parts.push(`${t.criteriaCount} criteri${t.criteriaCount === 1 ? 'on' : 'a'}`);
   return parts.join(' · ');
 }
 
