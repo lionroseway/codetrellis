@@ -83,6 +83,7 @@ async function onArtefactChanged(w: ProjectWatch, absPath: string): Promise<void
         planUid,
         itemUid,
         criterionUid: c.uid,
+        reason: 'stale',
         message: `"${c.text}" was approved, and ${rel} has changed since. Is it still met?`,
       });
     }
