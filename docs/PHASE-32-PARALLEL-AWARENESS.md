@@ -1,11 +1,16 @@
 # Phase 32 — Parallel Awareness
 
 > One developer, many agents, many worktrees, clones and branches.
-> CodeTrellis quietly watches
-> all of it and tells you — and your agents — only what matters.
+> CodeTrellis quietly watches all of it and tells you — and your
+> agents — only what matters.
 
-Status: **plan**. Nothing here is built yet. §3 lists what already exists
-and what this phase builds on.
+Status: **plan**. Nothing here is built yet.
+
+Companion docs:
+- [PHASE-32-JOURNEYS.md](PHASE-32-JOURNEYS.md): the stories to discuss.
+- [PHASE-32-CURRENT-STATE.md](PHASE-32-CURRENT-STATE.md): what the code
+  does today, checked line by line, including the bugs found on the way.
+  Every "exists" or "missing" claim below comes from there.
 
 ---
 
@@ -13,8 +18,7 @@ and what this phase builds on.
 
 Running several agents at once is now normal. A developer might have five
 agents going across five worktrees, clones or branches, each on a
-different ticket. The work
-gets done quickly. Keeping it consistent does not.
+different ticket. The work gets done quickly. Keeping it consistent does not.
 
 Today one person has to hold the whole picture in their head:
 
@@ -31,7 +35,9 @@ Git doesn't help until it's too late. It only sees two branches editing
 the **same lines**, and only when you merge. Most real clashes aren't
 like that. They're about **meaning**: a changed function signature, a
 broken design rule, the same helper written twice. CodeTrellis already
-has the graph that can see those. This phase points it at parallel work.
+has most of what's needed to see those: the dependency graph, which
+names each file imports, and a parser that can read any branch. This
+phase points it at parallel work.
 
 **The bet:** the developer's job moves from writing code to keeping AI
 output correct and efficient. That job needs a tool that watches
@@ -45,8 +51,9 @@ you move fast without babysitting.
    the next one. Every signal has to pass a relevance test (§4.4) before
    anyone sees it.
 2. **The graph decides who is affected.** Relevance isn't guessed from
-   file names. It comes from the dependency graph: who calls this, who
-   owns it, who is working near it.
+   file names. It comes from the dependency graph: who imports this,
+   who is working near it. ("Uses" means imports, not calls. There's no
+   call graph, and imports are enough for a warning.)
 3. **Agents are told first, people for judgement.** Most clashes can be
    fixed by the agents once they know about them. A person only sees what
    needs a decision.
@@ -62,35 +69,57 @@ you move fast without babysitting.
    machine except what already does (mobile over the paired mesh, push
    notifications with IDs only).
 7. **Phase 19 rules apply unchanged.** Workstream roots come from git
-   (or from a clone the user explicitly included), never from a request. File reads go through `confined-fs`. Every new
+   (or from a clone the user explicitly included), never from a request.
+   File reads go through `confined-fs`. Every new
    MCP tool gets a row in `TOOL_CAPABILITIES`. Every new mobile RPC
    method gets a row in the `peer-capabilities` matrix.
 
 ## 3. What already exists
 
-This phase is mostly about **connecting pieces that are already here**.
+The full map, with file and line references, is in
+[PHASE-32-CURRENT-STATE.md](PHASE-32-CURRENT-STATE.md). What matters
+for the design:
 
-| Piece | Where | What it gives us | Gap for this phase |
-|---|---|---|---|
-| Worktree listing | `services/worktree-service.ts` | Every worktree of the opened repo, branch, head, and the plan titles in each; confined by `belongsToRepo` | Lists worktrees; doesn't watch what changes in them |
-| File watcher | `services/file-watcher.ts` | Live re-index of the opened project | One watcher, one root. Sibling worktrees are invisible until opened as their own project, which re-indexes the whole repo |
-| Claude Code watcher | `agent/claude-code-watcher.ts` | Tails a Claude Code session JSONL | Tracks **one** session, and only where `cwd === projectRoot` exactly. A session in a worktree, or a second session, is never seen |
-| MCP sessions | `services/session-service.ts`, `mcp/client-identity.ts` | Every connected agent, attributed | Doesn't record which worktree or directory a session works in |
-| Connector | `mcp/connector/` | Stdio proxy every agent launches | Knows its own working directory; doesn't send it |
-| Claim + overlap | `plan-item-service.ts` (`claim_item`) | Warns when two in-progress Actions list the same files | Same plan only, and only **planned** files, not files actually edited |
-| Deviations | `services/deviation-service.ts`, `get_deviations` / `detect_deviations` | Plan intent vs files actually touched | Per plan; nobody links it to a live worktree |
-| Architecture checks | `check_architecture`, `check_conformity` | Rule violations on the graph | Run when asked, not continuously per worktree |
-| Stuck sensor | `services/stuck-sensor-service.ts` | Loop / error / idle detection per session | Already the right shape: this phase reuses its pattern |
-| Sensor bridge | `services/sensor-bridge-service.ts` | Turns detections into debounced channel events | Becomes the delivery path for awareness signals |
-| Channels | `channel-event-service.ts`, `post_channel_event` | `stuck`, `need-decision`, `steer`, … | Reused as-is for agent ↔ person questions |
-| Timeline | `components/layout/AgentTurns.tsx` in `PlanPanel` | Agent activity grouped into turns | Per session. No cross-session view |
-| Plan overlay | `services/plan-overlay-service.ts` | Draws plan intent onto file lines | Same mechanism can draw other workstreams onto lines |
-| Mobile activity | `mobile/app/(tabs)/activity.tsx` | Input requests, agents, channel events | No workstream or signal view |
-| Push | `services/push-notification-service.ts` | Push for stuck / need-decision, rate limited, IDs only | Reused for high-severity signals |
-| Review | `review_plan`, `get_pr_draft` (Phase 25, 31.7a) | A change checked against its plan; the PR body from the plan | One change at a time; knows nothing about other work in flight |
-| Criteria and sign-off | `criteria-service`, `check_criterion`, `run_checks` (Phase 31) | Whether an item's own work is done, and who signed | Same: per item |
-| Artefact watcher | `services/artefact-watcher.ts` | A changed material turns an approved criterion stale, and says so | Per item; a material shared by several tasks isn't followed across them |
-| Agent guides | `mcp/skill-guide.ts` (`multi-agent` flavour) | Guides served as MCP resources | Covers terminals and claims; says nothing about awareness |
+**Already here and reused as-is:**
+- `parseVirtualFile` parses any file content (another worktree, or
+  `git show branch:path`) without touching the database.
+- Imports record which names each file imports, which is the basis for
+  "who uses this".
+- `worktree-service` lists worktrees and ties them to the repo.
+- The `instrument` wrapper in `mcp/server.ts` sees every tool call and
+  can append to any result.
+- Sensor config, debounce and channel posting.
+- The capability matrices on both surfaces.
+- Push notifications, and the phone's approvals flow.
+- `review_plan`, `get_pr_draft`, criteria and check runs.
+- The artefact watcher, which already finds every task holding a
+  changed file.
+
+**Constraints that shape the design:**
+1. **The backend holds one project's graph at a time.** Other worktrees,
+   clones and branches cannot be loaded as projects alongside it. They
+   *must* be in-memory deltas over the opened project (§4.2).
+2. **No function signatures are stored.** Symbols have name, kind, lines
+   and modifiers only. `contract` needs signature extraction per
+   language (§4.2).
+3. **No call graph.** "Who uses X" is answered from imports. Python
+   records aliases instead of original names, and re-exports aren't
+   captured. Both are fixed in M2.
+4. **No architecture rules exist.** `check_conformity` only catches a
+   two-file cycle. `rule` signals wait for a rules format (M7).
+5. **Nothing records where an agent works.** There's no working
+   directory on sessions, the connector sends only the token, and the
+   server never asks for MCP roots.
+6. **One Claude Code session, one folder, one watcher.** All three are
+   module-level singletons today.
+
+**Bugs that make parallel work worse today**, fixed in M0 (details in
+CURRENT-STATE):
+- `claim_item` records the agent *type* as the assignee, so two Claude
+  Code sessions can't see each other's claims.
+- `register_session` wipes a session's plan and terminal link.
+- The Claude Code watcher reads only the first tool call in each
+  message.
 
 ## 4. The model
 
@@ -161,6 +190,15 @@ type where the language has one, exported or not. Changing a function's
 body doesn't change its signature; changing its parameters does. That
 separation is what lets contract signals stay quiet for ordinary edits.
 
+Signatures aren't extracted today. Each language plugin's `nodeToSymbol`
+still has the tree-sitter node, so the work is to read the `parameters`
+and `return_type` fields there into a new optional
+`ParsedSymbol.signature`. Start with TS/JS and Python. **A language
+without signature support produces no `contract` signals**: falling
+back to a body hash would flag every edit, which breaks principle 1.
+Python needs "exported" defined: no leading `_`, or listed in
+`__all__`.
+
 ### 4.3 Signals
 
 A **signal** is one thing worth knowing. Seven kinds, in the order we
@@ -169,15 +207,17 @@ build them:
 | Kind | Fires when | Example |
 |---|---|---|
 | `collision` | Two workstreams change the same file, or the same symbol | "`auth-refresh` and `billing-v2` both edit `session.ts` → `refreshToken`" |
-| `contract` | A workstream changes a symbol's signature, and another workstream's footprint calls it | "`billing-v2` changed `createInvoice(opts)` → `createInvoice(opts, currency)`. `checkout-fix` calls it in 2 places" |
+| `contract` | A workstream changes a symbol's signature, and another workstream's footprint imports it | "`billing-v2` changed `createInvoice(opts)` → `createInvoice(opts, currency)`. `checkout-fix` imports it in 2 files" |
 | `drift` | A workstream edits outside its item's declared scope | "Ticket says billing; agent is now editing `config/shared.ts`" |
-| `rule` | A workstream's delta breaks an architecture rule | "`web/` now imports from `db/` directly" |
+| `rule` | A workstream's delta breaks an architecture rule. **Needs a rules format first (M7)**; none exists today | "`web/` now imports from `db/` directly" |
 | `stale-base` | Main changed files this workstream also touches since its merge base | "`main` changed `session.ts` 40 minutes ago; `auth-refresh` branched before that" |
 | `duplicate` | A new symbol closely matches one added in another workstream or already on main | "`formatMoney` added in two workstreams in the last hour" |
 | `decision` | An agent posts `need-decision` / `need-context` | Reuses channels; shown in the same inbox |
 
 `collision` / `contract` / `drift` / `rule` / `stale-base` come from the
-footprint. `decision` comes from channels. `duplicate` is last because it
+footprint. "Calls it" in `contract` means **imports it**: the importer's
+specifiers include the changed name, and a namespace import counts as
+"possibly". `decision` comes from channels. `duplicate` is last because it
 is the only one that needs fuzzy matching, and fuzzy matching is where
 false positives come from.
 
@@ -186,10 +226,11 @@ false positives come from.
 Each signal is scored before it is shown:
 
 - **Who is affected.** The workstreams named in the signal, found through
-  the graph (callers, importers, owners), never through a text search.
+  the graph (importers of the changed file and name), never through a
+  text search.
 - **Severity.**
   - `high`: the signal will break a build or a merge, e.g. a contract
-    change with live callers elsewhere, or a collision on the same symbol.
+    change with live importers elsewhere, or a collision on the same symbol.
   - `medium`: work will need to be reconciled, e.g. a file-level
     collision, drift, a rule break.
   - `low`: worth knowing, e.g. stale base, a duplicate.
@@ -262,7 +303,10 @@ belongs to. Three sources, tried in order:
 2. **MCP roots.** For clients that expose `roots/list` (Claude Code
    does), the server asks for the roots.
 3. **Terminal presets.** `terminal_create` already knows the `cwd` it
-   started the agent in.
+   started the agent in, and the terminal exports
+   `CODETRELLIS_HOST_TERMINAL`. The connector forwards that as a header
+   too, so the server joins session → terminal → folder at connect time
+   instead of waiting for the agent to call `register_session`.
 
 Whatever the source, the server **validates the reported directory**:
 it must be a worktree from `listWorktrees`, the opened project itself,
@@ -272,7 +316,10 @@ reported path is used to *choose* a workstream, never as a root to read
 from (the Phase 19 rule against taking roots from requests).
 
 `agent_sessions` gains a `workstream_root` column (reconciled by
-`schema-reconciler`). Branch workstreams have no sessions on this
+`schema-reconciler`). Session ids are per connection, and a reconnect
+after an app restart makes a new one, so the binding is re-derived on
+every connect from the headers above rather than stored against an old
+id. Branch workstreams have no sessions on this
 machine; they are work that was done elsewhere or has already finished.
 
 ### 5.2 Seeing every Claude Code session
@@ -280,7 +327,8 @@ machine; they are work that was done elsewhere or has already finished.
 `claude-code-watcher.ts` moves from one active session to **a set**:
 every live session whose `cwd` is the folder of any workstream. Each
 tails independently. The existing cursor and rebind logic applies per
-session. The file paths in each session's `Edit` / `Write` records are
+session. It must read **every** `tool_use` block in a message (today it
+stops at the first), and tag each event with the session and folder. The file paths in each session's `Edit` / `Write` records are
 what attribute edits in a shared checkout (§4.1).
 
 ### 5.3 Watching workstreams cheaply
@@ -319,8 +367,8 @@ costs about what re-saving 40 files in the main project costs today.
 
 A new `awareness-service.ts`:
 
-- **Input:** footprints (§4.2), the base graph (callers and importers
-  from the existing tables), architecture rules, channel events.
+- **Input:** footprints (§4.2), the base graph (import edges and their
+  specifiers from the existing tables), architecture rules, channel events.
 - **Core:** a pure function, `computeSignals(footprints, graph, rules,
   previous) → signals`, that is easy to unit test with no database and
   no git.
@@ -328,8 +376,13 @@ A new `awareness-service.ts`:
   severity, subject, workstreams, first/last seen, state:
   `open | acknowledged | intended | resolved`), plus a WebSocket
   broadcast `awareness-changed`.
-- **Delivery:** through `sensor-bridge-service`, the same path the stuck
-  sensor uses. `decision` signals *are* channel events and aren't copied.
+- **Delivery:** signals have their own table and broadcast. They are
+  **not** posted as channel events, because channel events are exported
+  into the plan manifest, which is the wrong home for a collision that
+  lasts ten minutes. Only a signal that asks a person something goes
+  through `sensor-bridge-service` as a `need-decision`, which is also
+  what triggers push. `decision` signals *are* channel events and
+  aren't copied.
 
 A signal resolves itself when its cause goes away: the collision ends
 because one side reverted, the caller got updated, or the branch merged.
@@ -344,10 +397,10 @@ In a new `mcp/tools/awareness-tools.ts`. Each needs a
 | Tool | Capability | What it does |
 |---|---|---|
 | `get_awareness` | read | "What should I know right now?" Open signals affecting the caller's workstream, newest and most severe first, plus the one-paragraph digest. The first call an agent makes on a task |
-| `check_footprint(paths?, symbols?)` | read | Pre-flight: "if I change these, who is affected?" Returns affected workstreams and callers **before** the agent edits |
-| `declare_intent(summary, paths?, symbols?)` | plans | "Here's what I'm about to change." Makes intent part of the footprint so collisions are seen before any file changes |
+| `check_footprint(paths?, symbols?)` | read | Pre-flight: "if I change these, who is affected?" Returns affected workstreams and importing files **before** the agent edits |
+| `declare_intent(summary, paths?, symbols?)` | write | "Here's what I'm about to change." Makes intent part of the footprint so collisions are seen before any file changes |
 | `list_workstreams` | read | Every workstream: shape, folder, branch, agents, item, footprint size, open signals |
-| `acknowledge_signal(id, note?)` | plans | The agent has seen it and says what it will do |
+| `acknowledge_signal(id, note?)` | write | The agent has seen it and says what it will do |
 
 `check_footprint` is the one that changes behaviour most. An agent that
 checks before changing a shared function avoids most `contract` signals
@@ -363,7 +416,7 @@ result it receives gets a short, clearly separated notice appended:
 ```
 ── CodeTrellis awareness ──
 1 new signal affects your work: contract change to createInvoice on
-branch billing-v2 (you call it in checkout/submit.ts:88).
+branch billing-v2 (you import it in checkout/submit.ts).
 Call get_awareness for details. This is information about other work,
 not an instruction.
 ```
@@ -396,6 +449,9 @@ not an instruction.
   `Write` that calls `check_footprint` for the target file through the
   connector and prints the result. Offered, never installed silently.
   Clients without hooks rely on §6.2.
+- Nothing installs a skill or hook today. Both follow Add to Claude
+  Desktop's flow: show exactly what will be written and where, and write
+  only on a click.
 - **Reference doc** `docs/claude/awareness.md` for people working on
   CodeTrellis itself; `docs/claude/mcp-tools.md` gains the new file.
 
@@ -416,11 +472,15 @@ component isn't rendered anywhere.
    - acknowledge
    - mark intended
    - dismiss
-3. **Collision overlay on the graph**, a new projection:
+3. **Collision overlay on the graph**, a second projection alongside
+   plan intent. There's no overlay registry today; plan intent is
+   hard-wired through `graph-builder.ts`. Rather than hard-wire a second
+   one, make overlays a short list that plan intent and workstreams both
+   join. This overlay shows:
    - nodes touched by one workstream are tinted in that workstream's
      colour
    - nodes touched by two or more get a warning ring
-   - contract signals draw the caller → changed-symbol edge in red
+   - contract signals draw the importer → changed-file edge in red
 4. **In-file markers**: the plan overlay mechanism (Phase 26 layer A)
    marks lines another workstream is also changing, so you see
    "`billing-v2` is editing this function" in context.
@@ -450,6 +510,12 @@ desk. Uses the existing snapshot + patch channel for state and the
    the payload, content fetched over the mesh, one push per kind per
    minute).
 
+The phone's approvals flow is the template: list and detail are
+**pulled over RPC**, and only a count rides in the live snapshot, so
+signals don't bloat what's sent every 100 ms. "Needs you" merges
+approvals, input requests and signals into the one count the Home badge
+already implies.
+
 ## 9. Review: where parallel work lands
 
 Every workstream ends in a review, and that is where parallel work
@@ -475,6 +541,15 @@ None of these knows that any **other** work exists.
 
 ### 9.2 What this phase adds
 
+**Branch review gets its missing half.** Today `review_plan` can compare
+`commit:<ref>` sides, but a commit side has **files only, no dependency
+edges**, so the most useful finding (dependencies nobody planned) is
+suppressed for exactly the case parallel work produces. The footprint
+engine already parses a branch's changed files in memory, so it supplies
+the import delta for `commit:` sides, and branch reviews get dependency
+findings back. `list_comparands` also lists workstream branches, not
+just recent commits of HEAD.
+
 **An incoming PR is just a branch workstream.** Once its branch is
 fetched, a PR from anyone, from a cloud agent or from one of the
 developer's own sessions, is a branch workstream (§4.1). It gets the same
@@ -488,7 +563,7 @@ section.** For the workstream under review:
   acknowledged with the agent's note, or marked intended by the
   developer)
 - other open workstreams that depend on what this one changes, e.g.
-  "merging this changes `createInvoice`; `checkout-fix` calls it and
+  "merging this changes `createInvoice`; `checkout-fix` imports it and
   will need updating"
 
 A signal marked intended becomes a written-down decision in the PR
@@ -501,8 +576,10 @@ module instead of rediscovering it.
 2. it has no open **high** awareness signals.
 
 This is how blocking works, if a project wants it: awareness never
-blocks a tool call, but a project can add "no open high signals" as a
-mechanical check on a criterion (`criterion-checks.ts`). Then it gates
+blocks a tool call, but a project can turn on "no open high signals" as
+a mechanical check inside the existing `code` criterion kind
+(`criterion-checks.ts`), rather than as a new kind, which would touch
+seven places. Then it gates
 sign-off the same way a failing test would, through the existing loop,
 and stays opt-in.
 
@@ -517,7 +594,9 @@ or nearly ready, with:
   depends on, A goes first and B gets a heads-up to update, rather than
   B merging first and A breaking it.
 
-The order is a suggestion with its reason shown, never enforced.
+The order is a suggestion with its reason shown, never enforced. Reviews
+in the queue are keyed by (plan, branch); nothing keys them that way
+today.
 
 **After a merge.** Signals whose cause merged resolve themselves. Every
 other workstream touching the same files gets a `stale-base` signal
@@ -554,9 +633,9 @@ tasks at once, and those tasks often share source material.
 
 | Code | The Brief |
 |---|---|
-| Workstream = a branch and a folder | Workstream = a **task** (plan item) and the sessions working on it. Claude Desktop has no folder, so sessions bind through the task they call `get_brief` on |
+| Workstream = a branch and a folder | Workstream = a **task** (plan item) and the sessions working on it. Claude Desktop has no folder, so a session binds to the task it calls `get_brief(item_uid)` on, since that call already names the item |
 | Footprint = files and symbols changed | Footprint = **materials read** (with locators such as sheet and range, or page), and **outputs recorded** (`record_artefact`) |
-| The graph links callers to functions | Citations link outputs to the exact parts of materials they came from (Phase 31 §7.5) |
+| The graph links importers to what they import | Citations link outputs to the exact parts of materials they came from (Phase 31 §7.5) |
 
 ### 10.2 Signals
 
@@ -569,9 +648,18 @@ tasks at once, and those tasks often share source material.
 | (new) `version-split` | Two tasks are working from different versions of the same material | "'Board pack' used yesterday's `sales-2026.xlsx`; 'Q3 summary' used today's" |
 | `decision` | Unchanged: channels | |
 
-`artefact-watcher.ts` already catches a changed file turning an approved
-criterion stale, **for one item**. This phase takes that across tasks:
-one changed material, every task affected, told once.
+`artefact-watcher.ts` already finds **every task** holding a changed
+file (`itemsWithArtefactAt`). It then handles each task separately,
+with a check run and a notice each. This phase regroups that into one
+signal naming every affected task, told once.
+
+Two things have to be recorded that aren't today:
+- **Which session read which material.** The `material_read` event
+  stores only the agent type.
+- **The file's hash at the time it was read.** That is what
+  `version-split` compares.
+
+Both are additions to the one `read_material` handler.
 
 Detecting that two reports state *different numbers* for the same thing
 would need reading the outputs' content. That's valuable but noisy, so
@@ -595,6 +683,8 @@ it's out of scope here, like `duplicate` on the code side.
 Each milestone is usable by itself.
 
 **M0: See every workstream.**
+- Fix the three parallel-work bugs (§3): claim assignee, session
+  re-registration, and the watcher's first-tool-only read
 - Workstream discovery for worktrees and the shared checkout, and session binding (§5.1)
 - Multi-session Claude watcher (§5.2)
 - `list_workstreams`
@@ -619,8 +709,10 @@ reverting one side resolves it. A fetched branch that changes the same
 function raises the same signal without being checked out.
 
 **M2: Meaning.**
-- Signatures
-- `contract`, `drift` and `rule` signals
+- Signatures for TS/JS and Python (§4.2)
+- Import accuracy: Python records original names, `export … from` is
+  captured, and `imports.resolved_path` is indexed
+- `contract` and `drift` signals
 - Inline notices (§6.2)
 - `declare_intent`
 - The collision overlay
@@ -655,7 +747,7 @@ push, and a reply from the phone reaches the agent as a `steer`.
 - Review tab, and the queue on mobile
 
 *Done when:* reviewing a branch that changes a function another open
-workstream calls says so in the review and the PR body, and the queue
+workstream imports says so in the review and the PR body, and the queue
 puts it first with that reason.
 
 **M6: The Brief.**
@@ -667,7 +759,16 @@ puts it first with that reason.
 *Done when:* replacing a spreadsheet that two tasks cite tells both
 tasks' agents on their next call, and shows once in the digest.
 
-`duplicate` signals come after M6, once there's real data on how noisy
+**M7: Rules.**
+- A minimal rules format in `.codetrellis/config.json`: path boundaries
+  ("files under `web/` may not import from `db/`")
+- `rule` signals from each workstream's import delta
+- `check_conformity` checks those rules, so its description becomes true
+
+*Done when:* an agent adding a forbidden import in any workstream is told
+on its next call, and the developer sees one line.
+
+`duplicate` signals come after M7, once there's real data on how noisy
 the other kinds are.
 
 ## 12. Testing
