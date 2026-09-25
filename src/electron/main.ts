@@ -6,17 +6,22 @@ import {
   shell,
   powerMonitor,
   powerSaveBlocker,
+  protocol,
   session,
+  nativeImage,
   type WebContents,
 } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
+import { Readable } from 'node:stream';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
   initializeBackend,
   app as expressApp,
   addBroadcastTarget,
 } from '../backend/server';
-import { setElectronScreenshotCapture } from '../backend/mcp/server';
+import { setElectronScreenshotCapture, getMcpSetup } from '../backend/mcp/server';
+import { applyClaudeDesktop, previewClaudeDesktop, thisMachine } from '../backend/services/claude-desktop-config';
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
@@ -31,6 +36,59 @@ import {
   stopPowerSignals,
 } from '../backend/services/power-signals';
 import { getSettings } from '../backend/services/settings-service';
+import { bundledDictionaryDir, installDictionaries, confineSpellcheck } from './spellcheck';
+import {
+  resolveServable,
+  serveFile,
+  absolutePathOf,
+  isAttachmentUid,
+} from '../backend/services/artefact-content-service';
+import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
+import { setPreviewImageScaler } from '../backend/services/mobile-approvals';
+import { buildSignoffPack, renderPackHtml } from '../backend/services/signoff-pack';
+import { htmlToPdf } from './signoff-pdf';
+import { installHtmlView, closeHtmlView } from './html-view';
+import { ARTEFACT_SCHEME, installArtefactTransport } from './artefact-transport';
+
+// Phase 31 §7.1 — the packaged renderer is a file:// document: its fetch is
+// shimmed over IPC as UTF-8 and its <img>/<video> reach neither the shim nor
+// a server, so image, video and every binary artefact need a scheme of their
+// own. Registered before `ready`, as Electron requires. The URL carries an
+// attachment uid and nothing else; everything else is resolved in main.
+protocol.registerSchemesAsPrivileged([
+  ARTEFACT_SCHEME,
+  // §7.3 — HTML reports' own scheme. Handled ONLY on the report view's
+  // session (html-view.ts), so the app's window cannot load it at all.
+  { scheme: 'ct-html', privileges: { standard: true, secure: true, stream: true } },
+]);
+
+/** One answer for a `ct-artefact:` URL, by scheme or over IPC (artefact-transport.ts). */
+async function artefactResponse(requestUrl: string, range: string | null): Promise<Response> {
+  const url = new URL(requestUrl);
+  const uid = url.hostname;
+  // `?rendition=pdf` — an Office file as it looks (§7.6), converted by the
+  // engine in its own process; a 503 sends the viewer to its fallback.
+  if (url.searchParams.get('rendition') === 'pdf') {
+    if (!isAttachmentUid(uid)) return new Response('Not a file that can be shown', { status: 404 });
+    const result = await renditionOf(uid);
+    if (!result.ok) {
+      return new Response(JSON.stringify({ error: result.reason, fallback: true }), {
+        status: result.status, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const served = serveFile(result.file, range);
+    if (!served.stream) return new Response(served.error ?? 'Not found', { status: served.status, headers: served.headers });
+    return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, { status: served.status, headers: served.headers });
+  }
+  const file = isAttachmentUid(uid) ? await resolveServable(uid) : null;
+  if (!file) return new Response('Not a file that can be shown', { status: 404 });
+  const served = serveFile(file, range);
+  if (!served.stream) return new Response(served.error ?? 'Not found', { status: served.status, headers: served.headers });
+  return new Response(Readable.toWeb(served.stream) as unknown as ReadableStream, {
+    status: served.status,
+    headers: served.headers,
+  });
+}
 
 // Mirror console.* to <dataDir>/logs/<YYYY-MM-DD>.log so the
 // packaged app produces a discoverable trail when no terminal is
@@ -53,6 +111,19 @@ console.log(`[Electron] App boot — pid ${process.pid}, log file: ${getCurrentL
 if (process.platform === 'linux' && process.env.APPIMAGE) {
   app.commandLine.appendSwitch('no-sandbox');
   console.log('[Electron] AppImage detected on Linux — running with --no-sandbox');
+}
+
+// Spell-check dictionaries from the bundle, never Google's CDN. Installed
+// before the app is ready — any later and Chromium has already asked for
+// one — and every session confined to them as it is created. macOS uses
+// the system spellchecker and fetches nothing. See ./spellcheck.ts.
+if (process.platform !== 'darwin') {
+  const installed = installDictionaries(
+    bundledDictionaryDir(app.getAppPath(), process.resourcesPath, app.isPackaged),
+    app.getPath('userData'),
+  );
+  console.log(`[Electron] Spell-check dictionaries bundled: ${installed.join(', ') || 'none'}`);
+  app.on('session-created', (ses) => confineSpellcheck(ses, installed, app.getPreferredSystemLanguages()));
 }
 
 // electron-vite injects this env var when running `electron-vite dev`.
@@ -181,10 +252,12 @@ const RENDERER_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // ct-artefact: — Phase 31 §7.1, the only way bytes reach the viewer in
+  // the packaged app. Added to img/media/connect and nowhere else.
+  "img-src 'self' data: blob: ct-artefact:",
   "font-src 'self' data:",
-  "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*",
-  "media-src 'self' blob: data:",
+  "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:* ct-artefact:",
+  "media-src 'self' blob: data: ct-artefact:",
   "frame-src 'none'",
   "object-src 'none'",
   "base-uri 'self'",
@@ -313,6 +386,7 @@ function createWindow(backendOk: boolean): void {
   }
 
   mainWindow.on('closed', () => {
+    closeHtmlView(null);
     mainWindow = null;
   });
 }
@@ -323,6 +397,19 @@ app.whenReady().then(async () => {
   // error banner rather than a dangling Dock icon.
   // Before any window exists, so no document is ever served without it.
   installContentSecurityPolicy();
+  installArtefactTransport(artefactResponse, (sender) => sender === mainWindow?.webContents);
+  // Phase 31 §12 — an image sent to the phone as evidence is scaled to a
+  // phone screen first, not sent as the original. A PNG stays a PNG: a
+  // chart or diagram with a transparent background turns black as a JPEG.
+  setPreviewImageScaler((bytes, mime) => {
+    const image = nativeImage.createFromBuffer(bytes);
+    if (image.isEmpty()) return null;
+    const fitted = image.getSize().width > 1280 ? image.resize({ width: 1280, quality: 'good' }) : image;
+    return mime === 'image/png'
+      ? { bytes: fitted.toPNG(), mime: 'image/png' }
+      : { bytes: fitted.toJPEG(80), mime: 'image/jpeg' };
+  });
+  installHtmlView(() => mainWindow);
 
   const backendOk = await bootstrap();
   createWindow(backendOk);
@@ -356,6 +443,8 @@ app.on('window-all-closed', () => {
 // (cosmetic) and a `caffeinate` child can orphan briefly.
 app.on('before-quit', () => {
   teardownPowerControl();
+  // The conversion engine is a child process holding a gigabyte; it goes too.
+  stopEngine();
 });
 
 // =============================================================
@@ -420,6 +509,9 @@ function wirePowerControl(): void {
   // plug/unplug and on battery exhaustion.
   powerMonitor.on('on-battery', () => setAcState('battery'));
   powerMonitor.on('on-ac', () => setAcState('plugged'));
+  // Phase 31 §7.6 — the conversion engine holds a gigabyte while warm; it is
+  // not kept through a sleep. The next Office file opened starts it again.
+  powerMonitor.on('suspend', () => stopEngine());
 
   // Boot the state machine + signal wiring.
   startPowerService();
@@ -539,6 +631,73 @@ ipcMain.handle('logs:get-path', async () => getCurrentLogPath());
  * been verified against the signed manifest. A renderer-supplied path
  * would make this an arbitrary "open anything in Finder" primitive.
  */
+/**
+ * Phase 31 §7.4 — Show in Finder / Explorer. Never "open": `shell.openPath`
+ * hands a file to whatever the OS associates with it, and an agent that can
+ * record a file plus a person who clicks Open is an agent that can run a
+ * `.command`, an `.app` or a macro-enabled workbook. Revealing runs nothing.
+ *
+ * Takes an attachment uid, never a path: the path is resolved and confined
+ * here, as `updates:reveal` does, so this cannot reveal an arbitrary file.
+ */
+/**
+ * Phase 31 §6.1 — "Add to Claude Desktop". Writes another application's
+ * config file, so it is reachable from this window only (never HTTP or MCP,
+ * which an agent can reach), the entry is the connector this app resolved
+ * itself, and nothing is written that the person was not shown: `apply`
+ * takes the hash of the file they previewed. See claude-desktop-config.ts.
+ */
+function claudeDesktopEntry(): Record<string, unknown> | null {
+  const setup = getMcpSetup();
+  return (setup.connector?.config as { codetrellis?: Record<string, unknown> } | undefined)?.codetrellis ?? null;
+}
+ipcMain.handle('claude-desktop:preview', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return previewClaudeDesktop(thisMachine(), claudeDesktopEntry());
+});
+ipcMain.handle('claude-desktop:apply', (e, shownHash: unknown) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  if (typeof shownHash !== 'string' || !/^[0-9a-f]{64}$/.test(shownHash)) return { ok: false, reason: 'Preview the change first.' };
+  return applyClaudeDesktop(thisMachine(), claudeDesktopEntry(), shownHash);
+});
+
+ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {
+  if (!isAttachmentUid(uid)) return false;
+  const file = await resolveServable(uid);
+  if (!file) return false;
+  try {
+    shell.showItemInFolder(absolutePathOf(file));
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+/**
+ * Phase 31 §13 — save a plan's sign-off pack as a PDF. Only the app's own
+ * window may ask, by plan uid; where it is saved is the person's choice in
+ * the save dialog, never a path from the renderer.
+ */
+ipcMain.handle('signoff:export-pdf', async (event, planUid: unknown) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, reason: 'Not allowed' };
+  if (typeof planUid !== 'string' || !/^[A-Za-z0-9_-]{3,64}$/.test(planUid)) return { ok: false, reason: 'No plan' };
+  try {
+    const pack = buildSignoffPack(planUid);
+    const pdf = await htmlToPdf(renderPackHtml(pack));
+    const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
+    const choice = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save sign-off pack',
+      defaultPath: `sign-off-pack-${safe}.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (choice.canceled || !choice.filePath) return { ok: false, reason: 'cancelled' };
+    fs.writeFileSync(choice.filePath, pdf);
+    return { ok: true, path: choice.filePath };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 ipcMain.handle('updates:reveal', async () => {
   const state = getUpdateDownloadState();
   if (state.phase !== 'ready' || !state.filePath) return null;

@@ -12,27 +12,31 @@
   "main": "out/main/main.js",
   "scripts": {
     "postinstall": "patch-package",
-    "predev": "bash scripts/free-dev-ports.sh && node scripts/generate-build-info.js",
+    "predev": "bash scripts/free-dev-ports.sh && npm run build:connector && npm run build:rendition && npm run build:reader",
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "predev:frontend": "bash scripts/free-dev-ports.sh 5173",
     "dev:frontend": "vite --config vite.web.config.ts",
     "predev:backend": "bash scripts/free-dev-ports.sh 19432 3001",
     "dev:backend": "tsx watch --watch-path=src/backend --watch-path=src/shared src/backend/index.ts",
+    "predev:electron": "npm run build:connector && npm run build:rendition && npm run build:reader",
     "dev:electron": "electron-vite dev",
     "check:bundle": "bash scripts/check-no-relative-require.sh",
-    "prepackage": "node scripts/build-icons.js && node scripts/generate-build-info.js",
-    "package": "npm run check:bundle && electron-vite build && electron-builder",
-    "package:mac": "npm run check:bundle && electron-vite build && electron-builder --mac --arm64",
-    "package:mac-x64": "npm run check:bundle && electron-vite build && electron-builder --mac --x64",
-    "package:mac-universal": "npm run check:bundle && electron-vite build && electron-builder --mac",
-    "package:mac:signed": "npm run check:bundle && electron-vite build && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
-    "package:win": "npm run check:bundle && electron-vite build && electron-builder --win --x64",
-    "package:linux": "npm run check:bundle && electron-vite build && electron-builder --linux",
-    "package:all": "npm run check:bundle && electron-vite build && electron-builder --mac --arm64 --win --x64 --linux",
+    "prepackage": "node scripts/build-icons.js",
+    "package": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder",
+    "package:mac": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --arm64",
+    "package:mac-x64": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --x64",
+    "package:mac-universal": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac",
+    "package:mac:signed": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
+    "package:win": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --win --x64",
+    "package:linux": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --linux",
+    "package:all": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --arm64 --win --x64 --linux",
     "release": "bash scripts/release.sh",
     "release:dry-run": "bash scripts/release.sh --dry-run",
     "build:icons": "node scripts/build-icons.js",
-    "build:info": "node scripts/generate-build-info.js",
+    "build:connector": "vite build --config vite.connector.config.ts",
+    "build:rendition": "vite build --config vite.rendition.config.ts",
+    "build:reader": "vite build --config vite.reader.config.ts",
+    "fetch:rendition-engine": "node scripts/fetch-rendition-engine.mjs",
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",
     "test": "playwright test",
     "test:unit": "node --import tsx --test 'src/**/*.test.ts'",
@@ -119,12 +123,15 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "d3-force": "^3.0.0",
+    "dompurify": "^3.4.16",
     "express": "^5.0.0",
     "fast-json-patch": "^3.1.1",
     "html-to-image": "^1.11.13",
     "ignore": "^7.0.5",
     "lucide-react": "^0.460.0",
+    "mammoth": "^1.12.3",
     "node-pty": "^1.2.0-beta.13",
+    "pdfjs-dist": "^6.3.289",
     "prism-react-renderer": "^2.4.1",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
@@ -152,9 +159,48 @@
       "out/main/**/*",
       "out/preload/**/*",
       "out/renderer/**/*",
-      "package.json"
+      "package.json",
+      "!**/node_modules/pdfjs-dist/**",
+      "!**/node_modules/@napi-rs/canvas*/**"
     ],
     "extraResources": [
+      {
+        "from": "out/connector",
+        "to": "connector",
+        "filter": [
+          "mcp-connector.cjs"
+        ]
+      },
+      {
+        "from": "out/rendition",
+        "to": "rendition",
+        "filter": [
+          "engine-child.cjs"
+        ]
+      },
+      {
+        "from": "out/reader",
+        "to": "reader",
+        "filter": [
+          "material-reader.mjs"
+        ]
+      },
+      {
+        "from": "resources/rendition/engine",
+        "to": "rendition/engine",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/spellcheck",
+        "to": "spellcheck",
+        "filter": [
+          "*.bdic",
+          "COPYING*",
+          "LICENSE"
+        ]
+      },
       {
         "from": "resources/tree-sitter",
         "to": "tree-sitter",

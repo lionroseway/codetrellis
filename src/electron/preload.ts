@@ -44,6 +44,13 @@ const codetrellisIpc = {
     ipcRenderer.invoke('codetrellis:api', req),
 
   /**
+   * Phase 31 §7.1 — a `ct-artefact:` URL's response, body as bytes. The
+   * renderer's fetch cannot reach that scheme from its `file://` page.
+   */
+  artefact: (url: string): Promise<{ status: number; headers: Record<string, string>; body: ArrayBuffer }> =>
+    ipcRenderer.invoke('codetrellis:artefact', url),
+
+  /**
    * Subscribe to backend broadcast events (the equivalent of
    * receiving a WebSocket message). Returns an unsubscribe fn.
    */
@@ -110,6 +117,38 @@ const electronAPI = {
    */
   revealUpdateDownload: (): Promise<string | null> => ipcRenderer.invoke('updates:reveal'),
   getLogPath: (): Promise<string> => ipcRenderer.invoke('logs:get-path'),
+  /**
+   * Phase 31 §7.4 — show an attachment's file in Finder / Explorer. Takes
+   * the attachment uid, never a path; there is deliberately no "open".
+   */
+  revealArtefact: (uid: string): Promise<boolean> => ipcRenderer.invoke('artefacts:reveal', uid),
+  /**
+   * Phase 31 §13 — save a plan's sign-off pack as a PDF, by plan uid. The
+   * main process asks where to save it.
+   */
+  exportSignoffPdf: (planUid: string): Promise<{ ok: boolean; path?: string; reason?: string }> =>
+    ipcRenderer.invoke('signoff:export-pdf', planUid),
+  /**
+   * Phase 31 §7.3 — an HTML report in its own sandboxed view, laid over the
+   * given rectangle of this window. By attachment uid; scripts off unless
+   * asked. `hide` removes the view and clears its session.
+   */
+  /**
+   * Phase 31 §6.1 — add the connector to Claude Desktop's config. `preview`
+   * returns the diff and the hash of the file shown; `apply` writes only if
+   * the file is still that one, keeping a backup.
+   */
+  claudeDesktop: {
+    preview: (): Promise<unknown> => ipcRenderer.invoke('claude-desktop:preview'),
+    apply: (shownHash: string): Promise<unknown> => ipcRenderer.invoke('claude-desktop:apply', shownHash),
+  },
+  htmlReport: {
+    show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean): Promise<{ ok: boolean; reason?: string }> =>
+      ipcRenderer.invoke('artefacts:html:show', uid, bounds, scripts),
+    move: (bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> =>
+      ipcRenderer.invoke('artefacts:html:bounds', bounds),
+    hide: (): Promise<boolean> => ipcRenderer.invoke('artefacts:html:hide'),
+  },
 };
 
 contextBridge.exposeInMainWorld('codetrellisIpc', codetrellisIpc);

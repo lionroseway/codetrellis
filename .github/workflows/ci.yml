@@ -33,6 +33,7 @@
 #   no-private-docs   seconds   this repo is public
 #   desktop           ~1 min    typecheck, bundle guard, web build, unit tests
 #   mobile            ~30 s     typecheck
+#   html-view         ~1 min    the sandboxed HTML view, a hostile report, real Electron
 #
 # And what does NOT:
 #
@@ -167,6 +168,11 @@ jobs:
       # hermetic (plain node:test over the service layer, no subprocess, no
       # browser), so they can block — which they cannot do sitting inside an
       # advisory job.
+      # The material reader's bundle — what ships — so the unit tests read
+      # through it under the permission model, not only through the source.
+      - name: Build (material reader)
+        run: npm run build:reader
+
       - name: Unit tests
         run: npm run test:unit
 
@@ -206,6 +212,49 @@ jobs:
         run: npm run typecheck
 
   # ---------------------------------------------------------------------------
+  # The sandboxed HTML view (Phase 31 §7.3), in real Electron.
+  #
+  # A report that tries every way out — remote loads, fetch, sockets,
+  # beacons, forms, pop-ups, navigation, file:, path traversal, other apps
+  # through the OS — shown by the real src/electron/html-view.ts, scripts off
+  # and then on, against a listener that must count zero. Chromium's sandbox
+  # stays on: Ubuntu 24.04 restricts the unprivileged user namespaces it
+  # needs, so that restriction is lifted for this job rather than the
+  # sandbox being turned off. The Electron binary is fetched here because
+  # npm no longer runs install scripts.
+  # ---------------------------------------------------------------------------
+  html-view:
+    name: HTML view sandbox (Electron)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci && node node_modules/electron/install.js
+      - name: Allow Chromium's sandbox its user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Hostile report
+        run: npx tsx tools/html-view-hostile/run.ts
+      # A packaged renderer is a file:// page, which no browser spec runs:
+      # this is the only test of how artefact bytes reach it.
+      - name: Artefact bytes in a file:// renderer
+        run: npx tsx tools/artefact-transport-check/run.ts
+
+      # The sign-off pack's PDF is printed in a hidden Electron window; this
+      # is the only test that it produces a PDF and reaches no network.
+      - name: Sign-off pack PDF
+        run: npx tsx tools/signoff-pdf-check/run.ts
+
+      # Chromium downloads Hunspell dictionaries from Google unless one is
+      # already in place. The app ships its own; this is the only test that
+      # none is ever fetched.
+      - name: Spell-check dictionaries bundled
+        run: npx tsx tools/spellcheck-check/run.ts
+
+  # ---------------------------------------------------------------------------
   # THE ONLY CONTEXT BRANCH PROTECTION PINS.
   #
   # `if: always()` so it runs even when a dependency failed — without it the
@@ -218,7 +267,7 @@ jobs:
     # `harness` is NOT here. It is green (139 passed, 0 failed) but it does
     # not FIT: ~99s locally, >20min on ubuntu-latest, where it hit the job
     # timeout. See e2e-harness.yml.
-    needs: [no-private-docs, desktop, mobile]
+    needs: [no-private-docs, desktop, mobile, html-view]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - name: Check results

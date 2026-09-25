@@ -58,6 +58,34 @@ export interface ToolDeps {
   planImportService: typeof import('../services/plan-import-service');
   presenceService: typeof import('../services/presence-service');
   projectConfigService: typeof import('../services/project-config-service');
+  /**
+   * Criteria, as an AGENT may use them: read, add (at `propose`), submit.
+   * Deliberately a Pick — deciding, rewording, re-policying and deleting
+   * need a person's `HumanDecision`, and are not reachable from here at
+   * all (Phase 31 §4.3; human-decision.test.ts).
+   */
+  criteriaService: Pick<
+    typeof import('../services/criteria-service'),
+    'listCriteria' | 'getCriterion' | 'addCriterionAsAgent' | 'CriterionError'
+  >;
+  /**
+   * Phase 31 §8 — the loops. `submitChecked` is the agent's ONLY way to
+   * submit: it runs the mechanical checks and refuses evidence that fails
+   * one, so the raw `submitCriterion` is not in the Pick above.
+   */
+  criterionLoop: Pick<
+    typeof import('../services/criterion-loop-service'),
+    'checkCriterion' | 'submitChecked' | 'getWorklist' | 'runCheckRun'
+  >;
+  /** Phase 31 §4.2 — record a file that matters; hashes kept current. */
+  artefactService: Pick<
+    typeof import('../services/artefact-service'),
+    'recordArtefact' | 'refreshArtefactHashes' | 'listArtefacts' | 'ArtefactError'
+  >;
+  startArtefactWatching: typeof import('../services/artefact-watcher').startArtefactWatching;
+  /** Phase 31 §5 — the Brief, and reading a material through us (§5.1). */
+  briefService: Pick<typeof import('../services/brief-service'), 'getBrief' | 'listMaterials'>;
+  readMaterial: typeof import('../services/material-reader/reader-host').readMaterial;
 
   // Specific function imports (not full modules)
   applyTemplate: typeof import('../services/plan-templates-service').applyTemplate;

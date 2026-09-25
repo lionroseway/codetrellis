@@ -121,6 +121,13 @@ export interface ProjectChannelsConfig {
  */
 export type ProjectRepoRole = 'planning' | 'code' | 'mixed';
 
+/**
+ * Phase 31 §10.1 — where opening this folder lands. A folder of documents
+ * opens in the Brief; a codebase on the graph (the default, never stored)
+ * or in the code reader. Separate from `repoRole`, which keeps its meaning.
+ */
+export type ProjectDefaultSurface = 'graph' | 'code' | 'brief';
+
 // --- Sensor configuration (Phase 4.1) ----------------------------------------
 
 /** Drift sensor — auto-fires when files change outside the plan. */
@@ -191,6 +198,8 @@ export interface ProjectConfig {
    * UI-only signal; nothing is gated on it. See ProjectRepoRole.
    */
   repoRole?: ProjectRepoRole;
+  /** Phase 31 §10.1 — where opening this folder lands. Absent = the graph. */
+  defaultSurface?: ProjectDefaultSurface;
   /** Phase 6.5 — freeze-period governance. */
   freeze?: FreezeConfig;
   /** ISO timestamp of last save. Updated automatically. */

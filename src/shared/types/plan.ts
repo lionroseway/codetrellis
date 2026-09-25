@@ -151,6 +151,13 @@ export interface TaskAttachment {
   author: string;
   authorType: string;
   createdAt: number;
+  /**
+   * Phase 31 §4.2 — set when the attachment is an artefact: a file the item
+   * read (material), produced (output) or captured (evidence).
+   */
+  role?: 'material' | 'output' | 'evidence' | null;
+  /** The file's hash when last taken; null when it has gone or is a link. */
+  sha256?: string | null;
 }
 
 export interface Task {
@@ -694,7 +701,9 @@ export type PlanEventType =
   | 'reordered'
   | 'status_changed'
   | 'kind_transmuted'
-  | 'plan_status_changed';
+  | 'plan_status_changed'
+  /** Phase 31 §5.1 — an agent read a material through read_material. */
+  | 'material_read';
 
 export interface PlanEvent {
   id: number;

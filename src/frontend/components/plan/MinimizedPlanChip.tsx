@@ -34,6 +34,8 @@ export function MinimizedPlanChip({ onRestore }: { onRestore: () => void }) {
 
   return (
     <div
+      // ToastContainer measures this to keep the toast stack above it.
+      data-minimized-plan-chip=""
       className={`absolute bottom-3 right-3 z-20 flex items-center gap-2 rounded-full border border-accent/40 bg-[#0c0e1a]/95 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.6)] px-3 py-1.5 text-[11px] transition-all duration-300 ease-out ${
         shown ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
       }`}

@@ -24,8 +24,9 @@ import {
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
-import { configText, copyText, fetchMcpSetup, maskToken, tokenOf, type McpSetup } from '../../lib/mcp-setup';
+import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
+import { AddToClaudeDesktop } from './AddToClaudeDesktop';
 
 // --- Per-device access (Phase 19, finding 15) -------------------------------
 
@@ -271,7 +272,7 @@ export function SettingsModal({
               <PowerSection settings={settings} onChange={update} />
             )}
             {section === 'telemetry' && <TelemetrySection />}
-            {section === 'updates' && <UpdatesSection />}
+            {section === 'updates' && <UpdatesSection settings={settings} onChange={update} />}
             {section === 'about' && <AboutSection onJumpToSection={setSection} />}
           </div>
 
@@ -286,8 +287,20 @@ export function SettingsModal({
 }
 
 function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  // A modal says it is one, and Escape leaves it — as the guide and every
+  // other dialog here do. Neither was true of Settings: a screen reader had
+  // no dialog to announce, and the keyboard had no way out but Tab-hunting
+  // for the close button.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Settings"
       className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -422,7 +435,7 @@ function McpSection({
 }) {
   const [port, setPort] = useState(String(settings.mcp.port));
   const [autodetect, setAutodetect] = useState(settings.mcp.autodetectOnCollision);
-  const [copied, setCopied] = useState<'config' | 'claude' | 'agent' | null>(null);
+  const [copied, setCopied] = useState<CopyWhat | null>(null);
   const [setup, setSetup] = useState<McpSetup | null>(null);
 
   useEffect(() => {
@@ -435,9 +448,15 @@ function McpSection({
     onChange({ mcp: { port: n, autodetectOnCollision: autodetect } });
   };
 
-  const copy = async (what: 'config' | 'claude' | 'agent') => {
+  const copy = async (what: CopyWhat) => {
     if (!setup) return;
-    const text = what === 'config' ? configText(setup) : what === 'claude' ? setup.claudeCodeCommand : setup.agentPrompt;
+    const text = {
+      config: recommendedConfigText(setup),
+      claude: setup.connector?.claudeCodeCommand ?? setup.claudeCodeCommand,
+      agent: setup.agentPrompt,
+      'direct-config': configText(setup),
+      'direct-claude': setup.claudeCodeCommand,
+    }[what];
     if (await copyText(text)) {
       setCopied(what);
       setTimeout(() => setCopied(null), 1500);
@@ -537,43 +556,99 @@ function McpSection({
       </Field>
 
       <Field label="Connect an agent">
-        <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.04] px-3 py-2 text-[10.5px] text-amber-100/90 leading-relaxed mb-2">
-          Agents must authenticate. The config below carries this launch&apos;s token in an{' '}
-          <code className="font-mono">{setup?.header ?? 'x-codetrellis-token'}</code> header. The token{' '}
-          <strong>changes every time CodeTrellis starts</strong>, so an agent that connected yesterday is refused
-          today with &quot;Missing or invalid capability token&quot; until it is re-copied, or until the agent re-reads{' '}
-          <code className="font-mono break-all">{setup?.tokenFile ?? '<data dir>/capability-token'}</code>.
-        </div>
+        {setup?.connector ? (
+          <p className="text-[10.5px] text-foreground-muted leading-relaxed mb-2">
+            Your agent runs the CodeTrellis connector as a local command, and it finds this app by itself.
+            Nothing secret goes in the config, and it <strong>keeps working when CodeTrellis restarts</strong> or
+            moves to another port. Works with Claude Code, Claude Desktop, Cursor and any other MCP client.
+          </p>
+        ) : (
+          <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.04] px-3 py-2 text-[10.5px] text-amber-100/90 leading-relaxed mb-2">
+            The connector is not built in this checkout (<code className="font-mono">npm run build:connector</code>), so
+            only a direct connection is offered. It carries this launch&apos;s token and{' '}
+            <strong>stops working when CodeTrellis restarts</strong>.
+          </div>
+        )}
         <pre className="bg-black/30 border border-white/[0.06] rounded-md px-3 py-2 text-[10.5px] font-mono text-foreground-muted overflow-x-auto" data-testid="mcp-config-snippet">
-{setup ? maskToken(configText(setup), tokenOf(setup)) : 'Loading...'}
+{setup ? (setup.connector ? recommendedConfigText(setup) : maskToken(configText(setup), tokenOf(setup))) : 'Loading...'}
         </pre>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {([
-            { key: 'config', label: 'Copy config', title: 'JSON for an mcpServers block (Cursor, Claude Code .mcp.json, …). Includes the token.' },
-            { key: 'claude', label: 'Copy Claude Code command', title: 'A `claude mcp add` one-liner. Includes the token.' },
-            { key: 'agent', label: 'Copy instructions for an agent', title: 'Plain-English setup an LLM can follow. Tells it where to read the token; does not contain it.' },
-          ] as const).map((b) => (
-            <button
-              key={b.key}
-              onClick={() => copy(b.key)}
-              disabled={!setup}
-              title={b.title}
-              data-testid={`mcp-copy-${b.key}`}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-[10.5px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-40"
-            >
-              {copied === b.key ? <CheckCircle2 size={11} className="text-green-400" /> : <Copy size={11} />}
-              {copied === b.key ? 'Copied' : b.label}
-            </button>
-          ))}
-        </div>
+        <CopyButtons
+          buttons={[
+            { key: 'claude', label: 'Copy Claude Code command', title: 'A `claude mcp add` one-liner, for every project.' },
+            { key: 'config', label: 'Copy JSON', title: 'An mcpServers entry — Claude Desktop, Cursor, and most other clients.' },
+            { key: 'agent', label: 'Copy instructions for an agent', title: 'Plain-English setup an LLM can follow. Contains no secret.' },
+          ]}
+          copied={copied}
+          disabled={!setup}
+          onCopy={copy}
+        />
+        {setup?.connector && <AddToClaudeDesktop />}
+        {setup?.connector && (
+          <details className="mt-2 group">
+            <summary className="cursor-pointer text-[10.5px] text-foreground-subtle hover:text-foreground-muted">
+              Direct connection, for a client that can only take a URL
+            </summary>
+            <div className="mt-2 rounded-md border border-amber-400/25 bg-amber-400/[0.04] px-3 py-2 text-[10.5px] text-amber-100/90 leading-relaxed">
+              Carries this launch&apos;s token in an <code className="font-mono">{setup.header}</code> header,
+              and <strong>stops working when CodeTrellis restarts</strong> — the agent is refused with
+              &quot;Missing or invalid capability token&quot; until it is re-copied or re-reads{' '}
+              <code className="font-mono break-all">{setup.tokenFile}</code>.
+            </div>
+            <pre className="mt-2 bg-black/30 border border-white/[0.06] rounded-md px-3 py-2 text-[10.5px] font-mono text-foreground-muted overflow-x-auto">
+{maskToken(configText(setup), tokenOf(setup))}
+            </pre>
+            <CopyButtons
+              buttons={[
+                { key: 'direct-config', label: 'Copy direct config', title: 'Includes the token.' },
+                { key: 'direct-claude', label: 'Copy direct Claude Code command', title: 'Includes the token.' },
+              ]}
+              copied={copied}
+              disabled={false}
+              onCopy={copy}
+            />
+          </details>
+        )}
       </Field>
 
       <p className="text-[10px] text-foreground-subtle leading-relaxed">
-        Paste the config into your client&apos;s MCP servers setting (Cursor: <code className="font-mono">~/.cursor/mcp.json</code>),
-        or run the Claude Code command. Easiest of all: paste the instructions into your agent and let it configure
-        itself. They tell it the server needs a credential and where to read it, without putting the token in the chat.
+        Claude Code: run the command. Claude Desktop: <strong>Add to Claude Desktop</strong> in the desktop app, or paste
+        the JSON into its <code className="font-mono">claude_desktop_config.json</code> under{' '}
+        <code className="font-mono">mcpServers</code>; then quit and reopen it. Cursor: <code className="font-mono">~/.cursor/mcp.json</code>. Or paste the instructions into
+        your agent and let it set itself up.
       </p>
     </>
+  );
+}
+
+type CopyWhat = 'config' | 'claude' | 'agent' | 'direct-config' | 'direct-claude';
+
+function CopyButtons({
+  buttons,
+  copied,
+  disabled,
+  onCopy,
+}: {
+  buttons: { key: CopyWhat; label: string; title: string }[];
+  copied: CopyWhat | null;
+  disabled: boolean;
+  onCopy: (what: CopyWhat) => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {buttons.map((b) => (
+        <button
+          key={b.key}
+          onClick={() => onCopy(b.key)}
+          disabled={disabled}
+          title={b.title}
+          data-testid={`mcp-copy-${b.key}`}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-[10.5px] rounded-md border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04] disabled:opacity-40"
+        >
+          {copied === b.key ? <CheckCircle2 size={11} className="text-green-400" /> : <Copy size={11} />}
+          {copied === b.key ? 'Copied' : b.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1678,8 +1753,26 @@ function TelemetrySection() {
         Everything stays on your machine. Your project's plans live in your repo (committed via git, your transport).
         Your DB lives at <code className="font-mono">~/.codetrellis/data.db</code>. The MCP server binds to <code className="font-mono">127.0.0.1</code> only — no remote agents reach it.
       </p>
+      <div className="text-[11px] text-foreground-muted leading-relaxed" data-testid="telemetry-outbound">
+        <p>What does leave this machine, and only when:</p>
+        <ul className="list-disc pl-4 mt-1 space-y-0.5">
+          <li>
+            <span className="text-foreground">Update checks</span> — codetrellis.dev, then GitHub if it is unreachable: this platform and version.
+            {' '}Off in Settings → Updates.
+          </li>
+          <li>
+            <span className="text-foreground">Phone notifications</span> — only with a paired phone that asked for them, through Expo&apos;s push service.
+          </li>
+          <li>
+            <span className="text-foreground">Channel webhooks</span> — only to hosts you have approved in Settings.
+          </li>
+        </ul>
+        <p className="mt-1">
+          Spell-check dictionaries ship with the app, so none is downloaded from Google as Chromium otherwise would.
+        </p>
+      </div>
       <p className="text-[10px] text-foreground-subtle">
-        This isn't a setting you can toggle — it's a property of how the tool's built. We mention it explicitly because trust matters for a tool you run on your own code.
+        Usage telemetry isn&apos;t a setting you can toggle — it&apos;s a property of how the tool&apos;s built. We mention it explicitly because trust matters for a tool you run on your own code.
       </p>
     </>
   );
@@ -1816,7 +1909,13 @@ interface UpdateStateData {
  * Download → opens the platform installer URL in the system
  * browser. Auto-apply on quit waits for code-signing.
  */
-function UpdatesSection() {
+function UpdatesSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
   const [state, setState] = useState<UpdateStateData | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -1880,7 +1979,17 @@ function UpdatesSection() {
         <div className="text-[10.5px] text-foreground-subtle mt-3">
           {lastCheckedAt
             ? `Last checked ${formatRelativeTime(new Date(lastCheckedAt))}`
-            : "Haven't checked yet — auto-checks once a day in the background."}
+            : settings.updates.autoCheck
+              ? "Haven't checked yet — auto-checks once a day in the background."
+              : "Haven't checked — automatic checks are off."}
+        </div>
+        <div className="mt-3" data-testid="updates-auto-check">
+          <Toggle
+            checked={settings.updates.autoCheck}
+            onChange={(v) => onChange({ updates: { ...settings.updates, autoCheck: v } })}
+            label="Check for updates automatically"
+            sub="At launch and once a day. The request carries this platform and version, nothing else. Off, CodeTrellis only checks when you press the button."
+          />
         </div>
       </div>
 

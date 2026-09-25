@@ -50,6 +50,7 @@ interface TerminalMessage {
 
 interface CodetrellisIpcBridge {
   api: (req: IpcRequest) => Promise<IpcResponse>;
+  artefact?: (url: string) => Promise<{ status: number; headers: Record<string, string>; body: ArrayBuffer }>;
   onWsEvent: (cb: (msg: BroadcastMessage) => void) => () => void;
   terminalSend: (termId: string, data: { type: string; [key: string]: unknown }) => void;
   onTerminalData: (termId: string, cb: (msg: TerminalMessage) => void) => () => void;
@@ -103,6 +104,15 @@ function installFetchShim(bridge: CodetrellisIpcBridge): void {
   const origFetch = window.fetch.bind(window);
 
   window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Phase 31 §7.1: a fetch from this file:// page to ct-artefact: is refused
+    // as cross-origin, and the scheme is deliberately not CORS-enabled (that
+    // would mean trusting origin `null`). Main answers it over IPC, as bytes.
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.startsWith('ct-artefact://') && bridge.artefact) {
+      const res = await bridge.artefact(url);
+      const nullBody = res.status === 204 || res.status === 304;
+      return new Response(nullBody ? null : res.body, { status: res.status, headers: res.headers });
+    }
     const path = extractApiPath(input);
     if (path === null) {
       // Not a /api/... call — let native fetch handle it (assets,

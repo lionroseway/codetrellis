@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -16,8 +17,44 @@ import tailwindcss from '@tailwindcss/vite';
  * absolute `/assets/...` reference would resolve to `file:///assets`
  * and 404. `./` makes assets relative to the document URL.
  */
+/**
+ * Build metadata for `src/shared/build-info.ts`, computed here because
+ * every packaged build passes through this file — whichever npm script or
+ * CI job started it. An npm hook or a committed generated file can be
+ * skipped or go stale; this cannot. Version is deliberately absent: the
+ * app imports it from package.json, the same file electron-builder uses.
+ */
+function buildStamp() {
+  const git = (...args: string[]): string => {
+    try {
+      return execFileSync('git', args, {
+        cwd: __dirname,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      return '';
+    }
+  };
+  const commit = git('rev-parse', 'HEAD');
+  // Needs full history — a shallow CI checkout counts 1. The workflows
+  // check out with `fetch-depth: 0` for this.
+  const count = Number(git('rev-list', '--count', 'HEAD'));
+  return {
+    buildTime: new Date().toISOString(),
+    buildNumber: Number.isFinite(count) ? count : 0,
+    commit,
+    commitShort: commit.slice(0, 7),
+    branch: git('rev-parse', '--abbrev-ref', 'HEAD'),
+    dirty: git('status', '--porcelain') !== '',
+  };
+}
+
 export default defineConfig({
   main: {
+    define: {
+      __CODETRELLIS_BUILD__: JSON.stringify(buildStamp()),
+    },
     plugins: [
       // sql.js + web-tree-sitter ship Emscripten UMD bundles that
       // break when bundled (`Cannot set properties of undefined
@@ -109,6 +146,14 @@ export default defineConfig({
       alias: {
         '@shared': path.resolve(__dirname, 'src/shared'),
       },
+    },
+    // Lazy-loaded by the artefact viewer, or imported only by its workers,
+    // which Vite's startup scan does not follow. Bundled up front so the
+    // first PDF or Word document opened in dev doesn't make Vite
+    // re-optimise and reload the page. Keep in step with vite.web.config.ts,
+    // which serves `npm run dev` and the browser suite.
+    optimizeDeps: {
+      include: ['pdfjs-dist/legacy/build/pdf.mjs', 'mammoth'],
     },
     build: {
       outDir: path.resolve(__dirname, 'out/renderer'),

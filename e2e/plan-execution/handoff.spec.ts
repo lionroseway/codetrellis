@@ -9,10 +9,13 @@ import { test, expect } from '@playwright/test';
 import { gotoWithProject, seedPlan, openPlan, cleanupPlans, API } from '../helpers/setup';
 
 test.describe('Handoff button', () => {
-  const PLAN_TITLE = 'E2E Handoff Plan';
+  // Unique per run: two copies of this file (a retry, --repeat-each, a
+  // second worker) would otherwise open and delete each other's plan.
+  const RUN = Math.random().toString(36).slice(2, 7);
+  const PLAN_TITLE = `E2E Handoff Plan ${RUN}`;
 
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Handoff');
+    await cleanupPlans(request, PLAN_TITLE);
   });
 
   test('Hand off button visible when plan has pending actions', async ({ page, request }) => {
@@ -24,9 +27,13 @@ test.describe('Handoff button', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    // HandoffButton renders when pending actions exist
-    const handoff = page.getByText('Hand off').first();
-    await expect(handoff).toBeVisible({ timeout: 5000 });
+    // HandoffButton renders once the plan's items are in and one is pending.
+    // openPlan waits for the workspace, not its items, and opening a plan over
+    // the whole repo's graph is ~1.5 s of main thread on a dev machine — past
+    // 5 s on a shared CI runner. Wait for the task itself, then the button.
+    await expect(page.getByTestId('plan-item-tree').getByText('Pending Handoff Task').first()).toBeVisible({ timeout: 15_000 });
+    const handoff = page.getByRole('button', { name: 'Hand off', exact: true }).first();
+    await expect(handoff).toBeVisible({ timeout: 10_000 });
   });
 
   test('Hand off button not visible when all actions are done', async ({ page, request }) => {
@@ -44,7 +51,7 @@ test.describe('Handoff button', () => {
     await page.waitForTimeout(2000);
 
     // Handoff button should not be visible
-    await expect(page.getByText('Hand off').first()).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('button', { name: 'Hand off', exact: true }).first()).not.toBeVisible({ timeout: 3000 });
   });
 
   test('clicking Hand off shows dropdown options', async ({ page, request }) => {
@@ -56,7 +63,7 @@ test.describe('Handoff button', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    const handoff = page.getByText('Hand off').first();
+    const handoff = page.getByRole('button', { name: 'Hand off', exact: true }).first();
     await handoff.click();
     await page.waitForTimeout(500);
 

@@ -8,7 +8,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { API } from '../helpers/setup';
+import { API, openProject } from '../helpers/setup';
 import { FIXTURE_PATH } from '../live-agent/helpers/fixture-reset';
 import path from 'node:path';
 
@@ -18,12 +18,12 @@ function fixturePath(relative: string): string {
 }
 
 test.describe('Tree-sitter parser validation', () => {
-  test.beforeAll(async ({ request }) => {
+  test.beforeAll(async () => {
     // Scan the fixture repo
-    const res = await request.post(`${API}/project/scan`, {
-      data: { projectPath: FIXTURE_PATH },
-    });
-    expect(res.ok()).toBeTruthy();
+    // Retried until the scan really ran: a scan while another is in
+    // progress answers 200 with the file tree only, and the graph these
+    // tests read is then another project's.
+    await openProject(FIXTURE_PATH);
   });
 
   test('TypeScript: extracts symbols from .ts files', async ({ request }) => {

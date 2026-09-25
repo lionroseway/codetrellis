@@ -33,6 +33,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { appendPlanEvent } from './plan-event-service';
+import { unmetHumanCriteria } from './criteria-service';
 import type {
   PlanItem,
   PlanItemKind,
@@ -1176,17 +1177,19 @@ export function getNextItem(planUid: string, parentUid?: string | null): NextIte
   if (myIdx > 0) {
     // Check the immediately preceding sibling
     const prev = siblings[myIdx - 1];
-    if (prev.requiresApproval && prev.status === 'done') {
-      // The previous sibling requires approval before moving on.
-      // Gate the next item. Human must explicitly "approve" the
-      // previous item, which the frontend handles by clearing the
-      // gate (or the agent can call approve_gate).
+    // Phase 31 §4.1: the gate is "the previous sibling has human-policy
+    // criteria a person has not met". `requiresApproval` is shorthand for
+    // one such criterion, so a plan that only sets the flag gates exactly
+    // as before — but clearing it now takes a person's sign-off, not a
+    // flag any caller could flip.
+    const unmet = prev.status === 'done' ? unmetHumanCriteria(prev.uid) : [];
+    if (unmet.length > 0) {
       return {
         item: null,
         gated: {
           itemUid: next.uid,
           itemTitle: next.title,
-          reason: `Waiting for human approval of "${prev.title}" before proceeding.`,
+          reason: `Waiting for a person to sign off "${prev.title}" (${unmet.map((c) => `"${c.text}"`).join(', ')}) before proceeding.`,
         },
       };
     }

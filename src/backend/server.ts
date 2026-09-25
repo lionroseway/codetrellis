@@ -50,6 +50,7 @@ import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { buildPrDraft } from './services/pr-draft-service';
+import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -78,11 +79,20 @@ import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } 
 import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
+import * as criteriaService from './services/criteria-service';
+import * as criterionLoop from './services/criterion-loop-service';
+import * as artefactContent from './services/artefact-content-service';
+import * as rendition from './services/rendition/rendition-service';
+import * as artefactService from './services/artefact-service';
+import * as _lazy___services_artefact_watcher from './services/artefact-watcher';
+const startArtefactWatching = (a: Parameters<typeof _lazy___services_artefact_watcher.startArtefactWatching>[0]) =>
+  _lazy___services_artefact_watcher.startArtefactWatching(a);
+import { issueHumanDecision } from './services/human-decision';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
 import { getDeviations, resolveDeviation } from './services/deviation-service';
 import * as presenceService from './services/presence-service';
-import { applyTemplate } from './services/plan-templates-service';
+import { applyTemplate, applyTemplateToPlan } from './services/plan-templates-service';
 import { listTemplates } from './services/plan-templates';
 import { publishPlanAsTemplate } from './services/plan-template-publish-service';
 import {
@@ -1136,9 +1146,19 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     }
 
     try {
-      startPlanFileWatcher(projectPath);
+      // Awaited, like startWatching above — see startPlanFileWatcher.
+      await startPlanFileWatcher(projectPath);
     } catch (err) {
       console.warn('[Scan] Plan file watcher failed to start:', err);
+    }
+
+    // Phase 31 §4.4 — the recorded artefacts, so an approval taken on a
+    // file notices when the file changes.
+    try {
+      const { startArtefactWatcherForProject } = _lazy___services_artefact_watcher;
+      startArtefactWatcherForProject(projectPath);
+    } catch (err) {
+      console.warn('[Scan] Artefact watcher failed to start:', err);
     }
 
     try {
@@ -2411,20 +2431,214 @@ app.get('/api/items/:uid', (req, res) => {
 });
 
 /** Read full bundle: item + parent + children + attachments + comments + recent versions. */
-app.get('/api/items/:uid/full', (req, res) => {
+app.get('/api/items/:uid/full', async (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  // Criteria below are derived against the artefacts' current hashes.
+  await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
   const parent = item.parentUid ? planItemService.getItem(item.parentUid) : null;
   const children = planItemService.getChildren(item.planUid, req.params.uid);
   const attachments = taskAttachmentsService.listItemAttachments(req.params.uid);
   const comments = commentService.listItemComments(req.params.uid);
   const versions = planItemService.listItemVersions(req.params.uid).slice(0, 10);
-  res.json({ item, parent, children, attachments, comments, versions });
+  const criteria = criteriaService.listCriteria(req.params.uid);
+  res.json({ item, parent, children, attachments, comments, criteria, versions });
 });
 
-/** Update any field on an item. */
+// ── Phase 31 §4.1–4.3: acceptance criteria and sign-off ──────────────
+//
+// This is the desktop's route to a person's decision: each handler below
+// that changes how work is judged issues a HumanDecision, which is the
+// only thing criteria-service accepts for it. MCP tools cannot reach
+// these operations at all (human-decision.test.ts).
+
+function desktopDecision() {
+  return issueHumanDecision('desktop', getAuthorKey('human'));
+}
+
+function criteriaChanged(itemUid: string): void {
+  const item = planItemService.getItem(itemUid);
+  broadcast('plan-item-criteria-changed', { planUid: item?.planUid ?? null, itemUid });
+  saveNow(() => exportDatabase());
+}
+
+function sendCriterionError(res: express.Response, err: unknown): void {
+  if (err instanceof criteriaService.CriterionError) {
+    res.status(err.status).json({ error: err.message });
+    return;
+  }
+  res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+}
+
+app.get('/api/items/:uid/criteria', async (req, res) => {
+  if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  // The authoritative check (§4.4): files change while the app is closed.
+  await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
+  res.json(criteriaService.listCriteria(req.params.uid));
+});
+
+app.post('/api/items/:uid/criteria', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.addCriterionAsHuman(
+      req.params.uid, { text: body.text, kind: body.kind, policy: body.policy }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.status(201).json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.put('/api/criteria/:uid', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const criterion = criteriaService.updateCriterion(
+      req.params.uid, { text: body.text, policy: body.policy, sortOrder: body.sortOrder }, desktopDecision(),
+    );
+    criteriaChanged(criterion.itemUid);
+    res.json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.delete('/api/criteria/:uid', (req, res) => {
+  try {
+    const before = criteriaService.getCriterion(req.params.uid);
+    if (!before || !criteriaService.deleteCriterion(req.params.uid, desktopDecision())) {
+      res.status(404).json({ error: 'Criterion not found' });
+      return;
+    }
+    criteriaChanged(before.itemUid);
+    res.json({ ok: true });
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+/** Approve, or send back with a note. */
+app.post('/api/criteria/:uid/decide', async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    // A decision records the hashes of what it was taken on — take them fresh.
+    const before = criteriaService.getCriterion(req.params.uid);
+    if (before) await artefactService.refreshArtefactHashes(before.itemUid).catch(() => []);
+    const criterion = criteriaService.decideCriterion(
+      req.params.uid, { decision: body.decision, note: body.note, anchor: body.anchor }, desktopDecision(),
+    );
+    // The notices that asked for this decision are answered (§12).
+    const decidedPlan = planItemService.getItem(criterion.itemUid)?.planUid;
+    if (decidedPlan) _lazy___services_sensor_bridge_service.resolveCriterionNotices(decidedPlan, criterion.uid);
+    criteriaChanged(criterion.itemUid);
+    res.json(criterion);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.get('/api/criteria/:uid/signoffs', (req, res) => {
+  if (!criteriaService.getCriterion(req.params.uid)) { res.status(404).json({ error: 'Criterion not found' }); return; }
+  res.json(criteriaService.listSignoffs(req.params.uid));
+});
+
+// ── Phase 31 §8: the loops — checks, the worklist, check runs ─────────
+//
+// Every handler takes the plan or criterion from the path and derives the
+// project from the stored plan; nothing here reads a root from a request.
+
+app.post('/api/criteria/:uid/check', async (req, res) => {
+  try {
+    res.json(await criterionLoop.checkCriterion(req.params.uid));
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+
+app.get('/api/plans/:uid/worklist', async (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(await criterionLoop.getWorklist(req.params.uid));
+});
+
+app.get('/api/plans/:uid/check-runs', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
+  res.json(criterionLoop.listCheckRuns(req.params.uid, limit));
+});
+
+/** "Run checks" — a person asks; the run records, and approves nothing. */
+app.post('/api/plans/:uid/check-runs', async (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  try {
+    const run = await criterionLoop.runCheckRun({
+      planUid: req.params.uid, trigger: 'manual', by: getAuthorKey('human'), byType: 'human',
+    });
+    broadcast('plan-check-run', { planUid: req.params.uid, runUid: run.uid });
+    saveNow(() => exportDatabase());
+    res.status(201).json(run);
+  } catch (err) {
+    sendCriterionError(res, err);
+  }
+});
+// ── Phase 31 §4.2: artefacts — files an item read, produced or captured ──
+
+app.get('/api/items/:uid/artefacts', async (req, res) => {
+  if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
+  res.json(artefactService.listArtefacts(req.params.uid));
+});
+
+/**
+ * A person records a file. The path is resolved inside the item's own
+ * project (from its plan, never the request), links are refused, and the
+ * type comes from the extension allowlist.
+ */
+app.post('/api/items/:uid/artefacts', async (req, res) => {
+  const body = req.body ?? {};
+  try {
+    const artefact = await artefactService.recordArtefact({
+      itemUid: req.params.uid,
+      path: body.path,
+      role: body.role,
+      note: typeof body.note === 'string' ? body.note : null,
+      actor: { author: getAuthorKey('human'), authorType: 'human' },
+    });
+    startArtefactWatching(artefact);
+    criteriaChanged(req.params.uid);
+    res.status(201).json(artefact);
+  } catch (err) {
+    if (err instanceof artefactService.ArtefactError) { res.status(err.status).json({ error: err.message }); return; }
+    res.status(500).json({ error: 'Could not record the artefact' });
+  }
+});
+
+
+/**
+ * Update any field on an item.
+ *
+ * Every field the item editor sends has to be named here — a field left
+ * out is dropped without an error, and the store then renders the
+ * server's unchanged copy. That is how the approval gate toggle, the
+ * routing panel (skills, claim policy, execution config, constraints),
+ * symbol targets and visibility all appeared to save and never did.
+ */
+const CASCADE_MODES = new Set(['inherit', 'replace', 'none']);
+const ITEM_VISIBILITIES = new Set(['shared', 'local']);
+
 app.put('/api/items/:uid', (req, res) => {
   const body = req.body ?? {};
+  // These are written to the row as given, so refuse a value the reader
+  // would not understand rather than store it.
+  for (const key of ['skillsMode', 'claimPolicyMode', 'executionConfigMode', 'constraintsMode']) {
+    if (body[key] !== undefined && !CASCADE_MODES.has(body[key])) {
+      res.status(400).json({ error: `${key} must be one of: ${[...CASCADE_MODES].join(', ')}` });
+      return;
+    }
+  }
+  if (body.visibility !== undefined && !ITEM_VISIBILITIES.has(body.visibility)) {
+    res.status(400).json({ error: 'visibility must be shared or local' });
+    return;
+  }
   const item = planItemService.updateItem(req.params.uid, {
     title: body.title,
     body: body.body,
@@ -2435,9 +2649,21 @@ app.put('/api/items/:uid', (req, res) => {
     blockedReason: body.blockedReason,
     scopePath: body.scopePath,
     fileSpecs: body.fileSpecs,
+    symbolSpecs: body.symbolSpecs,
     newConnections: body.newConnections,
     removedConnections: body.removedConnections,
     dependencies: body.dependencies,
+    skills: body.skills,
+    skillsMode: body.skillsMode,
+    claimPolicy: body.claimPolicy,
+    claimPolicyMode: body.claimPolicyMode,
+    executionConfig: body.executionConfig,
+    executionConfigMode: body.executionConfigMode,
+    constraints: body.constraints,
+    constraintsMode: body.constraintsMode,
+    requiresApproval: typeof body.requiresApproval === 'boolean' ? body.requiresApproval : undefined,
+    visibility: body.visibility,
+    overrideParentVisibility: body.overrideParentVisibility,
     parentUid: body.parentUid,
     sortOrder: body.sortOrder,
     changeSummary: body.changeSummary,
@@ -2639,42 +2865,88 @@ app.post('/api/items/:uid/attachments', (req, res) => {
  * The endpoint exists so the renderer doesn't need direct filesystem
  * access — works in both Electron and dev/web mode.
  */
-app.get('/api/attachments/:uid/file', (req, res) => {
-  const db = getDb();
-  const r = db.exec(
-    `SELECT value, target_uid, content_type FROM attachments WHERE uid = ?`,
-    [req.params.uid],
-  );
-  const row = r[0]?.values[0];
-  if (!row) { res.status(404).json({ error: 'Attachment not found' }); return; }
-  const value = row[0] as string;
-  const targetUid = row[1] as string;
-  const contentType = (row[2] as string | null) ?? 'application/octet-stream';
-
-  // Resolve project root from the parent item -> plan -> project_path.
-  // Cheap join — runs once per attachment fetch.
-  let projectRoot: string | undefined;
-  const parent = db.exec(
-    `SELECT p.project_path FROM plan_items i JOIN plans p ON p.uid = i.plan_uid WHERE i.uid = ?`,
-    [targetUid],
-  );
-  const projectPath = parent[0]?.values[0]?.[0] as string | undefined;
-  if (projectPath) projectRoot = projectPath;
-
-  const abs = taskAttachmentsService.resolveAttachmentAbsPath(value, projectRoot);
-  if (!abs) {
-    res.status(404).json({ error: 'Attachment value is not a file', value });
+async function sendAttachmentContent(req: express.Request, res: express.Response): Promise<void> {
+  // Phase 31 §7.1 — the same resolver the packaged app's `ct-artefact:`
+  // scheme uses. See artefact-content-service for what it guarantees.
+  const file = await artefactContent.resolveServable(req.params.uid);
+  if (!file) { res.status(404).json({ error: 'This attachment is not a file that can be shown' }); return; }
+  const served = artefactContent.serveFile(file, typeof req.headers.range === 'string' ? req.headers.range : null);
+  if (!served.stream) {
+    for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+    res.status(served.status).json({ error: served.error });
     return;
   }
-  if (!fs.existsSync(abs)) {
-    res.status(404).json({ error: 'Attachment file missing on disk', path: abs });
+  res.status(served.status);
+  for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+  const stream = served.stream;
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(500).json({ error: 'Could not read the attachment' });
+    else res.destroy();
+  });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
+}
+
+app.get('/api/attachments/:uid/file', (req, res) => { void sendAttachmentContent(req, res); });
+app.get('/api/artefacts/:uid/content', (req, res) => { void sendAttachmentContent(req, res); });
+
+/**
+ * Phase 31 §7.6 — an Office file as it looks, converted to PDF by the
+ * engine in its own process. Found and read exactly as `/content` is; a
+ * conversion that cannot happen is a 503 with a sentence, and the viewer
+ * shows the packaged fallback.
+ */
+app.get('/api/artefacts/:uid/rendition', async (req, res) => {
+  if (!artefactContent.isAttachmentUid(req.params.uid)) { res.status(404).json({ error: 'Attachment not found' }); return; }
+  const result = await rendition.renditionOf(req.params.uid);
+  if (!result.ok) { res.status(result.status).json({ error: result.reason, fallback: true }); return; }
+  const served = artefactContent.serveFile(result.file, typeof req.headers.range === 'string' ? req.headers.range : null);
+  if (!served.stream) {
+    for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+    res.status(served.status).json({ error: served.error, fallback: true });
     return;
   }
-  // Caching is fine — the file is immutable (uid in the path).
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  res.setHeader('Content-Type', contentType);
-  fs.createReadStream(abs).pipe(res);
+  res.status(served.status);
+  for (const [k, v] of Object.entries(served.headers)) res.setHeader(k, v);
+  const stream = served.stream;
+  stream.on('error', () => { if (!res.headersSent) res.status(500).json({ error: 'Could not read the rendition' }); else res.destroy(); });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
 });
+
+/**
+ * What the viewer shows around the bytes: name, role, size, hash, who
+ * recorded it. Never the absolute path — the project-relative one is
+ * what a person recognises and what a locator is written against.
+ */
+app.get('/api/artefacts/:uid', async (req, res) => {
+  const file = await artefactContent.resolveServable(req.params.uid);
+  const row = getDb().exec(
+    `SELECT uid, target_uid, value, label, kind, role, sha256, size, mtime, recorded_by, recorded_by_type, author, created_at
+     FROM attachments WHERE uid = ?`,
+    [req.params.uid],
+  )[0]?.values[0];
+  if (!row) { res.status(404).json({ error: 'Attachment not found' }); return; }
+  const value = row[2] as string;
+  res.json({
+    uid: row[0],
+    itemUid: row[1],
+    path: file ? file.rel.split(path.sep).join('/') : null,
+    name: path.basename(value.replace(/^userdata:\/\//, '')),
+    label: row[3] ?? null,
+    kind: row[4],
+    role: row[5] ?? null,
+    sha256: row[6] ?? null,
+    size: row[7] ?? null,
+    mtime: row[8] ?? null,
+    recordedBy: row[9] ?? row[11] ?? null,
+    recordedByType: row[10] ?? null,
+    createdAt: row[12],
+    contentType: file?.contentType ?? null,
+    viewable: !!file,
+  });
+});
+
 
 // Plan versions
 app.get('/api/plans/:uid/versions', (req, res) => {
@@ -3196,6 +3468,56 @@ app.post('/api/plans/:uid/unlink', (req, res) => {
   }
 });
 
+// --- Phase 31 §13: the sign-off pack ---------------------------------
+//
+// The same rows as the PR draft's criteria table, as data, as a page that
+// leaves the app, and checked later against the files it names. The plan
+// comes from the path; the files a pack names are resolved inside the
+// plan's own project (signoff-pack.ts), never where the pack says.
+
+app.get('/api/plans/:uid/signoff-pack', (req, res) => {
+  try {
+    res.json(buildSignoffPack(req.params.uid));
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/plans/:uid/signoff-pack.html', (req, res) => {
+  try {
+    const pack = buildSignoffPack(req.params.uid);
+    const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    // A file to save, not a page to render inside the app's origin.
+    res.setHeader('Content-Disposition', `attachment; filename="sign-off-pack-${safe}.html"`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(renderPackHtml(pack));
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** "Verify this pack": the saved page or its JSON, as text; re-hash every file it names. */
+app.post(
+  '/api/plans/:uid/signoff-pack/verify',
+  express.text({ type: 'text/plain', limit: '20mb' }),
+  async (req, res) => {
+    try {
+      const text = typeof req.body === 'string' ? req.body : '';
+      if (!text.trim()) { res.status(400).json({ error: 'Send the saved pack (.html or .json) as text' }); return; }
+      let pack: unknown;
+      try { pack = packFromText(text); } catch (err) {
+        res.status(400).json({ error: err instanceof PackError ? err.message : 'That file is not a readable sign-off pack' });
+        return;
+      }
+      res.json(await verifyPack(req.params.uid, pack));
+    } catch (err) {
+      res.status(err instanceof PackError ? 400 : 500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+);
+
 // --- Plan Templates API (Phase 12 §G) ---
 
 app.get('/api/plan-templates', (req, res) => {
@@ -3250,6 +3572,34 @@ app.post('/api/plans/from-template', (req, res) => {
     broadcast('plan-created', { plan: result.plan });
     for (const phase of result.phases) broadcast('plan-phase-created', { phase });
     for (const doc of result.docs) broadcast('plan-doc-created', { doc });
+    saveNow(() => exportDatabase());
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * Phase 31 §14 — fill an existing, empty plan from a template: what "Start
+ * from a template" on an empty plan does. The project is the plan's own;
+ * nothing about a location is taken from the request.
+ */
+app.post('/api/plans/:uid/apply-template', (req, res) => {
+  const { templateId, placeholderValues } = req.body || {};
+  if (typeof templateId !== 'string' || !templateId) {
+    res.status(400).json({ error: 'templateId is required' });
+    return;
+  }
+  try {
+    const result = applyTemplateToPlan({
+      planUid: req.params.uid,
+      templateId,
+      placeholderValues: placeholderValues && typeof placeholderValues === 'object' ? placeholderValues : undefined,
+      author: getAuthorKey('human'),
+      authorType: 'human',
+    });
+    for (const item of result.items) broadcast('plan-item-created', { planUid: req.params.uid, item });
+    broadcast('plan-updated', { planUid: req.params.uid });
     saveNow(() => exportDatabase());
     res.json(result);
   } catch (err) {
@@ -3446,15 +3796,10 @@ app.get('/api/logs/path', (_req, res) => {
 // --- Build info (so Settings → About can show what's actually running) ---
 
 /**
- * In dev (running from source) the committed `BUILD_INFO` constant
- * goes stale fast — every version bump in `package.json` would
- * require re-running `scripts/generate-build-info.js`. The user
- * reported the panel showing v0.1.0 when the repo was actually at
- * v0.1.3 because the committed snapshot pre-dated the version bumps.
- *
- * Fix: recompute live from `package.json` + `git` on every request
- * when we can. In packaged Electron (no source tree), `git` and the
- * source `package.json` both fail; we fall through to BUILD_INFO.
+ * Running from source there is no bundler stamp, so `BUILD_INFO` has
+ * the version but no commit or build number (see shared/build-info.ts).
+ * Read those live from `git` when we can. In packaged Electron (no
+ * source tree) this returns null and the stamped `BUILD_INFO` answers.
  *
  * Cheap: a few git invocations per Settings → About open. No caching
  * needed at this volume.
@@ -4467,7 +4812,7 @@ function rearmProjectWatchers(): void {
       if (!fs.existsSync(path.join(proj.path, '.codetrellis'))) continue;
       startProjectConfigWatcher(proj.path);
       try {
-        startPlanFileWatcher(proj.path);
+        void startPlanFileWatcher(proj.path);
       } catch {
         // plan-file watcher may need a project scan to be useful;
         // best-effort.

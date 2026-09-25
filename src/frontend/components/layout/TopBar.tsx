@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap, FileCode } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap, FileCode, ClipboardList } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useUiStore } from '../../stores/ui-store';
@@ -269,6 +269,8 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
 function TabItem({ tab, isActive }: { tab: ProjectTab; isActive: boolean }) {
   const setActiveTab = useProjectStore((s) => s.setActiveTab);
   const removeTab = useProjectStore((s) => s.removeTab);
+  // The Brief never shows branches or commits (Phase 31 §10.6).
+  const inBrief = useUiStore((s) => s.workspaceMode === 'brief');
 
   return (
     <div
@@ -280,7 +282,7 @@ function TabItem({ tab, isActive }: { tab: ProjectTab; isActive: boolean }) {
       }`}
     >
       <span className="truncate font-medium">{tab.name}</span>
-      {isActive ? (
+      {inBrief ? null : isActive ? (
         <BranchPopover projectPath={tab.root} />
       ) : (
         tab.branch && (
@@ -364,10 +366,41 @@ function CodeModeToggle() {
   );
 }
 
+/**
+ * Phase 31 §10.1 — the Brief: the same plans read as work to be done and
+ * judged, for someone whose folder is documents rather than code. A peer
+ * mode like Code: the graph is not mounted while it shows.
+ */
+function BriefToggle() {
+  const root = useProjectStore((s) => s.root);
+  const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  if (!root) return null;
+
+  const active = workspaceMode === 'brief';
+  return (
+    <button
+      type="button"
+      onClick={() => setWorkspaceMode(active ? 'graph' : 'brief')}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border transition-all shrink-0 ${
+        active
+          ? 'border-accent/60 text-accent bg-accent/10 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
+          : 'border-border text-foreground-muted hover:text-foreground hover:border-border-glow hover:shadow-[0_0_8px_rgba(59,130,246,0.1)]'
+      }`}
+      title={active ? 'Back to the graph' : 'The work as a brief: tasks, materials, and what good looks like'}
+    >
+      <ClipboardList size={12} />
+      Brief
+    </button>
+  );
+}
+
 export function TopBar() {
   const tabs = useProjectStore((s) => s.tabs);
   const activeTabId = useProjectStore((s) => s.activeTabId);
   const root = useProjectStore((s) => s.root);
+  const workspaceMode = useUiStore((s) => s.workspaceMode);
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const setViewDepth = useGraphStore((s) => s.setViewDepth);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -409,7 +442,7 @@ export function TopBar() {
         </button>
       )}
 
-      <div className="flex items-center bg-surface rounded-lg p-0.5 gap-0.5 border border-border shrink-0">
+      {workspaceMode !== 'brief' && <div className="flex items-center bg-surface rounded-lg p-0.5 gap-0.5 border border-border shrink-0">
         {depthOptions.map((opt) => (
           <button
             key={opt.value}
@@ -423,8 +456,9 @@ export function TopBar() {
             {opt.label}
           </button>
         ))}
-      </div>
+      </div>}
 
+      <BriefToggle />
       <CodeModeToggle />
       <DocsToggle />
 

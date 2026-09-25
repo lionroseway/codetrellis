@@ -1,5 +1,5 @@
 import type { AgentEvent } from '@shared/types';
-import { phraseEvent, type PhrasedEvent } from './tool-phrasing';
+import { phraseEvent, type PhrasedEvent, type PhraseVocabulary } from './tool-phrasing';
 
 /**
  * Turn grouping — Phase 22, change A.
@@ -74,7 +74,11 @@ function fileOf(event: AgentEvent): string | null {
  *
  * Input need not be sorted; output is oldest-first.
  */
-export function groupIntoTurns(events: AgentEvent[], gapMs: number = TURN_GAP_MS): AgentTurn[] {
+export function groupIntoTurns(
+  events: AgentEvent[],
+  gapMs: number = TURN_GAP_MS,
+  vocabulary: PhraseVocabulary = 'code',
+): AgentTurn[] {
   if (events.length === 0) return [];
 
   const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
@@ -111,12 +115,12 @@ export function groupIntoTurns(events: AgentEvent[], gapMs: number = TURN_GAP_MS
     turns.push(turn);
   }
 
-  for (const turn of turns) finalise(turn);
+  for (const turn of turns) finalise(turn, vocabulary);
   return turns;
 }
 
-function finalise(turn: AgentTurn): void {
-  const phrased = turn.events.map((e) => ({ event: e, phrased: phraseEvent(e) }));
+function finalise(turn: AgentTurn, vocabulary: PhraseVocabulary): void {
+  const phrased = turn.events.map((e) => ({ event: e, phrased: phraseEvent(e, vocabulary) }));
 
   turn.hasError = phrased.some((p) => p.phrased.intent === 'error');
   turn.mutating = phrased.some((p) => p.phrased.mutating);

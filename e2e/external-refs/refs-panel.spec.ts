@@ -24,12 +24,15 @@ test.describe('External references', () => {
     const res = await request.post(`${API}/items/${plan.actionUids[0]}/refs`, {
       data: {
         url: 'https://github.com/example/repo/issues/42',
-        label: 'GitHub Issue #42',
+        title: 'GitHub Issue #42',
       },
     });
     expect(res.ok()).toBeTruthy();
     const ref = await res.json();
     expect(ref.uid).toBeTruthy();
+    // The API's field is `title`; this spec used to send `label`, which
+    // the server ignores, and nothing noticed.
+    expect(ref.title).toBe('GitHub Issue #42');
   });
 
   test('list external refs via API', async ({ request }) => {
@@ -40,7 +43,7 @@ test.describe('External references', () => {
 
     // Add a ref
     await request.post(`${API}/items/${plan.actionUids[0]}/refs`, {
-      data: { url: 'https://example.com/docs', label: 'Docs' },
+      data: { url: 'https://example.com/docs', title: 'Docs' },
     });
 
     // List refs
@@ -57,7 +60,7 @@ test.describe('External references', () => {
     });
 
     const addRes = await request.post(`${API}/items/${plan.actionUids[0]}/refs`, {
-      data: { url: 'https://example.com/to-delete', label: 'Delete me' },
+      data: { url: 'https://example.com/to-delete', title: 'Delete me' },
     });
     const ref = await addRes.json();
 
@@ -78,7 +81,7 @@ test.describe('External references', () => {
     });
 
     await request.post(`${API}/items/${plan.actionUids[0]}/refs`, {
-      data: { url: 'https://github.com/example/repo', label: 'GitHub Repo Link' },
+      data: { url: 'https://github.com/example/repo', title: 'GitHub Repo Link' },
     });
 
     await gotoWithProject(page);

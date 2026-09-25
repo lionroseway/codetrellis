@@ -64,7 +64,10 @@ test.describe('Getting Started checklist', () => {
     await page.waitForTimeout(1500);
 
     // Counter format: "N/4"
-    await expect(page.getByText(/^\d+\/\d+$/)).toBeVisible();
+    // Scoped to the checklist: criteria counts ("0/1") use the same format.
+    await expect(
+      page.getByRole('button', { name: /^Getting started/ }).getByText(/^\d+\/\d+$/),
+    ).toBeVisible();
   });
 
   test('"Show MCP setup" link opens MCP guide modal', async ({ page }) => {
@@ -77,10 +80,14 @@ test.describe('Getting Started checklist', () => {
     await gotoWithProject(page, { skipOnboarding: false });
     await page.waitForTimeout(1500);
 
+    // The step offers the link only until an agent has connected, and this
+    // suite shares one backend — another spec may already have connected
+    // one. When it is offered, it must open the guide (which replaced the
+    // three-step "Connect an AI Agent" wizard).
     const link = page.getByText('Show MCP setup');
     if (await link.isVisible({ timeout: 2000 }).catch(() => false)) {
       await link.click();
-      await expect(page.getByText('Connect an AI Agent')).toBeVisible({ timeout: 3000 });
+      await expect(page.getByRole('dialog', { name: 'CodeTrellis guide' })).toBeVisible({ timeout: 3000 });
     }
   });
 

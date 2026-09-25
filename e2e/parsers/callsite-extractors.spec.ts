@@ -12,15 +12,15 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { API } from '../helpers/setup';
+import { API, openProject } from '../helpers/setup';
 import { FIXTURE_PATH } from '../live-agent/helpers/fixture-reset';
 
 test.describe('Callsite extractors', () => {
-  test.beforeAll(async ({ request }) => {
-    const res = await request.post(`${API}/project/scan`, {
-      data: { projectPath: FIXTURE_PATH },
-    });
-    expect(res.ok()).toBeTruthy();
+  test.beforeAll(async () => {
+    // Retried until the scan really ran: a scan while another is in
+    // progress answers 200 with the file tree only, and the graph these
+    // tests read is then another project's.
+    await openProject(FIXTURE_PATH);
   });
 
   test('cross-system endpoint returns data', async ({ request }) => {

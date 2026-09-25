@@ -200,6 +200,17 @@ export interface WebhookSettings {
   allowLoopback: boolean;
 }
 
+/** Whether the app looks for new versions on its own. */
+export interface UpdateSettings {
+  /**
+   * Check codetrellis.dev (then GitHub Releases) at launch and once a day.
+   * The request carries the platform and the running version, nothing
+   * else. Off, the app never checks unless asked to — Settings → Updates →
+   * Check for Updates still works.
+   */
+  autoCheck: boolean;
+}
+
 export interface AppSettings {
   identity: IdentitySettings;
   mcp: McpSettings;
@@ -221,6 +232,8 @@ export interface AppSettings {
    * Empty by default: webhook URLs arrive in repository files.
    */
   webhooks: WebhookSettings;
+  /** Background update checks — the one request the app makes on its own. */
+  updates: UpdateSettings;
   /**
    * Phase 5.1 — true once the user completes the first-run wizard.
    * When false (or absent in older settings files), the frontend
@@ -294,6 +307,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   webhooks: {
     allowedHosts: [],
     allowLoopback: false,
+  },
+  // On: an update can be a security fix, and a person who never opens
+  // Settings should still hear about it.
+  updates: {
+    autoCheck: true,
   },
   firstRunComplete: false,
   updatedAt: '',

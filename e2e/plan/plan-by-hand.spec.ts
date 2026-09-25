@@ -24,17 +24,30 @@ import { test, expect } from '@playwright/test';
 import { gotoWithProject, cleanupPlans, authHeaders, API } from '../helpers/setup';
 
 const PROJECT = path.resolve(process.cwd(), 'tests/fixtures/sample-app');
-const TITLE = 'E2E ByHand Rounding';
+// Unique per run: a fixed title let two copies (a retry, --repeat-each, a
+// second worker) find each other's plan and delete each other's export.
+const RUN = Math.random().toString(36).slice(2, 7);
+const TITLE = `E2E ByHand Rounding ${RUN}`;
 /** A file that genuinely exists in the fixture, so the picker can find it. */
 const TARGET_FILE = 'money.go';
 
 test.describe('planning by hand', () => {
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E ByHand');
-    fs.rmSync(path.join(PROJECT, '.codetrellis', 'plans'), { recursive: true, force: true });
+    await cleanupPlans(request, TITLE);
+    // Only this run's export; the fixture's plans directory is shared.
+    const plansDir = path.join(PROJECT, '.codetrellis', 'plans');
+    if (fs.existsSync(plansDir)) {
+      for (const slug of fs.readdirSync(plansDir)) {
+        if (slug.includes(RUN)) fs.rmSync(path.join(plansDir, slug), { recursive: true, force: true });
+      }
+    }
   });
 
   test('a person can plan a change and put it in the repo', async ({ page }) => {
+    // One whole journey — create, anchor, rename, share, read back — not one
+    // step. Its own waits add up past the default 30s, and on a CI runner
+    // shared with a second worker it has taken 38s while every step passed.
+    test.setTimeout(90_000);
     await gotoWithProject(page, { projectPath: PROJECT });
 
     // ── create ────────────────────────────────────────────────────
@@ -44,10 +57,14 @@ test.describe('planning by hand', () => {
     await expect(titleBox).toBeVisible({ timeout: 5000 });
     await titleBox.fill(TITLE);
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(1200);
 
-    const planUid = await findPlanUid(page, TITLE);
-    expect(planUid, 'the plan the user just typed a title into should exist').toBeTruthy();
+    // Polled, not slept: the title saves on a debounce, and under load a
+    // fixed 1.2s was sometimes not enough.
+    let planUid: string | undefined;
+    await expect.poll(async () => (planUid = await findPlanUid(page, TITLE)), {
+      message: 'the plan the user just typed a title into should exist',
+      timeout: 10_000,
+    }).toBeTruthy();
 
     // ── a page, for the thinking ──────────────────────────────────
     // A plan is not only a list of edits. The page is where the reason
@@ -73,7 +90,7 @@ test.describe('planning by hand', () => {
 
     // ── name the task, the way a person would ─────────────────────
     const action = items.find((i) => i.kind === 'action')!;
-    await page.getByText(action.title).first().click();
+    await page.getByTestId('plan-item-tree').getByText(action.title).first().click();
     await page.waitForTimeout(500);
     const itemTitle = page.locator('input[placeholder="Untitled"]').first();
     await expect(itemTitle).toBeVisible({ timeout: 5000 });
@@ -114,17 +131,23 @@ test.describe('planning by hand', () => {
     // ── scope changes mid-flight, as it does ──────────────────────
     await itemTitle.fill('Round half-up in the Go money package (and say so in the docs)');
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(900);
+    await expect.poll(async () => (await getItem(page, action.uid))?.title, { timeout: 10_000 })
+      .toContain('and say so in the docs');
     const renamed = await getItem(page, action.uid);
-    expect(renamed?.title).toContain('and say so in the docs');
     expect(renamed?.fileSpecs?.length, 'renaming must not drop the anchor').toBeGreaterThanOrEqual(1);
 
     // ── share it to the repo ──────────────────────────────────────
     // The sharing chip lives on the plan's own page, not on an item's.
     // Clicking the plan's name in the header is the way back — and until
     // this journey existed, there was no way back at all.
-    await page.locator(`button[title="Back to ${TITLE}"]`).click();
-    await page.waitForTimeout(900);
+    // The chip renders nothing until its status comes back, and nothing at
+    // all if that request fails — so wait for the request itself, and say
+    // what it answered, rather than time out on an absent button.
+    const [status] = await Promise.all([
+      page.waitForResponse((r) => r.url().includes(`/api/plans/${planUid}/file-status`), { timeout: 15_000 }),
+      page.locator(`button[title="Back to ${TITLE}"]`).click(),
+    ]);
+    expect(status.ok(), `file-status -> ${status.status()} ${await status.text().catch(() => '')}`).toBeTruthy();
     // "Local" and "Shared" are the chip's two states; clicking it is
     // the only export affordance a person has.
     // Match the sync chip by its tooltip, not by the word "Shared" —
@@ -132,7 +155,7 @@ test.describe('planning by hand', () => {
     // loose locator matched that instead and "passed" instantly while
     // the export was still in flight.
     const chip = page.locator('button[title^="Local —"]');
-    await expect(chip).toBeVisible({ timeout: 5000 });
+    await expect(chip).toBeVisible({ timeout: 10_000 });
     await Promise.all([
       page.waitForResponse((r) => r.url().includes('/export') && r.request().method() === 'POST'),
       chip.click(),
@@ -162,7 +185,7 @@ test.describe('planning by hand', () => {
     // the plan is named on disk.
     const found = JSON.stringify(await discovered.json());
     expect(found, 'a plan written to the repo must be discoverable from it')
-      .toContain('e2e-byhand-rounding');
+      .toContain(`e2e-byhand-rounding-${RUN}`);
   });
 });
 

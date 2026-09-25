@@ -8,6 +8,12 @@
 import { test, expect } from '@playwright/test';
 import { gotoWithProject } from '../helpers/setup';
 
+/** The sidebar, in order. Twelve since Appearance, Devices, Power and Sync joined. */
+const SECTIONS = [
+  'Identity', 'Appearance', 'MCP Server', 'Plans', 'Data', 'Devices',
+  'Power', 'Sync', 'Logs', 'Telemetry', 'Updates', 'About',
+];
+
 test.describe('Settings modal chrome', () => {
   test('Settings button opens the modal', async ({ page }) => {
     await gotoWithProject(page);
@@ -18,22 +24,17 @@ test.describe('Settings modal chrome', () => {
     await expect(page.getByRole('button', { name: 'Identity' })).toBeVisible({ timeout: 3000 });
   });
 
-  test('sidebar shows all 8 section buttons', async ({ page }) => {
+  test('sidebar shows every section', async ({ page }) => {
     await gotoWithProject(page);
 
     await page.locator('button[title*="Settings"]').click();
-    await page.waitForTimeout(500);
 
-    // Scope to the settings dialog to avoid "Plans" matching the PlanPanel tab
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('button', { name: 'Identity' })).toBeVisible({ timeout: 3000 });
-    await expect(dialog.getByRole('button', { name: 'MCP Server' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Plans' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Data' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Logs' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Telemetry' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Updates' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'About' })).toBeVisible();
+    // Scoped to the Settings dialog: "Plans", "Data" and "Live" also name
+    // buttons (and folders in the file tree) outside it.
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    for (const section of SECTIONS) {
+      await expect(dialog.getByRole('button', { name: section, exact: true })).toBeVisible({ timeout: 3000 });
+    }
   });
 
   test('clicking a section changes the content area', async ({ page }) => {
@@ -54,30 +55,23 @@ test.describe('Settings modal chrome', () => {
     await gotoWithProject(page);
 
     await page.locator('button[title*="Settings"]').click();
-    await page.waitForTimeout(500);
-    await expect(page.getByRole('button', { name: 'Identity' })).toBeVisible({ timeout: 3000 });
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    await expect(dialog).toBeVisible({ timeout: 3000 });
 
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
-
-    await expect(page.getByRole('button', { name: 'Identity' })).not.toBeVisible();
+    await expect(dialog).toHaveCount(0);
   });
 
   test('clicking through all sections does not crash', async ({ page }) => {
     await gotoWithProject(page);
 
     await page.locator('button[title*="Settings"]').click();
-    await page.waitForTimeout(500);
-
-    // Scope to dialog to avoid "Plans" matching PlanPanel tab
-    const dialog = page.getByRole('dialog');
-    const sections = ['Identity', 'MCP Server', 'Plans', 'Data', 'Logs', 'Telemetry', 'Updates', 'About'];
-    for (const section of sections) {
-      await dialog.getByRole('button', { name: section }).click();
-      await page.waitForTimeout(200);
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    for (const section of SECTIONS) {
+      await dialog.getByRole('button', { name: section, exact: true }).click();
     }
 
-    // Should still be on About section, modal still open
-    await expect(dialog.getByRole('button', { name: 'About' })).toBeVisible();
+    // Still open, on the last section.
+    await expect(dialog.getByRole('button', { name: 'About', exact: true })).toBeVisible();
   });
 });

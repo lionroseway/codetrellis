@@ -71,3 +71,10 @@ docs/private/
 # src/backend/services/release-public-key.ts on purpose — see
 # scripts/generate-signing-key.js.
 scripts/release-signing-key.pem
+
+# Phase 31 §7.6 — the conversion engine is built from LibreOffice source and
+# pinned by hash (services/rendition/engine-lock.ts); never committed.
+resources/rendition/engine/
+# A local engine build (tools/rendition-engine/build.sh) and its packaged output.
+.rendition-build/
+dist-engine/

@@ -26,7 +26,7 @@ test.describe('WebSocket broadcast events', () => {
 
   test.afterEach(async ({ request }) => {
     ws?.close();
-    await cleanupPlans(request, 'E2E');
+    await cleanupPlans(request, 'E2E WS:');
   });
 
   test('plan-created fires on POST /api/plans', async ({ request }) => {

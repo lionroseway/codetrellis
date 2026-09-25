@@ -25,6 +25,21 @@ interface ElectronAPI {
   /** Reveal the current day's log file in Finder / Explorer. */
   revealLogs: () => Promise<string>;
   revealUpdateDownload?: () => Promise<string | null>;
+  /** Phase 31 §7.4 — reveal an attachment's file by uid; there is no "open". */
+  revealArtefact?: (uid: string) => Promise<boolean>;
+  /** Phase 31 §13 — save a plan's sign-off pack as a PDF (desktop only). */
+  exportSignoffPdf?: (planUid: string) => Promise<{ ok: boolean; path?: string; reason?: string }>;
+  /** Phase 31 §6.1 — add the connector to Claude Desktop's config (desktop only). */
+  claudeDesktop?: {
+    preview: () => Promise<ClaudeDesktopPreview>;
+    apply: (shownHash: string) => Promise<ClaudeDesktopApplied>;
+  };
+  /** Phase 31 §7.3 — an HTML report in its own sandboxed view (desktop only). */
+  htmlReport?: {
+    show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean) => Promise<{ ok: boolean; reason?: string }>;
+    move: (bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
+    hide: () => Promise<boolean>;
+  };
   /** Absolute path of the current day's log file. */
   getLogPath: () => Promise<string>;
 }
@@ -41,3 +56,11 @@ declare global {
 }
 
 export {};
+
+type ClaudeDesktopDiffLine = { op: ' ' | '+' | '-'; text: string };
+type ClaudeDesktopPreview =
+  | { ok: true; path: string; status: 'add' | 'update' | 'unchanged'; diff: ClaudeDesktopDiffLine[]; beforeHash: string; exists: boolean }
+  | { ok: false; reason: string };
+type ClaudeDesktopApplied =
+  | { ok: true; path: string; backupPath: string | null; status: 'add' | 'update' | 'unchanged' }
+  | { ok: false; reason: string; changed?: boolean };

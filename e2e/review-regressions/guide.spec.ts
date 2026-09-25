@@ -83,4 +83,67 @@ test.describe('The guide', () => {
     const dialog = page.getByRole('dialog', { name: 'CodeTrellis guide' });
     await expect(dialog.getByRole('heading', { name: /does not hand it everything/ })).toBeVisible();
   });
+
+  // ── Carried over from the specs for the two modals this replaced ──
+  // LearnTrellis (a nine-step carousel) and the three-step McpGuideModal
+  // were deleted in favour of this guide; their specs kept testing
+  // components that no longer render. What they checked that is still
+  // TRUE of the guide lives here: first-run behaviour, the seen flag,
+  // closing, and the TopBar entry points.
+
+  /** Clear the seen flag once — not on the reload a test does later. */
+  async function firstRun(page: import('@playwright/test').Page) {
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('e2e:guide-cleared')) return;
+      localStorage.removeItem('codetrellis:guide:seen');
+      sessionStorage.setItem('e2e:guide-cleared', '1');
+    });
+  }
+
+  test('opens by itself on first run, once', async ({ page }) => {
+    await firstRun(page);
+    await page.goto('/');
+    const dialog = page.getByRole('dialog', { name: 'CodeTrellis guide' });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    expect(await page.evaluate(() => localStorage.getItem('codetrellis:guide:seen'))).toBe('1');
+
+    await page.reload();
+    await page.waitForTimeout(1500);
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test('does not open by itself once seen', async ({ page }) => {
+    // The suite's storageState sets the flag.
+    await page.goto('/');
+    await page.waitForTimeout(1500);
+    await expect(page.getByRole('dialog', { name: 'CodeTrellis guide' })).toHaveCount(0);
+  });
+
+  test('Escape and the close button both close it', async ({ page }) => {
+    await gotoWithProject(page, { projectPath: PROJECT_PATH });
+    const dialog = page.getByRole('dialog', { name: 'CodeTrellis guide' });
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-mcp-guide')));
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-mcp-guide')));
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Close guide' }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test('the TopBar opens it — Connect Agent, and the tour button', async ({ page }) => {
+    await gotoWithProject(page, { projectPath: PROJECT_PATH });
+    const dialog = page.getByRole('dialog', { name: 'CodeTrellis guide' });
+
+    await page.getByRole('button', { name: 'Connect Agent' }).click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Open onboarding tour' }).click();
+    await expect(dialog).toBeVisible();
+  });
 });

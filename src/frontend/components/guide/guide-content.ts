@@ -79,10 +79,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'CodeTrellis runs a local MCP server. Copy the config into your agent, restart it, and it appears in '
       + 'the top bar. Any MCP-capable client works — there is nothing Claude-specific about it.',
     points: [
-      'The server needs a credential: a per-launch token, sent as the x-codetrellis-token header. The copied config includes it.',
-      'The token changes every time the app starts. An agent refused with "Missing or invalid capability token" needs the config re-copied, or to re-read the token file.',
-      'Easiest: "Copy agent instructions" and paste them into your agent. They tell it where to read the token, so the token itself never goes into the chat.',
-      'Claude Code: Settings → MCP Server → Copy Claude Code command. Cursor: paste the config into ~/.cursor/mcp.json.',
+      'The copied config runs the CodeTrellis connector: a small local command your agent launches, which finds this app by itself. Nothing secret goes in the config, and it keeps working when CodeTrellis restarts.',
+      'Claude Code: Settings → MCP Server → Copy Claude Code command. Claude Desktop: Settings → MCP Server → Add to Claude Desktop (see "Claude Desktop" below). Cursor: ~/.cursor/mcp.json.',
+      'Easiest: "Copy agent instructions" and paste them into your agent, and it sets itself up. They contain no secret.',
+      'A direct connection (a URL plus this launch\'s token) is still in Settings for clients that can only take a URL. It stops working whenever CodeTrellis restarts.',
     ],
     asks: [
       {
@@ -91,6 +91,34 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
     ],
     tools: ['register_session', 'get_app_guide'],
+  },
+  {
+    id: 'claude-desktop',
+    group: 'Getting started',
+    label: 'Claude Desktop',
+    title: 'Connecting Claude Desktop',
+    blurb:
+      'Claude Desktop — its chat or its Code tab — connects through the connector, a small command it runs itself that '
+      + 'finds this app on every start. It is the same MCP server every agent uses, with the same full tool set: '
+      + 'nothing is different because the client is Claude Desktop, and everything it does shows on the Timeline.',
+    points: [
+      'In the desktop app: Settings → MCP Server → "Add to Claude Desktop…". You see the exact change to Claude Desktop\'s own config file first; the previous file is kept beside it, and nothing is written unless you click Add.',
+      'Then quit Claude Desktop completely and reopen it. CodeTrellis appears among its tools. Restarting CodeTrellis later needs nothing — the connector reconnects by itself.',
+      'If CodeTrellis is not running, Claude Desktop is told so in a sentence and the connector keeps trying; open CodeTrellis and carry on.',
+      'Permissions are per installation, not per client: whatever you allow in Settings → MCP Server — running commands, screen capture and the rest — Claude Desktop has too, and so does every other agent.',
+      'Evidence it records is checked here, against the file on disk, before it can ask you to sign anything off.',
+    ],
+    asks: [
+      {
+        prompt: 'Use CodeTrellis to show me what is waiting for me, then take the first task and tell me what it needs.',
+        note: 'Starts from your worklist, so it works the same whether the plan came from a developer or from you.',
+      },
+      {
+        prompt: 'For the task you are on, record the file you produced as evidence, check each criterion, and only then submit it for my sign-off.',
+        note: 'The checks run here before anything reaches you, so a missing file or a wrong sheet is caught first.',
+      },
+    ],
+    tools: ['register_session', 'get_worklist', 'get_next_item', 'list_criteria', 'record_artefact', 'check_criterion', 'submit_criterion'],
   },
   {
     id: 'agent-permissions',
@@ -262,7 +290,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         note: 'What to say after clearing a full context, or on a different machine.',
       },
     ],
-    tools: ['get_next_item', 'claim_item', 'update_item_progress', 'set_item_blocked', 'approve_gate', 'copy_plan_as_prompt'],
+    tools: ['get_next_item', 'claim_item', 'update_item_progress', 'set_item_blocked', 'list_criteria', 'submit_criterion', 'copy_plan_as_prompt'],
   },
   {
     id: 'review',
@@ -465,5 +493,38 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
     ],
     tools: ['list_paired_devices', 'get_peer_status', 'mobile_present', 'mobile_navigate'],
+  },
+
+  // ── Phase 31 §10.6 — for someone whose folder is documents, not code ──
+  {
+    id: 'for-analysts',
+    group: 'Getting started',
+    label: 'For analysts',
+    title: 'A brief: the work, the materials, and what good looks like',
+    blurb:
+      'Brief mode reads a plan as a piece of work. On the left are its tasks. In the middle is the task in front '
+      + 'of you: its goal, the guide, the materials you gave and what Claude produced. On the right is what good '
+      + 'looks like, each line with its state, and what Claude is doing. Nothing about code appears. A folder with '
+      + 'no git is normal here, not a warning.',
+    points: [
+      'Connect Claude Desktop from Settings → MCP Server → Add to Claude Desktop. It gets the same tools as any other agent.',
+      'Say what good looks like in your own words. Each line is judged separately, and only you can approve one that needs judgement.',
+      'Claude reads your spreadsheets, documents and PDFs through CodeTrellis, so every read is on the record. What a file says is treated as material to work on, never as instructions.',
+      'Open any material or output from the task to see it. Send a line back from the exact cell, page or sentence that is wrong.',
+      'A file that changes after you approved it shows ⚠ changed since approved, and goes back on Claude\'s list.',
+    ],
+    asks: [
+      {
+        prompt: 'Start a brief for the Q3 regional summary. The sales extract and the reporting guide are in this folder. What good looks like: covers all four regions, figures match the extract, follows the guide\'s tone.',
+        note: 'Claude records the materials, writes the tasks, and puts your words down verbatim as what good looks like.',
+      },
+      {
+        prompt: 'Read the brief for the next task, do it, check your work against what good looks like, and offer it to me when every check passes.',
+      },
+      {
+        prompt: 'I sent two lines back. Pick them up from the worklist and fix them.',
+      },
+    ],
+    tools: ['get_brief', 'list_materials', 'read_material', 'record_artefact', 'check_criterion', 'submit_criterion', 'get_worklist', 'navigate_to'],
   },
 ];

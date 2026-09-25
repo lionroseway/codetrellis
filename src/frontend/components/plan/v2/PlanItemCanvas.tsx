@@ -22,11 +22,14 @@ import { PlanVersionHistory } from './PlanVersionHistory';
 import { NextUpStrip } from './NextUpStrip';
 import { PlanDiffPanel } from './PlanDiffPanel';
 import { PlanReviewPanel } from './PlanReviewPanel';
+import { PlanCheckRunPanel } from './PlanCheckRunPanel';
 import { ContextRail } from './ContextRail';
+import { CopyRef } from './CopyRef';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
 import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
+import { CriteriaBlock } from './CriteriaBlock';
 import { PlanTemplateChooser } from './PlanTemplateChooser';
 import { PlanImportModal } from './PlanImportModal';
 import { PlanShareMenu } from './PlanShareMenu';
@@ -141,6 +144,7 @@ export function PlanItemCanvas() {
           <ItemChannelBand itemUid={item.uid} />
           <BodyEditor key={item.uid} item={item} />
           <TargetsStrip item={item} />
+          <CriteriaBlock itemUid={item.uid} criteria={ctx?.criteria ?? []} attachments={ctx?.attachments ?? []} />
           <ItemRoutingPanel item={item} />
           <ItemLevelNudge item={item} attachments={ctx?.attachments ?? []} />
           <ContextRail item={item} attachments={ctx?.attachments ?? []} />
@@ -235,6 +239,7 @@ function ItemChannelBand({ itemUid }: { itemUid: string }) {
  */
 function ItemHeaderProperties({ item }: { item: PlanItem }) {
   const updateItem = usePlanItemsStore((s) => s.updateItem);
+  const plan = usePlanStore((s) => s.activePlan);
   const openHistoryDrawer = usePlanItemsStore((s) => s.openHistoryDrawer);
   const addToast = useToastStore((s) => s.addToast);
   const projectRoot = useProjectStore((s) => s.root);
@@ -317,6 +322,12 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
       <span className="text-[11.5px] uppercase tracking-wider font-medium px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02]">
         {isAction ? 'Task' : 'Page'}
       </span>
+      <CopyRef
+        kind={isAction ? 'task' : 'page'}
+        uid={item.uid}
+        title={item.title}
+        within={plan ? { kind: 'plan', uid: plan.uid, title: plan.title } : null}
+      />
 
       {isAction && (
         <>
@@ -369,7 +380,7 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
                 : 'border-white/[0.08] bg-white/[0.02] text-foreground-subtle hover:text-foreground-muted'
             }`}
             title={item.requiresApproval
-              ? 'Approval gate ON — agent must wait for human approval after completing this item'
+              ? 'Approval gate ON — the next task waits until you approve "Reviewed and approved" under Acceptance criteria'
               : 'No approval gate — click to require human approval before next task starts'}
           >
             {item.requiresApproval ? '🔒' : '🔓'}
@@ -621,6 +632,11 @@ function PlanHomePage() {
 
               Order is the cheapest signal of what a page is for. */}
           <PlanReviewPanel planUid={plan.uid} />
+
+          {/* Phase 31 §8.3 — the loop a person runs: re-check every
+              criterion, and see what moved since last time. Beside the
+              review because a code criterion's check IS the review. */}
+          <PlanCheckRunPanel planUid={plan.uid} />
 
           {/* Plan diff — what's planned vs what's landed. Shown
               when there's something to diff (any Action with intent). */}
@@ -1171,6 +1187,7 @@ function CommentsBlock({
                   <span>·</span>
                   <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
                   <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
+                  <CopyRef kind="comment" uid={c.uid} within={{ kind: isAction ? 'task' : 'page', uid: itemUid }} />
                   <button
                     onClick={() => {
                       if (confirm('Delete this comment?')) removeItemComment(itemUid, c.uid);

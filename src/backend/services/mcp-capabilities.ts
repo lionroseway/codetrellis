@@ -1,5 +1,5 @@
 import { type PeerCapability, DEFAULT_GRANTS } from './peer-capabilities';
-import { isTrustedProjectRoot, isTrustedPlanDir } from './trusted-roots';
+import { evictedHint, isTrustedProjectRoot, isTrustedPlanDir } from './trusted-roots';
 import type { McpProjectScope } from '../../shared/types/settings';
 
 /**
@@ -25,11 +25,13 @@ import type { McpProjectScope } from '../../shared/types/settings';
  *
  * The usual defence is that an MCP client is a local process that could run
  * commands itself, so gating them is theatre. That fails here, for a reason
- * the product states about itself: CodeTrellis is agent-agnostic on purpose
- * and names Claude Desktop among its clients. Claude Desktop has no shell.
- * Neither does a hosted or sandboxed runtime. For any client that cannot
- * already execute, CodeTrellis was a privilege-escalation route — connect
- * it, and it gains a shell it did not have.
+ * the product states about itself: CodeTrellis is agent-agnostic on purpose,
+ * and not every client it serves can execute on its own — a chat session
+ * with no shell tool enabled, a hosted or sandboxed runtime. For any client
+ * that cannot already execute, CodeTrellis was a privilege-escalation route
+ * — connect it, and it gains a shell it did not have. The grants below are
+ * the same for every client; what differs is only what a client could
+ * already do without us.
  *
  * DENY BY DEFAULT
  *
@@ -154,13 +156,30 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   delete_item: 'write',
   claim_item: 'write',
   get_next_item: 'read',
-  approve_gate: 'write',
+  // Retired in Phase 31.1 — it refuses. Kept one release so an agent that
+  // learned it gets a direction rather than a missing tool.
+  approve_gate: 'read',
+  list_criteria: 'read',
+  record_artefact: 'write',
+  add_criterion: 'write',
+  submit_criterion: 'write',
+  // Phase 31 §8 — the loops. Reads: they report, and a check run is a
+  // record of what was found, never a decision.
+  check_criterion: 'read',
+  get_worklist: 'read',
+  run_checks: 'read',
+  // Phase 31 §5 — the Brief. Reading a material hands over a file's
+  // contents, so it is `files`, as reading any project file is.
+  get_brief: 'read',
+  list_materials: 'read',
+  read_material: 'files',
   list_items: 'read',
   search_items: 'read',
   get_plan_timeline: 'read',
   restore_item_version: 'write',
   list_item_versions: 'read',
   list_item_comments: 'read',
+  resolve_reference: 'read',
   add_item_comment: 'write',
   update_item_progress: 'write',
   set_item_blocked: 'write',
@@ -426,10 +445,13 @@ export function assertMcpProjectInScope(
   if (typeof candidate !== 'string' || candidate.trim().length === 0) return;
 
   if (!isTrustedProjectRoot(candidate)) {
+    const evicted = evictedHint(candidate);
     throw new McpAuthorizationError(
-      `"${tool}" named a project that is not open: "${candidate}". Project roots come from the ` +
-        'projects this app has opened, not from the request. Open it first, or set MCP project ' +
-        'scope to "anywhere" in Settings → MCP Server.',
+      `"${tool}" named a project that is not open: "${candidate}". ` +
+        (evicted
+          ? evicted
+          : 'Project roots come from the projects this app has opened, not from the request. ' +
+            'Open it first, or set MCP project scope to "anywhere" in Settings → MCP Server.'),
       null,
     );
   }

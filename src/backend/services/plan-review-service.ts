@@ -4,6 +4,8 @@ import path from 'node:path';
 import { compareSnapshots, listComparands, type ComparisonResult } from './snapshot-compare-service';
 import { formatCost } from './pricing';
 import { getBudgetReport } from './budget-service';
+import { listCriteria } from './criteria-service';
+import { rowsForCriterion, type SignoffRow } from './signoff-rows';
 import type { PlanItem } from '../../shared/types';
 
 /**
@@ -35,6 +37,38 @@ export interface ReviewedItem {
   /** Declared file targets that did not. */
   missing: string[];
   verdict: 'landed' | 'partial' | 'untouched' | 'no-targets';
+  /**
+   * Phase 31 — where the item's acceptance criteria stand. A diff says
+   * what changed; this says whether anyone agreed it was what was asked.
+   */
+  criteria: CriteriaSummary;
+  /**
+   * Phase 31 §13 — each criterion, verbatim, with its evidence and who
+   * signed: the same rows the PR draft's table and the sign-off pack are
+   * rendered from.
+   */
+  signoffs: SignoffRow[];
+}
+
+export interface CriteriaSummary {
+  total: number;
+  met: number;
+  /** Submitted, waiting for a person. */
+  waiting: number;
+  sentBack: number;
+}
+
+function criteriaOf(item: PlanItem): { criteria: CriteriaSummary; signoffs: SignoffRow[] } {
+  const all = listCriteria(item.uid);
+  return {
+    criteria: {
+      total: all.length,
+      met: all.filter((c) => c.state === 'met').length,
+      waiting: all.filter((c) => c.state === 'submitted').length,
+      sentBack: all.filter((c) => c.state === 'sent_back').length,
+    },
+    signoffs: all.map((c) => rowsForCriterion(item, c)),
+  };
 }
 
 export interface PlanReview {
@@ -168,6 +202,7 @@ export function reviewPlan(params: {
         landed: [],
         missing: [],
         verdict: 'no-targets',
+        ...criteriaOf(item),
       };
     }
 
@@ -181,7 +216,10 @@ export function reviewPlan(params: {
     const verdict: ReviewedItem['verdict'] =
       landed.length === 0 ? 'untouched' : missing.length === 0 ? 'landed' : 'partial';
 
-    return { uid: item.uid, title: item.title, status: item.status ?? null, landed, missing, verdict };
+    return {
+      uid: item.uid, title: item.title, status: item.status ?? null, landed, missing, verdict,
+      ...criteriaOf(item),
+    };
   });
 
   // Every declared target across the plan, for the unclaimed check.
@@ -264,6 +302,20 @@ export function renderReviewMarkdown(review: PlanReview, planTitle?: string): st
     lines.push('');
     for (const item of partial) {
       lines.push(`- **${item.title}** — still missing: ${item.missing.map((m) => `\`${m}\``).join(', ')}`);
+    }
+    lines.push('');
+  }
+
+  const unsigned = review.items.filter((i) => i.criteria.total > 0 && i.criteria.met < i.criteria.total);
+  if (unsigned.length > 0) {
+    lines.push('### Criteria not yet met');
+    lines.push('');
+    for (const item of unsigned) {
+      const c = item.criteria;
+      const parts = [`${c.met}/${c.total} met`];
+      if (c.waiting) parts.push(`${c.waiting} waiting for sign-off`);
+      if (c.sentBack) parts.push(`${c.sentBack} sent back`);
+      lines.push(`- **${item.title}** — ${parts.join(', ')}`);
     }
     lines.push('');
   }

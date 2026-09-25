@@ -37,15 +37,21 @@ export type EventIntent = 'read' | 'write' | 'ask' | 'session' | 'error';
 interface ToolPhrasing {
   intent: EventIntent;
   mutating: boolean;
-  /** Build the sentence. `args` is already parsed and never null. */
-  phrase: (args: Record<string, unknown>) => string;
+  /**
+   * Build the sentence. `args` is already parsed and never null; `summary`
+   * is what the tool itself said it did, when its args cannot name it
+   * (`read_material` is given a uid, and says which file it read).
+   */
+  phrase: (args: Record<string, unknown>, summary: string | null) => string;
 }
 
 /** `itm_4f3a…` is noise in a sentence; a title is not. */
 function subject(args: Record<string, unknown>, ...keys: string[]): string {
   for (const key of keys) {
     const v = args[key];
-    if (typeof v === 'string' && v.trim() && !/^(itm|pln|doc|evt)_/.test(v)) {
+    // A uid is not a title — `itm_…`, or the uuids plans, items and
+    // criteria now carry.
+    if (typeof v === 'string' && v.trim() && !/^(itm|pln|doc|evt)_/.test(v) && !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v)) {
       return `"${v.length > 60 ? `${v.slice(0, 57)}…` : v}"`;
     }
   }
@@ -140,7 +146,17 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   },
   await_user_input: { intent: 'ask', mutating: false, phrase: () => 'Waiting for your answer' },
   await_ack: { intent: 'ask', mutating: false, phrase: () => 'Waiting for acknowledgement' },
-  approve_gate: { intent: 'ask', mutating: true, phrase: (a) => `Requested approval for ${subject(a, 'gate', 'name')}` },
+  approve_gate: { intent: 'error', mutating: false, phrase: (a) => `Tried to clear the approval gate on ${subject(a, 'uid')} — refused, sign-off is yours` },
+  record_artefact: { intent: 'write', mutating: true, phrase: (a) => `Recorded ${({ material: 'a material', output: 'an output', evidence: 'evidence' } as Record<string, string>)[String(a.role)] ?? 'a file'}: ${subject(a, 'path')}` },
+  list_criteria: { intent: 'read', mutating: false, phrase: (a) => `Read the criteria for ${subject(a, 'item_uid')}` },
+  add_criterion: { intent: 'write', mutating: true, phrase: (a) => `Added a criterion: ${subject(a, 'text')}` },
+  submit_criterion: { intent: 'ask', mutating: true, phrase: (a, summary) => summary ?? `Submitted evidence for ${subject(a, 'criterion_uid')}` },
+  check_criterion: { intent: 'read', mutating: false, phrase: (a, summary) => summary ?? `Checked evidence for ${subject(a, 'criterion_uid')}` },
+  get_worklist: { intent: 'read', mutating: false, phrase: () => 'Read the worklist' },
+  run_checks: { intent: 'read', mutating: false, phrase: () => 'Re-ran every check on the plan' },
+  get_brief: { intent: 'read', mutating: false, phrase: (a) => `Read the brief for ${subject(a, 'item_uid')}` },
+  list_materials: { intent: 'read', mutating: false, phrase: () => 'Listed the materials' },
+  read_material: { intent: 'read', mutating: false, phrase: (a, summary) => summary ?? `Read material ${subject(a, 'attachment_uid')}` },
 
   // ── Reading ───────────────────────────────────────────────────────
   search_symbols: { intent: 'read', mutating: false, phrase: (a) => `Looked for \`${String(a.query ?? '')}\`` },
@@ -151,6 +167,7 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   get_drift_report: { intent: 'read', mutating: false, phrase: () => 'Checked for drift' },
   get_next_item: { intent: 'read', mutating: false, phrase: () => 'Asked what to work on next' },
   get_item: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')}` },
+  resolve_reference: { intent: 'read', mutating: false, phrase: (a) => `Looked up ${subject(a, 'ref')}` },
   read_item_full: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')} in full` },
   get_plan: { intent: 'read', mutating: false, phrase: (a) => `Read plan ${subject(a, 'title', 'plan_uid')}` },
   list_items: { intent: 'read', mutating: false, phrase: () => 'Listed plan items' },
@@ -172,6 +189,46 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
     phrase: (a) => (a.active === false ? 'Lifted the freeze' : 'Started a freeze'),
   },
 };
+
+/** The last path segment — "Q3-summary.docx", not "Reports/Q3/Q3-summary.docx". */
+function fileName(args: Record<string, unknown>, key: string): string {
+  const v = args[key];
+  return typeof v === 'string' && v.trim() ? v.split(/[\\/]/).pop()! : 'a file';
+}
+
+/**
+ * Phase 31 §10.5 — the same tools, said in the Brief's words (§10.3):
+ * tasks not items, "what good looks like" not criteria, and a file by its
+ * name. Keyed by the same tool names as TOOL_PHRASINGS, in the same file, so
+ * a tool phrased in one and not the other shows in one diff. A tool missing
+ * here falls back to the table above.
+ */
+const BRIEF_PHRASINGS: Record<string, ToolPhrasing> = {
+  get_brief: { intent: 'read', mutating: false, phrase: () => 'Read the brief' },
+  list_materials: { intent: 'read', mutating: false, phrase: () => 'Looked through the materials' },
+  read_material: { intent: 'read', mutating: false, phrase: (_a, summary) => summary ?? 'Read a material' },
+  record_artefact: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => {
+      const name = fileName(a, 'path');
+      if (a.role === 'output') return `Wrote ${name}`;
+      if (a.role === 'evidence') return `Saved ${name} as evidence`;
+      return `Added ${name} to the materials`;
+    },
+  },
+  list_criteria: { intent: 'read', mutating: false, phrase: () => 'Read what good looks like' },
+  add_criterion: { intent: 'write', mutating: true, phrase: (a) => `Suggested what good looks like: ${subject(a, 'text')}` },
+  check_criterion: { intent: 'read', mutating: false, phrase: (_a, summary) => summary ?? 'Checked its work before offering it' },
+  submit_criterion: { intent: 'ask', mutating: true, phrase: (a, summary) => summary ?? `Offered evidence for ${subject(a, 'criterion_uid')}` },
+  get_worklist: { intent: 'read', mutating: false, phrase: () => 'Checked what it still owes you' },
+  run_checks: { intent: 'read', mutating: false, phrase: () => 'Re-checked the whole brief' },
+  get_next_item: { intent: 'read', mutating: false, phrase: () => 'Asked which task is next' },
+  claim_item: { intent: 'write', mutating: true, phrase: (a) => `Took on ${subject(a, 'title', 'uid')}` },
+  add_item_comment: { intent: 'write', mutating: true, phrase: (a) => `Left a note on ${subject(a, 'title', 'uid')}` },
+};
+
+export type PhraseVocabulary = 'code' | 'brief';
 
 function parseArgs(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
@@ -199,14 +256,15 @@ function humaniseToolName(tool: string): string {
  * agent), and the Claude Code session-JSONL events, which carry
  * read/write/edit/bash actions instead of tool names.
  */
-export function phraseEvent(event: AgentEvent): PhrasedEvent {
+export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'code'): PhrasedEvent {
   const payload = event.payload ?? {};
 
   // ── MCP tool events ───────────────────────────────────────────────
   const tool = typeof payload.tool === 'string' ? payload.tool : null;
   if (tool && (event.type === 'tool_call' || event.type === 'tool_error')) {
     const args = parseArgs(payload.args);
-    const phrasing = TOOL_PHRASINGS[tool];
+    const phrasing = (vocabulary === 'brief' ? BRIEF_PHRASINGS[tool] : undefined) ?? TOOL_PHRASINGS[tool];
+    const summary = typeof payload.summary === 'string' && payload.summary.trim() ? payload.summary : null;
 
     if (event.type === 'tool_error') {
       const err = typeof payload.error === 'string' ? `: ${payload.error.slice(0, 80)}` : '';
@@ -219,7 +277,7 @@ export function phraseEvent(event: AgentEvent): PhrasedEvent {
     }
 
     if (phrasing) {
-      return { text: phrasing.phrase(args), intent: phrasing.intent, tool, mutating: phrasing.mutating };
+      return { text: phrasing.phrase(args, summary), intent: phrasing.intent, tool, mutating: phrasing.mutating };
     }
 
     // No phrasing for this tool. Readable, not raw JSON — and obvious

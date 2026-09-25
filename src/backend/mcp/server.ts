@@ -42,12 +42,28 @@ import * as terminalService from '../services/terminal-service';
 import * as planImportService from '../services/plan-import-service';
 import * as presenceService from '../services/presence-service';
 import * as projectConfigService from '../services/project-config-service';
+import {
+  listCriteria,
+  getCriterion,
+  addCriterionAsAgent,
+  CriterionError,
+} from '../services/criteria-service';
+import { checkCriterion, submitChecked, getWorklist, runCheckRun } from '../services/criterion-loop-service';
+import {
+  recordArtefact,
+  refreshArtefactHashes,
+  listArtefacts,
+  ArtefactError,
+} from '../services/artefact-service';
+import { startArtefactWatching } from '../services/artefact-watcher';
+import { getBrief, listMaterials } from '../services/brief-service';
+import { readMaterial } from '../services/material-reader/reader-host';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
 import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
-import { saveNow } from '../services/persistence';
+import { saveNow, getDataDir } from '../services/persistence';
 import { getSettings, updateSettings } from '../services/settings-service';
 import { assertMcpMayCall, assertMcpProjectInScope, McpAuthorizationError } from '../services/mcp-capabilities';
 import { DEFAULT_GRANTS, type PeerCapability } from '../services/peer-capabilities';
@@ -64,6 +80,15 @@ import {
   findRecentProjectByOriginUrl,
 } from '../services/recent-projects-service';
 import { buildSkillGuide } from './skill-guide';
+import { agentTypeFromClientInfo } from './client-identity';
+import { writeEndpointFile, removeEndpointFile } from './connector/files';
+import {
+  resolveConnectorCommand,
+  claudeCodeConnectorCommand,
+  connectorConfig,
+} from './connector/command';
+import fs from 'node:fs';
+import { resolveReferenceArgs, AmbiguousReferenceError } from '../services/reference-service';
 
 // ── Tool & resource modules ─────────────────────────────────────────
 
@@ -158,6 +183,13 @@ interface ToolEventPayload {
   agentType: string | null;
   agentModel: string | null;
   error?: string;
+  /**
+   * What the call did, in words, when the args alone cannot say it — a
+   * tool puts it in its result's `_meta.summary`. `read_material` is given
+   * an attachment uid and names the file it read ("Read Q3-sales.xlsx —
+   * sheet Regional"); the Timeline would otherwise show the uid.
+   */
+  summary?: string;
 }
 
 function broadcastToolEvent(payload: ToolEventPayload): void {
@@ -246,6 +278,13 @@ function buildToolDeps(sessionId: string): ToolDeps {
     planImportService,
     presenceService,
     projectConfigService,
+    // An agent's view of criteria only — see ToolDeps.criteriaService.
+    criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, CriterionError },
+    criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun },
+    artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, ArtefactError },
+    startArtefactWatching,
+    briefService: { getBrief, listMaterials },
+    readMaterial,
 
     // Specific functions
     applyTemplate,
@@ -386,10 +425,16 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     // is visible in the Timeline rather than disappearing.
     try {
       assertMcpMayCall(name, grantedMcpCapabilities());
+      // References — `task 9f2c41ab` — become full uids here, once, so every
+      // tool accepts what a person pastes (see reference-service). After the
+      // capability check, so a refused tool never queries anything; before
+      // the scope check and the handler, so both see the real uid. A
+      // reference grants nothing: the tool still enforces its own checks.
+      args = resolveReferenceArgs(args);
       assertMcpProjectInScope(name, args, mcpProjectScope());
     } catch (err) {
-      if (err instanceof McpAuthorizationError) {
-        console.warn(`[MCP][Authz] REFUSED ${name} — ${err.message}`);
+      if (err instanceof McpAuthorizationError || err instanceof AmbiguousReferenceError) {
+        console.warn(`[MCP]${err instanceof McpAuthorizationError ? '[Authz] REFUSED' : ' Ambiguous reference in'} ${name} — ${err.message}`);
         broadcastToolEvent({
           tool: name,
           args: summarizeArgs(args),
@@ -406,6 +451,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
 
     try {
       const result = await handler(args, extra);
+      const summary = result?._meta?.summary;
       broadcastToolEvent({
         tool: name,
         args: summarizeArgs(args),
@@ -414,6 +460,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
         sessionId,
         agentType: agentInfo.type,
         agentModel: agentInfo.model,
+        ...(typeof summary === 'string' && !result?.isError ? { summary: summary.slice(0, 200) } : {}),
       });
       return result;
     } catch (err) {
@@ -606,6 +653,21 @@ export async function startMcpServer(): Promise<void> {
         : 'mcp-client';
       sessionService.registerSession(sessionId, inferredAgentType);
 
+      // Then name it from what it says it is. The user-agent above is a
+      // guess, and through the stdio connector it is always the connector's,
+      // whichever agent launched it (see client-identity). `retypeSession`
+      // only replaces the guess, so an explicit `register_session` wins.
+      mcpServer.server.oninitialized = () => {
+        const claimed = agentTypeFromClientInfo(mcpServer.server.getClientVersion()?.name);
+        if (!claimed || claimed === inferredAgentType) return;
+        try {
+          if (sessionService.retypeSession(sessionId, inferredAgentType, claimed)) {
+            console.log(`[MCP] Client ${sessionId} identified as ${claimed}`);
+            broadcast('mcp-session-changed', { reason: 'identified', sessionId });
+          }
+        } catch { /* attribution is best-effort; it must never break a connection */ }
+      };
+
       // SSE-driven keep-alive (Phase 2 tester finding): without this,
       // a connected agent that doesn't call any tool for >60s gets
       // swept by cleanStaleSessions and a subsequent reconnect lands
@@ -692,6 +754,22 @@ export async function startMcpServer(): Promise<void> {
         app.removeListener('error', onError);
         boundPort = candidate;
         console.log(`[MCP] Server running on http://127.0.0.1:${boundPort}${candidate !== requestedPort ? ` (requested ${requestedPort}, autodetected)` : ''}`);
+        // Publish where we actually are. The stdio connector reads this on
+        // every connect, so a port that walked forward — a second instance —
+        // does not strand an agent configured once.
+        try {
+          // Token first, endpoint second, always: the connector refuses an
+          // endpoint older than the token (see connector/files). Minting is
+          // idempotent, so this is a no-op on the normal boot path.
+          getCapabilityToken();
+          writeEndpointFile(getDataDir(), {
+            url: `http://127.0.0.1:${boundPort}/sse`,
+            pid: process.pid,
+            startedAt: Date.now(),
+          });
+        } catch (err) {
+          console.warn('[MCP] Could not write the endpoint file:', err);
+        }
         try {
           const { broadcast: bc } = _lazy____server;
           bc('mcp-port-changed', { port: boundPort, requested: requestedPort });
@@ -757,8 +835,30 @@ export function getMcpConfig(): Record<string, unknown> {
   };
 }
 
+export interface McpConnectorSetup {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  /** Paste-ready `mcpServers` entry. Contains no secret. */
+  config: Record<string, unknown>;
+  /** `claude mcp add … -- <command>`, user-scoped. Contains no secret. */
+  claudeCodeCommand: string;
+}
+
 export interface McpSetup {
-  /** Paste-ready `mcpServers` entry, token included. */
+  /**
+   * The stdio connector — the recommended way to connect any agent.
+   *
+   * It reads the token and the bound port itself on every connect, so the
+   * config survives restarts (new token) and a moved port, and contains no
+   * secret. Null only in a dev checkout that never ran `build:connector`.
+   */
+  connector: McpConnectorSetup | null;
+  /**
+   * A DIRECT connection's `mcpServers` entry, this launch's token included.
+   * Stops working when CodeTrellis restarts; kept for clients that can only
+   * be given a URL.
+   */
   config: Record<string, unknown>;
   url: string;
   /** The header name the token goes in. */
@@ -767,41 +867,86 @@ export interface McpSetup {
   queryParam: string;
   /** Where any process running as this user can read the current token. */
   tokenFile: string;
-  /** One-liner for Claude Code. Contains the token. */
+  /** Direct-connection one-liner for Claude Code. Contains the token. */
   claudeCodeCommand: string;
   /**
    * Instructions for an LLM agent to configure itself.
    *
    * Deliberately WITHOUT the token. This text is meant to be pasted into
-   * a chat, which sends it to a model provider, and the agent can read
-   * the file itself: it runs as the user, and the file is the design
-   * (see capability-token). It also survives a restart, which a pasted
-   * value does not.
+   * a chat, which sends it to a model provider. The connector needs no
+   * token at all; for a direct connection the agent can read the file
+   * itself: it runs as the user, and the file is the design (see
+   * capability-token).
    */
   agentPrompt: string;
+}
+
+function currentConnector(): McpConnectorSetup | null {
+  const cmd = resolveConnectorCommand({
+    execPath: process.execPath,
+    electronVersion: process.versions.electron,
+    resourcesPath: (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath,
+    cwd: process.cwd(),
+    dataDir: getDataDir(),
+    exists: (p) => fs.existsSync(p),
+  });
+  if (!cmd) return null;
+  return {
+    ...cmd,
+    config: connectorConfig(cmd),
+    claudeCodeCommand: claudeCodeConnectorCommand(cmd),
+  };
 }
 
 export function getMcpSetup(): McpSetup {
   const url = `http://127.0.0.1:${boundPort}/sse`;
   const tokenFile = getTokenFilePath();
   const token = getCapabilityToken();
+  const connector = currentConnector();
+
+  const direct = [
+    `- Transport: SSE. URL: ${url}`,
+    `- It requires a credential. Every request must carry the header \`${TOKEN_HEADER}: <token>\` (\`Authorization: Bearer <token>\` also works). If your MCP client cannot send headers, append \`?${TOKEN_QUERY_PARAM}=<token>\` to the URL instead.`,
+    `- Read the token from the file ${tokenFile} (readable only by this user). Do not ask me to paste it.`,
+    '- The token changes every time CodeTrellis starts. If a request is refused with HTTP 401 "Missing or invalid capability token", re-read the file and update the config. Do not retry with the old value.',
+    '- Name the server `codetrellis`. In Claude Code: `claude mcp add --transport sse codetrellis ' + url + ' --header "' + TOKEN_HEADER + ': <token>"`.',
+  ];
+
+  const agentPrompt = connector
+    ? [
+      'Connect yourself to the CodeTrellis MCP server running on this machine.',
+      '',
+      'Use the CodeTrellis connector, a local stdio MCP server. It reads its credential itself on every connect, so the config needs no token and keeps working when CodeTrellis restarts.',
+      '',
+      `- Name: \`codetrellis\`. Transport: stdio. Command: \`${connector.command}\``,
+      `- Arguments: ${connector.args.map((a) => `\`${a}\``).join(' ')}`,
+      ...(Object.keys(connector.env).length > 0
+        ? [`- Environment: ${Object.entries(connector.env).map(([k, v]) => `\`${k}=${v}\``).join(' ')}`]
+        : []),
+      `- In Claude Code, run: \`${connector.claudeCodeCommand}\``,
+      '- Replace any existing `codetrellis` entry that points at a URL: that kind stops working whenever CodeTrellis restarts.',
+      '',
+      'Only if your client cannot launch a stdio server, connect directly instead:',
+      ...direct,
+      '',
+      '- Once connected, call `register_session`, then `get_app_guide`.',
+    ].join('\n')
+    : [
+      'Connect yourself to the CodeTrellis MCP server running on this machine.',
+      '',
+      ...direct,
+      '- Once connected, call `register_session`, then `get_app_guide`.',
+    ].join('\n');
+
   return {
+    connector,
     config: getMcpConfig(),
     url,
     header: TOKEN_HEADER,
     queryParam: TOKEN_QUERY_PARAM,
     tokenFile,
     claudeCodeCommand: `claude mcp add --transport sse codetrellis ${url} --header "${TOKEN_HEADER}: ${token}"`,
-    agentPrompt: [
-      'Connect yourself to the CodeTrellis MCP server running on this machine.',
-      '',
-      `- Transport: SSE. URL: ${url}`,
-      `- It requires a credential. Every request must carry the header \`${TOKEN_HEADER}: <token>\` (\`Authorization: Bearer <token>\` also works). If your MCP client cannot send headers, append \`?${TOKEN_QUERY_PARAM}=<token>\` to the URL instead.`,
-      `- Read the token from the file ${tokenFile} (readable only by this user). Do not ask me to paste it.`,
-      '- The token changes every time CodeTrellis starts. If a request is refused with HTTP 401 "Missing or invalid capability token", re-read the file and update the config. Do not retry with the old value.',
-      '- Name the server `codetrellis`. In Claude Code: `claude mcp add --transport sse codetrellis ' + url + ' --header "' + TOKEN_HEADER + ': <token>"`.',
-      '- Once connected, call `register_session`, then `get_app_guide`.',
-    ].join('\n'),
+    agentPrompt,
   };
 }
 
@@ -809,6 +954,7 @@ export async function stopMcpServer(): Promise<void> {
   if (httpServer) {
     httpServer.close();
     httpServer = null;
+    try { removeEndpointFile(getDataDir(), process.pid); } catch { /* best-effort */ }
   }
   await Promise.allSettled(
     Array.from(connectedServers.values()).map((s) => s.close()),

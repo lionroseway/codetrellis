@@ -66,12 +66,35 @@ const storageState = {
   ],
 };
 
+const MARKETING_IGNORE = process.env.E2E_MARKETING ? [] : ['**/marketing/**'];
+
+/**
+ * Named spec files on the command line. A full run orders the serial
+ * project after everything else; a targeted one just runs what was named.
+ */
+const TARGETED = process.argv.some((a) => /\.(spec|setup)\.ts(:\d+)*$/.test(a) || /(^|\/)e2e\/[^-]/.test(a));
+
+/** Specs that need the backend to themselves — see the `serial` project. */
+const SERIAL_SPECS = [
+  // Their agents navigate every open page.
+  '**/live-agent/preseeded-execution.spec.ts',
+  '**/live-agent/preseeded-deviation.spec.ts',
+  '**/live-agent/authored-deviation.spec.ts',
+  '**/live-agent/agent-authored-flow.spec.ts',
+  '**/golden-chain/mcp-agent-flow.spec.ts',
+  '**/mcp-tools/changes-drift-templates.spec.ts',
+  // navigate_to 'artefact' opens the viewer over every open page.
+  '**/plan/brief-mode.spec.ts',
+  // They read the graph of whichever project was scanned last.
+  '**/parsers/**',
+];
+
 export default defineConfig({
   testDir: './e2e',
   // The marketing spec regenerates committed screenshots under
   // marketing-assets/. In a normal run it silently rewrote them with
   // whatever test data was loaded. Opt in with E2E_MARKETING=1.
-  testIgnore: process.env.E2E_MARKETING ? [] : ['**/marketing/**'],
+  testIgnore: MARKETING_IGNORE,
   timeout: 30000,
   // Playwright's default is half the CPU cores. Every test opens and scans
   // this whole repository in its own Chromium against ONE backend, so on a
@@ -91,7 +114,16 @@ export default defineConfig({
     {
       command: 'npx tsx src/backend/index.ts',
       port: 3001,
-      env: { CODETRELLIS_DATA_DIR: E2E_DATA_DIR, CODETRELLIS_CAPABILITY_TOKEN: E2E_TOKEN },
+      env: {
+        CODETRELLIS_DATA_DIR: E2E_DATA_DIR,
+        CODETRELLIS_CAPABILITY_TOKEN: E2E_TOKEN,
+        // No conversion engine unless a run asks for one (pw.local.config.ts
+        // does). From source the backend otherwise uses resources/rendition/
+        // engine, which packaging fills with the pinned engine — so the same
+        // specs saw no engine in CI and a real one on a machine that had
+        // packaged, and the "without the engine" specs failed only there.
+        CODETRELLIS_RENDITION_ENGINE: process.env.CODETRELLIS_RENDITION_ENGINE || path.join(E2E_DATA_DIR, 'no-rendition-engine'),
+      },
       // Reusing whatever is on :3001 meant testing against the developer's
       // dev backend and its real data, with a token this run does not
       // hold. A busy port now fails loudly; opt back in explicitly.
@@ -107,9 +139,39 @@ export default defineConfig({
     },
   ],
   projects: [
+    // Opens the project under test once — see e2e/project.setup.ts.
+    // Its `teardown` is the serial project below: Playwright runs a
+    // teardown after every project that depends on setup has finished, and
+    // runs it even when some of their tests failed. As an ordinary dependent
+    // of `chromium` it would be skipped outright by one failing UI spec.
+    //
+    // Not on a targeted run (`npx playwright test e2e/plan/x.spec.ts`): a
+    // teardown ignores the file filter, so every targeted run also ran all
+    // 39 agent specs, while running one of THOSE files alone skipped setup.
+    // Targeted, serial depends on setup like everything else.
+    { name: 'setup', testMatch: /project\.setup\.ts$/, ...(TARGETED ? {} : { teardown: 'serial' }) },
     {
       name: 'chromium',
       use: { browserName: 'chromium' },
+      dependencies: ['setup'],
+      // A project's testIgnore REPLACES the top-level one, so repeat it.
+      testIgnore: [...MARKETING_IGNORE, ...SERIAL_SPECS],
+    },
+    // After every other spec, one at a time, for two reasons:
+    //  - Some call MCP tools that steer the UI (`set_active_plan`,
+    //    `open_plan`, `navigate_to`), which broadcast `ui-navigate` to EVERY
+    //    connected page — by design, so the app follows the agent. Beside the
+    //    UI specs they switched another worker's page to their plan mid-test.
+    //  - The parser specs read `/api/cross-system`, symbols and stats, which
+    //    are the graph of whichever project was scanned LAST. Any other
+    //    worker's scan between their scan and their read replaced it, and
+    //    "the fixture has an HTTP pairing" read zero edges.
+    {
+      name: 'serial',
+      use: { browserName: 'chromium' },
+      testMatch: SERIAL_SPECS,
+      ...(TARGETED ? { dependencies: ['setup'] } : {}),
+      workers: 1,
     },
   ],
 });

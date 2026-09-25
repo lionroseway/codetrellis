@@ -192,18 +192,29 @@ UIDs are stable across export → import → re-export. The schema:
 - Spec docs (with `orderHint` + `parentDocUid`)
 - Plan templates
 
+**Comments, attachments and channel events ride with the item.** An
+item's comments are written into its YAML (`comments:`), its attachments
+likewise (`attachments:` — the reference, not the bytes of a file it
+points at), and a plan's channel events live under `<slug>/channels/`.
+All of it is committed wherever the plan is. An earlier version of this
+section listed comments as device-local; `serializeItem` has exported them
+since the unified item model, so a note written in the app reaches
+everyone who can read the repository — including, for a public repo, the
+public.
+
+**To keep something off disk**, mark the item `local` (Phase 3.2). A
+local item — and so its comments and attachments — is filtered out of the
+export by `listItemsForExport`. Its children are local too, unless one
+explicitly overrides back to `shared`; that one is exported, re-anchored
+under the nearest exported ancestor.
+
 **Runtime / device-local state** (DB only, NOT exported):
 
-- Comments (private to a session)
 - Deviations (re-derived on scan)
 - Trellis snapshots (per-device baseline)
 - Agent sessions (live state)
 - Cross-system edges (re-derived from callsites)
 - Recent projects, AST data, file cache
-
-If a comment ever needs to be shared across devices, we'll add a
-"shared comments" surface that's separately exported. v1 keeps that
-surface device-local.
 
 ## 10. File format examples
 

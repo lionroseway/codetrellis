@@ -42,7 +42,7 @@ test.describe('Branch popover', () => {
     await page.waitForTimeout(500);
 
     // Current branch has a "current" badge
-    await expect(page.getByText('current').first()).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('current', { exact: true }).first()).toBeVisible({ timeout: 3000 });
   });
 
   test('popover shows Rescan project button', async ({ page }) => {

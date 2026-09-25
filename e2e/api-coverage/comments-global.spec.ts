@@ -6,10 +6,10 @@ import { test, expect } from '@playwright/test';
 import { seedPlan, cleanupPlans, API } from '../helpers/setup';
 
 test.describe('Global comments API', () => {
-  const PLAN_TITLE = 'E2E Comments Plan';
+  const PLAN_TITLE = 'E2E Global Comments Plan';
 
   test.afterEach(async ({ request }) => {
-    await cleanupPlans(request, 'E2E Comments');
+    await cleanupPlans(request, 'E2E Global Comments');
   });
 
   test('POST /api/comments creates a plan comment', async ({ request }) => {

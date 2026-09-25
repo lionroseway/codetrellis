@@ -116,7 +116,7 @@ test.describe('Plan item canvas', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    await page.getByText('FileSpec Action').first().click();
+    await page.getByTestId('plan-item-tree').getByText('FileSpec Action').first().click();
     await page.waitForTimeout(500);
 
     // File targets should be visible in the canvas

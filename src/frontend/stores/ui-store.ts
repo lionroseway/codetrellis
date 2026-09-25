@@ -38,7 +38,7 @@ export interface SelectedNodeMeta {
  * Phase 26 — `code` is a peer of `graph`, not a panel inside it. When it
  * is active the graph does not mount, so its layout cost is not paid.
  */
-export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code';
+export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code' | 'brief';
 
 interface UiState {
   sidebarVisible: boolean;

@@ -87,6 +87,9 @@ export function updateSettings(patch: DeepPartial<AppSettings>): AppSettings {
         ? (patch.webhooks.allowedHosts as string[])
         : current.webhooks.allowedHosts,
     },
+    updates: {
+      autoCheck: typeof patch.updates?.autoCheck === 'boolean' ? patch.updates.autoCheck : current.updates.autoCheck,
+    },
     firstRunComplete: patch.firstRunComplete ?? current.firstRunComplete,
     updatedAt: new Date().toISOString(),
   };
@@ -303,6 +306,9 @@ export function mergeWithDefaults(raw: any): AppSettings {
       allowLoopback: typeof raw?.webhooks?.allowLoopback === 'boolean'
         ? raw.webhooks.allowLoopback
         : DEFAULT_SETTINGS.webhooks.allowLoopback,
+    },
+    updates: {
+      autoCheck: typeof raw?.updates?.autoCheck === 'boolean' ? raw.updates.autoCheck : DEFAULT_SETTINGS.updates.autoCheck,
     },
     firstRunComplete: typeof raw?.firstRunComplete === 'boolean' ? raw.firstRunComplete : DEFAULT_SETTINGS.firstRunComplete,
     updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : '',

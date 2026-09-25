@@ -8,6 +8,7 @@
 
 import { type APIRequestContext } from '@playwright/test';
 import WebSocket from 'ws';
+import { authHeaders } from '../../helpers/setup';
 
 const API = 'http://localhost:3001/api';
 const WS_URL = 'ws://localhost:3001/ws';
@@ -92,7 +93,9 @@ export function createWsCollector(): Promise<WsEventCollector> {
       reject: (err: Error) => void;
     }> = [];
 
-    const ws = new WebSocket(WS_URL);
+    // The upgrade authenticates like every other local transport (Phase 19).
+    // A Node client can send the header; a browser would need the query form.
+    const ws = new WebSocket(WS_URL, { headers: authHeaders() });
 
     ws.on('open', () => {
       resolve({

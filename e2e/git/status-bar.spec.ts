@@ -12,7 +12,7 @@ test.describe('Status bar', () => {
   test('shows "Ready" after project scan', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByText('Ready').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Ready', { exact: true }).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('shows project path in monospace', async ({ page }) => {
@@ -39,9 +39,12 @@ test.describe('Status bar', () => {
     await gotoWithProject(page);
 
     // Agent status shows either "Connected" or "Watching"
-    const connected = page.getByText('Connected').first();
-    const watching = page.getByText('Watching').first();
-    const either = connected.or(watching);
+    // Exact, and `.first()` on the union: a substring match also found a
+    // file named connected-agents.spec.ts, and `.or` of two `.first()`s can
+    // still resolve to two elements.
+    const connected = page.getByText('Connected', { exact: true });
+    const watching = page.getByText('Watching', { exact: true });
+    const either = connected.or(watching).first();
     await expect(either).toBeVisible({ timeout: 5000 });
   });
 

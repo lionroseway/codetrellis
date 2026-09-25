@@ -36,7 +36,7 @@ test.describe('Project scan', () => {
   test('StatusBar shows "Ready" after scan', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByText('Ready')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Ready', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
   test('plan panel tabs are visible', async ({ page }) => {
@@ -59,8 +59,8 @@ test.describe('Project scan', () => {
   test('trellis mode buttons are visible', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByRole('button', { name: 'Live' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Baseline' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Live', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Baseline', exact: true })).toBeVisible();
   });
 
   test('layout toggle (Map/Tree) is visible', async ({ page }) => {

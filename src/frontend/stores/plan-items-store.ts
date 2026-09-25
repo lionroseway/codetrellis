@@ -22,6 +22,9 @@ import type {
   Comment,
   TaskStatus,
   FileSpec,
+  ItemCriterion,
+  CriterionKind,
+  CriterionPolicy,
 } from '@shared/types';
 
 export interface PlanItemFullBundle {
@@ -30,6 +33,8 @@ export interface PlanItemFullBundle {
   children: PlanItem[];
   attachments: TaskAttachment[];
   comments: Comment[];
+  /** Phase 31 — acceptance criteria, with their derived state. */
+  criteria: ItemCriterion[];
   versions: PlanItemVersion[];
 }
 
@@ -103,6 +108,29 @@ interface PlanItemsState {
   onItemEvent: (event: PlanEvent) => void;
   onItemCommentAdded: (itemUid: string, comment: Comment) => void;
   onItemAttachmentAdded: (itemUid: string, attachment: TaskAttachment) => void;
+
+  // Phase 31 — criteria. Each write goes to the REST route that issues a
+  // person's decision; the result comes back through `refreshCriteria`.
+  refreshCriteria: (itemUid: string) => Promise<void>;
+  addCriterion: (itemUid: string, input: { text: string; kind: CriterionKind; policy?: CriterionPolicy }) => Promise<string | null>;
+  updateCriterion: (itemUid: string, criterionUid: string, changes: { text?: string; policy?: CriterionPolicy }) => Promise<string | null>;
+  deleteCriterion: (itemUid: string, criterionUid: string) => Promise<string | null>;
+  decideCriterion: (
+    itemUid: string,
+    criterionUid: string,
+    decision: 'approved' | 'sent_back',
+    note?: string,
+    /** §8.2 — the file and place a send-back is about. */
+    anchor?: { attachmentUid: string; locator: unknown },
+  ) => Promise<string | null>;
+  /**
+   * A criterion being written, per item. Held here rather than in the
+   * block's own state: the canvas re-renders on every broadcast, and a
+   * remount must not throw away what a person was typing — nor should
+   * looking at another item and coming back. Present = the form is open.
+   */
+  criterionDrafts: Record<string, { text: string; kind: CriterionKind }>;
+  setCriterionDraft: (itemUid: string, draft: { text: string; kind: CriterionKind } | null) => void;
 }
 
 const HISTORY_CAP = 50;
@@ -115,6 +143,7 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
   selectedItemUid: null,
   history: { back: [], forward: [] },
   contextByUid: {},
+  criterionDrafts: {},
   activityDrawerOpen: true,
   historyDrawerItemUid: null,
   hydrating: false,
@@ -417,6 +446,9 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       }
       return { itemsByUid: { ...s.itemsByUid, [itemUid]: { ...before, ...safeChanges } } };
     });
+    // The gate is a criterion now (Phase 31): toggling it adds or removes
+    // one, so the open item's criteria have to follow.
+    if ('requiresApproval' in changes) void get().refreshCriteria(itemUid);
   },
 
   onItemMoved: (itemUid, toParentUid, sortOrder) => {
@@ -463,7 +495,65 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       return { contextByUid: { ...s.contextByUid, [itemUid]: { ...ctx, attachments: [...ctx.attachments, attachment] } } };
     });
   },
+
+  refreshCriteria: async (itemUid) => {
+    if (!get().contextByUid[itemUid]) return; // not open — it loads fresh when it is
+    try {
+      const res = await fetch(`/api/items/${itemUid}/criteria`);
+      if (!res.ok) return;
+      const criteria: ItemCriterion[] = await res.json();
+      set((s) => {
+        const ctx = s.contextByUid[itemUid];
+        if (!ctx) return s;
+        return { contextByUid: { ...s.contextByUid, [itemUid]: { ...ctx, criteria } } };
+      });
+    } catch { /* the WS event will bring it round again */ }
+  },
+
+  setCriterionDraft: (itemUid, draft) =>
+    set((s) => {
+      const next = { ...s.criterionDrafts };
+      if (draft) next[itemUid] = draft;
+      else delete next[itemUid];
+      return { criterionDrafts: next };
+    }),
+
+  addCriterion: (itemUid, input) =>
+    criteriaWrite(`/api/items/${itemUid}/criteria`, 'POST', input, () => get().refreshCriteria(itemUid)),
+
+  updateCriterion: (itemUid, criterionUid, changes) =>
+    criteriaWrite(`/api/criteria/${criterionUid}`, 'PUT', changes, () => get().refreshCriteria(itemUid)),
+
+  deleteCriterion: (itemUid, criterionUid) =>
+    criteriaWrite(`/api/criteria/${criterionUid}`, 'DELETE', undefined, () => get().refreshCriteria(itemUid)),
+
+  decideCriterion: (itemUid, criterionUid, decision, note, anchor) =>
+    criteriaWrite(`/api/criteria/${criterionUid}/decide`, 'POST', { decision, note, anchor }, () => get().refreshCriteria(itemUid)),
 }));
+
+/** Returns null on success, or the server's reason — shown to the person. */
+async function criteriaWrite(
+  url: string,
+  method: 'POST' | 'PUT' | 'DELETE',
+  body: unknown,
+  after: () => Promise<void>,
+): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      return data.error ?? `Failed (HTTP ${res.status})`;
+    }
+    await after();
+    return null;
+  } catch (err) {
+    return String(err);
+  }
+}
 
 /**
  * Helper: build a tree of children-by-parent from the flat item map.
