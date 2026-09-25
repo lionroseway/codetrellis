@@ -50,6 +50,7 @@ import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { buildPrDraft } from './services/pr-draft-service';
+import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -3466,6 +3467,56 @@ app.post('/api/plans/:uid/unlink', (req, res) => {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// --- Phase 31 §13: the sign-off pack ---------------------------------
+//
+// The same rows as the PR draft's criteria table, as data, as a page that
+// leaves the app, and checked later against the files it names. The plan
+// comes from the path; the files a pack names are resolved inside the
+// plan's own project (signoff-pack.ts), never where the pack says.
+
+app.get('/api/plans/:uid/signoff-pack', (req, res) => {
+  try {
+    res.json(buildSignoffPack(req.params.uid));
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/plans/:uid/signoff-pack.html', (req, res) => {
+  try {
+    const pack = buildSignoffPack(req.params.uid);
+    const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    // A file to save, not a page to render inside the app's origin.
+    res.setHeader('Content-Disposition', `attachment; filename="sign-off-pack-${safe}.html"`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(renderPackHtml(pack));
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** "Verify this pack": the saved page or its JSON, as text; re-hash every file it names. */
+app.post(
+  '/api/plans/:uid/signoff-pack/verify',
+  express.text({ type: 'text/plain', limit: '20mb' }),
+  async (req, res) => {
+    try {
+      const text = typeof req.body === 'string' ? req.body : '';
+      if (!text.trim()) { res.status(400).json({ error: 'Send the saved pack (.html or .json) as text' }); return; }
+      let pack: unknown;
+      try { pack = packFromText(text); } catch (err) {
+        res.status(400).json({ error: err instanceof PackError ? err.message : 'That file is not a readable sign-off pack' });
+        return;
+      }
+      res.json(await verifyPack(req.params.uid, pack));
+    } catch (err) {
+      res.status(err instanceof PackError ? 400 : 500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+);
 
 // --- Plan Templates API (Phase 12 §G) ---
 

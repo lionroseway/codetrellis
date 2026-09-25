@@ -25,6 +25,7 @@ import { CriteriaBlock } from '../plan/v2/CriteriaBlock';
 import { AgentTurnList, useAgentTurns } from '../layout/AgentTurns';
 import { openArtefactAt } from '../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../lib/brief-vocabulary';
+import { SignoffPackControls } from './SignoffPackControls';
 import type { ItemCriterion, PlanItem, TaskAttachment } from '@shared/types';
 
 /** The plan's items depth-first, siblings in order — the order the tree shows. */
@@ -242,6 +243,7 @@ export function BriefWorkspace() {
             })}
           </ul>
         )}
+        <SignoffPackControls planUid={plan.uid} planTitle={plan.title} />
       </aside>
 
       <main className="overflow-y-auto px-8 py-6" data-testid="brief-task">

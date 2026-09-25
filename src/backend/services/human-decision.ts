@@ -26,6 +26,8 @@ declare const brand: unique symbol;
 export interface HumanDecision {
   readonly actor: string;
   readonly channel: HumanChannel;
+  /** The paired device, by its alias, when the decision came from one. */
+  readonly device?: string | null;
   readonly [brand]: true;
 }
 
@@ -35,8 +37,8 @@ const issued = new WeakSet<object>();
  * Only for the transports a person is on. Do not call from `mcp/` — the
  * static test will fail, and it will be right.
  */
-export function issueHumanDecision(channel: HumanChannel, actor: string): HumanDecision {
-  const decision = Object.freeze({ actor, channel }) as HumanDecision;
+export function issueHumanDecision(channel: HumanChannel, actor: string, device: string | null = null): HumanDecision {
+  const decision = Object.freeze({ actor, channel, device }) as HumanDecision;
   issued.add(decision);
   return decision;
 }

@@ -123,6 +123,12 @@ const electronAPI = {
    */
   revealArtefact: (uid: string): Promise<boolean> => ipcRenderer.invoke('artefacts:reveal', uid),
   /**
+   * Phase 31 §13 — save a plan's sign-off pack as a PDF, by plan uid. The
+   * main process asks where to save it.
+   */
+  exportSignoffPdf: (planUid: string): Promise<{ ok: boolean; path?: string; reason?: string }> =>
+    ipcRenderer.invoke('signoff:export-pdf', planUid),
+  /**
    * Phase 31 §7.3 — an HTML report in its own sandboxed view, laid over the
    * given rectangle of this window. By attachment uid; scripts off unless
    * asked. `hide` removes the view and clears its session.

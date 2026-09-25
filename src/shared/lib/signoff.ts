@@ -45,6 +45,8 @@ export interface SignoffRow {
     at: number;
     /** The hashes the approval was taken on — what the pack is checked against. */
     evidenceHashes: Record<string, string | null>;
+    /** The paired device a person decided on, by its alias; null on the desktop. */
+    device: string | null;
   } | null;
   /**
    * Approved by the agent itself, under an `agent` policy — never a
@@ -72,7 +74,7 @@ export function decisionWords(row: SignoffRow): string {
   const d = row.decision;
   if (!d) return '—';
   const verb = d.decision === 'approved' ? (row.selfApproved ? 'self-approved by' : 'approved by') : 'sent back by';
-  const how = d.channel === 'mcp' ? 'over MCP' : `on the ${d.channel}`;
+  const how = d.channel === 'mcp' ? 'over MCP' : `on the ${d.channel}${d.device ? ` (${d.device})` : ''}`;
   return `${verb} ${d.actor} ${how}, ${date(d.at)}`;
 }
 

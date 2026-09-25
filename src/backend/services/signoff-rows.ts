@@ -61,7 +61,7 @@ export function rowsForCriterion(item: PlanItem, c: ItemCriterion): SignoffRow {
     decision: s
       ? {
         decision: s.decision, actor: s.actor, actorType: s.actorType, channel: s.channel,
-        note: s.note, at: s.createdAt, evidenceHashes: recorded,
+        note: s.note, at: s.createdAt, evidenceHashes: recorded, device: s.device ?? null,
       }
       : null,
     selfApproved: !!s && s.decision === 'approved' && s.actorType !== 'human',

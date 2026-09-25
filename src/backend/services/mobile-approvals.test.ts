@@ -169,6 +169,7 @@ describe('deciding from the phone', () => {
     const signoff = criteria.listSignoffs(criterion.uid).at(-1)!;
     assert.equal(signoff.channel, 'phone');
     assert.equal(signoff.actorType, 'human');
+    assert.equal(signoff.device, 'Test phone', 'the sign-off names the device it was taken on (§13)');
     assert.ok(Object.keys(signoff.evidenceHashes ?? {}).length > 0, 'the hashes it was taken on are recorded');
     const entry = audit.listPeerAudit({ fingerprint: CONFIRMED }).find((e) => e.kind === 'decision');
     assert.ok(entry, 'the decision is in the device audit');

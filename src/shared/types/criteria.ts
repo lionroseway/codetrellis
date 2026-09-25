@@ -54,6 +54,8 @@ export interface CriterionSignoff {
    * locator the note is about.
    */
   anchor?: { attachmentUid: string; locator: unknown } | null;
+  /** §13 — the paired device a person decided on (its alias); null on the desktop. */
+  device?: string | null;
 }
 
 export interface ItemCriterion {

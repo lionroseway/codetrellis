@@ -205,7 +205,7 @@ async function decide(
   const criterion = criteriaService.decideCriterion(
     criterionUid,
     { decision: params.decision, note: params.note, anchor: params.anchor },
-    issueHumanDecision('phone', getAuthorKey('human')),
+    issueHumanDecision('phone', getAuthorKey('human'), device.alias),
   );
 
   // The sign-off says a person decided, on the phone. Which phone is

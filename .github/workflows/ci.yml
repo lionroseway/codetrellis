@@ -243,6 +243,11 @@ jobs:
       - name: Artefact bytes in a file:// renderer
         run: npx tsx tools/artefact-transport-check/run.ts
 
+      # The sign-off pack's PDF is printed in a hidden Electron window; this
+      # is the only test that it produces a PDF and reaches no network.
+      - name: Sign-off pack PDF
+        run: npx tsx tools/signoff-pdf-check/run.ts
+
   # ---------------------------------------------------------------------------
   # THE ONLY CONTEXT BRANCH PROTECTION PINS.
   #
