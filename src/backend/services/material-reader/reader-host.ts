@@ -27,6 +27,7 @@ import { readServableCapped, resolveServable, type ServableFile } from '../artef
 import { existingRendition } from '../rendition/rendition-service';
 import type { EngineHost } from '../rendition/engine-host';
 import { isPackagedElectron } from '../../mcp/connector/command';
+import { canonicalRoot } from '../confined-fs';
 import { TEXT_EXTS } from '../../../shared/lib/locator';
 import type { MaterialLocator, ReadReply, ReadRequest } from './read';
 
@@ -100,12 +101,18 @@ export function runReader(
   opts: { script?: string; timeoutMs?: number; heapMb?: number } = {},
 ): Promise<RunReply> {
   return new Promise((resolve) => {
-    const script = opts.script ?? readerScript();
-    const launch = readerLaunch(script, opts);
     let settled = false;
     let stderr = '';
+    let outOfMemory = false;
     let child: ReturnType<typeof fork>;
     try {
+      // Started, and granted, by its canonical path. Node checks the loader's
+      // own walk of the entry path against the grant BEFORE following links,
+      // so a script reached through a symlink (macOS's /var → /private/var,
+      // where every temp dir lives) dies reading "/var" however it is granted.
+      // Canonicalising is not a wider grant: it is the same file, named once.
+      const script = canonicalRoot(opts.script ?? readerScript());
+      const launch = readerLaunch(script, opts);
       child = fork(script, [], {
         execPath: process.execPath,
         execArgv: launch.execArgv,
@@ -121,7 +128,15 @@ export function runReader(
       resolve({ ok: false, reason: `The reader could not start (${(err as Error).message})` });
       return;
     }
-    child.stderr?.on('data', (d: Buffer) => { stderr = (stderr + d.toString()).slice(-4000); });
+    child.stderr?.on('data', (d: Buffer) => {
+      // Noted as it arrives, not found in the tail afterwards: on macOS V8
+      // follows the heap-limit line with ~9KB of native stack, so the kept
+      // tail no longer holds it and the reason read "the reader stopped".
+      // Tested against the joined text, so a line split across chunks counts.
+      const joined = stderr + d.toString();
+      if (/heap limit|out of memory/i.test(joined)) outOfMemory = true;
+      stderr = joined.slice(-4000);
+    });
     const timeoutMs = opts.timeoutMs ?? READ_TIMEOUT_MS;
     const done = (r: RunReply) => {
       if (settled) return;
@@ -144,7 +159,6 @@ export function runReader(
       // wait is capped, and stderr (the heap-limit message) drains meanwhile.
       const judge = () => setImmediate(() => {
         if (settled) return;
-        const outOfMemory = /heap limit|out of memory/i.test(stderr);
         if (!outOfMemory) {
           console.warn(`[reader] stopped without answering (code ${code}, signal ${signal}): ${stderr.trim().split('\n').slice(-5).join(' | ') || 'no output'}`);
         }

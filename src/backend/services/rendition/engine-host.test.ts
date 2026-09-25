@@ -30,7 +30,9 @@ exports.create = async () => ({
     if (text === 'NOT-PDF') return new Uint8Array([1, 2, 3, 4, 5, 6]);
     if (text === 'THROW') throw new Error('bad input at /secret/path');
     if (text === 'PID') return Buffer.from('%PDF-' + process.pid);
-    if (text === 'ENV') return Buffer.from('%PDF-' + JSON.stringify(Object.keys(process.env)));
+    // __CF_USER_TEXT_ENCODING is set by macOS CoreFoundation inside every
+    // process at start (a child forked with env {} has it) — not inherited.
+    if (text === 'ENV') return Buffer.from('%PDF-' + JSON.stringify(Object.keys(process.env).filter((k) => k !== '__CF_USER_TEXT_ENCODING')));
     if (text.startsWith('READ ')) {
       try { require('node:fs').readFileSync(text.slice(5)); return Buffer.from('%PDF-read allowed'); }
       catch (e) { return Buffer.from('%PDF-read ' + e.code); }
@@ -150,6 +152,22 @@ describe('what the engine may not do', () => {
     assert.equal(text(await h.convert(Buffer.from('ENV'), 'docx')), '%PDF-[]');
     assert.equal(text(await h.convert(Buffer.from('NET'), 'docx')), '%PDF-net refused; fetch absent; child_process refused');
     delete process.env.CODETRELLIS_CAPABILITY_TOKEN_TEST;
+  });
+
+  test('an engine reached through a symlinked directory still starts, and is still confined', async () => {
+    // macOS keeps every temp dir under /var → /private/var, and an engine
+    // started through a link died reading "/var" however it was granted. A
+    // link made here fails the same way on any OS, so CI on Linux catches it.
+    const linked = path.join(os.tmpdir(), `ct-engine-link-${process.pid}`);
+    fs.rmSync(linked, { force: true, recursive: true });
+    fs.symlinkSync(tmp, linked, 'junction');
+    try {
+      const h = host({ engineDir: path.join(linked, 'engine'), childScript: path.join(linked, 'engine-child.cjs') });
+      assert.equal(text(await h.convert(Buffer.from('hello'), 'docx')), '%PDF-1.4 hello');
+      assert.equal(text(await h.convert(Buffer.from(`READ ${secret}`), 'docx')), '%PDF-read ERR_ACCESS_DENIED');
+    } finally {
+      fs.rmSync(linked, { force: true });
+    }
   });
 
   test('where the runtime cannot keep it off the network, only an engine proven network-free runs', async () => {
