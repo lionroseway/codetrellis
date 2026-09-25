@@ -47,7 +47,7 @@ import { renditionOf, stopEngine } from '../backend/services/rendition/rendition
 import { setPreviewImageScaler } from '../backend/services/mobile-approvals';
 import { buildSignoffPack, renderPackHtml } from '../backend/services/signoff-pack';
 import { htmlToPdf } from './signoff-pdf';
-import { installHtmlView, closeHtmlView } from './html-view';
+import { installHtmlView, closeHtmlView, pngWithReport } from './html-view';
 import { ARTEFACT_SCHEME, installArtefactTransport } from './artefact-transport';
 
 // Phase 31 §7.1 — the packaged renderer is a file:// document: its fetch is
@@ -350,7 +350,8 @@ function createWindow(backendOk: boolean): void {
     await win.webContents.capturePage();
     await new Promise((r) => setTimeout(r, 120));
     const image = await win.webContents.capturePage();
-    return image.toPNG().toString('base64');
+    // An HTML report is its own view over the window, not part of the page.
+    return (await pngWithReport(win, image)).toString('base64');
   });
 
   // Forward backend broadcasts to the renderer via IPC. Also
