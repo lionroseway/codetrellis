@@ -236,6 +236,47 @@ export function listCriteria(itemUid: string): ItemCriterion[] {
   ).map(toCriterion);
 }
 
+/** One criterion a person has to look at, with where it lives. */
+export interface AwaitingCriterion {
+  criterion: ItemCriterion;
+  itemTitle: string;
+  planUid: string;
+  planTitle: string;
+}
+
+/**
+ * Phase 31 §12 — what is waiting on a person, across every plan: work an
+ * agent submitted for a person to judge, and approvals whose files have
+ * changed since. Newest first.
+ *
+ * Reads the hashes as stored. The artefact watcher keeps them current for
+ * open projects; the phone refreshes an item's before it is decided on.
+ */
+export function listAwaitingPerson(limit = 100): AwaitingCriterion[] {
+  const candidates = rows(
+    `SELECT DISTINCT c.uid, i.title, p.uid, p.title
+       FROM item_criteria c
+       JOIN plan_items i ON i.uid = c.item_uid
+       JOIN plans p ON p.uid = i.plan_uid
+      WHERE EXISTS (SELECT 1 FROM criterion_evidence e WHERE e.criterion_uid = c.uid)`,
+  );
+  const out: Array<AwaitingCriterion & { at: number }> = [];
+  for (const r of candidates) {
+    const criterion = getCriterion(r[0] as string);
+    if (!criterion || (criterion.state !== 'submitted' && criterion.state !== 'stale')) continue;
+    const at = criterion.state === 'stale'
+      ? criterion.latestSignoff?.createdAt ?? 0
+      : criterion.latestSubmission[0]?.submittedAt ?? 0;
+    out.push({
+      criterion, itemTitle: r[1] as string, planUid: r[2] as string, planTitle: r[3] as string, at,
+    });
+  }
+  return out
+    .sort((a, b) => b.at - a.at)
+    .slice(0, limit)
+    .map(({ at: _at, ...rest }) => rest);
+}
+
 export function listSignoffs(criterionUid: string): CriterionSignoff[] {
   return rows(
     `SELECT uid, criterion_uid, decision, actor, actor_type, channel, note, created_at, evidence_hashes,

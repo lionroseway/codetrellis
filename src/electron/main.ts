@@ -8,6 +8,7 @@ import {
   powerSaveBlocker,
   protocol,
   session,
+  nativeImage,
   type WebContents,
 } from 'electron';
 import path from 'node:path';
@@ -41,6 +42,7 @@ import {
   isAttachmentUid,
 } from '../backend/services/artefact-content-service';
 import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
+import { setPreviewImageScaler } from '../backend/services/mobile-approvals';
 import { installHtmlView, closeHtmlView } from './html-view';
 import { ARTEFACT_SCHEME, installArtefactTransport } from './artefact-transport';
 
@@ -379,6 +381,17 @@ app.whenReady().then(async () => {
   // Before any window exists, so no document is ever served without it.
   installContentSecurityPolicy();
   installArtefactTransport(artefactResponse, (sender) => sender === mainWindow?.webContents);
+  // Phase 31 §12 — an image sent to the phone as evidence is scaled to a
+  // phone screen first, not sent as the original. A PNG stays a PNG: a
+  // chart or diagram with a transparent background turns black as a JPEG.
+  setPreviewImageScaler((bytes, mime) => {
+    const image = nativeImage.createFromBuffer(bytes);
+    if (image.isEmpty()) return null;
+    const fitted = image.getSize().width > 1280 ? image.resize({ width: 1280, quality: 'good' }) : image;
+    return mime === 'image/png'
+      ? { bytes: fitted.toPNG(), mime: 'image/png' }
+      : { bytes: fitted.toJPEG(80), mime: 'image/jpeg' };
+  });
   installHtmlView(() => mainWindow);
 
   const backendOk = await bootstrap();

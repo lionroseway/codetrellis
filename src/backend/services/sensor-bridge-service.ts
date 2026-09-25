@@ -96,6 +96,29 @@ function postSensorEvent(input: Omit<PostChannelEventInput, 'author' | 'authorTy
   }
 }
 
+// --- Criteria → channel bridge (Phase 31 §12) ------------------------------
+
+/**
+ * A criterion needs a person: an agent submitted work for them to judge,
+ * or an approval's files changed since. Posted like every sensor event —
+ * broadcast, exported, dispatched — so it reaches a phone as a push, and
+ * it names the criterion, so the push opens the approval rather than a
+ * list the person then has to search.
+ */
+export function postCriterionNotice(opts: {
+  planUid: string;
+  itemUid: string;
+  criterionUid: string;
+  message: string;
+}): ChannelEvent | null {
+  return postSensorEvent({
+    planUid: opts.planUid,
+    itemUid: opts.itemUid,
+    eventType: 'need-decision',
+    payload: { message: opts.message, criterionUid: opts.criterionUid },
+  });
+}
+
 // --- Drift → channel bridge (Phase 4.2) -------------------------------------
 
 /**

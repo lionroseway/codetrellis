@@ -36,6 +36,7 @@ import { getItem, listAllItems } from './plan-item-service';
 import { reviewPlan } from './plan-review-service';
 import { resolveWithin } from './confined-fs';
 import { formatReference } from '../../shared/lib/references';
+import { postCriterionNotice } from './sensor-bridge-service';
 import type {
   CheckRun,
   CheckRunOutcome,
@@ -213,6 +214,19 @@ export async function submitChecked(
     );
   }
   const criterion = criteria.submitCriterion(uid, input, actor);
+  // §12 — waiting on a person now, so tell them, wherever they are. An
+  // agent-policy criterion was approved by the submission itself.
+  if (criterion.state === 'submitted') {
+    const item = getItem(criterion.itemUid);
+    if (item) {
+      postCriterionNotice({
+        planUid: item.planUid,
+        itemUid: item.uid,
+        criterionUid: criterion.uid,
+        message: `${actor.author} submitted "${criterion.text}" on ${item.title} — approve it or send it back.`,
+      });
+    }
+  }
   return { criterion, check: result };
 }
 

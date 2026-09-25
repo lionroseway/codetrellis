@@ -23,6 +23,11 @@
  *   graph.directory   — list files in a directory with symbol/connection counts
  *   graph.file        — file detail: symbols + imports + importedBy
  *   graph.search      — search symbols by name
+ *   criteria.awaiting — what is waiting on a person (Phase 31 §12)
+ *   criteria.list     — one item's criteria and their evidence
+ *   criterion.decide  — approve, or send back with a note
+ *   artefact.preview  — the cited place in a piece of evidence, streamed
+ *                       as `preview.chunk` messages (mobile-approvals.ts)
  */
 
 import { DATA_CHANNELS } from '../../shared/types';
@@ -79,6 +84,7 @@ import {
   broadcast,
 } from '../server';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
+import { handleApprovalMethod } from './mobile-approvals';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -385,6 +391,17 @@ async function routeMethod(
   fingerprint: string = '',
 ): Promise<unknown> {
   switch (method) {
+    // --- Approvals (Phase 31 §12) ---------------------------------------------
+    case 'criteria.awaiting':
+    case 'criteria.list':
+    case 'criterion.decide':
+    case 'artefact.preview':
+      return handleApprovalMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      });
+
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {
       // Optional filter. Confined all the same: an unopened path here

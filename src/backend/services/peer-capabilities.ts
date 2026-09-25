@@ -116,9 +116,16 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'sysdoc.list': 'read',
   'sysdoc.read': 'read',
   'diagnostics.flush': 'read',
+  // Phase 31 §12 — what is waiting on a person, and one item's criteria.
+  'criteria.awaiting': 'read',
+  'criteria.list': 'read',
 
   // ── write ───────────────────────────────────────────────────────────
   'channel.post': 'write',
+  // Phase 31 §12 — a person's approval or send-back. `write` admits it;
+  // the handler also requires a CONFIRMED pairing, because the sign-off is
+  // recorded as the person's (mobile-approvals.ts).
+  'criterion.decide': 'write',
   'channel.resolve': 'write',
   'comment.add': 'write',
   'deviation.resolve': 'write',
@@ -150,6 +157,9 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // ── files ───────────────────────────────────────────────────────────
   // Separated from `read` because these return file CONTENT and enumerate
   // directories, rather than the plan/graph metadata `read` covers.
+  // Phase 31 §12 — the cited place in a piece of evidence: file content,
+  // read through the same confined reader as read_material.
+  'artefact.preview': 'files',
   'fs.browse': 'files',
   'graph.fileSource': 'files',
 
