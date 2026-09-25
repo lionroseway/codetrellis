@@ -106,6 +106,11 @@ a tagged candidate and on packaged artifacts.
   fallback** — see "The AppImage sandbox" below. `.deb` / `.rpm` keep
   the sandbox and are the better Linux option where there is a choice.
   Session persistence and power-aware sleep prevention are wired in.
+  **Spell-check dictionaries are bundled** (`resources/spellcheck/`, English
+  only) and installed before the app is ready, so Chromium never fetches
+  one from Google's CDN; `tools/spellcheck-check` proves it in CI. The only
+  request the app makes on its own is the update check, and
+  Settings → Updates turns it off.
 - **Mobile runtime**: Expo SDK 57 + React Native 0.86.3 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),

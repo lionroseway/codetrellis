@@ -272,7 +272,7 @@ export function SettingsModal({
               <PowerSection settings={settings} onChange={update} />
             )}
             {section === 'telemetry' && <TelemetrySection />}
-            {section === 'updates' && <UpdatesSection />}
+            {section === 'updates' && <UpdatesSection settings={settings} onChange={update} />}
             {section === 'about' && <AboutSection onJumpToSection={setSection} />}
           </div>
 
@@ -1753,8 +1753,26 @@ function TelemetrySection() {
         Everything stays on your machine. Your project's plans live in your repo (committed via git, your transport).
         Your DB lives at <code className="font-mono">~/.codetrellis/data.db</code>. The MCP server binds to <code className="font-mono">127.0.0.1</code> only — no remote agents reach it.
       </p>
+      <div className="text-[11px] text-foreground-muted leading-relaxed" data-testid="telemetry-outbound">
+        <p>What does leave this machine, and only when:</p>
+        <ul className="list-disc pl-4 mt-1 space-y-0.5">
+          <li>
+            <span className="text-foreground">Update checks</span> — codetrellis.dev, then GitHub if it is unreachable: this platform and version.
+            {' '}Off in Settings → Updates.
+          </li>
+          <li>
+            <span className="text-foreground">Phone notifications</span> — only with a paired phone that asked for them, through Expo&apos;s push service.
+          </li>
+          <li>
+            <span className="text-foreground">Channel webhooks</span> — only to hosts you have approved in Settings.
+          </li>
+        </ul>
+        <p className="mt-1">
+          Spell-check dictionaries ship with the app, so none is downloaded from Google as Chromium otherwise would.
+        </p>
+      </div>
       <p className="text-[10px] text-foreground-subtle">
-        This isn't a setting you can toggle — it's a property of how the tool's built. We mention it explicitly because trust matters for a tool you run on your own code.
+        Usage telemetry isn&apos;t a setting you can toggle — it&apos;s a property of how the tool&apos;s built. We mention it explicitly because trust matters for a tool you run on your own code.
       </p>
     </>
   );
@@ -1891,7 +1909,13 @@ interface UpdateStateData {
  * Download → opens the platform installer URL in the system
  * browser. Auto-apply on quit waits for code-signing.
  */
-function UpdatesSection() {
+function UpdatesSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
   const [state, setState] = useState<UpdateStateData | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -1955,7 +1979,17 @@ function UpdatesSection() {
         <div className="text-[10.5px] text-foreground-subtle mt-3">
           {lastCheckedAt
             ? `Last checked ${formatRelativeTime(new Date(lastCheckedAt))}`
-            : "Haven't checked yet — auto-checks once a day in the background."}
+            : settings.updates.autoCheck
+              ? "Haven't checked yet — auto-checks once a day in the background."
+              : "Haven't checked — automatic checks are off."}
+        </div>
+        <div className="mt-3" data-testid="updates-auto-check">
+          <Toggle
+            checked={settings.updates.autoCheck}
+            onChange={(v) => onChange({ updates: { ...settings.updates, autoCheck: v } })}
+            label="Check for updates automatically"
+            sub="At launch and once a day. The request carries this platform and version, nothing else. Off, CodeTrellis only checks when you press the button."
+          />
         </div>
       </div>
 

@@ -36,6 +36,7 @@ import {
   stopPowerSignals,
 } from '../backend/services/power-signals';
 import { getSettings } from '../backend/services/settings-service';
+import { bundledDictionaryDir, installDictionaries, confineSpellcheck } from './spellcheck';
 import {
   resolveServable,
   serveFile,
@@ -110,6 +111,19 @@ console.log(`[Electron] App boot — pid ${process.pid}, log file: ${getCurrentL
 if (process.platform === 'linux' && process.env.APPIMAGE) {
   app.commandLine.appendSwitch('no-sandbox');
   console.log('[Electron] AppImage detected on Linux — running with --no-sandbox');
+}
+
+// Spell-check dictionaries from the bundle, never Google's CDN. Installed
+// before the app is ready — any later and Chromium has already asked for
+// one — and every session confined to them as it is created. macOS uses
+// the system spellchecker and fetches nothing. See ./spellcheck.ts.
+if (process.platform !== 'darwin') {
+  const installed = installDictionaries(
+    bundledDictionaryDir(app.getAppPath(), process.resourcesPath, app.isPackaged),
+    app.getPath('userData'),
+  );
+  console.log(`[Electron] Spell-check dictionaries bundled: ${installed.join(', ') || 'none'}`);
+  app.on('session-created', (ses) => confineSpellcheck(ses, installed, app.getPreferredSystemLanguages()));
 }
 
 // electron-vite injects this env var when running `electron-vite dev`.
