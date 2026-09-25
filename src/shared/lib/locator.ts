@@ -40,3 +40,19 @@ export function toSpan(value: unknown): { start: number; end: number } | null {
 
 /** The formats read as lines: what a `{lines}` locator points into. */
 export const TEXT_EXTS: ReadonlySet<string> = new Set(['md', 'txt', 'json', 'log', 'csv', 'html', 'htm', 'xml', 'svg']);
+
+/** A locator in words, for a link or the way back: "lines 4–6", "Regional!C14", "page 3". */
+export function describeLocator(locator: unknown): string {
+  if (!locator || typeof locator !== 'object') return '';
+  const l = locator as Record<string, unknown>;
+  if (typeof l.range === 'string') return typeof l.sheet === 'string' ? `${l.sheet}!${l.range}` : String(l.range);
+  if (typeof l.sheet === 'string') return l.sheet;
+  if (typeof l.page === 'number') return `page ${l.page}`;
+  if (l.lines !== undefined) {
+    const v = Array.isArray(l.lines) ? `${l.lines[0]}–${l.lines[1]}` : String(l.lines).replace('-', '–');
+    return /[–]/.test(v) ? `lines ${v}` : `line ${v}`;
+  }
+  if (l.t !== undefined) return `at ${l.t}`;
+  if (typeof l.text === 'string') return `“${l.text.slice(0, 40)}${l.text.length > 40 ? '…' : ''}”`;
+  return '';
+}

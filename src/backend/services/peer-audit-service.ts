@@ -40,6 +40,7 @@ import { getSettingsDir } from './persistence';
 export type PeerAuditKind =
   | 'refused'          // an RPC the device was not allowed to make
   | 'terminal-access'  // terminal inventory / scrollback / live output / input
+  | 'decision'         // a person approved or sent back work from this device (§12)
   | 'capability-change'; // the user granted or revoked something
 
 export interface PeerAuditEntry {

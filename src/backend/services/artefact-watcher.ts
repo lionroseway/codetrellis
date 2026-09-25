@@ -25,7 +25,7 @@ import {
 } from './artefact-service';
 import { listCriteria } from './criteria-service';
 import { runCheckRun } from './criterion-loop-service';
-import { postChannelEvent } from './channel-event-service';
+import { postCriterionNotice } from './sensor-bridge-service';
 import { getDb } from './database';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 
@@ -79,20 +79,13 @@ async function onArtefactChanged(w: ProjectWatch, absPath: string): Promise<void
     // Once per criterion, on the transition from met to stale — a second
     // edit to an already-stale file says nothing new.
     for (const c of nowStale) {
-      try {
-        postChannelEvent({
-          planUid,
-          itemUid,
-          eventType: 'need-decision',
-          payload: {
-            message: `"${c.text}" was approved, and ${rel} has changed since. Is it still met?`,
-          },
-          author: 'codetrellis',
-          authorType: 'system',
-        });
-      } catch (err) {
-        console.warn('[Artefacts] Could not post the stale notice:', err);
-      }
+      postCriterionNotice({
+        planUid,
+        itemUid,
+        criterionUid: c.uid,
+        reason: 'stale',
+        message: `"${c.text}" was approved, and ${rel} has changed since. Is it still met?`,
+      });
     }
   }
 }

@@ -167,6 +167,9 @@ export async function pushForChannelEvent(event: ChannelEvent): Promise<void> {
         eventId: event.uid,
         planUid: event.planUid,
         eventType: event.eventType,
+        // §12 — a notice about a criterion opens its approval on the phone.
+        ...(typeof event.payload?.criterionUid === 'string' ? { criterionUid: event.payload.criterionUid } : {}),
+        ...(event.itemUid ? { itemUid: event.itemUid } : {}),
       },
       sound: 'default',
       channelId: 'codetrellis-events',
@@ -220,6 +223,7 @@ export async function pushForInputRequest(
 // --- Internals ---------------------------------------------------------------
 
 function channelEventTitle(event: ChannelEvent): string {
+  if (typeof event.payload?.criterionUid === 'string') return 'Approval needed';
   const labels: Record<string, string> = {
     'stuck': 'Agent is stuck',
     'need-decision': 'Decision needed',

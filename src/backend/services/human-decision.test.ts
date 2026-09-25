@@ -64,3 +64,16 @@ test('the guard still guards: the issuer exists and the desktop transport uses i
   const service = fs.readFileSync(path.join(BACKEND, 'services', 'criteria-service.ts'), 'utf-8');
   assert.match(service, /isHumanDecision\(decision\)/, 'the service checks at runtime, not only by type');
 });
+
+test('a decision is issued in exactly two places: the desktop REST layer and the phone', () => {
+  const approvals = fs.readFileSync(path.join(BACKEND, 'services', 'mobile-approvals.ts'), 'utf-8');
+  assert.match(approvals, /issueHumanDecision\('phone'/, 'the peer layer is where a phone decision is issued');
+  assert.match(approvals, /getPairedDevice\(peer\.fingerprint\)/, 'from the DTLS identity, not the request');
+
+  const callers = walk(BACKEND)
+    .filter((f) => !f.endsWith(path.join('services', 'human-decision.ts')))
+    .filter((f) => /\bissueHumanDecision\(/.test(fs.readFileSync(f, 'utf-8')))
+    .map((f) => path.relative(BACKEND, f))
+    .sort();
+  assert.deepEqual(callers, ['server.ts', path.join('services', 'mobile-approvals.ts')]);
+});

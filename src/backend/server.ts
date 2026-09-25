@@ -2526,6 +2526,9 @@ app.post('/api/criteria/:uid/decide', async (req, res) => {
     const criterion = criteriaService.decideCriterion(
       req.params.uid, { decision: body.decision, note: body.note, anchor: body.anchor }, desktopDecision(),
     );
+    // The notices that asked for this decision are answered (§12).
+    const decidedPlan = planItemService.getItem(criterion.itemUid)?.planUid;
+    if (decidedPlan) _lazy___services_sensor_bridge_service.resolveCriterionNotices(decidedPlan, criterion.uid);
     criteriaChanged(criterion.itemUid);
     res.json(criterion);
   } catch (err) {
