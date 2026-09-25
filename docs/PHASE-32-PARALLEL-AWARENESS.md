@@ -87,6 +87,9 @@ This phase is mostly about **connecting pieces that are already here**.
 | Plan overlay | `services/plan-overlay-service.ts` | Draws plan intent onto file lines | Same mechanism can draw other workstreams onto lines |
 | Mobile activity | `mobile/app/(tabs)/activity.tsx` | Input requests, agents, channel events | No workstream or signal view |
 | Push | `services/push-notification-service.ts` | Push for stuck / need-decision, rate limited, IDs only | Reused for high-severity signals |
+| Review | `review_plan`, `get_pr_draft` (Phase 25, 31.7a) | A change checked against its plan; the PR body from the plan | One change at a time; knows nothing about other work in flight |
+| Criteria and sign-off | `criteria-service`, `check_criterion`, `run_checks` (Phase 31) | Whether an item's own work is done, and who signed | Same: per item |
+| Artefact watcher | `services/artefact-watcher.ts` | A changed material turns an approved criterion stale, and says so | Per item; a material shared by several tasks isn't followed across them |
 | Agent guides | `mcp/skill-guide.ts` (`multi-agent` flavour) | Guides served as MCP resources | Covers terminals and claims; says nothing about awareness |
 
 ## 4. The model
@@ -447,7 +450,147 @@ desk. Uses the existing snapshot + patch channel for state and the
    the payload, content fetched over the mesh, one push per kind per
    minute).
 
-## 9. Milestones
+## 9. Review: where parallel work lands
+
+Every workstream ends in a review, and that is where parallel work
+actually meets. Five agents can work in isolation all afternoon. The
+clashes happen when their branches merge, in whatever order they merge.
+If the developer's job is keeping AI output correct, review is where
+most of that job happens, so awareness has to carry through to it.
+
+### 9.1 What exists
+
+Phase 25 and Phase 31 built review for **one** change at a time:
+
+- `review_plan` checks a diff against the plan that asked for it. It
+  reports files no item claimed, and dependencies nobody planned.
+- `get_pr_draft` writes the PR body from the plan, including what was
+  agreed, the evidence and who signed off (31.7a). The agent opens the
+  PR itself; CodeTrellis holds no GitHub credentials.
+- Criteria, `check_criterion`, `run_checks` and sign-off (Phase 31) say
+  whether the item's own work is done.
+- Approve or send back from the phone (31.6b).
+
+None of these knows that any **other** work exists.
+
+### 9.2 What this phase adds
+
+**An incoming PR is just a branch workstream.** Once its branch is
+fetched, a PR from anyone, from a cloud agent or from one of the
+developer's own sessions, is a branch workstream (§4.1). It gets the same
+footprint and the same signals as local work, with no GitHub integration
+needed.
+
+**`review_plan` and `get_pr_draft` gain an "Other work in flight"
+section.** For the workstream under review:
+
+- open signals involving it, and what happened to each (fixed,
+  acknowledged with the agent's note, or marked intended by the
+  developer)
+- other open workstreams that depend on what this one changes, e.g.
+  "merging this changes `createInvoice`; `checkout-fix` calls it and
+  will need updating"
+
+A signal marked intended becomes a written-down decision in the PR
+body, so the reviewer sees *why* two tickets both touched the auth
+module instead of rediscovering it.
+
+**Ready for review means two things.** A workstream is ready when:
+
+1. its criteria pass (Phase 31, unchanged), and
+2. it has no open **high** awareness signals.
+
+This is how blocking works, if a project wants it: awareness never
+blocks a tool call, but a project can add "no open high signals" as a
+mechanical check on a criterion (`criterion-checks.ts`). Then it gates
+sign-off the same way a failing test would, through the existing loop,
+and stays opt-in.
+
+**The review queue.** A new view listing every workstream that is ready
+or nearly ready, with:
+
+- criteria status
+- blast radius (existing `diff-engine`)
+- unplanned dependencies (existing `review_plan`)
+- open signals
+- a **suggested merge order**: when workstream A changes something B
+  depends on, A goes first and B gets a heads-up to update, rather than
+  B merging first and A breaking it.
+
+The order is a suggestion with its reason shown, never enforced.
+
+**After a merge.** Signals whose cause merged resolve themselves. Every
+other workstream touching the same files gets a `stale-base` signal
+straight away, because main moved. That's the moment agents most need
+to be told, and it's already covered by §6.2.
+
+### 9.3 Agent tools
+
+| Tool | Capability | What it does |
+|---|---|---|
+| `get_review_queue` | read | The queue above, with suggested order and reasons |
+| `review_plan` (existing) | read | Gains the "Other work in flight" section |
+| `get_pr_draft` (existing) | read | Gains the same section in the PR body |
+
+An agent asked to review a PR can now say "this is fine by itself, but
+merge it after `billing-v2`, and here's why".
+
+### 9.4 Views
+
+- **Desktop:** a Review tab next to Awareness in `PlanPanel` showing the
+  queue. Opening a workstream shows its review with the new section.
+- **Mobile:** the queue as a list, the order and reasons, and the
+  existing approve / send back actions (31.6b).
+
+## 10. Work that isn't code: the Brief
+
+Phase 31 brought in work that isn't code: analysts working in Claude
+Desktop from Excel, Word, PDF and images, with criteria, evidence and
+sign-off, shown through the **Brief**. The parallel problem is the same
+there. One analyst may run several Claude Desktop sessions on several
+tasks at once, and those tasks often share source material.
+
+### 10.1 Same model, different nouns
+
+| Code | The Brief |
+|---|---|
+| Workstream = a branch and a folder | Workstream = a **task** (plan item) and the sessions working on it. Claude Desktop has no folder, so sessions bind through the task they call `get_brief` on |
+| Footprint = files and symbols changed | Footprint = **materials read** (with locators such as sheet and range, or page), and **outputs recorded** (`record_artefact`) |
+| The graph links callers to functions | Citations link outputs to the exact parts of materials they came from (Phase 31 §7.5) |
+
+### 10.2 Signals
+
+| Code signal | Brief equivalent | Example |
+|---|---|---|
+| `collision` | Two tasks write the same output file | "Tasks 'Q3 summary' and 'Board pack' both write `revenue.xlsx`" |
+| `contract` | A shared source material changed, and outputs in *other* tasks cite the part that changed | "`sales-2026.xlsx` changed. Two reports in two tasks cite `Summary!B2:F9`; one was already signed off" |
+| `stale-base` | A material changed after a task started using it | "The policy PDF was replaced after 'Compliance review' began" |
+| `drift` | A task reads materials outside its brief, or produces outputs it didn't record | "'Q3 summary' is reading `hr-salaries.xlsx`, which isn't in its brief" |
+| (new) `version-split` | Two tasks are working from different versions of the same material | "'Board pack' used yesterday's `sales-2026.xlsx`; 'Q3 summary' used today's" |
+| `decision` | Unchanged: channels | |
+
+`artefact-watcher.ts` already catches a changed file turning an approved
+criterion stale, **for one item**. This phase takes that across tasks:
+one changed material, every task affected, told once.
+
+Detecting that two reports state *different numbers* for the same thing
+would need reading the outputs' content. That's valuable but noisy, so
+it's out of scope here, like `duplicate` on the code side.
+
+### 10.3 Where it shows
+
+- **The Brief page** gets a plain-language "Other work affected" line
+  per task. Words, not graph: "The sales spreadsheet changed. This
+  report and the board pack both use it."
+- **Agents** get the same inline notice (§6.2) and `get_awareness`. The
+  `get_brief` result gains an "affected by other work" field, because a
+  Claude Desktop agent reads its brief first.
+- **The digest and the phone** are shared with the code side. One inbox,
+  whatever kind of work raised the signal.
+- **Sign-off packs** (31.7b) list signals that touched the task and how
+  each was resolved, the same way PR bodies do (§9.2).
+
+## 11. Milestones
 
 Each milestone is usable by itself.
 
@@ -505,10 +648,29 @@ until either side changes shape.
 *Done when:* a contract signal on the desktop reaches the phone as a
 push, and a reply from the phone reaches the agent as a `steer`.
 
-`duplicate` signals come after M4, once there's real data on how noisy
+**M5: Review.**
+- "Other work in flight" in `review_plan` and `get_pr_draft`
+- The review queue with suggested merge order
+- The optional "no open high signals" criterion check
+- Review tab, and the queue on mobile
+
+*Done when:* reviewing a branch that changes a function another open
+workstream calls says so in the review and the PR body, and the queue
+puts it first with that reason.
+
+**M6: The Brief.**
+- Task workstreams bound through `get_brief`
+- Material footprints from reads and citations
+- `contract`, `stale-base`, `drift` and `version-split` for materials
+- "Other work affected" on the Brief page and in `get_brief`
+
+*Done when:* replacing a spreadsheet that two tasks cite tells both
+tasks' agents on their next call, and shows once in the digest.
+
+`duplicate` signals come after M6, once there's real data on how noisy
 the other kinds are.
 
-## 10. Testing
+## 12. Testing
 
 - **Unit (`test:unit`)**: `computeSignals` with footprints as plain
   data: every kind, deduplication, cooldown, intended suppression,
@@ -528,7 +690,7 @@ the other kinds are.
   **zero** signals. Treat a regression here as seriously as a missed
   signal.
 
-## 11. Open questions
+## 13. Open questions
 
 1. **Worktrees of worktrees.** Should a project opened *from* a linked
    worktree see the same workstreams as one opened from the main
@@ -539,10 +701,8 @@ the other kinds are.
 3. **Merge base choice.** Merge base with the default branch, or with
    the branch the workstream was created from? Default branch is simpler
    and right for most setups; stacked branches would want the latter.
-4. **Blocking rules.** Principle 4 says advisory. If a developer wants a
-   `rule` signal to block, the natural place is `check_criterion` (Phase
-   31), so it fails a criterion instead of refusing a tool call. That
-   needs its own design.
+4. **Blocking rules.** Settled in §9.2: never at the tool call, and
+   opt-in as a criterion check.
 5. **Non-Claude session logs.** Codex, Cursor and others have no
    session-JSONL watcher, so their workstreams are built from MCP calls
    and file changes only. That's probably enough; confirm with real use.
