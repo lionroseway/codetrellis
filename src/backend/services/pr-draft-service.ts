@@ -5,6 +5,7 @@ import { listAllItems } from './plan-item-service';
 import { getPlanExternalRefs } from './external-intake-service';
 import { getExternalRefs } from './external-refs-service';
 import { reviewPlan, renderReviewMarkdown } from './plan-review-service';
+import { signoffRows, renderCriteriaTable, criteriaWarnings } from './signoff-rows';
 
 /**
  * PR drafts — Phase 25.
@@ -146,7 +147,14 @@ export function buildPrDraft(params: {
     lines.push('');
   }
 
-  const warnings: string[] = [];
+  // Phase 31 §13 — what was agreed, before what changed: every criterion,
+  // where it stands, the evidence it was judged on and who signed. A
+  // reviewer reads this before the diff because it says what "done" meant.
+  const rows = signoffRows(params.planUid);
+  const table = renderCriteriaTable(rows);
+  if (table) lines.push(table, '');
+
+  const warnings: string[] = criteriaWarnings(rows);
   const review = reviewPlan({
     planUid: params.planUid,
     projectPath: params.projectPath,
