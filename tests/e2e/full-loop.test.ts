@@ -28,6 +28,7 @@ test.describe.serial('Full lifecycle loop', () => {
   let h: Harness;
   let planUid: string;
   let taskUids: string[];
+  let actionUids: string[];
   let phaseUid: string;
 
   // ── Setup ──────────────────────────────────────────────────────
@@ -68,6 +69,33 @@ test.describe.serial('Full lifecycle loop', () => {
     const detail = await h.client.getPlan(planUid);
     expect(detail.tasks).toHaveLength(2);
     taskUids = detail.tasks.map((t) => t.uid);
+  });
+
+  // Deviation detection reads V2 Actions (plan_items, kind='action') since
+  // the V2 MCP migration, not the V1 tasks created above. So the same two
+  // pieces of work are also seeded as Actions with their file specs; the
+  // V1 tasks stay, because the REST phase / status / completion steps below
+  // still exercise that surface.
+  test('seed the same work as V2 Actions with file specs', async () => {
+    const seeder = await h.spawnAgent({ agentType: 'seeder-agent' });
+    const specs = [
+      { title: 'Refactor the validator module', path: 'packages/shared/src/validators.ts', action: 'modify' },
+      { title: 'Add a new string-utils module', path: 'packages/shared/src/string-utils.ts', action: 'create' },
+    ];
+    actionUids = [];
+    for (const spec of specs) {
+      const res = await seeder.callTool('add_item', {
+        plan_uid: planUid,
+        kind: 'action',
+        title: spec.title,
+        file_specs: [{ path: spec.path, action: spec.action }],
+      });
+      expect(res.isError).not.toBe(true);
+      const item = JSON.parse(res.text);
+      expect(item.uid).toBeTruthy();
+      expect(item.kind).toBe('action');
+      actionUids.push(item.uid);
+    }
   });
 
   // ── 2. Add a phase and a spec doc ──────────────────────────────
@@ -172,9 +200,10 @@ test.describe.serial('Full lifecycle loop', () => {
     const nextRes = await h.client.raw('GET', `/api/plans/${planUid}/next-task`);
     expect(nextRes.ok).toBe(true);
     const next = await nextRes.json();
-    // Should get one of our tasks
+    // With V2 Actions present, next-task offers one of them: plan_items is
+    // the model the workspace and the agent tools use.
     expect(next.uid).toBeTruthy();
-    expect(taskUids).toContain(next.uid);
+    expect(actionUids).toContain(next.uid);
   });
 
   test('agent edits the validator file and marks task 1 done', async () => {
@@ -243,19 +272,7 @@ test.describe.serial('Full lifecycle loop', () => {
     expect(Array.isArray(devs)).toBe(true);
   });
 
-  // SKIPPED — this asserts across the V1/V2 seam and cannot pass as written.
-  //
-  // The test seeds tasks through the REST plan API (h.client.createPlan with
-  // `affectedFiles`), which is the V1 task model. But Phase B of the V2 MCP
-  // migration moved `detect_deviations` onto plan_items (kind='action'), so it
-  // never sees those files and no `missing_file` deviation is produced. The
-  // earlier assertion in this test still passes — deviations ARE detected —
-  // it is specifically the missing_file type that cannot appear.
-  //
-  // The behaviour is worth testing; the fixture is what is wrong. Unskip once
-  // this file seeds V2 items via add_item / bulk_add_items rather than V1
-  // tasks. Tracked as part of the V1 sunset, not as a flake.
-  test.skip('write unexpected file → deviation detected after explicit detect', async () => {
+  test('write unexpected file → deviation detected after explicit detect', async () => {
     // Write a file NOT in any task's affected files
     const unexpectedPath = path.join(
       h.fixture.projectPath,
@@ -275,12 +292,19 @@ test.describe.serial('Full lifecycle loop', () => {
     });
     expect(doneRes.ok).toBe(true);
 
+    // And the V2 Actions, which are what detection reads: the validator
+    // work really happened; the string-utils file was never created.
+    const detector = await h.spawnAgent({ agentType: 'detector-agent' });
+    for (const uid of actionUids) {
+      const upd = await detector.callTool('update_item', { uid, status: 'done' });
+      expect(upd.isError).not.toBe(true);
+    }
+
     // Use the MCP detect_deviations tool (spawned agent is still connected)
     // We can also use the REST endpoint. Let's use REST for the detect
     // trigger and then read deviations.
     // Actually, detect_deviations is MCP-only. Let's spawn a second agent
     // to call it.
-    const detector = await h.spawnAgent({ agentType: 'detector-agent' });
     const detectResult = await detector.callTool('detect_deviations', {
       plan_uid: planUid,
     });
@@ -297,16 +321,7 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 7. Reconcile deviations ────────────────────────────────────
 
-  // SKIPPED — depends on the skipped test above.
-  //
-  // full-loop.test.ts is a SEQUENTIAL CHAIN: each test builds on state the
-  // previous one left behind. This step accepts the pending deviations that
-  // step 6 was supposed to create, so skipping step 6 leaves it with nothing
-  // to reconcile and it fails on an empty list rather than on its own logic.
-  //
-  // Unskip together with the one above, in the same change that reseeds this
-  // file onto V2 items. Skipping them separately just moves the failure.
-  test.skip('reconcile — accept the missing-file deviation', async () => {
+  test('reconcile — accept the missing-file deviation', async () => {
     const devsRes = await h.client.raw('GET', `/api/plans/${planUid}/deviations`);
     const devs = await devsRes.json();
     const pending = devs.filter(
@@ -372,18 +387,7 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 9. Plan completion ─────────────────────────────────────────
 
-  // SKIPPED — third and last link in the same broken chain.
-  //
-  // Task 2 only reaches `done` via the reconcile step above, which is skipped,
-  // so this asserts every task is done and finds one still in_progress. Its
-  // own logic is fine.
-  //
-  // The three skips in this file are ONE piece of work, not three: reseed
-  // full-loop onto V2 items (add_item / bulk_add_items) instead of V1 tasks,
-  // then unskip all three together. The remaining 17 tests in this file still
-  // pass and still cover real REST + plan behaviour, which is why the file is
-  // skipped surgically rather than wholesale.
-  test.skip('all tasks done — mark plan completed', async () => {
+  test('all tasks done — mark plan completed', async () => {
     // Verify both tasks are done
     const detail = await h.client.getPlan(planUid);
     for (const task of detail.tasks) {
@@ -480,12 +484,7 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 14. Final consistency checks ──────────────────────────────
 
-  // SKIPPED — terminal assertion of the same chain.
-  //
-  // Asserts the end state of a lifecycle that no longer completes, because
-  // three earlier steps are skipped. Fourth and last link; unskip with the
-  // other three when this file is reseeded onto V2 items.
-  test.skip('final plan state is consistent', async () => {
+  test('final plan state is consistent', async () => {
     const plan = await h.client.getPlan(planUid);
     expect(plan.status).toBe('completed');
     expect(plan.tasks.every((t) => t.status === 'done')).toBe(true);
