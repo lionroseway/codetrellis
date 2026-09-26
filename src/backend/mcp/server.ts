@@ -843,6 +843,8 @@ export interface McpConnectorSetup {
   config: Record<string, unknown>;
   /** `claude mcp add … -- <command>`, user-scoped. Contains no secret. */
   claudeCodeCommand: string;
+  /** When this config does not survive every restart and update, and why. */
+  caveat?: string;
 }
 
 export interface McpSetup {
@@ -889,6 +891,11 @@ function currentConnector(): McpConnectorSetup | null {
     cwd: process.cwd(),
     dataDir: getDataDir(),
     exists: (p) => fs.existsSync(p),
+    env: {
+      APPIMAGE: process.env.APPIMAGE,
+      APPDIR: process.env.APPDIR,
+      PORTABLE_EXECUTABLE_FILE: process.env.PORTABLE_EXECUTABLE_FILE,
+    },
   });
   if (!cmd) return null;
   return {
@@ -917,6 +924,7 @@ export function getMcpSetup(): McpSetup {
       'Connect yourself to the CodeTrellis MCP server running on this machine.',
       '',
       'Use the CodeTrellis connector, a local stdio MCP server. It reads its credential itself on every connect, so the config needs no token and keeps working when CodeTrellis restarts.',
+      ...(connector.caveat ? ['', connector.caveat] : []),
       '',
       `- Name: \`codetrellis\`. Transport: stdio. Command: \`${connector.command}\``,
       `- Arguments: ${connector.args.map((a) => `\`${a}\``).join(' ')}`,

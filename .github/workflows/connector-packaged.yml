@@ -1,0 +1,67 @@
+name: Connector in packaged builds
+
+# The agent connector's command is different in the Linux AppImage (it names
+# the .AppImage file, because the mount changes every launch) and in the
+# Windows portable .exe (it names the unpacked binary, with a caveat). Unit
+# tests pin the command's shape; only the built artifact on its own OS shows
+# that the runtime, AppRun, the portable launcher and Electron's Node mode
+# accept it. So this builds each one and runs the command for real — see
+# scripts/smoke-connector-packaged.ts.
+#
+# Nothing is uploaded or published: this is a check, not a release step.
+
+on:
+  pull_request:
+    paths:
+      - 'src/backend/mcp/connector/**'
+      - 'scripts/smoke-connector-packaged.ts'
+      - '.github/workflows/connector-packaged.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the build stamp's build number is `git rev-list --count HEAD`
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install deps
+        # As in build-installers.yml: the lockfile exactly, no install scripts.
+        run: npm ci --ignore-scripts
+      - name: Install FUSE 2
+        # The AppImage runtime needs libfuse2 to mount itself; ubuntu-latest
+        # ships only FUSE 3.
+        run: sudo apt-get update && sudo apt-get install -y libfuse2t64
+      - name: Build the AppImage (x64)
+        run: npm run package:linux -- AppImage --x64 --publish never
+      - name: Run the connector command it hands out
+        run: npx tsx scripts/smoke-connector-packaged.ts appimage out/make/*.AppImage
+
+  portable:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install deps
+        run: npm ci --ignore-scripts
+      - name: Build the installer + portable exe
+        # The same script build-installers.yml runs, so the portable launcher
+        # under test is the one that ships.
+        run: npm run package:win -- --publish never
+      - name: Run the connector command it hands out
+        shell: bash
+        run: npx tsx scripts/smoke-connector-packaged.ts portable out/make/*Portable*.exe

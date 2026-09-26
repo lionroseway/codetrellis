@@ -557,11 +557,18 @@ function McpSection({
 
       <Field label="Connect an agent">
         {setup?.connector ? (
-          <p className="text-[10.5px] text-foreground-muted leading-relaxed mb-2">
-            Your agent runs the CodeTrellis connector as a local command, and it finds this app by itself.
-            Nothing secret goes in the config, and it <strong>keeps working when CodeTrellis restarts</strong> or
-            moves to another port. Works with Claude Code, Claude Desktop, Cursor and any other MCP client.
-          </p>
+          <>
+            <p className="text-[10.5px] text-foreground-muted leading-relaxed mb-2">
+              Your agent runs the CodeTrellis connector as a local command, and it finds this app by itself.
+              Nothing secret goes in the config, and it <strong>keeps working when CodeTrellis restarts</strong> or
+              moves to another port. Works with Claude Code, Claude Desktop, Cursor and any other MCP client.
+            </p>
+            {setup.connector.caveat && (
+              <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.04] px-3 py-2 text-[10.5px] text-amber-100/90 leading-relaxed mb-2" data-testid="mcp-connector-caveat">
+                {setup.connector.caveat}
+              </div>
+            )}
+          </>
         ) : (
           <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.04] px-3 py-2 text-[10.5px] text-amber-100/90 leading-relaxed mb-2">
             The connector is not built in this checkout (<code className="font-mono">npm run build:connector</code>), so

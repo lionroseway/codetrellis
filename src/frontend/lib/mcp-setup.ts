@@ -26,6 +26,8 @@ export interface McpConnectorSetup {
   env: Record<string, string>;
   config: Record<string, unknown>;
   claudeCodeCommand: string;
+  /** Set when this config stops working on some restart or update — show it. */
+  caveat?: string;
 }
 
 export interface McpSetup {
