@@ -946,6 +946,12 @@ export function useWebSocket() {
             window.dispatchEvent(new CustomEvent('open-settings'));
           }
 
+          // --- An agent asked to delete plans (request_plan_deletion) ---
+          // The person confirms in PlanDeletionRequest; nothing is deleted here.
+          if (type === 'ui-confirm-plan-deletion') {
+            window.dispatchEvent(new CustomEvent('plan-deletion-request', { detail: payload }));
+          }
+
           // --- MCP guide modal (MCP open_mcp_guide tool) ---
           if (type === 'ui-open-mcp-guide') {
             window.dispatchEvent(new CustomEvent('open-mcp-guide'));

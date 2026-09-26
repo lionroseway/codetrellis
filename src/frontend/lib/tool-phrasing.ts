@@ -122,11 +122,18 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
     phrase: (a) => `Created plan ${subject(a, 'title')} from the ${String(a.template_id ?? 'a')} template`,
   },
   update_plan: { intent: 'write', mutating: true, phrase: (a) => `Updated plan ${subject(a, 'title', 'plan_uid')}` },
-  delete_plan: { intent: 'write', mutating: true, phrase: (a) => `Deleted plan ${subject(a, 'title', 'plan_uid')}` },
   set_active_plan: { intent: 'session', mutating: false, phrase: (a) => `Switched to plan ${subject(a, 'title', 'plan_uid')}` },
   export_plan_to_files: { intent: 'write', mutating: true, phrase: (a) => `Exported plan ${subject(a, 'plan_uid')} to disk` },
 
   // ── Asking the human ──────────────────────────────────────────────
+  request_plan_deletion: {
+    intent: 'ask',
+    mutating: false,
+    phrase: (a) => {
+      const n = Array.isArray(a.plan_uids) ? a.plan_uids.length : 1;
+      return n === 1 ? 'Asked you to confirm deleting a plan' : `Asked you to confirm deleting ${n} plans`;
+    },
+  },
   post_channel_event: {
     intent: 'ask',
     mutating: true,

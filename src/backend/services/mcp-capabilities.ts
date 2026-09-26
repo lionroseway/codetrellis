@@ -199,8 +199,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   get_plan: 'read',
   update_plan: 'write',
   list_plans: 'read',
-  delete_plan: 'write',
-  bulk_delete_plans: 'write',
+  // Asks the person; deletes nothing (plan deletion left MCP in Phase 32 §0.4c-3).
+  request_plan_deletion: 'write',
   export_plan_to_files: 'files',
   import_plan_from_files: 'files',
   discover_plan_files: 'files',

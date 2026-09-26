@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4c-1 Plans (0.4c is split: 0.4c-1 plans, 0.4c-2 items) |
-| **Status** | Full harness on 0.4c-1: 453 passed, 1 skipped, 0 retries |
-| **Next action** | 0.4c-1 PR: merge when CI is green; then 0.4c-3 (plan deletion by confirmation), then 0.4c-2 (items + V1 retirement) |
+| **Stage / step** | 0.4c-3 Plan deletion only by human confirmation |
+| **Status** | Full harness on 0.4c-3: 456 passed, 1 skipped, 0 retries |
+| **Next action** | 0.4c-3 PR: merge when CI is green; then 0.4c-2 (items + V1 retirement) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4c1-plans` |
+| **Branch** | `feat/phase-32-0.4c3-plan-deletion` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -36,7 +36,7 @@
 - [x] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic (#115)
 - [x] 0.4a Project and scan (#116)
 - [x] 0.4b Graph (#117)
-- [ ] 0.4c-1 Plans
+- [x] 0.4c-1 Plans (#118)
 - [ ] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete)
 - [ ] 0.4c-2 Items, incl. retiring the V1 task API
 - [ ] 0.4d Criteria and sign-off
@@ -139,6 +139,24 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4c-3 — plan deletion is a person's decision
+- **Removed from MCP:** `delete_plan`, `bulk_delete_plans` (and their
+  capability rows, guide entries and timeline phrasing).
+- **Added:** `request_plan_deletion(plan_uids, reason)`. It refuses
+  unknown, archived and unopened-project plans, broadcasts
+  `ui-confirm-plan-deletion`, and deletes nothing.
+- **In the app:** `PlanDeletionRequest` shows the plans, the agent's
+  reason and what deletion does; Delete stays disabled until the person
+  types the plan's name (or "delete N plans"). "Keep it" leaves
+  everything as it was. The person's own delete buttons (Plans panel,
+  phone) are unchanged.
+- **Tests:** `plan-tools` (the tools are gone; the request asks and
+  deletes nothing; the three refusals; deleting a renamed plan through
+  the app's path still removes its directory) and browser
+  `e2e/plan/plan-deletion-request.spec.ts` (disabled until typed, wrong
+  text stays disabled, correct text deletes, "Keep it" keeps). Serial,
+  because the request reaches every open page.
 
 ### 2026-09-26: browser suite — how to run a targeted check fairly
 - A targeted run (`npx playwright test e2e/plan e2e/inspector`) makes the
