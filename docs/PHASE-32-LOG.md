@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4c-3 Plan deletion only by human confirmation |
-| **Status** | Started. #118 (0.4c-1) merged |
-| **Next action** | Full harness, PR and merge; then 0.4c-2 (items + V1 retirement) |
+| **Status** | Full harness on 0.4c-3: 456 passed, 1 skipped, 0 retries |
+| **Next action** | 0.4c-3 PR: merge when CI is green; then 0.4c-2 (items + V1 retirement) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4c3-plan-deletion` |
 | **Last updated** | 2026-09-26 |
