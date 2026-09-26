@@ -3088,6 +3088,7 @@ app.get('/api/plans/:uid/external-sync', (req, res) => {
 });
 
 app.get('/api/plans/:uid/budget/check', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(budgetService.checkBudget(req.params.uid));
 });
 
@@ -3487,6 +3488,12 @@ app.post('/api/sessions/:sessionId/assign-plan', (req, res) => {
   const { sessionId } = req.params;
   const { planUid } = req.body;
   if (!planUid) { res.status(400).json({ error: 'planUid required' }); return; }
+  // Both checked: an unknown one was accepted and broadcast (bug 27).
+  if (!planService.getPlan(planUid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  if (!sessionService.getActiveSessions().some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ error: 'No active agent session with that id' });
+    return;
+  }
   sessionService.setActivePlan(sessionId, planUid);
   broadcast('plan-assigned', { sessionId, planUid });
   broadcast('mcp-session-changed', { reason: 'assign_plan', sessionId, planUid });

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4f Channels and presence |
-| **Status** | 4 routes and 4 tools tested; bugs 25 (presence waits stranded agents) and 26 (watcher missed files in a new folder) fixed. Full harness next |
-| **Next action** | Full harness on 0.4f; PR; merge when green; then 0.4g (agents and MCP) |
+| **Stage / step** | 0.4g Agents and MCP |
+| **Status** | 2 routes and 20 tools tested, shape-only tests strengthened; bugs 27 and 28 fixed. Full harness next |
+| **Next action** | Full harness on 0.4g; PR; merge when green; then 0.4h (drift, governance, review) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4f-channels` |
+| **Branch** | `feat/phase-32-0.4g-agents` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -41,7 +41,7 @@
 - [x] 0.4c-2 Items, incl. retiring the V1 task API (#120)
 - [x] 0.4d Criteria and sign-off (#121)
 - [x] 0.4e Brief and viewer (#122)
-- [ ] 0.4f Channels and presence
+- [x] 0.4f Channels and presence (#123)
 - [ ] 0.4g Agents and MCP
 - [ ] 0.4h Drift, governance, review
 - [ ] 0.4i Terminals and audio
@@ -141,6 +141,46 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4g — agents and MCP (bugs 27, 28)
+
+`tests/e2e/agent-ui-tools.test.ts` covers the 2 untested routes and the 20
+untested tools in domain g: every UI tool's broadcast, the budget tools,
+logs, the app guide, the doc-check sensor, and the capture and settings
+tools once granted. `e2e/agent/mcp-ui-tools.spec.ts` (serial) checks the
+window follows them: the plan opens, the item is selected and
+back/forward step through the selection, the activity and history drawers
+and the settings and guide dialogs open. The Activity toggle got
+`aria-pressed` and the selected tree row `aria-current` so a test (and a
+screen reader) can tell.
+
+**Bug 27, uids taken on trust.** Five UI tools, the three budget tools and
+`POST /api/sessions/:id/assign-plan` never checked the plan, item, file or
+session existed. A wrong uid was reported to the agent as shown while the
+window said "Could not load plan"; `set_budget` stored a ceiling for no
+plan. All refuse now, and nothing reaches the window.
+
+**Bug 28, the log file.** Naming the log path rotated the logger, so in a
+web or dev build it created an empty file and opened a write stream
+nothing used, and `get_logs` said "(no log entries found)". Now the path
+is only named, and `get_logs` says file logging is the desktop app's. A
+unit test (`logger-path.test.ts`) fails without the fix.
+
+`setup_agent_permissions` now reads and writes through the confined-file
+helper (Phase 19 rule); a harness test covers it.
+
+Strengthened four shape-only tests (`/api/agent/status`,
+`/api/mcp/status`, assign-plan). Untested: 21 REST routes, 13 MCP tools,
+all in later steps. Domain g's behaviour column is complete.
+
+Housekeeping: a scratch probe (`.probe.mjs`) from the bug-26 investigation
+was committed by mistake in #123; removed here. It was outside `src/`, so
+neither lint nor any test saw it. Commits now stage named paths, not
+`git add -A`.
+
+**For the owner:** an agent can raise, clear or exempt the budget ceiling
+it is asked to respect (`set_budget` is `budget · write`). Left as is;
+raised in chat, like plan deletion was.
+
 ### 2026-09-26: 0.4f — presence waits and the watcher flake (bugs 25, 26)
 
 `tests/e2e/presence-channels.test.ts` covers the four untested routes
@@ -178,6 +218,9 @@ same mechanism only if the machine was loaded enough to delay the attach.
 
 Untested: 23 REST routes, 33 MCP tools. The 7 mobile RPC methods in
 domain f stay with 0.4j.
+
+Full harness at `8d62634`: 489 passed, 1 skipped, 0 retries. CI green;
+merged as #123.
 
 ### 2026-09-26: 0.4e — an agent could cite a CSV cell it could not read (bug 24)
 

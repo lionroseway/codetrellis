@@ -53,6 +53,7 @@ import {
   recordArtefact,
   refreshArtefactHashes,
   listArtefacts,
+  getArtefact,
   ArtefactError,
 } from '../services/artefact-service';
 import { startArtefactWatching } from '../services/artefact-watcher';
@@ -282,7 +283,7 @@ function buildToolDeps(sessionId: string): ToolDeps {
     // An agent's view of criteria only — see ToolDeps.criteriaService.
     criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, CriterionError },
     criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun },
-    artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, ArtefactError },
+    artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, getArtefact, ArtefactError },
     startArtefactWatching,
     briefService: { getBrief, listMaterials },
     readMaterial,

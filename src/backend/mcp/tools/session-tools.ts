@@ -3,11 +3,11 @@
  */
 
 import { z } from 'zod';
-import fs from 'node:fs';
 import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta } from '../helpers';
+import { ConfinementError, readTextWithin, writeFileWithin } from '../../services/confined-fs';
 
 /**
  * The recent-projects tools update a row by path. With no row the UPDATE
@@ -21,6 +21,16 @@ function notInRecents(projectPath: string) {
 }
 
 export function register(server: McpServer, deps: ToolDeps): void {
+  // A uid an agent passes to a UI tool is checked before anything is sent to
+  // the window: it was not, so a wrong one was reported to the agent as
+  // shown while the window said "Could not load plan" (Phase 32 §0.4g, bug 27).
+  const notFound = (what: string, uid: string) => ({
+    content: [{ type: 'text' as const, text: `${what} ${uid} not found.` }],
+    isError: true,
+  });
+  const missingPlan = (uid: string | undefined) => (uid && !deps.planService.getPlan(uid) ? notFound('Plan', uid) : null);
+  const missingItem = (uid: string | undefined) => (uid && !deps.planItemService.getItem(uid) ? notFound('Item', uid) : null);
+
   server.registerTool(
     'register_session',
     {
@@ -70,6 +80,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: { plan_uid: z.string() },
     },
     async ({ plan_uid }) => {
+      const refused = missingPlan(plan_uid);
+      if (refused) return refused;
       const sessionId = deps.sessionId;
       if (sessionId) {
         deps.sessionService.setActivePlan(sessionId, plan_uid);
@@ -119,6 +131,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (target === 'artefact' && !attachment_uid) {
         return { content: [{ type: 'text' as const, text: 'target "artefact" needs attachment_uid' }], isError: true };
       }
+      const refused = missingPlan(plan_uid) ?? missingItem(item_uid)
+        ?? (attachment_uid && !deps.artefactService.getArtefact(attachment_uid) ? notFound('Recorded file', attachment_uid) : null);
+      if (refused) return refused;
       deps.broadcast('ui-navigate', {
         target, planUid: plan_uid, filePath: file_path, line, itemUid: item_uid, attachmentUid: attachment_uid, locator: locator ?? null,
       });
@@ -136,6 +151,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, split_view }) => {
+      const refused = missingPlan(plan_uid);
+      if (refused) return refused;
       deps.broadcast('ui-navigate', { target: split_view ? 'split' : 'plan', planUid: plan_uid });
       return { content: [{ type: 'text' as const, text: `Opened plan ${plan_uid}${split_view ? ' in split view' : ''}` }] };
     },
@@ -442,6 +459,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ item_uid }) => {
+      const refused = missingItem(item_uid);
+      if (refused) return refused;
       deps.broadcast('ui-open-history-drawer', { itemUid: item_uid });
       return { content: [{ type: 'text' as const, text: `Opened history drawer for item ${item_uid}` }] };
     },
@@ -486,24 +505,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path: projectPath }) => {
-      const claudeDir = path.join(projectPath, '.claude');
-      const settingsPath = path.join(claudeDir, 'settings.local.json');
+      // Read and written through the confined-file helper, inside the
+      // project: a `.claude` that is a link, or a settings file that is one,
+      // is refused rather than followed (CLAUDE.md security rules).
+      const rel = path.join('.claude', 'settings.local.json');
+      let settingsPath = path.join(projectPath, rel);
 
       try {
-        // Ensure .claude/ directory exists
-        if (!fs.existsSync(claudeDir)) {
-          fs.mkdirSync(claudeDir, { recursive: true });
-        }
-
         // Read existing settings if any — merge rather than clobber
         let settings: any = {};
-        if (fs.existsSync(settingsPath)) {
-          try {
-            settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-          } catch {
-            // Malformed JSON — overwrite
-          }
+        try {
+          settings = JSON.parse(readTextWithin(projectPath, rel, 'agent settings'));
+        } catch (err) {
+          if (err instanceof ConfinementError) throw err;
+          // Missing or malformed JSON — start fresh
         }
+        if (!settings || typeof settings !== 'object' || Array.isArray(settings)) settings = {};
 
         // Ensure permissions.allow exists and contains the wildcard
         if (!settings.permissions) settings.permissions = {};
@@ -518,7 +535,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           settings.permissions.allow.push(wildcard);
         }
 
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+        settingsPath = writeFileWithin(projectPath, rel, JSON.stringify(settings, null, 2) + '\n', 'agent settings');
 
         return {
           content: [{

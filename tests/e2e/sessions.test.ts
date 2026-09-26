@@ -71,15 +71,17 @@ test.describe.serial('Sessions API', () => {
     expect(res.ok).toBe(true);
     const body = await res.json();
     expect(body.ok).toBe(true);
+    // The session now carries the plan (what Connected Agents shows).
+    const after = (await (await h.client.raw('GET', '/api/sessions')).json()) as Array<{ sessionId: string; activePlanUid: string | null }>;
+    expect(after.find((s) => s.sessionId === ours.sessionId)?.activePlanUid).toBe(planUid);
   });
 
   test('GET /api/mcp/status returns server info', async () => {
     const res = await h.client.raw('GET', '/api/mcp/status');
     expect(res.ok).toBe(true);
     const status = await res.json();
-    expect(status).toBeTruthy();
-    expect(typeof status).toBe('object');
-    // Should have port info at minimum
-    expect(status).toHaveProperty('port');
+    // Running on the port this backend's agents connect to, with ours counted.
+    expect(status).toEqual({ running: true, port: h.backend.mcpPort, connectedAgents: expect.any(Number) });
+    expect(status.connectedAgents).toBeGreaterThanOrEqual(1);
   });
 });

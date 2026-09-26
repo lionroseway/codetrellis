@@ -80,7 +80,7 @@ export interface ToolDeps {
   /** Phase 31 §4.2 — record a file that matters; hashes kept current. */
   artefactService: Pick<
     typeof import('../services/artefact-service'),
-    'recordArtefact' | 'refreshArtefactHashes' | 'listArtefacts' | 'ArtefactError'
+    'recordArtefact' | 'refreshArtefactHashes' | 'listArtefacts' | 'getArtefact' | 'ArtefactError'
   >;
   startArtefactWatching: typeof import('../services/artefact-watcher').startArtefactWatching;
   /** Phase 31 §5 — the Brief, and reading a material through us (§5.1). */

@@ -101,6 +101,13 @@ function summarise(planUid: string) {
   };
 }
 
+/** A budget belongs to a plan: none is read or stored for a uid that is not one (bug 27). */
+function missingPlan(deps: ToolDeps, planUid: string) {
+  return deps.planService.getPlan(planUid)
+    ? null
+    : { content: [{ type: 'text' as const, text: `Plan ${planUid} not found.` }], isError: true };
+}
+
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- get_budget ---
 
@@ -117,9 +124,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         plan_uid: z.string().describe('UID of the plan.'),
       },
     },
-    async ({ plan_uid }) => ({
+    async ({ plan_uid }) => missingPlan(deps, plan_uid) ?? {
       content: [{ type: 'text' as const, text: JSON.stringify(summarise(plan_uid), null, 2) }],
-    }),
+    },
   );
 
   // --- set_budget ---
@@ -142,6 +149,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, minutes, cost_usd, exempt }) => {
+      const refused = missingPlan(deps, plan_uid);
+      if (refused) return refused;
       const budget = setBudget({ planUid: plan_uid, minutes, costUsd: cost_usd, exempt });
       const n = deps.broadcast('plan-budget-changed', { planUid: plan_uid, budget });
       return {
@@ -167,6 +176,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid }) => {
+      const refused = missingPlan(deps, plan_uid);
+      if (refused) return refused;
       const result = checkBudget(plan_uid);
       return {
         content: [{

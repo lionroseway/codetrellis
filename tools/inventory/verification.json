@@ -481,5 +481,107 @@
   },
   "rest:POST /api/screenshot-response": {
     "behaviour": "✓ 0.4f: the renderer's answer resolves the waiting request tool by nonce (graph-tools)"
+  },
+  "rest:GET /api/plans/:uid/budget/check": {
+    "behaviour": "✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27"
+  },
+  "rest:GET /api/sensors/doc-check": {
+    "behaviour": "✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l"
+  },
+  "rest:POST /api/sessions/:sessionId/assign-plan": {
+    "behaviour": "✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27"
+  },
+  "mcp:check_budget": {
+    "behaviour": "✓ 0.4g: none → ok → exempt states, reason in words; unknown plan refused (agent-ui-tools); bug 27"
+  },
+  "mcp:get_budget": {
+    "behaviour": "✓ 0.4g: ceiling, spent, forecast, notes; unknown plan refused (agent-ui-tools)"
+  },
+  "mcp:set_budget": {
+    "behaviour": "✓ 0.4g: set, exempt, clear one dimension; broadcast; nothing stored for an unknown plan (agent-ui-tools)"
+  },
+  "mcp:clipboard_write": {
+    "behaviour": "✓ 0.4g: sends the text to the window (agent-ui-tools)"
+  },
+  "mcp:clipboard_read": {
+    "behaviour": "✓ 0.4g: refused without capture; the window's answer returned (agent-ui-tools)"
+  },
+  "mcp:screenshot": {
+    "behaviour": "✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools)"
+  },
+  "mcp:get_app_guide": {
+    "behaviour": "✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools)"
+  },
+  "mcp:get_log_path": {
+    "behaviour": "✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28"
+  },
+  "mcp:get_logs": {
+    "behaviour": "✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28"
+  },
+  "mcp:navigate_item_back": {
+    "behaviour": "✓ 0.4g: selection steps back (agent-ui-tools, mcp-ui-tools.spec)"
+  },
+  "mcp:navigate_item_forward": {
+    "behaviour": "✓ 0.4g: and forward (agent-ui-tools, mcp-ui-tools.spec)"
+  },
+  "mcp:navigate_to": {
+    "behaviour": "✓ 0.4g: every target's payload; unknown plan/item/file refused (agent-ui-tools); bug 27"
+  },
+  "mcp:open_history_drawer": {
+    "behaviour": "✓ 0.4g: drawer opens on the item; unknown item refused (agent-ui-tools, mcp-ui-tools.spec); bug 27"
+  },
+  "mcp:open_mcp_guide": {
+    "behaviour": "✓ 0.4g: guide dialog opens (agent-ui-tools, mcp-ui-tools.spec)"
+  },
+  "mcp:open_plan": {
+    "behaviour": "✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27"
+  },
+  "mcp:open_settings": {
+    "behaviour": "✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec)"
+  },
+  "mcp:refresh_ui": {
+    "behaviour": "✓ 0.4g: sends ui-refresh (agent-ui-tools)"
+  },
+  "mcp:select_item": {
+    "behaviour": "✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27"
+  },
+  "mcp:set_active_plan": {
+    "behaviour": "✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27"
+  },
+  "mcp:set_baseline": {
+    "behaviour": "✓ 0.4g: sets and clears (agent-ui-tools)"
+  },
+  "mcp:setup_agent_permissions": {
+    "behaviour": "✓ 0.4g: refused without settings; merges the wildcard; inside an opened project only, never through a link (agent-ui-tools)"
+  },
+  "mcp:toggle_activity_drawer": {
+    "behaviour": "✓ 0.4g: drawer toggles both ways (agent-ui-tools, mcp-ui-tools.spec)"
+  },
+  "mcp:toggle_panel": {
+    "behaviour": "✓ 0.4g: sends the panel (agent-ui-tools)"
+  },
+  "rest:GET /api/agent/status": {
+    "behaviour": "✓ 0.4g: the session watcher's state, nothing more (misc-endpoints)"
+  },
+  "rest:GET /api/mcp/config": {
+    "behaviour": "✓ 0.4g: a copied config carries the token and connects (misc-endpoints)"
+  },
+  "rest:GET /api/mcp/setup": {
+    "behaviour": "✓ 0.4g: the agent prompt names the token file and never carries the token (misc-endpoints, mcp-connector)"
+  },
+  "rest:GET /api/mcp/status": {
+    "behaviour": "✓ 0.4g: running on the agents' port with connected agents counted (sessions)"
+  },
+  "rest:GET /api/sessions": {
+    "behaviour": "✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools)"
+  },
+  "mcp:register_session": {
+    "behaviour": "✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers)"
+  },
+  "mcp:get_settings": {
+    "behaviour": "✓ 0.4g: reads back what update_settings wrote; no secrets in settings (cdev-phase5)"
+  },
+  "mcp:update_settings": {
+    "behaviour": "✓ 0.4g: persists first-run and data fields (cdev-phase5)"
   }
 }

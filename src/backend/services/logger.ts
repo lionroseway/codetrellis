@@ -96,6 +96,11 @@ export function installFileLogger(): void {
  * the logs directory if needed.
  */
 export function getCurrentLogPath(): string {
+  // Without the file logger (web and dev builds, the harness) this only
+  // names the path. It used to rotate, which created an empty log file and
+  // opened a write stream nothing ever wrote to, so every reader of the path
+  // saw a log file that was not being written (Phase 32 §0.4g).
+  if (!installed) return path.join(logDir(), `${ymd(new Date())}.log`);
   rotateIfNeeded();
   return currentLogPath || path.join(logDir(), `${ymd(new Date())}.log`);
 }
