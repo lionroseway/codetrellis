@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4c-2 Items, incl. retiring the V1 task API |
-| **Status** | Started. #119 (0.4c-3) merged |
-| **Next action** | The items surface: versions, restore, move, comments, attachments, artefacts, refs, summary, suggest_specs |
+| **Status** | Full harness on 0.4c-2: 464 passed, 1 skipped, 0 retries |
+| **Next action** | 0.4c-2 PR: merge when CI is green; then 0.4d (criteria and sign-off) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4c2-items` |
 | **Last updated** | 2026-09-26 |
