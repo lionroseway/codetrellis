@@ -14,7 +14,7 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 227 | 213 | 69 | 69 | 36 | 0 |
+| REST routes | 227 | 213 | 58 | 58 | 36 | 0 |
 | MCP tools | 186 | 148 | 57 | 45 | 27 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 98 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 70 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 71 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -90,7 +90,7 @@ is proof of a gap.
 | c | `DELETE /api/items/:uid` |  | ✗ none | 5 |  |  |  |
 | c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `DELETE /api/plans/:uid` |  | 1 | 10 |  |  |  |
+| c | `DELETE /api/plans/:uid` |  | 1 | 11 |  |  |  |
 | c | `DELETE /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/attachments/:uid/file` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/comments` |  | ✗ none | ✗ none |  |  |  |
@@ -107,36 +107,36 @@ is proof of a gap.
 | c | `GET /api/pantry/resolve` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-docs/:docUid/versions` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plan-history/:planSlug` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plan-history/:planSlug` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/at/:commitHash` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 37 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 38 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 12 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 13 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid` |  | 1 | 10 |  |  |  |
+| c | `GET /api/plans/:uid` |  | 1 | 11 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/changes` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
+| c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/deviations` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans/:uid/docs` |  | ✗ none | 4 |  |  |  |
+| c | `GET /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
 | c | `GET /api/plans/:uid/docs/by-type/:docType` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/docs/search` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plans/:uid/docs/search` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/external-sync` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/file-status` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/next-task` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 4 |  |  |  |
-| c | `GET /api/plans/:uid/projection` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plans/:uid/projection` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/refs` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/review` |  | ✗ none | 5 |  |  |  |
 | c | `GET /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/:uid/versions` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/discover` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/plans/reconcile` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plans/discover` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/reconcile` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/stitched` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/tasks/:taskUid/attachments` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/tasks/:taskUid/comments` |  | ✗ none | ✗ none |  |  |  |
@@ -158,13 +158,13 @@ is proof of a gap.
 | c | `POST /api/items/:uid/move` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/plans` |  | ✗ none | 37 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 38 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 12 |  |  |  |
-| c | `POST /api/plans/:uid/apply-template` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 13 |  |  |  |
+| c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/docs` |  | ✗ none | 4 |  |  |  |
-| c | `POST /api/plans/:uid/export` |  | ✗ none | 7 |  |  |  |
+| c | `POST /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
+| c | `POST /api/plans/:uid/export` |  | ✗ none | 8 |  |  |  |
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 1 |  |  |  |
@@ -172,11 +172,11 @@ is proof of a gap.
 | c | `POST /api/plans/:uid/tasks/:taskUid/claim` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/tasks/:taskUid/code-reference` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/:uid/unlink` |  | ✗ none | 3 |  |  |  |
-| c | `POST /api/plans/bulk-delete` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/plans/bulk-delete` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/from-template` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/plans/import` |  | 1 | 2 |  |  |  |
-| c | `POST /api/plans/import-external` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/plans/prune-orphans` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/plans/import-external` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/tasks/:taskUid/attachments` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/tasks/:taskUid/blocked` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/tasks/:taskUid/comments` |  | ✗ none | ✗ none |  |  |  |
@@ -185,7 +185,7 @@ is proof of a gap.
 | c | `PUT /api/items/:uid` |  | ✗ none | 5 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/plans/:uid` |  | 1 | 10 |  |  |  |
+| c | `PUT /api/plans/:uid` |  | 1 | 11 |  |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plans/:uid/tasks/:taskUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |

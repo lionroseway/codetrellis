@@ -1822,15 +1822,19 @@ app.get('/api/plans/stitched', (req, res) => {
   }
 });
 
-// Prune orphaned plan directories from disk
+// Prune orphaned plan directories of an opened project. The project is
+// confined like every other root; the body only SELECTS among that
+// project's current orphans (see pruneOrphanedDirs).
 app.post('/api/plans/prune-orphans', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
   const { dirPaths } = req.body || {};
   if (!Array.isArray(dirPaths) || dirPaths.length === 0) {
-    res.status(400).json({ error: 'dirPaths must be a non-empty array of absolute paths' });
+    res.status(400).json({ error: 'dirPaths must be a non-empty array of orphaned plan directories' });
     return;
   }
-  const removed = pruneOrphanedDirs(dirPaths);
-  res.json({ ok: true, removed });
+  const { removed, skipped } = pruneOrphanedDirs(projectRoot, dirPaths);
+  res.json({ ok: true, removed, skipped });
 });
 
 // Get plan

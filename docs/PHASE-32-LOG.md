@@ -134,6 +134,19 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4c-1 — plan REST routes
+- **`tests/e2e/plan-rest.test.ts` (9):** discover, reconcile and prune
+  (the Plans panel's disk hygiene), bulk delete, apply-template,
+  import-external from an issue checklist, doc search, projection and a
+  single proposed change, and plan history through real git commits.
+- **prune-orphans now takes the project** (`?project=`, confined like
+  every root) and removes only directories that are that project's
+  orphans at the moment of the call, re-checked just before removal;
+  anything else is skipped and reported. The Plans panel passes the
+  project. `discoverPlanDirs` uses lstat, so a link in the plans dir is
+  not a plan directory. (Rationale is with the owner, per CLAUDE.md.)
+- 11 routes leave `untested.json` (now 58 routes, 45 tools, 47 RPC).
+
 ### 2026-09-26: 0.4c-1 — renaming a plan disconnected it from the repo (bug 22)
 - **`tests/e2e/plan-tools.test.ts` (10):** the ten plan tools with no
   test: update, delete, bulk delete, copy as prompt, list / create-from /
