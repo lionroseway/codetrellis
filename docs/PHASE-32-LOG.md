@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4a Project and scan |
-| **Status** | Started. #115 merged (0.3b, 0.6a, 0.3 done) |
+| **Status** | Fixes and tests committed; full harness running on `2ec3da5` |
 | **Next action** | Full harness run on the 0.4a branch, then open the 0.4a PR |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4a-project-scan` |
