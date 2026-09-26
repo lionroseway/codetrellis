@@ -8,6 +8,9 @@ Status: **plan**. Nothing here is built yet.
 
 Companion docs:
 - [PHASE-32-JOURNEYS.md](PHASE-32-JOURNEYS.md): the stories to discuss.
+- [PHASE-32-OBSERVABILITY.md](PHASE-32-OBSERVABILITY.md): how it all
+  looks. The screen, replay and fast-forward, the stack, collision zones,
+  conferring, grounding and breakpoints. Build track B.
 - [PHASE-32-CURRENT-STATE.md](PHASE-32-CURRENT-STATE.md): what the code
   does today, checked line by line, including the bugs found on the way.
   Every "exists" or "missing" claim below comes from there.

@@ -533,3 +533,231 @@ make parallel work worse now.
 
 Bugs 1–3 are M0 prerequisites in the plan. Bugs 4–7 can land on their
 own at any time.
+
+---
+
+# Observability areas
+
+These sections back [PHASE-32-OBSERVABILITY.md](PHASE-32-OBSERVABILITY.md).
+
+## 18. Replay and history
+
+**`playback-service.ts`** (Phase 26 layer C).
+- It builds discrete frames from commits and stored checkpoints, plus a
+  final `live` frame (`:82-122`).
+- Each frame has file counts and up to 200 changed paths (`:138-155`).
+- Edge counts are `null` whenever a commit is involved, because commits
+  carry files only (`:145-149`).
+- It refuses to interpolate (`:20-24`).
+- Served at `GET /api/playback` (`server.ts:3103-3117`).
+
+**`PlaybackBar.tsx`.** Step, play/pause, a slider and 0.5–4× speed; it
+stops at the end (`:42-74,132-150`).
+- It is mounted only in `CodeWorkspace.tsx`, where the frame becomes the
+  "before" side of **one file's diff** (`:128-149,197-213`).
+- No graph replay and no multi-agent timeline exist.
+
+**Phase 25 play-forward** (interpolated animation, `PHASE-25…md:147-168`)
+is recorded as not built (`:176-179`), and contradicts the later "never
+interpolate" rule.
+
+**`trellis_snapshots`** (`db-schema.ts:193-205`).
+- Stores per-file hash, language and symbol count, plus edges with
+  specifiers (`trellis-service.ts:57-80`).
+- It has **no commit SHA and no session**.
+- Snapshots are written only on plan approval (`server.ts:1929-1937`),
+  the Checkpoint button (`server.ts:3612-3620`, `MainCanvas.tsx:217-240`),
+  and `capture_checkpoint` (`drift-tools.ts:229-243`).
+- The scan baseline is **in memory only** (`diff-engine.ts:44-58`),
+  re-pinned on every scan and lost on restart.
+
+**What is saved over time, and what isn't.**
+- **Saved:**
+  - `plan_events` (structural changes only)
+  - `channel_events`
+  - plan and item versions
+  - criterion evidence and sign-offs
+  - `check_runs`
+  - per-turn `item_time_entries`
+  - deviations
+  - comments
+- **Not saved:**
+  - MCP tool calls, which are broadcast only (`mcp/server.ts:195-201`)
+  - Claude Code watcher events, also broadcast only
+    (`claude-code-watcher.ts:229,263`)
+  - the frontend agent store, which is in memory and lost on reload
+    (`agent-store.ts:26-30`)
+
+**For Phase 32:** replay needs a persisted `agent_events` table, and
+automatic snapshots at turn ends, status changes and commits, each
+recording SHA and session. `PlaybackBar` is reused as-is.
+
+## 19. Plans, tasks and tickets
+
+**How plans render.**
+- `PlanListView` is a flat list (`:524-575`).
+- `PlanItemTree` is one plan's tree (`:241,341`).
+- `PlanItemCanvas` is one item at a time.
+
+**Dependencies are never drawn.** They feed only the blocked count
+(`NextUpStrip.tsx:37`) and a cycle check (`PlanReadinessRing.tsx:71-79`).
+There's no kanban, gantt or dependency graph.
+
+**Phases.** `plan_phases` is legacy; the store fetches it
+(`plan-store.ts:307`) but nothing renders it.
+
+**On the graph**, only the active plan's projection shows
+(`projection-service.ts:10`, `MainCanvas.tsx:603-613`).
+
+**Cross-plan dependencies.** Item `dependencies` is an unchecked uid
+list (`plan-item-service.ts:514-515`). `getNextItem` looks only within
+the plan (`:1137-1159`), so a dependency on another plan's item never
+counts as done. `claimItem` ignores dependencies (`:1011-1109`).
+
+**Tickets (Phase 24).** There's no tracker client; the agent holds the
+credentials (`PHASE-24…md:10-31`).
+- URLs are recognised for GitHub, Jira, Linear, Figma, Notion and Slack
+  (`external-refs-service.ts:20-27`).
+- An epic becomes a plan and a story becomes an item
+  (`external-intake-service.ts:391-432`).
+- Write-back is a watermark (`:290-374`).
+
+**For Phase 32:** the stack view needs a multi-plan aggregate, over every
+active plan's projection and file specs, within the one scanned project.
+It also needs cross-plan dependency resolution. Ticket keys label the
+rows.
+
+## 20. Specs and conferring
+
+**How specs are stored.** Spec pages are plan items of kind `object`
+(`shared/types/plan.ts:532,579-583`), versioned in `plan_item_versions`
+(`plan-item-service.ts:609-614`).
+- A body edit writes **no** `plan_events` row (`:616-619`).
+- The legacy `plan_documents` has its own versions and no MCP tools.
+- System docs are git-versioned files with commit-stamp freshness
+  (`system-docs-service.ts:340-392`).
+
+**Proposals.** There is no proposal flow. The "Proposed" tab is the code
+change feed from file specs (`ProposedChanges.tsx`, `plan.ts:365-395`).
+`propose_doc_update` is designed (`docs/cdev/07-system-documentation.md:56-65`)
+and absent from `src/`.
+
+**Links from tasks to specs.** None structured. There are the tree,
+short text references (`shared/lib/references.ts:1-16`), and a system
+doc's `references`.
+- The doc sensor notifies only `references.plans[0]`
+  (`sensor-bridge-service.ts:249-310`), and only on code drift.
+
+**Channels.**
+- Six event types (`shared/types/channel.ts:17-25`), threaded by
+  `respondsTo`.
+- Routing matches type, status, plan, item and age, then sends a toast
+  or webhook (`project-config.ts:50-96`).
+- There's **no recipient field**, and agents only receive by polling
+  `list_channel_events` (`channel-tools.ts:114-150`).
+- Threads can't cross plans (`channel-event-service.ts:181-183`).
+
+**Designed but unbuilt** (`docs/cdev/08-agent-collaboration.md`):
+- steer delivered at the next pause (`:92-100`)
+- handoff with the channel record as context (`:102-114`)
+- stuck detection pausing the agent (`:84-88`)
+
+**For Phase 32:** conferring needs:
+- a proposal queue
+- task → spec-section links
+- an event on spec body edits
+- addressed events with cross-plan fan-out
+- delivery through the awareness notice
+
+## 21. Tests and grounding
+
+**The `test` criterion** accepts a report as evidence
+(`criterion-checks.ts:392-416`).
+- It fails if the report predates the last change to the item's
+  targets.
+- For JUnit XML it reads totals, and fails on any failure, any error or
+  zero tests (`:305-317`).
+- Other formats are `unverified`.
+- `submitChecked` refuses on any fail (`criterion-loop-service.ts:203-215`).
+
+**Nothing runs tests.** There's no lcov, istanbul or cobertura support.
+
+**`coverage-service`** measures scanner understanding (import
+resolution, unmatched routes), not test coverage (`coverage-service.ts:3-41`).
+
+**Tests aren't mapped to anything.** Nothing links tests to code,
+symbols, items or criteria. The readiness ring looks for the word "test"
+(`PlanReadinessRing.tsx:115-131`).
+
+**Grounding in Phase 31** means provenance: evidence is a file plus a
+checkable locator, with sha256 at submission and approval
+(`PHASE-31…md:58-85`, `criteria-service.ts:520-531,596-604`).
+
+**For Phase 32:**
+- Per-test JUnit ingestion.
+- Mapping tests to code through test files' imports, using the same
+  import data as §3.
+- A staleness check against the code each test covers.
+
+## 22. Human breakpoints
+
+| Mechanism | Blocks? | Where |
+|---|---|---|
+| `present` + `await_ack` | Yes, ≤120 s, then `acked:false` | `presence-tools.ts:51-88` |
+| `await_user_input` | Yes, ≤300 s, then `timed_out:true` | `presence-tools.ts:107-158` |
+| `need-decision` | No; the agent continues | `channel-tools.ts:47-110` |
+| `submit_criterion` | No; the agent polls `get_worklist` | `criterion-loop-service.ts:203-232` |
+| Freeze | No; only `check_freeze` reads it | `freeze-service.ts:117-121` |
+| Budget | No; "advisory" | `budget-tools.ts:129-132` |
+| `requiresApproval` | Only via `get_next_item`; not at claim or done | `plan-item-service.ts:1169-1194` |
+| `claimPolicy: human-only` | Yes, at claim | `plan-item-service.ts:1029-1031` |
+| `excludePaths` / `lockInterfaces` | No; prompt text only | `prompt-builders.ts:96-100` |
+
+**`human-decision.ts`.** A decision object can only come from
+`issueHumanDecision`, checked against a WeakSet (`:34-48`), and is issued
+by desktop REST and the confirmed phone. `approve_gate` always refuses
+(`plan-item-tools.ts:487-506`).
+
+**For Phase 32:** real breakpoints need:
+- enforcement at the tool interception point (claim, status, spec edit,
+  proposal)
+- a resumable wait that outlives 300 s
+- a hook for editor-tool edits, with detect-and-report for clients
+  without hooks
+
+## 23. Audit records
+
+**What's recorded.**
+- **`plan_events`**: append-only in practice, structural only, not
+  exported to git.
+- **Criterion evidence and sign-offs**: actor, channel, device and
+  hashes; never deleted, deliberately not exported
+  (`criteria-service.ts:630-634`).
+- **Sign-off pack**: re-verifiable by re-hashing files, but **not
+  signed** (`signoff-pack.ts:22-23`).
+- **Peer audit**: a JSON file capped at 2,000 entries
+  (`peer-audit-service.ts:39-68`).
+- **Git commits**: the human as author, the agent as co-author trailer;
+  signing optional (`git-commit-service.ts:10-126`).
+- **Logs**: kept 14 days (`logger.ts:38,171-182`).
+
+**Tamper evidence.** Only the file hashes inside criteria and packs.
+There's no chain or signature on audit rows, which live in the local
+database (`persistence.ts:52`).
+
+**For Phase 32:**
+- persisted agent activity
+- spec-edit and breakpoint events
+- a hash-chained append-only log
+- signed packs
+- configurable retention
+- an evidence export
+
+## More bugs found along the way
+
+| # | Bug | Where | Why it matters |
+|---|---|---|---|
+| 8 | `broadcastChannelEvent` and `broadcastInputRequest` have no callers (with #4, the remote-interaction relay is unwired) | `remote-interaction-service.ts:127-171` | Channel events and input requests don't reach paired devices through the intended path |
+| 9 | The scan baseline lives in memory and is lost on restart | `diff-engine.ts:44-58` | "Diff since baseline" silently changes meaning after a restart |
+| 10 | Spec body edits write no `plan_events` row | `plan-item-service.ts:616-619` | The history of a spec's content is only in versions, invisible to timelines and audit |
+| 11 | Cross-plan dependencies never resolve | `plan-item-service.ts:1137-1159` | An item that depends on another plan's item is never offered as next |

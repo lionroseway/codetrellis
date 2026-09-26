@@ -4,7 +4,9 @@
 > analyst is in, what CodeTrellis does, and what they see.
 > The design is in [PHASE-32-PARALLEL-AWARENESS.md](PHASE-32-PARALLEL-AWARENESS.md);
 > what exists today, with file references, is in
-> [PHASE-32-CURRENT-STATE.md](PHASE-32-CURRENT-STATE.md).
+> [PHASE-32-CURRENT-STATE.md](PHASE-32-CURRENT-STATE.md); and the
+> surface (replay, stack, breakpoints) is in
+> [PHASE-32-OBSERVABILITY.md](PHASE-32-OBSERVABILITY.md).
 
 Each journey ends with **what exists** (✓), **what's new** (＋), and
 **to discuss** (?).
@@ -241,6 +243,130 @@ The Q3 agent opens `hr-salaries.xlsx`, which isn't in its brief.
 
 ---
 
+## G. Replay and fast-forward
+
+### G1. "What happened while I was in that meeting?"
+
+Sam was away for two hours. They press **catch up** and watch the two
+hours play at 4×: lanes filling with agent activity, a collision zone
+opening and closing, one breakpoint answered from the phone.
+
+- ✓ A transport bar (step, play, speed) exists, for one file's diff.
+- ＋ Saving agent activity (it's lost today), lanes per workstream, and
+  one clock driving graph, stack and inbox.
+- ? Is 4× catch-up better than a written digest, or does it just add to
+  it?
+
+### G2. The auditor's question
+
+Months later: "When this payment change was built, what else was going
+on, and who approved what?" The reviewer sets the cursor to that week.
+The stack shows what was in flight, the graph shows the code as it was,
+and the timeline shows the breakpoints and decisions.
+
+- ✓ Decisions with who, when, device and file hashes; sign-off packs.
+- ＋ Saved agent activity, automatic snapshots, and an evidence export.
+- ? How far back must this go? That decides retention.
+
+### G3. Playing the plans forward
+
+Before starting, Sam plays forward: the graph shows what all active
+plans *will* change, and a dashed zone appears: "◇ planned overlap:
+JIRA-142 and JIRA-150 both plan to change `invoice.ts`." They re-sequence
+before anyone writes code.
+
+- ✓ Planned-state projection, for one plan.
+- ＋ All active plans at once, and future collision zones.
+- ? Should this run automatically when a new plan is approved?
+
+---
+
+## H. How work stacks up
+
+### H1. The lead's morning view
+
+A lead opens the stack: ticket keys down the side, tasks nested, who is
+on what, "⚠ overlaps JIRA-150" in words, and dependencies drawn, including
+one task waiting on another plan.
+
+- ✓ Tickets linked to plans and items (Phase 24).
+- ＋ The multi-plan view, overlap bands, drawn and cross-plan
+  dependencies. None of these exist today.
+- ? Rows by ticket, by plan, or by workstream?
+
+---
+
+## I. Conferring
+
+### I1. The spec is wrong
+
+The billing agent finds the invoice format can't carry currency. It
+**proposes a spec change** with the failing test as evidence.
+CodeTrellis finds two other plans relying on that spec section. Their
+agents reply with the impact: "checkout: no change needed", "exports:
+one new column". Sam sees one proposal with both impacts, and accepts.
+Linked tasks are marked "spec changed" and their agents re-plan.
+
+- ✓ Channel vocabulary (`weigh-in`, `need-decision`, `steer`); versioned
+  spec pages.
+- ＋ Proposals, task → spec links, events on spec edits, messages
+  addressed to an agent, and reach across plans. None exist today.
+- ? Should agents ever be allowed to change a spec without a person?
+
+---
+
+## J. Grounding
+
+### J1. "Done" on stale tests
+
+An agent marks work done, citing a test report from before its last
+edit. The task shows "⚠ tests older than the code", and the criterion
+check refuses it.
+
+- ✓ The `test` criterion already rejects a report older than the code.
+- ＋ Per-test results, tests mapped to code, and the grounding overlay
+  on the graph.
+- ? Should CodeTrellis ever *run* tests, or always leave that to the
+  agent?
+
+### J2. Watching coverage land
+
+In replay, the grounding overlay shows `billing/` going from "○ no
+tests" to "✓ 12 passing" as the agent works.
+
+- ＋ Everything. It depends on J1's mapping and on replay.
+
+---
+
+## K. Breakpoints
+
+### K1. "Ask me before touching payments"
+
+Sam right-clicks `payments/` on the graph and sets a **breakpoint**. Later
+an agent claims a task that would change it, and the claim returns
+"paused: waiting for a decision". Sam gets a push, replies "go ahead,
+but don't change the refund path", and the agent continues with that
+note.
+
+- ✓ Blocking waits (≤300 s); `requiresApproval`; human-only claims.
+- ＋ Breakpoints on code, specs and tasks; a wait that can last hours;
+  the inbox, phone and timeline entries.
+- ? Default answer if nobody responds: keep waiting, or stop the agent?
+
+### K2. The honest breach
+
+An agent that doesn't support hooks edits a file under `payments/`
+directly. CodeTrellis can't stop that. It sees the edit, tells the agent
+on its next step to stop and wait, and the inbox shows "**breach**",
+not "paused".
+
+- ＋ Detection and wording that never claims enforcement it didn't
+  have.
+- ? Is detect-and-report acceptable for regulated teams, or must they
+  use hook-capable agents for breakpointed code?
+
+---
+
 ## F. What must never happen
 
 These are the tests for "quiet by default":
@@ -263,4 +389,7 @@ These are the tests for "quiet by default":
    themselves is realistic.
 3. **D2**: review is where the human's time goes.
 4. **E1**: whether the business side is a second product or the same one.
-5. **F**: agree on what "too noisy" means before building.
+5. **K1 and K2**: breakpoints, the clearest value in regulated work.
+6. **G1, G2 and I1**: replay and conferring, the clearest things to
+   *show*.
+7. **F**: agree on what "too noisy" means before building.
