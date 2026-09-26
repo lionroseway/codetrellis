@@ -5,63 +5,50 @@
  *
  * What this layer adds beyond the REST loop test:
  *   - Verifies the MCP transport itself works on the spawned port.
- *   - Verifies tool invocation (`register_session`, `claim_task`,
- *     `update_task`, `get_next_task`) does what its description says.
+ *   - Verifies the V2 agent tools (`add_item`, `get_next_item`,
+ *     `claim_item`, `update_item`) do what their descriptions say.
+ *   - Verifies auto-progress reaches V2 Actions: an agent editing an
+ *     Action's files moves it to in_progress without being told.
  *   - Catches MCP SDK regressions before they ship to humans.
+ *
+ * Rewritten onto V2 for Phase 32 §0.3b. It was skipped because it drove
+ * the V1 task tools the V2 migration removed (docs/V2-MCP-MIGRATION.md
+ * §6); the scenarios are unchanged. Rewriting the second one found that
+ * auto-progress only ever advanced V1 tasks, which the workspace no
+ * longer renders — fixed in plan-progress-service in the same change.
  *
  * No real LLM. No API keys. Fully offline.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { setupHarness, waitFor } from '../harness';
+import { setupHarness, waitFor, type Harness } from '../harness';
 
-/*
- * ─────────────────────────────────────────────────────────────────────────
- * SKIPPED — this file tests MCP tools that NO LONGER EXIST.
- *
- * The V2 MCP migration REMOVED (not deprecated) all 19 V1 plan tools:
- * claim_task, add_subtask, update_task, update_task_progress,
- * set_task_blocked, add_task_comment, add_task_attachment, get_next_task,
- * add_plan_doc, add_plan_phase and the rest. `create_plan` also no longer
- * accepts inline tasks, so `getPlan(...).tasks` comes back empty and every
- * assertion here fails on an empty array rather than on its own logic.
- *
- * See docs/V2-MCP-MIGRATION.md §6 for the removal list.
- *
- * KEPT, NOT DELETED, because the SCENARIOS are still worth covering — the
- * V1 plumbing underneath them is what went away. Whoever reseeds these onto
- * the V2 surface (add_item / bulk_add_items / claim_item) gets the intent
- * for free instead of rediscovering it.
- *
- * Coverage status: full-loop.test.ts covers the agent lifecycle end to end
- * (16 passing tests), so the loop itself is not going untested.
- *
- * To re-enable: rewrite against the V2 tools, then change
- * `test.describe.skip` back to `test.describe`.
- * ─────────────────────────────────────────────────────────────────────────
- */
-test.describe.skip('Agent-driven loop (via MCP)', () => {
+interface ItemRow {
+  uid: string;
+  kind: string;
+  status: string | null;
+  assignee?: string | null;
+}
+
+async function getItem(h: Harness, uid: string): Promise<ItemRow> {
+  const res = await h.client.raw('GET', `/api/items/${uid}`);
+  expect(res.ok).toBe(true);
+  return (await res.json()) as ItemRow;
+}
+
+test.describe('Agent-driven loop (via MCP)', () => {
   test.setTimeout(120_000);
 
-  test('agent connects, registers, claims a task, reports done — REST sees it', async () => {
+  test('agent connects, finds the next Action, claims it, reports done — REST sees it', async () => {
     const h = await setupHarness('agent-loop-claim');
     try {
       await h.client.scanProject(h.fixture.projectPath);
-
-      // Plan with one task targeting a known fixture file.
       const plan = await h.client.createPlan({
         title: 'Agent claim flow',
         projectPath: h.fixture.projectPath,
-        tasks: [
-          {
-            description: 'Update the API client',
-            affectedFiles: ['packages/web/src/api.ts'],
-          },
-        ],
       });
-      const detail = await h.client.getPlan(plan.uid);
-      const taskUid = detail.tasks[0].uid;
-      expect(detail.tasks[0].status).toBe('pending');
 
       const agent = await h.spawnAgent({
         agentType: 'harness-claude',
@@ -71,30 +58,46 @@ test.describe.skip('Agent-driven loop (via MCP)', () => {
       // 1. The MCP server should advertise the tools we depend on.
       const tools = await agent.mcp.listTools();
       const toolNames = new Set(tools.map((t) => t.name));
-      for (const required of ['register_session', 'claim_task', 'update_task', 'get_next_task']) {
+      for (const required of ['register_session', 'add_item', 'get_next_item', 'claim_item', 'update_item']) {
         expect(toolNames.has(required), `missing MCP tool: ${required}`).toBe(true);
       }
 
-      // 2. Claim the task via MCP.
-      const claim = await agent.claimTask(plan.uid, taskUid);
-      expect(claim.isError).not.toBe(true);
-      expect(claim.text).toMatch(/claimed/i);
+      // 2. One Action targeting a known fixture file.
+      const added = await agent.callTool('add_item', {
+        plan_uid: plan.uid,
+        kind: 'action',
+        title: 'Update the API client',
+        file_specs: [{ path: 'packages/web/src/api.ts', action: 'modify' }],
+      });
+      expect(added.isError).not.toBe(true);
+      const itemUid = (JSON.parse(added.text) as ItemRow).uid;
+      expect((await getItem(h, itemUid)).status).toBe('pending');
 
-      // 3. Mark it in_progress, then done.
-      const inflight = await agent.updateTaskStatus(plan.uid, taskUid, 'in_progress');
+      // 3. get_next_item offers it.
+      const next = await agent.getNextItem(plan.uid);
+      expect(next.isError).not.toBe(true);
+      expect((JSON.parse(next.text) as ItemRow).uid).toBe(itemUid);
+
+      // 4. Claim it.
+      const claim = await agent.claimItem(itemUid);
+      expect(claim.isError).not.toBe(true);
+      const claimed = JSON.parse(claim.text) as { ok: boolean; message: string };
+      expect(claimed.ok).toBe(true);
+      expect(claimed.message).toMatch(/claimed/i);
+
+      // 5. Mark it in_progress, then done.
+      const inflight = await agent.updateItemStatus(itemUid, 'in_progress');
       expect(inflight.isError).not.toBe(true);
-      const finished = await agent.updateTaskStatus(plan.uid, taskUid, 'done');
+      const finished = await agent.updateItemStatus(itemUid, 'done');
       expect(finished.isError).not.toBe(true);
 
-      // 4. REST should see the task in `done` state — wait briefly
-      //    in case the broadcast hasn't propagated.
+      // 6. REST sees the Action done.
       const final = await waitFor(
         async () => {
-          const fresh = await h.client.getPlan(plan.uid);
-          const t = fresh.tasks.find((t) => t.uid === taskUid);
-          return t && t.status === 'done' ? t : null;
+          const fresh = await getItem(h, itemUid);
+          return fresh.status === 'done' ? fresh : null;
         },
-        { timeoutMs: 5000, description: `task ${taskUid} to land in done via MCP update_task` },
+        { timeoutMs: 5000, description: `action ${itemUid} to land in done via MCP update_item` },
       );
       expect(final.status).toBe('done');
     } finally {
@@ -102,52 +105,47 @@ test.describe.skip('Agent-driven loop (via MCP)', () => {
     }
   });
 
-  test('agent file edit + REST plan creation = auto-progress fires', async () => {
-    // Tighter version of loop.test.ts but with the agent in the loop.
-    // Proves: MCP-attributed file edits are seen by the watcher and
-    // propagate through plan-progress-service back to REST.
+  test('agent file edit on an Action\'s file = auto-progress fires', async () => {
+    // Tighter version of loop.test.ts, with the agent in the loop and
+    // on the V2 model. Proves: an agent's file edit is seen by the
+    // watcher and moves the Action whose file specs name that file.
     const h = await setupHarness('agent-loop-auto-progress');
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const plan = await h.client.createPlan({
         title: 'Agent auto-progress',
         projectPath: h.fixture.projectPath,
-        tasks: [
-          {
-            description: 'Edit the validators',
-            affectedFiles: ['packages/shared/src/validators.ts'],
-          },
-        ],
       });
-      const detail = await h.client.getPlan(plan.uid);
-      const taskUid = detail.tasks[0].uid;
 
       const agent = await h.spawnAgent({ agentType: 'harness-codex' });
+      const added = await agent.callTool('add_item', {
+        plan_uid: plan.uid,
+        kind: 'action',
+        title: 'Edit the validators',
+        file_specs: [{ path: 'packages/shared/src/validators.ts', action: 'modify' }],
+      });
+      expect(added.isError).not.toBe(true);
+      const itemUid = (JSON.parse(added.text) as ItemRow).uid;
+      expect((await getItem(h, itemUid)).status).toBe('pending');
 
-      // Agent writes to the file via filesystem — the MCP world
-      // doesn't have a "write file" tool today (deliberate; agents
-      // use their own native edit tool, then REPORT what they did).
-      // We use the agent helper to keep paths consistent.
-      const before = require('node:fs').readFileSync(
-        require('node:path').join(h.fixture.projectPath, 'packages/shared/src/validators.ts'),
-        'utf-8',
-      );
+      // Agents edit files with their own native tools and then report;
+      // there is deliberately no MCP "write file" tool.
+      const before = fs.readFileSync(path.join(h.fixture.projectPath, 'packages/shared/src/validators.ts'), 'utf-8');
       await agent.writeFile(
         'packages/shared/src/validators.ts',
         `${before}\n// Edited by harness-codex via scripted-agent.writeFile()\n`,
       );
 
-      const advancedTask = await waitFor(
+      const advanced = await waitFor(
         async () => {
-          const fresh = await h.client.getPlan(plan.uid);
-          const t = fresh.tasks.find((t) => t.uid === taskUid);
-          return t && t.status === 'in_progress' ? t : null;
+          const fresh = await getItem(h, itemUid);
+          return fresh.status === 'in_progress' ? fresh : null;
         },
         // Same 20 s buffer rationale as `loop.test.ts` — generous on
         // green, only matters when the system is under load.
-        { timeoutMs: 20_000, description: `task ${taskUid} to advance via file watcher` },
+        { timeoutMs: 20_000, description: `action ${itemUid} to advance via file watcher` },
       );
-      expect(advancedTask.status).toBe('in_progress');
+      expect(advanced.status).toBe('in_progress');
     } finally {
       await h.teardown();
     }

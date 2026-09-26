@@ -34,6 +34,7 @@ import {
   helperChunks,
   quotedPattern,
   reconcileTools,
+  stripSkippedTests,
   routePattern,
 } from './extract';
 
@@ -65,7 +66,8 @@ function walk(dir: string, keep: (f: string) => boolean): string[] {
 
 function loadTexts(files: string[]): Map<string, string> {
   const m = new Map<string, string>();
-  for (const f of files) m.set(path.relative(ROOT, f), fs.readFileSync(f, 'utf8'));
+  // A skipped test is not coverage: drop it before searching for mentions.
+  for (const f of files) m.set(path.relative(ROOT, f), stripSkippedTests(fs.readFileSync(f, 'utf8')));
   return m;
 }
 
@@ -93,7 +95,20 @@ function esc(s: string): string {
   return s.replace(/\|/g, '\\|');
 }
 
+export interface Collected {
+  rows: (InventoryRow & { domain: DomainKey | null })[];
+  recon: ReturnType<typeof reconcileTools>;
+}
+
 export async function build(): Promise<{ markdown: string; unmapped: InventoryRow[] }> {
+  const { rows, recon } = await collect();
+  const unmapped = rows.filter((r) => !r.domain);
+  const human: Record<string, HumanEntry> = fs.existsSync(HUMAN) ? JSON.parse(fs.readFileSync(HUMAN, 'utf8')) : {};
+  return { markdown: render(rows as InventoryRow[], recon, human), unmapped };
+}
+
+/** Every row of every surface, with its test references. */
+export async function collect(): Promise<Collected> {
   const unitFiles = loadTexts([
     ...walk(path.join(ROOT, 'src'), (f) => /\.test\.tsx?$/.test(f)),
     // The inventory's own tests are fixtures full of example names, not coverage.
@@ -169,10 +184,7 @@ export async function build(): Promise<{ markdown: string; unmapped: InventoryRo
     rows.push({ surface: 'settings', id: s, domain: 'k', unitTests: null, harnessTests: null });
   }
 
-  const unmapped = rows.filter((r) => !r.domain);
-  const human: Record<string, HumanEntry> = fs.existsSync(HUMAN) ? JSON.parse(fs.readFileSync(HUMAN, 'utf8')) : {};
-
-  return { markdown: render(rows as InventoryRow[], recon, human), unmapped };
+  return { rows, recon };
 }
 
 const SURFACES: { key: Surface; title: string; testable: boolean }[] = [

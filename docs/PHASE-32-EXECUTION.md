@@ -59,6 +59,13 @@ one to continue without asking.
   `feat/phase-32-<step>-<slug>` (for example
   `feat/phase-32-a0-parallel-bugs`).
 - **CI runs on PRs into `feat/phase-*`** (`ci.yml`, `security.yml`).
+- **One step PR open at a time.** PRs are squash-merged, and every step
+  edits the Phase 32 docs (at least the log's Now block). So two open
+  step PRs always conflict, and stacking one branch on another doesn't
+  help, because a squash merge drops the branch's history. Start the
+  next step's branch from `feat/phase-32` **after** the previous PR
+  merges. Work done ahead goes onto that fresh branch by cherry-picking
+  its own commits. (Learned on #113–#115, 2026-09-26.)
 - **Before a phase-end merge:** bring `main` into `feat/phase-32`, run
   everything, and verify a packaged build (CLAUDE.md: only a packaged
   build proves Electron + native modules).
@@ -213,9 +220,9 @@ conditional on the environment:
 
 | Tests | Why skipped | Action |
 |---|---|---|
-| agent-loop (2), multi-agent (2), task-context (7) | Exercise V1 plan tools removed in the V2 migration (`docs/V2-MCP-MIGRATION.md` §6); the scenarios are still wanted | Reseed onto V2 (`add_item`, `bulk_add_items`, `claim_item`, …) and unskip |
-| full-loop (4) | Fixture seeds V1 tasks, so V2 deviation detection never sees their files | Reseed the fixture with V2 items and unskip |
-| plan-export (1) | chokidar auto-sync races a timer | Make the wait deterministic (an event or a sync counter), per the test's own note; never by raising the timeout |
+| agent-loop (2), multi-agent (2), task-context (7) | Exercised V1 plan tools removed in the V2 migration | **Done:** rewritten onto V2. agent-loop 2 and multi-agent 2 unskipped. task-context: 3 of 7 were already covered by `plan-items.test.ts`, 4 were not and are now tested (bug 14). Rewriting agent-loop found bug 13 |
+| full-loop (4) | Fixture seeded V1 tasks, so V2 deviation detection never saw their files | **Done:** also seeded as V2 Actions; 4 unskipped |
+| plan-export (1) | chokidar auto-sync raced a timer | **Done:** stale skip. #73 already made the wait deterministic (awaits `ready`); verified under load and unskipped |
 | build-artifacts (1) | `mobile/node_modules` absent | Justified: conditional on the environment. CI installs it where it matters |
 | reader-host (1, unit) | Needs `npm run build:reader` | Justified: CI builds it first |
 | release-signature (2, unit) | Private signing key lives only on the release machine | Justified: by design |
@@ -263,15 +270,18 @@ Each gets its own regression test (from CURRENT-STATE):
 | 1 `claim_item` assignee is agent type | A0 |
 | 2 `register_session` wipes plan and terminal link | A0 |
 | 3 watcher reads first `tool_use` only | A0 |
-| 4 `pushForInputRequest` unwired | 0.6 |
-| 5 guide and tool descriptions for architecture tools wrong | 0.6 |
-| 6 review `before` default misdescribed | 0.6 |
-| 7 skill-guide header out of date | 0.6 |
-| 8 remote-interaction relay unwired | 0.6 |
+| 4 `pushForInputRequest` unwired | B4 / A4 (reclassified: local agent prompts never reach the phone) |
+| 5 guide and tool descriptions for architecture tools wrong | 0.6a (fixed) |
+| 6 review `before` default misdescribed | 0.6a (fixed) |
+| 7 skill-guide header out of date | 0.6a (fixed) |
+| 8 remote-interaction relay unwired | not a defect: desktop-to-desktop relay, out of scope for Phase 32 |
 | 9 scan baseline lost on restart | 0.6 |
 | 10 spec body edits leave no event | B1 (event log) |
 | 11 cross-plan dependencies never resolve | B6 |
-| 12 CI lint step disabled on a stale premise | 0.3 |
+| 12 CI lint step disabled on a stale premise | 0.3 (fixed) |
+| 13 auto-progress ignored V2 Actions | 0.3b (fixed) |
+| 14 skipped test's coverage claim was false | 0.3b (fixed) |
+| 15 guides documented arguments the tools don't take | 0.6a (fixed + guard) |
 
 Anything the sweep (0.4) finds is added to this table and to
 CURRENT-STATE.

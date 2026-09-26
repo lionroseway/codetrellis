@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.2 Inventory → PR open; 0.3 next |
-| **Status** | 0.2 green: typecheck, lint 0 errors / 291 warnings, unit 971/974, harness 363 passed / 17 skipped / 0 failed (18.1 min) |
-| **Next action** | Get the 0.2 PR reviewed and merged into `feat/phase-32`; then branch `feat/phase-32-0.3-coverage-guards`: guards for tools, routes and RPC with shrink-only allowlists, and enable CI lint (bug 12) |
-| **Blockers** | 0.3 builds on 0.2's extractors, so it waits for the 0.2 merge |
-| **Branch** | `feat/phase-32-0.2-inventory` → PR into `feat/phase-32` |
+| **Stage / step** | 0.3b + 0.6a + 0.3 → one PR, #115 (#113 and #114 closed as superseded) |
+| **Status** | #115 contains all three steps and merges cleanly into `feat/phase-32` |
+| **Next action** | Merge #115. Then 0.4a (behavioural sweep: project and scan) on a fresh branch from `feat/phase-32` |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-0.3-coverage-guards` → #115 |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -32,7 +32,7 @@
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
 - [x] 0.2 Inventory and verification matrix
-- [ ] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
+- [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
 - [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
 - [ ] 0.4a Project and scan
 - [ ] 0.4b Graph
@@ -123,11 +123,136 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Workstreams are deltas over the one project graph | The backend holds one project graph at a time (CURRENT-STATE §1) |
 | 2026-09-26 | `rule` signals wait for a rules format (A7) | No architecture rules exist (CURRENT-STATE §4) |
 | 2026-09-26 | Breakpoints distinguish enforced from detected | CodeTrellis can't stop editor-tool edits without a hook |
+| 2026-09-26 | One Phase 32 step PR open at a time; each step branches from `feat/phase-32` after the previous merge | Squash merges plus shared docs made parallel and stacked PRs conflict (#113–#115) |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-26: Stacking failed under squash merges; consolidated into #115
+- A local simulation of squash-merging #113 → #114 → #115 still
+  conflicted at #114. A squash merge drops the branch's history, so the
+  stacked branch re-applies 0.3b's doc edits against the squashed copy.
+- **Fix:** #115 already contains 0.3b, 0.6a and 0.3, and merges cleanly
+  alone, so it becomes the single PR. #113 and #114 are closed as
+  superseded (re-openable).
+- **New rule** (EXECUTION §1.3, Decisions): one step PR open at a time;
+  each step branches from `feat/phase-32` after the previous merge.
+
+### 2026-09-26: PRs stacked to remove merge conflicts
+- #113, #114 and #115 each merged cleanly into `feat/phase-32` alone,
+  but they all edit the Phase 32 docs, so merging one made the others
+  conflict.
+- **Now stacked:** 0.6a contains 0.3b, and 0.3 contains both. Merge
+  #113 → #114 → #115 in that order and none conflicts. The overlaps are
+  resolved once per branch: bug tables 12–15 in order, and every log
+  entry kept.
+- **The coverage guard's first real use:** stacking brought 0.3b's tests
+  into 0.3, and the guard named the four routes they now cover (items
+  full / blocked / progress, plans reconcile). All deleted from
+  `untested.json`, which now lists 71 routes, 74 tools and 47 RPC
+  methods.
+- On the stacked 0.3 branch: typecheck 0 errors; lint 0 errors / 291
+  warnings; unit 979 tests / 976 pass / 3 skipped.
+
+### 2026-09-26: 0.3 coverage guards
+- **`tools/inventory/coverage.test.ts`:** every REST route, MCP tool and
+  RPC method must be reached by a test, or be listed in
+  `tools/inventory/untested.json`. The list can only shrink. The guard
+  fails on a new untested item, on a listed item that gained a test, and
+  on a listed item that no longer exists. Verified: removing an entry
+  fails with "has no test — write one".
+- **Skipped tests no longer count as coverage** (`stripSkippedTests`):
+  string-named `test.skip`, `test.describe.skip`, `describe.skip` and
+  `it.skip` calls are removed before searching. Conditional
+  `test.skip(!ok, …)` guards are kept.
+- **Starting list:** 75 routes, 74 tools, 47 RPC methods. This branch
+  predates #113, so its V1 skipped files no longer count and REST reads
+  75. When #113 lands, entries its tests now reach must be deleted from
+  the list, and the guard will name them.
+- **Bug 12 fixed:** CI's lint step is enabled, and the header note
+  corrected.
+- `collect()` was split out of `build()`, so the guard and the matrix
+  share one enumeration.
+- `CLAUDE.md` counts corrected (lint ~291, unit ~975, harness ~380), and
+  the shrinking-list rule documented.
+- typecheck 0 errors; lint 0 errors / 291 warnings; unit 978 tests / 975
+  pass / 3 skipped. Harness not re-run: no runtime code changed (tools,
+  CI and docs only).
+### 2026-09-26: 0.6a — descriptions that lied to agents
+- While #112 and #113 await merge, took the independent 0.6 bugs.
+- **Bugs 5–7 fixed:**
+  - `check_conformity`'s description no longer promises layer rules;
+    the guide's architecture table matches the real arguments.
+  - The review tools' `before` default is described truthfully (newest
+    commit, else baseline).
+  - The skill-guide header lists all six resources.
+- **Bug 15 (new, wider):** measured every `` `tool(args)` `` in every
+  guide flavour against the arguments the server registers. 21 of 340
+  documented calls named arguments that don't exist, e.g.:
+  - `claim_item(item_uid)`, `update_item_progress(item_uid, note)`
+  - the plan-history tools' `plan_uid` for `plan_slug`
+  - `update_settings(path, value)`
+  - `reconcile(deviation_uid, action)`
+
+  All fixed. `server.ts` now records each tool's argument names at
+  registration (`listRegisteredToolArgs`). A new guard in
+  `skill-guide.test.ts` fails on any documented argument a tool doesn't
+  take, and it was verified to catch a reintroduced mistake.
+- **Bug 4 reclassified:** the missing push is the small part. A local
+  agent's `await_user_input` never reaches the phone at all, because the
+  snapshot only carries requests relayed from other desktops. That's the
+  "answer an agent from the phone" feature, so it moves to B4/A4.
+- **Bug 8 reclassified:** the unwired functions are the desktop-to-desktop
+  relay, an unfinished multi-machine feature. Out of scope, not a
+  defect.
+- typecheck 0 errors; lint 0 errors / 291 warnings; unit 963 tests /
+  960 pass / 3 skipped (+1 guard; this branch predates 0.2).
+
+### 2026-09-26: #112 merged; feat/phase-32 merged into 0.3b
+- Resolved the Phase 32 doc overlaps (bug tables 12–14 kept in order;
+  both branches' log entries kept) and filled EXECUTION §0.3b's outcome
+  column.
+- **Regenerated matrix:** REST routes with no test went from 63 to 71.
+  This isn't a regression. The inventory counted mentions inside
+  *skipped* test files as coverage, so 8 V1 `/api/tasks/*` routes looked
+  tested while only a skipped file named them. With the V1 files
+  rewritten, the true number shows. V2 `/api/items/*` routes gained real
+  coverage.
+- **Blind spot for 0.3:** the coverage guards must not count skipped
+  tests.
+- Unit on the merged branch: 974 tests, 971 pass, 3 skipped.
+
+### 2026-09-26: 0.3b complete — harness 377 passed / 1 skipped / 0 failed
+- **full-loop (4):** deviation detection reads V2 Actions, so the same
+  work is now also seeded as Actions (`add_item` with `file_specs`) and
+  marked done via `update_item`. 4 unskipped plus a seeding step; 21/21
+  over 3 repeats. `next-task` now offers the V2 Action.
+- **plan-export chokidar (1):** a stale skip. #55 skipped it, and #73
+  fixed the race three days later (`scanProject` awaits the watcher's
+  `ready`). 10/10 alone and 10/10 with all cores saturated. Unskipped.
+- **agent-loop (2):** rewritten onto V2. The auto-progress scenario
+  exposed **bug 13**: `plan-progress-service` only advanced V1 tasks,
+  so V2 Actions never lit up on a file edit. Fixed. The test times out
+  without the fix and passes with it.
+- **multi-agent (2):** rewritten onto `claim_item`; 6/6 over 3 repeats.
+- **task-context (7):** its header claimed V2 coverage in
+  `plan-items.test.ts`. Checked each scenario: 3 were covered, 4 were not
+  (**bug 14**). The file now tests those four:
+  - the full `claim_item` context
+  - child context, url attachment and file-spec update
+  - export → import through `items/`
+  - REST ↔ MCP parity and validation
+
+  12/12 over 3 repeats. The import comes from the project's plans dir,
+  because imports are confined to opened projects (Phase 19).
+- Scripted-agent's V1 helpers, which called tools that no longer exist,
+  are replaced by `claimItem`, `updateItemStatus` and `getNextItem`.
+- Remaining harness skips are environment-conditional only:
+  build-artifacts, and the terminals tests' `ptyAvailable` guard.
+- On this branch (which predates 0.2): typecheck 0 errors, lint 0 errors
+  / 291 warnings, unit 962 tests / 959 pass / 3 skipped.
 
 ### 2026-09-26: 0.2 green
 - Harness on `feat/phase-32-0.2-inventory`: 363 passed, 17 skipped,

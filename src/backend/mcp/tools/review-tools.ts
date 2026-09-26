@@ -81,7 +81,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: {
         plan_uid: z.string(),
         project_path: z.string(),
-        before: z.string().optional().describe(`Defaults to "baseline". ${COMPARAND_HELP}`),
+        before: z.string().optional().describe(`Defaults to the newest commit (so the review covers what changed since it); "baseline" when the project has no commits. ${COMPARAND_HELP}`),
         after: z.string().optional().describe(`Defaults to "live". ${COMPARAND_HELP}`),
         format: z.enum(['json', 'markdown']).optional().describe('Defaults to json.'),
       },
@@ -121,7 +121,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: {
         plan_uid: z.string(),
         project_path: z.string(),
-        before: z.string().optional().describe(`Defaults to "baseline". ${COMPARAND_HELP}`),
+        before: z.string().optional().describe(`Defaults to the newest commit (so the review covers what changed since it); "baseline" when the project has no commits. ${COMPARAND_HELP}`),
         after: z.string().optional().describe(`Defaults to "live". ${COMPARAND_HELP}`),
       },
     },
