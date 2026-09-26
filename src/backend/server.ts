@@ -92,7 +92,7 @@ import { issueHumanDecision, issueUnverifiedDecision } from './services/human-de
 import { cameFromAppWindow } from './services/ipc-dispatcher';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
-import { getDeviations, resolveDeviation } from './services/deviation-service';
+import { getDeviations, reconcileDeviations, DeviationError } from './services/deviation-service';
 import * as presenceService from './services/presence-service';
 import { applyTemplate, applyTemplateToPlan } from './services/plan-templates-service';
 import { listTemplates } from './services/plan-templates';
@@ -2743,17 +2743,26 @@ app.get('/api/plans/:uid/projection', (req, res) => {
 
 // Plan deviations
 app.get('/api/plans/:uid/deviations', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(getDeviations(req.params.uid));
 });
 
-// Reconcile deviations
+// Reconcile deviations — only this plan's, each checked first (bug 30)
 app.post('/api/plans/:uid/reconcile', (req, res) => {
-  const { deviations } = req.body; // [{id, action}]
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  const { deviations } = req.body ?? {}; // [{id, action}]
   if (!Array.isArray(deviations)) { res.status(400).json({ error: 'deviations array required' }); return; }
-  for (const d of deviations) {
-    resolveDeviation(d.id, d.action);
+  try {
+    const resolved = reconcileDeviations(req.params.uid, deviations, cameFromAppWindow(req)
+      ? { actor: getAuthorKey('human'), actorType: 'human' }
+      : { actor: getAuthorKey('human'), actorType: 'unverified' });
+    broadcast('deviations-resolved', { planUid: req.params.uid, ids: deviations.map((d: { id: unknown }) => d.id) });
+    saveNow(() => exportDatabase());
+    res.json({ ok: true, resolved });
+  } catch (err) {
+    if (err instanceof DeviationError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
   }
-  res.json({ ok: true, resolved: deviations.length });
 });
 
 // --- Plan Spec Documents API ---

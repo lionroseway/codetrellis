@@ -93,6 +93,8 @@ export interface ToolDeps {
   publishPlanAsTemplate: typeof import('../services/plan-template-publish-service').publishPlanAsTemplate;
   getDeviations: typeof import('../services/deviation-service').getDeviations;
   resolveDeviation: typeof import('../services/deviation-service').resolveDeviation;
+  reconcileDeviations: typeof import('../services/deviation-service').reconcileDeviations;
+  DeviationError: typeof import('../services/deviation-service').DeviationError;
   detectDeviations: typeof import('../services/deviation-service').detectDeviations;
   captureCurrentTrellis: typeof import('../services/trellis-service').captureCurrentTrellis;
   listSnapshots: typeof import('../services/trellis-service').listSnapshots;

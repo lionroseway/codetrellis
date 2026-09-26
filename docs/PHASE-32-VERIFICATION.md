@@ -15,7 +15,7 @@ is proof of a gap.
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
 | REST routes | 215 | 201 | 21 | 21 | 90 | 0 |
-| MCP tools | 185 | 147 | 19 | 13 | 91 | 0 |
+| MCP tools | 185 | 147 | 10 | 4 | 91 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -66,14 +66,14 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 76 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 78 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
 | b | `GET /api/cross-system` |  | ✗ none | 6 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
 | b | `GET /api/dependencies` |  | ✗ none | 3 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
 | b | `GET /api/dependencies/file` |  | ✗ none | 2 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
-| b | `GET /api/diff` |  | ✗ none | 2 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
+| b | `GET /api/diff` |  | ✗ none | 3 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
 | b | `GET /api/file/at` |  | ✗ none | 2 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
 | b | `GET /api/file/content` |  | ✗ none | 2 | ✓ 0.4b: returns the file's exact content; outside opened projects 403 (misc-endpoints, filesystem-boundary) |  |  |
 | b | `GET /api/file/overlay` |  | ✗ none | 2 | ✓ 0.4b: plan edits mapped onto lines (plan-overlay) |  |  |
@@ -87,7 +87,7 @@ is proof of a gap.
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes a reply from the thread (item-surface) |  |  |
-| c | `DELETE /api/items/:uid` |  | ✗ none | 7 |  |  |  |
+| c | `DELETE /api/items/:uid` |  | ✗ none | 8 |  |  |  |
 | c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
 | c | `DELETE /api/plans/:uid` |  | 1 | 12 |  |  |  |
@@ -96,7 +96,7 @@ is proof of a gap.
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
 | c | `GET /api/contributions` |  | 1 | 3 |  |  |  |
 | c | `GET /api/items/:itemUid/refs` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/items/:uid` |  | ✗ none | 7 |  |  |  |
+| c | `GET /api/items/:uid` |  | ✗ none | 8 |  |  |  |
 | c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/criteria` |  | ✗ none | 5 |  |  |  |
@@ -111,16 +111,16 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 43 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 44 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 18 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 19 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 12 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/deviations` |  | ✗ none | 2 |  |  |  |
+| c | `GET /api/plans/:uid/deviations` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
 | c | `GET /api/plans/:uid/docs/by-type/:docType` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/docs/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by body with excerpt; no match is empty (plan-rest) |  |  |
@@ -151,23 +151,23 @@ is proof of a gap.
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 43 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 44 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 18 |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 19 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
 | c | `POST /api/plans/:uid/export` |  | ✗ none | 8 |  |  |  |
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/plans/:uid/unlink` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/bulk-delete` |  | ✗ none | 1 | ✓ 0.4c-1: exactly the named plans; empty list 400 (plan-rest) |  |  |
 | c | `POST /api/plans/from-template` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/plans/import` |  | 1 | 2 |  |  |  |
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
-| c | `PUT /api/items/:uid` |  | ✗ none | 7 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
+| c | `PUT /api/items/:uid` |  | ✗ none | 8 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/plans/:uid` |  | 1 | 12 |  |  |  |
@@ -203,12 +203,12 @@ is proof of a gap.
 | g | `GET /api/sessions` |  | ✗ none | 4 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
-| h | `GET /api/baseline` |  | ✗ none | 2 |  |  |  |
+| h | `GET /api/baseline` |  | ✗ none | 3 |  |  |  |
 | h | `GET /api/comparands` |  | ✗ none | 4 |  |  |  |
 | h | `GET /api/compare` |  | ✗ none | 5 |  |  |  |
 | h | `GET /api/conflicts` |  | ✗ none | 4 |  |  |  |
 | h | `GET /api/freeze` |  | ✗ none | 2 |  |  |  |
-| h | `POST /api/baseline/capture` |  | ✗ none | 1 |  |  |  |
+| h | `POST /api/baseline/capture` |  | ✗ none | 2 |  |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 |  |  |  |
 | h | `PUT /api/freeze` |  | ✗ none | 2 |  |  |  |
 | i | `DELETE /api/terminals/:id` |  | ✗ none | 1 |  |  |  |
@@ -298,14 +298,14 @@ is proof of a gap.
 | b | `ui_ready` | graph · read | ✗ none | 1 | ✓ 0.4b: renderer answer passed through; no window = ready:false within 5 s; real window (graph-tools, e2e mcp-view-tools) |  |  |
 | c | `accept_contributions` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `add_external_ref` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: GitHub issue URL recognised (item-surface) |  |  |
-| c | `add_item` | plan-item · write | 3 | 14 |  |  |  |
+| c | `add_item` | plan-item · write | 3 | 15 |  |  |  |
 | c | `add_item_attachment` | plan-item · write | ✗ none | 3 |  |  |  |
 | c | `add_item_comment` | plan-item · write | ✗ none | 3 |  |  |  |
 | c | `add_plan_scope` | plan · write | ✗ none | 3 |  |  |  |
 | c | `bulk_add_items` | plan-item · write | 1 | ✗ none |  |  |  |
 | c | `claim_item` | plan-item · write | 1 | 4 |  |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
-| c | `create_plan` | plan · write | 1 | 16 |  |  |  |
+| c | `create_plan` | plan · write | 1 | 17 |  |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
 | c | `delete_item` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `delete_item_attachment` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
@@ -344,7 +344,7 @@ is proof of a gap.
 | c | `set_plan_home_repo` | plan · write | ✗ none | 1 | ✓ 0.4c-1: normalised; empty clears (plan-tools) |  |  |
 | c | `suggest_specs` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: file specs under a scope (item-surface) |  |  |
 | c | `unlink_plan_from_files` | plan · write | ✗ none | 1 | ✓ 0.4c-1: removes the directory, even after a rename; plan survives (plan-tools; bug 22) |  |  |
-| c | `update_item` | plan-item · write | 1 | 9 |  |  |  |
+| c | `update_item` | plan-item · write | 1 | 10 |  |  |  |
 | c | `update_item_progress` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `update_plan` | plan · write | ✗ none | 1 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 1 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
@@ -393,29 +393,29 @@ is proof of a gap.
 | g | `toggle_activity_drawer` | session · write | ✗ none | 1 | ✓ 0.4g: drawer toggles both ways (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `toggle_panel` | session · write | ✗ none | 1 | ✓ 0.4g: sends the panel (agent-ui-tools) |  |  |
 | g | `update_settings` | ui · settings | ✗ none | 1 | ✓ 0.4g: persists first-run and data fields (cdev-phase5) |  |  |
-| h | `capture_checkpoint` | drift · write | ✗ none | ✗ none |  |  |  |
+| h | `capture_checkpoint` | drift · write | ✗ none | 1 |  |  |  |
 | h | `check_freeze` | governance · read | ✗ none | 1 |  |  |  |
 | h | `commit_manifest_changes` | git · write | ✗ none | 4 |  |  |  |
-| h | `compare_snapshots` | review · read | ✗ none | 1 |  |  |  |
-| h | `detect_conflicts` | git · read | ✗ none | 1 |  |  |  |
-| h | `detect_deviations` | drift · read | ✗ none | 2 |  |  |  |
+| h | `compare_snapshots` | review · read | ✗ none | 2 |  |  |  |
+| h | `detect_conflicts` | git · read | ✗ none | 2 |  |  |  |
+| h | `detect_deviations` | drift · read | ✗ none | 3 |  |  |  |
 | h | `diff_plan_between_commits` | git · read | ✗ none | 1 |  |  |  |
 | h | `exempt_plan_from_freeze` | governance · write | ✗ none | 1 |  |  |  |
-| h | `get_change_status` | drift · read | ✗ none | ✗ none |  |  |  |
-| h | `get_changes_summary` | drift · read | ✗ none | ✗ none |  |  |  |
-| h | `get_deviations` | drift · read | ✗ none | ✗ none |  |  |  |
+| h | `get_change_status` | drift · read | ✗ none | 1 |  |  |  |
+| h | `get_changes_summary` | drift · read | ✗ none | 1 |  |  |  |
+| h | `get_deviations` | drift · read | ✗ none | 1 |  |  |  |
 | h | `get_drift_report` | drift · read | ✗ none | 1 |  |  |  |
 | h | `get_freeze_status` | governance · read | ✗ none | 1 |  |  |  |
 | h | `get_plan_at_commit` | git · read | ✗ none | 1 |  |  |  |
 | h | `get_plan_history` | git · read | ✗ none | 1 |  |  |  |
 | h | `get_pr_draft` | review · read | 1 | ✗ none |  |  |  |
 | h | `get_team_activity` | git · read | ✗ none | 1 |  |  |  |
-| h | `list_comparands` | review · read | ✗ none | ✗ none |  |  |  |
-| h | `list_proposed_changes` | drift · read | ✗ none | ✗ none |  |  |  |
-| h | `reconcile` | drift · write | ✗ none | ✗ none |  |  |  |
-| h | `resolve_conflict` | git · write | ✗ none | ✗ none |  |  |  |
+| h | `list_comparands` | review · read | ✗ none | 1 |  |  |  |
+| h | `list_proposed_changes` | drift · read | ✗ none | 1 |  |  |  |
+| h | `reconcile` | drift · write | ✗ none | 1 |  |  |  |
+| h | `resolve_conflict` | git · write | ✗ none | 1 |  |  |  |
 | h | `review_plan` | review · read | 2 | 1 |  |  |  |
-| h | `search_plan_history` | git · read | ✗ none | ✗ none |  |  |  |
+| h | `search_plan_history` | git · read | ✗ none | 1 |  |  |  |
 | h | `set_freeze` | governance · write | ✗ none | 1 |  |  |  |
 | i | `get_audio_context` | audio · capture | ✗ none | 1 |  |  |  |
 | i | `get_audio_status` | audio · capture | ✗ none | 1 |  |  |  |

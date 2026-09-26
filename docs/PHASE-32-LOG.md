@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | 0.4h Drift, governance, review |
 | **Status** | Started. #124 (0.4g) merged; its full harness was 500 passed, 1 skipped, 0 retries |
-| **Next action** | Baseline done (bug 29). Next: the 9 untested tools (checkpoints, changes, deviations, comparands, reconcile, conflicts, history search) |
+| **Next action** | Bugs 29–32 fixed, 9 tools tested. Next: check the existing domain-h tests assert behaviour, fill the matrix, full harness, PR |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4h-drift` |
 | **Last updated** | 2026-09-26 |
@@ -141,6 +141,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4h — the drift and review tools (bugs 30, 31, 32)
+
+`tests/e2e/drift-review-tools.test.ts` covers the 9 untested tools:
+deviations (get, reconcile), proposed changes (list, summary, one),
+`capture_checkpoint` and `list_comparands`, `resolve_conflict` by side,
+and `search_plan_history`.
+
+- **Bug 30, reconcile.** Resolved deviations by bare id, across plans;
+  counted unknown ids as resolved; REST stored any action; credited the
+  plan change to "codetrellis". Now `reconcileDeviations` checks every id
+  and action against the plan first and records the resolver (new
+  `resolved_by` / `resolved_by_type` columns; the reconciler adds them).
+  The phone's `deviation.resolve` goes through it too. Plan checks on
+  `get_deviations`, `detect_deviations` (no more `process.cwd()`
+  fallback) and `capture_checkpoint`; `get_change_status` not-found is an
+  error.
+- **Bug 31, write-through.** Item and criterion changes never scheduled
+  the write to `.codetrellis/plans/`. Found because the history test's
+  item never reached disk; the 0.4c-1 rename test had passed on the rename
+  debounce firing after its `add_item`. Every item mutation now schedules
+  it. 36 plan, cdev, manifest, worktree and item specs (175 tests) pass.
+- **Bug 32, history search.** The record separator ended each record, so
+  file lists fell into the next one: no `matchedFiles`, and only the
+  first match survived. The separator now starts each record.
+
+Each fix's test fails without it. Untested MCP tools: 4 (mobile_* and
+read_system_doc, later steps).
 
 ### 2026-09-26: 0.4h — what the baseline is, and says it is (bug 29)
 

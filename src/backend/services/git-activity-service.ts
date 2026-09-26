@@ -173,7 +173,11 @@ export function searchPlanHistory(
   // execFileSync passes each arg directly — no shell, so query can't inject.
   const args = [
     'log',
-    '--format=%H%x1f%aI%x1f%aN%x1f%s%x1e',
+    // The separator STARTS each record. At the end, --name-only's file list
+    // (which follows the header) fell into the NEXT record: matchedFiles was
+    // always empty, and every match after the first was dropped because its
+    // record began with the previous commit's files (Phase 32 §0.4h).
+    '--format=%x1e%H%x1f%aI%x1f%aN%x1f%s',
     '--name-only',
     `-G${escapeRegex(query)}`,
     '-i', // case-insensitive

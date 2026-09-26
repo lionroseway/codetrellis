@@ -581,9 +581,13 @@ async function routeMethod(
 
     case 'deviation.resolve': {
       const id = params.id as number;
-      const resolution = params.resolution as 'accepted' | 'reverted' | 'ignored';
+      const resolution = params.resolution;
       if (!id || !resolution) throw new Error('id and resolution required');
-      deviationService.resolveDeviation(id, resolution);
+      // Through the same checks as the desktop (bug 30): a real deviation, a
+      // real resolution, recorded as the person on the paired phone.
+      const planUid = deviationService.planOfDeviation(id);
+      if (!planUid) throw new Error(`No deviation ${id}`);
+      deviationService.reconcileDeviations(planUid, [{ id, action: resolution }], { actor: getAuthorKey('human'), actorType: 'human' });
       return { ok: true };
     }
 

@@ -23,19 +23,10 @@
     "PUT /api/system-docs/:uid"
   ],
   "mcp": [
-    "capture_checkpoint",
-    "get_change_status",
-    "get_changes_summary",
-    "get_deviations",
-    "list_comparands",
-    "list_proposed_changes",
     "mobile_navigate",
     "mobile_present",
     "mobile_screenshot",
-    "read_system_doc",
-    "reconcile",
-    "resolve_conflict",
-    "search_plan_history"
+    "read_system_doc"
   ],
   "rpc": [
     "changes.summary",
