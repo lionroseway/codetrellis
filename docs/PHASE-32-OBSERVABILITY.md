@@ -11,6 +11,8 @@ Status: **plan**. Companion to:
   today, with file references. §18–§23 cover this doc's areas.
 - [PHASE-32-JOURNEYS.md](PHASE-32-JOURNEYS.md): the stories, including
   G–K for this doc.
+- [PHASE-32-WIREFRAMES.md](PHASE-32-WIREFRAMES.md): ASCII sketches of
+  every screen and state below.
 
 ---
 
