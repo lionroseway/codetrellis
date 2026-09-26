@@ -57,6 +57,18 @@ describe('currentBranch', () => {
   });
   test('not a repository', () => assert.equal(currentBranch(plain), null));
   test('a path that does not exist', () => assert.equal(currentBranch(path.join(tmp, 'nope')), null));
+  test('a subdirectory of a repository is not itself a checkout (unchanged behaviour)', () => {
+    const sub = path.join(main, 'sub');
+    fs.mkdirSync(sub, { recursive: true });
+    assert.equal(currentBranch(sub), null);
+  });
+  test('a HEAD that climbs out with `..` is not followed', () => {
+    const bogus = path.join(tmp, 'bogus');
+    fs.mkdirSync(path.join(bogus, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(bogus, '.git', 'HEAD'), 'ref: refs/../../../etc/passwd\n');
+    assert.equal(currentBranch(bogus), null);
+    assert.equal(hasCommits(bogus), false);
+  });
 });
 
 describe('checkoutGitDir', () => {
@@ -76,6 +88,12 @@ describe('localBranches', () => {
     }
   });
   test('empty for a non-repo', () => assert.deepEqual(localBranches(plain), []));
+  test('a branch both packed and loose (committed to after packing) is listed once', () => {
+    git(main, 'commit', '-q', '--allow-empty', '-m', 'after packing');
+    assert.ok(fs.existsSync(path.join(main, '.git', 'refs', 'heads', 'main')));
+    assert.ok(fs.readFileSync(path.join(main, '.git', 'packed-refs'), 'utf-8').includes('refs/heads/main'));
+    assert.equal(localBranches(main).filter((b) => b === 'main').length, 1);
+  });
 });
 
 describe('hasCommits', () => {

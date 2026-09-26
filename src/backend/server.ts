@@ -618,9 +618,9 @@ app.get('/api/git/worktrees', (req, res) => {
 });
 
 // Branches and the OTHER worktrees of a project's repository, for the
-// branch popover. Asked of git (services/git-checkout) so it answers the
-// same from a linked worktree, whose `.git` is a file, and sees packed
-// branches; the previous hand-read of `.git/` saw neither.
+// branch popover. services/git-checkout follows a linked worktree's `.git`
+// file and reads packed refs; the previous hand-read of `.git/` did
+// neither. The other checkouts come from `git worktree list`.
 app.get('/api/git/info', (req, res) => {
   const projectPath = requireProjectPath(req, res);
   if (!projectPath) return;

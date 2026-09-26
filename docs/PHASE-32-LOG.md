@@ -124,6 +124,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | `rule` signals wait for a rules format (A7) | No architecture rules exist (CURRENT-STATE §4) |
 | 2026-09-26 | Breakpoints distinguish enforced from detected | CodeTrellis can't stop editor-tool edits without a hook |
 | 2026-09-26 | One Phase 32 step PR open at a time; each step branches from `feat/phase-32` after the previous merge | Squash merges plus shared docs made parallel and stacked PRs conflict (#113–#115) |
+| 2026-09-26 | Git checkout facts (branch, git dir, branches) are read from git's on-disk layout, not by running `git` | Auto-detect asks about unopened directories; `safe.directory` would blank the branch where the file read worked (0.4a) |
+| 2026-09-26 | `project.*` RPC methods are verified in 0.4j, not 0.4a | No harness path to the peer RPC surface yet; 0.4j builds it |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
@@ -175,9 +177,16 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   - `commit_manifest_changes` failed with ENOTDIR.
 
   Branch listing also missed packed refs (any clone, any `git gc`).
-- **Fix:** `services/git-checkout.ts` asks git (`rev-parse
-  --absolute-git-dir`, `symbolic-ref`, `for-each-ref`), and every site
-  uses it. The commit message goes in on stdin instead of a temp file.
+- **Fix:** `services/git-checkout.ts` reads git's on-disk layout
+  properly (the `.git` file's `gitdir:`, `commondir`, HEAD, loose and
+  packed refs) and every site uses it. The commit message goes in on
+  stdin instead of a temp file.
+- **Decision: file reads, not `git`.** First draft ran `git rev-parse` /
+  `symbolic-ref`. Changed because `/api/auto-detect` asks about
+  directories named in Claude Code's session files (not opened
+  projects), and git refuses repos owned by another user
+  (`safe.directory`), which would blank the branch chip where the old
+  read worked.
 - **Tests:** `tests/e2e/worktree-project.test.ts` (6, all from inside a
   linked worktree; all 6 failed before the fix) and
   `git-checkout.test.ts` (13 unit). `git-integration` still green.
