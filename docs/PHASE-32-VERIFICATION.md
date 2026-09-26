@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 213 | 199 | 27 | 27 | 72 | 0 |
-| MCP tools | 185 | 147 | 46 | 37 | 56 | 0 |
+| REST routes | 213 | 199 | 23 | 23 | 78 | 0 |
+| MCP tools | 185 | 147 | 42 | 33 | 65 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 74 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 75 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -111,8 +111,8 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 41 |  |  |  |
-| c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 42 |  |  |  |
+| c | `GET /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 17 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 12 |  |  |  |
@@ -151,8 +151,8 @@ is proof of a gap.
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 41 |  |  |  |
-| c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 42 |  |  |  |
+| c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 17 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
@@ -187,12 +187,12 @@ is proof of a gap.
 | e | `GET /api/artefacts/:uid/rendition` |  | ✗ none | 1 | ✓ 0.4e: 415 for a type it does not convert; 503 with a sentence and fallback without an engine; 404 (brief-surface) |  |  |
 | e | `GET /api/items/:uid/artefacts` |  | ✗ none | 1 | ✓ 0.4e: the item's files, re-hashed after an edit; 404 (brief-surface) |  |  |
 | e | `POST /api/items/:uid/artefacts` |  | ✗ none | 1 | ✓ 0.4e: hashed, stored relative, re-record in place; bad role, type, missing, outside, link, unknown item refused (brief-surface) |  |  |
-| f | `GET /api/channels/:eventUid/thread` |  | ✗ none | ✗ none |  |  |  |
-| f | `GET /api/presence/cards` |  | ✗ none | 1 |  |  |  |
-| f | `POST /api/channels/:eventUid/status` |  | ✗ none | ✗ none |  |  |  |
-| f | `POST /api/presence/ack` |  | ✗ none | ✗ none |  |  |  |
-| f | `POST /api/presence/reply` |  | ✗ none | ✗ none |  |  |  |
-| f | `POST /api/screenshot-response` |  | ✗ none | 1 |  |  |  |
+| f | `GET /api/channels/:eventUid/thread` |  | ✗ none | 1 | ✓ 0.4f: root then replies in order, human and agent posts; unknown root → [] (presence-channels, cdev-channels) |  |  |
+| f | `GET /api/presence/cards` |  | ✗ none | 2 | ✓ 0.4f: posted card listed with its agent; empty after dismiss (presence-channels) |  |  |
+| f | `POST /api/channels/:eventUid/status` |  | ✗ none | 1 | ✓ 0.4f: resolve, reopen; broadcast; missing/unknown status 400; unknown event 404 (presence-channels) |  |  |
+| f | `POST /api/presence/ack` |  | ✗ none | 1 | ✓ 0.4f: releases the waiting await_ack; broadcast; 400 without fields; 404 unknown card (presence-channels) |  |  |
+| f | `POST /api/presence/reply` |  | ✗ none | 1 | ✓ 0.4f: reaches the waiting agent once and is not re-queued; 400 without text (presence-channels; bug 25) |  |  |
+| f | `POST /api/screenshot-response` |  | ✗ none | 1 | ✓ 0.4f: the renderer's answer resolves the waiting request tool by nonce (graph-tools) |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/setup` |  | ✗ none | 2 |  |  |  |
@@ -303,7 +303,7 @@ is proof of a gap.
 | c | `bulk_add_items` | plan-item · write | 1 | ✗ none |  |  |  |
 | c | `claim_item` | plan-item · write | 1 | 4 |  |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
-| c | `create_plan` | plan · write | 1 | 15 |  |  |  |
+| c | `create_plan` | plan · write | 1 | 16 |  |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
 | c | `delete_item` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `delete_item_attachment` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
@@ -356,15 +356,15 @@ is proof of a gap.
 | e | `list_materials` | plan-item · read | 1 | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
 | e | `read_material` | plan-item · files | 2 | 1 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | 1 | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
-| f | `await_ack` | presence · write | ✗ none | ✗ none |  |  |  |
-| f | `await_user_input` | presence · write | ✗ none | ✗ none |  |  |  |
-| f | `dismiss_channel_event` | channel · write | ✗ none | ✗ none |  |  |  |
-| f | `dismiss_presence` | presence · write | ✗ none | ✗ none |  |  |  |
-| f | `get_channel_thread` | channel · read | ✗ none | 1 |  |  |  |
-| f | `list_channel_events` | channel · read | ✗ none | 3 |  |  |  |
-| f | `post_channel_event` | channel · write | 1 | 5 |  |  |  |
-| f | `present` | presence · write | ✗ none | 1 |  |  |  |
-| f | `resolve_channel_event` | channel · write | ✗ none | 2 |  |  |  |
+| f | `await_ack` | presence · write | ✗ none | 1 | ✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25) |  |  |
+| f | `await_user_input` | presence · write | ✗ none | 1 | ✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25) |  |  |
+| f | `dismiss_channel_event` | channel · write | ✗ none | 1 | ✓ 0.4f: dismissed, broadcast, gone from the open list; unknown an error (presence-channels) |  |  |
+| f | `dismiss_presence` | presence · write | ✗ none | 1 | ✓ 0.4f: clears every card and releases waiters (presence-channels; bug 25) |  |  |
+| f | `get_channel_thread` | channel · read | ✗ none | 2 | ✓ 0.4f: same order as REST (presence-channels, cdev-channels) |  |  |
+| f | `list_channel_events` | channel · read | ✗ none | 4 | ✓ 0.4f: status filter excludes dismissed; pulled events appear (presence-channels; bug 26) |  |  |
+| f | `post_channel_event` | channel · write | 1 | 6 | ✓ 0.4f: threads with responds_to, exported to the plan folder (presence-channels, cdev-channels) |  |  |
+| f | `present` | presence · write | ✗ none | 2 | ✓ 0.4f: card posted, broadcast, attributed to the agent (presence-channels) |  |  |
+| f | `resolve_channel_event` | channel · write | ✗ none | 2 | ✓ 0.4f: resolved in DB and YAML (cdev-channels) |  |  |
 | g | `check_budget` | budget · read | ✗ none | ✗ none |  |  |  |
 | g | `clipboard_read` | ui · capture | 1 | ✗ none |  |  |  |
 | g | `clipboard_write` | ui · write | ✗ none | ✗ none |  |  |  |

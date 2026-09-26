@@ -562,18 +562,14 @@ app.post('/api/presence/reply', (req, res) => {
     res.status(400).json({ error: 'text is required' });
     return;
   }
-  const reply = presenceService.postReply(text);
-
-  // Resolve the pending await_user_input promise if one exists
-  const nonce = (globalThis as any).__presenceReplyNonce as string | undefined;
-  if (nonce) {
-    const resolver = (globalThis as any).__presenceResolve as
-      ((nonce: string, data: string) => void) | undefined;
-    if (resolver) {
-      resolver(nonce, JSON.stringify({ text: reply.text, at: reply.createdAt }));
-    }
-    (globalThis as any).__presenceReplyNonce = undefined;
-  }
+  // The agent waiting on the box gets it; with nobody waiting it is queued
+  // for the next question (presence-service, bug 25).
+  const nonce = presenceService.takeReplyWaiter();
+  const resolver = (globalThis as any).__presenceResolve as
+    ((nonce: string, data: string) => boolean) | undefined;
+  const at = Date.now();
+  const delivered = !!nonce && !!resolver && resolver(nonce, JSON.stringify({ text, at }));
+  const reply = presenceService.postReply(text, { queue: !delivered });
 
   broadcast('presence-reply', { reply });
   res.json({ ok: true, reply });
@@ -2068,6 +2064,10 @@ app.post('/api/channels/:eventUid/status', (req, res) => {
   const { status } = req.body || {};
   if (!status) {
     res.status(400).json({ error: 'status is required' });
+    return;
+  }
+  if (!channelEventService.getChannelEvent(req.params.eventUid)) {
+    res.status(404).json({ error: 'Channel event not found' });
     return;
   }
   try {

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4e Brief and viewer |
-| **Status** | 5 artefact routes and the 4 Brief tools tested; bug 24 (CSV cell citations unreadable) fixed. Full harness next |
-| **Next action** | Full harness on 0.4e; PR; merge when green; then 0.4f (channels and presence, incl. the cdev-channels watcher flake) |
+| **Stage / step** | 0.4f Channels and presence |
+| **Status** | 4 routes and 4 tools tested; bugs 25 (presence waits stranded agents) and 26 (watcher missed files in a new folder) fixed. Full harness next |
+| **Next action** | Full harness on 0.4f; PR; merge when green; then 0.4g (agents and MCP) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4e-brief` |
+| **Branch** | `feat/phase-32-0.4f-channels` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -40,7 +40,7 @@
 - [x] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete) (#119)
 - [x] 0.4c-2 Items, incl. retiring the V1 task API (#120)
 - [x] 0.4d Criteria and sign-off (#121)
-- [ ] 0.4e Brief and viewer
+- [x] 0.4e Brief and viewer (#122)
 - [ ] 0.4f Channels and presence
 - [ ] 0.4g Agents and MCP
 - [ ] 0.4h Drift, governance, review
@@ -141,6 +141,44 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4f — presence waits and the watcher flake (bugs 25, 26)
+
+`tests/e2e/presence-channels.test.ts` covers the four untested routes
+(thread, status, presence ack and reply) and four untested tools
+(await_ack, await_user_input, dismiss_presence, dismiss_channel_event),
+plus present and the channel read tools.
+
+**Bug 25, presence waits.** `await_user_input` stored its waiting nonce
+in one global; a second agent's question overwrote it and the first agent
+waited out its timeout (up to 5 min), told nothing. `dismiss_presence`
+left every `await_ack` waiting; `await_ack` on an unknown card waited the
+full timeout. Fixed as the owner's rule for agents implies: tell the
+agent. A replaced wait returns `{text: null, superseded: true}` at once,
+dismiss releases waiters with `via: "dismissed"`, an unknown card is an
+error. A reply that answered someone is no longer also queued. That part
+is defensive: its test passes on the old code too, because a later
+question already skipped older replies. The other three bug-25 tests fail
+without the fix. An unknown channel event's status change is now 404.
+
+**Bug 26, the cdev-channels flake.** 0.4a saw `cdev-channels` step 6
+("external channel event imported by watcher") time out once, never
+reproduced. The watcher's own comment names a chokidar v4 behaviour with
+new folders, so I probed chokidar alone with the app's options: a file
+written into a folder immediately after the folder is created was missed
+11 times in 60; with a 5 ms or longer gap, never, even under CPU load. The
+product case is a pull that brings a teammate's first channel events on a
+shared plan as a new `channels/` folder with its files. The harness test
+does exactly that (8 plans × 3 files) and lost an event in 2 of 3 unfixed
+runs. Fix: when a folder appears in the plans tree, the watcher looks in
+it 500 ms later and hands over what it was not told about (one plan import
+per plan folder, which reads the channel files too). 6 of 6 with the fix.
+Whether this is what the 0.4a flake was is not proven. That step writes
+into a `channels/` folder the app created moments earlier, so it is the
+same mechanism only if the machine was loaded enough to delay the attach.
+
+Untested: 23 REST routes, 33 MCP tools. The 7 mobile RPC methods in
+domain f stay with 0.4j.
+
 ### 2026-09-26: 0.4e — an agent could cite a CSV cell it could not read (bug 24)
 
 Writing `tests/e2e/brief-surface.test.ts` (the five artefact routes and
@@ -169,6 +207,9 @@ convert and 503 with `fallback: true` when the build has no engine;
 `get_brief` gives the item's own files plus the pages' materials (not the
 pages' outputs). Untested REST routes: 27. `artefact.preview` (mobile)
 stays with 0.4j; the three domain-e components get their UX pass in 0.5.
+
+Full harness at `95b28c4`: 480 passed, 1 skipped, 0 retries. CI green;
+merged as #122.
 
 ### 2026-09-26: 0.4d — decisions and criteria say who made them
 

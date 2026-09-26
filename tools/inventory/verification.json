@@ -436,5 +436,50 @@
   },
   "mcp:record_artefact": {
     "behaviour": "✓ 0.4e: agent records an output (brief-surface, criteria-loops)"
+  },
+  "rest:GET /api/channels/:eventUid/thread": {
+    "behaviour": "✓ 0.4f: root then replies in order, human and agent posts; unknown root → [] (presence-channels, cdev-channels)"
+  },
+  "rest:GET /api/presence/cards": {
+    "behaviour": "✓ 0.4f: posted card listed with its agent; empty after dismiss (presence-channels)"
+  },
+  "rest:POST /api/channels/:eventUid/status": {
+    "behaviour": "✓ 0.4f: resolve, reopen; broadcast; missing/unknown status 400; unknown event 404 (presence-channels)"
+  },
+  "rest:POST /api/presence/ack": {
+    "behaviour": "✓ 0.4f: releases the waiting await_ack; broadcast; 400 without fields; 404 unknown card (presence-channels)"
+  },
+  "rest:POST /api/presence/reply": {
+    "behaviour": "✓ 0.4f: reaches the waiting agent once and is not re-queued; 400 without text (presence-channels; bug 25)"
+  },
+  "mcp:await_ack": {
+    "behaviour": "✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25)"
+  },
+  "mcp:await_user_input": {
+    "behaviour": "✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25)"
+  },
+  "mcp:dismiss_channel_event": {
+    "behaviour": "✓ 0.4f: dismissed, broadcast, gone from the open list; unknown an error (presence-channels)"
+  },
+  "mcp:dismiss_presence": {
+    "behaviour": "✓ 0.4f: clears every card and releases waiters (presence-channels; bug 25)"
+  },
+  "mcp:get_channel_thread": {
+    "behaviour": "✓ 0.4f: same order as REST (presence-channels, cdev-channels)"
+  },
+  "mcp:list_channel_events": {
+    "behaviour": "✓ 0.4f: status filter excludes dismissed; pulled events appear (presence-channels; bug 26)"
+  },
+  "mcp:post_channel_event": {
+    "behaviour": "✓ 0.4f: threads with responds_to, exported to the plan folder (presence-channels, cdev-channels)"
+  },
+  "mcp:present": {
+    "behaviour": "✓ 0.4f: card posted, broadcast, attributed to the agent (presence-channels)"
+  },
+  "mcp:resolve_channel_event": {
+    "behaviour": "✓ 0.4f: resolved in DB and YAML (cdev-channels)"
+  },
+  "rest:POST /api/screenshot-response": {
+    "behaviour": "✓ 0.4f: the renderer's answer resolves the waiting request tool by nonce (graph-tools)"
   }
 }
