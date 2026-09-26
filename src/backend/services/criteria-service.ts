@@ -7,8 +7,10 @@
  * nothing can set it directly and it cannot drift from its history.
  *
  * Decisions are append-only (`criterion_signoffs`). A person's decision
- * takes a `HumanDecision`, which no MCP code can construct (see
- * human-decision.ts). An agent's submission on an `agent`-policy
+ * takes a `HumanDecision` (the app window or a paired phone) or an
+ * `UnverifiedDecision` (the local HTTP API, which cannot tell a person
+ * from a script holding the token). No MCP code can construct either (see
+ * human-decision.ts), and the row records which it was. An agent's submission on an `agent`-policy
  * criterion records an approval in the agent's own name, over the `mcp`
  * channel — it is never stamped as a person's.
  */
@@ -16,7 +18,7 @@
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
-import { isHumanDecision, type HumanDecision } from './human-decision';
+import { actorTypeOf, isHumanDecision, isUnverifiedDecision, type DecisionAuthority } from './human-decision';
 import { currentHashes } from './artefact-service';
 import type {
   CriterionEvidence,
@@ -405,7 +407,7 @@ export function ensureCriteria(itemUid: string): void {
 export function addCriterionAsHuman(
   itemUid: string,
   input: { text: string; kind?: unknown; policy?: unknown },
-  decision: HumanDecision,
+  decision: DecisionAuthority,
 ): ItemCriterion {
   assertHuman(decision);
   requireItem(itemUid);
@@ -413,7 +415,7 @@ export function addCriterionAsHuman(
   const policy = input.policy === undefined ? defaultPolicy(kind) : parsePolicy(input.policy);
   const uid = insertCriterion({
     itemUid, text: requireText(input.text), kind, policy, source: null,
-    author: decision.actor, authorType: 'human',
+    author: decision.actor, authorType: actorTypeOf(decision),
   });
   markDirty();
   return getCriterion(uid)!;
@@ -444,7 +446,7 @@ export function addCriterionAsAgent(
 export function updateCriterion(
   uid: string,
   changes: { text?: unknown; policy?: unknown; sortOrder?: unknown },
-  decision: HumanDecision,
+  decision: DecisionAuthority,
 ): ItemCriterion {
   assertHuman(decision);
   const before = getCriterion(uid);
@@ -475,7 +477,7 @@ export function updateCriterion(
   return getCriterion(uid)!;
 }
 
-export function deleteCriterion(uid: string, decision: HumanDecision): boolean {
+export function deleteCriterion(uid: string, decision: DecisionAuthority): boolean {
   assertHuman(decision);
   if (!getCriterion(uid)) return false;
   getDb().run(`DELETE FROM item_criteria WHERE uid = ?`, [uid]);
@@ -545,7 +547,7 @@ export function submitCriterion(
 export function decideCriterion(
   criterionUid: string,
   input: { decision: unknown; note?: unknown; anchor?: unknown },
-  decision: HumanDecision,
+  decision: DecisionAuthority,
 ): ItemCriterion {
   assertHuman(decision);
   const criterion = getCriterion(criterionUid);
@@ -558,7 +560,7 @@ export function decideCriterion(
     throw new CriterionError('Say what is wrong — a send-back note is what the agent reads next.');
   }
   const anchor = input.decision === 'sent_back' ? parseAnchor(input.anchor, criterion.itemUid) : null;
-  appendSignoff(criterionUid, input.decision, decision.actor, 'human', decision.channel, note, anchor, decision.device ?? null);
+  appendSignoff(criterionUid, input.decision, decision.actor, actorTypeOf(decision), decision.channel, note, anchor, decision.device ?? null);
   markDirty();
   return getCriterion(criterionUid)!;
 }
@@ -751,8 +753,14 @@ export function criteriaForTemplate(itemUid: string): Array<{ text: string; kind
 
 // ── helpers ───────────────────────────────────────────────────────────
 
-function assertHuman(decision: HumanDecision): void {
-  if (!isHumanDecision(decision)) {
+/**
+ * A decision from the app window, a paired phone, or the local API. Never
+ * MCP: no tool can construct either authority. Which of them it was is
+ * recorded on the row (`actorTypeOf`), so an unverified one stays visibly
+ * unverified wherever it is shown.
+ */
+function assertHuman(decision: DecisionAuthority): void {
+  if (!isHumanDecision(decision) && !isUnverifiedDecision(decision)) {
     throw new CriterionError('Only a person can do this, from CodeTrellis or a paired phone.', 403);
   }
 }

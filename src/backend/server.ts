@@ -88,7 +88,8 @@ import * as artefactService from './services/artefact-service';
 import * as _lazy___services_artefact_watcher from './services/artefact-watcher';
 const startArtefactWatching = (a: Parameters<typeof _lazy___services_artefact_watcher.startArtefactWatching>[0]) =>
   _lazy___services_artefact_watcher.startArtefactWatching(a);
-import { issueHumanDecision } from './services/human-decision';
+import { issueHumanDecision, issueUnverifiedDecision } from './services/human-decision';
+import { cameFromAppWindow } from './services/ipc-dispatcher';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
 import { getDeviations, resolveDeviation } from './services/deviation-service';
@@ -2154,13 +2155,21 @@ app.get('/api/items/:uid/full', async (req, res) => {
 
 // ── Phase 31 §4.1–4.3: acceptance criteria and sign-off ──────────────
 //
-// This is the desktop's route to a person's decision: each handler below
-// that changes how work is judged issues a HumanDecision, which is the
-// only thing criteria-service accepts for it. MCP tools cannot reach
+// This is the desktop's route to a person's decision. Each handler below
+// that changes how work is judged issues a decision authority, which is
+// the only thing criteria-service accepts for it. MCP tools cannot reach
 // these operations at all (human-decision.test.ts).
+//
+// Which authority depends on how the request arrived (§0.4d, owner's
+// decision: decisions are tagged by who made them). From the app window's
+// IPC it is a person, `desktop`. Over plain HTTP with the token it could be
+// a person in a browser or a script that read the token, so it is recorded
+// as `unverified` over `local-api`: it counts, and says what it is wherever
+// it is shown.
 
-function desktopDecision() {
-  return issueHumanDecision('desktop', getAuthorKey('human'));
+function decisionFrom(req: express.Request) {
+  const actor = getAuthorKey('human');
+  return cameFromAppWindow(req) ? issueHumanDecision('desktop', actor) : issueUnverifiedDecision(actor);
 }
 
 function criteriaChanged(itemUid: string): void {
@@ -2188,7 +2197,7 @@ app.post('/api/items/:uid/criteria', (req, res) => {
   try {
     const body = req.body ?? {};
     const criterion = criteriaService.addCriterionAsHuman(
-      req.params.uid, { text: body.text, kind: body.kind, policy: body.policy }, desktopDecision(),
+      req.params.uid, { text: body.text, kind: body.kind, policy: body.policy }, decisionFrom(req),
     );
     criteriaChanged(criterion.itemUid);
     res.status(201).json(criterion);
@@ -2201,7 +2210,7 @@ app.put('/api/criteria/:uid', (req, res) => {
   try {
     const body = req.body ?? {};
     const criterion = criteriaService.updateCriterion(
-      req.params.uid, { text: body.text, policy: body.policy, sortOrder: body.sortOrder }, desktopDecision(),
+      req.params.uid, { text: body.text, policy: body.policy, sortOrder: body.sortOrder }, decisionFrom(req),
     );
     criteriaChanged(criterion.itemUid);
     res.json(criterion);
@@ -2213,7 +2222,7 @@ app.put('/api/criteria/:uid', (req, res) => {
 app.delete('/api/criteria/:uid', (req, res) => {
   try {
     const before = criteriaService.getCriterion(req.params.uid);
-    if (!before || !criteriaService.deleteCriterion(req.params.uid, desktopDecision())) {
+    if (!before || !criteriaService.deleteCriterion(req.params.uid, decisionFrom(req))) {
       res.status(404).json({ error: 'Criterion not found' });
       return;
     }
@@ -2232,7 +2241,7 @@ app.post('/api/criteria/:uid/decide', async (req, res) => {
     const before = criteriaService.getCriterion(req.params.uid);
     if (before) await artefactService.refreshArtefactHashes(before.itemUid).catch(() => []);
     const criterion = criteriaService.decideCriterion(
-      req.params.uid, { decision: body.decision, note: body.note, anchor: body.anchor }, desktopDecision(),
+      req.params.uid, { decision: body.decision, note: body.note, anchor: body.anchor }, decisionFrom(req),
     );
     // The notices that asked for this decision are answered (§12).
     const decidedPlan = planItemService.getItem(criterion.itemUid)?.planUid;

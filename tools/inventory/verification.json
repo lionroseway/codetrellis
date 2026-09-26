@@ -361,5 +361,53 @@
   },
   "rest:PUT /api/items/:uid": {
     "behaviour": "✓ 0.4c-2: parentUid validated like move (item-surface; bug 23)"
+  },
+  "rest:DELETE /api/criteria/:uid": {
+    "behaviour": "✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff)"
+  },
+  "rest:GET /api/criteria/:uid/signoffs": {
+    "behaviour": "✓ 0.4d: append-only record, each tagged by how it arrived — local-api/unverified over HTTP (criteria-signoff, criteria-loops)"
+  },
+  "rest:GET /api/plans/:uid/signoff-pack": {
+    "behaviour": "✓ 0.4d: every criterion, unverified approval tagged, file with hash at approval; unknown plan 404 (signoff-surface)"
+  },
+  "rest:GET /api/plans/:uid/signoff-pack.html": {
+    "behaviour": "✓ 0.4d: attachment download, CSP sandbox, nosniff; unverified approvals listed apart (signoff-surface)"
+  },
+  "rest:GET /api/plans/:uid/worklist": {
+    "behaviour": "✓ 0.4d: sent back first with note, then open; met/waiting counted; stale after source moves (signoff-surface)"
+  },
+  "rest:POST /api/criteria/:uid/check": {
+    "behaviour": "✓ 0.4d: holds while cited cell exists, fails with the reason once it is gone; 404 (signoff-surface)"
+  },
+  "rest:POST /api/criteria/:uid/decide": {
+    "behaviour": "✓ 0.4d: approve / send back (note required); HTTP records unverified, app window records human (criteria-signoff, ipc-dispatcher unit)"
+  },
+  "rest:POST /api/plans/:uid/signoff-pack/verify": {
+    "behaviour": "✓ 0.4d: matches, then changed after edit; empty, non-pack and other plan's pack refused (signoff-surface)"
+  },
+  "rest:PUT /api/criteria/:uid": {
+    "behaviour": "✓ 0.4d: rewording resets to open (criteria-signoff)"
+  },
+  "mcp:add_criterion": {
+    "behaviour": "✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec)"
+  },
+  "mcp:approve_gate": {
+    "behaviour": "✓ 0.4d: retired — refuses and points at submit_criterion (criteria-signoff)"
+  },
+  "mcp:check_criterion": {
+    "behaviour": "✓ 0.4d: refuses a cell outside the file, passes once fixed (criteria-loops)"
+  },
+  "mcp:get_worklist": {
+    "behaviour": "✓ 0.4d: hands back the send-back note and where it points (criteria-loops)"
+  },
+  "mcp:list_criteria": {
+    "behaviour": "✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff)"
+  },
+  "mcp:run_checks": {
+    "behaviour": "✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops)"
+  },
+  "mcp:submit_criterion": {
+    "behaviour": "✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff)"
   }
 }

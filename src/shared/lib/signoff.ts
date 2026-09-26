@@ -53,13 +53,19 @@ export interface SignoffRow {
    * person. Listed apart in the pack.
    */
   selfApproved: boolean;
+  /**
+   * Decided through the local HTTP API (§0.4d): it counts, but the token
+   * cannot tell a person from a script that read it, so it is never shown
+   * as a person's. The pack lists unverified approvals apart.
+   */
+  unverified: boolean;
   /** For a stale criterion: the files that changed after it was approved. */
   changedFiles: string[];
 }
 
-export function stateWords(row: Pick<SignoffRow, 'state' | 'selfApproved'>): string {
+export function stateWords(row: Pick<SignoffRow, 'state' | 'selfApproved'> & { unverified?: boolean }): string {
   switch (row.state) {
-    case 'met': return row.selfApproved ? 'met (agent-checked)' : 'met';
+    case 'met': return row.selfApproved ? 'met (agent-checked)' : row.unverified ? 'met (unverified)' : 'met';
     case 'submitted': return 'waiting for sign-off';
     case 'sent_back': return 'sent back';
     case 'stale': return 'changed since approved';
@@ -74,7 +80,11 @@ export function decisionWords(row: SignoffRow): string {
   const d = row.decision;
   if (!d) return '—';
   const verb = d.decision === 'approved' ? (row.selfApproved ? 'self-approved by' : 'approved by') : 'sent back by';
-  const how = d.channel === 'mcp' ? 'over MCP' : `on the ${d.channel}${d.device ? ` (${d.device})` : ''}`;
+  const how = d.channel === 'mcp'
+    ? 'over MCP'
+    : d.channel === 'local-api'
+      ? 'through the local API (unverified: not the app or a paired phone)'
+      : `on the ${d.channel}${d.device ? ` (${d.device})` : ''}`;
   return `${verb} ${d.actor} ${how}, ${date(d.at)}`;
 }
 

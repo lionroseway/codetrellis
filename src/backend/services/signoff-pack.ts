@@ -188,14 +188,25 @@ function groupByItem(rows: SignoffRow[]): Array<{ title: string; ref: string; ro
   return [...groups.values()];
 }
 
+/** " — 2 of them by the agent's own checks and 1 unverified, listed separately" */
+function summaryApart(self: number, unverified: number): string {
+  const parts = [
+    self ? `${self} of them by the agent's own checks` : '',
+    unverified ? `${unverified}${self ? '' : ' of them'} unverified (local API)` : '',
+  ].filter(Boolean);
+  return parts.length ? ` — ${parts.join(' and ')}, listed separately` : '';
+}
+
 /**
  * The pack as a standalone page. No script runs in it — the only `<script>`
  * is `application/json` data — and every value from the plan is escaped,
  * because criterion text and notes are written by agents and people alike.
  */
 export function renderPackHtml(pack: SignoffPack): string {
-  const byPerson = pack.rows.filter((r) => !r.selfApproved);
+  const unverifiedApproval = (r: SignoffRow) => r.unverified && r.decision?.decision === 'approved';
+  const byPerson = pack.rows.filter((r) => !r.selfApproved && !unverifiedApproval(r));
   const selfApproved = pack.rows.filter((r) => r.selfApproved);
+  const unverified = pack.rows.filter(unverifiedApproval);
   const met = pack.rows.filter((r) => r.state === 'met').length;
   const title = `Sign-off pack — ${pack.plan.title}`;
   const sections = groupByItem(byPerson)
@@ -205,6 +216,10 @@ export function renderPackHtml(pack: SignoffPack): string {
 <h2 class="self">Approved by the agent's own checks</h2>
 <p class="muted">These criteria were left to the agent (agent policy), and it approved them itself when it submitted. No person signed them.</p>
 ${groupByItem(selfApproved).map((g) => `<h3 class="item">${esc(g.title)} <span class="ref">${esc(g.ref)}</span></h3>\n${g.rows.map(rowHtml).join('\n')}`).join('\n')}`;
+  const unverifiedSection = unverified.length === 0 ? '' : `
+<h2 class="self">Approved through the local API (unverified)</h2>
+<p class="muted">These approvals came over the local HTTP API with this machine's token, not from the CodeTrellis app or a paired phone. A person in a browser or a script holding the token could have made them; nothing records which.</p>
+${groupByItem(unverified).map((g) => `<h3 class="item">${esc(g.title)} <span class="ref">${esc(g.ref)}</span></h3>\n${g.rows.map(rowHtml).join('\n')}`).join('\n')}`;
   const fileRows = pack.files.map((f) => `<tr><td class="path">${esc(f.path)}</td><td><code>${esc(f.sha256)}</code></td><td>${f.takenAt === 'approval' ? 'at approval' : 'when offered'}</td></tr>`).join('');
 
   return `<!doctype html>
@@ -236,8 +251,9 @@ ${groupByItem(selfApproved).map((g) => `<h3 class="item">${esc(g.title)} <span c
 <body>
 <h1>${esc(title)}</h1>
 <p class="muted">Generated ${esc(pack.generatedAt.replace('T', ' ').slice(0, 16))} UTC by CodeTrellis · plan ${esc(pack.plan.uid)}</p>
-<p class="summary">${met} of ${pack.rows.length} criteria met${selfApproved.length ? ` — ${selfApproved.length} of them by the agent's own checks, listed separately` : ''}.</p>
-${sections || '<p class="muted">This plan has no acceptance criteria.</p>'}
+<p class="summary">${met} of ${pack.rows.length} criteria met${summaryApart(selfApproved.length, unverified.length)}.</p>
+${sections || (pack.rows.length ? '' : '<p class="muted">This plan has no acceptance criteria.</p>')}
+${unverifiedSection}
 ${self}
 <h2>Files and hashes</h2>
 <p class="muted">Every file this pack vouches for, with the sha256 it had when it was judged. "Verify a pack" in CodeTrellis re-hashes each one and says which still match.</p>

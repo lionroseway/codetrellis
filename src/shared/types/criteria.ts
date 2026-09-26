@@ -21,7 +21,8 @@ export type CriterionPolicy = 'agent' | 'propose' | 'human';
 export type CriterionState = 'open' | 'submitted' | 'met' | 'sent_back' | 'stale';
 
 export type SignoffDecision = 'approved' | 'sent_back';
-export type SignoffChannel = 'desktop' | 'phone' | 'mcp';
+/** `local-api`: plain HTTP with the token — a person or a script, it cannot tell. */
+export type SignoffChannel = 'desktop' | 'phone' | 'mcp' | 'local-api';
 
 export interface CriterionEvidence {
   uid: string;
