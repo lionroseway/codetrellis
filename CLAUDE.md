@@ -31,6 +31,23 @@ Deep-dive docs live in `docs/claude/`:
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.
 
+## Phase 32 — Parallel awareness (in progress on `feat/phase-32`)
+
+**Read [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md) first.** Its
+**Now** block names the current step and the very next action. The work
+is long-running and runs across sessions, so the log, not the
+conversation, is the state. Update it at the start and end of every
+step, after every decision, before any long command, and at least every
+30 minutes ([`docs/PHASE-32-EXECUTION.md`](docs/PHASE-32-EXECUTION.md)
+§1).
+
+- **Branches:** one step, one branch `feat/phase-32-<step>-<slug>`, one
+  PR into `feat/phase-32`. The phase merges into `main` once, at the end.
+- **The suite was fully green at the start**, so any failure is ours.
+  Never skip, disable or quarantine a test.
+- **Stage 0 verifies what exists** (inventory, tests for everything,
+  clean UX) before new features.
+
 ## Phase 19 — Security Hardening (in progress)
 
 CodeTrellis runs on developer workstations with network reach into the
