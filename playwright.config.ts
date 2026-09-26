@@ -85,6 +85,8 @@ const SERIAL_SPECS = [
   '**/mcp-tools/changes-drift-templates.spec.ts',
   // The graph view tools act on every open page.
   '**/graph/mcp-view-tools.spec.ts',
+  // So do the UI tools (open_plan, select_item, the drawers and dialogs).
+  '**/agent/mcp-ui-tools.spec.ts',
   // Answers about whichever project was scanned last.
   '**/mcp-tools/graph-tools.spec.ts',
   // Opens the sample app, which swaps the one project every parallel spec reads.

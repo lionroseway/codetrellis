@@ -463,6 +463,24 @@ export const SCHEMA_PLAN_ITEMS = `
     updated_at  INTEGER NOT NULL
   );
 
+  -- Every change to a plan's ceiling, append-only: who made it, how it
+  -- arrived, and what it was before. An agent may change a budget (it is
+  -- advisory), and a change an agent made is flagged until a person has
+  -- seen it (Phase 32 §0.4g, owner's decision).
+  CREATE TABLE IF NOT EXISTS plan_budget_changes (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_uid         TEXT NOT NULL,
+    actor            TEXT NOT NULL,
+    actor_type       TEXT NOT NULL,
+    channel          TEXT NOT NULL,
+    before_json      TEXT,
+    after_json       TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    acknowledged_at  INTEGER,
+    acknowledged_by  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_plan_budget_changes_plan ON plan_budget_changes(plan_uid, created_at);
+
   CREATE TABLE IF NOT EXISTS plan_item_versions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     item_uid        TEXT NOT NULL REFERENCES plan_items(uid),

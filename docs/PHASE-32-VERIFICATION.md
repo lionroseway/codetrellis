@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 213 | 199 | 23 | 23 | 78 | 0 |
-| MCP tools | 185 | 147 | 42 | 33 | 65 | 0 |
+| REST routes | 215 | 201 | 21 | 21 | 90 | 0 |
+| MCP tools | 185 | 147 | 19 | 13 | 91 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -31,7 +31,7 @@ is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 8 | 26 | 0 | 20 | 0 | 0 |
+| 0.4g Agents and MCP | 10 | 26 | 0 | 20 | 0 | 0 |
 | 0.4h Drift, governance, review | 8 | 24 | 6 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
@@ -45,7 +45,7 @@ is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (213)
+## REST routes (215)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 75 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 76 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -111,12 +111,12 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 42 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 43 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 17 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 18 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 12 |  |  |  |
-| c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
@@ -151,9 +151,9 @@ is proof of a gap.
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 42 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 43 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 17 |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 18 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
@@ -171,7 +171,7 @@ is proof of a gap.
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/plans/:uid` |  | 1 | 12 |  |  |  |
-| c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
+| c | `PUT /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
 | d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 | ✓ 0.4d: append-only record, each tagged by how it arrived — local-api/unverified over HTTP (criteria-signoff, criteria-loops) |  |  |
@@ -192,15 +192,17 @@ is proof of a gap.
 | f | `POST /api/channels/:eventUid/status` |  | ✗ none | 1 | ✓ 0.4f: resolve, reopen; broadcast; missing/unknown status 400; unknown event 404 (presence-channels) |  |  |
 | f | `POST /api/presence/ack` |  | ✗ none | 1 | ✓ 0.4f: releases the waiting await_ack; broadcast; 400 without fields; 404 unknown card (presence-channels) |  |  |
 | f | `POST /api/presence/reply` |  | ✗ none | 1 | ✓ 0.4f: reaches the waiting agent once and is not re-queued; 400 without text (presence-channels; bug 25) |  |  |
-| f | `POST /api/screenshot-response` |  | ✗ none | 1 | ✓ 0.4f: the renderer's answer resolves the waiting request tool by nonce (graph-tools) |  |  |
-| g | `GET /api/agent/status` |  | ✗ none | 1 |  |  |  |
-| g | `GET /api/mcp/config` |  | ✗ none | 1 |  |  |  |
-| g | `GET /api/mcp/setup` |  | ✗ none | 2 |  |  |  |
-| g | `GET /api/mcp/status` |  | ✗ none | 1 |  |  |  |
-| g | `GET /api/plans/:uid/budget/check` |  | ✗ none | ✗ none |  |  |  |
-| g | `GET /api/sensors/doc-check` |  | ✗ none | ✗ none |  |  |  |
-| g | `GET /api/sessions` |  | ✗ none | 3 |  |  |  |
-| g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 2 |  |  |  |
+| f | `POST /api/screenshot-response` |  | ✗ none | 2 | ✓ 0.4f: the renderer's answer resolves the waiting request tool by nonce (graph-tools) |  |  |
+| g | `GET /api/agent/status` |  | ✗ none | 1 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
+| g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
+| g | `GET /api/mcp/setup` |  | ✗ none | 2 | ✓ 0.4g: the agent prompt names the token file and never carries the token (misc-endpoints, mcp-connector) |  |  |
+| g | `GET /api/mcp/status` |  | ✗ none | 1 | ✓ 0.4g: running on the agents' port with connected agents counted (sessions) |  |  |
+| g | `GET /api/plans/:uid/budget/changes` |  | ✗ none | 1 | ✓ 0.4g: every change newest first, with channel and flag; no-op changes not recorded; unknown plan 404 (agent-ui-tools) |  |  |
+| g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
+| g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
+| g | `GET /api/sessions` |  | ✗ none | 4 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
+| g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | h | `GET /api/baseline` |  | ✗ none | 2 |  |  |  |
 | h | `GET /api/comparands` |  | ✗ none | 4 |  |  |  |
 | h | `GET /api/compare` |  | ✗ none | 5 |  |  |  |
@@ -247,14 +249,14 @@ is proof of a gap.
 | k | `GET /api/logs/path` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/power/status` |  | ✗ none | ✗ none |  |  |  |
-| k | `GET /api/settings` |  | ✗ none | 16 |  |  |  |
+| k | `GET /api/settings` |  | ✗ none | 17 |  |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 2 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | ✗ none |  |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 |  |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 16 |  |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 17 |  |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 2 |  |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
@@ -365,32 +367,32 @@ is proof of a gap.
 | f | `post_channel_event` | channel · write | 1 | 6 | ✓ 0.4f: threads with responds_to, exported to the plan folder (presence-channels, cdev-channels) |  |  |
 | f | `present` | presence · write | ✗ none | 2 | ✓ 0.4f: card posted, broadcast, attributed to the agent (presence-channels) |  |  |
 | f | `resolve_channel_event` | channel · write | ✗ none | 2 | ✓ 0.4f: resolved in DB and YAML (cdev-channels) |  |  |
-| g | `check_budget` | budget · read | ✗ none | ✗ none |  |  |  |
-| g | `clipboard_read` | ui · capture | 1 | ✗ none |  |  |  |
-| g | `clipboard_write` | ui · write | ✗ none | ✗ none |  |  |  |
-| g | `get_app_guide` | ui · read | ✗ none | ✗ none |  |  |  |
-| g | `get_budget` | budget · read | ✗ none | ✗ none |  |  |  |
-| g | `get_log_path` | ui · read | ✗ none | ✗ none |  |  |  |
-| g | `get_logs` | ui · read | ✗ none | ✗ none |  |  |  |
-| g | `get_settings` | ui · read | ✗ none | 1 |  |  |  |
-| g | `navigate_item_back` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `navigate_item_forward` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `navigate_to` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `open_history_drawer` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `open_mcp_guide` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `open_plan` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `open_settings` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `refresh_ui` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `register_session` | session · read | 1 | 5 |  |  |  |
-| g | `screenshot` | ui · capture | 1 | ✗ none |  |  |  |
-| g | `select_item` | ui · write | ✗ none | ✗ none |  |  |  |
-| g | `set_active_plan` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `set_baseline` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `set_budget` | budget · write | ✗ none | ✗ none |  |  |  |
-| g | `setup_agent_permissions` | session · settings | 1 | ✗ none |  |  |  |
-| g | `toggle_activity_drawer` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `toggle_panel` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `update_settings` | ui · settings | ✗ none | 1 |  |  |  |
+| g | `check_budget` | budget · read | ✗ none | 1 | ✓ 0.4g: none → ok → exempt states, reason in words; unknown plan refused (agent-ui-tools); bug 27 |  |  |
+| g | `clipboard_read` | ui · capture | 1 | 1 | ✓ 0.4g: refused without capture; the window's answer returned (agent-ui-tools) |  |  |
+| g | `clipboard_write` | ui · write | ✗ none | 1 | ✓ 0.4g: sends the text to the window (agent-ui-tools) |  |  |
+| g | `get_app_guide` | ui · read | ✗ none | 1 | ✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools) |  |  |
+| g | `get_budget` | budget · read | ✗ none | 1 | ✓ 0.4g: ceiling, spent, forecast, notes; unknown plan refused (agent-ui-tools) |  |  |
+| g | `get_log_path` | ui · read | ✗ none | 1 | ✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28 |  |  |
+| g | `get_logs` | ui · read | ✗ none | 1 | ✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28 |  |  |
+| g | `get_settings` | ui · read | ✗ none | 1 | ✓ 0.4g: reads back what update_settings wrote; no secrets in settings (cdev-phase5) |  |  |
+| g | `navigate_item_back` | session · write | ✗ none | 1 | ✓ 0.4g: selection steps back (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `navigate_item_forward` | session · write | ✗ none | 1 | ✓ 0.4g: and forward (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `navigate_to` | session · write | ✗ none | 1 | ✓ 0.4g: every target's payload; unknown plan/item/file refused (agent-ui-tools); bug 27 |  |  |
+| g | `open_history_drawer` | session · write | ✗ none | 1 | ✓ 0.4g: drawer opens on the item; unknown item refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
+| g | `open_mcp_guide` | session · write | ✗ none | 1 | ✓ 0.4g: guide dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
+| g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
+| g | `register_session` | session · read | 1 | 5 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `screenshot` | ui · capture | 1 | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
+| g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
+| g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
+| g | `set_baseline` | session · write | ✗ none | 1 | ✓ 0.4g: sets and clears (agent-ui-tools) |  |  |
+| g | `set_budget` | budget · write | ✗ none | 1 | ✓ 0.4g: set, exempt, clear one dimension; recorded in the agent's name and flagged until seen; nothing stored for an unknown plan (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `setup_agent_permissions` | session · settings | 1 | 1 | ✓ 0.4g: refused without settings; merges the wildcard; inside an opened project only, never through a link (agent-ui-tools) |  |  |
+| g | `toggle_activity_drawer` | session · write | ✗ none | 1 | ✓ 0.4g: drawer toggles both ways (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `toggle_panel` | session · write | ✗ none | 1 | ✓ 0.4g: sends the panel (agent-ui-tools) |  |  |
+| g | `update_settings` | ui · settings | ✗ none | 1 | ✓ 0.4g: persists first-run and data fields (cdev-phase5) |  |  |
 | h | `capture_checkpoint` | drift · write | ✗ none | ✗ none |  |  |  |
 | h | `check_freeze` | governance · read | ✗ none | 1 |  |  |  |
 | h | `commit_manifest_changes` | git · write | ✗ none | 4 |  |  |  |

@@ -244,8 +244,10 @@ test.describe.serial('Miscellaneous endpoints', () => {
     const res = await h.client.raw('GET', '/api/agent/status');
     expect(res.ok).toBe(true);
     const body = await res.json();
-    expect(body).toBeTruthy();
-    expect(typeof body).toBe('object');
+    // The Claude Code session watcher: whether it is tailing a session, and which.
+    expect(Object.keys(body).sort()).toEqual(['jsonlPath', 'sessionId', 'watching']);
+    expect(typeof body.watching).toBe('boolean');
+    if (!body.watching) expect(body).toMatchObject({ sessionId: null, jsonlPath: null });
   });
 
   // --- Systems / FS ---

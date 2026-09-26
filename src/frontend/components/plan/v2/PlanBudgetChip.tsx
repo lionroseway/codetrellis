@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Timer, Info } from 'lucide-react';
+import { Timer, Info, Flag } from 'lucide-react';
 import type { Plan } from '@shared/types';
 import {
-  stateOf, formatMinutes, formatCost, type BudgetState,
+  stateOf, formatMinutes, formatCost, describeBudgetChange, type BudgetState, type BudgetCeiling,
 } from '../../../lib/budget-format';
 
 /**
@@ -55,7 +55,20 @@ interface BudgetReport {
   overruns: Array<{ itemUid: string; estimateMinutes: number; spentMinutes: number }>;
   pricingVersion: string;
   pricingVersions?: string[];
+  /** An agent's changes to the ceiling that no person has acknowledged (§0.4g). */
+  flaggedChanges?: FlaggedChange[];
 }
+
+
+interface FlaggedChange {
+  id: number;
+  actor: string;
+  actorType: string;
+  at: number;
+  before: BudgetCeiling | null;
+  after: BudgetCeiling;
+}
+
 
 const CHIP_STYLE: Record<BudgetState, string> = {
   over: 'border-red-500/30 bg-red-500/[0.08] text-red-300 hover:bg-red-500/15',
@@ -89,6 +102,21 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
   }, [plan.uid]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Live: an agent's set_budget, another window's save, an acknowledgement.
+  useEffect(() => {
+    const onChanged = (e: Event) => {
+      const planUid = (e as CustomEvent<{ planUid?: string }>).detail?.planUid;
+      if (planUid === plan.uid) void load();
+    };
+    window.addEventListener('plan-budget-changed', onChanged);
+    return () => window.removeEventListener('plan-budget-changed', onChanged);
+  }, [load, plan.uid]);
+
+  const acknowledge = async (id: number) => {
+    const res = await fetch(`/api/plans/${encodeURIComponent(plan.uid)}/budget/changes/${id}/acknowledge`, { method: 'POST' });
+    if (res.ok) await load();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -142,14 +170,19 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
 
   const state = stateOf(report);
   const { budget } = report;
+  const flagged = report.flaggedChanges ?? [];
 
   return (
     <div className="relative inline-block">
       <button
         onClick={() => setOpen((v) => !v)}
         className={`flex items-center gap-2 px-2.5 py-1 rounded-full border transition-colors ${CHIP_STYLE[state]}`}
-        title="Time and cost recorded against this plan"
+        title={flagged.length ? `An agent changed this plan's budget (${flagged.length}) — open to review` : 'Time and cost recorded against this plan'}
+        data-testid="plan-budget-chip"
       >
+        {flagged.length > 0 && (
+          <Flag size={11} className="text-amber-300" aria-label={`${flagged.length} budget change${flagged.length === 1 ? '' : 's'} by an agent to review`} />
+        )}
         <Timer size={12} />
         <span className="text-[12.5px] tabular-nums">
           {formatMinutes(report.spentMinutes)}
@@ -168,6 +201,28 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
           className="absolute left-0 top-full mt-1.5 w-80 z-50 bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] p-3 text-[11.5px]"
         >
           <div className="text-foreground font-medium mb-2">Plan budget</div>
+
+          {flagged.length > 0 && (
+            // An agent may change a budget — it is advisory — but a person
+            // sees that it did, until they say they have (§0.4g).
+            <div className="mb-2.5 pb-2 border-b border-white/[0.06] space-y-1.5" data-testid="budget-flagged-changes">
+              {flagged.map((c) => (
+                <div key={c.id} className="flex items-start gap-1.5 text-amber-200/90 leading-snug" data-testid="budget-flagged-change">
+                  <Flag size={11} className="shrink-0 mt-0.5 text-amber-300" />
+                  <span className="flex-1">
+                    <span className="font-medium">{c.actor}</span> (agent) {describeBudgetChange(c.before, c.after)}
+                    <span className="text-foreground-subtle"> · {new Date(c.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+                  </span>
+                  <button
+                    onClick={() => void acknowledge(c.id)}
+                    className="shrink-0 px-1.5 py-0.5 rounded border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.05]"
+                  >
+                    Seen
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <dl className="space-y-1">
             <Row label="Time spent" value={formatMinutes(report.spentMinutes)} />

@@ -3037,10 +3037,28 @@ app.get('/api/plans/:uid/review', (req, res) => {
 // model we have prices for. An unknown cost comes back as null, never
 // zero — see services/pricing.ts.
 app.get('/api/plans/:uid/budget', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(budgetService.getBudgetReport(req.params.uid));
 });
 
+/** Every change to the ceiling, newest first: who, how, before and after (§0.4g). */
+app.get('/api/plans/:uid/budget/changes', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(budgetService.listBudgetChanges(req.params.uid));
+});
+
+/** A person has seen an agent's change to the ceiling: it is no longer flagged. */
+app.post('/api/plans/:uid/budget/changes/:id/acknowledge', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  const id = Number(req.params.id);
+  const change = Number.isInteger(id) ? budgetService.acknowledgeBudgetChange(req.params.uid, id, getAuthorKey('human')) : null;
+  if (!change) { res.status(404).json({ error: 'No such budget change on this plan' }); return; }
+  broadcast('plan-budget-changed', { planUid: req.params.uid, acknowledged: change.id });
+  res.json(change);
+});
+
 app.put('/api/plans/:uid/budget', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   const body = (req.body ?? {}) as { minutes?: number | null; costUsd?: number | null; exempt?: boolean };
 
   // A ceiling is a positive number or an explicit null to clear it. Nothing
@@ -3066,6 +3084,11 @@ app.put('/api/plans/:uid/budget', (req, res) => {
     minutes: body.minutes,
     costUsd: body.costUsd,
     exempt: body.exempt,
+    // Recorded with who made it, tagged by how it arrived, as a criterion
+    // decision is (decisionFrom). A person's change is never flagged.
+    by: cameFromAppWindow(req)
+      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' },
   });
   broadcast('plan-budget-changed', { planUid: req.params.uid, budget });
   res.json(budgetService.getBudgetReport(req.params.uid));
@@ -3088,6 +3111,7 @@ app.get('/api/plans/:uid/external-sync', (req, res) => {
 });
 
 app.get('/api/plans/:uid/budget/check', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(budgetService.checkBudget(req.params.uid));
 });
 
@@ -3487,6 +3511,12 @@ app.post('/api/sessions/:sessionId/assign-plan', (req, res) => {
   const { sessionId } = req.params;
   const { planUid } = req.body;
   if (!planUid) { res.status(400).json({ error: 'planUid required' }); return; }
+  // Both checked: an unknown one was accepted and broadcast (bug 27).
+  if (!planService.getPlan(planUid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  if (!sessionService.getActiveSessions().some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ error: 'No active agent session with that id' });
+    return;
+  }
   sessionService.setActivePlan(sessionId, planUid);
   broadcast('plan-assigned', { sessionId, planUid });
   broadcast('mcp-session-changed', { reason: 'assign_plan', sessionId, planUid });

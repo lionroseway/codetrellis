@@ -223,6 +223,7 @@ export function PlanWorkspaceShellV2() {
         </button>
         <button
           onClick={() => usePlanItemsStore.getState().toggleActivityDrawer()}
+          aria-pressed={activityDrawerOpen}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
             activityDrawerOpen
               ? 'border-accent/30 bg-accent/10 text-accent'

@@ -294,6 +294,7 @@ function ItemRow({
   return (
     <div
       ref={rowRef}
+      aria-current={isSelected ? 'true' : undefined}
       className={[
         'group relative flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer rounded-md mx-1.5',
         isSelected ? 'bg-accent/10 ring-1 ring-accent/30' : 'hover:bg-white/[0.03]',

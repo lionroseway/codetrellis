@@ -8,7 +8,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stateOf, formatMinutes, formatCost, WARN_AT } from './budget-format';
+import { stateOf, formatMinutes, formatCost, describeBudgetChange, WARN_AT } from './budget-format';
 import { budgetState, type PlanBudget } from '../../backend/services/budget-service';
 
 const budget = (over: Partial<PlanBudget> = {}): PlanBudget => ({
@@ -123,3 +123,21 @@ describe('the chip agrees with the service', () => {
     );
   });
 });
+
+describe('an agent\'s change to a budget, in words (0.4g)', () => {
+  const c = (minutes: number | null, costUsd: number | null, exempt = false) => ({ minutes, costUsd, exempt });
+
+  test('raised, lowered, set and cleared, per dimension', () => {
+    assert.equal(describeBudgetChange(c(120, 5), c(240, 5)), 'raised the time ceiling 2h → 4h');
+    assert.equal(describeBudgetChange(c(120, 5), c(120, 2.5)), 'lowered the cost ceiling $5.00 → $2.50');
+    assert.equal(describeBudgetChange(null, c(90, null)), 'set a time ceiling of 1h 30m');
+    assert.equal(describeBudgetChange(c(120, 5), c(null, 5)), 'cleared the time ceiling (was 2h)');
+  });
+
+  test('an exemption is named, and several changes are listed together', () => {
+    assert.equal(describeBudgetChange(c(120, 5), c(120, 5, true)), 'exempted the plan from its ceiling');
+    assert.equal(describeBudgetChange(c(120, 5, true), c(240, null, false)),
+      'raised the time ceiling 2h → 4h, cleared the cost ceiling (was $5.00), ended the exemption');
+  });
+});
+

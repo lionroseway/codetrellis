@@ -15,6 +15,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
+import { authorFromExtra } from '../helpers';
 import {
   getBudgetReport,
   setBudget,
@@ -75,6 +76,15 @@ function summarise(planUid: string) {
     // field exists to prevent.
     pricing_version: report.pricingVersion,
     pricing_versions: report.pricingVersions,
+    // An agent's change to the ceiling stays flagged until a person has seen
+    // it (Phase 32 §0.4g): what it was, what it became, and who changed it.
+    flagged_changes: report.flaggedChanges.map((c) => ({
+      by: c.actor,
+      by_type: c.actorType,
+      at: new Date(c.at).toISOString(),
+      before: c.before ? { minutes: c.before.minutes, cost_usd: c.before.costUsd, exempt: c.before.exempt } : null,
+      after: { minutes: c.after.minutes, cost_usd: c.after.costUsd, exempt: c.after.exempt },
+    })),
     note: [
       report.spentCostUsd === null && getUnattributedTokenReports() === 0
         ? 'No cost recorded: no agent on this plan reported a model we have prices for. Time is still measured.'
@@ -101,6 +111,13 @@ function summarise(planUid: string) {
   };
 }
 
+/** A budget belongs to a plan: none is read or stored for a uid that is not one (bug 27). */
+function missingPlan(deps: ToolDeps, planUid: string) {
+  return deps.planService.getPlan(planUid)
+    ? null
+    : { content: [{ type: 'text' as const, text: `Plan ${planUid} not found.` }], isError: true };
+}
+
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- get_budget ---
 
@@ -117,9 +134,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         plan_uid: z.string().describe('UID of the plan.'),
       },
     },
-    async ({ plan_uid }) => ({
+    async ({ plan_uid }) => missingPlan(deps, plan_uid) ?? {
       content: [{ type: 'text' as const, text: JSON.stringify(summarise(plan_uid), null, 2) }],
-    }),
+    },
   );
 
   // --- set_budget ---
@@ -130,7 +147,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Set or clear a plan budget. Either dimension may be set independently; pass null to clear one. ' +
         'Crossing 80% raises a need-decision channel event (once), and past 100% check_budget returns ' +
-        'allowed=false. The ceiling is advisory — it cannot stop an agent, it tells one to stop.',
+        'allowed=false. The ceiling is advisory — it cannot stop an agent, it tells one to stop. ' +
+        'A change you make is recorded in your name with the values before it, and flagged to the person ' +
+        'until they acknowledge it; say why in your reply to them.',
       inputSchema: {
         plan_uid: z.string(),
         minutes: z.number().int().positive().nullable().optional()
@@ -141,9 +160,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
           .describe('Exempt this plan from its ceiling without clearing it — mirrors freeze exemptions.'),
       },
     },
-    async ({ plan_uid, minutes, cost_usd, exempt }) => {
-      const budget = setBudget({ planUid: plan_uid, minutes, costUsd: cost_usd, exempt });
-      const n = deps.broadcast('plan-budget-changed', { planUid: plan_uid, budget });
+    async ({ plan_uid, minutes, cost_usd, exempt }, extra: any) => {
+      const refused = missingPlan(deps, plan_uid);
+      if (refused) return refused;
+      const id = authorFromExtra(deps, extra);
+      const budget = setBudget({
+        planUid: plan_uid, minutes, costUsd: cost_usd, exempt,
+        by: { actor: id.author, actorType: id.authorType, channel: 'mcp' },
+      });
+      const n = deps.broadcast('plan-budget-changed', { planUid: plan_uid, budget, flagged: true });
       return {
         content: [{
           type: 'text' as const,
@@ -167,6 +192,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid }) => {
+      const refused = missingPlan(deps, plan_uid);
+      if (refused) return refused;
       const result = checkBudget(plan_uid);
       return {
         content: [{
