@@ -4031,11 +4031,21 @@ app.get('/api/freeze', (req, res) => {
 
 app.put('/api/freeze', (req, res) => {
   const { setFreeze } = _lazy___services_freeze_service;
-  const { projectPath: rawProjectPath, active, reason, until, allowedPlanUids } = req.body;
+  const { projectPath: rawProjectPath, active, reason, until, allowedPlanUids } = req.body ?? {};
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
   if (!projectPath) return;
-  if (!projectPath || active === undefined) {
-    res.status(400).json({ error: 'projectPath and active required' });
+  // Each field checked: it stored what it was sent, so `active: "no"` (truthy)
+  // froze the project and an `until` that is not a date never expired
+  // (Phase 32 §0.4h, bug 33).
+  const problem =
+    typeof active !== 'boolean' ? 'active must be true or false'
+      : reason !== undefined && reason !== null && typeof reason !== 'string' ? 'reason must be text'
+        : until !== undefined && until !== null && (typeof until !== 'string' || Number.isNaN(Date.parse(until))) ? 'until must be an ISO date, or null'
+          : allowedPlanUids !== undefined && (!Array.isArray(allowedPlanUids) || !allowedPlanUids.every((u: unknown) => typeof u === 'string'))
+            ? 'allowedPlanUids must be a list of plan uids'
+            : null;
+  if (problem) {
+    res.status(400).json({ error: problem });
     return;
   }
   const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids });

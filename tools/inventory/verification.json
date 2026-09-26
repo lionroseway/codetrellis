@@ -549,7 +549,7 @@
     "behaviour": "✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27"
   },
   "mcp:set_baseline": {
-    "behaviour": "✓ 0.4g: sets and clears (agent-ui-tools)"
+    "behaviour": "✓ 0.4h: pins the commit on the backend, the window reads it back; null clears; bad refs refused (baseline); bug 29"
   },
   "mcp:setup_agent_permissions": {
     "behaviour": "✓ 0.4g: refused without settings; merges the wildcard; inside an opened project only, never through a link (agent-ui-tools)"
@@ -595,5 +595,101 @@
   },
   "rest:POST /api/plans/:uid/budget/changes/:id/acknowledge": {
     "behaviour": "✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec)"
+  },
+  "rest:GET /api/baseline": {
+    "behaviour": "✓ 0.4h: source, dirty, capturedAt and a label that says what it is; kept across rescans (baseline); bug 29"
+  },
+  "rest:POST /api/baseline/capture": {
+    "behaviour": "✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29"
+  },
+  "rest:GET /api/comparands": {
+    "behaviour": "✓ 0.4h: live, baseline, checkpoints by name, commits; outside a project refused (drift-review-tools), plan-review, review-confinement"
+  },
+  "rest:GET /api/compare": {
+    "behaviour": "✓ 0.4h: exact diffs, same-point note, commit edges not compared, 404 unknown (plan-review, compare-hash-space, compare-phantom-removals)"
+  },
+  "rest:GET /api/conflicts": {
+    "behaviour": "✓ 0.4h: a real merge conflict with per-field ours/theirs (manifest-conflicts, worktree-project)"
+  },
+  "rest:POST /api/conflicts/resolve": {
+    "behaviour": "✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks)"
+  },
+  "rest:GET /api/freeze": {
+    "behaviour": "✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6"
+  },
+  "rest:PUT /api/freeze": {
+    "behaviour": "✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33"
+  },
+  "mcp:capture_checkpoint": {
+    "behaviour": "✓ 0.4h: becomes checkpoint:<id>, compares against live; unknown plan refused (drift-review-tools)"
+  },
+  "mcp:check_freeze": {
+    "behaviour": "✓ 0.4h: blocked during a freeze, allowed when exempt or lifted (review-governance-tools), cdev-phase6"
+  },
+  "mcp:commit_manifest_changes": {
+    "behaviour": "✓ 0.4h: HEAD is the returned sha, [cdev] subject, attribution lines, clean status (worktree-project, cdev-channels)"
+  },
+  "mcp:compare_snapshots": {
+    "behaviour": "✓ 0.4h: checkpoint → live names exactly the changed files; unknown comparand refused (review-governance-tools)"
+  },
+  "mcp:detect_conflicts": {
+    "behaviour": "✓ 0.4h: names the conflicted manifest during a real merge; empty when clean (drift-review-tools), cdev-phase6"
+  },
+  "mcp:detect_deviations": {
+    "behaviour": "✓ 0.4h: missing_file for a done action's absent file; unknown plan refused (drift-review-tools), full-loop, cdev-sensors"
+  },
+  "mcp:diff_plan_between_commits": {
+    "behaviour": "✓ 0.4h: items added between two commits, by title (cdev-phase6)"
+  },
+  "mcp:exempt_plan_from_freeze": {
+    "behaviour": "✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6)"
+  },
+  "mcp:get_change_status": {
+    "behaviour": "✓ 0.4h: one change by id; unknown id an error (drift-review-tools); bug 30"
+  },
+  "mcp:get_changes_summary": {
+    "behaviour": "✓ 0.4h: totals by kind (drift-review-tools)"
+  },
+  "mcp:get_deviations": {
+    "behaviour": "✓ 0.4h: the plan's own, same as REST; unknown plan refused (drift-review-tools)"
+  },
+  "mcp:get_drift_report": {
+    "behaviour": "✓ 0.4h: planned file satisfied, the other unexpected, against the checkpoint (review-governance-tools)"
+  },
+  "mcp:get_freeze_status": {
+    "behaviour": "✓ 0.4h: inactive, active with reason and remaining time, inactive again (cdev-phase6)"
+  },
+  "mcp:get_plan_at_commit": {
+    "behaviour": "✓ 0.4h: title and items as of each commit (cdev-phase6)"
+  },
+  "mcp:get_plan_history": {
+    "behaviour": "✓ 0.4h: the plan's commits, newest first, with subject and author (review-governance-tools)"
+  },
+  "mcp:get_pr_draft": {
+    "behaviour": "✓ 0.4h: title, review, acceptance criteria table and warnings; git untouched (review-governance-tools), plan-review"
+  },
+  "mcp:get_team_activity": {
+    "behaviour": "✓ 0.4h: both manifest commits, newest first (review-governance-tools)"
+  },
+  "mcp:list_comparands": {
+    "behaviour": "✓ 0.4h: live first, baseline, the named checkpoint, commits (drift-review-tools)"
+  },
+  "mcp:list_proposed_changes": {
+    "behaviour": "✓ 0.4h: one row per file spec with operation and kind (drift-review-tools)"
+  },
+  "mcp:reconcile": {
+    "behaviour": "✓ 0.4h: only this plan's deviations, checked first, in the caller's name; accepted amends the plan as them (drift-review-tools); bug 30"
+  },
+  "mcp:resolve_conflict": {
+    "behaviour": "✓ 0.4h: by_side takes theirs and stages; missing side and escaping path refused (drift-review-tools)"
+  },
+  "mcp:review_plan": {
+    "behaviour": "✓ 0.4h: landed item, the unclaimed file named, baseline kept after rescan, markdown names its basis (review-governance-tools)"
+  },
+  "mcp:search_plan_history": {
+    "behaviour": "✓ 0.4h: every matching commit with its files, newest first (drift-review-tools); bug 32"
+  },
+  "mcp:set_freeze": {
+    "behaviour": "✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6)"
   }
 }

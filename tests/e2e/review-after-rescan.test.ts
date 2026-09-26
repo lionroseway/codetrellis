@@ -1,7 +1,7 @@
 /**
  * A review after a rescan must not report that nothing happened.
  *
- * `scanProject` re-pins the baseline on every run, and `reviewPlan`
+ * `scanProject` re-pinned the baseline on every run (until 0.4h), and `reviewPlan`
  * defaulted `before` to `'baseline'`. So the sequence every agent actually
  * follows — edit files, rescan, ask for a review — compared the baseline
  * against itself and answered "untouched" for every item on a plan whose

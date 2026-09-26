@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | 0.4h Drift, governance, review |
 | **Status** | Started. #124 (0.4g) merged; its full harness was 500 passed, 1 skipped, 0 retries |
-| **Next action** | Bugs 29–32 fixed, 9 tools tested. Next: check the existing domain-h tests assert behaviour, fill the matrix, full harness, PR |
+| **Next action** | Bugs 29–33 fixed; domain h complete. Full harness, PR, merge when green; then 0.4i (terminals and audio) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4h-drift` |
 | **Last updated** | 2026-09-26 |
@@ -141,6 +141,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4h — the existing domain-h tests, audited (bug 33)
+
+A read-only audit of the tests for the other 23 domain-h items found
+`PUT /api/freeze` untested; `compare_snapshots`, `review_plan` and
+`get_pr_draft` never run through MCP; `get_drift_report`, the baseline
+routes, `get_plan_history` and `get_team_activity` checked for shape or a
+count. `tests/e2e/review-governance-tools.test.ts` (7) checks their
+answers; `baseline.test.ts` covers the baseline routes.
+
+**Bug 33:** `PUT /api/freeze` stored what it was sent; `active: "no"`
+froze the project and a non-date `until` never expired. Validated now.
+
+**For the owner:** as with budgets before 0.4g, an agent can lift a freeze
+or exempt its own plan (`set_freeze`, `exempt_plan_from_freeze`,
+`governance · write`). Left as is; asked whether freezes should be flagged
+like budget changes.
+
+Domain h's behaviour column is complete. The 6 mobile RPC methods in
+domain h stay with 0.4j.
 
 ### 2026-09-26: 0.4h — the drift and review tools (bugs 30, 31, 32)
 
