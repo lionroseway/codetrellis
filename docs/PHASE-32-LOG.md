@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4d Criteria and sign-off |
-| **Status** | Provenance, criterion origin tags and the 5 untested routes done; unit, lint, typecheck and targeted suites green. Full harness running |
-| **Next action** | Full harness on 0.4d; then PR, merge when CI is green; then 0.4e (Brief and viewer) |
+| **Stage / step** | 0.4e Brief and viewer |
+| **Status** | 5 artefact routes and the 4 Brief tools tested; bug 24 (CSV cell citations unreadable) fixed. Full harness next |
+| **Next action** | Full harness on 0.4e; PR; merge when green; then 0.4f (channels and presence, incl. the cdev-channels watcher flake) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4d-criteria` |
+| **Branch** | `feat/phase-32-0.4e-brief` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -39,7 +39,7 @@
 - [x] 0.4c-1 Plans (#118)
 - [x] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete) (#119)
 - [x] 0.4c-2 Items, incl. retiring the V1 task API (#120)
-- [ ] 0.4d Criteria and sign-off
+- [x] 0.4d Criteria and sign-off (#121)
 - [ ] 0.4e Brief and viewer
 - [ ] 0.4f Channels and presence
 - [ ] 0.4g Agents and MCP
@@ -141,6 +141,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4e — an agent could cite a CSV cell it could not read (bug 24)
+
+Writing `tests/e2e/brief-surface.test.ts` (the five artefact routes and
+get_brief / list_materials / read_material against the real server):
+`read_material` with `{"range": "A2:B3"}` on a CSV was refused, "read by
+{lines}, {text}". But `check_criterion` accepts that locator on a CSV,
+the viewer opens a CSV at the cited cell, and the tool's description says
+the locator you read with is the one you cite. So an agent could only
+cite a CSV cell by guessing it.
+
+The check also counted columns by splitting each line on commas, so
+`"APAC, East"` made a third column: `C3` passed in a two-column file.
+
+Fix: the viewer's RFC 4180 parser moved to `shared/lib/csv.ts`, and all
+three use it. `read_material` reads a CSV by `{range}` (format csv,
+"cells A2:B3"); without one a CSV still reads as numbered lines. Tests:
+`read.test.ts` (range, quoted comma, outside, lines), a new
+`criterion-checks.test.ts` (fails 2 of 3 without the fix), and the
+harness spec.
+
+Also covered in this step, no defects: recording refuses a bad role, an
+unshowable type, a missing file, a path outside, a link and an unknown
+item; the bytes route sends nosniff / no-store / a sandbox CSP and serves
+ranges (206, 416); the rendition route says 415 for a type it does not
+convert and 503 with `fallback: true` when the build has no engine;
+`get_brief` gives the item's own files plus the pages' materials (not the
+pages' outputs). Untested REST routes: 27. `artefact.preview` (mobile)
+stays with 0.4j; the three domain-e components get their UX pass in 0.5.
+
 ### 2026-09-26: 0.4d — decisions and criteria say who made them
 
 Owner's decision: agents are co-workers, so an agent adding a criterion
@@ -187,6 +216,9 @@ verify) are covered by the new `tests/e2e/signoff-surface.test.ts`, and
 the untested list is down to 32 REST routes. The matrix behaviour column
 is filled for all 9 routes and 7 tools in domain d. The 3 mobile RPC
 methods in domain d stay with 0.4j.
+
+Full harness at `c56646b`: 471 passed, 1 skipped, 0 retries. CI green;
+merged as #121.
 
 ### 2026-09-26: 0.4c-2 — items could be moved out of the tree (bug 23)
 - **`tests/e2e/item-surface.test.ts` (8):** versions, events and restore;

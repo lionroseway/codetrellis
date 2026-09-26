@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 213 | 199 | 32 | 32 | 67 | 0 |
-| MCP tools | 185 | 147 | 49 | 37 | 52 | 0 |
+| REST routes | 213 | 199 | 27 | 27 | 72 | 0 |
+| MCP tools | 185 | 147 | 46 | 37 | 56 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 73 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 74 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -99,8 +99,8 @@ is proof of a gap.
 | c | `GET /api/items/:uid` |  | ✗ none | 7 |  |  |  |
 | c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/items/:uid/criteria` |  | ✗ none | 4 |  |  |  |
-| c | `GET /api/items/:uid/events` |  | ✗ none | 1 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
+| c | `GET /api/items/:uid/criteria` |  | ✗ none | 5 |  |  |  |
+| c | `GET /api/items/:uid/events` |  | ✗ none | 2 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
 | c | `GET /api/items/:uid/full` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/versions` |  | ✗ none | 1 | ✓ 0.4c-2: each edit a version (item-surface) |  |  |
 | c | `GET /api/pantry/resolve` |  | ✗ none | 3 |  |  |  |
@@ -111,9 +111,9 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 40 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 41 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 16 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 17 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 12 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
@@ -147,13 +147,13 @@ is proof of a gap.
 | c | `POST /api/items/:uid/claim` |  | ✗ none | 1 | ✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop) |  |  |
 | c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
 | c | `POST /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/items/:uid/criteria` |  | ✗ none | 4 |  |  |  |
+| c | `POST /api/items/:uid/criteria` |  | ✗ none | 5 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 40 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 41 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 16 |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 17 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
@@ -182,11 +182,11 @@ is proof of a gap.
 | d | `POST /api/criteria/:uid/decide` |  | ✗ none | 4 | ✓ 0.4d: approve / send back (note required); HTTP records unverified, app window records human (criteria-signoff, ipc-dispatcher unit) |  |  |
 | d | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | 1 | ✓ 0.4d: matches, then changed after edit; empty, non-pack and other plan's pack refused (signoff-surface) |  |  |
 | d | `PUT /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: rewording resets to open (criteria-signoff) |  |  |
-| e | `GET /api/artefacts/:uid` |  | ✗ none | ✗ none |  |  |  |
-| e | `GET /api/artefacts/:uid/content` |  | ✗ none | ✗ none |  |  |  |
-| e | `GET /api/artefacts/:uid/rendition` |  | ✗ none | ✗ none |  |  |  |
-| e | `GET /api/items/:uid/artefacts` |  | ✗ none | ✗ none |  |  |  |
-| e | `POST /api/items/:uid/artefacts` |  | ✗ none | ✗ none |  |  |  |
+| e | `GET /api/artefacts/:uid` |  | ✗ none | 1 | ✓ 0.4e: relative path, role, hash, recorder; never the absolute path; 404 (brief-surface) |  |  |
+| e | `GET /api/artefacts/:uid/content` |  | ✗ none | 1 | ✓ 0.4e: bytes with nosniff/no-store/sandbox CSP; 206 range; 416; image type; 404 (brief-surface, artefact-viewer) |  |  |
+| e | `GET /api/artefacts/:uid/rendition` |  | ✗ none | 1 | ✓ 0.4e: 415 for a type it does not convert; 503 with a sentence and fallback without an engine; 404 (brief-surface) |  |  |
+| e | `GET /api/items/:uid/artefacts` |  | ✗ none | 1 | ✓ 0.4e: the item's files, re-hashed after an edit; 404 (brief-surface) |  |  |
+| e | `POST /api/items/:uid/artefacts` |  | ✗ none | 1 | ✓ 0.4e: hashed, stored relative, re-record in place; bad role, type, missing, outside, link, unknown item refused (brief-surface) |  |  |
 | f | `GET /api/channels/:eventUid/thread` |  | ✗ none | ✗ none |  |  |  |
 | f | `GET /api/presence/cards` |  | ✗ none | 1 |  |  |  |
 | f | `POST /api/channels/:eventUid/status` |  | ✗ none | ✗ none |  |  |  |
@@ -352,10 +352,10 @@ is proof of a gap.
 | d | `list_criteria` | plan-item · read | 1 | 2 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
 | d | `submit_criterion` | plan-item · write | 1 | 4 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
-| e | `get_brief` | plan-item · read | 2 | ✗ none |  |  |  |
-| e | `list_materials` | plan-item · read | 1 | ✗ none |  |  |  |
-| e | `read_material` | plan-item · files | 2 | ✗ none |  |  |  |
-| e | `record_artefact` | plan-item · write | 1 | 3 |  |  |  |
+| e | `get_brief` | plan-item · read | 2 | 1 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
+| e | `list_materials` | plan-item · read | 1 | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
+| e | `read_material` | plan-item · files | 2 | 1 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
+| e | `record_artefact` | plan-item · write | 1 | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
 | f | `await_ack` | presence · write | ✗ none | ✗ none |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | ✗ none |  |  |  |
 | f | `dismiss_channel_event` | channel · write | ✗ none | ✗ none |  |  |  |

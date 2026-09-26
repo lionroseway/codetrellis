@@ -409,5 +409,32 @@
   },
   "mcp:submit_criterion": {
     "behaviour": "✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff)"
+  },
+  "rest:GET /api/artefacts/:uid": {
+    "behaviour": "✓ 0.4e: relative path, role, hash, recorder; never the absolute path; 404 (brief-surface)"
+  },
+  "rest:GET /api/artefacts/:uid/content": {
+    "behaviour": "✓ 0.4e: bytes with nosniff/no-store/sandbox CSP; 206 range; 416; image type; 404 (brief-surface, artefact-viewer)"
+  },
+  "rest:GET /api/artefacts/:uid/rendition": {
+    "behaviour": "✓ 0.4e: 415 for a type it does not convert; 503 with a sentence and fallback without an engine; 404 (brief-surface)"
+  },
+  "rest:GET /api/items/:uid/artefacts": {
+    "behaviour": "✓ 0.4e: the item's files, re-hashed after an edit; 404 (brief-surface)"
+  },
+  "rest:POST /api/items/:uid/artefacts": {
+    "behaviour": "✓ 0.4e: hashed, stored relative, re-record in place; bad role, type, missing, outside, link, unknown item refused (brief-surface)"
+  },
+  "mcp:get_brief": {
+    "behaviour": "✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface)"
+  },
+  "mcp:list_materials": {
+    "behaviour": "✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface)"
+  },
+  "mcp:read_material": {
+    "behaviour": "✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit)"
+  },
+  "mcp:record_artefact": {
+    "behaviour": "✓ 0.4e: agent records an output (brief-surface, criteria-loops)"
   }
 }
