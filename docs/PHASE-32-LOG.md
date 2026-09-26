@@ -11,10 +11,10 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.2 Inventory (0.1 Baseline done) |
-| **Status** | 0.1 complete: every suite green on Node 26. 0.2 not started |
-| **Next action** | Branch `feat/phase-32-0.2-inventory` from `feat/phase-32` once #111 merges; write `tools/inventory/` to generate `docs/PHASE-32-VERIFICATION.md`; reconcile 165 tools vs 186 capability rows |
-| **Blockers** | #111 needs merging into `feat/phase-32` before step branches are cut from it |
+| **Stage / step** | 0.3b Skipped tests (0.2 in PR #112, green, awaiting merge) |
+| **Status** | full-loop 4 unskipped (21/21, 3× stable); plan-export chokidar unskipped (stale skip, fixed in #73). Next: agent-loop, multi-agent, task-context (11 tests on removed V1 tools) |
+| **Next action** | Rewrite agent-loop, multi-agent and task-context onto V2 tools (`add_item`, `bulk_add_items`, `claim_item`, `update_item`, …), keeping each scenario's intent |
+| **Blockers** | none. When #112 merges: merge `feat/phase-32` into this branch and run `npm run inventory` |
 | **Branch** | `claude/wizardly-thompson-v52j45` → PR [#111](https://github.com/lionroseway/codetrellis/pull/111) into `feat/phase-32` (plan docs, CI trigger) |
 | **Last updated** | 2026-09-26 |
 
