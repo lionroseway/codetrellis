@@ -302,49 +302,10 @@
   "rest:POST /api/items/:uid/code-reference": {
     "behaviour": "✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21)"
   },
-  "rest:GET /api/plans/:uid/tasks": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:GET /api/tasks/:taskUid/attachments": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:GET /api/tasks/:taskUid/comments": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:GET /api/tasks/:taskUid/full": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:GET /api/tasks/:taskUid/subtasks": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/plans/:uid/tasks": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/plans/:uid/tasks/:taskUid/claim": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/plans/:uid/tasks/:taskUid/code-reference": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/tasks/:taskUid/attachments": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/tasks/:taskUid/blocked": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/tasks/:taskUid/comments": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/tasks/:taskUid/progress": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:POST /api/tasks/:taskUid/subtasks": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
-  "rest:PUT /api/plans/:uid/tasks/:taskUid": {
-    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
-  },
   "mcp:request_plan_deletion": {
     "behaviour": "✓ 0.4c-3: asks the window, deletes nothing; refuses unknown, archived and unopened-project plans; typed confirmation in the app (plan-tools, e2e plan-deletion-request)"
+  },
+  "rest:POST /api/items/:uid/claim": {
+    "behaviour": "✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop)"
   }
 }
