@@ -32,7 +32,8 @@
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
 - [ ] 0.2 Inventory and verification matrix
-- [ ] 0.3 Test mapping and coverage guards
+- [ ] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
+- [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
 - [ ] 0.4a Project and scan
 - [ ] 0.4b Graph
 - [ ] 0.4c Plans and items
@@ -127,6 +128,18 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: Skipped tests triaged (for 0.3b)
+- **Harness 17:**
+  - 11 exercise removed V1 tools (agent-loop, multi-agent,
+    task-context).
+  - 4 have a V1 fixture (full-loop).
+  - 1 is a racy chokidar wait (plan-export).
+  - 1 is environment-conditional (build-artifacts).
+- **Unit 3:** reader-host needs `build:reader`; release-signature needs
+  the release key (2).
+- So 16 tests hide behaviour we want covered, and 4 are legitimately
+  conditional. Added EXECUTION §0.3b.
 
 ### 2026-09-26: 0.2 inventory built
 - `tools/inventory/` has pure extractors (`extract.ts`) and a runner

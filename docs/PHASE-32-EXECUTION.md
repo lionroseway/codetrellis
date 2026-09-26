@@ -205,6 +205,21 @@ verified · UX checked · notes.
 - **Done when:** the guards are in and green, and the allowlists are
   counted in the log.
 
+### 0.3b Skipped tests
+
+At baseline, 17 harness tests and 3 unit tests don't run. Each one gets
+**unskipped** (reseeded or made deterministic) or **justified** as
+conditional on the environment:
+
+| Tests | Why skipped | Action |
+|---|---|---|
+| agent-loop (2), multi-agent (2), task-context (7) | Exercise V1 plan tools removed in the V2 migration (`docs/V2-MCP-MIGRATION.md` §6); the scenarios are still wanted | Reseed onto V2 (`add_item`, `bulk_add_items`, `claim_item`, …) and unskip |
+| full-loop (4) | Fixture seeds V1 tasks, so V2 deviation detection never sees their files | Reseed the fixture with V2 items and unskip |
+| plan-export (1) | chokidar auto-sync races a timer | Make the wait deterministic (an event or a sync counter), per the test's own note; never by raising the timeout |
+| build-artifacts (1) | `mobile/node_modules` absent | Justified: conditional on the environment. CI installs it where it matters |
+| reader-host (1, unit) | Needs `npm run build:reader` | Justified: CI builds it first |
+| release-signature (2, unit) | Private signing key lives only on the release machine | Justified: by design |
+
 ### 0.4 Behavioural sweep, by domain
 
 One sub-step and one PR per domain. For each:
