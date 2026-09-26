@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.2 Inventory → PR open; 0.3 next |
-| **Status** | 0.2 green: typecheck, lint 0 errors / 291 warnings, unit 971/974, harness 363 passed / 17 skipped / 0 failed (18.1 min) |
-| **Next action** | Get the 0.2 PR reviewed and merged into `feat/phase-32`; then branch `feat/phase-32-0.3-coverage-guards`: guards for tools, routes and RPC with shrink-only allowlists, and enable CI lint (bug 12) |
-| **Blockers** | 0.3 builds on 0.2's extractors, so it waits for the 0.2 merge |
-| **Branch** | `feat/phase-32-0.2-inventory` → PR into `feat/phase-32` |
+| **Stage / step** | 0.3 Coverage guards (0.2 merged as #112; 0.3b → #113, 0.6a → #114, both green) |
+| **Status** | Guards and CI lint done on `feat/phase-32-0.3-coverage-guards`; unit 975/978; PR next |
+| **Next action** | Open the 0.3 PR. Whichever of #113 / 0.3 merges second must shrink `untested.json`: #113 adds tests for items it lists. Then 0.4a (behavioural sweep: project and scan) |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-0.3-coverage-guards` (from `feat/phase-32` at `53576ca`) |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -32,7 +32,7 @@
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
 - [x] 0.2 Inventory and verification matrix
-- [ ] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
+- [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
 - [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
 - [ ] 0.4a Project and scan
 - [ ] 0.4b Graph
@@ -128,6 +128,31 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.3 coverage guards
+- **`tools/inventory/coverage.test.ts`:** every REST route, MCP tool and
+  RPC method must be reached by a test, or be listed in
+  `tools/inventory/untested.json`. The list can only shrink. The guard
+  fails on a new untested item, on a listed item that gained a test, and
+  on a listed item that no longer exists. Verified: removing an entry
+  fails with "has no test — write one".
+- **Skipped tests no longer count as coverage** (`stripSkippedTests`):
+  string-named `test.skip`, `test.describe.skip`, `describe.skip` and
+  `it.skip` calls are removed before searching. Conditional
+  `test.skip(!ok, …)` guards are kept.
+- **Starting list:** 75 routes, 74 tools, 47 RPC methods. This branch
+  predates #113, so its V1 skipped files no longer count and REST reads
+  75. When #113 lands, entries its tests now reach must be deleted from
+  the list, and the guard will name them.
+- **Bug 12 fixed:** CI's lint step is enabled, and the header note
+  corrected.
+- `collect()` was split out of `build()`, so the guard and the matrix
+  share one enumeration.
+- `CLAUDE.md` counts corrected (lint ~291, unit ~975, harness ~380), and
+  the shrinking-list rule documented.
+- typecheck 0 errors; lint 0 errors / 291 warnings; unit 978 tests / 975
+  pass / 3 skipped. Harness not re-run: no runtime code changed (tools,
+  CI and docs only).
 
 ### 2026-09-26: 0.2 green
 - Harness on `feat/phase-32-0.2-inventory`: 363 passed, 17 skipped,

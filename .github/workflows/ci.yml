@@ -20,18 +20,18 @@
 # contended slot for no benefit. vars.CI_RUNNER is still honoured so the
 # decision is one repository variable away if this repo ever goes private.
 #
-# WHY THERE IS NO LINT JOB YET
+# LINT
 #
-# `npm run lint` runs `eslint src/`, and eslint is not a declared dependency —
-# it has never worked. Adding a lint gate before installing eslint would make
-# CI red on arrival and teach everyone to ignore it. Installing eslint is
-# Phase 19 Gate 3 work; the job below is written and commented out, ready to
-# enable in the same PR that adds the dependency.
+# `npm run lint` gates the desktop job: 0 errors required, warnings allowed
+# (the severity split is explained in eslint.config.mjs). It was commented
+# out here on the premise that eslint wasn't installed; by Phase 32 it was
+# (`eslint ^9.39.5`) and passed with 0 errors, so the gate was simply
+# missing. Enabled in Phase 32 §0.3.
 #
 # WHAT ACTUALLY BLOCKS ON A PR
 #
 #   no-private-docs   seconds   this repo is public
-#   desktop           ~1 min    typecheck, bundle guard, web build, unit tests
+#   desktop           ~1 min    typecheck, bundle guard, web build, unit tests, lint
 #   mobile            ~30 s     typecheck
 #   html-view         ~1 min    the sandboxed HTML view, a hostile report, real Electron
 #
@@ -178,10 +178,8 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
-      # - name: Lint
-      #   run: npm run lint
-      #   # ENABLE IN THE SAME PR THAT ADDS ESLINT AS A DEVDEPENDENCY.
-      #   # See the header note; eslint is currently not installed at all.
+      - name: Lint
+        run: npm run lint
 
   # ---------------------------------------------------------------------------
   # Mobile: typecheck only.

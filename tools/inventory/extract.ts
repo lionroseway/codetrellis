@@ -249,6 +249,101 @@ export function filesReaching(
   return hits.sort();
 }
 
+/**
+ * Remove unconditionally skipped tests from test source, so a mention inside
+ * one doesn't count as coverage. Phase 32 §0.3b found 8 routes that looked
+ * tested only because a `test.describe.skip` file named them.
+ *
+ * Removes `test.skip('name', …)`, `test.describe.skip('name', …)`,
+ * `describe.skip(…)` and `it.skip(…)` calls whose first argument is a
+ * string — i.e. a skipped test, not a conditional `test.skip(!ok, 'why')`
+ * guard inside a running one. Parens are matched with string, template and
+ * comment awareness, which is all test files need.
+ */
+export function stripSkippedTests(source: string): string {
+  const head = /\b(?:test\.describe|test|describe|it)\.skip\(\s*(['"`])/g;
+  let out = '';
+  let from = 0;
+  for (let m = head.exec(source); m; m = head.exec(source)) {
+    const open = source.indexOf('(', m.index);
+    const close = matchParen(source, open);
+    if (close < 0) break;
+    out += source.slice(from, m.index);
+    from = close + 1;
+    head.lastIndex = from;
+  }
+  return out + source.slice(from);
+}
+
+/** Index of the `)` matching the `(` at `open`, or -1. */
+function matchParen(s: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    const c = s[i];
+    if (c === '"' || c === "'" || c === '`') {
+      i = skipString(s, i);
+      continue;
+    }
+    if (c === '/' && s[i + 1] === '/') { i = s.indexOf('\n', i); if (i < 0) return -1; continue; }
+    if (c === '/' && s[i + 1] === '*') { i = s.indexOf('*/', i + 2) + 1; if (i <= 0) return -1; continue; }
+    if (c === '(') depth++;
+    else if (c === ')' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+function skipString(s: string, start: number): number {
+  const q = s[start];
+  for (let i = start + 1; i < s.length; i++) {
+    if (s[i] === '\\') { i++; continue; }
+    if (q === '`' && s[i] === '$' && s[i + 1] === '{') {
+      const end = matchBrace(s, i + 1);
+      if (end < 0) return s.length;
+      i = end;
+      continue;
+    }
+    if (s[i] === q) return i;
+  }
+  return s.length;
+}
+
+function matchBrace(s: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    const c = s[i];
+    if (c === '"' || c === "'" || c === '`') { i = skipString(s, i); continue; }
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+// ── Coverage guard ──────────────────────────────────────────────────────────
+
+export interface CoverageDelta {
+  /** Untested today and not on the allowlist: a new gap. */
+  newlyUntested: string[];
+  /** On the allowlist but now tested: the list must shrink. */
+  nowTested: string[];
+  /** On the allowlist but no longer exists. */
+  gone: string[];
+}
+
+/**
+ * Compare today's untested set with the allowlist. Only an exact match
+ * passes, so the allowlist can only shrink, and only on purpose.
+ */
+export function compareCoverage(untested: string[], allowlist: string[], existing: string[]): CoverageDelta {
+  const u = new Set(untested);
+  const a = new Set(allowlist);
+  const e = new Set(existing);
+  return {
+    newlyUntested: [...u].filter((x) => !a.has(x)).sort(),
+    nowTested: [...a].filter((x) => e.has(x) && !u.has(x)).sort(),
+    gone: [...a].filter((x) => !e.has(x)).sort(),
+  };
+}
+
 // ── Reconciliation ──────────────────────────────────────────────────────────
 
 export interface ToolReconciliation {
