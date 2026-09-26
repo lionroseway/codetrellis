@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.6a Descriptions (0.2 → #112 and 0.3b → #113, both green, awaiting merge) |
-| **Status** | Bugs 5–7 fixed, and a wider class (bug 15: 21 guide entries with wrong argument names) fixed with a guard test. Bugs 4 and 8 reclassified. Harness running |
-| **Next action** | Green harness → open the 0.6a PR. Merge order: #112, #113, 0.6a. After each merge, merge `feat/phase-32` into the next branch and run `npm run inventory` |
+| **Status** | Bugs 5–7 fixed, and a wider class (bug 15: 21 guide entries with wrong argument names) fixed with a guard test. Bugs 4 and 8 reclassified. Harness 363 passed / 17 skipped / 0 failed (baseline counts; this branch predates #113) |
+| **Next action** | 0.6a PR open. Merge order: #112, #113, 0.6a. After each merge, merge `feat/phase-32` into the next branch and run `npm run inventory` |
 | **Blockers** | Merges of #112 / #113 (step 0.3 builds on #112's extractors) |
 | **Branch** | `feat/phase-32-0.6a-descriptions` (from `feat/phase-32` at `1c6dd3c`) |
 | **Last updated** | 2026-09-26 |
