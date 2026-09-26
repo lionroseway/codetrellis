@@ -11,9 +11,9 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.6a Descriptions → PR #114 (0.2 merged as #112; 0.3b → #113) |
-| **Status** | 0.6a green; `feat/phase-32` (with #112) merged in and the matrix regenerated. Merges again once #113 lands |
-| **Next action** | After #113 merges: merge `feat/phase-32` into this branch again and run `npm run inventory`. Next step: 0.3 coverage guards + CI lint |
+| **Stage / step** | 0.6a Descriptions → PR #114, stacked on 0.3b (#113) |
+| **Status** | PRs are stacked so they merge in order without conflicts: #113 (0.3b), then #114 (0.6a, contains 0.3b), then #115 (0.3, contains both) |
+| **Next action** | Merge #113 → #114 → #115 in that order. Then 0.4a (behavioural sweep: project and scan) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.6a-descriptions` → #114 |
 | **Last updated** | 2026-09-26 |
@@ -158,6 +158,50 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   defect.
 - typecheck 0 errors; lint 0 errors / 291 warnings; unit 963 tests /
   960 pass / 3 skipped (+1 guard; this branch predates 0.2).
+
+### 2026-09-26: #112 merged; feat/phase-32 merged into 0.3b
+- Resolved the Phase 32 doc overlaps (bug tables 12–14 kept in order;
+  both branches' log entries kept) and filled EXECUTION §0.3b's outcome
+  column.
+- **Regenerated matrix:** REST routes with no test went from 63 to 71.
+  This isn't a regression. The inventory counted mentions inside
+  *skipped* test files as coverage, so 8 V1 `/api/tasks/*` routes looked
+  tested while only a skipped file named them. With the V1 files
+  rewritten, the true number shows. V2 `/api/items/*` routes gained real
+  coverage.
+- **Blind spot for 0.3:** the coverage guards must not count skipped
+  tests.
+- Unit on the merged branch: 974 tests, 971 pass, 3 skipped.
+
+### 2026-09-26: 0.3b complete — harness 377 passed / 1 skipped / 0 failed
+- **full-loop (4):** deviation detection reads V2 Actions, so the same
+  work is now also seeded as Actions (`add_item` with `file_specs`) and
+  marked done via `update_item`. 4 unskipped plus a seeding step; 21/21
+  over 3 repeats. `next-task` now offers the V2 Action.
+- **plan-export chokidar (1):** a stale skip. #55 skipped it, and #73
+  fixed the race three days later (`scanProject` awaits the watcher's
+  `ready`). 10/10 alone and 10/10 with all cores saturated. Unskipped.
+- **agent-loop (2):** rewritten onto V2. The auto-progress scenario
+  exposed **bug 13**: `plan-progress-service` only advanced V1 tasks,
+  so V2 Actions never lit up on a file edit. Fixed. The test times out
+  without the fix and passes with it.
+- **multi-agent (2):** rewritten onto `claim_item`; 6/6 over 3 repeats.
+- **task-context (7):** its header claimed V2 coverage in
+  `plan-items.test.ts`. Checked each scenario: 3 were covered, 4 were not
+  (**bug 14**). The file now tests those four:
+  - the full `claim_item` context
+  - child context, url attachment and file-spec update
+  - export → import through `items/`
+  - REST ↔ MCP parity and validation
+
+  12/12 over 3 repeats. The import comes from the project's plans dir,
+  because imports are confined to opened projects (Phase 19).
+- Scripted-agent's V1 helpers, which called tools that no longer exist,
+  are replaced by `claimItem`, `updateItemStatus` and `getNextItem`.
+- Remaining harness skips are environment-conditional only:
+  build-artifacts, and the terminals tests' `ptyAvailable` guard.
+- On this branch (which predates 0.2): typecheck 0 errors, lint 0 errors
+  / 291 warnings, unit 962 tests / 959 pass / 3 skipped.
 
 ### 2026-09-26: 0.2 green
 - Harness on `feat/phase-32-0.2-inventory`: 363 passed, 17 skipped,
