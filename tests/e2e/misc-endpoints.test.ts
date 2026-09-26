@@ -106,8 +106,8 @@ test.describe.serial('Miscellaneous endpoints', () => {
     const res = await h.client.raw('GET', `/api/file/content?path=${encodedPath}`);
     expect(res.ok).toBe(true);
     const body = await res.json();
-    expect(typeof body.content).toBe('string');
-    expect(body.content.length).toBeGreaterThan(0);
+    // The file's actual content, not just some non-empty string.
+    expect(body.content).toBe(fs.readFileSync(filePath, 'utf-8'));
   });
 
   test('GET /api/file/content refuses a path outside every opened project', async () => {

@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4b Graph |
-| **Status** | Started. #116 (0.4a) merged |
-| **Next action** | Remaining 0.4b: playback, trellis snapshots/checkpoints, file/at, overlay; matrix column; full harness; PR |
+| **Status** | Fixes (bugs 17–20) and tests committed; matrix filled for domain b |
+| **Next action** | Full harness on the 0.4b branch (nothing else running), then PR and merge |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4b-graph` |
 | **Last updated** | 2026-09-26 |
@@ -132,6 +132,18 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4b — matrix filled; shape-only tests replaced
+- `baselines`: the trellis snapshot records its branch, and its diff is
+  empty at capture, then reports a file and edge added afterwards (live,
+  no rescan); unknown id 404. Was `toBeTruthy()`.
+- `misc-endpoints`: `/api/file/content` returns the file's exact content
+  (was "non-empty string").
+- `untested.json`: 11 tools and 2 routes removed (now 69 routes, 55
+  tools, 47 RPC). Behaviour column filled for all 17 routes and 15 tools
+  of 0.4b. The 8 graph/changes RPC methods are deferred to 0.4j.
+- Checks: typecheck 0; lint 0 errors / 290 warnings (one fewer: an
+  `as any` went with the mode fix); unit 995 / 992 / 3 skipped.
 
 ### 2026-09-26: 0.4b — the live graph degraded with every edit (bugs 19, 20)
 - **Bug 19:** `graph_set_mode('baseline')` sent `baseline`; the renderer's
