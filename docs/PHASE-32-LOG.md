@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4a Project and scan |
-| **Status** | Full harness on `2ec3da5`: 400 passed, 1 skipped, 1 flaky (cdev-channels, see entry) |
-| **Next action** | Open the 0.4a PR; after merge, 0.4b (graph) |
+| **Stage / step** | 0.4b Graph |
+| **Status** | Started. #116 (0.4a) merged |
+| **Next action** | Browser spec: drive the graph view tools against a real page; then REST graph routes (playback, trellis, diff) behaviour |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4a-project-scan` |
+| **Branch** | `feat/phase-32-0.4b-graph` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -34,7 +34,7 @@
 - [x] 0.2 Inventory and verification matrix
 - [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
 - [x] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic (#115)
-- [ ] 0.4a Project and scan
+- [x] 0.4a Project and scan (#116)
 - [ ] 0.4b Graph
 - [ ] 0.4c Plans and items
 - [ ] 0.4d Criteria and sign-off
@@ -126,11 +126,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | One Phase 32 step PR open at a time; each step branches from `feat/phase-32` after the previous merge | Squash merges plus shared docs made parallel and stacked PRs conflict (#113–#115) |
 | 2026-09-26 | Git checkout facts (branch, git dir, branches) are read from git's on-disk layout, not by running `git` | Auto-detect asks about unopened directories; `safe.directory` would blank the branch where the file read worked (0.4a) |
 | 2026-09-26 | `project.*` RPC methods are verified in 0.4j, not 0.4a | No harness path to the peer RPC surface yet; 0.4j builds it |
+| 2026-09-26 | Step PRs into `feat/phase-32` are merged by the agent once green (squash); no waiting on the owner | Owner's instruction |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4b — graph queries that answered wrongly (bugs 17, 18)
+- **`tests/e2e/graph-tools.test.ts` (22):** the 15 graph MCP tools with
+  no harness test, plus `/api/dependencies/file` (no test at all). The
+  view tools' broadcasts are asserted with `openEventStream`; for
+  `graph_snapshot`, `graph_export` and `ui_ready` the harness answers as
+  the renderer through `/api/screenshot-response`.
+- **Bug 17:** `get_dependencies` with a project-relative path returned
+  empty lists ("no dependencies"); `check_conformity` with absolute paths
+  reported everything conformant. The only earlier test (`e2e/mcp-tools`)
+  asserted `toBeTruthy()`. Both now accept either form.
+- **Bug 18:** `graph_snapshot` defaulted to full metadata despite
+  promising a compact default.
+- 3 of 22 failed before the fixes, each one a bug above.
 
 ### 2026-09-26: 0.4a full harness — one flaky, not reproduced
 - **Result on `2ec3da5`:** 400 passed, 1 skipped (environment), 1 flaky.

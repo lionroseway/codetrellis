@@ -801,6 +801,15 @@ export function getFileDependencies(filePath: string): {
 } {
   const d = getDb();
 
+  // Accept the project-relative form too. Rows are keyed by absolute path,
+  // and a relative one (what agents and every other graph tool use)
+  // matched nothing, so the answer was two empty lists: "no dependencies".
+  const row = d.exec(
+    `SELECT path FROM files WHERE path = ? OR relative_path = ? LIMIT 1`,
+    [filePath, filePath.replace(/^\.\//, '')],
+  );
+  filePath = (row[0]?.values[0]?.[0] as string | undefined) ?? filePath;
+
   // What this file imports
   const importsResult = d.exec(`
     SELECT f2.path, f2.relative_path, i.specifiers

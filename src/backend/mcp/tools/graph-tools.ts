@@ -187,7 +187,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         deps.pendingResponses.set(nonce, { resolve, reject, timer });
       });
 
-      deps.broadcast('ui-graph-snapshot-request', { nonce, includeMetadata: include_metadata !== false });
+      // Metadata only when asked, as the description says. `!== false`
+      // made the "compact" default the full dump.
+      deps.broadcast('ui-graph-snapshot-request', { nonce, includeMetadata: include_metadata === true });
 
       try {
         const json = await p;
