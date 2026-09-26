@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4b Graph |
-| **Status** | Fixes (bugs 17–20) and tests committed; matrix filled for domain b |
-| **Next action** | Full harness on the 0.4b branch (nothing else running), then PR and merge |
+| **Status** | Full harness on `2af7069`: 430 passed, 1 skipped, 0 flaky |
+| **Next action** | 0.4b PR: merge when CI is green; then 0.4c (plans and items) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4b-graph` |
 | **Last updated** | 2026-09-26 |
@@ -132,6 +132,12 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4b full harness — clean
+- 430 passed, 1 skipped (environment), 0 retries, 18.5 min, with nothing
+  else running. `cdev-channels` passed first time, consistent with the
+  0.4a flake being load from the parallel unit/lint run. It stays open
+  for 0.4f until the watcher path is understood.
 
 ### 2026-09-26: 0.4b — matrix filled; shape-only tests replaced
 - `baselines`: the trellis snapshot records its branch, and its diff is
