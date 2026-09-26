@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.3b Skipped tests (0.2 in PR #112, green, awaiting merge) |
-| **Status** | All 16 hidden-behaviour skips resolved: 15 unskipped or rewritten, and 3 V1 duplicates dropped after verifying their coverage in plan-items. Bug 13 fixed. Full harness running |
-| **Next action** | When the harness is green, open the 0.3b PR. After #112 merges, merge `feat/phase-32` in, run `npm run inventory`, and fill EXECUTION §0.3b's outcome column |
+| **Status** | All 16 hidden-behaviour skips resolved: 15 unskipped or rewritten, and 3 V1 duplicates dropped after verifying their coverage in plan-items. Bug 13 fixed. Harness **377 passed, 1 skipped, 0 failed, no retries** (18.9 min), was 363/17 |
+| **Next action** | 0.3b PR open. After #112 merges, merge `feat/phase-32` in, run `npm run inventory`, and fill EXECUTION §0.3b's outcome column |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.3b-skipped-tests` (from `feat/phase-32` at `1c6dd3c`); 0.2 is `feat/phase-32-0.2-inventory` → #112 |
 | **Last updated** | 2026-09-26 |
@@ -127,7 +127,7 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
 
 ## Entries
 
-### 2026-09-26: 0.3b complete, pending harness
+### 2026-09-26: 0.3b complete — harness 377 passed / 1 skipped / 0 failed
 - **full-loop (4):** deviation detection reads V2 Actions, so the same
   work is now also seeded as Actions (`add_item` with `file_specs`) and
   marked done via `update_item`. 4 unskipped plus a seeding step; 21/21
