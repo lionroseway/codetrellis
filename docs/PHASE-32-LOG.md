@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4b Graph |
-| **Status** | Full harness on `2af7069`: 430 passed, 1 skipped, 0 flaky |
-| **Next action** | 0.4b PR: merge when CI is green; then 0.4c (plans and items) |
+| **Stage / step** | 0.4c-1 Plans (0.4c is split: 0.4c-1 plans, 0.4c-2 items) |
+| **Status** | Started. #117 (0.4b) merged |
+| **Next action** | Re-domain sign-off/worklist to d. Then plan CRUD, templates, discover/import/export, bulk delete, prune |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4b-graph` |
+| **Branch** | `feat/phase-32-0.4c1-plans` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -35,8 +35,9 @@
 - [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
 - [x] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic (#115)
 - [x] 0.4a Project and scan (#116)
-- [ ] 0.4b Graph
-- [ ] 0.4c Plans and items
+- [x] 0.4b Graph (#117)
+- [ ] 0.4c-1 Plans
+- [ ] 0.4c-2 Items
 - [ ] 0.4d Criteria and sign-off
 - [ ] 0.4e Brief and viewer
 - [ ] 0.4f Channels and presence
@@ -132,6 +133,30 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4c-1 — "Add to plan" wrote into V1 (bug 21)
+- **Which V1 task routes are still called?** The plan store's V1 task,
+  phase and doc functions (`fetchTaskContext`, `addTaskComment`,
+  `createPlanPhase`, `createPlanDoc` and 20 more) are referenced by
+  nothing outside the store. One live caller remained: the inspector's
+  "Add to plan" popover (`AddToTaskPopover`, reached by selecting lines
+  in the code view).
+- **Bug 21:** on a V2 plan the popover listed no tasks (V1 can't see V2
+  items), and what it created was a V1 task the workspace never shows.
+  Ported to V2 Actions. The new `POST /api/items/:uid/code-reference`
+  merges the line range into the Action's fileSpecs on the backend
+  (a renderer read-modify-write could race an agent), and the reference
+  shows in the code overlay.
+- **Tests:** `tests/e2e/code-reference.test.ts` (4: first and second
+  reference, overlay, refusals); browser
+  `e2e/inspector/add-to-plan.spec.ts` drives select lines → existing
+  Action and → new Action, and fails on the old popover. `data-line` on
+  code rows gives it a stable selector.
+- **Proposed to the owner, not done:** with the popover ported, nothing
+  live calls the V1 task REST routes (`/api/tasks/*`,
+  `/api/plans/:uid/tasks*`) or the dead plan-store functions. Retiring
+  them is the honest fix for their untested entries; writing tests for
+  dead surface is not.
 
 ### 2026-09-26: 0.4b full harness — clean
 - 430 passed, 1 skipped (environment), 0 retries, 18.5 min, with nothing
