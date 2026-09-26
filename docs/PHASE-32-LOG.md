@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.6a Descriptions (0.2 → #112 and 0.3b → #113, both green, awaiting merge) |
-| **Status** | Bugs 5–7 fixed, and a wider class (bug 15: 21 guide entries with wrong argument names) fixed with a guard test. Bugs 4 and 8 reclassified. Harness 363 passed / 17 skipped / 0 failed (baseline counts; this branch predates #113) |
-| **Next action** | 0.6a PR open. Merge order: #112, #113, 0.6a. After each merge, merge `feat/phase-32` into the next branch and run `npm run inventory` |
-| **Blockers** | Merges of #112 / #113 (step 0.3 builds on #112's extractors) |
-| **Branch** | `feat/phase-32-0.6a-descriptions` (from `feat/phase-32` at `1c6dd3c`) |
+| **Stage / step** | 0.6a Descriptions → PR #114 (0.2 merged as #112; 0.3b → #113) |
+| **Status** | 0.6a green; `feat/phase-32` (with #112) merged in and the matrix regenerated. Merges again once #113 lands |
+| **Next action** | After #113 merges: merge `feat/phase-32` into this branch again and run `npm run inventory`. Next step: 0.3 coverage guards + CI lint |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-0.6a-descriptions` → #114 |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -31,8 +31,9 @@
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
-- [ ] 0.2 Inventory and verification matrix
-- [ ] 0.3 Test mapping and coverage guards
+- [x] 0.2 Inventory and verification matrix
+- [ ] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
+- [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
 - [ ] 0.4a Project and scan
 - [ ] 0.4b Graph
 - [ ] 0.4c Plans and items
@@ -96,14 +97,15 @@
 ## Baseline
 
 Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
-`npm ci`, at `main` = `a4665b2` plus docs only.
+`npm ci`. Harness and build at `1433770` plus the plan docs; typecheck, lint
+and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 | Check | Result | Time | Notes |
 |---|---|---|---|
 | `npm ci` | ok | — | `install-scripts` warnings as expected (npm 11.19 skips them); `better-sqlite3` and `node-pty` load from prebuilds |
 | `typecheck` | **0 errors** | 19 s | |
 | `lint` | **0 errors, 291 warnings** | 13 s | CLAUDE.md says ~277; the warning count is the baseline to not increase |
-| `test:unit` | **950 tests: 947 pass, 0 fail, 3 skipped** | 30 s | CLAUDE.md says 461; out of date |
+| `test:unit` | **962 tests: 959 pass, 0 fail, 3 skipped** (at `1c6dd3c`; 950/947 at `1433770`) | 30 s | CLAUDE.md says 461; out of date |
 | `build` (web) | **ok** | 33 s | one chunk-size warning (>500 kB), pre-existing |
 | `test:harness` | **363 passed, 17 skipped, 0 failed, 0 flaky** | 18.6 min | CLAUDE.md says 328 + 16. Skips are in agent-loop (2), build-artifacts (1), full-loop (4), multi-agent (2), plan-export (1), task-context (7); each is explained or fixed in 0.3. Run with a git-excluded `playwright.local.config.ts` pointing at `/opt/pw-browsers/chromium`, because the container's Chromium doesn't match Playwright 1.63's pinned revision |
 | Packaged Electron | can't run here | | needs macOS: `npm ci && npm run package:mac`, launch, confirm "Backend initialised" |
@@ -156,6 +158,70 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
   defect.
 - typecheck 0 errors; lint 0 errors / 291 warnings; unit 963 tests /
   960 pass / 3 skipped (+1 guard; this branch predates 0.2).
+
+### 2026-09-26: 0.2 green
+- Harness on `feat/phase-32-0.2-inventory`: 363 passed, 17 skipped,
+  0 failed, no retries, 18.1 min. This is also the first harness run on
+  the post-#110 base, and #110's connector change is clean.
+
+### 2026-09-26: Skipped tests triaged (for 0.3b)
+- **Harness 17:**
+  - 11 exercise removed V1 tools (agent-loop, multi-agent,
+    task-context).
+  - 4 have a V1 fixture (full-loop).
+  - 1 is a racy chokidar wait (plan-export).
+  - 1 is environment-conditional (build-artifacts).
+- **Unit 3:** reader-host needs `build:reader`; release-signature needs
+  the release key (2).
+- So 16 tests hide behaviour we want covered, and 4 are legitimately
+  conditional. Added EXECUTION §0.3b.
+
+### 2026-09-26: 0.2 inventory built
+- `tools/inventory/` has pure extractors (`extract.ts`) and a runner
+  (`run.ts`); `npm run inventory` generates
+  `docs/PHASE-32-VERIFICATION.md`. 12 unit tests, including one that
+  fails when the committed matrix is stale or any row has no domain.
+  `test:unit` now also runs `tools/**/*.test.ts`; `tsconfig` includes
+  `tools/inventory`.
+- **The surface:**
+  - 226 REST routes
+  - 186 MCP tools
+  - 72 RPC methods
+  - 98 components
+  - 31 mobile screens
+  - 12 settings sections
+- **MCP reconciled:** 186 registered = 186 capability rows, with no stale
+  rows and no unauthorised tools. The earlier "165" was a grep that
+  missed multi-line registrations.
+- **Test-mention gaps**, meaning no test file mentions the item even via
+  harness helpers:
+  - 63 REST routes
+  - 74 MCP tools
+  - 47 RPC methods
+
+  Spot-checked five tools and three RPC methods by hand; all are real
+  gaps (one apparent hit was prose in a comment).
+- The first freshness run caught the inventory's own test fixtures being
+  counted as coverage. They're excluded now.
+- **Finding 12:** CI's lint step is commented out with a note saying
+  ESLint isn't installed. It is (`eslint ^9.39.5`, and lint passes with
+  0 errors), so lint is currently ungated. Enable it in 0.3.
+
+### 2026-09-26: #111 merged; 0.2 started
+- #111 was squash-merged into `feat/phase-32` as `1c6dd3c`.
+- **Baseline correction:** the 0.1 numbers were measured on `1433770`,
+  not `a4665b2` as first written (my branch predated #110). Re-ran on
+  the true base `1c6dd3c`:
+  - typecheck: 0 errors
+  - lint: 0 errors / 291 warnings
+  - unit: **962 tests, 959 pass, 0 fail, 3 skipped** (+12 from #110's
+    connector tests)
+
+  The harness wasn't re-run. #110 touched the connector only; it gets
+  re-run in 0.2's definition of done.
+- Step branches follow the plan's naming. The old session branch can't
+  be force-reset to the new base, so each step gets a fresh branch from
+  `feat/phase-32`.
 
 ### 2026-09-26: 0.1 Baseline complete
 - The full harness is green on Node 26.10.0: 363 passed, 17 skipped,
