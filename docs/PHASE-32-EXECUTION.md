@@ -144,7 +144,7 @@ Scale, measured 2026-09-26:
 | Surface | Count |
 |---|---|
 | REST routes | 226 |
-| MCP tool registrations | 165 (capability rows: 186, to be reconciled) |
+| MCP tools | 186 registered = 186 capability rows (reconciled in 0.2; an early grep said 165) |
 | Mobile RPC methods | 72 |
 | Frontend components | 98 |
 | Mobile screens | 31 |
@@ -205,6 +205,21 @@ verified · UX checked · notes.
 - **Done when:** the guards are in and green, and the allowlists are
   counted in the log.
 
+### 0.3b Skipped tests
+
+At baseline, 17 harness tests and 3 unit tests don't run. Each one gets
+**unskipped** (reseeded or made deterministic) or **justified** as
+conditional on the environment:
+
+| Tests | Why skipped | Action |
+|---|---|---|
+| agent-loop (2), multi-agent (2), task-context (7) | Exercised V1 plan tools removed in the V2 migration | **Done:** rewritten onto V2. agent-loop 2 and multi-agent 2 unskipped. task-context: 3 of 7 were already covered by `plan-items.test.ts`, 4 were not and are now tested (bug 14). Rewriting agent-loop found bug 13 |
+| full-loop (4) | Fixture seeded V1 tasks, so V2 deviation detection never saw their files | **Done:** also seeded as V2 Actions; 4 unskipped |
+| plan-export (1) | chokidar auto-sync raced a timer | **Done:** stale skip. #73 already made the wait deterministic (awaits `ready`); verified under load and unskipped |
+| build-artifacts (1) | `mobile/node_modules` absent | Justified: conditional on the environment. CI installs it where it matters |
+| reader-host (1, unit) | Needs `npm run build:reader` | Justified: CI builds it first |
+| release-signature (2, unit) | Private signing key lives only on the release machine | Justified: by design |
+
 ### 0.4 Behavioural sweep, by domain
 
 One sub-step and one PR per domain. For each:
@@ -256,6 +271,7 @@ Each gets its own regression test (from CURRENT-STATE):
 | 9 scan baseline lost on restart | 0.6 |
 | 10 spec body edits leave no event | B1 (event log) |
 | 11 cross-plan dependencies never resolve | B6 |
+| 12 CI lint step disabled on a stale premise | 0.3 |
 | 13 auto-progress ignored V2 Actions | 0.3b (fixed) |
 | 14 skipped test's coverage claim was false | 0.3b (fixed) |
 

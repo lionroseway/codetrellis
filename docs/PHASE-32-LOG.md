@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.3b Skipped tests (0.2 in PR #112, green, awaiting merge) |
-| **Status** | All 16 hidden-behaviour skips resolved: 15 unskipped or rewritten, and 3 V1 duplicates dropped after verifying their coverage in plan-items. Bug 13 fixed. Harness **377 passed, 1 skipped, 0 failed, no retries** (18.9 min), was 363/17 |
-| **Next action** | 0.3b PR open. After #112 merges, merge `feat/phase-32` in, run `npm run inventory`, and fill EXECUTION §0.3b's outcome column |
+| **Stage / step** | 0.3b Skipped tests → PR #113 (0.2 merged as #112) |
+| **Status** | 0.3b green (harness 377/1/0); `feat/phase-32` (with #112) merged in, doc overlaps resolved, verification matrix regenerated |
+| **Next action** | Get #113 merged, then #114 (0.6a). Next step: 0.3 coverage guards + CI lint, on a fresh branch from `feat/phase-32` |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.3b-skipped-tests` (from `feat/phase-32` at `1c6dd3c`); 0.2 is `feat/phase-32-0.2-inventory` → #112 |
+| **Branch** | `feat/phase-32-0.3b-skipped-tests` → #113; `feat/phase-32-0.6a-descriptions` → #114 |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -31,8 +31,9 @@
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
-- [ ] 0.2 Inventory and verification matrix
-- [ ] 0.3 Test mapping and coverage guards
+- [x] 0.2 Inventory and verification matrix
+- [ ] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
+- [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
 - [ ] 0.4a Project and scan
 - [ ] 0.4b Graph
 - [ ] 0.4c Plans and items
@@ -96,14 +97,15 @@
 ## Baseline
 
 Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
-`npm ci`, at `main` = `a4665b2` plus docs only.
+`npm ci`. Harness and build at `1433770` plus the plan docs; typecheck, lint
+and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 | Check | Result | Time | Notes |
 |---|---|---|---|
 | `npm ci` | ok | — | `install-scripts` warnings as expected (npm 11.19 skips them); `better-sqlite3` and `node-pty` load from prebuilds |
 | `typecheck` | **0 errors** | 19 s | |
 | `lint` | **0 errors, 291 warnings** | 13 s | CLAUDE.md says ~277; the warning count is the baseline to not increase |
-| `test:unit` | **950 tests: 947 pass, 0 fail, 3 skipped** | 30 s | CLAUDE.md says 461; out of date |
+| `test:unit` | **962 tests: 959 pass, 0 fail, 3 skipped** (at `1c6dd3c`; 950/947 at `1433770`) | 30 s | CLAUDE.md says 461; out of date |
 | `build` (web) | **ok** | 33 s | one chunk-size warning (>500 kB), pre-existing |
 | `test:harness` | **363 passed, 17 skipped, 0 failed, 0 flaky** | 18.6 min | CLAUDE.md says 328 + 16. Skips are in agent-loop (2), build-artifacts (1), full-loop (4), multi-agent (2), plan-export (1), task-context (7); each is explained or fixed in 0.3. Run with a git-excluded `playwright.local.config.ts` pointing at `/opt/pw-browsers/chromium`, because the container's Chromium doesn't match Playwright 1.63's pinned revision |
 | Packaged Electron | can't run here | | needs macOS: `npm ci && npm run package:mac`, launch, confirm "Backend initialised" |
@@ -126,6 +128,20 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
 ---
 
 ## Entries
+
+### 2026-09-26: #112 merged; feat/phase-32 merged into 0.3b
+- Resolved the Phase 32 doc overlaps (bug tables 12–14 kept in order;
+  both branches' log entries kept) and filled EXECUTION §0.3b's outcome
+  column.
+- **Regenerated matrix:** REST routes with no test went from 63 to 71.
+  This isn't a regression. The inventory counted mentions inside
+  *skipped* test files as coverage, so 8 V1 `/api/tasks/*` routes looked
+  tested while only a skipped file named them. With the V1 files
+  rewritten, the true number shows. V2 `/api/items/*` routes gained real
+  coverage.
+- **Blind spot for 0.3:** the coverage guards must not count skipped
+  tests.
+- Unit on the merged branch: 974 tests, 971 pass, 3 skipped.
 
 ### 2026-09-26: 0.3b complete — harness 377 passed / 1 skipped / 0 failed
 - **full-loop (4):** deviation detection reads V2 Actions, so the same
@@ -156,6 +172,70 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
   build-artifacts, and the terminals tests' `ptyAvailable` guard.
 - On this branch (which predates 0.2): typecheck 0 errors, lint 0 errors
   / 291 warnings, unit 962 tests / 959 pass / 3 skipped.
+
+### 2026-09-26: 0.2 green
+- Harness on `feat/phase-32-0.2-inventory`: 363 passed, 17 skipped,
+  0 failed, no retries, 18.1 min. This is also the first harness run on
+  the post-#110 base, and #110's connector change is clean.
+
+### 2026-09-26: Skipped tests triaged (for 0.3b)
+- **Harness 17:**
+  - 11 exercise removed V1 tools (agent-loop, multi-agent,
+    task-context).
+  - 4 have a V1 fixture (full-loop).
+  - 1 is a racy chokidar wait (plan-export).
+  - 1 is environment-conditional (build-artifacts).
+- **Unit 3:** reader-host needs `build:reader`; release-signature needs
+  the release key (2).
+- So 16 tests hide behaviour we want covered, and 4 are legitimately
+  conditional. Added EXECUTION §0.3b.
+
+### 2026-09-26: 0.2 inventory built
+- `tools/inventory/` has pure extractors (`extract.ts`) and a runner
+  (`run.ts`); `npm run inventory` generates
+  `docs/PHASE-32-VERIFICATION.md`. 12 unit tests, including one that
+  fails when the committed matrix is stale or any row has no domain.
+  `test:unit` now also runs `tools/**/*.test.ts`; `tsconfig` includes
+  `tools/inventory`.
+- **The surface:**
+  - 226 REST routes
+  - 186 MCP tools
+  - 72 RPC methods
+  - 98 components
+  - 31 mobile screens
+  - 12 settings sections
+- **MCP reconciled:** 186 registered = 186 capability rows, with no stale
+  rows and no unauthorised tools. The earlier "165" was a grep that
+  missed multi-line registrations.
+- **Test-mention gaps**, meaning no test file mentions the item even via
+  harness helpers:
+  - 63 REST routes
+  - 74 MCP tools
+  - 47 RPC methods
+
+  Spot-checked five tools and three RPC methods by hand; all are real
+  gaps (one apparent hit was prose in a comment).
+- The first freshness run caught the inventory's own test fixtures being
+  counted as coverage. They're excluded now.
+- **Finding 12:** CI's lint step is commented out with a note saying
+  ESLint isn't installed. It is (`eslint ^9.39.5`, and lint passes with
+  0 errors), so lint is currently ungated. Enable it in 0.3.
+
+### 2026-09-26: #111 merged; 0.2 started
+- #111 was squash-merged into `feat/phase-32` as `1c6dd3c`.
+- **Baseline correction:** the 0.1 numbers were measured on `1433770`,
+  not `a4665b2` as first written (my branch predated #110). Re-ran on
+  the true base `1c6dd3c`:
+  - typecheck: 0 errors
+  - lint: 0 errors / 291 warnings
+  - unit: **962 tests, 959 pass, 0 fail, 3 skipped** (+12 from #110's
+    connector tests)
+
+  The harness wasn't re-run. #110 touched the connector only; it gets
+  re-run in 0.2's definition of done.
+- Step branches follow the plan's naming. The old session branch can't
+  be force-reset to the new base, so each step gets a fresh branch from
+  `feat/phase-32`.
 
 ### 2026-09-26: 0.1 Baseline complete
 - The full harness is green on Node 26.10.0: 363 passed, 17 skipped,

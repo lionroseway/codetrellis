@@ -47,6 +47,11 @@ step, after every decision, before any long command, and at least every
   Never skip, disable or quarantine a test.
 - **Stage 0 verifies what exists** (inventory, tests for everything,
   clean UX) before new features.
+- **`docs/PHASE-32-VERIFICATION.md` is generated** by `npm run inventory`
+  (every REST route, MCP tool, RPC method, component, mobile screen and
+  settings section, with its test references). A unit test fails when it
+  is stale, so adding a route, a tool or a test that mentions one means
+  re-running `npm run inventory` and committing the result.
 
 ## Phase 19 — Security Hardening (in progress)
 
