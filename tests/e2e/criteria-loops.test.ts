@@ -79,9 +79,12 @@ test.describe('Phase 31.2a — checks, the worklist and check runs', () => {
       expect(run.stale).toEqual([{ criterion_uid: c.uid, criterion: 'EMEA revenue matches the ledger', changed: ['data/ledger.csv'] }]);
       expect(run.since_last.join(' ')).toMatch(/went stale .* data\/ledger\.csv changed/);
 
-      // Nothing was approved by being checked: the only approval is the person's.
-      const signoffs = await (await h.client.raw('GET', `/api/criteria/${c.uid}/signoffs`)).json() as Array<{ decision: string; actorType: string }>;
-      expect(signoffs.filter((s) => s.decision === 'approved').every((s) => s.actorType === 'human')).toBe(true);
+      // Nothing was approved by being checked: the only approval is the one
+      // taken through the decide route (over HTTP here, so unverified; 0.4d).
+      const signoffs = await (await h.client.raw('GET', `/api/criteria/${c.uid}/signoffs`)).json() as Array<{ decision: string; actorType: string; channel: string }>;
+      const approvals = signoffs.filter((s) => s.decision === 'approved');
+      expect(approvals.length).toBeGreaterThan(0);
+      expect(approvals.every((s) => s.actorType === 'unverified' && s.channel === 'local-api')).toBe(true);
 
       const runs = await (await h.client.raw('GET', `/api/plans/${plan.uid}/check-runs`)).json() as Array<{ trigger: string }>;
       expect(runs.length).toBeGreaterThanOrEqual(2);

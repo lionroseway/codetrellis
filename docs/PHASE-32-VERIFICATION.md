@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 213 | 199 | 37 | 37 | 58 | 0 |
-| MCP tools | 185 | 147 | 49 | 37 | 45 | 0 |
+| REST routes | 213 | 199 | 32 | 32 | 67 | 0 |
+| MCP tools | 185 | 147 | 49 | 37 | 52 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 72 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 73 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -99,7 +99,7 @@ is proof of a gap.
 | c | `GET /api/items/:uid` |  | ✗ none | 7 |  |  |  |
 | c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/items/:uid/criteria` |  | ✗ none | 3 |  |  |  |
+| c | `GET /api/items/:uid/criteria` |  | ✗ none | 4 |  |  |  |
 | c | `GET /api/items/:uid/events` |  | ✗ none | 1 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
 | c | `GET /api/items/:uid/full` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/versions` |  | ✗ none | 1 | ✓ 0.4c-2: each edit a version (item-surface) |  |  |
@@ -111,9 +111,9 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 39 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 40 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 15 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 16 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 12 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
@@ -147,13 +147,13 @@ is proof of a gap.
 | c | `POST /api/items/:uid/claim` |  | ✗ none | 1 | ✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop) |  |  |
 | c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
 | c | `POST /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/items/:uid/criteria` |  | ✗ none | 3 |  |  |  |
+| c | `POST /api/items/:uid/criteria` |  | ✗ none | 4 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 39 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 40 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 15 |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 16 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
@@ -173,15 +173,15 @@ is proof of a gap.
 | c | `PUT /api/plans/:uid` |  | 1 | 12 |  |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
-| d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 |  |  |  |
-| d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 |  |  |  |
-| d | `GET /api/plans/:uid/signoff-pack` |  | ✗ none | ✗ none |  |  |  |
-| d | `GET /api/plans/:uid/signoff-pack.html` |  | ✗ none | ✗ none |  |  |  |
-| d | `GET /api/plans/:uid/worklist` |  | ✗ none | ✗ none |  |  |  |
-| d | `POST /api/criteria/:uid/check` |  | ✗ none | ✗ none |  |  |  |
-| d | `POST /api/criteria/:uid/decide` |  | ✗ none | 3 |  |  |  |
-| d | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | ✗ none |  |  |  |
-| d | `PUT /api/criteria/:uid` |  | ✗ none | 1 |  |  |  |
+| d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
+| d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 | ✓ 0.4d: append-only record, each tagged by how it arrived — local-api/unverified over HTTP (criteria-signoff, criteria-loops) |  |  |
+| d | `GET /api/plans/:uid/signoff-pack` |  | ✗ none | 1 | ✓ 0.4d: every criterion, unverified approval tagged, file with hash at approval; unknown plan 404 (signoff-surface) |  |  |
+| d | `GET /api/plans/:uid/signoff-pack.html` |  | ✗ none | 1 | ✓ 0.4d: attachment download, CSP sandbox, nosniff; unverified approvals listed apart (signoff-surface) |  |  |
+| d | `GET /api/plans/:uid/worklist` |  | ✗ none | 1 | ✓ 0.4d: sent back first with note, then open; met/waiting counted; stale after source moves (signoff-surface) |  |  |
+| d | `POST /api/criteria/:uid/check` |  | ✗ none | 1 | ✓ 0.4d: holds while cited cell exists, fails with the reason once it is gone; 404 (signoff-surface) |  |  |
+| d | `POST /api/criteria/:uid/decide` |  | ✗ none | 4 | ✓ 0.4d: approve / send back (note required); HTTP records unverified, app window records human (criteria-signoff, ipc-dispatcher unit) |  |  |
+| d | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | 1 | ✓ 0.4d: matches, then changed after edit; empty, non-pack and other plan's pack refused (signoff-surface) |  |  |
+| d | `PUT /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: rewording resets to open (criteria-signoff) |  |  |
 | e | `GET /api/artefacts/:uid` |  | ✗ none | ✗ none |  |  |  |
 | e | `GET /api/artefacts/:uid/content` |  | ✗ none | ✗ none |  |  |  |
 | e | `GET /api/artefacts/:uid/rendition` |  | ✗ none | ✗ none |  |  |  |
@@ -345,17 +345,17 @@ is proof of a gap.
 | c | `update_item` | plan-item · write | 1 | 9 |  |  |  |
 | c | `update_item_progress` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `update_plan` | plan · write | ✗ none | 1 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
-| d | `add_criterion` | plan-item · write | ✗ none | 1 |  |  |  |
-| d | `approve_gate` | plan-item · read | ✗ none | 1 |  |  |  |
-| d | `check_criterion` | plan-item · read | ✗ none | 1 |  |  |  |
-| d | `get_worklist` | plan-item · read | ✗ none | 1 |  |  |  |
-| d | `list_criteria` | plan-item · read | 1 | 2 |  |  |  |
-| d | `run_checks` | plan-item · read | ✗ none | 1 |  |  |  |
-| d | `submit_criterion` | plan-item · write | 1 | 3 |  |  |  |
+| d | `add_criterion` | plan-item · write | ✗ none | 1 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
+| d | `approve_gate` | plan-item · read | ✗ none | 1 | ✓ 0.4d: retired — refuses and points at submit_criterion (criteria-signoff) |  |  |
+| d | `check_criterion` | plan-item · read | ✗ none | 1 | ✓ 0.4d: refuses a cell outside the file, passes once fixed (criteria-loops) |  |  |
+| d | `get_worklist` | plan-item · read | ✗ none | 1 | ✓ 0.4d: hands back the send-back note and where it points (criteria-loops) |  |  |
+| d | `list_criteria` | plan-item · read | 1 | 2 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
+| d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
+| d | `submit_criterion` | plan-item · write | 1 | 4 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
 | e | `get_brief` | plan-item · read | 2 | ✗ none |  |  |  |
 | e | `list_materials` | plan-item · read | 1 | ✗ none |  |  |  |
 | e | `read_material` | plan-item · files | 2 | ✗ none |  |  |  |
-| e | `record_artefact` | plan-item · write | 1 | 2 |  |  |  |
+| e | `record_artefact` | plan-item · write | 1 | 3 |  |  |  |
 | f | `await_ack` | presence · write | ✗ none | ✗ none |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | ✗ none |  |  |  |
 | f | `dismiss_channel_event` | channel · write | ✗ none | ✗ none |  |  |  |

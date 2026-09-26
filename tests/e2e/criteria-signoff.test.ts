@@ -91,7 +91,11 @@ test.describe('Phase 31.1 — criteria and sign-off', () => {
       const sentBack = criteria.find((c) => c.uid === gate.uid)!;
       expect(sentBack.state).toBe('sent_back');
       expect(sentBack.sent_back_note).toBe('EMEA excludes the Nordics restatement');
-      expect(sentBack.decided_by?.actor_type).toBe('human');
+      // The harness decides over plain HTTP, which cannot tell a person from
+      // a script holding the token: recorded as unverified, never as an
+      // agent (0.4d). The app window's IPC is what records 'human'
+      // (ipc-dispatcher.test.ts).
+      expect(sentBack.decided_by?.actor_type).toBe('unverified');
 
       // 7. Resubmit; the person approves. The gate lifts.
       await agent.callTool('submit_criterion', { criterion_uid: gate.uid, note: 'Restatement included' });
@@ -104,10 +108,11 @@ test.describe('Phase 31.1 — criteria and sign-off', () => {
       const released = JSON.parse((await agent.callTool('get_next_item', { plan_uid: plan.uid })).text);
       expect(released.uid ?? released.item?.uid).toBe(next);
 
-      // 8. The decisions are a record, in the person's name.
+      // 8. The decisions are a record, in the person's name, tagged by how
+      // they arrived: over the local API, so unverified.
       const signoffs = await (await h.client.raw('GET', `/api/criteria/${gate.uid}/signoffs`)).json();
       expect(signoffs.map((s: { decision: string }) => s.decision)).toEqual(['sent_back', 'approved']);
-      expect(signoffs.every((s: { actorType: string; channel: string }) => s.actorType === 'human' && s.channel === 'desktop')).toBe(true);
+      expect(signoffs.every((s: { actorType: string; channel: string }) => s.actorType === 'unverified' && s.channel === 'local-api')).toBe(true);
 
       // 9. The plan file carries the criteria and never the decisions.
       const exported = await (await h.client.raw('POST', `/api/plans/${plan.uid}/export?path=${encodeURIComponent(h.fixture.projectPath)}`)).json();

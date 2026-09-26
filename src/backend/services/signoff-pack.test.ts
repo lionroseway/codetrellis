@@ -63,6 +63,11 @@ before(async () => {
 
   const byAgent = criteria.addCriterionAsHuman(ITEM, { text: 'The script compiles', kind: 'code', policy: 'agent' }, hd.issueHumanDecision('desktop', 'x'));
   criteria.submitCriterion(byAgent.uid, { note: 'tsc clean' }, AGENT);
+
+  // Decided over the local HTTP API (0.4d): counts, but is not a person's.
+  const viaApi = criteria.addCriterionAsHuman(ITEM, { text: 'The summary reads well', kind: 'manual' }, hd.issueUnverifiedDecision('saif@example.com'));
+  criteria.submitCriterion(viaApi.uid, { note: 'Summary drafted' }, AGENT);
+  criteria.decideCriterion(viaApi.uid, { decision: 'approved' }, hd.issueUnverifiedDecision('saif@example.com'));
 });
 
 after(() => {
@@ -94,6 +99,34 @@ describe('the pack', () => {
     const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
     assert.deepEqual(scripts, ['<script type="application/json" id="codetrellis-signoff-pack">'], 'the only script is data');
     assert.match(html, /Content-Security-Policy" content="default-src 'none'/);
+  });
+
+  test('lists approvals through the local API apart, as unverified, and they still count (0.4d)', () => {
+    const pack = packs.buildSignoffPack(PLAN);
+    const row = pack.rows.find((r) => r.text === 'The summary reads well')!;
+    assert.equal(row.state, 'met', 'an unverified approval counts');
+    assert.equal(row.unverified, true);
+    assert.equal(row.selfApproved, false, 'it is not the agent approving itself');
+    assert.equal(row.decision?.actorType, 'unverified');
+    assert.equal(row.decision?.channel, 'local-api');
+    assert.equal(pack.rows.find((r) => r.text === HOSTILE)!.unverified, false, 'a phone decision is a person\'s');
+
+    const html = packs.renderPackHtml(pack);
+    const section = html.indexOf('Approved through the local API (unverified)');
+    const self = html.indexOf("Approved by the agent's own checks");
+    assert.ok(section > 0, 'the section is there');
+    const at = html.indexOf('The summary reads well');
+    assert.ok(at > section && at < self, 'the unverified approval is in its own section');
+    assert.ok(html.indexOf('Totals match') < section, 'the person-approved one is not');
+    assert.match(html, /approved by saif@example\.com through the local API \(unverified/);
+    assert.match(html, /3 of 3 criteria met — 1 of them by the agent's own checks and 1 unverified \(local API\), listed separately/);
+  });
+
+  test('the PR table says how many approvals are unverified', async () => {
+    const { signoffRows, renderCriteriaTable } = await import('./signoff-rows');
+    const table = renderCriteriaTable(signoffRows(PLAN));
+    assert.match(table, /met \(unverified\)/);
+    assert.match(table, /_1 of these was approved through the local API, not from the CodeTrellis app or a paired phone/);
   });
 
   test('the saved page carries its own data, hostile text and all', () => {

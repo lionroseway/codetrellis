@@ -4,6 +4,7 @@ import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, Tas
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { describeLocator, openArtefactAt } from '../../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../../lib/brief-vocabulary';
+import { criterionOrigin } from '../../../lib/criterion-origin';
 
 /**
  * Phase 31 §4.1–4.3 — what this item is judged on, and where each
@@ -161,11 +162,17 @@ function CriterionRow({
     if (!err) { setSendingBack(false); setNote(''); }
   };
 
+  // Who decided, tagged by how the decision arrived (§0.4d): a person in the
+  // app or on a paired phone, an agent in its own name, or the local API,
+  // which cannot tell a person from a script holding the token.
   const decidedBy = c.latestSignoff
     ? c.latestSignoff.actorType === 'human'
       ? c.latestSignoff.actor
-      : `${c.latestSignoff.actor} (agent)`
+      : c.latestSignoff.actorType === 'unverified'
+        ? `${c.latestSignoff.actor} (local API, unverified)`
+        : `${c.latestSignoff.actor} (agent)`
     : null;
+  const origin = criterionOrigin(c);
   const evidenceNote = c.latestSubmission.find((e) => e.note)?.note ?? null;
   // Each piece of evidence with the place it cites, opened in the viewer
   // there (§7.5) — the claim and where it came from, one click apart.
@@ -200,6 +207,7 @@ function CriterionRow({
                 {decidedBy && c.state !== 'submitted' && <> — {decidedBy}</>}
               </>
             )}
+            {origin && <>{' · '}<span data-testid="criterion-origin" className="text-cyan-300/80">{origin}</span></>}
             {' · '}{KIND_LABEL[c.kind]}{' · '}
             {c.kind === 'manual' ? (
               <span title="A judgement — only a person can meet it">{POLICY_LABEL.human}</span>

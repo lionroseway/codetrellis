@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4c-2 Items, incl. retiring the V1 task API |
-| **Status** | Full harness on 0.4c-2: 464 passed, 1 skipped, 0 retries |
-| **Next action** | 0.4c-2 PR: merge when CI is green; then 0.4d (criteria and sign-off) |
+| **Stage / step** | 0.4d Criteria and sign-off |
+| **Status** | Provenance, criterion origin tags and the 5 untested routes done; unit, lint, typecheck and targeted suites green. Full harness running |
+| **Next action** | Full harness on 0.4d; then PR, merge when CI is green; then 0.4e (Brief and viewer) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4c2-items` |
+| **Branch** | `feat/phase-32-0.4d-criteria` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -38,7 +38,7 @@
 - [x] 0.4b Graph (#117)
 - [x] 0.4c-1 Plans (#118)
 - [x] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete) (#119)
-- [ ] 0.4c-2 Items, incl. retiring the V1 task API
+- [x] 0.4c-2 Items, incl. retiring the V1 task API (#120)
 - [ ] 0.4d Criteria and sign-off
 - [ ] 0.4e Brief and viewer
 - [ ] 0.4f Channels and presence
@@ -134,11 +134,59 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Plan deletion leaves MCP. An agent may ask; the app shows a confirmation where the person types the plan's name (0.4c-3) | Owner's decision. Deleting shared plan files is a human act |
 | 2026-09-26 | Cut a release at the end of Stage 0 (new step 0.8), before Tracks A–C | Owner's decision. Stage 0 has found and fixed a lot across the app |
 | 2026-09-26 | Cloud-environment CLI is follow-on work, specified in `docs/FOLLOW-ON-CLOUD-ENVIRONMENTS.md`, not part of Phase 32 | Widens Phase 32's one-machine scope |
+| 2026-09-26 | Agents are co-workers: they may add and (where policy allows) close criteria. Every criterion and decision is tagged with who did it, taken from how the call arrived — MCP = that agent, paired phone = the person on that device, the app window (Electron IPC) = the person in the app, plain HTTP = "local API, unverified". Policies unchanged; the sign-off pack shows agent and unverified decisions separately (0.4d) | Owner's decision. Honest provenance over blocking agents |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4d — decisions and criteria say who made them
+
+Owner's decision: agents are co-workers, so an agent adding a criterion
+as it works is fine, as long as everything is tagged with who did it.
+
+**The problem.** Every REST decision was issued as a person's
+(`issueHumanDecision('desktop', …)`), whatever sent it. The token proves
+a caller may use the API, not that a person is there: any script that
+reads the token file could approve a criterion "as the person". And the
+Brief said "approved by Claude" for every agent, whichever one it was.
+
+**What changed.**
+- `ipc-dispatcher` marks the requests it builds for the app window
+  (`dispatchAuthorised`) in a WeakSet; `cameFromAppWindow(req)` reads it.
+  Nothing a caller sends can set it: no header or property is involved.
+- `server.ts` `decisionFrom(req)`: app window → `HumanDecision`
+  (`desktop`); anything else over HTTP → `UnverifiedDecision`
+  (`local-api`). The phone stays `phone`, from the DTLS identity.
+- `criteria-service` accepts either, and records `actor_type` as
+  `human` or `unverified`. **Unverified decisions count.** The web build
+  and the harness both use HTTP, so refusing them would break the web
+  build, and they are no weaker than before. What changes is that they are
+  labelled: on the item card ("(local API, unverified)"), in the Brief, in
+  the PR table note, and in their own section of the sign-off pack.
+  (Earlier in chat I said they would not count. That changed while I was
+  building it, for the reason above; raised with the owner.)
+- The Brief names the agent ("approved by codex-cli (agent)"), not
+  "Claude".
+- Criteria show who added them: "added by <agent> (agent)", or "through
+  the local API", "from a template", "from the plan file". Nothing is
+  shown for a person's lines or for the system's.
+
+**Tests.** `ipc-dispatcher.test.ts` (new unit test: the mark, and that
+nothing in a request forges it); `human-decision.test.ts` (static: only
+`server.ts` issues unverified decisions; only the authorised dispatch
+marks); `signoff-pack.test.ts` (the unverified section, the summary line,
+the PR note); `criterion-origin.test.ts`; `brief-vocabulary.test.ts`;
+`criteria.spec.ts` (browser: agent tag, then unverified decision);
+`criteria-signoff` / `criteria-loops` updated to assert `unverified` /
+`local-api` over HTTP.
+
+The 5 untested domain-d routes (check, worklist, pack JSON, pack page,
+verify) are covered by the new `tests/e2e/signoff-surface.test.ts`, and
+the untested list is down to 32 REST routes. The matrix behaviour column
+is filled for all 9 routes and 7 tools in domain d. The 3 mobile RPC
+methods in domain d stay with 0.4j.
 
 ### 2026-09-26: 0.4c-2 — items could be moved out of the tree (bug 23)
 - **`tests/e2e/item-surface.test.ts` (8):** versions, events and restore;
