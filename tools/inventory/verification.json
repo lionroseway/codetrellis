@@ -498,7 +498,7 @@
     "behaviour": "✓ 0.4g: ceiling, spent, forecast, notes; unknown plan refused (agent-ui-tools)"
   },
   "mcp:set_budget": {
-    "behaviour": "✓ 0.4g: set, exempt, clear one dimension; broadcast; nothing stored for an unknown plan (agent-ui-tools)"
+    "behaviour": "✓ 0.4g: set, exempt, clear one dimension; recorded in the agent's name and flagged until seen; nothing stored for an unknown plan (agent-ui-tools, mcp-ui-tools.spec)"
   },
   "mcp:clipboard_write": {
     "behaviour": "✓ 0.4g: sends the text to the window (agent-ui-tools)"
@@ -583,5 +583,17 @@
   },
   "mcp:update_settings": {
     "behaviour": "✓ 0.4g: persists first-run and data fields (cdev-phase5)"
+  },
+  "rest:GET /api/plans/:uid/budget": {
+    "behaviour": "✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation)"
+  },
+  "rest:PUT /api/plans/:uid/budget": {
+    "behaviour": "✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation)"
+  },
+  "rest:GET /api/plans/:uid/budget/changes": {
+    "behaviour": "✓ 0.4g: every change newest first, with channel and flag; no-op changes not recorded; unknown plan 404 (agent-ui-tools)"
+  },
+  "rest:POST /api/plans/:uid/budget/changes/:id/acknowledge": {
+    "behaviour": "✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec)"
   }
 }

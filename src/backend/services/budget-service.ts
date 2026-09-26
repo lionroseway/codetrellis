@@ -117,6 +117,40 @@ export interface BudgetReport {
   pricingVersion: string;
   /** Every distinct price table contributing to `spentCostUsd`, sorted. */
   pricingVersions: string[];
+  /**
+   * Changes an agent made to this plan's ceiling that no person has
+   * acknowledged yet, oldest first (Phase 32 §0.4g). Agents may change a
+   * budget; the person sees that they did.
+   */
+  flaggedChanges: BudgetChange[];
+}
+
+/** Who changed a budget, and how the change arrived. */
+export interface BudgetChangeBy {
+  actor: string;
+  /** 'human', 'unverified' (the local HTTP API) or the agent's type. */
+  actorType: string;
+  channel: 'desktop' | 'phone' | 'local-api' | 'mcp';
+}
+
+export type BudgetCeiling = Pick<PlanBudget, 'minutes' | 'costUsd' | 'exempt'>;
+
+export interface BudgetChange extends BudgetChangeBy {
+  id: number;
+  planUid: string;
+  /** Null when the plan had no budget before. */
+  before: BudgetCeiling | null;
+  after: BudgetCeiling;
+  at: number;
+  /** An agent's change, not yet acknowledged by a person. */
+  flagged: boolean;
+  acknowledgedAt: number | null;
+  acknowledgedBy: string | null;
+}
+
+/** A change is flagged when an agent made it: a person's, or the local API's, is not. */
+export function isFlaggedActor(actorType: string): boolean {
+  return actorType !== 'human' && actorType !== 'unverified';
 }
 
 // ── Pure logic ───────────────────────────────────────────────────────
@@ -409,6 +443,8 @@ export function setBudget(params: {
   minutes?: number | null;
   costUsd?: number | null;
   exempt?: boolean;
+  /** Who is changing it. Recorded with the values before and after. */
+  by?: BudgetChangeBy;
 }): PlanBudget {
   const db = getDb();
   const existing = getBudget(params.planUid);
@@ -433,8 +469,76 @@ export function setBudget(params: {
        updated_at = excluded.updated_at`,
     [next.planUid, next.minutes, next.costUsd, next.exempt ? 1 : 0, null, Date.now()],
   );
+
+  // A change that changes nothing is not recorded: there is nothing to flag.
+  const ceiling = (b: PlanBudget | BudgetCeiling): BudgetCeiling => ({ minutes: b.minutes, costUsd: b.costUsd, exempt: b.exempt });
+  const before = existing ? ceiling(existing) : null;
+  const after = ceiling(next);
+  if (params.by && JSON.stringify(before) !== JSON.stringify(after)) {
+    db.run(
+      `INSERT INTO plan_budget_changes (plan_uid, actor, actor_type, channel, before_json, after_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [next.planUid, params.by.actor, params.by.actorType, params.by.channel,
+       before ? JSON.stringify(before) : null, JSON.stringify(after), Date.now()],
+    );
+  }
   markDirty();
   return next;
+}
+
+function toChange(r: unknown[]): BudgetChange {
+  const actorType = r[3] as string;
+  const acknowledgedAt = (r[8] as number | null) ?? null;
+  return {
+    id: r[0] as number,
+    planUid: r[1] as string,
+    actor: r[2] as string,
+    actorType,
+    channel: r[4] as BudgetChange['channel'],
+    before: r[5] ? JSON.parse(r[5] as string) : null,
+    after: JSON.parse(r[6] as string),
+    at: r[7] as number,
+    flagged: isFlaggedActor(actorType) && acknowledgedAt === null,
+    acknowledgedAt,
+    acknowledgedBy: (r[9] as string | null) ?? null,
+  };
+}
+
+const CHANGE_COLUMNS = 'id, plan_uid, actor, actor_type, channel, before_json, after_json, created_at, acknowledged_at, acknowledged_by';
+
+/** Every change to a plan's ceiling, newest first. */
+export function listBudgetChanges(planUid: string, limit = 50): BudgetChange[] {
+  try {
+    const res = getDb().exec(
+      `SELECT ${CHANGE_COLUMNS} FROM plan_budget_changes WHERE plan_uid = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [planUid, limit],
+    );
+    return (res[0]?.values ?? []).map(toChange);
+  } catch {
+    return [];
+  }
+}
+
+/** An agent's changes no person has acknowledged, oldest first. */
+export function flaggedBudgetChanges(planUid: string): BudgetChange[] {
+  return listBudgetChanges(planUid, 500).filter((c) => c.flagged).reverse();
+}
+
+/**
+ * A person has seen an agent's change. Returns the change, or null when
+ * the plan has no such change. Acknowledging again changes nothing.
+ */
+export function acknowledgeBudgetChange(planUid: string, id: number, by: string): BudgetChange | null {
+  const db = getDb();
+  db.run(
+    `UPDATE plan_budget_changes SET acknowledged_at = ?, acknowledged_by = ?
+     WHERE plan_uid = ? AND id = ? AND acknowledged_at IS NULL`,
+    [Date.now(), by, planUid, id],
+  );
+  markDirty();
+  const res = db.exec(`SELECT ${CHANGE_COLUMNS} FROM plan_budget_changes WHERE plan_uid = ? AND id = ?`, [planUid, id]);
+  const row = res[0]?.values[0];
+  return row ? toChange(row) : null;
 }
 
 /** Record that the warning fired, so it fires once per ceiling. */
@@ -578,6 +682,7 @@ export function getBudgetReport(planUid: string): BudgetReport {
         : pricingVersions.length === 1 ? pricingVersions[0]
           : 'mixed',
     pricingVersions,
+    flaggedChanges: flaggedBudgetChanges(planUid),
   };
 }
 

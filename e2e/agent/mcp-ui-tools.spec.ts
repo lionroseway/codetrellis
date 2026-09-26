@@ -10,7 +10,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, seedPlan, cleanupPlans } from '../helpers/setup';
+import { gotoWithProject, seedPlan, cleanupPlans, API, authHeaders } from '../helpers/setup';
 import { createMcpClient } from '../helpers/mcp-client';
 
 type Client = Awaited<ReturnType<typeof createMcpClient>>;
@@ -80,4 +80,26 @@ test.describe('UI tools against the window', () => {
     await expect(page.getByText('Could not load plan')).toHaveCount(0);
     await expect(page.getByTestId('plan-item-tree').getByText('Stay on this')).toBeVisible();
   });
+
+  test('an agent\'s budget change shows as a flag on the chip until the person marks it seen (0.4g)', async ({ page, request }) => {
+    const seeded = await seedPlan(request, { title: TITLE, actions: [{ title: 'Budgeted work' }] });
+    await gotoWithProject(page);
+    await client.callTool('open_plan', { plan_uid: seeded.uid });
+    await expect(page.getByTestId('plan-item-tree').getByText('Budgeted work')).toBeVisible({ timeout: 15_000 });
+
+    // The person's ceiling, then the agent raises it — while the plan is open.
+    const res = await request.put(`${API}/plans/${seeded.uid}/budget`, { headers: authHeaders(), data: { minutes: 120 } });
+    expect(res.ok()).toBe(true);
+    await client.callTool('set_budget', { plan_uid: seeded.uid, minutes: 240 });
+
+    const chip = page.getByTestId('plan-budget-chip');
+    await expect(chip.getByLabel(/1 budget change by an agent to review/)).toBeVisible({ timeout: 10_000 });
+    await chip.click();
+    const change = page.getByTestId('budget-flagged-change');
+    await expect(change).toContainText('(agent) raised the time ceiling 2h → 4h');
+    await change.getByRole('button', { name: 'Seen' }).click();
+    await expect(page.getByTestId('budget-flagged-changes')).toHaveCount(0);
+    await expect(chip.getByLabel(/budget change/)).toHaveCount(0);
+  });
 });
+

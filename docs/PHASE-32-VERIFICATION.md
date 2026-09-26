@@ -14,7 +14,7 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 213 | 199 | 21 | 21 | 86 | 0 |
+| REST routes | 215 | 201 | 21 | 21 | 90 | 0 |
 | MCP tools | 185 | 147 | 19 | 13 | 91 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
@@ -31,7 +31,7 @@ is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 8 | 26 | 0 | 20 | 0 | 0 |
+| 0.4g Agents and MCP | 10 | 26 | 0 | 20 | 0 | 0 |
 | 0.4h Drift, governance, review | 8 | 24 | 6 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
@@ -45,7 +45,7 @@ is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (213)
+## REST routes (215)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -116,7 +116,7 @@ is proof of a gap.
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 18 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 12 |  |  |  |
-| c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
@@ -171,7 +171,7 @@ is proof of a gap.
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/plans/:uid` |  | 1 | 12 |  |  |  |
-| c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
+| c | `PUT /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
 | d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 | ✓ 0.4d: append-only record, each tagged by how it arrived — local-api/unverified over HTTP (criteria-signoff, criteria-loops) |  |  |
@@ -197,9 +197,11 @@ is proof of a gap.
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
 | g | `GET /api/mcp/setup` |  | ✗ none | 2 | ✓ 0.4g: the agent prompt names the token file and never carries the token (misc-endpoints, mcp-connector) |  |  |
 | g | `GET /api/mcp/status` |  | ✗ none | 1 | ✓ 0.4g: running on the agents' port with connected agents counted (sessions) |  |  |
+| g | `GET /api/plans/:uid/budget/changes` |  | ✗ none | 1 | ✓ 0.4g: every change newest first, with channel and flag; no-op changes not recorded; unknown plan 404 (agent-ui-tools) |  |  |
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 4 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
+| g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | h | `GET /api/baseline` |  | ✗ none | 2 |  |  |  |
 | h | `GET /api/comparands` |  | ✗ none | 4 |  |  |  |
@@ -386,7 +388,7 @@ is proof of a gap.
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
 | g | `set_baseline` | session · write | ✗ none | 1 | ✓ 0.4g: sets and clears (agent-ui-tools) |  |  |
-| g | `set_budget` | budget · write | ✗ none | 1 | ✓ 0.4g: set, exempt, clear one dimension; broadcast; nothing stored for an unknown plan (agent-ui-tools) |  |  |
+| g | `set_budget` | budget · write | ✗ none | 1 | ✓ 0.4g: set, exempt, clear one dimension; recorded in the agent's name and flagged until seen; nothing stored for an unknown plan (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `setup_agent_permissions` | session · settings | 1 | 1 | ✓ 0.4g: refused without settings; merges the wildcard; inside an opened project only, never through a link (agent-ui-tools) |  |  |
 | g | `toggle_activity_drawer` | session · write | ✗ none | 1 | ✓ 0.4g: drawer toggles both ways (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `toggle_panel` | session · write | ✗ none | 1 | ✓ 0.4g: sends the panel (agent-ui-tools) |  |  |

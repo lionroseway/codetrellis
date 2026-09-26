@@ -153,6 +153,50 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
     expect(JSON.parse(await call('set_budget', { plan_uid: planUid, cost_usd: null, exempt: false })).budget).toEqual({ minutes: 120, cost_usd: null, exempt: false });
   });
 
+  test('an agent\'s budget change is recorded and flagged until a person has seen it (owner\'s decision, 0.4g)', async () => {
+    const flaggedPlan = (await h.client.createPlan({ title: 'Flagged budget', projectPath: h.fixture.projectPath })).uid;
+
+    // A person sets the ceiling: recorded, not flagged (over HTTP, so tagged local-api).
+    await req('PUT', `/api/plans/${flaggedPlan}/budget`, { minutes: 120, costUsd: 5 });
+    expect((await req('GET', `/api/plans/${flaggedPlan}/budget`)).flaggedChanges).toEqual([]);
+
+    // The agent raises it and exempts the plan: allowed, in its own name, flagged.
+    const raised = JSON.parse(await call('set_budget', { plan_uid: flaggedPlan, minutes: 240, exempt: true }));
+    expect(raised.flagged_changes).toEqual([expect.objectContaining({
+      by_type: expect.not.stringMatching(/^(human|unverified)$/),
+      before: { minutes: 120, cost_usd: 5, exempt: false },
+      after: { minutes: 240, cost_usd: 5, exempt: true },
+    })]);
+    await events.waitFor('plan-budget-changed', (p) => p.planUid === flaggedPlan && p.flagged === true);
+
+    const report = await req('GET', `/api/plans/${flaggedPlan}/budget`);
+    expect(report.flaggedChanges).toHaveLength(1);
+    const change = report.flaggedChanges[0];
+    expect(change).toMatchObject({ channel: 'mcp', flagged: true, before: { minutes: 120 }, after: { minutes: 240, exempt: true } });
+    // Other agents see it too.
+    expect(JSON.parse(await call('check_budget', { plan_uid: flaggedPlan })).flagged_changes).toHaveLength(1);
+
+    // Setting the same values again changes nothing, so records nothing.
+    await call('set_budget', { plan_uid: flaggedPlan, minutes: 240 });
+    const history = (await req('GET', `/api/plans/${flaggedPlan}/budget/changes`)) as Array<{ actorType: string; channel: string; flagged: boolean }>;
+    expect(history.map((c) => [c.channel, c.flagged])).toEqual([['mcp', true], ['local-api', false]]);
+    expect(history[1].actorType).toBe('unverified');
+
+    // A person says they have seen it: no longer flagged, and the record keeps who and when.
+    const seen = await req('POST', `/api/plans/${flaggedPlan}/budget/changes/${change.id}/acknowledge`);
+    expect(seen).toMatchObject({ id: change.id, flagged: false, acknowledgedBy: expect.any(String) });
+    expect(seen.acknowledgedAt).toBeGreaterThan(0);
+    expect((await req('GET', `/api/plans/${flaggedPlan}/budget`)).flaggedChanges).toEqual([]);
+    expect(JSON.parse(await call('get_budget', { plan_uid: flaggedPlan })).flagged_changes).toEqual([]);
+
+    // Unknown change, unknown plan.
+    expect((await h.client.raw('POST', `/api/plans/${flaggedPlan}/budget/changes/99999/acknowledge`)).status).toBe(404);
+    expect((await h.client.raw('POST', `/api/plans/${planUid}/budget/changes/${change.id}/acknowledge`)).status).toBe(404);
+    expect((await h.client.raw('GET', '/api/plans/no-such-plan/budget/changes')).status).toBe(404);
+    expect((await h.client.raw('GET', '/api/plans/no-such-plan/budget')).status).toBe(404);
+    expect((await h.client.raw('PUT', '/api/plans/no-such-plan/budget', { minutes: 10 })).status).toBe(404);
+  });
+
   test('budget tools refuse a plan that does not exist, and store nothing for it (bug 27)', async () => {
     for (const tool of ['get_budget', 'set_budget', 'check_budget']) {
       const res = await agent.callTool(tool, { plan_uid: 'no-such-plan', minutes: 10 });

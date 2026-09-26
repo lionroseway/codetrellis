@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4g Agents and MCP |
-| **Status** | 2 routes and 20 tools tested, shape-only tests strengthened; bugs 27 and 28 fixed. Full harness next |
+| **Status** | Harness clean at `36b3ff7` (499/1/0). Added budget-change flagging (owner's decision); re-running the harness |
 | **Next action** | Full harness on 0.4g; PR; merge when green; then 0.4h (drift, governance, review) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4g-agents` |
@@ -135,6 +135,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Cut a release at the end of Stage 0 (new step 0.8), before Tracks A–C | Owner's decision. Stage 0 has found and fixed a lot across the app |
 | 2026-09-26 | Cloud-environment CLI is follow-on work, specified in `docs/FOLLOW-ON-CLOUD-ENVIRONMENTS.md`, not part of Phase 32 | Widens Phase 32's one-machine scope |
 | 2026-09-26 | Agents are co-workers: they may add and (where policy allows) close criteria. Every criterion and decision is tagged with who did it, taken from how the call arrived — MCP = that agent, paired phone = the person on that device, the app window (Electron IPC) = the person in the app, plain HTTP = "local API, unverified". Policies unchanged; the sign-off pack shows agent and unverified decisions separately (0.4d) | Owner's decision. Honest provenance over blocking agents |
+| 2026-09-26 | Agents may change a plan's budget; each change is recorded (who, how it arrived, before and after) and an agent's change is flagged on the budget chip until a person marks it seen (0.4g) | Owner's decision ("budget changes can be flagged"). Same stance as 0.4d: tag, don't block |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
@@ -177,9 +178,20 @@ was committed by mistake in #123; removed here. It was outside `src/`, so
 neither lint nor any test saw it. Commits now stage named paths, not
 `git add -A`.
 
-**For the owner:** an agent can raise, clear or exempt the budget ceiling
-it is asked to respect (`set_budget` is `budget · write`). Left as is;
-raised in chat, like plan deletion was.
+**Budget changes are flagged (owner's decision).** I raised that an agent
+can raise, clear or exempt the ceiling it is asked to respect. The owner:
+"budget changes can be flagged". So every change is recorded in
+`plan_budget_changes` (actor, actor type, channel, before, after); a
+change an agent made is flagged until a person marks it seen. The chip
+shows a flag, its popover says what changed in words ("codex (agent)
+raised the time ceiling 2h → 4h") with a Seen button, and `get_budget` /
+`check_budget` report `flagged_changes` so other agents see it too. A
+person's change (desktop, or local-api over HTTP) is recorded and not
+flagged; a change to the same values is not recorded. The chip also
+refreshes on `plan-budget-changed` now; it loaded once on mount, so an
+agent's change never showed until the plan was reopened. New routes:
+`GET /api/plans/:uid/budget/changes`, `POST …/changes/:id/acknowledge`,
+both tested; `GET` and `PUT /budget` now 404 an unknown plan.
 
 ### 2026-09-26: 0.4f — presence waits and the watcher flake (bugs 25, 26)
 

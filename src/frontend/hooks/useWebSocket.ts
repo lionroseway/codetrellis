@@ -946,6 +946,13 @@ export function useWebSocket() {
             window.dispatchEvent(new CustomEvent('open-settings'));
           }
 
+          // --- A plan's budget changed (set_budget, the chip, an acknowledgement) ---
+          // The chip loaded once on mount and nothing told it, so an agent's
+          // change (flagged, §0.4g) did not show until the plan was reopened.
+          if (type === 'plan-budget-changed') {
+            window.dispatchEvent(new CustomEvent('plan-budget-changed', { detail: payload }));
+          }
+
           // --- An agent asked to delete plans (request_plan_deletion) ---
           // The person confirms in PlanDeletionRequest; nothing is deleted here.
           if (type === 'ui-confirm-plan-deletion') {
