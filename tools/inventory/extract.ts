@@ -145,6 +145,9 @@ const TOOL_FILE_DOMAINS: Record<string, DomainKey> = {
 export function domainForTool(name: string, section: string | undefined): DomainKey | null {
   if (/criteri|signoff|worklist|run_checks|approve_gate/.test(name)) return 'd';
   if (/brief|material|artefact/.test(name)) return 'e';
+  // The project lifecycle lives in session-tools and ui-tools by file, but
+  // it is what 0.4a covers: open, rescan, close, and the recent-projects list.
+  if (/^(open|close|rescan|pin|unpin)_project$|recent_projects?$|^(get|set|refresh)_repo_(identity|alias|origin)$/.test(name)) return 'a';
   return section ? TOOL_FILE_DOMAINS[section] ?? null : null;
 }
 

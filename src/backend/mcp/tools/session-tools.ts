@@ -9,6 +9,17 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta } from '../helpers';
 
+/**
+ * The recent-projects tools update a row by path. With no row the UPDATE
+ * matches nothing, and they used to report success anyway.
+ */
+function notInRecents(projectPath: string) {
+  return {
+    isError: true,
+    content: [{ type: 'text' as const, text: `Project not in recents: ${projectPath}` }],
+  };
+}
+
 export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'register_session',
@@ -175,9 +186,21 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      // No path means the open project, as the description says. This
+      // used to fall back to process.cwd() — the backend's own working
+      // directory, which is `/` in a packaged app and never a project the
+      // user opened, and which the project-scope check (keyed on
+      // project_path) never saw.
+      const target = project_path ?? deps.getActiveProjectPath();
+      if (!target) {
+        return {
+          content: [{ type: 'text' as const, text: 'Rescan failed: no project is open. Pass project_path, or open one with open_project.' }],
+          isError: true,
+        };
+      }
       try {
-        const stats = await deps.scanProject(project_path ?? process.cwd());
-        return { content: [{ type: 'text' as const, text: `Rescan complete${project_path ? ` for ${project_path}` : ''} — ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports (${stats.resolvedImports} resolved)` }] };
+        const stats = await deps.scanProject(target);
+        return { content: [{ type: 'text' as const, text: `Rescan complete for ${target} — ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports (${stats.resolvedImports} resolved)` }] };
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Rescan failed: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
@@ -232,6 +255,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      if (!deps.getRecentProject(project_path)) return notInRecents(project_path);
       deps.setRecentProjectPinned(project_path, true);
       deps.saveNow(() => deps.exportDatabase());
       return { content: [{ type: 'text' as const, text: `Pinned project: ${project_path}` }] };
@@ -247,6 +271,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      if (!deps.getRecentProject(project_path)) return notInRecents(project_path);
       deps.setRecentProjectPinned(project_path, false);
       deps.saveNow(() => deps.exportDatabase());
       return { content: [{ type: 'text' as const, text: `Unpinned project: ${project_path}` }] };
@@ -262,6 +287,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      if (!deps.getRecentProject(project_path)) return notInRecents(project_path);
       deps.removeRecentProject(project_path);
       deps.saveNow(() => deps.exportDatabase());
       return { content: [{ type: 'text' as const, text: `Removed from recents: ${project_path}` }] };

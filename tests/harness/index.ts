@@ -53,6 +53,7 @@ export {
   slugify,
 } from './paths';
 export { waitFor, sleep, type WaitForOptions } from './wait';
+export { openEventStream, type EventStream, type BackendEvent } from './events';
 export { authFetch } from './client';
 export {
   createMcpClient,
