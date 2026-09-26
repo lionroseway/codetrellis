@@ -3,6 +3,8 @@
  *
  * Ten plan tools had no test: update, delete, bulk delete, copy as prompt,
  * templates (list, create from, publish), discover, unlink, home repo.
+ * Since 0.4c-3 the two delete tools are gone: an agent may only ask
+ * (`request_plan_deletion`), and a person confirms in the app.
  *
  * Writing them found bug 22: a plan's directory is named from its title
  * (plus a uid prefix), and after a RENAME everything looked it up by the
@@ -16,7 +18,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { setupHarness, waitFor, type Harness, type ScriptedAgent } from '../harness';
+import { setupHarness, waitFor, openEventStream, type Harness, type ScriptedAgent } from '../harness';
 
 test.describe.serial('Plan tools', () => {
   test.setTimeout(120_000);
@@ -144,28 +146,71 @@ test.describe.serial('Plan tools', () => {
     expect(plan.title).toBe('Payments cleanup (phase 1)');
   });
 
-  test('delete_plan archives the plan and removes its renamed directory', async () => {
+  test('deleting a renamed plan (the app\'s path) removes its directory', async () => {
     const made = await json('create_plan', { title: 'Short-lived', project_path: root });
     await json('update_plan', { plan_uid: made.uid, title: 'Short-lived, renamed' });
     expect(dirsFor(made.uid)).toHaveLength(1);
-
-    const res = await json('delete_plan', { plan_uid: made.uid });
-    expect(res.diskRemoved).toBe(true);
+    const res = await h.client.raw('DELETE', `/api/plans/${made.uid}`);
+    expect(res.ok).toBe(true);
     expect(dirsFor(made.uid)).toEqual([]);
-    const listed = (await json('list_plans', { project_path: root })) as { plans: Array<{ uid: string }> };
-    expect(listed.plans.map((p) => p.uid)).not.toContain(made.uid);
   });
 
-  test('bulk_delete_plans deletes exactly the plans named', async () => {
-    const a = await json('create_plan', { title: 'Bulk A', project_path: root });
-    const b = await json('create_plan', { title: 'Bulk B', project_path: root });
-    const keep = await json('create_plan', { title: 'Keep me', project_path: root });
-    const res = await json('bulk_delete_plans', { plan_uids: [a.uid, b.uid] });
-    expect(res.deleted).toBe(2);
-    const listed = ((await json('list_plans', { project_path: root })) as { plans: Array<{ uid: string }> }).plans.map((p) => p.uid);
-    expect(listed).not.toContain(a.uid);
-    expect(listed).not.toContain(b.uid);
-    expect(listed).toContain(keep.uid);
-    expect(dirsFor(a.uid)).toEqual([]);
+  // ── Plan deletion is a person's decision (0.4c-3) ──────────────────
+
+  test('the delete tools are gone', async () => {
+    for (const tool of ['delete_plan', 'bulk_delete_plans']) {
+      const res = await agent.callTool(tool, { plan_uid: planUid, plan_uids: [planUid] });
+      expect(res.isError, `${tool} should no longer exist`).toBe(true);
+    }
+    expect((await json('get_plan', { plan_uid: planUid })).status).not.toBe('archived');
+  });
+
+  test('request_plan_deletion asks the window and deletes nothing', async () => {
+    const events = await openEventStream(h.backend);
+    try {
+      const a = await json('create_plan', { title: 'Old spike', project_path: root });
+      const b = await json('create_plan', { title: 'Abandoned idea', project_path: root });
+      const res = await json('request_plan_deletion', { plan_uids: [a.uid, b.uid], reason: 'Both superseded by the payments plan.' });
+      expect(res.requested).toBe(true);
+      expect(res.note).toMatch(/Nothing has been deleted/);
+
+      const asked = await events.waitFor('ui-confirm-plan-deletion', (p) => p.requestId === res.requestId);
+      expect(asked.plans.map((p: { title: string }) => p.title)).toEqual(['Old spike', 'Abandoned idea']);
+      expect(asked.reason).toBe('Both superseded by the payments plan.');
+
+      // Still there, in the DB and on disk.
+      const listed = ((await json('list_plans', { project_path: root })) as { plans: Array<{ uid: string }> }).plans.map((p) => p.uid);
+      expect(listed).toEqual(expect.arrayContaining([a.uid, b.uid]));
+      expect(dirsFor(a.uid)).toHaveLength(1);
+    } finally {
+      await events.close();
+    }
+  });
+
+  test('request_plan_deletion refuses unknown and archived plans', async () => {
+    expect((await agent.callTool('request_plan_deletion', { plan_uids: ['no-such-plan'], reason: 'x' })).isError).toBe(true);
+    const gone = await json('create_plan', { title: 'Already gone', project_path: root });
+    await h.client.raw('DELETE', `/api/plans/${gone.uid}`);
+    const res = await agent.callTool('request_plan_deletion', { plan_uids: [gone.uid], reason: 'x' });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/No active plan/);
+  });
+
+  test('request_plan_deletion refuses a plan whose project is not open', async () => {
+    const plan = await json('create_plan', { title: 'In the first project', project_path: root });
+    // Open a different project and drop the first from the recent list:
+    // the first is then no longer an opened project.
+    const other = path.join(h.fixture.tmpDir, 'other-project');
+    fs.mkdirSync(path.join(other, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(other, 'src', 'x.ts'), 'export const x = 1;\n');
+    await h.client.scanProject(other);
+    await h.client.raw('DELETE', '/api/recent-projects', { projectPath: root });
+    try {
+      const res = await agent.callTool('request_plan_deletion', { plan_uids: [plan.uid], reason: 'x' });
+      expect(res.isError).toBe(true);
+      expect(res.text).toMatch(/not open/);
+    } finally {
+      await h.client.scanProject(root);
+    }
   });
 });

@@ -89,6 +89,8 @@ const SERIAL_SPECS = [
   '**/mcp-tools/graph-tools.spec.ts',
   // Opens the sample app, which swaps the one project every parallel spec reads.
   '**/inspector/add-to-plan.spec.ts',
+  // request_plan_deletion opens its confirmation on every open page.
+  '**/plan/plan-deletion-request.spec.ts',
   // navigate_to 'artefact' opens the viewer over every open page.
   '**/plan/brief-mode.spec.ts',
   // They read the graph of whichever project was scanned last.

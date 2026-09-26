@@ -24,6 +24,7 @@ import { GUIDE_SEEN_KEY } from './components/guide/GuideModal';
 import { FirstRunWizard } from './components/FirstRunWizard';
 import { ToastContainer } from './components/Toast';
 import { PresencePane } from './components/presence/PresencePane';
+import { PlanDeletionRequest } from './components/plan/PlanDeletionRequest';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { AgentPulse } from './components/layout/AgentPulse';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -374,6 +375,8 @@ export function App() {
       {askIdentity && <FirstRunWizard onComplete={onFirstRunComplete} />}
       <GettingStarted />
       <PresencePane />
+      {/* An agent may only ASK to delete plans; this is where the person decides. */}
+      <PlanDeletionRequest />
       <ToastContainer />
     </div>
   );

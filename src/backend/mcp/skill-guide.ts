@@ -347,8 +347,7 @@ edges.
 | \`get_plan(plan_uid)\` | Read plan metadata + item summary |
 | \`update_plan(plan_uid, ...)\` | Update title / description / status |
 | \`list_plans(project_path?, status?)\` | Browse plans with pagination |
-| \`delete_plan(plan_uid)\` | Remove a plan |
-| \`bulk_delete_plans(plan_uids)\` | Clean up multiple plans |
+| \`request_plan_deletion(plan_uids, reason)\` | Ask the person to delete plans; they confirm in the app by typing the name. Deletes nothing itself |
 | \`get_plan_summary(plan_uid)\` | One-call health dashboard: completion %, blockers, deviations |
 | \`copy_plan_as_prompt(plan_uid, item_uid?)\` | Serialise a plan/item as a handoff prompt |
 

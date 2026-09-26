@@ -245,12 +245,6 @@
   "mcp:update_plan": {
     "behaviour": "✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22)"
   },
-  "mcp:delete_plan": {
-    "behaviour": "✓ 0.4c-1: archives, removes the directory even after a rename (plan-tools; bug 22)"
-  },
-  "mcp:bulk_delete_plans": {
-    "behaviour": "✓ 0.4c-1: exactly the named plans (plan-tools)"
-  },
   "mcp:copy_plan_as_prompt": {
     "behaviour": "✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools)"
   },
@@ -349,5 +343,8 @@
   },
   "rest:PUT /api/plans/:uid/tasks/:taskUid": {
     "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "mcp:request_plan_deletion": {
+    "behaviour": "✓ 0.4c-3: asks the window, deletes nothing; refuses unknown, archived and unopened-project plans; typed confirmation in the app (plan-tools, e2e plan-deletion-request)"
   }
 }
