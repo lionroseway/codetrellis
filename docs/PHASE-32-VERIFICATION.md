@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 227 | 213 | 58 | 58 | 36 | 0 |
-| MCP tools | 186 | 148 | 57 | 45 | 27 | 0 |
+| REST routes | 227 | 213 | 58 | 58 | 48 | 0 |
+| MCP tools | 186 | 148 | 57 | 45 | 37 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 98 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -107,10 +107,10 @@ is proof of a gap.
 | c | `GET /api/pantry/resolve` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-docs/:docUid/versions` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plan-history/:planSlug` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plan-history/:planSlug` |  | ✗ none | 1 | ✓ 0.4c-1: the commit that touched the plan (plan-rest) |  |  |
 | c | `GET /api/plan-history/:planSlug/at/:commitHash` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans` |  | ✗ none | 38 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
@@ -119,29 +119,29 @@ is proof of a gap.
 | c | `GET /api/plans/:uid` |  | 1 | 11 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/deviations` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
 | c | `GET /api/plans/:uid/docs/by-type/:docType` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/docs/search` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/:uid/docs/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by body with excerpt; no match is empty (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/external-sync` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/file-status` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/next-task` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 4 |  |  |  |
-| c | `GET /api/plans/:uid/projection` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/:uid/projection` |  | ✗ none | 1 | ✓ 0.4c-1: ghost and modified files from an Action (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/refs` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/review` |  | ✗ none | 5 |  |  |  |
-| c | `GET /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
 | c | `GET /api/plans/:uid/versions` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/discover` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/reconcile` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/discover` |  | ✗ none | 1 | ✓ 0.4c-1: exported plan directories (plan-rest) |  |  |
+| c | `GET /api/plans/reconcile` |  | ✗ none | 1 | ✓ 0.4c-1: the orphan once its plan is archived (plan-rest) |  |  |
 | c | `GET /api/plans/stitched` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/tasks/:taskUid/attachments` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/tasks/:taskUid/comments` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/tasks/:taskUid/full` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/tasks/:taskUid/subtasks` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/tasks/:taskUid/attachments` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `GET /api/tasks/:taskUid/comments` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `GET /api/tasks/:taskUid/full` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `GET /api/tasks/:taskUid/subtasks` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
 | c | `GET /api/team-activity` |  | 1 | 3 |  |  |  |
 | c | `POST /api/comments` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/contributions/accept` |  | ✗ none | 2 |  |  |  |
@@ -152,7 +152,7 @@ is proof of a gap.
 | c | `POST /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/items/:uid/blocked` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/claim` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
 | c | `POST /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/items/:uid/criteria` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | ✗ none |  |  |  |
@@ -161,33 +161,33 @@ is proof of a gap.
 | c | `POST /api/plans` |  | ✗ none | 38 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 13 |  |  |  |
-| c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
 | c | `POST /api/plans/:uid/export` |  | ✗ none | 8 |  |  |  |
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/plans/:uid/tasks/:taskUid/claim` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/tasks/:taskUid/code-reference` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `POST /api/plans/:uid/tasks/:taskUid/claim` |  | ✗ none | 1 |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `POST /api/plans/:uid/tasks/:taskUid/code-reference` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
 | c | `POST /api/plans/:uid/unlink` |  | ✗ none | 3 |  |  |  |
-| c | `POST /api/plans/bulk-delete` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/plans/bulk-delete` |  | ✗ none | 1 | ✓ 0.4c-1: exactly the named plans; empty list 400 (plan-rest) |  |  |
 | c | `POST /api/plans/from-template` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/plans/import` |  | 1 | 2 |  |  |  |
-| c | `POST /api/plans/import-external` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/tasks/:taskUid/attachments` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/tasks/:taskUid/blocked` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/tasks/:taskUid/comments` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/tasks/:taskUid/progress` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/tasks/:taskUid/subtasks` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
+| c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
+| c | `POST /api/tasks/:taskUid/attachments` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `POST /api/tasks/:taskUid/blocked` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `POST /api/tasks/:taskUid/comments` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `POST /api/tasks/:taskUid/progress` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
+| c | `POST /api/tasks/:taskUid/subtasks` |  | ✗ none | ✗ none |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
 | c | `PUT /api/items/:uid` |  | ✗ none | 5 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/plans/:uid` |  | 1 | 11 |  |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
-| c | `PUT /api/plans/:uid/tasks/:taskUid` |  | ✗ none | 1 |  |  |  |
+| c | `PUT /api/plans/:uid/tasks/:taskUid` |  | ✗ none | 1 |  |  | V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 |  |  |  |
@@ -315,16 +315,16 @@ is proof of a gap.
 | c | `add_item_comment` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `add_plan_scope` | plan · write | ✗ none | 3 |  |  |  |
 | c | `bulk_add_items` | plan-item · write | 1 | ✗ none |  |  |  |
-| c | `bulk_delete_plans` | plan · write | ✗ none | 1 |  |  |  |
+| c | `bulk_delete_plans` | plan · write | ✗ none | 1 | ✓ 0.4c-1: exactly the named plans (plan-tools) |  |  |
 | c | `claim_item` | plan-item · write | 1 | 4 |  |  |  |
-| c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 |  |  |  |
+| c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
 | c | `create_plan` | plan · write | 1 | 15 |  |  |  |
-| c | `create_plan_from_template` | plan · write | ✗ none | 1 |  |  |  |
+| c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
 | c | `delete_item` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `delete_item_attachment` | plan-item · write | ✗ none | ✗ none |  |  |  |
 | c | `delete_item_comment` | plan-item · write | ✗ none | ✗ none |  |  |  |
-| c | `delete_plan` | plan · write | ✗ none | 1 |  |  |  |
-| c | `discover_plan_files` | plan · files | ✗ none | 1 |  |  |  |
+| c | `delete_plan` | plan · write | ✗ none | 1 | ✓ 0.4c-1: archives, removes the directory even after a rename (plan-tools; bug 22) |  |  |
+| c | `discover_plan_files` | plan · files | ✗ none | 1 | ✓ 0.4c-1: the exported directory (plan-tools) |  |  |
 | c | `export_plan_to_files` | plan · files | ✗ none | 3 |  |  |  |
 | c | `get_item` | plan-item · read | 1 | 4 |  |  |  |
 | c | `get_next_item` | plan-item · read | ✗ none | 2 |  |  |  |
@@ -339,13 +339,13 @@ is proof of a gap.
 | c | `list_item_versions` | plan-item · read | ✗ none | ✗ none |  |  |  |
 | c | `list_items` | plan-item · read | ✗ none | 3 |  |  |  |
 | c | `list_plan_pointers` | plan · read | ✗ none | 1 |  |  |  |
-| c | `list_plan_templates` | plan · read | ✗ none | 1 |  |  |  |
+| c | `list_plan_templates` | plan · read | ✗ none | 1 | ✓ 0.4c-1: built-ins; project templates with project_root (plan-tools) |  |  |
 | c | `list_plans` | plan · read | 2 | 2 |  |  |  |
 | c | `list_plans_by_repo` | plan · read | ✗ none | 1 |  |  |  |
 | c | `move_item` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `promote_to_contribution` | contribution · write | ✗ none | 1 |  |  |  |
-| c | `publish_plan_as_template` | plan · write | ✗ none | 1 |  |  |  |
+| c | `publish_plan_as_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: writes template.yaml; appears in the list (plan-tools) |  |  |
 | c | `read_item_full` | plan-item · read | ✗ none | 2 |  |  |  |
 | c | `remove_external_ref` | plan-item · write | ✗ none | ✗ none |  |  |  |
 | c | `remove_plan_scope` | plan · write | ✗ none | 1 |  |  |  |
@@ -354,12 +354,12 @@ is proof of a gap.
 | c | `restore_item_version` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `search_items` | plan-item · read | 1 | ✗ none |  |  |  |
 | c | `set_item_blocked` | plan-item · write | ✗ none | 1 |  |  |  |
-| c | `set_plan_home_repo` | plan · write | ✗ none | 1 |  |  |  |
+| c | `set_plan_home_repo` | plan · write | ✗ none | 1 | ✓ 0.4c-1: normalised; empty clears (plan-tools) |  |  |
 | c | `suggest_specs` | plan-item · read | ✗ none | ✗ none |  |  |  |
-| c | `unlink_plan_from_files` | plan · write | ✗ none | 1 |  |  |  |
+| c | `unlink_plan_from_files` | plan · write | ✗ none | 1 | ✓ 0.4c-1: removes the directory, even after a rename; plan survives (plan-tools; bug 22) |  |  |
 | c | `update_item` | plan-item · write | 1 | 9 |  |  |  |
 | c | `update_item_progress` | plan-item · write | ✗ none | 2 |  |  |  |
-| c | `update_plan` | plan · write | ✗ none | 1 |  |  |  |
+| c | `update_plan` | plan · write | ✗ none | 1 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 1 |  |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 |  |  |  |
 | d | `check_criterion` | plan-item · read | ✗ none | 1 |  |  |  |
