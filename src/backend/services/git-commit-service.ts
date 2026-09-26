@@ -116,18 +116,12 @@ export function commitManifestChanges(opts: CommitOptions): CommitResult {
   const safePaths = opts.paths.map((p, i) => assertSafeGitPathArg(p, `commitPaths[${i}]`));
   runGit(['add', '--', ...safePaths], opts.projectRoot);
 
-  // Use --file to avoid shell-escaping the message body. We write the
-  // message to a temp file inside the project's .git/ dir, commit
-  // from it, then unlink.
-  const tmpMsgPath = path.join(opts.projectRoot, '.git', `cdev-commit-msg-${Date.now()}-${process.pid}.txt`);
-  try {
-    fs.writeFileSync(tmpMsgPath, message, 'utf-8');
-    const commitFlags = ['commit', '--file', tmpMsgPath];
-    if (opts.signed) commitFlags.push('-S');
-    runGit(commitFlags, opts.projectRoot);
-  } finally {
-    try { fs.unlinkSync(tmpMsgPath); } catch { /* ignore */ }
-  }
+  // The message goes in on stdin (`--file -`). It used to be written to a
+  // temp file under `<root>/.git/`, which is a FILE in a linked worktree,
+  // so every commit from a worktree failed with ENOTDIR.
+  const commitFlags = ['commit', '--file', '-'];
+  if (opts.signed) commitFlags.push('-S');
+  runGit(commitFlags, opts.projectRoot, message);
 
   const sha = runGit(['rev-parse', 'HEAD'], opts.projectRoot).trim();
   return { sha, message };
@@ -147,12 +141,13 @@ export function commitManifestChanges(opts: CommitOptions): CommitResult {
  * to the process verbatim, so metacharacters are inert. Option injection is
  * a separate concern and is handled by the validators in ./git-safety.
  */
-function runGit(args: string[], cwd: string): string {
+function runGit(args: string[], cwd: string, input?: string): string {
   try {
     return execFileSync('git', args, {
       cwd,
       encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      input,
+      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     });
   } catch (err: any) {
     const stderr = (err?.stderr ?? '').toString();

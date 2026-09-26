@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.3b + 0.6a + 0.3 → one PR, #115 (#113 and #114 closed as superseded) |
-| **Status** | #115 contains all three steps and merges cleanly into `feat/phase-32` |
-| **Next action** | Merge #115. Then 0.4a (behavioural sweep: project and scan) on a fresh branch from `feat/phase-32` |
+| **Stage / step** | 0.4a Project and scan |
+| **Status** | Started. #115 merged (0.3b, 0.6a, 0.3 done) |
+| **Next action** | Worktree fix done (bug 16). Next: re-domain the project-lifecycle MCP tools to 0.4a; test the untested ones and the `project.*` RPCs |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.3-coverage-guards` → #115 |
+| **Branch** | `feat/phase-32-0.4a-project-scan` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -33,7 +33,7 @@
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
 - [x] 0.2 Inventory and verification matrix
 - [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
-- [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
+- [x] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic (#115)
 - [ ] 0.4a Project and scan
 - [ ] 0.4b Graph
 - [ ] 0.4c Plans and items
@@ -129,6 +129,24 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4a — a linked worktree was a second-class project (bug 16)
+- **Found by reading the routes, confirmed by a failing test.** Six
+  places read `<root>/.git/HEAD`, `.git/MERGE_HEAD`, `.git/refs/heads`
+  or wrote a temp file into `.git/` by path. In a linked worktree `.git`
+  is a file, so from any worktree:
+  - `/api/git/branch` and the recent-projects entry said no branch;
+  - `/api/git/info` said "no commits", no branches, no other checkouts;
+  - `.codetrellis` merge conflicts were never detected;
+  - `commit_manifest_changes` failed with ENOTDIR.
+
+  Branch listing also missed packed refs (any clone, any `git gc`).
+- **Fix:** `services/git-checkout.ts` asks git (`rev-parse
+  --absolute-git-dir`, `symbolic-ref`, `for-each-ref`), and every site
+  uses it. The commit message goes in on stdin instead of a temp file.
+- **Tests:** `tests/e2e/worktree-project.test.ts` (6, all from inside a
+  linked worktree; all 6 failed before the fix) and
+  `git-checkout.test.ts` (13 unit). `git-integration` still green.
 
 ### 2026-09-26: Stacking failed under squash merges; consolidated into #115
 - A local simulation of squash-merging #113 → #114 → #115 still
