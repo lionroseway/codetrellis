@@ -602,13 +602,12 @@ export function useWebSocket() {
           // --- Graph mode (MCP graph_set_mode tool) ---
           if (type === 'ui-graph-mode') {
             const mode = payload?.mode as string | undefined;
-            if (mode) {
+            // Only modes the canvas can draw; anything else used to be
+            // stored as-is and left the canvas in no mode at all.
+            if (mode === 'live' || mode === 'current' || mode === 'planned' || mode === 'diff') {
               (async () => {
                 const { useGraphStore } = await import('../stores/graph-store');
-                const store = useGraphStore.getState();
-                if ('setTrellisMode' in store) {
-                  (store as any).setTrellisMode(mode);
-                }
+                useGraphStore.getState().setTrellisMode(mode);
               })();
             }
           }

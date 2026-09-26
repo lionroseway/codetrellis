@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 226 | 212 | 71 | 71 | 19 | 0 |
-| MCP tools | 186 | 148 | 82 | 66 | 12 | 0 |
+| REST routes | 226 | 212 | 69 | 69 | 36 | 0 |
+| MCP tools | 186 | 148 | 67 | 55 | 27 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 98 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -65,26 +65,26 @@ is proof of a gap.
 | a | `GET /api/onboarding-state` |  | ✗ none | 3 | ✓ 0.4a: moves with plans and connected agents (project-open) |  |  |
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
-| a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 66 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 68 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
-| b | `GET /api/architecture-summary` |  | ✗ none | 1 |  |  |  |
-| b | `GET /api/coverage` |  | ✗ none | 1 |  |  |  |
-| b | `GET /api/cross-system` |  | ✗ none | 6 |  |  |  |
-| b | `GET /api/dependencies` |  | ✗ none | 3 |  |  |  |
-| b | `GET /api/dependencies/file` |  | ✗ none | ✗ none |  |  |  |
-| b | `GET /api/diff` |  | ✗ none | 1 |  |  |  |
-| b | `GET /api/file/at` |  | ✗ none | 2 |  |  |  |
-| b | `GET /api/file/content` |  | ✗ none | 2 |  |  |  |
-| b | `GET /api/file/overlay` |  | ✗ none | 1 |  |  |  |
-| b | `GET /api/playback` |  | ✗ none | 2 |  |  |  |
-| b | `GET /api/symbols/file` |  | ✗ none | 5 |  |  |  |
-| b | `GET /api/symbols/search` |  | ✗ none | 2 |  |  |  |
-| b | `GET /api/systems` |  | ✗ none | 2 |  |  |  |
-| b | `GET /api/trellis/:id` |  | ✗ none | 3 |  |  |  |
-| b | `GET /api/trellis/:id/diff` |  | ✗ none | 2 |  |  |  |
-| b | `GET /api/trellis/snapshots` |  | ✗ none | 1 |  |  |  |
-| b | `POST /api/trellis/capture` |  | ✗ none | 3 |  |  |  |
+| b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
+| b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
+| b | `GET /api/cross-system` |  | ✗ none | 6 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
+| b | `GET /api/dependencies` |  | ✗ none | 3 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
+| b | `GET /api/dependencies/file` |  | ✗ none | 2 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
+| b | `GET /api/diff` |  | ✗ none | 2 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
+| b | `GET /api/file/at` |  | ✗ none | 2 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
+| b | `GET /api/file/content` |  | ✗ none | 2 | ✓ 0.4b: returns the file's exact content; outside opened projects 403 (misc-endpoints, filesystem-boundary) |  |  |
+| b | `GET /api/file/overlay` |  | ✗ none | 1 | ✓ 0.4b: plan edits mapped onto lines (plan-overlay) |  |  |
+| b | `GET /api/playback` |  | ✗ none | 2 | ✓ 0.4b: discrete frames between comparands (playback) |  |  |
+| b | `GET /api/symbols/file` |  | ✗ none | 5 | ✓ 0.4b: flat qualified symbols per language (go/ruby/jvm-apple support, smoke) |  |  |
+| b | `GET /api/symbols/search` |  | ✗ none | 2 | ✓ 0.4b: finds symbols by name, incl. through a workspace alias (smoke, input-validation) |  |  |
+| b | `GET /api/systems` |  | ✗ none | 3 | ✓ 0.4b: the fixture's services by path (graph-rest) |  |  |
+| b | `GET /api/trellis/:id` |  | ✗ none | 3 | ✓ 0.4b: includes the branch (baselines) |  |  |
+| b | `GET /api/trellis/:id/diff` |  | ✗ none | 2 | ✓ 0.4b: empty at capture; then the new file and its edge, live; 404 unknown (baselines) |  |  |
+| b | `GET /api/trellis/snapshots` |  | ✗ none | 1 | ✓ 0.4b: lists the capture (baselines) |  |  |
+| b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | ✗ none |  |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | ✗ none |  |  |  |
 | c | `DELETE /api/items/:uid` |  | ✗ none | 5 |  |  |  |
@@ -206,7 +206,7 @@ is proof of a gap.
 | f | `POST /api/channels/:eventUid/status` |  | ✗ none | ✗ none |  |  |  |
 | f | `POST /api/presence/ack` |  | ✗ none | ✗ none |  |  |  |
 | f | `POST /api/presence/reply` |  | ✗ none | ✗ none |  |  |  |
-| f | `POST /api/screenshot-response` |  | ✗ none | ✗ none |  |  |  |
+| f | `POST /api/screenshot-response` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/setup` |  | ✗ none | 2 |  |  |  |
@@ -292,21 +292,21 @@ is proof of a gap.
 | a | `set_repo_alias` | session · project | ✗ none | 1 | ✓ 0.4a: rename, reset, broadcast; unknown path refused (project-lifecycle) |  |  |
 | a | `unpin_project` | session · project | ✗ none | 1 | ✓ 0.4a: flag flips (project-lifecycle) |  |  |
 | a | `update_project_config` | project-config · write | ✗ none | 4 | ✓ 0.4a: writes .codetrellis/config.json; effective config follows (cdev-channels, cdev-sensors, cdev-routing) |  |  |
-| b | `check_architecture` | architecture · read | ✗ none | ✗ none |  |  |  |
-| b | `check_conformity` | architecture · read | ✗ none | ✗ none |  |  |  |
-| b | `get_dependencies` | architecture · read | ✗ none | ✗ none |  |  |  |
-| b | `graph_export` | graph · read | ✗ none | ✗ none |  |  |  |
-| b | `graph_focus` | graph · write | 1 | ✗ none |  |  |  |
-| b | `graph_select` | graph · write | ✗ none | ✗ none |  |  |  |
-| b | `graph_set_depth` | graph · write | ✗ none | ✗ none |  |  |  |
-| b | `graph_set_layout` | graph · write | ✗ none | ✗ none |  |  |  |
-| b | `graph_set_mode` | graph · write | ✗ none | ✗ none |  |  |  |
-| b | `graph_set_scope` | graph · write | 1 | ✗ none |  |  |  |
-| b | `graph_snapshot` | graph · read | 1 | ✗ none |  |  |  |
-| b | `graph_toggle_projection` | graph · write | ✗ none | ✗ none |  |  |  |
-| b | `list_cross_system_edges` | architecture · read | ✗ none | ✗ none |  |  |  |
-| b | `search_symbols` | architecture · read | 1 | ✗ none |  |  |  |
-| b | `ui_ready` | graph · read | ✗ none | ✗ none |  |  |  |
+| b | `check_architecture` | architecture · read | ✗ none | 1 | ✓ 0.4b: every edge; query narrows (graph-tools) |  |  |
+| b | `check_conformity` | architecture · read | ✗ none | 1 | ✓ 0.4b: flags the reverse of an import, relative or absolute (graph-tools; bug 17) |  |  |
+| b | `get_dependencies` | architecture · read | ✗ none | 1 | ✓ 0.4b: relative or absolute path (graph-tools; bug 17) |  |  |
+| b | `graph_export` | graph · read | ✗ none | 1 | ✓ 0.4b: renderer PNG round trip (graph-tools) |  |  |
+| b | `graph_focus` | graph · write | 1 | 1 | ✓ 0.4b: broadcast incl. highlight flag (graph-tools) |  |  |
+| b | `graph_select` | graph · write | ✗ none | 1 | ✓ 0.4b: selects file nodes by relative path on a real canvas (graph-tools, e2e mcp-view-tools) |  |  |
+| b | `graph_set_depth` | graph · write | ✗ none | 1 | ✓ 0.4b: canvas depth follows (graph-tools, e2e mcp-view-tools) |  |  |
+| b | `graph_set_layout` | graph · write | ✗ none | 1 | ✓ 0.4b: canvas layout follows (graph-tools, e2e mcp-view-tools) |  |  |
+| b | `graph_set_mode` | graph · write | ✗ none | 1 | ✓ 0.4b: canvas mode follows, incl. baseline (graph-tools, e2e mcp-view-tools; bug 19) |  |  |
+| b | `graph_set_scope` | graph · write | 1 | 1 | ✓ 0.4b: broadcast, set and clear (graph-tools) |  |  |
+| b | `graph_snapshot` | graph · read | 1 | 1 | ✓ 0.4b: compact by default; metadata on request; real canvas (graph-tools, e2e mcp-view-tools; bug 18) |  |  |
+| b | `graph_toggle_projection` | graph · write | ✗ none | 1 | ✓ 0.4b: broadcast (graph-tools) |  |  |
+| b | `list_cross_system_edges` | architecture · read | ✗ none | 1 | ✓ 0.4b: stats and edges (graph-tools) |  |  |
+| b | `search_symbols` | architecture · read | 1 | 1 | ✓ 0.4b: known function with its file (graph-tools) |  |  |
+| b | `ui_ready` | graph · read | ✗ none | 1 | ✓ 0.4b: renderer answer passed through; no window = ready:false within 5 s; real window (graph-tools, e2e mcp-view-tools) |  |  |
 | c | `accept_contributions` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `add_external_ref` | plan-item · write | ✗ none | ✗ none |  |  |  |
 | c | `add_item` | plan-item · write | 3 | 13 |  |  |  |
@@ -481,14 +481,14 @@ is proof of a gap.
 | a | `project.pin` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
 | a | `project.remove` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
 | a | `project.rescan` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `changes.summary` | read | ✗ none | ✗ none |  |  |  |
-| b | `graph.directory` | read | 1 | ✗ none |  |  |  |
-| b | `graph.file` | read | ✗ none | ✗ none |  |  |  |
-| b | `graph.fileSearch` | read | ✗ none | ✗ none |  |  |  |
-| b | `graph.fileSource` | files | 1 | ✗ none |  |  |  |
-| b | `graph.overview` | read | 1 | ✗ none |  |  |  |
-| b | `graph.scene` | read | ✗ none | ✗ none |  |  |  |
-| b | `graph.search` | read | ✗ none | ✗ none |  |  |  |
+| b | `changes.summary` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| b | `graph.directory` | read | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| b | `graph.file` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| b | `graph.fileSearch` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| b | `graph.fileSource` | files | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| b | `graph.overview` | read | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| b | `graph.scene` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| b | `graph.search` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
 | c | `comment.add` | write | ✗ none | ✗ none |  |  |  |
 | c | `item.ref.add` | write | ✗ none | ✗ none |  |  |  |
 | c | `item.ref.remove` | write | ✗ none | ✗ none |  |  |  |

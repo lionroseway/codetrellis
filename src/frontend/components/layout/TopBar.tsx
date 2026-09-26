@@ -447,6 +447,7 @@ export function TopBar() {
           <button
             key={opt.value}
             onClick={() => setViewDepth(opt.value)}
+            aria-pressed={viewDepth === opt.value}
             className={`px-3 py-1 text-[11px] font-medium rounded-md transition-all ${
               viewDepth === opt.value
                 ? 'bg-accent text-white shadow-[0_0_12px_rgba(59,130,246,0.3)]'

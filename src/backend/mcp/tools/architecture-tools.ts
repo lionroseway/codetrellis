@@ -2,6 +2,7 @@
  * Architecture query tools — search symbols, dependencies, conformity.
  */
 
+import path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
@@ -26,7 +27,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description: 'Get what a file imports and what imports it. Returns incoming and outgoing dependency edges.',
       inputSchema: {
-        file_path: z.string().describe('Absolute path to the file'),
+        file_path: z.string().describe('Path to the file: absolute, or relative to the project root'),
       },
     },
     async ({ file_path }) => {
@@ -77,8 +78,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description: 'Check whether proposed imports would create a direct two-file cycle (the imported file already imports the importer). That is the only rule today — there are no layer or boundary rules yet, so a clean result does not mean an import respects your architecture.',
       inputSchema: {
         proposed_imports: z.array(z.object({
-          from: z.string().describe('File that would contain the import'),
-          importing: z.string().describe('File being imported'),
+          from: z.string().describe('File that would contain the import (absolute, or relative to the project root)'),
+          importing: z.string().describe('File being imported (absolute, or relative to the project root)'),
         })).describe('List of proposed import relationships to check'),
       },
     },
@@ -87,8 +88,16 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const edgeSet = new Set(edges.map((e) => `${e.sourceRelative}->${e.targetRelative}`));
       const violations: Array<{ rule: string; message: string }> = [];
 
+      // Edges are project-relative. An absolute path matched nothing, so
+      // every proposal read as conformant — a false all-clear.
+      const root = deps.getActiveProjectPath();
+      const rel = (p: string): string => {
+        const r = root && path.isAbsolute(p) ? path.relative(root, p) : p;
+        return r.split(path.sep).join('/').replace(/^\.\//, '');
+      };
+
       for (const imp of proposed_imports) {
-        const reverse = `${imp.importing}->${imp.from}`;
+        const reverse = `${rel(imp.importing)}->${rel(imp.from)}`;
         if (edgeSet.has(reverse)) {
           violations.push({
             rule: 'circular-dependency',

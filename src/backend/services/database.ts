@@ -596,10 +596,37 @@ export function removeStaleFiles(stalePaths: string[]): void {
  * Without per-language dispatch the resolver was TS-only and Python /
  * Rust / PHP / Java imports silently dropped.
  */
+/**
+ * The alias map and systems the last scan resolved with, so a single-file
+ * re-parse between scans (the file watcher) resolves the same way. Without
+ * them a workspace alias like `@sample/shared` resolves to nothing.
+ */
+let resolutionContext: { projectRoot: string; aliasMap: AliasMapping[]; systems: DiscoveredSystem[] } | null = null;
+
+export function setImportResolutionContext(projectRoot: string, aliasMap: AliasMapping[], systems: DiscoveredSystem[]): void {
+  resolutionContext = { projectRoot, aliasMap, systems };
+}
+
+/**
+ * Resolve the imports a watcher re-parse stored (they arrive with no
+ * `resolved_path`), using the last scan's alias map and systems.
+ *
+ * The watcher used to store a re-parsed file and stop there, so between
+ * scans a new file never got its edges and an edited file LOST its
+ * outgoing edges — the live graph degraded with every edit an agent made.
+ * Only unresolved rows are visited, which also picks up an older import
+ * whose target file has only now appeared.
+ */
+export function resolvePendingImports(projectRoot: string): void {
+  const ctx = resolutionContext?.projectRoot === projectRoot ? resolutionContext : null;
+  resolveImports(projectRoot, ctx?.aliasMap ?? [], ctx?.systems ?? [], { onlyUnresolved: true });
+}
+
 export function resolveImports(
   projectRoot: string,
   aliasMap: AliasMapping[] = [],
   systems: DiscoveredSystem[] = [],
+  opts: { onlyUnresolved?: boolean } = {},
 ): void {
   const d = getDb();
 
@@ -659,7 +686,8 @@ export function resolveImports(
 
   // Get all imports
   const importsResult = d.exec(
-    `SELECT i.id, i.source_path, f.path, i.is_relative FROM imports i JOIN files f ON i.file_id = f.id`,
+    `SELECT i.id, i.source_path, f.path, i.is_relative FROM imports i JOIN files f ON i.file_id = f.id`
+      + (opts.onlyUnresolved ? ' WHERE i.resolved_path IS NULL' : ''),
   );
   if (!importsResult[0]) return;
 
@@ -701,7 +729,7 @@ export function resolveImports(
     }
   }
 
-  console.log(`[DB] Resolved ${resolved} import paths`);
+  if (!opts.onlyUnresolved) console.log(`[DB] Resolved ${resolved} import paths`);
 }
 
 /**
@@ -800,6 +828,15 @@ export function getFileDependencies(filePath: string): {
   importedBy: Array<{ path: string; relativePath: string; specifiers: string[] }>;
 } {
   const d = getDb();
+
+  // Accept the project-relative form too. Rows are keyed by absolute path,
+  // and a relative one (what agents and every other graph tool use)
+  // matched nothing, so the answer was two empty lists: "no dependencies".
+  const row = d.exec(
+    `SELECT path FROM files WHERE path = ? OR relative_path = ? LIMIT 1`,
+    [filePath, filePath.replace(/^\.\//, '')],
+  );
+  filePath = (row[0]?.values[0]?.[0] as string | undefined) ?? filePath;
 
   // What this file imports
   const importsResult = d.exec(`

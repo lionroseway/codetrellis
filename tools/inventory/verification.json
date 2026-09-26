@@ -121,5 +121,125 @@
   },
   "rpc:project.rescan": {
     "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rest:GET /api/architecture-summary": {
+    "behaviour": "✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest)"
+  },
+  "rest:GET /api/coverage": {
+    "behaviour": "✓ 0.4b: unread code by reason, unserved routes (coverage)"
+  },
+  "rest:GET /api/cross-system": {
+    "behaviour": "✓ 0.4b: the fixture's six pairings, before and after changes (cross-system)"
+  },
+  "rest:GET /api/dependencies": {
+    "behaviour": "✓ 0.4b: edges after scan (smoke, cross-system)"
+  },
+  "rest:GET /api/dependencies/file": {
+    "behaviour": "✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17)"
+  },
+  "rest:GET /api/diff": {
+    "behaviour": "✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20)"
+  },
+  "rest:GET /api/file/at": {
+    "behaviour": "✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges)"
+  },
+  "rest:GET /api/file/content": {
+    "behaviour": "✓ 0.4b: returns the file's exact content; outside opened projects 403 (misc-endpoints, filesystem-boundary)"
+  },
+  "rest:GET /api/file/overlay": {
+    "behaviour": "✓ 0.4b: plan edits mapped onto lines (plan-overlay)"
+  },
+  "rest:GET /api/playback": {
+    "behaviour": "✓ 0.4b: discrete frames between comparands (playback)"
+  },
+  "rest:GET /api/symbols/file": {
+    "behaviour": "✓ 0.4b: flat qualified symbols per language (go/ruby/jvm-apple support, smoke)"
+  },
+  "rest:GET /api/symbols/search": {
+    "behaviour": "✓ 0.4b: finds symbols by name, incl. through a workspace alias (smoke, input-validation)"
+  },
+  "rest:GET /api/systems": {
+    "behaviour": "✓ 0.4b: the fixture's services by path (graph-rest)"
+  },
+  "rest:GET /api/trellis/:id": {
+    "behaviour": "✓ 0.4b: includes the branch (baselines)"
+  },
+  "rest:GET /api/trellis/:id/diff": {
+    "behaviour": "✓ 0.4b: empty at capture; then the new file and its edge, live; 404 unknown (baselines)"
+  },
+  "rest:GET /api/trellis/snapshots": {
+    "behaviour": "✓ 0.4b: lists the capture (baselines)"
+  },
+  "rest:POST /api/trellis/capture": {
+    "behaviour": "✓ 0.4b: (baselines)"
+  },
+  "mcp:check_architecture": {
+    "behaviour": "✓ 0.4b: every edge; query narrows (graph-tools)"
+  },
+  "mcp:check_conformity": {
+    "behaviour": "✓ 0.4b: flags the reverse of an import, relative or absolute (graph-tools; bug 17)"
+  },
+  "mcp:get_dependencies": {
+    "behaviour": "✓ 0.4b: relative or absolute path (graph-tools; bug 17)"
+  },
+  "mcp:graph_export": {
+    "behaviour": "✓ 0.4b: renderer PNG round trip (graph-tools)"
+  },
+  "mcp:graph_focus": {
+    "behaviour": "✓ 0.4b: broadcast incl. highlight flag (graph-tools)"
+  },
+  "mcp:graph_select": {
+    "behaviour": "✓ 0.4b: selects file nodes by relative path on a real canvas (graph-tools, e2e mcp-view-tools)"
+  },
+  "mcp:graph_set_depth": {
+    "behaviour": "✓ 0.4b: canvas depth follows (graph-tools, e2e mcp-view-tools)"
+  },
+  "mcp:graph_set_layout": {
+    "behaviour": "✓ 0.4b: canvas layout follows (graph-tools, e2e mcp-view-tools)"
+  },
+  "mcp:graph_set_mode": {
+    "behaviour": "✓ 0.4b: canvas mode follows, incl. baseline (graph-tools, e2e mcp-view-tools; bug 19)"
+  },
+  "mcp:graph_set_scope": {
+    "behaviour": "✓ 0.4b: broadcast, set and clear (graph-tools)"
+  },
+  "mcp:graph_snapshot": {
+    "behaviour": "✓ 0.4b: compact by default; metadata on request; real canvas (graph-tools, e2e mcp-view-tools; bug 18)"
+  },
+  "mcp:graph_toggle_projection": {
+    "behaviour": "✓ 0.4b: broadcast (graph-tools)"
+  },
+  "mcp:list_cross_system_edges": {
+    "behaviour": "✓ 0.4b: stats and edges (graph-tools)"
+  },
+  "mcp:search_symbols": {
+    "behaviour": "✓ 0.4b: known function with its file (graph-tools)"
+  },
+  "mcp:ui_ready": {
+    "behaviour": "✓ 0.4b: renderer answer passed through; no window = ready:false within 5 s; real window (graph-tools, e2e mcp-view-tools)"
+  },
+  "rpc:changes.summary": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:graph.directory": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:graph.file": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:graph.fileSearch": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:graph.fileSource": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:graph.overview": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:graph.scene": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:graph.search": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
   }
 }

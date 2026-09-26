@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4a Project and scan |
-| **Status** | Full harness on `2ec3da5`: 400 passed, 1 skipped, 1 flaky (cdev-channels, see entry) |
-| **Next action** | Open the 0.4a PR; after merge, 0.4b (graph) |
+| **Stage / step** | 0.4b Graph |
+| **Status** | Full harness on `2af7069`: 430 passed, 1 skipped, 0 flaky |
+| **Next action** | 0.4b PR: merge when CI is green; then 0.4c (plans and items) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4a-project-scan` |
+| **Branch** | `feat/phase-32-0.4b-graph` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -34,7 +34,7 @@
 - [x] 0.2 Inventory and verification matrix
 - [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
 - [x] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic (#115)
-- [ ] 0.4a Project and scan
+- [x] 0.4a Project and scan (#116)
 - [ ] 0.4b Graph
 - [ ] 0.4c Plans and items
 - [ ] 0.4d Criteria and sign-off
@@ -126,11 +126,74 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | One Phase 32 step PR open at a time; each step branches from `feat/phase-32` after the previous merge | Squash merges plus shared docs made parallel and stacked PRs conflict (#113–#115) |
 | 2026-09-26 | Git checkout facts (branch, git dir, branches) are read from git's on-disk layout, not by running `git` | Auto-detect asks about unopened directories; `safe.directory` would blank the branch where the file read worked (0.4a) |
 | 2026-09-26 | `project.*` RPC methods are verified in 0.4j, not 0.4a | No harness path to the peer RPC surface yet; 0.4j builds it |
+| 2026-09-26 | Step PRs into `feat/phase-32` are merged by the agent once green (squash); no waiting on the owner | Owner's instruction |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4b full harness — clean
+- 430 passed, 1 skipped (environment), 0 retries, 18.5 min, with nothing
+  else running. `cdev-channels` passed first time, consistent with the
+  0.4a flake being load from the parallel unit/lint run. It stays open
+  for 0.4f until the watcher path is understood.
+
+### 2026-09-26: 0.4b — matrix filled; shape-only tests replaced
+- `baselines`: the trellis snapshot records its branch, and its diff is
+  empty at capture, then reports a file and edge added afterwards (live,
+  no rescan); unknown id 404. Was `toBeTruthy()`.
+- `misc-endpoints`: `/api/file/content` returns the file's exact content
+  (was "non-empty string").
+- `untested.json`: 11 tools and 2 routes removed (now 69 routes, 55
+  tools, 47 RPC). Behaviour column filled for all 17 routes and 15 tools
+  of 0.4b. The 8 graph/changes RPC methods are deferred to 0.4j.
+- Checks: typecheck 0; lint 0 errors / 290 warnings (one fewer: an
+  `as any` went with the mode fix); unit 995 / 992 / 3 skipped.
+
+### 2026-09-26: 0.4b — the live graph degraded with every edit (bugs 19, 20)
+- **Bug 19:** `graph_set_mode('baseline')` sent `baseline`; the renderer's
+  mode is `current`. Nothing changed on screen. Found by
+  `e2e/graph/mcp-view-tools.spec.ts`, which drives the view tools over
+  MCP against a real page (it fails without the fix).
+- **`aria-pressed`** on the mode, layout and depth toggles: their state
+  was colour only. That also gives the spec a stable assertion.
+- **Bug 20, the big one:** the file watcher stored a re-parsed file's
+  imports unresolved and never resolved them, and `unlink` only
+  broadcast. Between scans a new file had no edges, an edited file LOST
+  its outgoing edges, and a deleted file stayed. Fixed:
+  `resolvePendingImports` (unresolved rows only, with the scan's alias map
+  and systems) after each re-parse, and `removeStaleFiles` on unlink.
+  Measured about 3 ms per save on this repo (856 files, 1,718 unresolved
+  rows).
+- **`tests/e2e/graph-rest.test.ts` (6):** the architecture summary and
+  systems by content; `/api/diff` empty after a scan, then reporting an
+  added file, its edge, a modified file, the blast radius and git
+  untracked; an edit keeping its edges (through a workspace alias); a
+  delete leaving the graph. No rescan in the file, on purpose.
+- **`e2e/mcp-tools/graph-tools.spec.ts`** was answering about the wrong
+  project (the backend holds one graph; setup scans the fixture last)
+  while asserting `toBeTruthy()`. It now opens the fixture, runs serially
+  and checks the answers.
+- **For 0.4h (baseline):** every scan re-pins the baseline to the
+  working tree at scan time, labelled with the HEAD hash. So a rescan
+  empties the diff, and "baseline: HEAD" includes uncommitted work.
+  Known (review_plan works around it), but the label is misleading.
+  Decide the semantics in 0.4h.
+
+### 2026-09-26: 0.4b — graph queries that answered wrongly (bugs 17, 18)
+- **`tests/e2e/graph-tools.test.ts` (22):** the 15 graph MCP tools with
+  no harness test, plus `/api/dependencies/file` (no test at all). The
+  view tools' broadcasts are asserted with `openEventStream`; for
+  `graph_snapshot`, `graph_export` and `ui_ready` the harness answers as
+  the renderer through `/api/screenshot-response`.
+- **Bug 17:** `get_dependencies` with a project-relative path returned
+  empty lists ("no dependencies"); `check_conformity` with absolute paths
+  reported everything conformant. The only earlier test (`e2e/mcp-tools`)
+  asserted `toBeTruthy()`. Both now accept either form.
+- **Bug 18:** `graph_snapshot` defaulted to full metadata despite
+  promising a compact default.
+- 3 of 22 failed before the fixes, each one a bug above.
 
 ### 2026-09-26: 0.4a full harness — one flaky, not reproduced
 - **Result on `2ec3da5`:** 400 passed, 1 skipped (environment), 1 flaky.
