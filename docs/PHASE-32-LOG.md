@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | 0.4c-1 Plans (0.4c is split: 0.4c-1 plans, 0.4c-2 items) |
 | **Status** | Started. #117 (0.4b) merged |
-| **Next action** | Matrix column for 0.4c-1, full harness, PR and merge; then 0.4c-2 (items) |
+| **Next action** | Full harness on 0.4c-1, PR and merge; then 0.4c-3 (plan deletion by confirmation), then 0.4c-2 (items + V1 retirement) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4c1-plans` |
 | **Last updated** | 2026-09-26 |
@@ -37,7 +37,8 @@
 - [x] 0.4a Project and scan (#116)
 - [x] 0.4b Graph (#117)
 - [ ] 0.4c-1 Plans
-- [ ] 0.4c-2 Items
+- [ ] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete)
+- [ ] 0.4c-2 Items, incl. retiring the V1 task API
 - [ ] 0.4d Criteria and sign-off
 - [ ] 0.4e Brief and viewer
 - [ ] 0.4f Channels and presence
@@ -50,6 +51,7 @@
 - [ ] 0.5 UX audit
 - [ ] 0.6 Known bugs 4–9
 - [ ] 0.7 Stage review
+- [ ] 0.8 Release (Stage 0 ships before Tracks A–C)
 
 ### Track A: awareness
 - [ ] A0 Parallel-work bugs 1–3
@@ -128,6 +130,10 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Git checkout facts (branch, git dir, branches) are read from git's on-disk layout, not by running `git` | Auto-detect asks about unopened directories; `safe.directory` would blank the branch where the file read worked (0.4a) |
 | 2026-09-26 | `project.*` RPC methods are verified in 0.4j, not 0.4a | No harness path to the peer RPC surface yet; 0.4j builds it |
 | 2026-09-26 | Step PRs into `feat/phase-32` are merged by the agent once green (squash); no waiting on the owner | Owner's instruction |
+| 2026-09-26 | Retire the V1 task API: `/api/tasks/*`, `/api/plans/:uid/tasks*` and the dead plan-store functions (in 0.4c-2) | Owner's decision. Nothing live calls them since bug 21's fix; tests for dead surface would be waste |
+| 2026-09-26 | Plan deletion leaves MCP. An agent may ask; the app shows a confirmation where the person types the plan's name (0.4c-3) | Owner's decision. Deleting shared plan files is a human act |
+| 2026-09-26 | Cut a release at the end of Stage 0 (new step 0.8), before Tracks A–C | Owner's decision. Stage 0 has found and fixed a lot across the app |
+| 2026-09-26 | Cloud-environment CLI is follow-on work, specified in `docs/FOLLOW-ON-CLOUD-ENVIRONMENTS.md`, not part of Phase 32 | Widens Phase 32's one-machine scope |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
