@@ -128,7 +128,7 @@ Stage 0 comes first and is not optional. Everything after it is ordered
 so each step is usable by itself, and so the clearest value lands early.
 
 ```
-0.1 → 0.2 → 0.3 → 0.4 (domains) → 0.5 → 0.6 → 0.7 review
+0.1 → 0.2 → 0.3 → 0.4 (domains) → 0.5 → 0.6 → 0.7 review → 0.8 release
   → A0 → A1 → B1 → B2 → C1 → A2 → B4 → B3 → A3 → review
   → B5 → A4 → A5 → B6 → B7 → A6 → C2 → C3 → B8 → B9 → C4 → A7 → B10 → review
   → phase-end: main merged in, full suite, packaged build, merge to main
@@ -291,6 +291,24 @@ CURRENT-STATE.
 - The matrix is complete. The allowlists and UX issues are counted.
 - Bugs 4–9 are fixed.
 - A direction review is in the log.
+
+### 0.8 Release
+
+Stage 0 has found and fixed enough across the app that it ships before
+Phase 32's features begin (owner's decision, 2026-09-26).
+
+- `feat/phase-32` is merged into `main` at the end of Stage 0. Tracks A,
+  B and C then continue on `feat/phase-32` cut again from `main`, with
+  the same one-merge-at-the-end rule for the phase proper.
+- The release goes out through `scripts/release.sh` (signing and the
+  signed manifest need the release machine, so this step needs the owner
+  on macOS). Release notes via the `codetrellis-release-notes` skill,
+  drawn from the CURRENT-STATE bugs table.
+- Mobile ships only if something in it changed; the pairing protocol has
+  not.
+- **Done when:** the release is published and the packaged app is
+  verified to open its database (CLAUDE.md, "A packaged build is the
+  only thing that proves this").
 
 ---
 

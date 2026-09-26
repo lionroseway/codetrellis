@@ -174,7 +174,7 @@ export function PlanList() {
     setPruning(true);
     try {
       const dirPaths = reconcile.orphanedOnDisk.map((o) => o.dirPath);
-      const res = await fetch('/api/plans/prune-orphans', {
+      const res = await fetch(`/api/plans/prune-orphans?project=${encodeURIComponent(root ?? '')}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dirPaths }),
@@ -192,7 +192,7 @@ export function PlanList() {
       setPruning(false);
       setConfirmPrune(false);
     }
-  }, [reconcile, addToast, fetchReconcile]);
+  }, [reconcile, addToast, fetchReconcile, root]);
 
   const handleQuickCreate = async () => {
     if (!root) {

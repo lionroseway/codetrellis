@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4b Graph |
-| **Status** | Full harness on `2af7069`: 430 passed, 1 skipped, 0 flaky |
-| **Next action** | 0.4b PR: merge when CI is green; then 0.4c (plans and items) |
+| **Stage / step** | 0.4c-1 Plans (0.4c is split: 0.4c-1 plans, 0.4c-2 items) |
+| **Status** | Full harness on 0.4c-1: 453 passed, 1 skipped, 0 retries |
+| **Next action** | 0.4c-1 PR: merge when CI is green; then 0.4c-3 (plan deletion by confirmation), then 0.4c-2 (items + V1 retirement) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4b-graph` |
+| **Branch** | `feat/phase-32-0.4c1-plans` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -35,8 +35,10 @@
 - [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
 - [x] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic (#115)
 - [x] 0.4a Project and scan (#116)
-- [ ] 0.4b Graph
-- [ ] 0.4c Plans and items
+- [x] 0.4b Graph (#117)
+- [ ] 0.4c-1 Plans
+- [ ] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete)
+- [ ] 0.4c-2 Items, incl. retiring the V1 task API
 - [ ] 0.4d Criteria and sign-off
 - [ ] 0.4e Brief and viewer
 - [ ] 0.4f Channels and presence
@@ -49,6 +51,7 @@
 - [ ] 0.5 UX audit
 - [ ] 0.6 Known bugs 4–9
 - [ ] 0.7 Stage review
+- [ ] 0.8 Release (Stage 0 ships before Tracks A–C)
 
 ### Track A: awareness
 - [ ] A0 Parallel-work bugs 1–3
@@ -127,11 +130,89 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Git checkout facts (branch, git dir, branches) are read from git's on-disk layout, not by running `git` | Auto-detect asks about unopened directories; `safe.directory` would blank the branch where the file read worked (0.4a) |
 | 2026-09-26 | `project.*` RPC methods are verified in 0.4j, not 0.4a | No harness path to the peer RPC surface yet; 0.4j builds it |
 | 2026-09-26 | Step PRs into `feat/phase-32` are merged by the agent once green (squash); no waiting on the owner | Owner's instruction |
+| 2026-09-26 | Retire the V1 task API: `/api/tasks/*`, `/api/plans/:uid/tasks*` and the dead plan-store functions (in 0.4c-2) | Owner's decision. Nothing live calls them since bug 21's fix; tests for dead surface would be waste |
+| 2026-09-26 | Plan deletion leaves MCP. An agent may ask; the app shows a confirmation where the person types the plan's name (0.4c-3) | Owner's decision. Deleting shared plan files is a human act |
+| 2026-09-26 | Cut a release at the end of Stage 0 (new step 0.8), before Tracks A–C | Owner's decision. Stage 0 has found and fixed a lot across the app |
+| 2026-09-26 | Cloud-environment CLI is follow-on work, specified in `docs/FOLLOW-ON-CLOUD-ENVIRONMENTS.md`, not part of Phase 32 | Widens Phase 32's one-machine scope |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-26: browser suite — how to run a targeted check fairly
+- A targeted run (`npx playwright test e2e/plan e2e/inspector`) makes the
+  `serial` project depend only on `setup`, so it runs ALONGSIDE the
+  parallel specs (playwright.config `TARGETED`). Serial specs then share
+  the one backend project and the windows `ui_ready` asks: `brief-mode`
+  read another spec's page, and a spec that opens the sample app swaps
+  the project under the parallel ones. The base branch shows the same
+  class of failure (2 of 153, different specs).
+- **Run them apart:** `--project=setup --project=chromium <dirs>`, then
+  `--project=setup --project=serial <dirs>`. On this branch: 152/152 and
+  5/5.
+- **Mine, fixed:** `e2e/inspector/add-to-plan.spec.ts` opens the sample
+  app, so it is in `SERIAL_SPECS`.
+- **Helper fixed:** `gotoWithProject` now waits out "scan already in
+  progress" (200 with `astError`) the way `openProject` does, instead of
+  timing out on `.react-flow` whenever workers overlapped.
+
+### 2026-09-26: 0.4c-1 — plan REST routes
+- **`tests/e2e/plan-rest.test.ts` (9):** discover, reconcile and prune
+  (the Plans panel's disk hygiene), bulk delete, apply-template,
+  import-external from an issue checklist, doc search, projection and a
+  single proposed change, and plan history through real git commits.
+- **prune-orphans now takes the project** (`?project=`, confined like
+  every root) and removes only directories that are that project's
+  orphans at the moment of the call, re-checked just before removal;
+  anything else is skipped and reported. The Plans panel passes the
+  project. `discoverPlanDirs` uses lstat, so a link in the plans dir is
+  not a plan directory. (Rationale is with the owner, per CLAUDE.md.)
+- 11 routes leave `untested.json` (now 58 routes, 45 tools, 47 RPC).
+
+### 2026-09-26: 0.4c-1 — renaming a plan disconnected it from the repo (bug 22)
+- **`tests/e2e/plan-tools.test.ts` (10):** the ten plan tools with no
+  test: update, delete, bulk delete, copy as prompt, list / create-from /
+  publish templates, discover, unlink, home repo.
+- **Bug 22:** the plan directory is `<title-slug>-<uid prefix>`, looked
+  up by the current title. After a rename, write-through silently
+  stopped for good, channel events went to a new directory with no
+  plan.yaml, and unlink / delete left the real directory behind (to be
+  re-imported on the next pull). Found by the probe:
+  `unlink_plan_from_files` said `removed: false` for a directory
+  `discover_plan_files` had just listed. Fixed by finding the linked
+  directory by uid prefix, confirmed by the uid in plan.yaml (through the
+  confined helper; dirents don't follow symlinks). The directory keeps
+  its name; titles live in plan.yaml, so no churn in the repo. The
+  write-through, unlink and delete tests fail without the fix.
+- **Raised with the owner, not in these docs:** a concern about the
+  reach of the plan-deletion tools (Phase 19 class; handled per the
+  CLAUDE.md rule).
+- 10 tools leave `untested.json`.
+
+### 2026-09-26: 0.4c-1 — "Add to plan" wrote into V1 (bug 21)
+- **Which V1 task routes are still called?** The plan store's V1 task,
+  phase and doc functions (`fetchTaskContext`, `addTaskComment`,
+  `createPlanPhase`, `createPlanDoc` and 20 more) are referenced by
+  nothing outside the store. One live caller remained: the inspector's
+  "Add to plan" popover (`AddToTaskPopover`, reached by selecting lines
+  in the code view).
+- **Bug 21:** on a V2 plan the popover listed no tasks (V1 can't see V2
+  items), and what it created was a V1 task the workspace never shows.
+  Ported to V2 Actions. The new `POST /api/items/:uid/code-reference`
+  merges the line range into the Action's fileSpecs on the backend
+  (a renderer read-modify-write could race an agent), and the reference
+  shows in the code overlay.
+- **Tests:** `tests/e2e/code-reference.test.ts` (4: first and second
+  reference, overlay, refusals); browser
+  `e2e/inspector/add-to-plan.spec.ts` drives select lines → existing
+  Action and → new Action, and fails on the old popover. `data-line` on
+  code rows gives it a stable selector.
+- **Proposed to the owner, not done:** with the popover ported, nothing
+  live calls the V1 task REST routes (`/api/tasks/*`,
+  `/api/plans/:uid/tasks*`) or the dead plan-store functions. Retiring
+  them is the honest fix for their untested entries; writing tests for
+  dead surface is not.
 
 ### 2026-09-26: 0.4b full harness — clean
 - 430 passed, 1 skipped (environment), 0 retries, 18.5 min, with nothing

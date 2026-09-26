@@ -241,5 +241,113 @@
   },
   "rpc:graph.search": {
     "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "mcp:update_plan": {
+    "behaviour": "✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22)"
+  },
+  "mcp:delete_plan": {
+    "behaviour": "✓ 0.4c-1: archives, removes the directory even after a rename (plan-tools; bug 22)"
+  },
+  "mcp:bulk_delete_plans": {
+    "behaviour": "✓ 0.4c-1: exactly the named plans (plan-tools)"
+  },
+  "mcp:copy_plan_as_prompt": {
+    "behaviour": "✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools)"
+  },
+  "mcp:list_plan_templates": {
+    "behaviour": "✓ 0.4c-1: built-ins; project templates with project_root (plan-tools)"
+  },
+  "mcp:publish_plan_as_template": {
+    "behaviour": "✓ 0.4c-1: writes template.yaml; appears in the list (plan-tools)"
+  },
+  "mcp:create_plan_from_template": {
+    "behaviour": "✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools)"
+  },
+  "mcp:discover_plan_files": {
+    "behaviour": "✓ 0.4c-1: the exported directory (plan-tools)"
+  },
+  "mcp:unlink_plan_from_files": {
+    "behaviour": "✓ 0.4c-1: removes the directory, even after a rename; plan survives (plan-tools; bug 22)"
+  },
+  "mcp:set_plan_home_repo": {
+    "behaviour": "✓ 0.4c-1: normalised; empty clears (plan-tools)"
+  },
+  "rest:GET /api/plans/discover": {
+    "behaviour": "✓ 0.4c-1: exported plan directories (plan-rest)"
+  },
+  "rest:GET /api/plans/reconcile": {
+    "behaviour": "✓ 0.4c-1: the orphan once its plan is archived (plan-rest)"
+  },
+  "rest:POST /api/plans/prune-orphans": {
+    "behaviour": "✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest)"
+  },
+  "rest:POST /api/plans/bulk-delete": {
+    "behaviour": "✓ 0.4c-1: exactly the named plans; empty list 400 (plan-rest)"
+  },
+  "rest:POST /api/plans/:uid/apply-template": {
+    "behaviour": "✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest)"
+  },
+  "rest:POST /api/plans/import-external": {
+    "behaviour": "✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest)"
+  },
+  "rest:GET /api/plans/:uid/docs/search": {
+    "behaviour": "✓ 0.4c-1: finds by body with excerpt; no match is empty (plan-rest)"
+  },
+  "rest:GET /api/plans/:uid/projection": {
+    "behaviour": "✓ 0.4c-1: ghost and modified files from an Action (plan-rest)"
+  },
+  "rest:GET /api/plans/:uid/changes/:changeId": {
+    "behaviour": "✓ 0.4c-1: one projected change; unknown 404 (plan-rest)"
+  },
+  "rest:GET /api/plan-history/:planSlug": {
+    "behaviour": "✓ 0.4c-1: the commit that touched the plan (plan-rest)"
+  },
+  "rest:GET /api/plan-history/:planSlug/search": {
+    "behaviour": "✓ 0.4c-1: finds by text; missing q 400 (plan-rest)"
+  },
+  "rest:POST /api/items/:uid/code-reference": {
+    "behaviour": "✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21)"
+  },
+  "rest:GET /api/plans/:uid/tasks": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:GET /api/tasks/:taskUid/attachments": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:GET /api/tasks/:taskUid/comments": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:GET /api/tasks/:taskUid/full": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:GET /api/tasks/:taskUid/subtasks": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/plans/:uid/tasks": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/plans/:uid/tasks/:taskUid/claim": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/plans/:uid/tasks/:taskUid/code-reference": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/tasks/:taskUid/attachments": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/tasks/:taskUid/blocked": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/tasks/:taskUid/comments": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/tasks/:taskUid/progress": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:POST /api/tasks/:taskUid/subtasks": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
+  },
+  "rest:PUT /api/plans/:uid/tasks/:taskUid": {
+    "notes": "V1 task route: no live caller since 0.4c-1 (bug 21). Retirement proposed to the owner"
   }
 }

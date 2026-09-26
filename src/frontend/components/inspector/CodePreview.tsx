@@ -501,6 +501,7 @@ function LineRow({
       // instead of trusting that the right file on screen means the
       // right marks on it.
       data-verdict={verdict ?? undefined}
+      data-line={lineNum}
       onClick={onClick}
       title={verdictTooltip(
         verdict,

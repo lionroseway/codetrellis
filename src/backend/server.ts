@@ -1822,15 +1822,19 @@ app.get('/api/plans/stitched', (req, res) => {
   }
 });
 
-// Prune orphaned plan directories from disk
+// Prune orphaned plan directories of an opened project. The project is
+// confined like every other root; the body only SELECTS among that
+// project's current orphans (see pruneOrphanedDirs).
 app.post('/api/plans/prune-orphans', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
   const { dirPaths } = req.body || {};
   if (!Array.isArray(dirPaths) || dirPaths.length === 0) {
-    res.status(400).json({ error: 'dirPaths must be a non-empty array of absolute paths' });
+    res.status(400).json({ error: 'dirPaths must be a non-empty array of orphaned plan directories' });
     return;
   }
-  const removed = pruneOrphanedDirs(dirPaths);
-  res.json({ ok: true, removed });
+  const { removed, skipped } = pruneOrphanedDirs(projectRoot, dirPaths);
+  res.json({ ok: true, removed, skipped });
 });
 
 // Get plan
@@ -2602,6 +2606,57 @@ app.put('/api/items/:uid', (req, res) => {
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: body });
+  saveNow(() => exportDatabase());
+  res.json(item);
+});
+
+/**
+ * Append a code reference — a line range in one file — to an Action.
+ *
+ * The inspector's "Add to plan" (select lines in the code view) used the
+ * V1 task routes: it listed V1 tasks, so a V2 plan's Actions never
+ * appeared, and what it created was a V1 task the workspace never shows.
+ * This is its V2 target. The merge into `fileSpecs` happens here, in one
+ * synchronous step, so it cannot race an agent updating the same item —
+ * a read-modify-write from the renderer could.
+ */
+app.post('/api/items/:uid/code-reference', (req, res) => {
+  const { filePath, startLine, endLine, note, codeSnippet } = req.body || {};
+  if (!filePath || typeof filePath !== 'string' || path.isAbsolute(filePath)) {
+    res.status(400).json({ error: 'filePath is required, relative to the project root' });
+    return;
+  }
+  const start = Number(startLine);
+  const end = endLine === undefined ? start : Number(endLine);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+    res.status(400).json({ error: 'startLine and endLine must be line numbers, with endLine >= startLine' });
+    return;
+  }
+  const existing = planItemService.getItem(req.params.uid);
+  if (!existing) { res.status(404).json({ error: 'Item not found' }); return; }
+  if (existing.kind !== 'action') {
+    res.status(400).json({ error: 'Code references attach to Actions' });
+    return;
+  }
+
+  const parts = [typeof note === 'string' && note.trim() ? note.trim() : `See ${filePath}:${start}${end === start ? '' : `-${end}`}`];
+  if (typeof codeSnippet === 'string' && codeSnippet.trim()) {
+    parts.push('', '```', codeSnippet.replace(/```/g, '`​``'), '```');
+  }
+  const edit = { lineRange: { start, end }, instruction: parts.join('\n') };
+  const fileSpecs = [...(existing.fileSpecs ?? [])];
+  const at = fileSpecs.findIndex((s) => s.path === filePath);
+  if (at >= 0) fileSpecs[at] = { ...fileSpecs[at], edits: [...(fileSpecs[at].edits ?? []), edit] };
+  else fileSpecs.push({ path: filePath, action: 'modify', edits: [edit] });
+
+  const item = planItemService.updateItem(existing.uid, {
+    fileSpecs,
+    changeSummary: `Code reference ${filePath}:${start}${end === start ? '' : `-${end}`}`,
+    author: getAuthorKey('human'),
+    authorType: 'human',
+  });
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { fileSpecs } });
   saveNow(() => exportDatabase());
   res.json(item);
 });

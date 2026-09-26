@@ -3,7 +3,34 @@ import { createPortal } from 'react-dom';
 import { X, Plus, ListChecks, Sparkles } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
-import type { Task } from '../../../shared/types';
+
+/**
+ * "Add to plan" from a code selection, on V2 plan items.
+ *
+ * This used the V1 task routes: it listed V1 tasks, so a V2 plan's
+ * Actions never appeared, and whatever it created was a V1 task that the
+ * workspace never shows — the reference was lost (Phase 32 §0.4c, bug 21).
+ * The line range is now attached to an Action by
+ * `POST /api/items/:uid/code-reference`, which merges it into the
+ * Action's fileSpecs on the backend.
+ */
+interface ActionSummary {
+  uid: string;
+  title: string;
+  kind: string;
+  status: string;
+}
+
+async function postJson(url: string, body: unknown): Promise<{ uid?: string; error?: string }> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
 
 interface Props {
   filePath: string;
@@ -20,12 +47,11 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
   const plans = usePlanStore((s) => s.plans);
   const fetchPlans = usePlanStore((s) => s.fetchPlans);
   const activePlan = usePlanStore((s) => s.activePlan);
-  const fetchPlan = usePlanStore((s) => s.fetchPlan);
 
   const [mode, setMode] = useState<Mode>('existing');
   const [selectedPlanUid, setSelectedPlanUid] = useState<string | null>(activePlan?.uid ?? null);
   const [selectedTaskUid, setSelectedTaskUid] = useState<string | null>(null);
-  const [planTasks, setPlanTasks] = useState<Task[]>(activePlan?.tasks ?? []);
+  const [planActions, setPlanActions] = useState<ActionSummary[]>([]);
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newPlanTitle, setNewPlanTitle] = useState('');
   const [note, setNote] = useState('');
@@ -39,24 +65,18 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
 
   // When the active plan switches, default to it
   useEffect(() => {
-    if (activePlan?.uid) {
-      setSelectedPlanUid(activePlan.uid);
-      setPlanTasks(activePlan.tasks ?? []);
-    }
+    if (activePlan?.uid) setSelectedPlanUid(activePlan.uid);
   }, [activePlan?.uid]);
 
-  // When the user picks a different plan in the dropdown, fetch its tasks
+  // The picked plan's Actions (its V2 items of kind 'action').
   useEffect(() => {
-    if (!selectedPlanUid) { setPlanTasks([]); return; }
-    if (selectedPlanUid === activePlan?.uid && activePlan?.tasks) {
-      setPlanTasks(activePlan.tasks);
-      return;
-    }
-    fetch(`/api/plans/${selectedPlanUid}/tasks`)
+    if (!selectedPlanUid) { setPlanActions([]); return; }
+    setSelectedTaskUid(null);
+    fetch(`/api/plans/${encodeURIComponent(selectedPlanUid)}/items`)
       .then((r) => r.json())
-      .then((tasks) => setPlanTasks(Array.isArray(tasks) ? tasks : []))
-      .catch(() => setPlanTasks([]));
-  }, [selectedPlanUid, activePlan?.uid, activePlan?.tasks]);
+      .then((items) => setPlanActions(Array.isArray(items) ? items.filter((i: ActionSummary) => i.kind === 'action') : []))
+      .catch(() => setPlanActions([]));
+  }, [selectedPlanUid]);
 
   const relativePath = useMemo(() => {
     if (!root || !filePath.startsWith(root)) return filePath;
@@ -65,25 +85,15 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
 
   const lineRangeLabel = startLine === endLine ? `:${startLine}` : `:${startLine}-${endLine}`;
 
-  const submitExisting = async () => {
-    if (!selectedPlanUid || !selectedTaskUid) {
-      setError('Pick a task');
-      return;
-    }
+  const attach = (itemUid: string) => postJson(`/api/items/${encodeURIComponent(itemUid)}/code-reference`, {
+    filePath: relativePath, startLine, endLine, note, codeSnippet,
+  });
+
+  const run = async (work: () => Promise<void>) => {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/plans/${selectedPlanUid}/tasks/${selectedTaskUid}/code-reference`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath: relativePath, startLine, endLine, note, codeSnippet }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || res.statusText);
-      }
-      // Refresh plan so the inspector / panel reflects the update
-      if (selectedPlanUid === activePlan?.uid) await fetchPlan(selectedPlanUid);
+      await work();
       onClose();
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
@@ -92,39 +102,30 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
     }
   };
 
+  const createAction = async (planUid: string, title: string): Promise<string> => {
+    const item = await postJson(`/api/plans/${encodeURIComponent(planUid)}/items`, { kind: 'action', title });
+    if (!item.uid) throw new Error('The action was not created');
+    return item.uid;
+  };
+
+  const submitExisting = async () => {
+    if (!selectedPlanUid || !selectedTaskUid) {
+      setError('Pick an action');
+      return;
+    }
+    await run(async () => { await attach(selectedTaskUid); });
+  };
+
   const submitNewTask = async () => {
     if (!selectedPlanUid) {
       setError('Pick a plan');
       return;
     }
     if (!newTaskDesc.trim()) {
-      setError('Task description is required');
+      setError('Action title is required');
       return;
     }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const fileSpec = buildFileSpec(relativePath, startLine, endLine, note, codeSnippet);
-      const res = await fetch(`/api/plans/${selectedPlanUid}/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: newTaskDesc.trim(),
-          affectedFiles: [relativePath],
-          fileSpec,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || res.statusText);
-      }
-      if (selectedPlanUid === activePlan?.uid) await fetchPlan(selectedPlanUid);
-      onClose();
-    } catch (err) {
-      setError(String(err instanceof Error ? err.message : err));
-    } finally {
-      setSubmitting(false);
-    }
+    await run(async () => { await attach(await createAction(selectedPlanUid, newTaskDesc.trim())); });
   };
 
   const submitNewPlan = async () => {
@@ -136,37 +137,12 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
       setError('No project open');
       return;
     }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const fileSpec = buildFileSpec(relativePath, startLine, endLine, note, codeSnippet);
-      const res = await fetch('/api/plans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newPlanTitle.trim(),
-          description: '',
-          projectPath: root,
-          tasks: [
-            {
-              description: newTaskDesc.trim() || `Address ${relativePath}${lineRangeLabel}`,
-              affectedFiles: [relativePath],
-              fileSpec,
-            },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || res.statusText);
-      }
+    await run(async () => {
+      const plan = await postJson('/api/plans', { title: newPlanTitle.trim(), description: '', projectPath: root });
+      if (!plan.uid) throw new Error('The plan was not created');
+      await attach(await createAction(plan.uid, newTaskDesc.trim() || `Address ${relativePath}${lineRangeLabel}`));
       await fetchPlans(root);
-      onClose();
-    } catch (err) {
-      setError(String(err instanceof Error ? err.message : err));
-    } finally {
-      setSubmitting(false);
-    }
+    });
   };
 
   const onSubmit = () => {
@@ -200,8 +176,8 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
 
         <div className="flex border-b border-white/[0.04]">
           {([
-            { value: 'existing' as const, label: 'Existing task', icon: ListChecks },
-            { value: 'new-task' as const, label: 'New task', icon: Plus },
+            { value: 'existing' as const, label: 'Existing action', icon: ListChecks },
+            { value: 'new-task' as const, label: 'New action', icon: Plus },
             { value: 'new-plan' as const, label: 'New plan', icon: Sparkles },
           ]).map((tab) => (
             <button
@@ -231,7 +207,7 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
                 <option value="" disabled>Pick a plan…</option>
                 {plans.map((p) => (
                   <option key={p.uid} value={p.uid} className="bg-[#0b1020]">
-                    {p.title} ({p.completedTaskCount ?? 0}/{p.taskCount ?? 0})
+                    {p.title}
                   </option>
                 ))}
               </select>
@@ -245,12 +221,12 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
 
           {mode === 'existing' && selectedPlanUid && (
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">Task</label>
-              {planTasks.length === 0 ? (
-                <p className="text-[11px] text-foreground-subtle italic py-2">This plan has no tasks yet — switch to "New task".</p>
+              <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">Action</label>
+              {planActions.length === 0 ? (
+                <p className="text-[11px] text-foreground-subtle italic py-2">This plan has no actions yet — switch to "New action".</p>
               ) : (
                 <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1">
-                  {planTasks.map((task) => (
+                  {planActions.map((task) => (
                     <button
                       key={task.uid}
                       onClick={() => setSelectedTaskUid(task.uid)}
@@ -260,12 +236,8 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
                           : 'border-white/[0.05] bg-white/[0.015] text-foreground-muted hover:bg-white/[0.04] hover:border-white/[0.1]'
                       }`}
                     >
-                      <div className="truncate">{task.description}</div>
-                      {task.affectedFiles.length > 0 && (
-                        <div className="text-[9.5px] text-foreground-subtle truncate mt-0.5">
-                          {task.affectedFiles.length} file{task.affectedFiles.length === 1 ? '' : 's'}
-                        </div>
-                      )}
+                      <div className="truncate">{task.title}</div>
+                      <div className="text-[9.5px] text-foreground-subtle truncate mt-0.5">{task.status.replace('_', ' ')}</div>
                     </button>
                   ))}
                 </div>
@@ -275,7 +247,7 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
 
           {mode === 'new-task' && (
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">Task description</label>
+              <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">Action title</label>
               <input
                 type="text"
                 value={newTaskDesc}
@@ -301,7 +273,7 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">First task (optional)</label>
+                <label className="block text-[10px] uppercase tracking-wider text-foreground-subtle mb-1">First action (optional)</label>
                 <input
                   type="text"
                   value={newTaskDesc}
@@ -350,21 +322,4 @@ export function AddToTaskPopover({ filePath, startLine, endLine, codeSnippet, on
     </div>,
     document.body,
   );
-}
-
-function buildFileSpec(filePath: string, startLine: number, endLine: number, note: string, codeSnippet: string): string {
-  const range = startLine === endLine ? `${filePath}:${startLine}` : `${filePath}:${startLine}-${endLine}`;
-  const parts: string[] = [];
-  parts.push(`### Reference: \`${range}\``);
-  if (note.trim()) {
-    parts.push('');
-    parts.push(note.trim());
-  }
-  if (codeSnippet.trim()) {
-    parts.push('');
-    parts.push('```');
-    parts.push(codeSnippet.replace(/```/g, '`​``'));
-    parts.push('```');
-  }
-  return parts.join('\n');
 }

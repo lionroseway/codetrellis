@@ -39,7 +39,7 @@ import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
 import * as criteriaService from './criteria-service';
 import { getDb } from './database';
-import { readTextWithin } from './confined-fs';
+import { readTextWithin, resolveWithin } from './confined-fs';
 import type {
   Plan,
   PlanItem,
@@ -96,8 +96,11 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
   const plan = planService.getPlan(planUid);
   if (!plan) throw new Error(`Plan ${planUid} not found`);
 
-  const slug = makePlanSlug(plan);
-  const planDir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  // An existing directory keeps its name when the plan is renamed; writing
+  // to a fresh title-slug beside it would leave two directories carrying
+  // the same plan uid.
+  const planDir = getLinkedPlanDir(planUid, projectRoot)
+    ?? path.join(projectRoot, '.codetrellis', 'plans', makePlanSlug(plan));
   ensureDir(planDir);
 
   // Detect V2 items — if any exist, use V2 export path.
@@ -674,7 +677,9 @@ export function discoverPlanDirs(projectRoot: string): string[] {
     .map((name) => path.join(root, name))
     .filter((p) => {
       try {
-        return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml'));
+        // lstat: a link in the plans dir is not a plan directory, wherever
+        // it points.
+        return fs.lstatSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml'));
       } catch {
         return false;
       }
@@ -692,9 +697,33 @@ export function discoverPlanDirs(projectRoot: string): string[] {
 export function getLinkedPlanDir(planUid: string, projectRoot: string): string | null {
   const plan = planService.getPlan(planUid);
   if (!plan) return null;
-  const slug = makePlanSlug(plan);
-  const dir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  const dir = path.join(plansRoot, makePlanSlug(plan));
   if (fs.existsSync(path.join(dir, 'plan.yaml'))) return dir;
+
+  // Renamed since it was exported. The slug is title + uid prefix, and the
+  // directory keeps the name it was created under — so looking it up by
+  // the CURRENT title found nothing. That silently ended write-through for
+  // the rest of the plan's life (the repo copy froze at the old title) and
+  // made delete / unlink leave the directory behind, to be re-imported on
+  // the next pull (Phase 32 §0.4c, bug 22). Match on the uid prefix, and
+  // confirm by the uid inside plan.yaml. Dirents do not follow symlinks,
+  // and plan.yaml is read through the confined helper.
+  const suffix = `-${plan.uid.split('-')[0]}`;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(plansRoot, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.endsWith(suffix)) continue;
+    const candidate = path.join(plansRoot, entry.name);
+    try {
+      const raw = parseYaml(readTextWithin(candidate, 'plan.yaml', 'plan file')) as { uid?: unknown } | null;
+      if (raw?.uid === plan.uid) return candidate;
+    } catch { /* unreadable or not a plan: not this one */ }
+  }
   return null;
 }
 
@@ -798,19 +827,35 @@ export function reconcilePlanState(projectRoot: string): {
  * absolute directory paths (from `reconcilePlanState().orphanedOnDisk`).
  * Returns the count actually removed.
  */
-export function pruneOrphanedDirs(dirPaths: string[]): number {
+/**
+ * Remove orphaned plan directories of ONE opened project.
+ *
+ * A requested path is removed only if it is, right now, one of that
+ * project's orphans as `reconcilePlanState` computes them: a real
+ * directory (not a link) directly under `<root>/.codetrellis/plans/`, with
+ * a plan.yaml, and no active plan behind it. Anything else is skipped and
+ * reported, never removed — the caller's list is a selection from the
+ * orphans it was shown, not a set of paths to delete.
+ */
+export function pruneOrphanedDirs(projectRoot: string, dirPaths: string[]): { removed: number; skipped: string[] } {
+  const orphans = new Set(reconcilePlanState(projectRoot).orphanedOnDisk.map((o) => o.dirPath));
+  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
   let removed = 0;
+  const skipped: string[] = [];
   for (const dir of dirPaths) {
     try {
-      if (fs.existsSync(dir)) {
-        fs.rmSync(dir, { recursive: true, force: true });
-        removed++;
-      }
+      if (typeof dir !== 'string' || !orphans.has(dir)) { skipped.push(String(dir)); continue; }
+      // Re-checked immediately before removal: still a direct child, still
+      // a real directory, and inside the plans dir once canonicalised.
+      resolveWithin(plansRoot, path.basename(dir), 'plan directory');
+      if (path.dirname(dir) !== plansRoot || !fs.lstatSync(dir).isDirectory()) { skipped.push(dir); continue; }
+      fs.rmSync(dir, { recursive: true, force: true });
+      removed++;
     } catch {
-      // best-effort — skip dirs that can't be removed
+      skipped.push(String(dir));
     }
   }
-  return removed;
+  return { removed, skipped };
 }
 
 // --- Auto-sync (Phase 13 §B) ---
