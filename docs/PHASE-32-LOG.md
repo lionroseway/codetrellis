@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4c-1 Plans (0.4c is split: 0.4c-1 plans, 0.4c-2 items) |
-| **Status** | Started. #117 (0.4b) merged |
-| **Next action** | Full harness on 0.4c-1, PR and merge; then 0.4c-3 (plan deletion by confirmation), then 0.4c-2 (items + V1 retirement) |
+| **Status** | Full harness on 0.4c-1: 453 passed, 1 skipped, 0 retries |
+| **Next action** | 0.4c-1 PR: merge when CI is green; then 0.4c-3 (plan deletion by confirmation), then 0.4c-2 (items + V1 retirement) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4c1-plans` |
 | **Last updated** | 2026-09-26 |
