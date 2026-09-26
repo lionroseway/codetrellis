@@ -87,6 +87,8 @@ const SERIAL_SPECS = [
   '**/graph/mcp-view-tools.spec.ts',
   // Answers about whichever project was scanned last.
   '**/mcp-tools/graph-tools.spec.ts',
+  // Opens the sample app, which swaps the one project every parallel spec reads.
+  '**/inspector/add-to-plan.spec.ts',
   // navigate_to 'artefact' opens the viewer over every open page.
   '**/plan/brief-mode.spec.ts',
   // They read the graph of whichever project was scanned last.

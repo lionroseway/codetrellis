@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | 0.4c-1 Plans (0.4c is split: 0.4c-1 plans, 0.4c-2 items) |
 | **Status** | Started. #117 (0.4b) merged |
-| **Next action** | Re-domain sign-off/worklist to d. Then plan CRUD, templates, discover/import/export, bulk delete, prune |
+| **Next action** | Matrix column for 0.4c-1, full harness, PR and merge; then 0.4c-2 (items) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4c1-plans` |
 | **Last updated** | 2026-09-26 |
@@ -133,6 +133,23 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: browser suite — how to run a targeted check fairly
+- A targeted run (`npx playwright test e2e/plan e2e/inspector`) makes the
+  `serial` project depend only on `setup`, so it runs ALONGSIDE the
+  parallel specs (playwright.config `TARGETED`). Serial specs then share
+  the one backend project and the windows `ui_ready` asks: `brief-mode`
+  read another spec's page, and a spec that opens the sample app swaps
+  the project under the parallel ones. The base branch shows the same
+  class of failure (2 of 153, different specs).
+- **Run them apart:** `--project=setup --project=chromium <dirs>`, then
+  `--project=setup --project=serial <dirs>`. On this branch: 152/152 and
+  5/5.
+- **Mine, fixed:** `e2e/inspector/add-to-plan.spec.ts` opens the sample
+  app, so it is in `SERIAL_SPECS`.
+- **Helper fixed:** `gotoWithProject` now waits out "scan already in
+  progress" (200 with `astError`) the way `openProject` does, instead of
+  timing out on `.react-flow` whenever workers overlapped.
 
 ### 2026-09-26: 0.4c-1 — plan REST routes
 - **`tests/e2e/plan-rest.test.ts` (9):** discover, reconcile and prune

@@ -5,6 +5,10 @@
  * what it created was a V1 task the workspace never shows. Here: select
  * lines in the code reader, attach them to an existing Action, and to a
  * new one — and find both on the Actions themselves.
+ *
+ * Serial (playwright.config SERIAL_SPECS): it opens the sample app, and the
+ * backend holds one project, so running beside the parallel specs swapped
+ * their project out from under them.
  */
 
 import path from 'node:path';
