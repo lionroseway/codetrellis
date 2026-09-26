@@ -144,7 +144,7 @@ Scale, measured 2026-09-26:
 | Surface | Count |
 |---|---|
 | REST routes | 226 |
-| MCP tool registrations | 165 (capability rows: 186, to be reconciled) |
+| MCP tools | 186 registered = 186 capability rows (reconciled in 0.2; an early grep said 165) |
 | Mobile RPC methods | 72 |
 | Frontend components | 98 |
 | Mobile screens | 31 |
@@ -256,6 +256,7 @@ Each gets its own regression test (from CURRENT-STATE):
 | 9 scan baseline lost on restart | 0.6 |
 | 10 spec body edits leave no event | B1 (event log) |
 | 11 cross-plan dependencies never resolve | B6 |
+| 12 CI lint step disabled on a stale premise | 0.3 |
 
 Anything the sweep (0.4) finds is added to this table and to
 CURRENT-STATE.

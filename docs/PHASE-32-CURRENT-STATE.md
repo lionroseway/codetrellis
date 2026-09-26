@@ -761,3 +761,4 @@ database (`persistence.ts:52`).
 | 9 | The scan baseline lives in memory and is lost on restart | `diff-engine.ts:44-58` | "Diff since baseline" silently changes meaning after a restart |
 | 10 | Spec body edits write no `plan_events` row | `plan-item-service.ts:616-619` | The history of a spec's content is only in versions, invisible to timelines and audit |
 | 11 | Cross-plan dependencies never resolve | `plan-item-service.ts:1137-1159` | An item that depends on another plan's item is never offered as next |
+| 12 | CI's lint step is commented out, with a note that ESLint isn't installed. It is (`eslint ^9.39.5`), and lint passes with 0 errors | `.github/workflows/ci.yml:23-29,182-185` | `npm run lint` must exit 0 errors (CLAUDE.md), but nothing enforces it; an error could land unnoticed |
