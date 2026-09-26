@@ -37,7 +37,7 @@ import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, set
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
-import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
+import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
@@ -1025,6 +1025,7 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     console.log(`[Scan] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
 
     resolveImports(projectPath, aliasMap, systems);
+    setImportResolutionContext(projectPath, aliasMap, systems);
 
     try {
       recomputeCrossSystemEdges();

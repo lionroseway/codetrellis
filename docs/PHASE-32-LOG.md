@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | 0.4b Graph |
 | **Status** | Started. #116 (0.4a) merged |
-| **Next action** | Browser spec: drive the graph view tools against a real page; then REST graph routes (playback, trellis, diff) behaviour |
+| **Next action** | Remaining 0.4b: playback, trellis snapshots/checkpoints, file/at, overlay; matrix column; full harness; PR |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4b-graph` |
 | **Last updated** | 2026-09-26 |
@@ -132,6 +132,36 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4b — the live graph degraded with every edit (bugs 19, 20)
+- **Bug 19:** `graph_set_mode('baseline')` sent `baseline`; the renderer's
+  mode is `current`. Nothing changed on screen. Found by
+  `e2e/graph/mcp-view-tools.spec.ts`, which drives the view tools over
+  MCP against a real page (it fails without the fix).
+- **`aria-pressed`** on the mode, layout and depth toggles: their state
+  was colour only. That also gives the spec a stable assertion.
+- **Bug 20, the big one:** the file watcher stored a re-parsed file's
+  imports unresolved and never resolved them, and `unlink` only
+  broadcast. Between scans a new file had no edges, an edited file LOST
+  its outgoing edges, and a deleted file stayed. Fixed:
+  `resolvePendingImports` (unresolved rows only, with the scan's alias map
+  and systems) after each re-parse, and `removeStaleFiles` on unlink.
+  Measured about 3 ms per save on this repo (856 files, 1,718 unresolved
+  rows).
+- **`tests/e2e/graph-rest.test.ts` (6):** the architecture summary and
+  systems by content; `/api/diff` empty after a scan, then reporting an
+  added file, its edge, a modified file, the blast radius and git
+  untracked; an edit keeping its edges (through a workspace alias); a
+  delete leaving the graph. No rescan in the file, on purpose.
+- **`e2e/mcp-tools/graph-tools.spec.ts`** was answering about the wrong
+  project (the backend holds one graph; setup scans the fixture last)
+  while asserting `toBeTruthy()`. It now opens the fixture, runs serially
+  and checks the answers.
+- **For 0.4h (baseline):** every scan re-pins the baseline to the
+  working tree at scan time, labelled with the HEAD hash. So a rescan
+  empties the diff, and "baseline: HEAD" includes uncommitted work.
+  Known (review_plan works around it), but the label is misleading.
+  Decide the semantics in 0.4h.
 
 ### 2026-09-26: 0.4b — graph queries that answered wrongly (bugs 17, 18)
 - **`tests/e2e/graph-tools.test.ts` (22):** the 15 graph MCP tools with

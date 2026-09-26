@@ -4,7 +4,7 @@ import * as _lazy___plan_progress_service from './plan-progress-service';
 import { watch, type FSWatcher } from 'chokidar';
 import path from 'node:path';
 import { parseFile, initParser, getParseableExtensions } from './ast-parser';
-import { storeParsedFile, getFileHash } from './database';
+import { storeParsedFile, getFileHash, removeStaleFiles, resolvePendingImports } from './database';
 import { broadcast } from '../server';
 import { checkFileDeviation } from './deviation-service';
 import { checkDocFreshnessForFile } from './sensor-bridge-service';
@@ -131,6 +131,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
     if (oldHash === parsed.contentHash) return;
 
     storeParsedFile(parsed, projectRoot);
+    // The re-parse stores imports unresolved; without this the file lost
+    // every outgoing edge until the next full scan (bug 20).
+    resolvePendingImports(projectRoot);
     console.log(`[Watcher] Re-parsed: ${path.relative(projectRoot, filePath)}`);
 
     const relativePath = path.relative(projectRoot, filePath);
@@ -167,6 +170,8 @@ export async function startWatching(projectRoot: string): Promise<void> {
     if (!parsed) return;
 
     storeParsedFile(parsed, projectRoot);
+    // Its own imports, and any older import that was waiting for it.
+    resolvePendingImports(projectRoot);
     console.log(`[Watcher] New file parsed: ${path.relative(projectRoot, filePath)}`);
 
     broadcast('file-added', {
@@ -193,6 +198,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
 
   watcher.on('unlink', (filePath) => {
     console.log(`[Watcher] File removed: ${path.relative(projectRoot, filePath)}`);
+    // Out of the graph too. This only broadcast, so a deleted file (and
+    // its edges) stayed in the live graph and the diff until a rescan.
+    try { removeStaleFiles([filePath]); } catch (err) { console.warn('[Watcher] Could not drop removed file:', err); }
     broadcast('file-removed', { path: filePath });
 
     // Removing a file can drop one side of a cross-system edge.
