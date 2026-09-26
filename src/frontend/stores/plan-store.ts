@@ -1,17 +1,10 @@
 import { create } from 'zustand';
-import type { Plan, Task, Comment, AgentSessionInfo, Deviation, PlanDocument, PlanPhase, PhaseStatus, TaskAttachment, FileSpec, AttachmentKind } from '@shared/types';
+import type { Plan, Task, Comment, AgentSessionInfo, Deviation } from '@shared/types';
 
-/**
- * Phase 14 §B — per-task hydrated context. The Plan Workspace's
- * TaskCard shows comments + attachments + subtasks inline; rather
- * than fetch each per click, we cache the full bundle keyed by task
- * uid and hydrate lazily on first expand.
- */
-export interface TaskContextBundle {
-  comments: Comment[];
-  attachments: TaskAttachment[];
-  subtasks: Task[];
-}
+// The V1 task / phase / doc actions this store carried (task context,
+// comments, attachments, progress, subtasks, phases, spec docs) had no
+// caller; they were removed with the V1 task API in Phase 32 §0.4c-2.
+// Plan work is V2 plan items: see plan-items-store.
 
 interface PlanState {
   plans: Plan[];
@@ -21,19 +14,6 @@ interface PlanState {
   comments: Comment[];
   sessions: AgentSessionInfo[];
   deviations: Deviation[];
-  planDocs: PlanDocument[];
-  planPhases: PlanPhase[];
-  selectedDocUid: string | null;
-  /** Phase 14 §B — task-uid → hydrated context (comments + attachments + subtasks). */
-  taskContexts: Record<string, TaskContextBundle>;
-  /** Phase 14 §B — plan-scoped activity feed (claims, progress, blockers, comments, …). */
-  activityEvents: Array<{
-    id: string;
-    timestamp: number;
-    type: string;
-    taskUid?: string;
-    payload: Record<string, unknown>;
-  }>;
 
   /**
    * Plan scope filter — 'all' shows plans from every project,
@@ -56,56 +36,15 @@ interface PlanState {
   fetchComments: (targetUid: string) => Promise<void>;
   fetchSessions: () => Promise<void>;
 
-  fetchPlanDocs: (planUid: string) => Promise<void>;
-  createPlanDoc: (planUid: string, input: { docType: string; title: string; body: string; orderHint?: string | null; parentDocUid?: string | null }) => Promise<PlanDocument | null>;
-  updatePlanDoc: (docUid: string, updates: { title?: string; body?: string; docType?: string; changeSummary?: string; orderHint?: string | null; parentDocUid?: string | null }) => Promise<PlanDocument | null>;
-  deletePlanDoc: (docUid: string) => Promise<void>;
-  setSelectedDoc: (uid: string | null) => void;
 
-  fetchPlanPhases: (planUid: string) => Promise<void>;
-  createPlanPhase: (planUid: string, input: {
-    title: string;
-    phaseNumber?: number;
-    scope?: string;
-    prerequisites?: string;
-    gitCheckpoint?: string | null;
-    acceptanceCriteria?: string;
-    status?: PhaseStatus;
-  }) => Promise<PlanPhase | null>;
-  updatePlanPhase: (phaseUid: string, updates: Partial<PlanPhase>) => Promise<PlanPhase | null>;
-  deletePlanPhase: (phaseUid: string) => Promise<void>;
-  assignTaskToPhase: (planUid: string, taskUid: string, phaseUid: string | null) => Promise<void>;
 
   // Called by WebSocket handler
   onPlanCreated: (plan: Plan) => void;
   onPlanDeleted: (planUid: string) => void;
   onPlanUpdated: (planUid: string) => void;
-  onTaskUpdated: (planUid: string, taskUid: string, status: string) => void;
   onCommentAdded: (comment: Comment) => void;
-  onPlanDocCreated: (doc: PlanDocument) => void;
-  onPlanDocUpdated: (doc: PlanDocument) => void;
-  onPlanDocDeleted: (docUid: string) => void;
-  onPlanPhaseChanged: (planUid: string) => void;
 
   // --- Phase 14 §B — Plan Workspace ---
-  /** Hydrate `taskContexts[taskUid]` from `/api/tasks/:taskUid/full`. */
-  fetchTaskContext: (taskUid: string) => Promise<TaskContextBundle | null>;
-  /** Add a comment via REST, then push it into the task context cache. */
-  addTaskComment: (taskUid: string, kind: 'note' | 'blocker' | 'progress' | 'question', body: string) => Promise<Comment | null>;
-  /** Pin an attachment via REST. */
-  addTaskAttachment: (taskUid: string, input: { kind: AttachmentKind; value: string; label?: string; contentType?: string }) => Promise<TaskAttachment | null>;
-  /** Drop an attachment by uid. */
-  removeTaskAttachment: (taskUid: string, attachmentUid: string) => Promise<void>;
-  /** Mid-task progress heartbeat. */
-  reportTaskProgress: (taskUid: string, percent: number, message?: string) => Promise<void>;
-  /** Mark a task blocked with a reason. */
-  setTaskBlocked: (taskUid: string, reason: string) => Promise<void>;
-  /** Add a subtask under a task. */
-  addSubtask: (taskUid: string, input: { description: string; body?: string; prompt?: string; scopePath?: string | null; fileSpecs?: FileSpec[] }) => Promise<Task | null>;
-  /** Update task fields via REST (body / prompt / fileSpecs / scope_path / status / parent_task_uid). */
-  updateTaskFields: (planUid: string, taskUid: string, updates: Partial<Pick<Task, 'description' | 'status' | 'body' | 'prompt' | 'scopePath' | 'fileSpecs' | 'parentTaskUid' | 'phaseUid'>>) => Promise<void>;
-  /** Append an event to the plan-scoped activity feed. */
-  pushActivityEvent: (event: { type: string; taskUid?: string; payload: Record<string, unknown> }) => void;
 
   /**
    * Phase 15 §15.D — patch the plan's git context (baseRef /
@@ -129,11 +68,6 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   comments: [],
   sessions: [],
   deviations: [],
-  planDocs: [],
-  planPhases: [],
-  selectedDocUid: null,
-  taskContexts: {},
-  activityEvents: [],
   planScope: 'all',
 
   setPlanScope: (scope) => {
@@ -172,10 +106,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     }
     const plan = await res.json();
     set({ activePlan: plan, activePlanUid: uid });
-    // Also fetch comments + spec docs + phases
     get().fetchComments(uid);
-    get().fetchPlanDocs(uid);
-    get().fetchPlanPhases(uid);
   },
 
   setActivePlan: async (uid) => {
@@ -217,7 +148,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         }
       }
     } else {
-      set({ activePlanUid: null, activePlan: null, comments: [], planDocs: [], selectedDocUid: null, taskContexts: {}, activityEvents: [] });
+      set({ activePlanUid: null, activePlan: null, comments: [] });
     }
   },
 
@@ -242,150 +173,15 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     }
   },
 
-  fetchPlanDocs: async (planUid) => {
-    try {
-      const res = await fetch(`/api/plans/${planUid}/docs`);
-      const docs = await res.json();
-      set({ planDocs: Array.isArray(docs) ? docs : [] });
-    } catch {
-      set({ planDocs: [] });
-    }
-  },
 
-  createPlanDoc: async (planUid, input) => {
-    try {
-      const res = await fetch(`/api/plans/${planUid}/docs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) return null;
-      const doc: PlanDocument = await res.json();
-      set((s) => ({
-        planDocs: get().activePlanUid === planUid ? [...s.planDocs, doc] : s.planDocs,
-      }));
-      return doc;
-    } catch {
-      return null;
-    }
-  },
 
-  updatePlanDoc: async (docUid, updates) => {
-    try {
-      const res = await fetch(`/api/plan-docs/${docUid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (!res.ok) return null;
-      const doc: PlanDocument = await res.json();
-      set((s) => ({
-        planDocs: s.planDocs.map((d) => (d.uid === docUid ? doc : d)),
-      }));
-      return doc;
-    } catch {
-      return null;
-    }
-  },
 
-  deletePlanDoc: async (docUid) => {
-    try {
-      await fetch(`/api/plan-docs/${docUid}`, { method: 'DELETE' });
-      set((s) => ({
-        planDocs: s.planDocs.filter((d) => d.uid !== docUid),
-        selectedDocUid: s.selectedDocUid === docUid ? null : s.selectedDocUid,
-      }));
-    } catch {
-      // ignore — WS event will reconcile
-    }
-  },
 
-  setSelectedDoc: (uid) => set({ selectedDocUid: uid }),
 
-  fetchPlanPhases: async (planUid) => {
-    try {
-      const res = await fetch(`/api/plans/${planUid}/phases`);
-      const phases = await res.json();
-      set({ planPhases: Array.isArray(phases) ? phases : [] });
-    } catch {
-      set({ planPhases: [] });
-    }
-  },
 
-  createPlanPhase: async (planUid, input) => {
-    try {
-      const res = await fetch(`/api/plans/${planUid}/phases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) return null;
-      const phase: PlanPhase = await res.json();
-      set((s) => ({
-        planPhases: get().activePlanUid === planUid ? [...s.planPhases, phase] : s.planPhases,
-      }));
-      return phase;
-    } catch {
-      return null;
-    }
-  },
 
-  updatePlanPhase: async (phaseUid, updates) => {
-    try {
-      const res = await fetch(`/api/plan-phases/${phaseUid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (!res.ok) return null;
-      const phase: PlanPhase = await res.json();
-      set((s) => ({
-        planPhases: s.planPhases.map((p) => (p.uid === phaseUid ? phase : p)),
-      }));
-      return phase;
-    } catch {
-      return null;
-    }
-  },
 
-  deletePlanPhase: async (phaseUid) => {
-    try {
-      await fetch(`/api/plan-phases/${phaseUid}`, { method: 'DELETE' });
-      set((s) => {
-        // Detach tasks locally so the UI updates immediately; backend
-        // already cleared phase_uid via deletePhase.
-        const next = s.planPhases.filter((p) => p.uid !== phaseUid);
-        if (s.activePlan) {
-          const tasks = s.activePlan.tasks.map((t) =>
-            t.phaseUid === phaseUid ? { ...t, phaseUid: null } : t,
-          );
-          return { planPhases: next, activePlan: { ...s.activePlan, tasks } };
-        }
-        return { planPhases: next };
-      });
-    } catch {
-      // WS event will reconcile
-    }
-  },
 
-  assignTaskToPhase: async (planUid, taskUid, phaseUid) => {
-    try {
-      await fetch(`/api/plans/${planUid}/tasks/${taskUid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phaseUid }),
-      });
-      set((s) => {
-        if (!s.activePlan || s.activePlan.uid !== planUid) return s;
-        const tasks = s.activePlan.tasks.map((t) =>
-          t.uid === taskUid ? { ...t, phaseUid } : t,
-        );
-        return { activePlan: { ...s.activePlan, tasks } };
-      });
-    } catch {
-      // WS task-updated will reconcile
-    }
-  },
 
   onPlanCreated: (plan) => {
     // Optimistic prepend for instant visibility
@@ -403,7 +199,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       const plans = s.plans.filter((p) => p.uid !== planUid);
       // If the deleted plan is the active one, clear it
       if (s.activePlanUid === planUid) {
-        return { plans, activePlan: null, activePlanUid: null, comments: [], planDocs: [], selectedDocUid: null, taskContexts: {}, activityEvents: [] };
+        return { plans, activePlan: null, activePlanUid: null, comments: [] };
       }
       return { plans };
     });
@@ -421,19 +217,6 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     }
   },
 
-  onTaskUpdated: (planUid, taskUid, status) => {
-    set((s) => {
-      if (!s.activePlan || s.activePlan.uid !== planUid) return s;
-      const tasks = s.activePlan.tasks.map((t) =>
-        t.uid === taskUid ? { ...t, status: status as Task['status'] } : t
-      );
-      const completedTaskCount = tasks.filter((t) => t.status === 'done').length;
-      return {
-        activePlan: { ...s.activePlan, tasks, completedTaskCount },
-        plans: s.plans.map((p) => p.uid === planUid ? { ...p, completedTaskCount } : p),
-      };
-    });
-  },
 
   onCommentAdded: (comment) => {
     set((s) => {
@@ -444,209 +227,19 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     });
   },
 
-  onPlanDocCreated: (doc) => {
-    set((s) => {
-      if (s.activePlanUid !== doc.planUid) return s;
-      if (s.planDocs.some((d) => d.uid === doc.uid)) return s;
-      return { planDocs: [...s.planDocs, doc] };
-    });
-  },
 
-  onPlanDocUpdated: (doc) => {
-    set((s) => {
-      if (s.activePlanUid !== doc.planUid) return s;
-      return { planDocs: s.planDocs.map((d) => (d.uid === doc.uid ? doc : d)) };
-    });
-  },
 
-  onPlanDocDeleted: (docUid) => {
-    set((s) => ({
-      planDocs: s.planDocs.filter((d) => d.uid !== docUid),
-      selectedDocUid: s.selectedDocUid === docUid ? null : s.selectedDocUid,
-    }));
-  },
 
-  onPlanPhaseChanged: (planUid) => {
-    // Phase create / update / delete from any source — refetch the
-    // active plan's phases so the UI reflects all clients (including
-    // MCP-side authoring). Cheap, single endpoint.
-    if (get().activePlanUid === planUid) {
-      get().fetchPlanPhases(planUid);
-    }
-  },
 
   // --- Phase 14 §B Plan Workspace actions ---
 
-  fetchTaskContext: async (taskUid) => {
-    try {
-      const res = await fetch(`/api/tasks/${taskUid}/full`);
-      if (!res.ok) return null;
-      const full = await res.json();
-      const bundle: TaskContextBundle = {
-        comments: Array.isArray(full.comments) ? full.comments : [],
-        attachments: Array.isArray(full.attachments) ? full.attachments : [],
-        subtasks: Array.isArray(full.subtasks) ? full.subtasks : [],
-      };
-      set((s) => ({ taskContexts: { ...s.taskContexts, [taskUid]: bundle } }));
-      return bundle;
-    } catch {
-      return null;
-    }
-  },
 
-  addTaskComment: async (taskUid, kind, body) => {
-    try {
-      const res = await fetch(`/api/tasks/${taskUid}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind, body }),
-      });
-      if (!res.ok) return null;
-      const comment: Comment = await res.json();
-      // Optimistically add to taskContexts so the UI sees it before
-      // the WS round-trips back. The WS handler is idempotent on uid.
-      set((s) => {
-        const ctx = s.taskContexts[taskUid];
-        if (!ctx) return s;
-        if (ctx.comments.some((c) => c.uid === comment.uid)) return s;
-        return {
-          taskContexts: {
-            ...s.taskContexts,
-            [taskUid]: { ...ctx, comments: [...ctx.comments, comment] },
-          },
-        };
-      });
-      return comment;
-    } catch {
-      return null;
-    }
-  },
 
-  addTaskAttachment: async (taskUid, input) => {
-    try {
-      const res = await fetch(`/api/tasks/${taskUid}/attachments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) return null;
-      const attachment: TaskAttachment = await res.json();
-      set((s) => {
-        const ctx = s.taskContexts[taskUid];
-        if (!ctx) return s;
-        if (ctx.attachments.some((a) => a.uid === attachment.uid)) return s;
-        return {
-          taskContexts: {
-            ...s.taskContexts,
-            [taskUid]: { ...ctx, attachments: [...ctx.attachments, attachment] },
-          },
-        };
-      });
-      return attachment;
-    } catch {
-      return null;
-    }
-  },
 
-  removeTaskAttachment: async (taskUid, attachmentUid) => {
-    try {
-      await fetch(`/api/attachments/${attachmentUid}`, { method: 'DELETE' });
-      set((s) => {
-        const ctx = s.taskContexts[taskUid];
-        if (!ctx) return s;
-        return {
-          taskContexts: {
-            ...s.taskContexts,
-            [taskUid]: { ...ctx, attachments: ctx.attachments.filter((a) => a.uid !== attachmentUid) },
-          },
-        };
-      });
-    } catch { /* WS will reconcile */ }
-  },
 
-  reportTaskProgress: async (taskUid, percent, message) => {
-    try {
-      await fetch(`/api/tasks/${taskUid}/progress`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ percent, message }),
-      });
-      // Optimistically bump progressPercent in activePlan; WS will
-      // reconcile body / comments.
-      set((s) => {
-        if (!s.activePlan) return s;
-        const tasks = s.activePlan.tasks.map((t) =>
-          t.uid === taskUid ? { ...t, progressPercent: percent } : t,
-        );
-        return { activePlan: { ...s.activePlan, tasks } };
-      });
-    } catch { /* WS will reconcile */ }
-  },
 
-  setTaskBlocked: async (taskUid, reason) => {
-    try {
-      await fetch(`/api/tasks/${taskUid}/blocked`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      });
-      set((s) => {
-        if (!s.activePlan) return s;
-        const tasks = s.activePlan.tasks.map((t) =>
-          t.uid === taskUid ? { ...t, status: 'blocked' as Task['status'], blockedReason: reason } : t,
-        );
-        return { activePlan: { ...s.activePlan, tasks } };
-      });
-    } catch { /* WS will reconcile */ }
-  },
 
-  addSubtask: async (taskUid, input) => {
-    try {
-      const res = await fetch(`/api/tasks/${taskUid}/subtasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) return null;
-      const subtask: Task = await res.json();
-      set((s) => {
-        // Append to the active plan's task list, and to the parent's
-        // taskContext.subtasks if hydrated.
-        let activePlan = s.activePlan;
-        if (activePlan) {
-          activePlan = { ...activePlan, tasks: [...activePlan.tasks, subtask] };
-        }
-        const ctx = s.taskContexts[taskUid];
-        const updatedCtx = ctx ? { ...ctx, subtasks: [...ctx.subtasks, subtask] } : ctx;
-        return {
-          activePlan,
-          taskContexts: ctx ? { ...s.taskContexts, [taskUid]: updatedCtx! } : s.taskContexts,
-        };
-      });
-      return subtask;
-    } catch {
-      return null;
-    }
-  },
 
-  updateTaskFields: async (planUid, taskUid, updates) => {
-    // Map the camelCase fields the store uses onto the REST payload
-    // (server.ts pulls them right back out by the same name).
-    try {
-      await fetch(`/api/plans/${planUid}/tasks/${taskUid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      set((s) => {
-        if (!s.activePlan || s.activePlan.uid !== planUid) return s;
-        const tasks = s.activePlan.tasks.map((t) =>
-          t.uid === taskUid ? { ...t, ...updates } as Task : t,
-        );
-        return { activePlan: { ...s.activePlan, tasks } };
-      });
-    } catch { /* WS will reconcile */ }
-  },
 
   updatePlanGitContext: async (planUid, patch) => {
     try {
@@ -696,15 +289,4 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     }
   },
 
-  pushActivityEvent: (event) => {
-    set((s) => {
-      const next = [
-        ...s.activityEvents,
-        { id: `${event.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, timestamp: Date.now(), ...event },
-      ];
-      // Cap the feed at 200 — older events scroll off (the server's
-      // durable comments table is the long-term record).
-      return { activityEvents: next.length > 200 ? next.slice(-200) : next };
-    });
-  },
 }));

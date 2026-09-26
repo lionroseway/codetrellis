@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4c-3 Plan deletion only by human confirmation |
-| **Status** | Full harness on 0.4c-3: 456 passed, 1 skipped, 0 retries |
-| **Next action** | 0.4c-3 PR: merge when CI is green; then 0.4c-2 (items + V1 retirement) |
+| **Stage / step** | 0.4c-2 Items, incl. retiring the V1 task API |
+| **Status** | Full harness on 0.4c-2: 464 passed, 1 skipped, 0 retries |
+| **Next action** | 0.4c-2 PR: merge when CI is green; then 0.4d (criteria and sign-off) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4c3-plan-deletion` |
+| **Branch** | `feat/phase-32-0.4c2-items` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -37,7 +37,7 @@
 - [x] 0.4a Project and scan (#116)
 - [x] 0.4b Graph (#117)
 - [x] 0.4c-1 Plans (#118)
-- [ ] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete)
+- [x] 0.4c-3 Plan deletion only by human confirmation (MCP can ask, not delete) (#119)
 - [ ] 0.4c-2 Items, incl. retiring the V1 task API
 - [ ] 0.4d Criteria and sign-off
 - [ ] 0.4e Brief and viewer
@@ -139,6 +139,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4c-2 — items could be moved out of the tree (bug 23)
+- **`tests/e2e/item-surface.test.ts` (8):** versions, events and restore;
+  move; comments (REST and MCP, threaded); attachments; external refs;
+  plan summary; suggest_specs.
+- **Bug 23:** no parent validation anywhere. Moving an item under its own
+  sub-item returned 200 and both disappeared from the tree; so did
+  self-parenting, a parent in another plan, or a missing parent. Fixed
+  with `assertValidParent` in the item service (create, update, move):
+  REST 400 through the global error handler (and the create route's own
+  catch), MCP an error result, the phone an RPC error. The test fails
+  without the fix (200 where 400 is expected). Plan import is unaffected:
+  it creates parents before children from the directory tree.
+- The item artefact routes move to domain e (Brief materials).
+- `untested.json`: 8 tools and 8 routes removed (now 37 routes, 37 tools,
+  47 RPC).
+
+### 2026-09-26: 0.4c-2 — the V1 task API is retired
+- **Removed:** 14 REST routes (`/api/plans/:uid/tasks*`, `/api/tasks/*`),
+  and from `plan-store` the 24 functions and 5 state fields nothing read
+  (V1 task context, comments, attachments, progress, subtasks, phases,
+  spec docs), about 410 lines. `setActivePlan` no longer fetches docs and
+  phases into fields no component reads.
+- **Kept, because live code uses them:** `GET /api/plans/:uid/next-task`
+  (serves V2 Actions) and `DELETE /api/attachments/:uid` (the V2 item
+  store). The plan docs and phases routes stay too: they have no UI
+  caller, but they feed plan export and have their own tests, and were
+  not part of the decision. Raise at 0.7.
+- **Tests:** `full-loop` now drives V2 throughout (claim via
+  `/api/items/:uid/claim`, status via `PUT /api/items/:uid`), which also
+  covers the claim route. `e2e/tasks-legacy/` is deleted with the API it
+  tested (removed feature, not a skipped test).
+- `untested.json`: 13 V1 routes gone, and the claim route is now tested
+  (45 routes, 45 tools, 47 RPC).
 
 ### 2026-09-26: 0.4c-3 — plan deletion is a person's decision
 - **Removed from MCP:** `delete_plan`, `bulk_delete_plans` (and their

@@ -129,6 +129,8 @@ export function domainForRoute(path: string): DomainKey | null {
   // cover: the sign-off pack and worklist, and the agent budget.
   if (/\/(signoff-pack|worklist)\b/.test(path)) return 'd';
   if (/\/budget\//.test(path)) return 'g';
+  // An item's recorded files are Brief materials (0.4e).
+  if (/\/artefacts\b/.test(path)) return 'e';
   const seg = path.startsWith('/api/') ? path.split('/')[2] : path.split('/')[1];
   return REST_DOMAINS[seg] ?? null;
 }

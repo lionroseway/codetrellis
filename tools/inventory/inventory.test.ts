@@ -84,6 +84,7 @@ describe('domains', () => {
     assert.equal(domainForRoute('/api/plans/:uid/signoff-pack.html'), 'd');
     assert.equal(domainForRoute('/api/plans/:uid/worklist'), 'd');
     assert.equal(domainForRoute('/api/plans/:uid/budget/check'), 'g');
+    assert.equal(domainForRoute('/api/items/:uid/artefacts'), 'e');
   });
 
   test('tools: name overrides beat the registering file', () => {

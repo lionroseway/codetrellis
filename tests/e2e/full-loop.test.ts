@@ -4,14 +4,17 @@
  * Exercises the complete CodeTrellis lifecycle end-to-end:
  *
  *   1. Scan project
- *   2. Create a plan with phases, tasks, and a spec doc
+ *   2. Create a plan with Actions, a phase and a spec doc
  *   3. Approve the plan (triggers baseline snapshot)
  *   4. Agent connects via MCP and picks up the plan
- *   5. Agent claims & executes tasks (file writes, status updates)
+ *   5. Agent claims & executes Actions (file writes, status updates)
  *   6. Detect deviations (missing file, unexpected file)
  *   7. Reconcile deviations
  *   8. Verify proposed-changes drift tracking
- *   9. Agent completes all tasks → plan marked completed
+ *   9. Agent completes all Actions → plan marked completed
+ *
+ * On V2 plan items throughout. It used V1 tasks for the claim / status /
+ * completion steps until the V1 task API was retired (Phase 32 §0.4c-2).
  *  10. Verify trellis diff shows changes since baseline
  *
  * No real LLM. No API keys. Fully offline.
@@ -27,7 +30,6 @@ test.describe.serial('Full lifecycle loop', () => {
 
   let h: Harness;
   let planUid: string;
-  let taskUids: string[];
   let actionUids: string[];
   let phaseUid: string;
 
@@ -44,39 +46,20 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 1. Plan creation with tasks ────────────────────────────────
 
-  test('create a plan with two tasks targeting fixture files', async () => {
+  test('create a plan for the fixture', async () => {
     const plan = await h.client.createPlan({
       title: 'Full-loop refactor',
       description: 'Refactor validators and add a new utility module',
       projectPath: h.fixture.projectPath,
-      tasks: [
-        {
-          description: 'Refactor the validator module',
-          affectedFiles: ['packages/shared/src/validators.ts'],
-        },
-        {
-          description: 'Add a new string-utils module',
-          affectedFiles: ['packages/shared/src/string-utils.ts'],
-        },
-      ],
     });
 
     expect(plan.uid).toBeTruthy();
     expect(plan.title).toBe('Full-loop refactor');
     expect(plan.status).toBe('draft');
     planUid = plan.uid;
-
-    const detail = await h.client.getPlan(planUid);
-    expect(detail.tasks).toHaveLength(2);
-    taskUids = detail.tasks.map((t) => t.uid);
   });
 
-  // Deviation detection reads V2 Actions (plan_items, kind='action') since
-  // the V2 MCP migration, not the V1 tasks created above. So the same two
-  // pieces of work are also seeded as Actions with their file specs; the
-  // V1 tasks stay, because the REST phase / status / completion steps below
-  // still exercise that surface.
-  test('seed the same work as V2 Actions with file specs', async () => {
+  test('seed the work as Actions with file specs', async () => {
     const seeder = await h.spawnAgent({ agentType: 'seeder-agent' });
     const specs = [
       { title: 'Refactor the validator module', path: 'packages/shared/src/validators.ts', action: 'modify' },
@@ -100,7 +83,7 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 2. Add a phase and a spec doc ──────────────────────────────
 
-  test('add a phase and bind tasks to it', async () => {
+  test('add a phase', async () => {
     const phaseRes = await h.client.raw('POST', `/api/plans/${planUid}/phases`, {
       title: 'Phase 1 — Core refactor',
       scope: 'Validators and new utils',
@@ -109,14 +92,6 @@ test.describe.serial('Full lifecycle loop', () => {
     const phase = await phaseRes.json();
     expect(phase.uid).toBeTruthy();
     phaseUid = phase.uid;
-
-    // Bind both tasks to this phase
-    for (const taskUid of taskUids) {
-      const res = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUid}`, {
-        phaseUid,
-      });
-      expect(res.ok).toBe(true);
-    }
   });
 
   test('add a spec doc to the plan', async () => {
@@ -206,25 +181,23 @@ test.describe.serial('Full lifecycle loop', () => {
     expect(actionUids).toContain(next.uid);
   });
 
-  test('agent edits the validator file and marks task 1 done', async () => {
+  test('agent claims Action 1, edits the validator file and marks it done', async () => {
     // Move plan to in_progress
     const statusRes = await h.client.raw('PUT', `/api/plans/${planUid}`, {
       status: 'in_progress',
     });
     expect(statusRes.ok).toBe(true);
 
-    // Claim task 1 via REST
+    // Claim Action 1 via REST
     const claimRes = await h.client.raw(
       'POST',
-      `/api/plans/${planUid}/tasks/${taskUids[0]}/claim`,
+      `/api/items/${actionUids[0]}/claim`,
       { agentId: 'full-loop-agent-1', agentType: 'full-loop-agent', model: 'harness/1.0' },
     );
     expect(claimRes.ok).toBe(true);
+    expect(((await claimRes.json()) as { ok: boolean }).ok).toBe(true);
 
-    // Update task to in_progress
-    const ipRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[0]}`, {
-      status: 'in_progress',
-    });
+    const ipRes = await h.client.raw('PUT', `/api/items/${actionUids[0]}`, { status: 'in_progress' });
     expect(ipRes.ok).toBe(true);
 
     // Agent edits the file
@@ -239,26 +212,22 @@ test.describe.serial('Full lifecycle loop', () => {
     );
 
     // Mark done
-    const doneRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[0]}`, {
-      status: 'done',
-    });
+    const doneRes = await h.client.raw('PUT', `/api/items/${actionUids[0]}`, { status: 'done' });
     expect(doneRes.ok).toBe(true);
 
     // Verify via REST
-    const detail = await h.client.getPlan(planUid);
-    const task1 = detail.tasks.find((t) => t.uid === taskUids[0]);
-    expect(task1?.status).toBe('done');
+    const item = (await (await h.client.raw('GET', `/api/items/${actionUids[0]}`)).json()) as { status: string; assignee: string | null };
+    expect(item.status).toBe('done');
+    expect(item.assignee).toBe('full-loop-agent-1');
   });
 
   // ── 6. Deviation detection ─────────────────────────────────────
 
-  test('detect deviations — task 2 expected file is missing', async () => {
-    // Task 2 expects `packages/shared/src/string-utils.ts` which
+  test('detect deviations — Action 2 expected file is missing', async () => {
+    // Action 2 expects `packages/shared/src/string-utils.ts` which
     // doesn't exist yet.  Mark it in_progress so it's in scope for
     // deviation checking, then detect.
-    const ipRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[1]}`, {
-      status: 'in_progress',
-    });
+    const ipRes = await h.client.raw('PUT', `/api/items/${actionUids[1]}`, { status: 'in_progress' });
     expect(ipRes.ok).toBe(true);
 
     // Deviation detection via REST
@@ -286,19 +255,12 @@ test.describe.serial('Full lifecycle loop', () => {
     // Re-scan so the file is in the DB
     await h.client.scanProject(h.fixture.projectPath);
 
-    // Now mark task 2 done WITHOUT creating its expected file
-    const doneRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[1]}`, {
-      status: 'done',
-    });
-    expect(doneRes.ok).toBe(true);
-
-    // And the V2 Actions, which are what detection reads: the validator
-    // work really happened; the string-utils file was never created.
+    // Now mark Action 2 done WITHOUT creating its expected file, through
+    // the agent tool: the validator work really happened; the
+    // string-utils file was never created.
     const detector = await h.spawnAgent({ agentType: 'detector-agent' });
-    for (const uid of actionUids) {
-      const upd = await detector.callTool('update_item', { uid, status: 'done' });
-      expect(upd.isError).not.toBe(true);
-    }
+    const upd = await detector.callTool('update_item', { uid: actionUids[1], status: 'done' });
+    expect(upd.isError).not.toBe(true);
 
     // Use the MCP detect_deviations tool (spawned agent is still connected)
     // We can also use the REST endpoint. Let's use REST for the detect
@@ -387,12 +349,11 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 9. Plan completion ─────────────────────────────────────────
 
-  test('all tasks done — mark plan completed', async () => {
-    // Verify both tasks are done
-    const detail = await h.client.getPlan(planUid);
-    for (const task of detail.tasks) {
-      expect(task.status).toBe('done');
-    }
+  test('all Actions done — mark plan completed', async () => {
+    // The two seeded Actions, plus the one reconciliation recorded.
+    const items = (await (await h.client.raw('GET', `/api/plans/${planUid}/items?kind=action`)).json()) as Array<{ uid: string; status: string }>;
+    expect(items.map((i) => i.uid)).toEqual(expect.arrayContaining(actionUids));
+    for (const item of items) expect(item.status).toBe('done');
 
     // Mark plan completed
     const res = await h.client.raw('PUT', `/api/plans/${planUid}`, {
