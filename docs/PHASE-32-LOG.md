@@ -11,10 +11,10 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.2 Inventory |
-| **Status** | built and green locally (typecheck, lint, unit 971/974); full harness running; then the PR |
-| **Next action** | When the harness finishes, record the result, open the 0.2 PR into `feat/phase-32`, then start 0.3 (coverage guards + enable CI lint) |
-| **Blockers** | none |
+| **Stage / step** | 0.2 Inventory → PR open; 0.3 next |
+| **Status** | 0.2 green: typecheck, lint 0 errors / 291 warnings, unit 971/974, harness 363 passed / 17 skipped / 0 failed (18.1 min) |
+| **Next action** | Get the 0.2 PR reviewed and merged into `feat/phase-32`; then branch `feat/phase-32-0.3-coverage-guards`: guards for tools, routes and RPC with shrink-only allowlists, and enable CI lint (bug 12) |
+| **Blockers** | 0.3 builds on 0.2's extractors, so it waits for the 0.2 merge |
 | **Branch** | `feat/phase-32-0.2-inventory` → PR into `feat/phase-32` |
 | **Last updated** | 2026-09-26 |
 
@@ -31,7 +31,7 @@
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
-- [ ] 0.2 Inventory and verification matrix
+- [x] 0.2 Inventory and verification matrix
 - [ ] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
 - [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
 - [ ] 0.4a Project and scan
@@ -128,6 +128,11 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.2 green
+- Harness on `feat/phase-32-0.2-inventory`: 363 passed, 17 skipped,
+  0 failed, no retries, 18.1 min. This is also the first harness run on
+  the post-#110 base, and #110's connector change is clean.
 
 ### 2026-09-26: Skipped tests triaged (for 0.3b)
 - **Harness 17:**
