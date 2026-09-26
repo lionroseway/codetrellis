@@ -11,10 +11,10 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.1 Baseline |
-| **Status** | in progress: typecheck, lint and unit done; build running; harness next |
-| **Next action** | Finish the build, then run `test:harness` in the background and record results below |
-| **Blockers** | none |
+| **Stage / step** | 0.2 Inventory (0.1 Baseline done) |
+| **Status** | 0.1 complete: every suite green on Node 26. 0.2 not started |
+| **Next action** | Branch `feat/phase-32-0.2-inventory` from `feat/phase-32` once #111 merges; write `tools/inventory/` to generate `docs/PHASE-32-VERIFICATION.md`; reconcile 165 tools vs 186 capability rows |
+| **Blockers** | #111 needs merging into `feat/phase-32` before step branches are cut from it |
 | **Branch** | `claude/wizardly-thompson-v52j45` → PR [#111](https://github.com/lionroseway/codetrellis/pull/111) into `feat/phase-32` (plan docs, CI trigger) |
 | **Last updated** | 2026-09-26 |
 
@@ -30,7 +30,7 @@
 - [x] CLAUDE.md points every session here
 
 ### Stage 0: ground truth
-- [ ] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
+- [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
 - [ ] 0.2 Inventory and verification matrix
 - [ ] 0.3 Test mapping and coverage guards
 - [ ] 0.4a Project and scan
@@ -104,8 +104,8 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
 | `typecheck` | **0 errors** | 19 s | |
 | `lint` | **0 errors, 291 warnings** | 13 s | CLAUDE.md says ~277; the warning count is the baseline to not increase |
 | `test:unit` | **950 tests: 947 pass, 0 fail, 3 skipped** | 30 s | CLAUDE.md says 461; out of date |
-| `build` (web) | running | | |
-| `test:harness` | not yet run | | CLAUDE.md: 328 passed + 16 skipped, ~17 min budget |
+| `build` (web) | **ok** | 33 s | one chunk-size warning (>500 kB), pre-existing |
+| `test:harness` | **363 passed, 17 skipped, 0 failed, 0 flaky** | 18.6 min | CLAUDE.md says 328 + 16. Skips are in agent-loop (2), build-artifacts (1), full-loop (4), multi-agent (2), plan-export (1), task-context (7); each is explained or fixed in 0.3. Run with a git-excluded `playwright.local.config.ts` pointing at `/opt/pw-browsers/chromium`, because the container's Chromium doesn't match Playwright 1.63's pinned revision |
 | Packaged Electron | can't run here | | needs macOS: `npm ci && npm run package:mac`, launch, confirm "Backend initialised" |
 
 ---
@@ -126,6 +126,17 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
 ---
 
 ## Entries
+
+### 2026-09-26: 0.1 Baseline complete
+- The full harness is green on Node 26.10.0: 363 passed, 17 skipped,
+  0 failed, no retries needed, 18.6 min. The web build is ok.
+- CLAUDE.md's counts are stale (unit 461 → 950, harness 328+16 →
+  363+17, lint ~277 → 291 warnings). Update CLAUDE.md in 0.2, when the
+  inventory gives exact numbers.
+- The 17 skips are a stage-0 item. "Tests for everything" includes
+  knowing why a test doesn't run.
+- CI now runs on #111, since it's a PR into `feat/phase-*`. Subscribed
+  to its activity.
 
 ### 2026-09-26: Setup and baseline started
 - Cut `feat/phase-32` from `main` (`a4665b2`), and opened #111 (plan docs) into it.
