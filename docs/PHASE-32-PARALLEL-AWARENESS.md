@@ -11,6 +11,12 @@ Companion docs:
 - [PHASE-32-OBSERVABILITY.md](PHASE-32-OBSERVABILITY.md): how it all
   looks. The screen, replay and fast-forward, the stack, collision zones,
   conferring, grounding and breakpoints. Build track B.
+- [PHASE-32-SHARED-WORK.md](PHASE-32-SHARED-WORK.md): skills on tasks,
+  team status through git, a linked planning repo, recurring plans. Build
+  track C.
+- [PHASE-32-EXECUTION.md](PHASE-32-EXECUTION.md) and
+  [PHASE-32-LOG.md](PHASE-32-LOG.md): the step-by-step plan and its
+  progress.
 - [PHASE-32-CURRENT-STATE.md](PHASE-32-CURRENT-STATE.md): what the code
   does today, checked line by line, including the bugs found on the way.
   Every "exists" or "missing" claim below comes from there.

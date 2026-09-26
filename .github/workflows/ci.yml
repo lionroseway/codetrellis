@@ -74,7 +74,9 @@ name: ci
 
 on:
   pull_request:
-    branches: [main]
+    # feat/phase-* are integration branches: milestone PRs land there and
+    # the phase merges into main once. Without this, those PRs are untested.
+    branches: [main, 'feat/phase-*']
   push:
     branches: [main]
   workflow_dispatch:
