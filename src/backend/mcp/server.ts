@@ -25,7 +25,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 // Static imports so Vite's Electron-main bundler resolves them correctly.
 
 import { searchSymbols, getDependencyEdges, getFileDependencies, getDbStats, getDb, exportDatabase } from '../services/database';
-import { broadcast, getBoundBackendPort, scanProject } from '../server';
+import { broadcast, getActiveProjectPath, getBoundBackendPort, scanProject } from '../server';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
@@ -319,6 +319,7 @@ function buildToolDeps(sessionId: string): ToolDeps {
     getLogDir,
     getBoundBackendPort,
     scanProject,
+    getActiveProjectPath,
     buildSkillGuide,
     captureElectronScreenshot: electronScreenshotCapture,
   };

@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 226 | 212 | 71 | 71 | 0 | 0 |
-| MCP tools | 186 | 148 | 91 | 74 | 0 | 0 |
+| REST routes | 226 | 212 | 71 | 71 | 19 | 0 |
+| MCP tools | 186 | 148 | 82 | 66 | 12 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 98 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -25,13 +25,13 @@ is proof of a gap.
 
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
-| 0.4a Project and scan | 19 | 2 | 10 | 0 | 0 | 0 |
+| 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 17 | 15 | 8 | 10 | 0 | 0 |
 | 0.4c Plans and items | 108 | 52 | 20 | 54 | 0 | 0 |
 | 0.4d Criteria and sign-off | 5 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 3 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 7 | 36 | 0 | 20 | 0 | 0 |
+| 0.4g Agents and MCP | 7 | 26 | 0 | 20 | 0 | 0 |
 | 0.4h Drift, governance, review | 8 | 24 | 6 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
@@ -49,25 +49,25 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| a | `DELETE /api/recent-projects` |  | 1 | 2 |  |  |  |
-| a | `GET /api/auto-detect` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/build-info` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/fs/browse` |  | ✗ none | 2 |  |  |  |
-| a | `GET /api/git/branch` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/git/branch-tip` |  | ✗ none | 2 |  |  |  |
-| a | `GET /api/git/commits` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/git/head` |  | ✗ none | 2 |  |  |  |
-| a | `GET /api/git/info` |  | 1 | 2 |  |  |  |
-| a | `GET /api/git/status` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/git/worktrees` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/health` |  | 1 | 3 |  |  |  |
-| a | `GET /api/identity/git-defaults` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/onboarding-state` |  | ✗ none | 2 |  |  |  |
-| a | `GET /api/project-config` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/recent-projects` |  | 1 | 2 |  |  |  |
-| a | `GET /api/stats` |  | ✗ none | 1 |  |  |  |
-| a | `POST /api/project/scan` |  | 2 | 64 |  |  |  |
-| a | `POST /api/recent-projects/pin` |  | 1 | 1 |  |  |  |
+| a | `DELETE /api/recent-projects` |  | 1 | 5 | ✓ 0.4a: removes a listed entry, including one whose directory is gone (project-open) |  |  |
+| a | `GET /api/auto-detect` |  | ✗ none | 1 | ✓ 0.4a: live sessions only, with branch (auto-detect) |  |  |
+| a | `GET /api/build-info` |  | ✗ none | 1 | ✓ 0.4a: version/commit stamp, token-gated (smoke, transport-auth) |  |  |
+| a | `GET /api/fs/browse` |  | ✗ none | 2 | ✓ 0.4a: lists a home dir; / /etc /var refused (misc-endpoints, filesystem-boundary) |  |  |
+| a | `GET /api/git/branch` |  | ✗ none | 2 | ✓ 0.4a: main checkout and linked worktree (git-integration, worktree-project; bug 16) |  |  |
+| a | `GET /api/git/branch-tip` |  | ✗ none | 2 | ✓ 0.4a: tip equals HEAD; option-like refs refused (git-integration) |  |  |
+| a | `GET /api/git/commits` |  | ✗ none | 1 | ✓ 0.4a: recent commits with hashes and subjects (git-integration) |  |  |
+| a | `GET /api/git/head` |  | ✗ none | 2 | ✓ 0.4a: matches status hash (git-integration) |  |  |
+| a | `GET /api/git/info` |  | 1 | 3 | ✓ 0.4a: branches incl. packed, other checkouts, hasCommits — from a worktree too (worktree-project; bug 16) |  |  |
+| a | `GET /api/git/status` |  | ✗ none | 1 | ✓ 0.4a: hash and file arrays (git-integration) |  |  |
+| a | `GET /api/git/worktrees` |  | ✗ none | 2 | ✓ 0.4a: both checkouts and the other one's plans, from a worktree; unopened refused (worktree-project, misc-endpoints) |  |  |
+| a | `GET /api/health` |  | 1 | 3 | ✓ 0.4a: status, parser, memory (misc-endpoints, smoke) |  |  |
+| a | `GET /api/identity/git-defaults` |  | ✗ none | 2 | ✓ 0.4a: the project's own git identity (project-open) |  |  |
+| a | `GET /api/onboarding-state` |  | ✗ none | 3 | ✓ 0.4a: moves with plans and connected agents (project-open) |  |  |
+| a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
+| a | `GET /api/recent-projects` |  | 1 | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
+| a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 66 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/cross-system` |  | ✗ none | 6 |  |  |  |
@@ -112,7 +112,7 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 35 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 36 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 10 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
@@ -161,7 +161,7 @@ is proof of a gap.
 | c | `POST /api/items/:uid/move` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/plans` |  | ✗ none | 35 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 36 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 10 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | ✗ none |  |  |  |
@@ -217,7 +217,7 @@ is proof of a gap.
 | h | `GET /api/baseline` |  | ✗ none | 2 |  |  |  |
 | h | `GET /api/comparands` |  | ✗ none | 4 |  |  |  |
 | h | `GET /api/compare` |  | ✗ none | 5 |  |  |  |
-| h | `GET /api/conflicts` |  | ✗ none | 3 |  |  |  |
+| h | `GET /api/conflicts` |  | ✗ none | 4 |  |  |  |
 | h | `GET /api/freeze` |  | ✗ none | 2 |  |  |  |
 | h | `POST /api/baseline/capture` |  | ✗ none | 1 |  |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 |  |  |  |
@@ -260,14 +260,14 @@ is proof of a gap.
 | k | `GET /api/logs/path` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/power/status` |  | ✗ none | ✗ none |  |  |  |
-| k | `GET /api/settings` |  | ✗ none | 13 |  |  |  |
+| k | `GET /api/settings` |  | ✗ none | 16 |  |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 2 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | ✗ none |  |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 |  |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 13 |  |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 16 |  |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 2 |  |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
@@ -280,8 +280,18 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| a | `get_project_config` | project-config · read | ✗ none | 2 |  |  |  |
-| a | `update_project_config` | project-config · write | ✗ none | 4 |  |  |  |
+| a | `close_project` | session · project | ✗ none | 1 | ✓ 0.4a: broadcasts ui-close-project (project-lifecycle) |  |  |
+| a | `get_project_config` | project-config · read | ✗ none | 2 | ✓ 0.4a: project override and effective merge with defaults (cdev-channels, cdev-sensors) |  |  |
+| a | `get_repo_identity` | session · read | ✗ none | 1 | ✓ 0.4a: alias, branch, origin; unopened refused (project-lifecycle) |  |  |
+| a | `list_recent_projects` | session · read | ✗ none | 2 | ✓ 0.4a: path, branch, pin marker (project-lifecycle) |  |  |
+| a | `open_project` | ui · project | 1 | 1 | ✓ 0.4a: scans, records, broadcasts ui-open-project (project-lifecycle) |  |  |
+| a | `pin_project` | session · project | ✗ none | 1 | ✓ 0.4a: flag flips; unknown path refused (project-lifecycle; fixed: claimed success) |  |  |
+| a | `refresh_repo_origin` | session · project | ✗ none | 1 | ✓ 0.4a: follows set-url, broadcasts (project-lifecycle) |  |  |
+| a | `remove_recent_project` | session · project | ✗ none | 1 | ✓ 0.4a: entry gone; unknown path refused (project-lifecycle) |  |  |
+| a | `rescan_project` | session · project | ✗ none | 1 | ✓ 0.4a: no path = the open project; none open = refused; unopened refused (project-lifecycle; fixed: scanned process.cwd()) |  |  |
+| a | `set_repo_alias` | session · project | ✗ none | 1 | ✓ 0.4a: rename, reset, broadcast; unknown path refused (project-lifecycle) |  |  |
+| a | `unpin_project` | session · project | ✗ none | 1 | ✓ 0.4a: flag flips (project-lifecycle) |  |  |
+| a | `update_project_config` | project-config · write | ✗ none | 4 | ✓ 0.4a: writes .codetrellis/config.json; effective config follows (cdev-channels, cdev-sensors, cdev-routing) |  |  |
 | b | `check_architecture` | architecture · read | ✗ none | ✗ none |  |  |  |
 | b | `check_conformity` | architecture · read | ✗ none | ✗ none |  |  |  |
 | b | `get_dependencies` | architecture · read | ✗ none | ✗ none |  |  |  |
@@ -372,42 +382,32 @@ is proof of a gap.
 | g | `check_budget` | budget · read | ✗ none | ✗ none |  |  |  |
 | g | `clipboard_read` | ui · capture | 1 | ✗ none |  |  |  |
 | g | `clipboard_write` | ui · write | ✗ none | ✗ none |  |  |  |
-| g | `close_project` | session · project | ✗ none | ✗ none |  |  |  |
 | g | `get_app_guide` | ui · read | ✗ none | ✗ none |  |  |  |
 | g | `get_budget` | budget · read | ✗ none | ✗ none |  |  |  |
 | g | `get_log_path` | ui · read | ✗ none | ✗ none |  |  |  |
 | g | `get_logs` | ui · read | ✗ none | ✗ none |  |  |  |
-| g | `get_repo_identity` | session · read | ✗ none | ✗ none |  |  |  |
 | g | `get_settings` | ui · read | ✗ none | 1 |  |  |  |
-| g | `list_recent_projects` | session · read | ✗ none | 1 |  |  |  |
 | g | `navigate_item_back` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `navigate_item_forward` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `navigate_to` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `open_history_drawer` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `open_mcp_guide` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `open_plan` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `open_project` | ui · project | 1 | ✗ none |  |  |  |
 | g | `open_settings` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `pin_project` | session · project | ✗ none | ✗ none |  |  |  |
-| g | `refresh_repo_origin` | session · project | ✗ none | ✗ none |  |  |  |
 | g | `refresh_ui` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `register_session` | session · read | 1 | 5 |  |  |  |
-| g | `remove_recent_project` | session · project | ✗ none | ✗ none |  |  |  |
-| g | `rescan_project` | session · project | ✗ none | ✗ none |  |  |  |
 | g | `screenshot` | ui · capture | 1 | ✗ none |  |  |  |
 | g | `select_item` | ui · write | ✗ none | ✗ none |  |  |  |
 | g | `set_active_plan` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `set_baseline` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `set_budget` | budget · write | ✗ none | ✗ none |  |  |  |
-| g | `set_repo_alias` | session · project | ✗ none | ✗ none |  |  |  |
 | g | `setup_agent_permissions` | session · settings | 1 | ✗ none |  |  |  |
 | g | `toggle_activity_drawer` | session · write | ✗ none | ✗ none |  |  |  |
 | g | `toggle_panel` | session · write | ✗ none | ✗ none |  |  |  |
-| g | `unpin_project` | session · project | ✗ none | ✗ none |  |  |  |
 | g | `update_settings` | ui · settings | ✗ none | 1 |  |  |  |
 | h | `capture_checkpoint` | drift · write | ✗ none | ✗ none |  |  |  |
 | h | `check_freeze` | governance · read | ✗ none | 1 |  |  |  |
-| h | `commit_manifest_changes` | git · write | ✗ none | 3 |  |  |  |
+| h | `commit_manifest_changes` | git · write | ✗ none | 4 |  |  |  |
 | h | `compare_snapshots` | review · read | ✗ none | 1 |  |  |  |
 | h | `detect_conflicts` | git · read | ✗ none | 1 |  |  |  |
 | h | `detect_deviations` | drift · read | ✗ none | 2 |  |  |  |
@@ -471,16 +471,16 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| a | `diagnostics.flush` | read | ✗ none | ✗ none |  |  |  |
-| a | `fs.browse` | files | 2 | ✗ none |  |  |  |
-| a | `project.active` | read | ✗ none | ✗ none |  |  |  |
-| a | `project.alias` | project | 1 | ✗ none |  |  |  |
-| a | `project.close` | project | 1 | ✗ none |  |  |  |
-| a | `project.list` | read | ✗ none | ✗ none |  |  |  |
-| a | `project.open` | project | 2 | ✗ none |  |  |  |
-| a | `project.pin` | project | 1 | ✗ none |  |  |  |
-| a | `project.remove` | project | 1 | ✗ none |  |  |  |
-| a | `project.rescan` | project | 1 | ✗ none |  |  |  |
+| a | `diagnostics.flush` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `fs.browse` | files | 2 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.active` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.alias` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.close` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.list` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.open` | project | 2 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.pin` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.remove` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
+| a | `project.rescan` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
 | b | `changes.summary` | read | ✗ none | ✗ none |  |  |  |
 | b | `graph.directory` | read | 1 | ✗ none |  |  |  |
 | b | `graph.file` | read | ✗ none | ✗ none |  |  |  |

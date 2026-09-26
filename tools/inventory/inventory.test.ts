@@ -87,6 +87,12 @@ describe('domains', () => {
     assert.equal(domainForTool('get_brief', 'plan-item'), 'e');
     assert.equal(domainForTool('claim_item', 'plan-item'), 'c');
     assert.equal(domainForTool('mystery', undefined), null);
+    // Project lifecycle, whichever file registers it; not graph projection.
+    assert.equal(domainForTool('rescan_project', 'session'), 'a');
+    assert.equal(domainForTool('open_project', 'ui'), 'a');
+    assert.equal(domainForTool('list_recent_projects', 'session'), 'a');
+    assert.equal(domainForTool('refresh_repo_origin', 'session'), 'a');
+    assert.equal(domainForTool('graph_toggle_projection', 'graph'), 'b');
   });
 
   test('RPC by area prefix; components by top directory, root files are g', () => {

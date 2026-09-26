@@ -120,6 +120,7 @@ export interface ToolDeps {
   getLogDir: typeof import('../services/logger').getLogDir;
   getBoundBackendPort: typeof import('../server').getBoundBackendPort;
   scanProject: typeof import('../server').scanProject;
+  getActiveProjectPath: typeof import('../server').getActiveProjectPath;
   buildSkillGuide: typeof import('./skill-guide').buildSkillGuide;
 
   /**

@@ -42,7 +42,8 @@ import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
-import { listWorktreesWithPlans } from './services/worktree-service';
+import { listWorktrees, listWorktreesWithPlans } from './services/worktree-service';
+import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
@@ -603,19 +604,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/git/branch', (req, res) => {
   const projectPath = requireProjectPath(req, res);
   if (!projectPath) return;
-
-  try {
-    const headPath = path.join(projectPath, '.git', 'HEAD');
-    if (fs.existsSync(headPath)) {
-      const head = fs.readFileSync(headPath, 'utf-8').trim();
-      const match = head.match(/^ref: refs\/heads\/(.+)$/);
-      res.json({ branch: match ? match[1] : 'detached' });
-    } else {
-      res.json({ branch: null });
-    }
-  } catch {
-    res.json({ branch: null });
-  }
+  res.json({ branch: currentBranch(projectPath) });
 });
 
 // Every worktree of the opened project's repo, with the plans on each
@@ -628,77 +617,26 @@ app.get('/api/git/worktrees', (req, res) => {
   res.json(listWorktreesWithPlans(projectRoot));
 });
 
-// List git branches and worktrees for a project
+// Branches and the OTHER worktrees of a project's repository, for the
+// branch popover. services/git-checkout follows a linked worktree's `.git`
+// file and reads packed refs; the previous hand-read of `.git/` did
+// neither. The other checkouts come from `git worktree list`.
 app.get('/api/git/info', (req, res) => {
   const projectPath = requireProjectPath(req, res);
   if (!projectPath) return;
 
-  const gitDir = path.join(projectPath, '.git');
-  if (!fs.existsSync(gitDir)) { res.json({ branches: [], worktrees: [], status: null }); return; }
+  if (!checkoutGitDir(projectPath)) { res.json({ branches: [], worktrees: [], status: null }); return; }
 
-  // Current branch
-  let currentBranch: string | null = null;
-  try {
-    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf-8').trim();
-    const match = head.match(/^ref: refs\/heads\/(.+)$/);
-    currentBranch = match ? match[1] : 'detached';
-  } catch { /* ignore */ }
+  const worktrees = listWorktrees(projectPath)
+    .filter((w) => !w.isCurrent && !w.bare)
+    .map((w) => ({ path: w.path, branch: w.branch }));
 
-  // List branches
-  const branches: string[] = [];
-  const refsDir = path.join(gitDir, 'refs', 'heads');
-  if (fs.existsSync(refsDir)) {
-    try {
-      const readBranches = (dir: string, prefix = '') => {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          if (entry.isDirectory()) {
-            readBranches(path.join(dir, entry.name), `${prefix}${entry.name}/`);
-          } else {
-            branches.push(`${prefix}${entry.name}`);
-          }
-        }
-      };
-      readBranches(refsDir);
-    } catch { /* ignore */ }
-  }
-
-  // List worktrees
-  const worktrees: Array<{ path: string; branch: string | null }> = [];
-  const worktreesDir = path.join(gitDir, 'worktrees');
-  if (fs.existsSync(worktreesDir)) {
-    try {
-      for (const entry of fs.readdirSync(worktreesDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const wtDir = path.join(worktreesDir, entry.name);
-        let wtBranch: string | null = null;
-        try {
-          const head = fs.readFileSync(path.join(wtDir, 'HEAD'), 'utf-8').trim();
-          const match = head.match(/^ref: refs\/heads\/(.+)$/);
-          wtBranch = match ? match[1] : null;
-        } catch { /* ignore */ }
-        // Read gitdir to find worktree path
-        let wtPath: string | null = null;
-        try {
-          wtPath = fs.readFileSync(path.join(wtDir, 'gitdir'), 'utf-8').trim();
-          wtPath = path.dirname(wtPath); // gitdir points to .git inside worktree
-        } catch { /* ignore */ }
-        worktrees.push({ path: wtPath || entry.name, branch: wtBranch });
-      }
-    } catch { /* ignore */ }
-  }
-
-  // Git status summary (untracked, modified, staged counts)
-  let untracked = 0;
-  try {
-    // Quick scan — check if index exists
-    const indexExists = fs.existsSync(path.join(gitDir, 'index'));
-    if (!indexExists) {
-      // No index = no commits yet, everything is untracked
-      untracked = -1; // signal "no commits"
-    }
-  } catch { /* ignore */ }
-
-  res.json({ currentBranch, branches, worktrees, hasCommits: untracked !== -1 });
+  res.json({
+    currentBranch: currentBranch(projectPath),
+    branches: localBranches(projectPath),
+    worktrees,
+    hasCommits: hasCommits(projectPath),
+  });
 });
 
 app.get('/api/git/status', (req, res) => {
@@ -787,16 +725,7 @@ app.get('/api/auto-detect', (_req, res) => {
       if (seenPaths.has(session.cwd)) continue;
       seenPaths.add(session.cwd);
 
-      // Get branch
-      let branch: string | null = null;
-      try {
-        const headPath = path.join(session.cwd, '.git', 'HEAD');
-        if (fs.existsSync(headPath)) {
-          const head = fs.readFileSync(headPath, 'utf-8').trim();
-          const match = head.match(/^ref: refs\/heads\/(.+)$/);
-          branch = match ? match[1] : 'detached';
-        }
-      } catch { /* ignore */ }
+      const branch = currentBranch(session.cwd);
 
       activeSessions.push({
         projectPath: session.cwd,
@@ -1028,7 +957,7 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     console.log(`[Scan] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
 
     try {
-      const branchInfo = getGitBranchName(projectPath);
+      const branchInfo = currentBranch(projectPath);
       recordProjectOpen(projectPath, branchInfo);
     } catch (err) {
       console.warn('[Scan] Failed to record recent project:', err);
@@ -5310,18 +5239,6 @@ export function getGitWorkingTreeStatus(projectPath: string): {
       commitHash: head?.commitHash || null,
       shortCommitHash: head?.shortCommitHash || null,
     };
-  } catch {
-    return null;
-  }
-}
-
-function getGitBranchName(projectPath: string): string | null {
-  try {
-    const headPath = path.join(projectPath, '.git', 'HEAD');
-    if (!fs.existsSync(headPath)) return null;
-    const head = fs.readFileSync(headPath, 'utf-8').trim();
-    const match = head.match(/^ref: refs\/heads\/(.+)$/);
-    return match ? match[1] : 'detached';
   } catch {
     return null;
   }

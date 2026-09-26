@@ -1,1 +1,125 @@
-{}
+{
+  "rest:DELETE /api/recent-projects": {
+    "behaviour": "✓ 0.4a: removes a listed entry, including one whose directory is gone (project-open)"
+  },
+  "rest:GET /api/auto-detect": {
+    "behaviour": "✓ 0.4a: live sessions only, with branch (auto-detect)"
+  },
+  "rest:GET /api/build-info": {
+    "behaviour": "✓ 0.4a: version/commit stamp, token-gated (smoke, transport-auth)"
+  },
+  "rest:GET /api/fs/browse": {
+    "behaviour": "✓ 0.4a: lists a home dir; / /etc /var refused (misc-endpoints, filesystem-boundary)"
+  },
+  "rest:GET /api/git/branch": {
+    "behaviour": "✓ 0.4a: main checkout and linked worktree (git-integration, worktree-project; bug 16)"
+  },
+  "rest:GET /api/git/branch-tip": {
+    "behaviour": "✓ 0.4a: tip equals HEAD; option-like refs refused (git-integration)"
+  },
+  "rest:GET /api/git/commits": {
+    "behaviour": "✓ 0.4a: recent commits with hashes and subjects (git-integration)"
+  },
+  "rest:GET /api/git/head": {
+    "behaviour": "✓ 0.4a: matches status hash (git-integration)"
+  },
+  "rest:GET /api/git/info": {
+    "behaviour": "✓ 0.4a: branches incl. packed, other checkouts, hasCommits — from a worktree too (worktree-project; bug 16)"
+  },
+  "rest:GET /api/git/status": {
+    "behaviour": "✓ 0.4a: hash and file arrays (git-integration)"
+  },
+  "rest:GET /api/git/worktrees": {
+    "behaviour": "✓ 0.4a: both checkouts and the other one's plans, from a worktree; unopened refused (worktree-project, misc-endpoints)"
+  },
+  "rest:GET /api/health": {
+    "behaviour": "✓ 0.4a: status, parser, memory (misc-endpoints, smoke)"
+  },
+  "rest:GET /api/identity/git-defaults": {
+    "behaviour": "✓ 0.4a: the project's own git identity (project-open)"
+  },
+  "rest:GET /api/onboarding-state": {
+    "behaviour": "✓ 0.4a: moves with plans and connected agents (project-open)"
+  },
+  "rest:GET /api/project-config": {
+    "behaviour": "✓ 0.4a: repoRole per project (cdev-central-oversight)"
+  },
+  "rest:GET /api/recent-projects": {
+    "behaviour": "✓ 0.4a: branch recorded, pinned first (project-open, worktree-project)"
+  },
+  "rest:GET /api/stats": {
+    "behaviour": "✓ 0.4a: counts track rescans (project-open, smoke)"
+  },
+  "rest:POST /api/project/scan": {
+    "behaviour": "✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others)"
+  },
+  "rest:POST /api/recent-projects/pin": {
+    "behaviour": "✓ 0.4a: reorders, and unpin restores recency order (project-open)"
+  },
+  "mcp:close_project": {
+    "behaviour": "✓ 0.4a: broadcasts ui-close-project (project-lifecycle)"
+  },
+  "mcp:get_project_config": {
+    "behaviour": "✓ 0.4a: project override and effective merge with defaults (cdev-channels, cdev-sensors)"
+  },
+  "mcp:get_repo_identity": {
+    "behaviour": "✓ 0.4a: alias, branch, origin; unopened refused (project-lifecycle)"
+  },
+  "mcp:list_recent_projects": {
+    "behaviour": "✓ 0.4a: path, branch, pin marker (project-lifecycle)"
+  },
+  "mcp:open_project": {
+    "behaviour": "✓ 0.4a: scans, records, broadcasts ui-open-project (project-lifecycle)"
+  },
+  "mcp:pin_project": {
+    "behaviour": "✓ 0.4a: flag flips; unknown path refused (project-lifecycle; fixed: claimed success)"
+  },
+  "mcp:refresh_repo_origin": {
+    "behaviour": "✓ 0.4a: follows set-url, broadcasts (project-lifecycle)"
+  },
+  "mcp:remove_recent_project": {
+    "behaviour": "✓ 0.4a: entry gone; unknown path refused (project-lifecycle)"
+  },
+  "mcp:rescan_project": {
+    "behaviour": "✓ 0.4a: no path = the open project; none open = refused; unopened refused (project-lifecycle; fixed: scanned process.cwd())"
+  },
+  "mcp:set_repo_alias": {
+    "behaviour": "✓ 0.4a: rename, reset, broadcast; unknown path refused (project-lifecycle)"
+  },
+  "mcp:unpin_project": {
+    "behaviour": "✓ 0.4a: flag flips (project-lifecycle)"
+  },
+  "mcp:update_project_config": {
+    "behaviour": "✓ 0.4a: writes .codetrellis/config.json; effective config follows (cdev-channels, cdev-sensors, cdev-routing)"
+  },
+  "rpc:diagnostics.flush": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:fs.browse": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.active": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.alias": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.close": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.list": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.open": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.pin": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.remove": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  },
+  "rpc:project.rescan": {
+    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+  }
+}

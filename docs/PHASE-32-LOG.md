@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.3b + 0.6a + 0.3 → one PR, #115 (#113 and #114 closed as superseded) |
-| **Status** | #115 contains all three steps and merges cleanly into `feat/phase-32` |
-| **Next action** | Merge #115. Then 0.4a (behavioural sweep: project and scan) on a fresh branch from `feat/phase-32` |
+| **Stage / step** | 0.4a Project and scan |
+| **Status** | Full harness on `2ec3da5`: 400 passed, 1 skipped, 1 flaky (cdev-channels, see entry) |
+| **Next action** | Open the 0.4a PR; after merge, 0.4b (graph) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.3-coverage-guards` → #115 |
+| **Branch** | `feat/phase-32-0.4a-project-scan` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -33,7 +33,7 @@
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, all suites)
 - [x] 0.2 Inventory and verification matrix
 - [x] 0.3 Test mapping and coverage guards (+ enable CI lint, bug 12)
-- [ ] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic
+- [x] 0.3b Skipped tests: 16 harness tests to reseed or make deterministic (#115)
 - [ ] 0.4a Project and scan
 - [ ] 0.4b Graph
 - [ ] 0.4c Plans and items
@@ -124,11 +124,90 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | `rule` signals wait for a rules format (A7) | No architecture rules exist (CURRENT-STATE §4) |
 | 2026-09-26 | Breakpoints distinguish enforced from detected | CodeTrellis can't stop editor-tool edits without a hook |
 | 2026-09-26 | One Phase 32 step PR open at a time; each step branches from `feat/phase-32` after the previous merge | Squash merges plus shared docs made parallel and stacked PRs conflict (#113–#115) |
+| 2026-09-26 | Git checkout facts (branch, git dir, branches) are read from git's on-disk layout, not by running `git` | Auto-detect asks about unopened directories; `safe.directory` would blank the branch where the file read worked (0.4a) |
+| 2026-09-26 | `project.*` RPC methods are verified in 0.4j, not 0.4a | No harness path to the peer RPC surface yet; 0.4j builds it |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4a full harness — one flaky, not reproduced
+- **Result on `2ec3da5`:** 400 passed, 1 skipped (environment), 1 flaky.
+- **The flaky one:** `cdev-channels` step 6, "external channel event
+  imported by watcher", timed out at 10 s on the first attempt and
+  passed on retry. It ran at test 24/402, when I had started the unit
+  suite, lint and inventory alongside.
+- **Not ours by code path:** the chokidar channel import in
+  `plan-file-service.ts`; nothing in 0.4a touches it. The later
+  "committed" step, which uses the changed commit path, passed.
+- **Not reproduced:** 8 runs with 4 CPU burners and 10 runs with the
+  unit suite looping alongside all passed (one worker, as the harness
+  config). An earlier "repro" with `--workers=2` was my artefact: two
+  copies sharing one fixture dir.
+- **Open item for 0.4f** (channels owns this path). Candidate: chokidar
+  attaching to a just-created `<slug>/channels/` asynchronously, so a
+  file written in that window is missed. The watcher does await
+  `ready`, so it is not the plan-export race #73 fixed.
+
+### 2026-09-26: 0.4a — project lifecycle verified; two more fixes
+- **`rescan_project` with no path scanned `process.cwd()`** — the
+  backend's working directory, `/` in a packaged app — instead of the
+  open project its description promises. The project-scope check, keyed
+  on `project_path`, never saw it. Now it uses the active project and
+  refuses when none is open. The regression test fails on the old code
+  (it scanned the whole codetrellis repo).
+- **`pin_project` / `unpin_project` / `remove_recent_project`** reported
+  success for a path with no recent-projects row (reachable with scope
+  "anywhere"). They now say "not in recents".
+- **New harness helper `openEventStream`** records `/ws` broadcasts, so
+  tools whose only UI effect is a broadcast (`close_project`,
+  `open_project`'s tab switch, alias and origin changes) are asserted,
+  not assumed. Every later 0.4 step can use it.
+- **New tests:** `project-lifecycle` (11, MCP), `project-open` (6, REST:
+  identity seeding on first scan had no test anywhere; pin order;
+  removing a deleted project; onboarding state; rescan add/delete),
+  `worktree-project` +1 (`/api/git/worktrees`), browser
+  `e2e/git/worktree-checkout.spec.ts`. Shape-only assertions on pin,
+  delete and onboarding-state now check behaviour.
+- **Inventory:** the lifecycle tools move to domain a (they were 0.4g by
+  file). 8 leave `untested.json` (now 71 routes, 66 tools, 47 RPC).
+  Behaviour column filled for all 19 routes and 12 tools of 0.4a.
+- **Decision:** the 10 `project.*` / `fs.browse` / `diagnostics.flush`
+  RPC methods move to 0.4j. There is no harness path to the peer RPC
+  surface, and building one is 0.4j's job.
+- **Browser suite:** `e2e/project`, `e2e/onboarding`, `e2e/git` — 55/55
+  pass here, plus the new worktree spec.
+- **For 0.5 (UX):** at 1280×720 the canvas toolbar rows overlap the
+  cluster card and hide its title; a worktree in the branch popover
+  reads only "main", which is ambiguous next to the branch of that name.
+- Checks: typecheck 0; lint 0 errors / 291 warnings; unit 992 / 989
+  pass / 3 skipped.
+
+### 2026-09-26: 0.4a — a linked worktree was a second-class project (bug 16)
+- **Found by reading the routes, confirmed by a failing test.** Six
+  places read `<root>/.git/HEAD`, `.git/MERGE_HEAD`, `.git/refs/heads`
+  or wrote a temp file into `.git/` by path. In a linked worktree `.git`
+  is a file, so from any worktree:
+  - `/api/git/branch` and the recent-projects entry said no branch;
+  - `/api/git/info` said "no commits", no branches, no other checkouts;
+  - `.codetrellis` merge conflicts were never detected;
+  - `commit_manifest_changes` failed with ENOTDIR.
+
+  Branch listing also missed packed refs (any clone, any `git gc`).
+- **Fix:** `services/git-checkout.ts` reads git's on-disk layout
+  properly (the `.git` file's `gitdir:`, `commondir`, HEAD, loose and
+  packed refs) and every site uses it. The commit message goes in on
+  stdin instead of a temp file.
+- **Decision: file reads, not `git`.** First draft ran `git rev-parse` /
+  `symbolic-ref`. Changed because `/api/auto-detect` asks about
+  directories named in Claude Code's session files (not opened
+  projects), and git refuses repos owned by another user
+  (`safe.directory`), which would blank the branch chip where the old
+  read worked.
+- **Tests:** `tests/e2e/worktree-project.test.ts` (6, all from inside a
+  linked worktree; all 6 failed before the fix) and
+  `git-checkout.test.ts` (13 unit). `git-integration` still green.
 
 ### 2026-09-26: Stacking failed under squash merges; consolidated into #115
 - A local simulation of squash-merging #113 → #114 → #115 still
