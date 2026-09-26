@@ -11,9 +11,9 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.3 Coverage guards → PR #115, stacked on 0.6a (#114) and 0.3b (#113) |
-| **Status** | PRs stacked to merge in order without conflicts: #113 (0.3b), then #114 (0.6a, contains 0.3b), then #115 (0.3, contains both). `untested.json` here already reflects 0.3b's new tests |
-| **Next action** | Merge #113 → #114 → #115 in that order. Then 0.4a (behavioural sweep: project and scan) on a fresh branch |
+| **Stage / step** | 0.3b + 0.6a + 0.3 → one PR, #115 (#113 and #114 closed as superseded) |
+| **Status** | #115 contains all three steps and merges cleanly into `feat/phase-32` |
+| **Next action** | Merge #115. Then 0.4a (behavioural sweep: project and scan) on a fresh branch from `feat/phase-32` |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.3-coverage-guards` → #115 |
 | **Last updated** | 2026-09-26 |
@@ -123,11 +123,22 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Workstreams are deltas over the one project graph | The backend holds one project graph at a time (CURRENT-STATE §1) |
 | 2026-09-26 | `rule` signals wait for a rules format (A7) | No architecture rules exist (CURRENT-STATE §4) |
 | 2026-09-26 | Breakpoints distinguish enforced from detected | CodeTrellis can't stop editor-tool edits without a hook |
+| 2026-09-26 | One Phase 32 step PR open at a time; each step branches from `feat/phase-32` after the previous merge | Squash merges plus shared docs made parallel and stacked PRs conflict (#113–#115) |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-26: Stacking failed under squash merges; consolidated into #115
+- A local simulation of squash-merging #113 → #114 → #115 still
+  conflicted at #114. A squash merge drops the branch's history, so the
+  stacked branch re-applies 0.3b's doc edits against the squashed copy.
+- **Fix:** #115 already contains 0.3b, 0.6a and 0.3, and merges cleanly
+  alone, so it becomes the single PR. #113 and #114 are closed as
+  superseded (re-openable).
+- **New rule** (EXECUTION §1.3, Decisions): one step PR open at a time;
+  each step branches from `feat/phase-32` after the previous merge.
 
 ### 2026-09-26: PRs stacked to remove merge conflicts
 - #113, #114 and #115 each merged cleanly into `feat/phase-32` alone,

@@ -59,6 +59,13 @@ one to continue without asking.
   `feat/phase-32-<step>-<slug>` (for example
   `feat/phase-32-a0-parallel-bugs`).
 - **CI runs on PRs into `feat/phase-*`** (`ci.yml`, `security.yml`).
+- **One step PR open at a time.** PRs are squash-merged, and every step
+  edits the Phase 32 docs (at least the log's Now block). So two open
+  step PRs always conflict, and stacking one branch on another doesn't
+  help, because a squash merge drops the branch's history. Start the
+  next step's branch from `feat/phase-32` **after** the previous PR
+  merges. Work done ahead goes onto that fresh branch by cherry-picking
+  its own commits. (Learned on #113–#115, 2026-09-26.)
 - **Before a phase-end merge:** bring `main` into `feat/phase-32`, run
   everything, and verify a packaged build (CLAUDE.md: only a packaged
   build proves Electron + native modules).
