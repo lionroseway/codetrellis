@@ -23,6 +23,7 @@ import { colLetters, parseDateStyles, parseSharedStrings, parseSheetGrid, parseW
 import { slideOrder, slideText } from '../../../shared/lib/pptx-xml';
 import { parseRange, toSpan, TEXT_EXTS, type CellRange } from '../../../shared/lib/locator';
 import { docxHtmlToMarkdown } from './docx-markdown';
+import { csvShape, parseCsv } from '../../../shared/lib/csv';
 
 /** The places `read_material` narrows to — the evidence locator's own shapes (§8.1). */
 export interface MaterialLocator {
@@ -153,10 +154,40 @@ function readTextFile(req: ReadRequest, locator: MaterialLocator): ReadReply {
   const lines = text.split(/\r?\n/);
   if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
   const notes: string[] = [];
-  refuseKeys(locator, ['lines', 'text'], req);
+  // A CSV's {range} was routed to readCsvRange; naming it here keeps the refusal honest.
+  refuseKeys(locator, req.ext === 'csv' ? ['lines', 'text', 'range'] : ['lines', 'text'], req);
   const { where, section } = readLines(lines, locator, { number: true, name: req.name });
   const sections = fit([section], notes, () => 'Ask for {"lines": "N-M"} to read further.');
   return { ok: true, format: 'text', where, outline: `${lines.length} lines`, sections, notes };
+}
+
+/**
+ * A CSV by cell, as a citation cites it: `{"range": "B2"}` or `A1:C10`.
+ * The check accepts that locator on a CSV and the viewer opens a CSV at
+ * it, so an agent must be able to read what it cites. Without a range, a
+ * CSV reads as numbered lines like any text file (Phase 32 §0.4e).
+ */
+function readCsvRange(req: ReadRequest, locator: MaterialLocator): ReadReply {
+  refuseKeys(locator, ['range'], req);
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(req.bytes);
+  const rows = parseCsv(text);
+  const shape = csvShape(rows);
+  const range = parseRange(String(locator.range).trim());
+  if (!range) throw new ReadError(`"${locator.range}" is not a cell or range — write it as C14 or A1:F20`);
+  if (range.to.row > shape.rows || range.to.col > shape.cols) {
+    throw new ReadError(`${locator.range} is outside ${req.name}, which has ${shape.rows} rows and ${shape.cols} columns`);
+  }
+  const at = `${colLetters(range.from.col)}${range.from.row}:${colLetters(range.to.col)}${range.to.row}`;
+  const body = toCsv(rows.slice(range.from.row - 1, range.to.row).map((r) => r.slice(range.from.col - 1, range.to.col)));
+  const notes: string[] = [];
+  return {
+    ok: true,
+    format: 'csv',
+    where: `cells ${at}`,
+    outline: `${shape.rows} rows, ${shape.cols} columns`,
+    sections: fit([{ heading: `Cells ${at}`, body }], notes, () => 'Ask for a smaller {"range"} to read the rest.'),
+    notes,
+  };
 }
 
 // ── Workbooks ─────────────────────────────────────────────────────────
@@ -497,6 +528,7 @@ export async function readMaterialBytes(input: ReadRequest): Promise<ReadReply> 
       case 'pptx': return await readDeck(req, locator);
       case 'pdf': return await readPdf(req, locator);
       default:
+        if (req.ext === 'csv' && locator.range !== undefined) return readCsvRange(req, locator);
         if (TEXT_EXTS.has(req.ext)) return readTextFile(req, locator);
         return { ok: false, reason: `.${req.ext} files are not read as text` };
     }

@@ -22,6 +22,7 @@ import { listZipEntries, readZipEntry, type ZipEntry } from '../lib/zip-entries'
 import type { Artefact } from './artefact-service';
 import { decodeXml, parseWorkbookSheets, sheetDimension } from '../../shared/lib/xlsx-xml';
 import { parseRange, toSpan, TEXT_EXTS } from '../../shared/lib/locator';
+import { csvShape, parseCsv } from '../../shared/lib/csv';
 import type { CheckFinding, CriterionCheck, CriterionKind } from '../../shared/types';
 
 /** Past this, a file is not read for a check — the finding says so. */
@@ -209,11 +210,11 @@ export function checkLocator(root: string, a: Artefact, locator: unknown): Check
           out.push(pass(`${a.path} has ${range ? `${target.name}!${range}` : `a sheet "${target.name}"`}`, a.uid));
         }
       } else if (ext === 'csv') {
-        const rows = buf.toString('utf8').split(/\r?\n/).filter((l, i, all) => l !== '' || i < all.length - 1);
-        const cols = Math.max(0, ...rows.map((l) => l.split(',').length));
+        // The viewer's parser: a quoted comma is one cell, not two.
+        const { rows, cols } = csvShape(parseCsv(buf.toString('utf8')));
         const r = range ? parseRange(range) : null;
-        if (r && (r.to.row > rows.length || r.to.col > cols)) {
-          out.push(fail(`${range} is outside ${a.path}, which has ${rows.length} rows and ${cols} columns`, a.uid));
+        if (r && (r.to.row > rows || r.to.col > cols)) {
+          out.push(fail(`${range} is outside ${a.path}, which has ${rows} rows and ${cols} columns`, a.uid));
         } else {
           out.push(pass(`${a.path} has ${range ?? 'that sheet'}`, a.uid));
         }
