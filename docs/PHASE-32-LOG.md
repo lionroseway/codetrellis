@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | 0.3b Skipped tests (0.2 in PR #112, green, awaiting merge) |
-| **Status** | full-loop 4 unskipped (21/21, 3× stable); plan-export chokidar unskipped (stale skip, fixed in #73). Next: agent-loop, multi-agent, task-context (11 tests on removed V1 tools) |
-| **Next action** | Rewrite agent-loop, multi-agent and task-context onto V2 tools (`add_item`, `bulk_add_items`, `claim_item`, `update_item`, …), keeping each scenario's intent |
-| **Blockers** | none. When #112 merges: merge `feat/phase-32` into this branch and run `npm run inventory` |
-| **Branch** | `claude/wizardly-thompson-v52j45` → PR [#111](https://github.com/lionroseway/codetrellis/pull/111) into `feat/phase-32` (plan docs, CI trigger) |
+| **Status** | All 16 hidden-behaviour skips resolved: 15 unskipped or rewritten, and 3 V1 duplicates dropped after verifying their coverage in plan-items. Bug 13 fixed. Full harness running |
+| **Next action** | When the harness is green, open the 0.3b PR. After #112 merges, merge `feat/phase-32` in, run `npm run inventory`, and fill EXECUTION §0.3b's outcome column |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-0.3b-skipped-tests` (from `feat/phase-32` at `1c6dd3c`); 0.2 is `feat/phase-32-0.2-inventory` → #112 |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -126,6 +126,36 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
 ---
 
 ## Entries
+
+### 2026-09-26: 0.3b complete, pending harness
+- **full-loop (4):** deviation detection reads V2 Actions, so the same
+  work is now also seeded as Actions (`add_item` with `file_specs`) and
+  marked done via `update_item`. 4 unskipped plus a seeding step; 21/21
+  over 3 repeats. `next-task` now offers the V2 Action.
+- **plan-export chokidar (1):** a stale skip. #55 skipped it, and #73
+  fixed the race three days later (`scanProject` awaits the watcher's
+  `ready`). 10/10 alone and 10/10 with all cores saturated. Unskipped.
+- **agent-loop (2):** rewritten onto V2. The auto-progress scenario
+  exposed **bug 13**: `plan-progress-service` only advanced V1 tasks,
+  so V2 Actions never lit up on a file edit. Fixed. The test times out
+  without the fix and passes with it.
+- **multi-agent (2):** rewritten onto `claim_item`; 6/6 over 3 repeats.
+- **task-context (7):** its header claimed V2 coverage in
+  `plan-items.test.ts`. Checked each scenario: 3 were covered, 4 were not
+  (**bug 14**). The file now tests those four:
+  - the full `claim_item` context
+  - child context, url attachment and file-spec update
+  - export → import through `items/`
+  - REST ↔ MCP parity and validation
+
+  12/12 over 3 repeats. The import comes from the project's plans dir,
+  because imports are confined to opened projects (Phase 19).
+- Scripted-agent's V1 helpers, which called tools that no longer exist,
+  are replaced by `claimItem`, `updateItemStatus` and `getNextItem`.
+- Remaining harness skips are environment-conditional only:
+  build-artifacts, and the terminals tests' `ptyAvailable` guard.
+- On this branch (which predates 0.2): typecheck 0 errors, lint 0 errors
+  / 291 warnings, unit 962 tests / 959 pass / 3 skipped.
 
 ### 2026-09-26: 0.1 Baseline complete
 - The full harness is green on Node 26.10.0: 363 passed, 17 skipped,
