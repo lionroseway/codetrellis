@@ -256,6 +256,8 @@ Each gets its own regression test (from CURRENT-STATE):
 | 9 scan baseline lost on restart | 0.6 |
 | 10 spec body edits leave no event | B1 (event log) |
 | 11 cross-plan dependencies never resolve | B6 |
+| 13 auto-progress ignored V2 Actions | 0.3b (fixed) |
+| 14 skipped test's coverage claim was false | 0.3b (fixed) |
 
 Anything the sweep (0.4) finds is added to this table and to
 CURRENT-STATE.
