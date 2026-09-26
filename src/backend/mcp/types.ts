@@ -121,6 +121,10 @@ export interface ToolDeps {
   getBoundBackendPort: typeof import('../server').getBoundBackendPort;
   scanProject: typeof import('../server').scanProject;
   getActiveProjectPath: typeof import('../server').getActiveProjectPath;
+  /** Pin the graph's baseline to a commit (HEAD when none is named). */
+  pinBaseline: typeof import('../server').pinBaseline;
+  BaselineError: typeof import('../server').BaselineError;
+  clearBaseline: typeof import('../services/diff-engine').clearBaseline;
   buildSkillGuide: typeof import('./skill-guide').buildSkillGuide;
 
   /**

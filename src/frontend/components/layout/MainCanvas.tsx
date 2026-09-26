@@ -87,6 +87,9 @@ export function MainCanvas() {
   const setBaselineMode = useGraphStore((s) => s.setBaselineMode);
   const baselineCommitHash = useGraphStore((s) => s.baselineCommitHash);
   const baselineShortCommitHash = useGraphStore((s) => s.baselineShortCommitHash);
+  // The backend's own words for the baseline (§0.4h): "abc1234", or
+  // "abc1234 + uncommitted changes" for a tree that was not that commit.
+  const [baselineText, setBaselineText] = useState<string | null>(null);
   const setBaselineReference = useGraphStore((s) => s.setBaselineReference);
   const currentSnapshot = useGraphStore((s) => s.currentSnapshot);
   const setCurrentSnapshot = useGraphStore((s) => s.setCurrentSnapshot);
@@ -188,12 +191,23 @@ export function MainCanvas() {
             commitHash: snapshot.commitHash ?? null,
             shortCommitHash: snapshot.shortCommitHash ?? null,
           });
+          setBaselineText(typeof snapshot.label === 'string' ? snapshot.label : null);
           return;
         }
         setCurrentSnapshot(null);
+        setBaselineText(null);
       })
       .catch(() => setCurrentSnapshot(null));
   }, [setBaselineReference, setCurrentSnapshot]);
+
+  // An agent's set_baseline, or a capture from another window: read the
+  // baseline back rather than trusting a hash in the broadcast, which is
+  // how the label came to say one commit while the diff used another.
+  useEffect(() => {
+    const onChanged = () => fetchBaselineSnapshot();
+    window.addEventListener('baseline-changed', onChanged);
+    return () => window.removeEventListener('baseline-changed', onChanged);
+  }, [fetchBaselineSnapshot]);
 
   /**
    * Phase 29 §4.16 — capture a trellis checkpoint for the active plan.
@@ -265,6 +279,7 @@ export function MainCanvas() {
             commitHash: snapshot.commitHash ?? null,
             shortCommitHash: snapshot.shortCommitHash ?? null,
           });
+          setBaselineText(typeof snapshot.label === 'string' ? snapshot.label : null);
         }
       })
       .catch(() => {});
@@ -1142,8 +1157,14 @@ export function MainCanvas() {
               >
                 Auto-track
               </button>
-              <span className="rounded-md border border-white/8 bg-black/12 px-2 py-1 text-[10px] text-zinc-300">
-                {baselineMode === 'auto' ? 'HEAD' : baselineShortCommitHash ? baselineShortCommitHash : 'baseline'}
+              <span
+                className="rounded-md border border-white/8 bg-black/12 px-2 py-1 text-[10px] text-zinc-300"
+                data-testid="baseline-label"
+                title="What the diff compares against"
+              >
+                {baselineMode === 'auto'
+                  ? `HEAD${baselineText ? ` · ${baselineText}` : ''}`
+                  : baselineText ?? baselineShortCommitHash ?? 'baseline'}
               </span>
               <select
                 value={baselineMode === 'auto' ? '__AUTO__' : (baselineCommitHash || '__CURRENT__')}

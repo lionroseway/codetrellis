@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4g Agents and MCP |
-| **Status** | Harness clean at `36b3ff7` (499/1/0). Added budget-change flagging (owner's decision); re-running the harness |
-| **Next action** | Full harness on 0.4g; PR; merge when green; then 0.4h (drift, governance, review) |
+| **Stage / step** | 0.4h Drift, governance, review |
+| **Status** | Started. #124 (0.4g) merged; its full harness was 500 passed, 1 skipped, 0 retries |
+| **Next action** | Baseline done (bug 29). Next: the 9 untested tools (checkpoints, changes, deviations, comparands, reconcile, conflicts, history search) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4g-agents` |
+| **Branch** | `feat/phase-32-0.4h-drift` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -42,7 +42,7 @@
 - [x] 0.4d Criteria and sign-off (#121)
 - [x] 0.4e Brief and viewer (#122)
 - [x] 0.4f Channels and presence (#123)
-- [ ] 0.4g Agents and MCP
+- [x] 0.4g Agents and MCP (#124)
 - [ ] 0.4h Drift, governance, review
 - [ ] 0.4i Terminals and audio
 - [ ] 0.4j Mobile surface
@@ -142,6 +142,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4h — what the baseline is, and says it is (bug 29)
+
+Logged in 0.4b for decision here. The baseline is what the graph's diff
+compares against, and it was wrong three ways:
+- every scan re-pinned it to the working tree, so a rescan emptied the
+  diff, labelled with the HEAD hash even over uncommitted work;
+- "Pin current HEAD" pinned the working tree, not HEAD;
+- `set_baseline` only broadcast: the window changed its label and the diff
+  kept comparing against the old snapshot.
+
+Decided (reversible; told the owner):
+- A baseline records its source (`scan` / `commit` / `working-tree`), when
+  it was taken, and whether the tree was dirty. The label is the backend's
+  own: `abc1234`, or `abc1234 + uncommitted changes`, never a bare hash
+  for a tree that was not that commit.
+- A rescan of the same project keeps the baseline. Opening another
+  project, or a capture, sets a new one.
+- Pinning with no commit named pins HEAD's contents (via git), so
+  uncommitted work shows against it. A non-git project pins its tree.
+- `set_baseline` pins on the backend (`pinBaseline`, shared with the
+  capture route) and the window reads the baseline back; null clears it.
+  Only an agent's pin switches the window from auto-track to pinned.
+- A commit to capture is checked with `isSafeGitRef` before git sees it.
+
+`tests/e2e/baseline.test.ts` (6) fails on the old code at the first test.
+The 13 harness specs and 7 browser specs that touch the baseline, diff,
+compare or review pass unchanged.
+
 ### 2026-09-26: 0.4g — agents and MCP (bugs 27, 28)
 
 `tests/e2e/agent-ui-tools.test.ts` covers the 2 untested routes and the 20
@@ -192,6 +220,9 @@ refreshes on `plan-budget-changed` now; it loaded once on mount, so an
 agent's change never showed until the plan was reopened. New routes:
 `GET /api/plans/:uid/budget/changes`, `POST …/changes/:id/acknowledge`,
 both tested; `GET` and `PUT /budget` now 404 an unknown plan.
+
+Full harness at `36b3ff7`: 499/1/0, and at `3808be1` (with flagging):
+500 passed, 1 skipped, 0 retries. CI green; merged as #124.
 
 ### 2026-09-26: 0.4f — presence waits and the watcher flake (bugs 25, 26)
 

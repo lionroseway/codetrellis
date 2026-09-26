@@ -40,7 +40,7 @@ import { initCapabilityToken, getTokenFilePath } from './services/capability-tok
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
-import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
+import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel } from './services/diff-engine';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
 import { listWorktrees, listWorktreesWithPlans } from './services/worktree-service';
 import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
@@ -1040,7 +1040,23 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       hash,
       symbolCount: 0,
     }));
-    setBaseline(captureSnapshot(fileData, depEdges), getGitHeadCommit(projectPath) || undefined);
+    // The baseline is the reference the diff compares against, so a RESCAN
+    // of the same project keeps it: re-pinning emptied the diff, and was
+    // labelled with the HEAD hash even over uncommitted work (bug 29).
+    // Opening another project, or no baseline yet, sets one here.
+    const current = getBaseline();
+    if (!current || current.projectPath !== projectPath) {
+      const head = getGitHeadCommit(projectPath);
+      const status = getGitWorkingTreeStatus(projectPath);
+      setBaseline(captureSnapshot(fileData, depEdges), {
+        ...(head ?? {}),
+        source: head?.commitHash ? 'scan' : 'working-tree',
+        dirty: !!status && (status.staged.length + status.unstaged.length + status.untracked.length) > 0,
+        projectPath,
+      });
+    } else {
+      console.log('[Diff] Rescan of the same project: baseline kept');
+    }
 
     // Awaited: the scan response is the signal that CodeTrellis is
     // live on this project, and a caller (or an agent that was just
@@ -1631,96 +1647,96 @@ export function readFilesSnapshot(projectPath: string): Array<{ path: string; ha
   }));
 }
 
-// Baseline snapshot captured during scan
+/** The baseline as the window and agents read it: where it came from, and a label that says so. */
+function baselineView(b: NonNullable<ReturnType<typeof getBaseline>>) {
+  return {
+    id: 0,
+    name: 'Baseline',
+    commitHash: b.commitHash || null,
+    shortCommitHash: b.shortCommitHash || null,
+    source: b.source,
+    dirty: b.dirty,
+    capturedAt: b.capturedAt,
+    label: baselineLabel(b),
+    data: {
+      files: [...b.files.entries()].map(([filePath, info]) => ({
+        path: filePath,
+        contentHash: info.hash,
+        symbolCount: info.symbolCount,
+      })),
+      edges: [...b.edges].map((edge) => {
+        const [source, target] = edge.split('->');
+        return { source, target, specifiers: [] };
+      }),
+    },
+  };
+}
+
+export class BaselineError extends Error {}
+
+/**
+ * Pin the baseline to a commit's own contents — HEAD when no commit is
+ * named ("Pin current HEAD", which used to pin the working tree). A
+ * project that is not a git repo pins its working tree. Used by the
+ * capture route and by `set_baseline`, which used to change only the
+ * window's label (bug 29).
+ */
+export async function pinBaseline(projectPath: string, commitHash?: string | null) {
+  const head = getGitHeadCommit(projectPath);
+  const ref = commitHash || head?.commitHash || null;
+  if (ref) {
+    // Checked before git sees it: a value starting with "-" is an option.
+    if (!isSafeGitRef(ref)) throw new BaselineError(`"${String(ref).slice(0, 80)}" is not a commit`);
+    const commitSnapshot = await captureGitCommitSnapshot(projectPath, ref);
+    if (!commitSnapshot) throw new BaselineError(`No commit "${ref}" in this project`);
+    setBaseline(commitSnapshot.snapshot, {
+      commitHash: commitSnapshot.commitHash,
+      shortCommitHash: commitSnapshot.shortCommitHash,
+      source: 'commit',
+      dirty: false,
+      projectPath,
+    });
+  } else {
+    const fileTree = scanDirectory(projectPath);
+    const filePaths = collectFilePaths(fileTree);
+    const parsedFiles = await parseFiles(filePaths);
+    for (const parsed of parsedFiles) storeParsedFile(parsed, projectPath);
+    resolveImports(projectPath);
+    const snapshot = captureSnapshot(parsedFiles.map((f) => ({
+      path: path.relative(projectPath, f.path),
+      hash: f.contentHash,
+      symbolCount: f.symbols.length,
+    })), getDependencyEdges());
+    setBaseline(snapshot, { source: 'working-tree', dirty: false, projectPath });
+  }
+  return getBaseline()!;
+}
+
 app.get('/api/baseline', (_req, res) => {
   const baseline = getBaseline();
   if (!baseline) {
     res.status(404).json({ error: 'No baseline captured yet. Scan a project first.' });
     return;
   }
-
-  res.json({
-    id: 0,
-    name: 'Baseline',
-    commitHash: baseline.commitHash || null,
-    shortCommitHash: baseline.shortCommitHash || null,
-    data: {
-      files: [...baseline.files.entries()].map(([path, info]) => ({
-        path,
-        contentHash: info.hash,
-        symbolCount: info.symbolCount,
-      })),
-      edges: [...baseline.edges].map((edge) => {
-        const [source, target] = edge.split('->');
-        return { source, target, specifiers: [] };
-      }),
-    },
-  });
+  res.json(baselineView(baseline));
 });
 
 app.post('/api/baseline/capture', async (req, res) => {
   const { projectPath: rawProjectPath, commitHash } = req.body || {};
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
   if (!projectPath) return;
-  if (!projectPath || typeof projectPath !== 'string') {
-    res.status(400).json({ error: 'projectPath is required' });
-    return;
-  }
-
-  if (commitHash && typeof commitHash !== 'string') {
+  if (commitHash !== undefined && commitHash !== null && typeof commitHash !== 'string') {
     res.status(400).json({ error: 'commitHash must be a string when provided' });
     return;
   }
-
-  if (commitHash) {
-    const commitSnapshot = await captureGitCommitSnapshot(projectPath, commitHash);
-    if (!commitSnapshot) {
-      res.status(400).json({ error: 'Unable to capture baseline for the selected commit' });
-      return;
-    }
-    setBaseline(commitSnapshot.snapshot, {
-      commitHash: commitSnapshot.commitHash,
-      shortCommitHash: commitSnapshot.shortCommitHash,
-    });
-  } else {
-    const fileTree = scanDirectory(projectPath);
-    const filePaths = collectFilePaths(fileTree);
-    const parsedFiles = await parseFiles(filePaths);
-
-    for (const parsed of parsedFiles) {
-      storeParsedFile(parsed, projectPath);
-    }
-    resolveImports(projectPath);
-
-    const depEdges = getDependencyEdges();
-    const fileData = parsedFiles.map((f) => ({
-      path: path.relative(projectPath, f.path),
-      hash: f.contentHash,
-      symbolCount: f.symbols.length,
-    }));
-    const snapshot = captureSnapshot(fileData, depEdges);
-    const head = getGitHeadCommit(projectPath);
-    setBaseline(snapshot, head || undefined);
+  try {
+    const baseline = await pinBaseline(projectPath, commitHash || null);
+    broadcast('ui-set-baseline', { commitHash: baseline.commitHash ?? null });
+    res.json(baselineView(baseline));
+  } catch (err) {
+    if (err instanceof BaselineError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
   }
-
-  const baseline = getBaseline();
-  res.json({
-    id: 0,
-    name: 'Baseline',
-    commitHash: baseline?.commitHash || null,
-    shortCommitHash: baseline?.shortCommitHash || null,
-    data: {
-      files: [...(baseline?.files.entries() || [])].map(([filePath, info]) => ({
-        path: filePath,
-        contentHash: info.hash,
-        symbolCount: info.symbolCount,
-      })),
-      edges: [...(baseline?.edges || [])].map((edge) => {
-        const [source, target] = edge.split('->');
-        return { source, target, specifiers: [] };
-      }),
-    },
-  });
 });
 
 // --- Plan API ---
@@ -4904,6 +4920,8 @@ function getRecentGitCommits(projectPath: string, limit = 20): GitCommitSummary[
 }
 
 async function captureGitCommitSnapshot(projectPath: string, commitHash: string): Promise<GitCommitSnapshotResult | null> {
+  // Never hand git something it would read as an option (git-safety).
+  if (!isSafeGitRef(commitHash)) return null;
   try {
     const commitMeta = execFileSync(
       'git',

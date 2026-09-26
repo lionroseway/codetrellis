@@ -228,18 +228,40 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'set_baseline',
     {
       description:
-        'Set the baseline commit hash for diff mode. The graph\'s "diff" and "baseline" modes compare ' +
-        'the current state against this reference point. Pass null to clear.',
+        'Pin the baseline the graph\'s "diff" and "baseline" modes compare against to a commit\'s own contents ' +
+        '(full or short hash, or a ref such as a branch name), in the open project. Uncommitted work then shows ' +
+        'as changes against it. Pass null to clear the baseline; the next scan sets one again.',
       inputSchema: {
-        commit_hash: z.string().nullable().describe('Full or short git commit hash to use as the baseline. Null to clear.'),
+        commit_hash: z.string().nullable().describe('Commit hash or ref to pin to. Null to clear.'),
       },
     },
     async ({ commit_hash }) => {
-      deps.broadcast('ui-set-baseline', { commitHash: commit_hash });
-      const msg = commit_hash
-        ? `Set baseline to commit ${commit_hash}`
-        : 'Cleared baseline reference';
-      return { content: [{ type: 'text' as const, text: msg }] };
+      // It used to broadcast only, so the window changed its label and the
+      // diff kept comparing against the old snapshot (bug 29).
+      if (commit_hash === null) {
+        deps.clearBaseline();
+        deps.broadcast('ui-set-baseline', { commitHash: null, by: 'agent' });
+        return { content: [{ type: 'text' as const, text: 'Cleared the baseline. The next scan sets one again.' }] };
+      }
+      const projectPath = deps.getActiveProjectPath();
+      if (!projectPath) {
+        return { content: [{ type: 'text' as const, text: 'No project is open to pin a baseline in.' }], isError: true };
+      }
+      try {
+        const baseline = await deps.pinBaseline(projectPath, commit_hash);
+        const n = deps.broadcast('ui-set-baseline', { commitHash: baseline.commitHash ?? null, by: 'agent' });
+        return resultWithMeta({
+          ok: true,
+          commitHash: baseline.commitHash,
+          shortCommitHash: baseline.shortCommitHash,
+          files: baseline.files.size,
+        }, n);
+      } catch (err) {
+        if (err instanceof deps.BaselineError) {
+          return { content: [{ type: 'text' as const, text: err.message }], isError: true };
+        }
+        throw err;
+      }
     },
   );
 
