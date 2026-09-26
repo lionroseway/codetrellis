@@ -307,5 +307,59 @@
   },
   "rest:POST /api/items/:uid/claim": {
     "behaviour": "✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop)"
+  },
+  "mcp:add_external_ref": {
+    "behaviour": "✓ 0.4c-2: GitHub issue URL recognised (item-surface)"
+  },
+  "mcp:list_external_refs": {
+    "behaviour": "✓ 0.4c-2: (item-surface)"
+  },
+  "mcp:remove_external_ref": {
+    "behaviour": "✓ 0.4c-2: (item-surface)"
+  },
+  "mcp:delete_item_attachment": {
+    "behaviour": "✓ 0.4c-2: (item-surface)"
+  },
+  "mcp:delete_item_comment": {
+    "behaviour": "✓ 0.4c-2: (item-surface)"
+  },
+  "mcp:get_plan_summary": {
+    "behaviour": "✓ 0.4c-2: counts by kind, byStatus, completion (item-surface)"
+  },
+  "mcp:list_item_versions": {
+    "behaviour": "✓ 0.4c-2: newest first, incl. the restore (item-surface)"
+  },
+  "mcp:suggest_specs": {
+    "behaviour": "✓ 0.4c-2: file specs under a scope (item-surface)"
+  },
+  "mcp:move_item": {
+    "behaviour": "✓ 0.4c-2: refuses cycles and foreign/missing parents (item-surface; bug 23)"
+  },
+  "rest:DELETE /api/attachments/:uid": {
+    "behaviour": "✓ 0.4c-2: removes; unknown 404 (item-surface)"
+  },
+  "rest:DELETE /api/comments/:uid": {
+    "behaviour": "✓ 0.4c-2: removes a reply from the thread (item-surface)"
+  },
+  "rest:GET /api/comments": {
+    "behaviour": "✓ 0.4c-2: threaded with replies (item-surface)"
+  },
+  "rest:POST /api/comments": {
+    "behaviour": "✓ 0.4c-2: top-level and reply; missing body 400 (item-surface)"
+  },
+  "rest:GET /api/items/:uid/events": {
+    "behaviour": "✓ 0.4c-2: rename recorded before/after (item-surface)"
+  },
+  "rest:GET /api/items/:uid/versions": {
+    "behaviour": "✓ 0.4c-2: each edit a version (item-surface)"
+  },
+  "rest:POST /api/items/:uid/move": {
+    "behaviour": "✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23)"
+  },
+  "rest:POST /api/items/:uid/restore-version/:version": {
+    "behaviour": "✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface)"
+  },
+  "rest:PUT /api/items/:uid": {
+    "behaviour": "✓ 0.4c-2: parentUid validated like move (item-surface; bug 23)"
   }
 }

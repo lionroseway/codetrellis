@@ -140,6 +140,22 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4c-2 — items could be moved out of the tree (bug 23)
+- **`tests/e2e/item-surface.test.ts` (8):** versions, events and restore;
+  move; comments (REST and MCP, threaded); attachments; external refs;
+  plan summary; suggest_specs.
+- **Bug 23:** no parent validation anywhere. Moving an item under its own
+  sub-item returned 200 and both disappeared from the tree; so did
+  self-parenting, a parent in another plan, or a missing parent. Fixed
+  with `assertValidParent` in the item service (create, update, move):
+  REST 400 through the global error handler (and the create route's own
+  catch), MCP an error result, the phone an RPC error. The test fails
+  without the fix (200 where 400 is expected). Plan import is unaffected:
+  it creates parents before children from the directory tree.
+- The item artefact routes move to domain e (Brief materials).
+- `untested.json`: 8 tools and 8 routes removed (now 37 routes, 37 tools,
+  47 RPC).
+
 ### 2026-09-26: 0.4c-2 — the V1 task API is retired
 - **Removed:** 14 REST routes (`/api/plans/:uid/tasks*`, `/api/tasks/*`),
   and from `plan-store` the 24 functions and 5 state fields nothing read

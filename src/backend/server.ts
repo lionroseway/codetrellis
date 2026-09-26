@@ -2125,7 +2125,8 @@ app.post('/api/plans/:planUid/items', (req, res) => {
     saveNow(() => exportDatabase());
     res.json(item);
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    const status = err instanceof planItemService.PlanItemStructureError ? 400 : 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -4516,6 +4517,12 @@ app.get('/api/sensors/doc-check', (req, res) => {
 // Catches synchronous throws in route handlers that slip past local
 // try/catch blocks.  Without this, unhandled errors crash the process.
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // A tree change the item tree cannot hold (see assertValidParent) is the
+  // caller's mistake, not the server's.
+  if (err instanceof planItemService.PlanItemStructureError) {
+    if (!res.headersSent) res.status(400).json({ error: err.message });
+    return;
+  }
   console.error('[Backend] Unhandled route error:', err);
   if (!res.headersSent) {
     res.status(500).json({ error: 'Internal server error' });

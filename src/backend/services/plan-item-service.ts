@@ -284,6 +284,7 @@ export function listItemSummaries(planUid: string): PlanItemSummary[] {
 export function createItem(input: CreatePlanItemInput): PlanItem {
   const db = getDb();
   const uid = input.uid ?? randomUUID();
+  assertValidParent(input.planUid, null, input.parentUid);
   const now = Date.now();
   const createdAt = input.createdAt ?? now;
   const updatedAt = input.updatedAt ?? now;
@@ -394,10 +395,42 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
 // Update
 // =============================================================================
 
+/**
+ * A structural change the tree cannot hold. Callers turn it into a 400.
+ */
+export class PlanItemStructureError extends Error {}
+
+/**
+ * May `itemUid` (null for a new item) sit under `parentUid`?
+ *
+ * Nothing checked this. A move or update could make an item its own parent,
+ * put it under one of its own descendants, point it at an item in another
+ * plan, or at a uid that does not exist — and in every case the item (and
+ * everything under it) silently disappeared from the tree, which is built
+ * down from the plan root (Phase 32 §0.4c-2, bug 23).
+ */
+export function assertValidParent(planUid: string, itemUid: string | null, parentUid: string | null | undefined): void {
+  if (parentUid == null) return;
+  if (itemUid !== null && parentUid === itemUid) throw new PlanItemStructureError('An item cannot be its own parent');
+  const parent = getItem(parentUid);
+  if (!parent) throw new PlanItemStructureError(`No item ${parentUid} to put it under`);
+  if (parent.planUid !== planUid) throw new PlanItemStructureError('The new parent belongs to a different plan');
+  if (itemUid === null) return;
+  const seen = new Set<string>([parent.uid]);
+  for (let cursor = parent.parentUid; cursor; cursor = getItem(cursor)?.parentUid ?? null) {
+    if (cursor === itemUid) throw new PlanItemStructureError('That would put the item under one of its own sub-items');
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
+  }
+}
+
 export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
   const db = getDb();
   const before = getItem(uid);
   if (!before) return null;
+  if (updates.parentUid !== undefined && updates.parentUid !== before.parentUid) {
+    assertValidParent(before.planUid, uid, updates.parentUid);
+  }
 
   const now = Date.now();
   const sets: string[] = ['updated_at = ?'];
@@ -653,6 +686,9 @@ export interface MoveItemInput {
 export function moveItem(uid: string, input: MoveItemInput): PlanItem | null {
   const before = getItem(uid);
   if (!before) return null;
+  if (input.newParentUid !== undefined && input.newParentUid !== before.parentUid) {
+    assertValidParent(before.planUid, uid, input.newParentUid);
+  }
   const now = Date.now();
   const db = getDb();
 
