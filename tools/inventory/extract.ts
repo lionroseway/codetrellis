@@ -125,6 +125,10 @@ const REST_DOMAINS: Record<string, DomainKey> = {
 };
 
 export function domainForRoute(path: string): DomainKey | null {
+  // Nested under /api/plans/:uid by URL, but they are what 0.4d and 0.4g
+  // cover: the sign-off pack and worklist, and the agent budget.
+  if (/\/(signoff-pack|worklist)\b/.test(path)) return 'd';
+  if (/\/budget\//.test(path)) return 'g';
   const seg = path.startsWith('/api/') ? path.split('/')[2] : path.split('/')[1];
   return REST_DOMAINS[seg] ?? null;
 }

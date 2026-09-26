@@ -96,8 +96,11 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
   const plan = planService.getPlan(planUid);
   if (!plan) throw new Error(`Plan ${planUid} not found`);
 
-  const slug = makePlanSlug(plan);
-  const planDir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  // An existing directory keeps its name when the plan is renamed; writing
+  // to a fresh title-slug beside it would leave two directories carrying
+  // the same plan uid.
+  const planDir = getLinkedPlanDir(planUid, projectRoot)
+    ?? path.join(projectRoot, '.codetrellis', 'plans', makePlanSlug(plan));
   ensureDir(planDir);
 
   // Detect V2 items — if any exist, use V2 export path.
@@ -692,9 +695,33 @@ export function discoverPlanDirs(projectRoot: string): string[] {
 export function getLinkedPlanDir(planUid: string, projectRoot: string): string | null {
   const plan = planService.getPlan(planUid);
   if (!plan) return null;
-  const slug = makePlanSlug(plan);
-  const dir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  const dir = path.join(plansRoot, makePlanSlug(plan));
   if (fs.existsSync(path.join(dir, 'plan.yaml'))) return dir;
+
+  // Renamed since it was exported. The slug is title + uid prefix, and the
+  // directory keeps the name it was created under — so looking it up by
+  // the CURRENT title found nothing. That silently ended write-through for
+  // the rest of the plan's life (the repo copy froze at the old title) and
+  // made delete / unlink leave the directory behind, to be re-imported on
+  // the next pull (Phase 32 §0.4c, bug 22). Match on the uid prefix, and
+  // confirm by the uid inside plan.yaml. Dirents do not follow symlinks,
+  // and plan.yaml is read through the confined helper.
+  const suffix = `-${plan.uid.split('-')[0]}`;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(plansRoot, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.endsWith(suffix)) continue;
+    const candidate = path.join(plansRoot, entry.name);
+    try {
+      const raw = parseYaml(readTextWithin(candidate, 'plan.yaml', 'plan file')) as { uid?: unknown } | null;
+      if (raw?.uid === plan.uid) return candidate;
+    } catch { /* unreadable or not a plan: not this one */ }
+  }
   return null;
 }
 

@@ -14,7 +14,7 @@ import path from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { stampSelfWrite } from './self-write-tracker';
 import { getPlan } from './plan-service';
-import { makePlanSlug } from './plan-file-service';
+import { getLinkedPlanDir, makePlanSlug } from './plan-file-service';
 import {
   postChannelEvent,
   eventToManifest,
@@ -30,6 +30,12 @@ const CHANNELS_DIR_NAME = 'channels';
  * `<projectRoot>/.codetrellis/plans/<slug>/channels/`
  */
 export function channelsDirFor(planUid: string, projectRoot: string): string {
+  // The plan's existing directory, which keeps its name when the plan is
+  // renamed; the title-slug only for a plan not yet on disk. Building it
+  // from the current title put a renamed plan's events in a new directory
+  // with no plan.yaml beside the real one (Phase 32 §0.4c, bug 22).
+  const linked = getLinkedPlanDir(planUid, projectRoot);
+  if (linked) return path.join(linked, CHANNELS_DIR_NAME);
   const plan = getPlan(planUid);
   const slug = plan ? makePlanSlug(plan) : planUid;
   return path.join(projectRoot, '.codetrellis', 'plans', slug, CHANNELS_DIR_NAME);

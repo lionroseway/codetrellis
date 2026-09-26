@@ -15,7 +15,7 @@ is proof of a gap.
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
 | REST routes | 227 | 213 | 69 | 69 | 36 | 0 |
-| MCP tools | 186 | 148 | 67 | 55 | 27 | 0 |
+| MCP tools | 186 | 148 | 57 | 45 | 27 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 98 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -27,11 +27,11 @@ is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 17 | 15 | 8 | 10 | 0 | 0 |
-| 0.4c Plans and items | 109 | 52 | 20 | 54 | 0 | 0 |
-| 0.4d Criteria and sign-off | 5 | 7 | 3 | 0 | 0 | 0 |
+| 0.4c Plans and items | 104 | 52 | 20 | 54 | 0 | 0 |
+| 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 3 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 7 | 26 | 0 | 20 | 0 | 0 |
+| 0.4g Agents and MCP | 8 | 26 | 0 | 20 | 0 | 0 |
 | 0.4h Drift, governance, review | 8 | 24 | 6 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 69 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 70 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -114,11 +114,10 @@ is proof of a gap.
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans` |  | ✗ none | 37 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 11 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 12 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 10 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/budget/check` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
@@ -134,11 +133,8 @@ is proof of a gap.
 | c | `GET /api/plans/:uid/projection` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/:uid/refs` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/review` |  | ✗ none | 5 |  |  |  |
-| c | `GET /api/plans/:uid/signoff-pack` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/plans/:uid/signoff-pack.html` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/plans/:uid/versions` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans/:uid/worklist` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/plans/:uid/versions` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/discover` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/reconcile` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/stitched` |  | ✗ none | 2 |  |  |  |
@@ -164,7 +160,7 @@ is proof of a gap.
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans` |  | ✗ none | 37 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 11 |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 12 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 4 |  |  |  |
@@ -172,7 +168,6 @@ is proof of a gap.
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/:uid/tasks/:taskUid/claim` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/tasks/:taskUid/code-reference` |  | ✗ none | ✗ none |  |  |  |
@@ -196,8 +191,12 @@ is proof of a gap.
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 |  |  |  |
+| d | `GET /api/plans/:uid/signoff-pack` |  | ✗ none | ✗ none |  |  |  |
+| d | `GET /api/plans/:uid/signoff-pack.html` |  | ✗ none | ✗ none |  |  |  |
+| d | `GET /api/plans/:uid/worklist` |  | ✗ none | ✗ none |  |  |  |
 | d | `POST /api/criteria/:uid/check` |  | ✗ none | ✗ none |  |  |  |
 | d | `POST /api/criteria/:uid/decide` |  | ✗ none | 3 |  |  |  |
+| d | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | ✗ none |  |  |  |
 | d | `PUT /api/criteria/:uid` |  | ✗ none | 1 |  |  |  |
 | e | `GET /api/artefacts/:uid` |  | ✗ none | ✗ none |  |  |  |
 | e | `GET /api/artefacts/:uid/content` |  | ✗ none | ✗ none |  |  |  |
@@ -212,6 +211,7 @@ is proof of a gap.
 | g | `GET /api/mcp/config` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/setup` |  | ✗ none | 2 |  |  |  |
 | g | `GET /api/mcp/status` |  | ✗ none | 1 |  |  |  |
+| g | `GET /api/plans/:uid/budget/check` |  | ✗ none | ✗ none |  |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | ✗ none |  |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 3 |  |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 2 |  |  |  |
@@ -310,25 +310,25 @@ is proof of a gap.
 | b | `ui_ready` | graph · read | ✗ none | 1 | ✓ 0.4b: renderer answer passed through; no window = ready:false within 5 s; real window (graph-tools, e2e mcp-view-tools) |  |  |
 | c | `accept_contributions` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `add_external_ref` | plan-item · write | ✗ none | ✗ none |  |  |  |
-| c | `add_item` | plan-item · write | 3 | 13 |  |  |  |
+| c | `add_item` | plan-item · write | 3 | 14 |  |  |  |
 | c | `add_item_attachment` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `add_item_comment` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `add_plan_scope` | plan · write | ✗ none | 3 |  |  |  |
 | c | `bulk_add_items` | plan-item · write | 1 | ✗ none |  |  |  |
-| c | `bulk_delete_plans` | plan · write | ✗ none | ✗ none |  |  |  |
+| c | `bulk_delete_plans` | plan · write | ✗ none | 1 |  |  |  |
 | c | `claim_item` | plan-item · write | 1 | 4 |  |  |  |
-| c | `copy_plan_as_prompt` | plan · read | ✗ none | ✗ none |  |  |  |
-| c | `create_plan` | plan · write | 1 | 14 |  |  |  |
-| c | `create_plan_from_template` | plan · write | ✗ none | ✗ none |  |  |  |
+| c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 |  |  |  |
+| c | `create_plan` | plan · write | 1 | 15 |  |  |  |
+| c | `create_plan_from_template` | plan · write | ✗ none | 1 |  |  |  |
 | c | `delete_item` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `delete_item_attachment` | plan-item · write | ✗ none | ✗ none |  |  |  |
 | c | `delete_item_comment` | plan-item · write | ✗ none | ✗ none |  |  |  |
-| c | `delete_plan` | plan · write | ✗ none | ✗ none |  |  |  |
-| c | `discover_plan_files` | plan · files | ✗ none | ✗ none |  |  |  |
+| c | `delete_plan` | plan · write | ✗ none | 1 |  |  |  |
+| c | `discover_plan_files` | plan · files | ✗ none | 1 |  |  |  |
 | c | `export_plan_to_files` | plan · files | ✗ none | 3 |  |  |  |
 | c | `get_item` | plan-item · read | 1 | 4 |  |  |  |
 | c | `get_next_item` | plan-item · read | ✗ none | 2 |  |  |  |
-| c | `get_plan` | plan · read | 2 | 1 |  |  |  |
+| c | `get_plan` | plan · read | 2 | 2 |  |  |  |
 | c | `get_plan_summary` | plan-item · read | ✗ none | ✗ none |  |  |  |
 | c | `get_plan_timeline` | plan-item · read | ✗ none | 1 |  |  |  |
 | c | `import_external` | plan · write | 1 | ✗ none |  |  |  |
@@ -339,13 +339,13 @@ is proof of a gap.
 | c | `list_item_versions` | plan-item · read | ✗ none | ✗ none |  |  |  |
 | c | `list_items` | plan-item · read | ✗ none | 3 |  |  |  |
 | c | `list_plan_pointers` | plan · read | ✗ none | 1 |  |  |  |
-| c | `list_plan_templates` | plan · read | ✗ none | ✗ none |  |  |  |
-| c | `list_plans` | plan · read | 2 | 1 |  |  |  |
+| c | `list_plan_templates` | plan · read | ✗ none | 1 |  |  |  |
+| c | `list_plans` | plan · read | 2 | 2 |  |  |  |
 | c | `list_plans_by_repo` | plan · read | ✗ none | 1 |  |  |  |
 | c | `move_item` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `promote_to_contribution` | contribution · write | ✗ none | 1 |  |  |  |
-| c | `publish_plan_as_template` | plan · write | ✗ none | ✗ none |  |  |  |
+| c | `publish_plan_as_template` | plan · write | ✗ none | 1 |  |  |  |
 | c | `read_item_full` | plan-item · read | ✗ none | 2 |  |  |  |
 | c | `remove_external_ref` | plan-item · write | ✗ none | ✗ none |  |  |  |
 | c | `remove_plan_scope` | plan · write | ✗ none | 1 |  |  |  |
@@ -354,12 +354,12 @@ is proof of a gap.
 | c | `restore_item_version` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `search_items` | plan-item · read | 1 | ✗ none |  |  |  |
 | c | `set_item_blocked` | plan-item · write | ✗ none | 1 |  |  |  |
-| c | `set_plan_home_repo` | plan · write | ✗ none | ✗ none |  |  |  |
+| c | `set_plan_home_repo` | plan · write | ✗ none | 1 |  |  |  |
 | c | `suggest_specs` | plan-item · read | ✗ none | ✗ none |  |  |  |
-| c | `unlink_plan_from_files` | plan · write | ✗ none | ✗ none |  |  |  |
+| c | `unlink_plan_from_files` | plan · write | ✗ none | 1 |  |  |  |
 | c | `update_item` | plan-item · write | 1 | 9 |  |  |  |
 | c | `update_item_progress` | plan-item · write | ✗ none | 2 |  |  |  |
-| c | `update_plan` | plan · write | ✗ none | ✗ none |  |  |  |
+| c | `update_plan` | plan · write | ✗ none | 1 |  |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 1 |  |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 |  |  |  |
 | d | `check_criterion` | plan-item · read | ✗ none | 1 |  |  |  |
@@ -377,7 +377,7 @@ is proof of a gap.
 | f | `dismiss_presence` | presence · write | ✗ none | ✗ none |  |  |  |
 | f | `get_channel_thread` | channel · read | ✗ none | 1 |  |  |  |
 | f | `list_channel_events` | channel · read | ✗ none | 3 |  |  |  |
-| f | `post_channel_event` | channel · write | 1 | 4 |  |  |  |
+| f | `post_channel_event` | channel · write | 1 | 5 |  |  |  |
 | f | `present` | presence · write | ✗ none | 1 |  |  |  |
 | f | `resolve_channel_event` | channel · write | ✗ none | 2 |  |  |  |
 | g | `check_budget` | budget · read | ✗ none | ✗ none |  |  |  |

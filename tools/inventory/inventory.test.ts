@@ -80,6 +80,10 @@ describe('domains', () => {
     assert.equal(domainForRoute('/api/plans/:uid'), 'c');
     assert.equal(domainForRoute('/api/criteria/:uid/decide'), 'd');
     assert.equal(domainForRoute('/api/no-such-area'), null);
+    // Nested under a plan by URL, owned by another domain.
+    assert.equal(domainForRoute('/api/plans/:uid/signoff-pack.html'), 'd');
+    assert.equal(domainForRoute('/api/plans/:uid/worklist'), 'd');
+    assert.equal(domainForRoute('/api/plans/:uid/budget/check'), 'g');
   });
 
   test('tools: name overrides beat the registering file', () => {

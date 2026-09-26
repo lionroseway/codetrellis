@@ -134,6 +134,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4c-1 — renaming a plan disconnected it from the repo (bug 22)
+- **`tests/e2e/plan-tools.test.ts` (10):** the ten plan tools with no
+  test: update, delete, bulk delete, copy as prompt, list / create-from /
+  publish templates, discover, unlink, home repo.
+- **Bug 22:** the plan directory is `<title-slug>-<uid prefix>`, looked
+  up by the current title. After a rename, write-through silently
+  stopped for good, channel events went to a new directory with no
+  plan.yaml, and unlink / delete left the real directory behind (to be
+  re-imported on the next pull). Found by the probe:
+  `unlink_plan_from_files` said `removed: false` for a directory
+  `discover_plan_files` had just listed. Fixed by finding the linked
+  directory by uid prefix, confirmed by the uid in plan.yaml (through the
+  confined helper; dirents don't follow symlinks). The directory keeps
+  its name; titles live in plan.yaml, so no churn in the repo. The
+  write-through, unlink and delete tests fail without the fix.
+- **Raised with the owner, not in these docs:** a concern about the
+  reach of the plan-deletion tools (Phase 19 class; handled per the
+  CLAUDE.md rule).
+- 10 tools leave `untested.json`.
+
 ### 2026-09-26: 0.4c-1 — "Add to plan" wrote into V1 (bug 21)
 - **Which V1 task routes are still called?** The plan store's V1 task,
   phase and doc functions (`fetchTaskContext`, `addTaskComment`,
