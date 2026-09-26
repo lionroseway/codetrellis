@@ -1,10 +1,10 @@
 /**
- * Multi-agent contention tests — proves `claim_task` actually
+ * Multi-agent contention tests — proves `claim_item` actually
  * arbitrates between concurrent agents.
  *
- * Two scripted agents connect simultaneously, both call `claim_task`
- * on the same task. Exactly one should win. Whoever loses should
- * see a "already claimed" response — not an error, not a silent
+ * Two scripted agents connect simultaneously, both call `claim_item`
+ * on the same Action. Exactly one should win. Whoever loses should
+ * see an "already claimed" response — not an error, not a silent
  * success.
  *
  * History: these tests originally surfaced a real upstream bug
@@ -15,118 +15,94 @@
  * registration into `setupMcpServerInstance()` and building a
  * fresh server per SSE connection. Same process, same port — the
  * change is purely in-memory bookkeeping.
+ *
+ * Rewritten onto V2 (`add_item` / `claim_item`) for Phase 32 §0.3b; it
+ * was skipped because `claim_task` was removed in the V2 migration
+ * (docs/V2-MCP-MIGRATION.md §6). The scenarios are unchanged. Parallel
+ * agents contending for work is exactly the case Phase 32 is about.
  */
 
 import { test, expect } from '@playwright/test';
-import { setupHarness } from '../harness';
+import { setupHarness, type Harness } from '../harness';
 
-/*
- * ─────────────────────────────────────────────────────────────────────────
- * SKIPPED — this file tests MCP tools that NO LONGER EXIST.
- *
- * The V2 MCP migration REMOVED (not deprecated) all 19 V1 plan tools:
- * claim_task, add_subtask, update_task, update_task_progress,
- * set_task_blocked, add_task_comment, add_task_attachment, get_next_task,
- * add_plan_doc, add_plan_phase and the rest. `create_plan` also no longer
- * accepts inline tasks, so `getPlan(...).tasks` comes back empty and every
- * assertion here fails on an empty array rather than on its own logic.
- *
- * See docs/V2-MCP-MIGRATION.md §6 for the removal list.
- *
- * KEPT, NOT DELETED, because the SCENARIOS are still worth covering — the
- * V1 plumbing underneath them is what went away. Whoever reseeds these onto
- * the V2 surface (add_item / bulk_add_items / claim_item) gets the intent
- * for free instead of rediscovering it.
- *
- * Coverage status: the contention contract IS still enforced —
- * plan-items.test.ts:289 spawns two separate MCP sessions and asserts that
- * exactly one claim_item wins. That test passes. What is lost here is only
- * the V1 claim_task spelling of the same rule.
- *
- * To re-enable: rewrite against the V2 tools, then change
- * `test.describe.skip` back to `test.describe`.
- * ─────────────────────────────────────────────────────────────────────────
- */
-test.describe.skip('Multi-agent contention', () => {
+interface ClaimResult {
+  ok: boolean;
+  message?: string;
+  reason?: string;
+}
+
+async function seedAction(h: Harness, title: string): Promise<{ planUid: string; itemUid: string }> {
+  const plan = await h.client.createPlan({ title, projectPath: h.fixture.projectPath });
+  const seeder = await h.spawnAgent({ agentType: 'seeder' });
+  const added = await seeder.callTool('add_item', {
+    plan_uid: plan.uid,
+    kind: 'action',
+    title: 'Contended task',
+    file_specs: [{ path: 'packages/web/src/api.ts', action: 'modify' }],
+  });
+  expect(added.isError).not.toBe(true);
+  return { planUid: plan.uid, itemUid: (JSON.parse(added.text) as { uid: string }).uid };
+}
+
+test.describe('Multi-agent contention', () => {
   test.setTimeout(120_000);
 
-  test('two agents racing on claim_task — exactly one wins', async () => {
+  test('two agents racing on claim_item — exactly one wins', async () => {
     const h = await setupHarness('multi-agent-claim-race');
     try {
       await h.client.scanProject(h.fixture.projectPath);
-      const plan = await h.client.createPlan({
-        title: 'Race plan',
-        projectPath: h.fixture.projectPath,
-        tasks: [
-          {
-            description: 'Contended task',
-            affectedFiles: ['packages/web/src/api.ts'],
-          },
-        ],
-      });
-      const detail = await h.client.getPlan(plan.uid);
-      const taskUid = detail.tasks[0].uid;
+      const { itemUid } = await seedAction(h, 'Race plan');
 
       const [a, b] = await Promise.all([
         h.spawnAgent({ agentType: 'agent-a' }),
         h.spawnAgent({ agentType: 'agent-b' }),
       ]);
 
-      // Race the two claims concurrently. The tool's text response
-      // distinguishes a winning claim ("Task claimed.") from a
-      // refusal ("Task already claimed or not pending.").
-      const [resA, resB] = await Promise.all([
-        a.claimTask(plan.uid, taskUid),
-        b.claimTask(plan.uid, taskUid),
-      ]);
+      // Race the two claims concurrently. The result's `ok` says who won;
+      // the loser is refused politely ("already claimed"), not errored.
+      const [resA, resB] = await Promise.all([a.claimItem(itemUid), b.claimItem(itemUid)]);
+      expect(resA.isError).not.toBe(true);
+      expect(resB.isError).not.toBe(true);
+      const results = [resA, resB].map((r) => JSON.parse(r.text) as ClaimResult);
 
-      const isWin = (text: string) => /claimed/i.test(text) && !/already claimed/i.test(text);
-      const isLoss = (text: string) => /already claimed|not pending/i.test(text);
+      const wins = results.filter((r) => r.ok);
+      const losses = results.filter((r) => !r.ok);
+      expect(wins).toHaveLength(1);
+      expect(losses).toHaveLength(1);
+      expect(losses[0].reason).toMatch(/already claimed|not pending/i);
 
-      const wins = [resA, resB].filter((r) => isWin(r.text)).length;
-      const losses = [resA, resB].filter((r) => isLoss(r.text)).length;
-
-      expect(wins).toBe(1);
-      expect(losses).toBe(1);
-
-      // The plan's task should reflect the winning claim — its
-      // assignedAgent should be one of the two agents (we don't
-      // assert which; either is correct).
-      const fresh = await h.client.getPlan(plan.uid);
-      const t = fresh.tasks.find((t) => t.uid === taskUid);
-      expect(t).toBeDefined();
-      // Once claimed, status should be `assigned` or `in_progress`,
-      // never `pending` (which would indicate the claim was lost).
-      expect(['assigned', 'in_progress']).toContain(t!.status);
+      // The Action reflects the winning claim: assigned to one of the two
+      // agents, and never back at `pending` (which would mean the claim
+      // was lost).
+      const res = await h.client.raw('GET', `/api/items/${itemUid}`);
+      expect(res.ok).toBe(true);
+      const item = (await res.json()) as { status: string; assignee: string | null };
+      expect(['agent-a', 'agent-b']).toContain(item.assignee);
+      expect(['assigned', 'in_progress']).toContain(item.status);
     } finally {
       await h.teardown();
     }
   });
 
-  test('sequential claims on the same task — second is rejected', async () => {
+  test('sequential claims on the same Action — second is rejected', async () => {
     // Sanity check: even without concurrency, a second claim should
     // fail. Catches the case where contention arbitration only
     // works under concurrent load.
     const h = await setupHarness('multi-agent-sequential');
     try {
       await h.client.scanProject(h.fixture.projectPath);
-      const plan = await h.client.createPlan({
-        title: 'Sequential plan',
-        projectPath: h.fixture.projectPath,
-        tasks: [{ description: 'Task', affectedFiles: ['packages/web/src/api.ts'] }],
-      });
-      const detail = await h.client.getPlan(plan.uid);
-      const taskUid = detail.tasks[0].uid;
+      const { itemUid } = await seedAction(h, 'Sequential plan');
 
       const agent = await h.spawnAgent({ agentType: 'sequential-a' });
       const otherAgent = await h.spawnAgent({ agentType: 'sequential-b' });
 
-      const first = await agent.claimTask(plan.uid, taskUid);
-      expect(first.text).toMatch(/claimed/i);
-      expect(first.text).not.toMatch(/already claimed/i);
+      const first = JSON.parse((await agent.claimItem(itemUid)).text) as ClaimResult;
+      expect(first.ok).toBe(true);
+      expect(first.message).toMatch(/claimed/i);
 
-      const second = await otherAgent.claimTask(plan.uid, taskUid);
-      expect(second.text).toMatch(/already claimed|not pending/i);
+      const second = JSON.parse((await otherAgent.claimItem(itemUid)).text) as ClaimResult;
+      expect(second.ok).toBe(false);
+      expect(second.reason).toMatch(/already claimed|not pending/i);
     } finally {
       await h.teardown();
     }

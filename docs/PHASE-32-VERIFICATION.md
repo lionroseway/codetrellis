@@ -14,7 +14,7 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 226 | 212 | 75 | 75 | 0 | 0 |
+| REST routes | 226 | 212 | 71 | 71 | 0 | 0 |
 | MCP tools | 186 | 148 | 91 | 74 | 0 | 0 |
 | Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
 | Frontend components | 98 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 |  |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 2 |  |  |  |
 | a | `GET /api/stats` |  | ✗ none | 1 |  |  |  |
-| a | `POST /api/project/scan` |  | 2 | 61 |  |  |  |
+| a | `POST /api/project/scan` |  | 2 | 64 |  |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 1 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 |  |  |  |
@@ -87,22 +87,22 @@ is proof of a gap.
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 |  |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | ✗ none |  |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | ✗ none |  |  |  |
-| c | `DELETE /api/items/:uid` |  | ✗ none | 3 |  |  |  |
+| c | `DELETE /api/items/:uid` |  | ✗ none | 5 |  |  |  |
 | c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `DELETE /api/plans/:uid` |  | 1 | 9 |  |  |  |
+| c | `DELETE /api/plans/:uid` |  | 1 | 10 |  |  |  |
 | c | `DELETE /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/attachments/:uid/file` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/comments` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/contributions` |  | 1 | 3 |  |  |  |
 | c | `GET /api/items/:itemUid/refs` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/items/:uid` |  | ✗ none | 3 |  |  |  |
+| c | `GET /api/items/:uid` |  | ✗ none | 5 |  |  |  |
 | c | `GET /api/items/:uid/artefacts` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/items/:uid/attachments` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/items/:uid/comments` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
+| c | `GET /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/criteria` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/items/:uid/events` |  | ✗ none | ✗ none |  |  |  |
-| c | `GET /api/items/:uid/full` |  | ✗ none | ✗ none |  |  |  |
+| c | `GET /api/items/:uid/full` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/items/:uid/versions` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/pantry/resolve` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
@@ -112,11 +112,11 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 32 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 35 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 10 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid` |  | 1 | 9 |  |  |  |
+| c | `GET /api/plans/:uid` |  | 1 | 10 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/budget/check` |  | ✗ none | ✗ none |  |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 1 |  |  |  |
@@ -153,32 +153,32 @@ is proof of a gap.
 | c | `POST /api/contributor-branch` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/items/:itemUid/refs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/artefacts` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/items/:uid/attachments` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/items/:uid/blocked` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
+| c | `POST /api/items/:uid/blocked` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/claim` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/items/:uid/comments` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/items/:uid/criteria` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/items/:uid/progress` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/plans` |  | ✗ none | 32 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 35 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 10 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 4 |  |  |  |
-| c | `POST /api/plans/:uid/export` |  | ✗ none | 6 |  |  |  |
+| c | `POST /api/plans/:uid/export` |  | ✗ none | 7 |  |  |  |
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/reconcile` |  | ✗ none | ✗ none |  |  |  |
+| c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/:uid/tasks` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/:uid/tasks/:taskUid/claim` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/tasks/:taskUid/code-reference` |  | ✗ none | ✗ none |  |  |  |
-| c | `POST /api/plans/:uid/unlink` |  | ✗ none | 2 |  |  |  |
+| c | `POST /api/plans/:uid/unlink` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/bulk-delete` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/from-template` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/plans/import` |  | 1 | 1 |  |  |  |
+| c | `POST /api/plans/import` |  | 1 | 2 |  |  |  |
 | c | `POST /api/plans/import-external` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/tasks/:taskUid/attachments` |  | ✗ none | ✗ none |  |  |  |
@@ -186,10 +186,10 @@ is proof of a gap.
 | c | `POST /api/tasks/:taskUid/comments` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/tasks/:taskUid/progress` |  | ✗ none | ✗ none |  |  |  |
 | c | `POST /api/tasks/:taskUid/subtasks` |  | ✗ none | ✗ none |  |  |  |
-| c | `PUT /api/items/:uid` |  | ✗ none | 3 |  |  |  |
+| c | `PUT /api/items/:uid` |  | ✗ none | 5 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/plans/:uid` |  | 1 | 9 |  |  |  |
+| c | `PUT /api/plans/:uid` |  | 1 | 10 |  |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plans/:uid/tasks/:taskUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
@@ -299,15 +299,15 @@ is proof of a gap.
 | b | `ui_ready` | graph · read | ✗ none | ✗ none |  |  |  |
 | c | `accept_contributions` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `add_external_ref` | plan-item · write | ✗ none | ✗ none |  |  |  |
-| c | `add_item` | plan-item · write | 3 | 9 |  |  |  |
-| c | `add_item_attachment` | plan-item · write | ✗ none | 1 |  |  |  |
-| c | `add_item_comment` | plan-item · write | ✗ none | 1 |  |  |  |
+| c | `add_item` | plan-item · write | 3 | 13 |  |  |  |
+| c | `add_item_attachment` | plan-item · write | ✗ none | 2 |  |  |  |
+| c | `add_item_comment` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `add_plan_scope` | plan · write | ✗ none | 3 |  |  |  |
 | c | `bulk_add_items` | plan-item · write | 1 | ✗ none |  |  |  |
 | c | `bulk_delete_plans` | plan · write | ✗ none | ✗ none |  |  |  |
-| c | `claim_item` | plan-item · write | 1 | 1 |  |  |  |
+| c | `claim_item` | plan-item · write | 1 | 4 |  |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | ✗ none |  |  |  |
-| c | `create_plan` | plan · write | 1 | 17 |  |  |  |
+| c | `create_plan` | plan · write | 1 | 14 |  |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | ✗ none |  |  |  |
 | c | `delete_item` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `delete_item_attachment` | plan-item · write | ✗ none | ✗ none |  |  |  |
@@ -316,7 +316,7 @@ is proof of a gap.
 | c | `discover_plan_files` | plan · files | ✗ none | ✗ none |  |  |  |
 | c | `export_plan_to_files` | plan · files | ✗ none | 3 |  |  |  |
 | c | `get_item` | plan-item · read | 1 | 4 |  |  |  |
-| c | `get_next_item` | plan-item · read | ✗ none | 1 |  |  |  |
+| c | `get_next_item` | plan-item · read | ✗ none | 2 |  |  |  |
 | c | `get_plan` | plan · read | 2 | 1 |  |  |  |
 | c | `get_plan_summary` | plan-item · read | ✗ none | ✗ none |  |  |  |
 | c | `get_plan_timeline` | plan-item · read | ✗ none | 1 |  |  |  |
@@ -335,7 +335,7 @@ is proof of a gap.
 | c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `promote_to_contribution` | contribution · write | ✗ none | 1 |  |  |  |
 | c | `publish_plan_as_template` | plan · write | ✗ none | ✗ none |  |  |  |
-| c | `read_item_full` | plan-item · read | ✗ none | 1 |  |  |  |
+| c | `read_item_full` | plan-item · read | ✗ none | 2 |  |  |  |
 | c | `remove_external_ref` | plan-item · write | ✗ none | ✗ none |  |  |  |
 | c | `remove_plan_scope` | plan · write | ✗ none | 1 |  |  |  |
 | c | `resolve_pantry_references` | contribution · read | ✗ none | 1 |  |  |  |
@@ -346,8 +346,8 @@ is proof of a gap.
 | c | `set_plan_home_repo` | plan · write | ✗ none | ✗ none |  |  |  |
 | c | `suggest_specs` | plan-item · read | ✗ none | ✗ none |  |  |  |
 | c | `unlink_plan_from_files` | plan · write | ✗ none | ✗ none |  |  |  |
-| c | `update_item` | plan-item · write | 1 | 6 |  |  |  |
-| c | `update_item_progress` | plan-item · write | ✗ none | 1 |  |  |  |
+| c | `update_item` | plan-item · write | 1 | 9 |  |  |  |
+| c | `update_item_progress` | plan-item · write | ✗ none | 2 |  |  |  |
 | c | `update_plan` | plan · write | ✗ none | ✗ none |  |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 1 |  |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 |  |  |  |

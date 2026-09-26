@@ -3,8 +3,10 @@
  *
  * Surfaced via MCP resources `codetrellis://skill` (project-tailored
  * summary), `codetrellis://skill/quickstart` (first-time flow),
- * `codetrellis://skill/power-user` (deep usage), and
- * `codetrellis://skill/ui-nav` (UI navigator for sub-agents).
+ * `codetrellis://skill/power-user` (deep usage), `codetrellis://skill/ui-nav`
+ * (UI navigator for sub-agents), `codetrellis://skill/diagnostics` (when
+ * something looks wrong) and `codetrellis://skill/multi-agent` (terminals,
+ * claims and hand-offs).
  * Agents fetch these on connect so they don't need out-of-band briefing.
  *
  * Also returned by the `get_app_guide` MCP tool.
@@ -622,9 +624,9 @@ those transitions silently.
 |------|-------------|
 | \`list_comparands(project_path)\` | Every point you can compare from: live, baseline, checkpoints, recent commits |
 | \`compare_snapshots(project_path, before, after)\` | Diff any two of them — files added / removed / modified, and edges where both sides know them |
-| \`get_plan_history(plan_uid, project_path)\` | How a plan changed across commits |
-| \`get_plan_at_commit(plan_uid, project_path, commit)\` | A plan as it stood at one commit |
-| \`diff_plan_between_commits(plan_uid, project_path, base, head)\` | What changed in the plan between two commits |
+| \`get_plan_history(project_path, plan_slug)\` | How a plan changed across commits |
+| \`get_plan_at_commit(project_path, plan_slug, commit_hash)\` | A plan as it stood at one commit |
+| \`diff_plan_between_commits(project_path, plan_slug, base_commit, head_commit)\` | What changed in the plan between two commits |
 | \`search_plan_history(project_path, query)\` | Find a plan change by text |
 | \`get_team_activity(project_path)\` | Who changed which plans, from the manifest's git history |
 
@@ -1057,7 +1059,7 @@ plan time-travel rail; \`navigate_to('timeline')\` opens the plan activity feed.
 | \`rescan_project(project_path?)\` | Re-parse the codebase |
 | \`set_baseline(commit_hash)\` | Set the diff baseline commit |
 | \`list_recent_projects()\` | List available projects |
-| \`pin_project(path)\` / \`unpin_project(path)\` | Pin/unpin in recents |
+| \`pin_project(project_path)\` / \`unpin_project(project_path)\` | Pin/unpin in recents |
 
 ### Modals
 
@@ -1093,16 +1095,16 @@ plan time-travel rail; \`navigate_to('timeline')\` opens the plan activity feed.
 
 ### "Walk me through the plan"
 1. \`open_plan(plan_uid)\` — open the plan
-2. \`select_item(first_object_uid)\` — start with the first Object
+2. \`select_item(item_uid=<first Object's uid>)\` — start with the first Object
 3. Pause, let the human read
-4. \`select_item(first_action_uid)\` — move to the first Action
+4. \`select_item(item_uid=<first Action's uid>)\` — move to the first Action
 5. Continue stepping through items
 
 ### "Show the plan alongside the graph"
 1. \`navigate_to('split', plan_uid)\` — plan + graph side by side
 2. \`graph_set_mode('planned')\` — show what the plan targets
-3. \`graph_toggle_projection(true)\` — ensure projection is on
-4. \`select_item(action_uid)\` — clicking an item highlights its files in the graph
+3. \`graph_toggle_projection(enabled=true)\` — ensure projection is on
+4. \`select_item(item_uid=<an Action's uid>)\` — clicking an item highlights its files in the graph
 
 ### "What changed since the baseline?"
 1. \`set_baseline(commit_hash)\` — set the reference point
@@ -1173,7 +1175,7 @@ and using the drift / baseline tools.
   \`get_logs(50, 'error')\` to see what happened.
 - **"MCP tool isn't working"** — \`get_logs(30, 'tool_error')\` to
   see if the tool errored server-side.
-- **"Graph looks stale"** — \`rescan_project(path)\` to re-parse,
+- **"Graph looks stale"** — \`rescan_project(project_path)\` to re-parse,
   then \`refresh_ui()\` to force the frontend to re-fetch.
 
 ## Settings
@@ -1181,7 +1183,7 @@ and using the drift / baseline tools.
 | Tool | What it does |
 |------|-------------|
 | \`get_settings()\` | Returns the full settings JSON (identity, MCP port, plan defaults). |
-| \`update_settings(path, value)\` | Change a setting. Path is dot-notation: \`identity.displayName\`, \`mcp.port\`, \`plans.defaultVisibility\`, \`plans.attachmentLocation\`. |
+| \`update_settings(identity?, mcp?, plans?, data?, device?)\` | Change settings by section, e.g. \`update_settings(plans={ defaultVisibility: "local" })\`. |
 | \`setup_agent_permissions(project_path?)\` | Auto-approve all CodeTrellis MCP tools in Claude Code settings. |
 
 ## Baseline and drift
@@ -1192,11 +1194,11 @@ point to detect unplanned changes.
 | Tool | What it does |
 |------|-------------|
 | \`set_baseline(commit_hash)\` | Pin a git commit as the "before" snapshot for diff overlays. |
-| \`capture_checkpoint(plan_uid, label, project_path?)\` | Named snapshot — freeze the current codebase state for later comparison. |
+| \`capture_checkpoint(plan_uid, name, project_path?)\` | Named snapshot — freeze the current codebase state for later comparison. |
 | \`get_drift_report(plan_uid)\` | Compare declared file_specs / symbol_specs against what actually changed. Shows on-track, missing, and unexpected changes. |
 | \`detect_deviations(plan_uid)\` | Run the deviation detector — finds files that changed outside of any plan item's declared scope. |
 | \`get_deviations(plan_uid)\` | Fetch the list of detected deviations. |
-| \`reconcile(deviation_uid, action)\` | Resolve a deviation: "accept" (add to plan), "revert" (undo), "ignore" (mark as noise). |
+| \`reconcile(plan_uid, deviations)\` | Resolve deviations: \`deviations\` is \`[{ id, action }]\` with action "accepted" (add to plan), "reverted" (undo) or "ignored" (mark as noise). |
 
 ### Drift workflow
 
@@ -1210,8 +1212,8 @@ point to detect unplanned changes.
 
 | Tool | What it does |
 |------|-------------|
-| \`check_conformity(project_path?)\` | Check for circular dependencies and other architectural issues. |
-| \`check_architecture(from_path?, to_path?)\` | Query dependency edges between files. |
+| \`check_conformity(proposed_imports)\` | Check proposed imports (\`[{ from, importing }]\`) for a direct two-file cycle — the one rule today; there are no layer rules yet. |
+| \`check_architecture(query?)\` | List file-to-file import edges, optionally filtered by a path substring. |
 | \`list_cross_system_edges()\` | Find HTTP, SQL, subprocess, and env coupling between modules. |
 `;
 
@@ -1230,7 +1232,7 @@ the right tool for the job.
 
 | Tool | What it does |
 |------|-------------|
-| \`terminal_create(preset, cwd?, plan_uid?)\` | Create a new terminal. Presets: "claude" (Claude Code), "codex" (OpenAI Codex CLI), "aider" (Aider), "shell" (plain bash). |
+| \`terminal_create(preset, cwd?, title?, focus?)\` | Create a new terminal. Presets: "claude" (Claude Code), "codex" (OpenAI Codex CLI), "aider" (Aider), "shell" (plain bash). |
 | \`terminal_write(session_id, input, focus?)\` | Send keystrokes to a terminal. Supports \\\\n for newlines. Set focus=true (default) to also switch the UI to that tab. |
 | \`terminal_read(session_id, lines?)\` | Read the last N lines of output (ANSI-stripped). Default 50 lines. |
 | \`terminal_focus(session_id)\` | Switch the terminal panel to show a specific tab. |
@@ -1259,11 +1261,11 @@ The claim system prevents two agents from grabbing the same Action.
 
 | Tool | What it does |
 |------|-------------|
-| \`claim_item(item_uid)\` | Atomically claim an Action. Fails if already claimed by another agent. Returns the item with your name as assignee. |
-| \`get_next_item(plan_uid, filter?)\` | Get the next available Action. Respects dependencies (DAG ordering) and approval gates. Optional filter: \`kind\`, \`status\`, \`parent_uid\`. |
-| \`update_item_progress(item_uid, percent, note?)\` | Report progress (0-100) with an optional note. Other agents and the user can see this. |
-| \`set_item_blocked(item_uid, reason)\` | Mark an item as blocked with a reason. Surfaces in the plan tree as a red indicator. |
-| \`add_item_comment(item_uid, body, kind?)\` | Leave a comment. Kind: "note" (default), "blocker", "progress", "question". |
+| \`claim_item(uid)\` | Atomically claim an Action. Fails if already claimed by another agent. Returns the item with your name as assignee. |
+| \`get_next_item(plan_uid, parent_uid?)\` | Get the next available Action. Respects dependencies (DAG ordering) and approval gates. \`parent_uid\` scopes it to one branch of the tree. |
+| \`update_item_progress(uid, percent, message?)\` | Report progress (0-100) with an optional message. Other agents and the user can see this. |
+| \`set_item_blocked(uid, reason)\` | Mark an item as blocked with a reason. Surfaces in the plan tree as a red indicator. |
+| \`add_item_comment(uid, body, kind?)\` | Leave a comment. Kind: "note" (default), "blocker", "progress", "question". |
 
 ### Typical multi-agent flow
 
