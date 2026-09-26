@@ -242,7 +242,7 @@ One sub-step and one PR per domain. For each:
 | 0.4c | Plans and items | create, tree, move, versions, restore, dependencies, claim, next item, templates and playbooks, import/export and write-through |
 | 0.4d | Criteria and sign-off | criteria, evidence, checks, check runs, worklist, decide, sign-off pack |
 | 0.4e | Brief and viewer | get_brief, materials, read_material, viewer formats, rendition fallbacks |
-| 0.4f | Channels and presence | post, thread, resolve, routing rules, webhooks, presence pane, awaits |
+| 0.4f | Channels and presence | post, thread, resolve, routing rules, webhooks, presence pane, awaits; the watcher-import flake seen once in 0.4a (log 2026-09-26) |
 | 0.4g | Agents and MCP | connector, sessions, identity, capabilities, project scope, timeline turns, stuck sensor |
 | 0.4h | Drift, governance, review | deviations, freeze, baseline, review_plan, PR draft, compare snapshots |
 | 0.4i | Terminals and audio | create, write, read, presets, remote terminals, audio capture |

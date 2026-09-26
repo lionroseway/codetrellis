@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4a Project and scan |
-| **Status** | Fixes and tests committed; full harness running on `2ec3da5` |
-| **Next action** | Full harness run on the 0.4a branch, then open the 0.4a PR |
+| **Status** | Full harness on `2ec3da5`: 400 passed, 1 skipped, 1 flaky (cdev-channels, see entry) |
+| **Next action** | Open the 0.4a PR; after merge, 0.4b (graph) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4a-project-scan` |
 | **Last updated** | 2026-09-26 |
@@ -131,6 +131,24 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4a full harness — one flaky, not reproduced
+- **Result on `2ec3da5`:** 400 passed, 1 skipped (environment), 1 flaky.
+- **The flaky one:** `cdev-channels` step 6, "external channel event
+  imported by watcher", timed out at 10 s on the first attempt and
+  passed on retry. It ran at test 24/402, when I had started the unit
+  suite, lint and inventory alongside.
+- **Not ours by code path:** the chokidar channel import in
+  `plan-file-service.ts`; nothing in 0.4a touches it. The later
+  "committed" step, which uses the changed commit path, passed.
+- **Not reproduced:** 8 runs with 4 CPU burners and 10 runs with the
+  unit suite looping alongside all passed (one worker, as the harness
+  config). An earlier "repro" with `--workers=2` was my artefact: two
+  copies sharing one fixture dir.
+- **Open item for 0.4f** (channels owns this path). Candidate: chokidar
+  attaching to a just-created `<slug>/channels/` asynchronously, so a
+  file written in that window is missed. The watcher does await
+  `ready`, so it is not the plan-export race #73 fixed.
 
 ### 2026-09-26: 0.4a — project lifecycle verified; two more fixes
 - **`rescan_project` with no path scanned `process.cwd()`** — the
