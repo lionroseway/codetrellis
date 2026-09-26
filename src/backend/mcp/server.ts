@@ -150,14 +150,15 @@ const pendingResponses: PendingResponses = new Map();
   }
 };
 
-// Presence ack / reply resolver — same pattern as screenshot.
-(globalThis as any).__presenceResolve = (nonce: string, data: string) => {
+// Presence ack / reply resolver — same pattern as screenshot. Says whether
+// anyone was still waiting, so a reply nobody received is kept (bug 25).
+(globalThis as any).__presenceResolve = (nonce: string, data: string): boolean => {
   const pending = pendingResponses.get(nonce);
-  if (pending) {
-    clearTimeout(pending.timer);
-    pendingResponses.delete(nonce);
-    pending.resolve(data);
-  }
+  if (!pending) return false;
+  clearTimeout(pending.timer);
+  pendingResponses.delete(nonce);
+  pending.resolve(data);
+  return true;
 };
 
 /**

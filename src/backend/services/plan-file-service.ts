@@ -928,6 +928,8 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
 const watchersByProject = new Map<string, FSWatcher>();
 const watcherReady = new Map<string, Promise<void>>();
 const PLAN_WATCHER_READY_TIMEOUT_MS = 10_000;
+/** How long after a folder appears the watcher looks in it for files it was not told about (bug 26). */
+const NEW_FOLDER_SWEEP_MS = 500;
 
 export function startPlanFileWatcher(projectRoot: string): Promise<void> {
   if (watchersByProject.has(projectRoot)) {
@@ -964,12 +966,52 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     depth: 10, // V2 items/ tree can nest deeply
   });
 
-  watcher.on('all', (event, filePath) => {
+  // Files the watcher has handled, and when: the new-folder sweep below
+  // replays only what it did not get.
+  const handledAt = new Map<string, number>();
+
+  // Bug 26 (Phase 32 §0.4f). A file written into a folder chokidar has not
+  // yet attached to is never reported — a pull that brings a new
+  // `channels/` folder with its files lost one in about six in a probe,
+  // and the event did not appear until something else touched that plan.
+  // So when a folder appears inside the plans tree, look in it once things
+  // settle and hand over whatever was missed.
+  const sweepNewFolder = (dir: string, seenAt: number): void => {
+    setTimeout(() => {
+      if (watchersByProject.get(projectRoot) !== watcher) return; // closed meanwhile
+      const missed = new Map<string, string[]>(); // planDir → files
+      const walk = (d: string, depth: number): void => {
+        if (depth > 10) return;
+        let entries: fs.Dirent[];
+        try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+        for (const e of entries) {
+          const p = path.join(d, e.name);
+          if (e.isDirectory()) { walk(p, depth + 1); continue; }
+          if (!e.isFile()) continue; // never follow a link
+          if ((handledAt.get(p) ?? 0) >= seenAt || wasJustWrittenByUs(p)) continue;
+          const planDir = findContainingPlanDir(p, plansRoot);
+          if (!planDir) continue;
+          (missed.get(planDir) ?? missed.set(planDir, []).get(planDir)!).push(p);
+        }
+      };
+      walk(dir, 0);
+      const { isChannelEventFile } = _lazy___channel_event_file_service;
+      for (const files of missed.values()) {
+        // A whole-plan import reads its channel events too, so one is enough.
+        const other = files.find((f) => !isChannelEventFile(f));
+        for (const f of other ? [other] : files) handle('add', f);
+      }
+    }, NEW_FOLDER_SWEEP_MS);
+  };
+
+  const handle = (event: string, filePath: string): void => {
     if (event !== 'add' && event !== 'change' && event !== 'unlink') return;
     if (!filePath) return;
 
     // Skip self-writes (we just stamped them in writeFileAtomic).
     if (wasJustWrittenByUs(filePath)) return;
+    if (handledAt.size > 5000) handledAt.clear(); // only the last few seconds matter to the sweep
+    handledAt.set(filePath, Date.now());
 
     // Resolve the plan directory containing this file.
     const planDir = findContainingPlanDir(filePath, plansRoot);
@@ -1039,6 +1081,14 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     } catch (err) {
       console.warn(`[Auto-sync] Failed to re-import ${planDir}:`, err);
     }
+  };
+
+  watcher.on('all', (event, filePath) => {
+    if (event === 'addDir') {
+      if (filePath && filePath !== plansRoot) sweepNewFolder(filePath, Date.now());
+      return;
+    }
+    handle(event, filePath);
   });
 
   watcher.on('error', (err) => {

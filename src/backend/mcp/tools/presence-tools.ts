@@ -53,7 +53,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Block until the user acknowledges a presence card (clicks "Got it" or speech finishes). ' +
-        'Returns { acked: true, via: "click"|"speech-end" } on success, or { acked: false, via: "timeout" } on timeout. ' +
+        'Returns { acked: true, via: "click"|"speech-end" } on success, { acked: false, via: "timeout" } on timeout, or ' +
+        '{ acked: false, via: "dismissed" } if the pane was dismissed first. An unknown card_id is an error. ' +
         'Use this after present(require_ack=true) to pace a walkthrough — the agent waits for the human before advancing.',
       inputSchema: {
         card_id: z.string().describe('ID of the card to wait for (returned by present)'),
@@ -65,7 +66,13 @@ export function register(server: McpServer, deps: ToolDeps): void {
 
       // Already acked? Return immediately.
       const existing = deps.presenceService.getCard(card_id);
-      if (existing?.acked) {
+      if (!existing) {
+        // Waiting would only sit out the timeout: nothing can acknowledge it (bug 25).
+        return { content: [{ type: 'text' as const, text:
+          `No presence card ${card_id}. Use the card_id that present returned; cards are cleared when the pane is ` +
+          'dismissed and when CodeTrellis restarts.' }], isError: true };
+      }
+      if (existing.acked) {
         return { content: [{ type: 'text' as const, text: JSON.stringify({
           acked: true, via: existing.ackedVia, card_id,
         }, null, 2) }] };
@@ -96,6 +103,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: {},
     },
     async () => {
+      // Anyone waiting on a card is released now, not at its timeout (bug 25).
+      for (const card of deps.presenceService.getCards()) {
+        const nonce = `ack-${card.id}`;
+        const pending = deps.pendingResponses.get(nonce);
+        if (!pending) continue;
+        clearTimeout(pending.timer);
+        deps.pendingResponses.delete(nonce);
+        pending.resolve(JSON.stringify({ acked: false, via: 'dismissed', card_id: card.id }));
+      }
       deps.presenceService.clearCards();
       const n = deps.broadcast('presence-dismissed', {});
       return resultWithMeta({ ok: true }, n);
@@ -109,7 +125,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Block until the user types a reply in the Presence Pane, or timeout. ' +
-        'Returns { text, at } with the user\'s message, or { text: null, timed_out: true } on timeout. ' +
+        'Returns { text, at } with the user\'s message, { text: null, timed_out: true } on timeout, or ' +
+        '{ text: null, superseded: true } if another question replaced yours before the person answered. ' +
         'Use after presenting a question to let the user respond without leaving the app.',
       inputSchema: {
         prompt: z.string().optional().describe('Hint text shown in the reply box'),
@@ -140,6 +157,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const p = new Promise<string>((resolve) => {
         const timer = setTimeout(() => {
           deps.pendingResponses.delete(nonce);
+          deps.presenceService.clearReplyWaiter(nonce);
           resolve(JSON.stringify({ text: null, timed_out: true }));
         }, clampedTimeout);
         deps.pendingResponses.set(nonce, {
@@ -149,8 +167,19 @@ export function register(server: McpServer, deps: ToolDeps): void {
         });
       });
 
-      // Store the nonce so the REST reply endpoint can find it
-      (globalThis as any).__presenceReplyNonce = nonce;
+      // The reply box now asks this question. Whoever was waiting on the
+      // previous one is told so now, not left to sit out its timeout (bug 25).
+      const replaced = deps.presenceService.setReplyWaiter(nonce);
+      const previous = replaced ? deps.pendingResponses.get(replaced) : undefined;
+      if (replaced && previous) {
+        clearTimeout(previous.timer);
+        deps.pendingResponses.delete(replaced);
+        previous.resolve(JSON.stringify({
+          text: null,
+          superseded: true,
+          note: 'Another question replaced yours in the reply box before the person answered. Ask again if you still need it.',
+        }));
+      }
 
       const resultStr = await p;
       return { content: [{ type: 'text' as const, text: resultStr }] };

@@ -77,14 +77,46 @@ export function clearCards(): void {
 
 // --- User replies (v2) ---
 
-export function postReply(text: string): UserReply {
+/**
+ * Post a reply. `queue: false` when it answered an agent that was waiting:
+ * that agent has it, so it is not left queued for whoever asks next.
+ */
+export function postReply(text: string, opts: { queue?: boolean } = {}): UserReply {
   const reply: UserReply = {
     id: generateId('pr'),
     text,
     createdAt: Date.now(),
   };
-  pendingReplies.push(reply);
+  if (opts.queue !== false) pendingReplies.push(reply);
   return reply;
+}
+
+// --- Who is waiting for a reply (Phase 32 §0.4f, bug 25) ---
+//
+// The pane has one reply box, showing the latest question. So one agent at
+// a time waits on it: a new question replaces the old, and the agent that
+// asked the old one must be told, not left to sit out its timeout. This
+// was a single global the tool overwrote without a word.
+
+let replyWaiter: string | null = null;
+
+/** Register the agent now waiting; returns the one it replaced, if any. */
+export function setReplyWaiter(nonce: string): string | null {
+  const previous = replyWaiter;
+  replyWaiter = nonce;
+  return previous;
+}
+
+/** The waiting agent, handed to whoever answers it (and no longer waiting). */
+export function takeReplyWaiter(): string | null {
+  const nonce = replyWaiter;
+  replyWaiter = null;
+  return nonce;
+}
+
+/** A wait that ended on its own (timeout): forget it if it is still the current one. */
+export function clearReplyWaiter(nonce: string): void {
+  if (replyWaiter === nonce) replyWaiter = null;
 }
 
 /**
