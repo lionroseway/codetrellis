@@ -4,8 +4,8 @@
  * See [docs/PHASE-29-SURFACING-WHAT-WE-COLLECT.md](../../docs/PHASE-29-SURFACING-WHAT-WE-COLLECT.md).
  *
  * `/api/auto-detect` reads `~/.claude/sessions`, keeps only sessions
- * whose pid is still alive, dedupes by working directory and reads the
- * branch from `.git/HEAD`. It has always worked and nothing has ever
+ * whose pid is still alive, dedupes by working directory and asks git
+ * for the branch (services/git-checkout; `.git` is a file in a worktree). It has always worked and nothing has ever
  * called it; the welcome screen now does.
  *
  * The liveness check is the part worth testing. A suggestion to open a

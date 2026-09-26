@@ -79,6 +79,21 @@ test.describe.serial('A linked worktree opened as a project', () => {
     expect(info.worktrees.map((w) => fs.realpathSync(w.path))).toContain(fs.realpathSync(main));
   });
 
+  test('git/worktrees lists both checkouts and the plans on the other one\'s disk', async () => {
+    const planDir = path.join(main, '.codetrellis', 'plans', 'main-only');
+    fs.mkdirSync(planDir, { recursive: true });
+    fs.writeFileSync(path.join(planDir, 'plan.yaml'), 'uid: uid-main-only\ntitle: Written on main\nstatus: active\n');
+
+    const res = await h.client.raw('GET', `/api/git/worktrees?project=${q}`);
+    expect(res.ok).toBe(true);
+    const wts = (await res.json()) as Array<{ path: string; branch: string | null; isCurrent: boolean; isMain: boolean; plans: Array<{ title: string }> }>;
+    expect(wts.map((w) => w.branch).sort()).toEqual([BRANCH, 'main']);
+    const here = wts.find((w) => w.isCurrent)!;
+    expect(here.branch).toBe(BRANCH);
+    const there = wts.find((w) => w.isMain)!;
+    expect(there.plans.map((p) => p.title)).toContain('Written on main');
+  });
+
   test('git/info lists packed branches too', async () => {
     // A clone, or any repo after `git gc`, keeps branches in packed-refs
     // rather than one file per branch under refs/heads.

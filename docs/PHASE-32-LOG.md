@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | 0.4a Project and scan |
 | **Status** | Started. #115 merged (0.3b, 0.6a, 0.3 done) |
-| **Next action** | Worktree fix done (bug 16). Next: re-domain the project-lifecycle MCP tools to 0.4a; test the untested ones and the `project.*` RPCs |
+| **Next action** | Full harness run on the 0.4a branch, then open the 0.4a PR |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4a-project-scan` |
 | **Last updated** | 2026-09-26 |
@@ -129,6 +129,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-26: 0.4a — project lifecycle verified; two more fixes
+- **`rescan_project` with no path scanned `process.cwd()`** — the
+  backend's working directory, `/` in a packaged app — instead of the
+  open project its description promises. The project-scope check, keyed
+  on `project_path`, never saw it. Now it uses the active project and
+  refuses when none is open. The regression test fails on the old code
+  (it scanned the whole codetrellis repo).
+- **`pin_project` / `unpin_project` / `remove_recent_project`** reported
+  success for a path with no recent-projects row (reachable with scope
+  "anywhere"). They now say "not in recents".
+- **New harness helper `openEventStream`** records `/ws` broadcasts, so
+  tools whose only UI effect is a broadcast (`close_project`,
+  `open_project`'s tab switch, alias and origin changes) are asserted,
+  not assumed. Every later 0.4 step can use it.
+- **New tests:** `project-lifecycle` (11, MCP), `project-open` (6, REST:
+  identity seeding on first scan had no test anywhere; pin order;
+  removing a deleted project; onboarding state; rescan add/delete),
+  `worktree-project` +1 (`/api/git/worktrees`), browser
+  `e2e/git/worktree-checkout.spec.ts`. Shape-only assertions on pin,
+  delete and onboarding-state now check behaviour.
+- **Inventory:** the lifecycle tools move to domain a (they were 0.4g by
+  file). 8 leave `untested.json` (now 71 routes, 66 tools, 47 RPC).
+  Behaviour column filled for all 19 routes and 12 tools of 0.4a.
+- **Decision:** the 10 `project.*` / `fs.browse` / `diagnostics.flush`
+  RPC methods move to 0.4j. There is no harness path to the peer RPC
+  surface, and building one is 0.4j's job.
+- **Browser suite:** `e2e/project`, `e2e/onboarding`, `e2e/git` — 55/55
+  pass here, plus the new worktree spec.
+- **For 0.5 (UX):** at 1280×720 the canvas toolbar rows overlap the
+  cluster card and hide its title; a worktree in the branch popover
+  reads only "main", which is ambiguous next to the branch of that name.
+- Checks: typecheck 0; lint 0 errors / 291 warnings; unit 992 / 989
+  pass / 3 skipped.
 
 ### 2026-09-26: 0.4a — a linked worktree was a second-class project (bug 16)
 - **Found by reading the routes, confirmed by a failing test.** Six
