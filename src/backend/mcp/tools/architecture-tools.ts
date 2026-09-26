@@ -74,7 +74,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'check_conformity',
     {
-      description: 'Check if proposed imports would violate architectural boundaries (circular dependencies, layer violations)',
+      description: 'Check whether proposed imports would create a direct two-file cycle (the imported file already imports the importer). That is the only rule today — there are no layer or boundary rules yet, so a clean result does not mean an import respects your architecture.',
       inputSchema: {
         proposed_imports: z.array(z.object({
           from: z.string().describe('File that would contain the import'),

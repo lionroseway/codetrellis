@@ -526,7 +526,7 @@ make parallel work worse now.
 | 1 | `claim_item` sets the assignee to the agent **type**, so two Claude Code sessions share one assignee and don't see each other's overlap | `plan-item-tools.ts:399-405`, `plan-item-service.ts:1084-1087` | Parallel agents of the same kind are invisible to each other |
 | 2 | `register_session` uses `INSERT OR REPLACE` without `active_plan_uid` / `host_terminal_id`, so an explicit call wipes both | `session-service.ts:8` | Sessions lose their plan and terminal link |
 | 3 | The Claude Code watcher reads only the first `tool_use` in each message | `agent/claude-code-watcher.ts:111-157` | Edits are undercounted |
-| 4 | `pushForInputRequest` has no caller | `push-notification-service.ts:189` | "Agent is waiting for you" never reaches the phone |
+| 4 | `pushForInputRequest` has no caller. **Reclassified in 0.6a:** the real gap is wider. A local agent's `await_user_input` never reaches the phone at all (not in the snapshot, not as a push); the phone only sees requests relayed from other desktops. Moved to B4/A4 (answering agents from the phone) | `push-notification-service.ts:189` | "Agent is waiting for you" never reaches the phone |
 | 5 | Agent guide lists `check_conformity` / `check_architecture` arguments the tools don't take; `check_conformity` promises layer rules it doesn't have | `mcp/skill-guide.ts:1213-1214`, `architecture-tools.ts:77` | Agents call tools wrongly and trust a check that doesn't exist |
 | 6 | `review_plan` / `get_pr_draft` say `before` defaults to baseline; it defaults to the newest commit | `review-tools.ts:84,124`, `plan-review-service.ts:163-171` | Misleads agents about what was compared |
 | 7 | `skill-guide.ts` header lists four resources; there are six | `mcp/skill-guide.ts:4-7` | Documentation drift |
@@ -757,7 +757,8 @@ database (`persistence.ts:52`).
 
 | # | Bug | Where | Why it matters |
 |---|---|---|---|
-| 8 | `broadcastChannelEvent` and `broadcastInputRequest` have no callers (with #4, the remote-interaction relay is unwired) | `remote-interaction-service.ts:127-171` | Channel events and input requests don't reach paired devices through the intended path |
+| 8 | `broadcastChannelEvent` and `broadcastInputRequest` have no callers. **Reclassified in 0.6a:** this is the desktop-to-desktop relay, an unfinished multi-machine feature and out of scope for Phase 32, rather than a defect (with #4, the remote-interaction relay is unwired) | `remote-interaction-service.ts:127-171` | Channel events and input requests don't reach paired devices through the intended path |
 | 9 | The scan baseline lives in memory and is lost on restart | `diff-engine.ts:44-58` | "Diff since baseline" silently changes meaning after a restart |
 | 10 | Spec body edits write no `plan_events` row | `plan-item-service.ts:616-619` | The history of a spec's content is only in versions, invisible to timelines and audit |
 | 11 | Cross-plan dependencies never resolve | `plan-item-service.ts:1137-1159` | An item that depends on another plan's item is never offered as next |
+| 15 | 21 entries across five agent guides named arguments the tools don't take (`claim_item(item_uid)` for `uid`, the plan-history tools' `plan_slug` documented as `plan_uid`, `update_settings(path, value)` for a sectioned object, and more). **Fixed in 0.6a**, with a guard test that checks every documented call against the registered schema | `mcp/skill-guide.ts` | An agent following the guide got a validation error and had to guess |

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.2 Inventory (0.1 Baseline done) |
-| **Status** | 0.1 complete: every suite green on Node 26. 0.2 not started |
-| **Next action** | Branch `feat/phase-32-0.2-inventory` from `feat/phase-32` once #111 merges; write `tools/inventory/` to generate `docs/PHASE-32-VERIFICATION.md`; reconcile 165 tools vs 186 capability rows |
-| **Blockers** | #111 needs merging into `feat/phase-32` before step branches are cut from it |
-| **Branch** | `claude/wizardly-thompson-v52j45` → PR [#111](https://github.com/lionroseway/codetrellis/pull/111) into `feat/phase-32` (plan docs, CI trigger) |
+| **Stage / step** | 0.6a Descriptions (0.2 → #112 and 0.3b → #113, both green, awaiting merge) |
+| **Status** | Bugs 5–7 fixed, and a wider class (bug 15: 21 guide entries with wrong argument names) fixed with a guard test. Bugs 4 and 8 reclassified. Harness running |
+| **Next action** | Green harness → open the 0.6a PR. Merge order: #112, #113, 0.6a. After each merge, merge `feat/phase-32` into the next branch and run `npm run inventory` |
+| **Blockers** | Merges of #112 / #113 (step 0.3 builds on #112's extractors) |
+| **Branch** | `feat/phase-32-0.6a-descriptions` (from `feat/phase-32` at `1c6dd3c`) |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -126,6 +126,36 @@ Measured in the cloud container on **Node 26.10.0 / npm 11.19.1**, clean
 ---
 
 ## Entries
+
+### 2026-09-26: 0.6a — descriptions that lied to agents
+- While #112 and #113 await merge, took the independent 0.6 bugs.
+- **Bugs 5–7 fixed:**
+  - `check_conformity`'s description no longer promises layer rules;
+    the guide's architecture table matches the real arguments.
+  - The review tools' `before` default is described truthfully (newest
+    commit, else baseline).
+  - The skill-guide header lists all six resources.
+- **Bug 15 (new, wider):** measured every `` `tool(args)` `` in every
+  guide flavour against the arguments the server registers. 21 of 340
+  documented calls named arguments that don't exist, e.g.:
+  - `claim_item(item_uid)`, `update_item_progress(item_uid, note)`
+  - the plan-history tools' `plan_uid` for `plan_slug`
+  - `update_settings(path, value)`
+  - `reconcile(deviation_uid, action)`
+
+  All fixed. `server.ts` now records each tool's argument names at
+  registration (`listRegisteredToolArgs`). A new guard in
+  `skill-guide.test.ts` fails on any documented argument a tool doesn't
+  take, and it was verified to catch a reintroduced mistake.
+- **Bug 4 reclassified:** the missing push is the small part. A local
+  agent's `await_user_input` never reaches the phone at all, because the
+  snapshot only carries requests relayed from other desktops. That's the
+  "answer an agent from the phone" feature, so it moves to B4/A4.
+- **Bug 8 reclassified:** the unwired functions are the desktop-to-desktop
+  relay, an unfinished multi-machine feature. Out of scope, not a
+  defect.
+- typecheck 0 errors; lint 0 errors / 291 warnings; unit 963 tests /
+  960 pass / 3 skipped (+1 guard; this branch predates 0.2).
 
 ### 2026-09-26: 0.1 Baseline complete
 - The full harness is green on Node 26.10.0: 363 passed, 17 skipped,

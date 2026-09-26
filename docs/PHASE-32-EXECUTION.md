@@ -248,14 +248,15 @@ Each gets its own regression test (from CURRENT-STATE):
 | 1 `claim_item` assignee is agent type | A0 |
 | 2 `register_session` wipes plan and terminal link | A0 |
 | 3 watcher reads first `tool_use` only | A0 |
-| 4 `pushForInputRequest` unwired | 0.6 |
-| 5 guide and tool descriptions for architecture tools wrong | 0.6 |
-| 6 review `before` default misdescribed | 0.6 |
-| 7 skill-guide header out of date | 0.6 |
-| 8 remote-interaction relay unwired | 0.6 |
+| 4 `pushForInputRequest` unwired | B4 / A4 (reclassified: local agent prompts never reach the phone) |
+| 5 guide and tool descriptions for architecture tools wrong | 0.6a (fixed) |
+| 6 review `before` default misdescribed | 0.6a (fixed) |
+| 7 skill-guide header out of date | 0.6a (fixed) |
+| 8 remote-interaction relay unwired | not a defect: desktop-to-desktop relay, out of scope for Phase 32 |
 | 9 scan baseline lost on restart | 0.6 |
 | 10 spec body edits leave no event | B1 (event log) |
 | 11 cross-plan dependencies never resolve | B6 |
+| 15 guides documented arguments the tools don't take | 0.6a (fixed + guard) |
 
 Anything the sweep (0.4) finds is added to this table and to
 CURRENT-STATE.
