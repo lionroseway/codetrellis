@@ -133,6 +133,8 @@ test.describe.serial('Graph through MCP', () => {
     ['graph_focus', { path: IMPORTER }, 'ui-graph-focus', { path: IMPORTER, highlight: true }],
     ['graph_focus', { path: IMPORTER, highlight: false }, 'ui-graph-focus', { path: IMPORTER, highlight: false }],
     ['graph_set_mode', { mode: 'planned' }, 'ui-graph-mode', { mode: 'planned' }],
+    // The renderer's name for the Baseline view is 'current'.
+    ['graph_set_mode', { mode: 'baseline' }, 'ui-graph-mode', { mode: 'current' }],
     ['graph_set_scope', { scope_path: 'packages/web' }, 'ui-graph-scope', { scopePath: 'packages/web' }],
     ['graph_set_scope', { scope_path: '' }, 'ui-graph-scope', { scopePath: '' }],
     ['graph_select', { paths: [IMPORTER, IMPORTED] }, 'ui-graph-select', { paths: [IMPORTER, IMPORTED] }],

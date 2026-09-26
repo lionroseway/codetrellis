@@ -1080,6 +1080,7 @@ export function MainCanvas() {
                 <button
                   key={mode}
                   onClick={() => setTrellisMode(mode)}
+                  aria-pressed={trellisMode === mode}
                   className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
                     trellisMode === mode
                       ? `bg-white/[0.08] ${color} shadow-[0_0_6px_currentColor]`
@@ -1225,6 +1226,7 @@ export function MainCanvas() {
             <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
               <button
                 onClick={() => setLayoutMode('map')}
+                aria-pressed={layoutMode === 'map'}
                 className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
                   layoutMode === 'map' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
                 }`}
@@ -1235,6 +1237,7 @@ export function MainCanvas() {
               </button>
               <button
                 onClick={() => setLayoutMode('tree')}
+                aria-pressed={layoutMode === 'tree'}
                 className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
                   layoutMode === 'tree' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
                 }`}
