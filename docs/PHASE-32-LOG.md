@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.8 Release |
-| **Status** | 0.7 merged (#135, harness 636/636). 0.8 prepared: version 0.1.17, release notes drafted (`docs/releases/v0.1.17.md`); desktop only |
-| **Next action** | Merge this into `feat/phase-32`, then `feat/phase-32` → `main`. Then the owner on macOS: `npm ci`, `npm run test:unit` (the signing tests run there), `scripts/release.sh`, open the packaged app, publish the notes |
-| **Blockers** | none |
-| **Branch** | `feat/phase-32-0.8-release` |
+| **Stage / step** | Track A — carried item 1: the coverage guard credits calls, not names |
+| **Status** | 0.1.17 released (owner, 2026-09-27). `feat/phase-32` fast-forwarded to `main` (`0861ee8`). Guard rewritten: tools, RPC methods and routes (with their method) are credited only where a test sends them; two routes it exposed are tested |
+| **Next action** | PR `feat/phase-32-a-coverage-calls` into `feat/phase-32`; merge when green. Then carried item 2: the authorship guard |
+| **Blockers** | none. The published v0.1.17 notes (build number, commit filled in) are not back in `docs/releases/v0.1.17.md` yet — the release machine's notes PR hasn't been opened |
+| **Branch** | `feat/phase-32-a-coverage-calls` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -51,9 +51,12 @@
 - [x] 0.5 UX audit — desktop (#131, #132, #133); the 31 phone screens after the release (owner's decision)
 - [x] 0.6 Known bugs 4–9 (#134)
 - [x] 0.7 Stage review (#135)
-- [ ] 0.8 Release (Stage 0 ships before Tracks A–C)
+- [x] 0.8 Release — v0.1.17, desktop and companion (#136, #137, #138)
 
 ### Track A: awareness
+- [ ] Carried 1: the coverage guard credits calls, not names (bug 50)
+- [ ] Carried 2: no tool or handler writes a fixed author (structural test)
+- [ ] Carried 3: harness and browser suites run in CI, sharded
 - [ ] A0 Parallel-work bugs 1–3
 - [ ] A1.1 Session binding
 - [ ] A1.2 Multi-session Claude watcher
@@ -149,6 +152,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: Track A, carried 1 — the coverage guard credits calls
+
+0.1.17 is out: the owner released desktop and companion from `main`
+(`0861ee8`). `feat/phase-32` was fast-forwarded to it, so Tracks A–C
+start from the release (EXECUTION §0.8).
+
+The first carried item (EXECUTION §4): the guard counted a test for a
+row when it *named* it. Bug 49 was the tools half — a Timeline phrasing
+fixture made three untested tools look tested. Rewriting the guard found
+the routes half (bug 50): a route was credited by path whatever the
+method, so `GET /api/items/:uid` covered `DELETE`, and `POST
+…/attachments` the `GET`. Neither had a test.
+
+Now (`tools/inventory/extract.ts`, `callsIn` / `filesCalling`):
+- a tool or RPC name counts where it is a top-level argument of a call
+  that sends it: `callTool`, `rpc`, `rpcError`, a peer `handle…Method`,
+  the SDK's `callTool({ name })`, a test's own wrapper around one of
+  those (to a fixpoint), or a `for … of` loop or table that passes it;
+- a route counts where a request names its method: a verb argument
+  (`raw('PUT', …)`, every local `req`), a verb-named function, `fetch` /
+  `authFetch` (their `method`, GET by default), a `{ method, url }` row,
+  or a table of endpoints its loop requests with a verb;
+- route definitions in fixtures (`app.get(…)`) and comments don't count.
+
+Measured before switching: no tool or RPC row lost all its tests; every
+dropped file-level credit checked was a comment, a fixture, a capability
+check or a method mismatch. Two routes lost all theirs, and
+`tests/e2e/item-delete-attachments.test.ts` covers them (4 tests, pass).
+The unit column went to almost empty — unit tests drive services, not
+the transports — and the matrix now says so.
 
 ### 2026-09-27: 0.8 — the companion ships with 0.1.17
 

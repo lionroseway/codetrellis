@@ -29,13 +29,14 @@ import {
   extractRpcMethods,
   extractSettingsSections,
   extractToolSections,
-  filesMatching,
-  filesReaching,
+  callsIn,
+  callsRoute,
+  filesCalling,
   helperChunks,
-  quotedPattern,
+  type Calls,
+  type TestFile,
   reconcileTools,
   stripSkippedTests,
-  routePattern,
 } from './extract';
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -64,10 +65,13 @@ function walk(dir: string, keep: (f: string) => boolean): string[] {
   return out;
 }
 
-function loadTexts(files: string[]): Map<string, string> {
-  const m = new Map<string, string>();
-  // A skipped test is not coverage: drop it before searching for mentions.
-  for (const f of files) m.set(path.relative(ROOT, f), stripSkippedTests(fs.readFileSync(f, 'utf8')));
+function loadTests(files: string[]): Map<string, TestFile> {
+  const m = new Map<string, TestFile>();
+  // A skipped test is not coverage: drop it before looking for calls.
+  for (const f of files) {
+    const text = stripSkippedTests(fs.readFileSync(f, 'utf8'));
+    m.set(path.relative(ROOT, f), { text, calls: callsIn(text) });
+  }
   return m;
 }
 
@@ -109,28 +113,31 @@ export async function build(): Promise<{ markdown: string; unmapped: InventoryRo
 
 /** Every row of every surface, with its test references. */
 export async function collect(): Promise<Collected> {
-  const unitFiles = loadTexts([
+  // A test is credited with what it SENDS — a tool call, an RPC request, a
+  // request with its method — not with every name it mentions (bug 49).
+  const unitFiles = loadTests([
     ...walk(path.join(ROOT, 'src'), (f) => /\.test\.tsx?$/.test(f)),
     // The inventory's own tests are fixtures full of example names, not coverage.
     ...walk(path.join(ROOT, 'tools'), (f) => /\.test\.tsx?$/.test(f) && !f.startsWith(__dirname)),
   ]);
-  const harnessFiles = loadTexts(walk(path.join(ROOT, 'tests', 'e2e'), (f) => /\.test\.ts$/.test(f)));
+  const harnessFiles = loadTests(walk(path.join(ROOT, 'tests', 'e2e'), (f) => /\.test\.ts$/.test(f)));
   const helpers = walk(path.join(ROOT, 'tests', 'harness'), (f) => f.endsWith('.ts')).flatMap((f) =>
-    helperChunks(fs.readFileSync(f, 'utf8')),
+    helperChunks(fs.readFileSync(f, 'utf8')).map((c) => ({ name: c.name, calls: callsIn(c.body) })),
   );
-  const harnessHits = (p: RegExp) => filesReaching(p, harnessFiles, helpers);
+  const credited = (hit: (c: Calls) => boolean) => ({
+    unitTests: filesCalling(hit, unitFiles),
+    harnessTests: filesCalling(hit, harnessFiles, helpers),
+  });
 
   const rows: (InventoryRow & { domain: DomainKey | null })[] = [];
 
   // REST
   for (const r of extractRoutes(read('src/backend/server.ts'))) {
-    const p = routePattern(r.path);
     rows.push({
       surface: 'rest',
       id: `${r.method} ${r.path}`,
       domain: domainForRoute(r.path) as DomainKey,
-      unitTests: filesMatching(p, unitFiles),
-      harnessTests: harnessHits(p),
+      ...credited((c) => callsRoute(c, r.method, r.path)),
     });
   }
 
@@ -141,27 +148,23 @@ export async function collect(): Promise<Collected> {
   const recon = reconcileTools(registered, [...sections.keys()]);
   const { TOOL_CAPABILITIES } = await import('../../src/backend/services/mcp-capabilities');
   for (const name of [...new Set(registered)].sort()) {
-    const p = quotedPattern(name);
     rows.push({
       surface: 'mcp',
       id: name,
       domain: domainForTool(name, sections.get(name)) as DomainKey,
       detail: `${sections.get(name) ?? '?'} · ${TOOL_CAPABILITIES[name] ?? 'NO CAPABILITY ROW'}`,
-      unitTests: filesMatching(p, unitFiles),
-      harnessTests: harnessHits(p),
+      ...credited((c) => c.names.has(name)),
     });
   }
 
   // RPC
   for (const { method, capability } of extractRpcMethods(read('src/backend/services/peer-capabilities.ts'))) {
-    const p = quotedPattern(method);
     rows.push({
       surface: 'rpc',
       id: method,
       domain: domainForRpc(method) as DomainKey,
       detail: capability,
-      unitTests: filesMatching(p, unitFiles),
-      harnessTests: harnessHits(p),
+      ...credited((c) => c.names.has(method)),
     });
   }
 
@@ -205,15 +208,18 @@ function render(rows: InventoryRow[], recon: ReturnType<typeof reconcileTools>, 
   L.push('> `tools/inventory/verification.json`, and `npm run inventory:check` fails when');
   L.push('> this file is stale. Stage 0 of [PHASE-32-EXECUTION.md](PHASE-32-EXECUTION.md).');
   L.push('');
-  L.push('"Unit" and "Harness" count the test files that mention the row (a route path,');
-  L.push('a quoted tool or method name). A mention is not proof of a meaningful test —');
-  L.push('0.3 turns these into enforced guards and 0.4 checks behaviour — but "✗ none"');
-  L.push('is proof of a gap.');
+  L.push('"Unit" and "Harness" count the test files that **send** the row — call the tool,');
+  L.push('send the RPC method, or make the request with that method — directly or through');
+  L.push('a harness helper. Naming it is not enough: a fixture that phrases tool calls once');
+  L.push('made three untested tools look tested (bug 49), and a `GET` covered the `PUT` on');
+  L.push('the same path. Unit tests drive services directly, so the unit column is mostly');
+  L.push('empty by design. A call is not proof of a meaningful test — the behaviour column');
+  L.push('records that — but "✗ none" is proof of a gap.');
   L.push('');
 
   L.push('## Summary');
   L.push('');
-  L.push('| Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |');
+  L.push('| Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |');
   L.push('|---|---|---|---|---|---|---|');
   for (const s of SURFACES) {
     const rs = rows.filter((r) => r.surface === s.key);

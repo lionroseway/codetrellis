@@ -1,9 +1,11 @@
 /**
  * Phase 32 stage 0.3 — "tests for everything" as a guard, not a hope.
  *
- * Every REST route, MCP tool and mobile RPC method must be reached by at
+ * Every REST route, MCP tool and mobile RPC method must be CALLED by at
  * least one test (a unit test, or a harness test directly or through a
- * harness helper). Skipped tests don't count.
+ * harness helper): the tool sent, the RPC method requested, the route
+ * requested with its own method. Naming one is not a call (bug 49), and a
+ * `GET` does not cover the `PUT` on the same path. Skipped tests don't count.
  *
  * Today's gaps are listed in `untested.json`. The list can only SHRINK:
  *
