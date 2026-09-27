@@ -1,16 +1,16 @@
-# Hermetic E2E harness — MANUAL / NIGHTLY runs.
+# Hermetic E2E harness — NIGHTLY on main, and on demand.
 #
-# This is the ONLY place the harness runs. It does not gate pull requests:
-# it is green (139 passed, 16 skipped, 0 failed) but takes 99s locally and
-# more than 20 minutes on ubuntu-latest, where it hit the job timeout. The
-# reasoning is in ci.yml's header, along with what would let it gate again.
+# Every pull request runs the harness too, in four shards, as a blocking job
+# in ci.yml (Phase 32, carried item 3). This workflow stays for the nightly
+# run of the whole suite in one job on main, and for running it against any
+# branch or SHA by hand.
 #
 #   Button:  Actions -> "e2e harness" -> Run workflow
 #   CLI:     gh workflow run e2e-harness.yml --ref <branch>
 #   Nightly: 03:00 UTC on main
 #
-# It deliberately does NOT trigger on pull_request — that would run the suite
-# twice on every PR.
+# It deliberately does NOT trigger on pull_request — ci.yml already runs it
+# there, sharded.
 #
 # IF IT FAILS WHOLESALE, CHECK THE NATIVE BINDING FIRST.
 #

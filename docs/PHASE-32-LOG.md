@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — carried item 2: no handler writes a fixed author |
-| **Status** | Update download merged (#142, bug 51). Authorship: one helper per transport, a structural guard (`src/backend/authorship.test.ts`), UI labels "local API, unverified"; full harness running |
-| **Next action** | Fix what the full harness finds (tests that encoded REST writes as `human`, each in its own commit), browser specs that do the same, then PR `feat/phase-32-a-authorship` |
-| **Blockers** | none. Plain HTTP recorded as `unverified` follows the owner's §0.4d decision; asked to confirm in the readout doc |
-| **Branch** | `feat/phase-32-a-authorship` |
+| **Stage / step** | Track A — A0: parallel-work bugs 1–3 |
+| **Status** | Carried items 1–3 merged (#141, #143, #144); CI now runs the harness (4 shards) and the browser suite (3) on every PR, both blocking. A0 done on its branch, PR open |
+| **Next action** | Merge A0's PR when green; then A1.1 (session binding: the connector sends the working folder and host terminal; the server validates them against the project's worktrees) |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-a0-parallel-bugs` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -56,8 +56,8 @@
 ### Track A: awareness
 - [x] Carried 1: the coverage guard credits calls, not names (bug 50) (#141)
 - [x] Owner's report: update download shows progress and asks where to save (bug 51) (#142)
-- [ ] Carried 2: no tool or handler writes a fixed author (structural test; bug 52)
-- [ ] Carried 3: harness and browser suites run in CI, sharded
+- [x] Carried 2: no tool or handler writes a fixed author (structural test; bug 52) (#143)
+- [x] Carried 3: harness and browser suites run in CI, sharded (#144)
 - [ ] A0 Parallel-work bugs 1–3
 - [ ] A1.1 Session binding
 - [ ] A1.2 Multi-session Claude watcher
@@ -177,6 +177,26 @@ Tests: `claim-by-session.test.ts` (3; 2 fail on the old code),
 `session-service.test.ts` (2; 1 fails on the old code),
 `claude-code-watcher.test.ts` (+1; fails on the old code),
 `tests/e2e/parallel-claims.test.ts` (two real sessions over MCP).
+
+### 2026-09-27: Track A, carried 3 — the suites run on every PR
+
+#144's own run was the measurement the ci.yml header asked for.
+
+| Job | Tests | Time |
+|---|---|---|
+| Harness 1/4 | 177 passed, 1 skipped | 2.5 min (3.3 with setup) |
+| Harness 2/4 | 153 passed | 1.9 min |
+| Harness 3/4, 4/4 | the rest, passed | ~3.7 min each |
+| Browser 1/3 | 277 passed | 11.2 min |
+| Browser 2/3 | 265 passed | 8.6 min |
+| Browser 3/3 | passed | ~8.8 min |
+
+The harness is 7–8× faster a shard on ubuntu-latest than in this container,
+so the single-job "did not finish in 20 minutes" of its early days is gone.
+Both suites now block. The one harness skip was build-artifacts wanting
+`mobile/node_modules`; the jobs install it. The browser suite's `serial`
+project is the setup project's teardown, so it runs in every shard — right,
+but about three minutes a shard to reclaim later.
 
 ### 2026-09-27: Track A, carried 2 — no handler writes a fixed author (bug 52)
 
