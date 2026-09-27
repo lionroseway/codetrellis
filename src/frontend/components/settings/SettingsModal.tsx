@@ -54,6 +54,9 @@ interface PeerAuditRow {
  * `services/peer-capabilities.ts` — deliberately without `terminal` or
  * `settings`.
  */
+/** The renderer's own platform, for advice that only applies on one. */
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
+
 const DEFAULT_DEVICE_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
 
 const DEVICE_CAPABILITIES: Array<{
@@ -688,7 +691,7 @@ function PlansSection({
   return (
     <>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
-        Default visibility for plans you create. You can toggle this per-plan in the plan header (Phase 13 §A — coming).
+        Default visibility for plans you create. Each plan can be switched from the Shared / Local chip in its header.
       </p>
 
       <Field label="Default visibility">
@@ -710,7 +713,7 @@ function PlansSection({
       </Field>
 
       <p className="text-[10px] text-foreground-subtle">
-        Shared plans land at <code className="font-mono">&lt;project&gt;/.codetrellis/plans/&lt;slug&gt;/</code>. See [PLAN-EXPORT.md](docs/PLAN-EXPORT.md).
+        Shared plans are written to <code className="font-mono">&lt;project&gt;/.codetrellis/plans/&lt;slug&gt;/</code>, so they are committed with the code. Local plans stay in this machine's database.
       </p>
 
       <Field label="Attachment storage">
@@ -1488,7 +1491,7 @@ function DevicesSection({
 
         {pairingState === 'idle' && (
           <p className="text-[10px] text-foreground-subtle mt-2">
-            Pair your phone to monitor agents, view plans, and interact remotely — no ports exposed.
+            Pair your phone to watch agents, read plans and answer questions from it. Pairing turns on “Allow phones on this network to connect” below, which opens a port.
           </p>
         )}
       </Field>
@@ -1505,7 +1508,7 @@ function DevicesSection({
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => onChange({ device: { ...settings.device, deviceName: name.trim() } })}
-            placeholder="e.g. Saif's iMac"
+            placeholder="e.g. Studio iMac"
             className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
           />
         </Field>
@@ -1730,7 +1733,7 @@ function LogsSection() {
   return (
     <>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
-        Backend logs (everything `console.log` / `console.warn` / `console.error` emits) mirrored to a daily file at:
+        Everything the backend logs is also written to a daily file at:
       </p>
       <div className="flex items-center gap-2">
         <code className="flex-1 bg-white/[0.05] border border-white/[0.06] rounded px-2 py-1.5 text-[10.5px] font-mono text-foreground-muted truncate">
@@ -1889,9 +1892,11 @@ function AboutSection({ onJumpToSection }: { onJumpToSection: (section: Section)
         </button>
       </p>
 
-      <p className="text-[10px] text-amber-200/80 leading-relaxed">
+      {/* Only where it applies, and not as a warning: it is advice about
+          installing, shown on every platform in amber before (Phase 32 §0.5). */}
+      {IS_MAC && <p className="text-[10px] text-foreground-subtle leading-relaxed">
         <strong>Installing on macOS:</strong> open the <code className="font-mono bg-white/[0.05] px-1 rounded">.dmg</code> file, then drag the <code className="font-mono bg-white/[0.05] px-1 rounded">CodeTrellis.app</code> icon onto the <code className="font-mono bg-white/[0.05] px-1 rounded">Applications</code> shortcut in the same window. Don't run the .app from the DMG mount or your Downloads folder — it won't update cleanly.
-      </p>
+      </p>}
     </>
   );
 }

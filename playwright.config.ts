@@ -96,6 +96,8 @@ const SERIAL_SPECS = [
   '**/inspector/add-to-plan.spec.ts',
   // request_plan_deletion opens its confirmation on every open page.
   '**/plan/plan-deletion-request.spec.ts',
+  // Its agent posts presence cards, asks to delete a plan and freezes the project.
+  '**/screenshots/ux-audit.spec.ts',
   // navigate_to 'artefact' opens the viewer over every open page.
   '**/plan/brief-mode.spec.ts',
   // They read the graph of whichever project was scanned last.
@@ -134,6 +136,14 @@ export default defineConfig({
         // (src/backend/services/grant-guard.ts). Test backends only.
         NODE_ENV: 'test',
         CODETRELLIS_ALLOW_HTTP_GRANTS: '1',
+        // The update check the backend makes at start went to the real
+        // codetrellis.dev and GitHub, so every run asked the internet and the
+        // Updates panel showed whatever it answered (a GitHub 403 in CI-like
+        // containers). The harness has pointed both at nowhere since 0.4k;
+        // this suite now does too. Automatic checks stay on, because
+        // e2e/settings/updates.spec.ts turns them off.
+        CODETRELLIS_OTA_URL: 'http://127.0.0.1:9',
+        CODETRELLIS_GITHUB_API: 'http://127.0.0.1:9',
         // No conversion engine unless a run asks for one (pw.local.config.ts
         // does). From source the backend otherwise uses resources/rendition/
         // engine, which packaging fills with the pinned engine — so the same

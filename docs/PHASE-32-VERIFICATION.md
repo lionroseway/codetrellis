@@ -17,9 +17,9 @@ is proof of a gap.
 | REST routes | 217 | 203 | 0 | 0 | 153 | 0 |
 | MCP tools | 185 | 147 | 3 | 0 | 152 | 0 |
 | Mobile RPC methods | 76 | 49 | 0 | 0 | 76 | 0 |
-| Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
+| Frontend components | 99 | n/a | n/a | n/a | 0 | 22 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
-| Settings sections | 12 | n/a | n/a | n/a | 10 | 0 |
+| Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
 ## By domain
 
@@ -557,7 +557,7 @@ is proof of a gap.
 | c | `plan/CrossRepoSection.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/MinimizedPlanChip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/OtherWorktreesSection.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/PlanDeletionRequest.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/PlanDeletionRequest.tsx` |  | n/a | n/a |  | ✓ 0.5a — says what deleting does; typed confirmation |  |
 | c | `plan/PlanListView.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/PlanTemplatePicker.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/ProposedChanges.tsx` |  | n/a | n/a |  |  |  |
@@ -576,7 +576,7 @@ is proof of a gap.
 | c | `plan/v2/ExecutionDashboard.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/ExternalRefsPanel.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/FileSymbolExpander.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/FreezeBar.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/v2/FreezeBar.tsx` |  | n/a | n/a |  | ✓ 0.5a — flagged change named, with Seen |  |
 | c | `plan/v2/HandoffButton.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/ItemRoutingPanel.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/ManifestConflictBar.tsx` |  | n/a | n/a |  |  |  |
@@ -584,18 +584,18 @@ is proof of a gap.
 | c | `plan/v2/NextUpStrip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PantryPlaceholder.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanActivityDrawer.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/PlanBudgetChip.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/v2/PlanBudgetChip.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: minutes box unlabelled (m14) |  |
 | c | `plan/v2/PlanCheckRunPanel.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanCompletionSummary.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanDiffPanel.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanGitContextChip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanHistoryRail.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanImportModal.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/PlanItemCanvas.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/v2/PlanItemCanvas.tsx` |  | n/a | n/a |  | ✓ 0.5a — minors: gaps (m4), emoji chips (m5) |  |
 | c | `plan/v2/PlanItemHistoryDrawer.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanItemTree.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanQualityNudge.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/PlanReadinessRing.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/v2/PlanReadinessRing.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: red "44%" → "1 to do before hand-off" (M2) |  |
 | c | `plan/v2/PlanReviewPanel.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanShareMenu.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanSwitcher.tsx` |  | n/a | n/a |  |  |  |
@@ -603,44 +603,44 @@ is proof of a gap.
 | c | `plan/v2/PlanTemplateChooser.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanTicketSyncChip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanVersionHistory.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/PlanWorkspaceShellV2.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/v2/PlanWorkspaceShellV2.tsx` |  | n/a | n/a |  | ✓ 0.5a — minors: repeated counts, "V2" (m3) |  |
 | c | `plan/v2/SlashMenu.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/TargetsStrip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/TeamActivityPanel.tsx` |  | n/a | n/a |  |  |  |
 | e | `artefact/ArtefactViewer.tsx` |  | n/a | n/a |  |  |  |
-| e | `brief/BriefWorkspace.tsx` |  | n/a | n/a |  |  |  |
+| e | `brief/BriefWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: "Ask Claude" (m15) |  |
 | e | `brief/SignoffPackControls.tsx` |  | n/a | n/a |  |  |  |
-| f | `presence/PresencePane.tsx` |  | n/a | n/a |  |  |  |
+| f | `presence/PresencePane.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: badge + count, toast over reply, above modal backdrop (m17, m22) |  |
 | g | `ActiveAgentProjects.tsx` |  | n/a | n/a |  |  |  |
 | g | `ErrorBoundary.tsx` |  | n/a | n/a |  |  |  |
 | g | `FirstRunWizard.tsx` |  | n/a | n/a |  |  |  |
-| g | `FolderPickerModal.tsx` |  | n/a | n/a |  |  |  |
+| g | `FolderPickerModal.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: opens at home (m18) |  |
 | g | `GettingStarted.tsx` |  | n/a | n/a |  |  |  |
-| g | `guide/GuideModal.tsx` |  | n/a | n/a |  |  |  |
+| g | `guide/GuideModal.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/AgentPanel.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/AgentPulse.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/AgentTurns.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/CodeWorkspace.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/ConnectedAgents.tsx` |  | n/a | n/a |  |  |  |
+| g | `layout/CodeWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state says what to do |  |
+| g | `layout/ConnectedAgents.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/CoverageChip.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/InspectorPanel.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/MainCanvas.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/PlanPanel.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/Sidebar.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/StatusBar.tsx` |  | n/a | n/a |  |  |  |
-| g | `layout/TopBar.tsx` |  | n/a | n/a |  |  |  |
+| g | `layout/InspectorPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: sparse file view (m21) |  |
+| g | `layout/MainCanvas.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: change summary covered the toolbar; now one quiet line (M1). Minor: 4-row toolbar at 1024 (m23) |  |
+| g | `layout/PlanPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: "Agent active" vs "No agents" (M3) |  |
+| g | `layout/Sidebar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
+| g | `layout/StatusBar.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: "1852/3680 linked" (m16) |  |
+| g | `layout/TopBar.tsx` |  | n/a | n/a |  | ✓ 0.5a — minors: depth tabs lit where no graph shows (m1), tab/branch truncation (m2) |  |
 | g | `Toast.tsx` |  | n/a | n/a |  |  |  |
 | g | `WelcomeScreen.tsx` |  | n/a | n/a |  |  |  |
-| i | `audio/AudioCaptureBar.tsx` |  | n/a | n/a |  |  |  |
+| i | `audio/AudioCaptureBar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | i | `terminal/TerminalInstance.tsx` |  | n/a | n/a |  |  |  |
-| i | `terminal/TerminalPanel.tsx` |  | n/a | n/a |  |  |  |
+| i | `terminal/TerminalPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | j | `pairing/DeviceIndicator.tsx` |  | n/a | n/a |  |  |  |
 | j | `pairing/RemotePeersPanel.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToClaudeDesktop.tsx` |  | n/a | n/a |  |  |  |
-| k | `settings/SettingsModal.tsx` |  | n/a | n/a |  |  |  |
+| k | `settings/SettingsModal.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: height jumps between sections (m11) |  |
 | k | `settings/VerifiedUpdateDownload.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
-| l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  |  |  |
+| l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state is content |  |
 
 ## Mobile screens (31)
 
@@ -682,15 +682,15 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| k | `about` |  | n/a | n/a | ✓ 0.4k: name, version, copy build info, jump to Updates (e2e about) |  |  |
-| k | `appearance` |  | n/a | n/a |  |  |  |
-| k | `data` |  | n/a | n/a | ✓ 0.4k: override box and the restart note (e2e data) — saving not checked |  |  |
-| k | `devices` |  | n/a | n/a | ✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access) |  |  |
-| k | `identity` |  | n/a | n/a | ✓ 0.4k: display name saves on leaving the box (e2e sections-save); pull from git config (e2e identity) |  |  |
-| k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) |  |  |
-| k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) |  |  |
-| k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) |  |  |
-| k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) |  |  |
-| k | `sync` |  | n/a | n/a |  |  |  |
-| k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) |  |  |
-| k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) |  |  |
+| k | `about` |  | n/a | n/a | ✓ 0.4k: name, version, copy build info, jump to Updates (e2e about) | ✓ 0.5a — macOS note only on macOS, no longer amber |  |
+| k | `appearance` |  | n/a | n/a |  | ✓ 0.5a — minor: native white radios (m10) |  |
+| k | `data` |  | n/a | n/a | ✓ 0.4k: override box and the restart note (e2e data) — saving not checked | ✓ 0.5a — minor: static amber note (m13); saving the override still unverified |  |
+| k | `devices` |  | n/a | n/a | ✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access) | ✓ 0.5a — major fixed: "no ports exposed" contradicted the port it opens; placeholder no longer a real name |  |
+| k | `identity` |  | n/a | n/a | ✓ 0.4k: display name saves on leaving the box (e2e sections-save); pull from git config (e2e identity) | ✓ 0.5a |  |
+| k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) | ✓ 0.5a — backticks fixed; minor: "(log file empty)" in web (m7) |  |
+| k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) | ✓ 0.5a — minors: refusal names the key (m6), native checkboxes (m10) |  |
+| k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) | ✓ 0.5a — stale "coming" note and raw markdown link fixed |  |
+| k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) | ✓ 0.5a — minor: jargon (m12) |  |
+| k | `sync` |  | n/a | n/a |  | ✓ 0.5a |  |
+| k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) | ✓ 0.5a — minor: database path hard-coded (m8) |  |
+| k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) | ✓ 0.5a — error state says why and offers retry; minor: stale footer (m9) |  |
