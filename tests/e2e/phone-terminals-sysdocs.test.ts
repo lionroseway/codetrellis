@@ -156,6 +156,20 @@ test.describe.serial('Terminals and system docs from the phone', () => {
     expect(await phone.rpcError('sysdoc.verify', { uid: 'no-such-doc' })).toMatch(/Doc not found/);
   });
 
+  test('the desktop\'s own edit and delete routes act on the same doc', async () => {
+    const other = await req('POST', '/api/system-docs', { projectPath: root, title: 'Scratch doc', body: 'x' });
+    expect(await req('PUT', `/api/system-docs/${other.uid}`, { title: 'Scratch doc, renamed' })).toMatchObject({ title: 'Scratch doc, renamed' });
+    await events.waitFor('system-doc-updated', (p) => p.uid === other.uid);
+    expect((await phone.rpc('sysdoc.read', { uid: other.uid })).doc.title).toBe('Scratch doc, renamed');
+    expect((await h.client.raw('PUT', '/api/system-docs/no-such-doc', { title: 'x' })).status).toBe(404);
+
+    expect(await req('DELETE', `/api/system-docs/${other.uid}`)).toEqual({ ok: true, uid: other.uid });
+    await events.waitFor('system-doc-removed', (p) => p.uid === other.uid);
+    expect(await phone.rpcError('sysdoc.read', { uid: other.uid })).toMatch(/Doc not found/);
+    // Deleting what is not there is a 404, not `{ ok: false }` with a 200.
+    expect((await h.client.raw('DELETE', `/api/system-docs/${other.uid}`)).status).toBe(404);
+  });
+
   test('sysdoc.delete removes it and tells the desktop; deleting one that is not there is refused', async () => {
     expect(await phone.rpc('sysdoc.delete', { uid: docUid })).toEqual({ ok: true });
     await events.waitFor('system-doc-removed', (p) => p.uid === docUid);

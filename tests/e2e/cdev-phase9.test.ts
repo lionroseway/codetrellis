@@ -102,7 +102,7 @@ test.describe('CDev Phase 9 — discovery and pairing', () => {
     }
   });
 
-  test('unpair_device returns false for unknown fingerprint', async () => {
+  test('unpair_device refuses an unknown fingerprint, removing nothing', async () => {
     const h = await setupHarness('cdev-phase9-unpair');
     try {
       // Phase 30: changing desktop settings is `settings` and is off by
@@ -110,8 +110,10 @@ test.describe('CDev Phase 9 — discovery and pairing', () => {
       await h.client.grantMcpCapabilities(['read', 'write', 'project', 'files', 'settings']);
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
 
+      // An error the agent sees, not a success whose text says otherwise
+      // (Phase 32 §0.4j, like bug 27's unknown ids).
       const res = await agent.callTool('unpair_device', { fingerprint: 'nonexistent-fp' });
-      expect(res.isError).not.toBe(true);
+      expect(res.isError).toBe(true);
       const data = JSON.parse(res.text);
       expect(data.removed).toBe(false);
     } finally {

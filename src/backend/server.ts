@@ -4316,6 +4316,7 @@ app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
     const removed = await peerService.unpairDevice(req.params.fingerprint);
+    if (!removed) { res.status(404).json({ error: 'device not found' }); return; }
     res.json({ removed });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4488,7 +4489,10 @@ app.post('/api/peers/push-tokens', (req, res) => {
 app.delete('/api/peers/push-tokens/:fingerprint', (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
-    peerService.unregisterPushToken(req.params.fingerprint);
+    if (!peerService.unregisterPushToken(req.params.fingerprint)) {
+      res.status(404).json({ error: 'no push token for that device' });
+      return;
+    }
     res.json({ unregistered: true });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4634,10 +4638,9 @@ app.put('/api/system-docs/:uid', (req, res) => {
 app.delete('/api/system-docs/:uid', (req, res) => {
   const svc = _lazy___services_system_docs_service;
   const ok = svc.deleteSystemDoc(req.params.uid);
-  if (ok) {
-    broadcast('system-doc-removed', { uid: req.params.uid });
-    saveNow(() => exportDatabase());
-  }
+  if (!ok) { res.status(404).json({ error: 'not found' }); return; }
+  broadcast('system-doc-removed', { uid: req.params.uid });
+  saveNow(() => exportDatabase());
   res.json({ ok, uid: req.params.uid });
 });
 

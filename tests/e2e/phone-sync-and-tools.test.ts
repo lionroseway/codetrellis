@@ -263,4 +263,19 @@ test.describe.serial('Sync, the terminal relay, and agent tools on the phone', (
     expect(after.flaggedChanges).toEqual([]);
     await events.waitFor('plan-budget-changed', (p) => p.planUid === planUid && p.acknowledged === budget.flaggedChanges[0].id);
   });
+
+  test('forgetting the phone: its push token, then the device; each refused once it is gone', async () => {
+    const fp = encodeURIComponent(phone.fingerprint);
+    expect(await req('DELETE', `/api/peers/push-tokens/${fp}`)).toEqual({ unregistered: true });
+    expect(JSON.stringify(await req('GET', '/api/peers/push-tokens'))).not.toContain(phone.fingerprint);
+    expect((await h.client.raw('DELETE', `/api/peers/push-tokens/${fp}`)).status).toBe(404);
+
+    expect(await req('DELETE', `/api/peers/devices/${fp}`)).toEqual({ removed: true });
+    expect((await req('GET', '/api/peers/devices')).map((d: { fingerprint: string }) => d.fingerprint)).not.toContain(phone.fingerprint);
+    await expect.poll(async () => {
+      const c = await req('GET', '/api/peers/connections');
+      return (Array.isArray(c) ? c : c.connections).some((x: { fingerprint: string; state: string }) => x.fingerprint === phone.fingerprint && x.state === 'connected');
+    }, { timeout: 10_000 }).toBe(false);
+    expect((await h.client.raw('DELETE', `/api/peers/devices/${fp}`)).status).toBe(404);
+  });
 });
