@@ -25,7 +25,7 @@ import { applyClaudeDesktop, previewClaudeDesktop, thisMachine } from '../backen
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
-import { getUpdateDownloadState } from '../backend/services/update-download-service';
+import { getUpdateDownloadState, saveVerifiedUpdateCopy } from '../backend/services/update-download-service';
 import {
   startPowerService,
   setAcState,
@@ -702,8 +702,33 @@ ipcMain.handle('signoff:export-pdf', async (event, planUid: unknown) => {
 ipcMain.handle('updates:reveal', async () => {
   const state = getUpdateDownloadState();
   if (state.phase !== 'ready' || !state.filePath) return null;
-  shell.showItemInFolder(state.filePath);
-  return state.filePath;
+  // The copy the person saved, once there is one; the staged file before.
+  const target = state.savedPath ?? state.filePath;
+  shell.showItemInFolder(target);
+  return target;
+});
+
+/**
+ * Save the verified installer where the person chooses. The destination comes
+ * from the native save dialog, never from the renderer, and the source is the
+ * service's own verified file.
+ */
+ipcMain.handle('updates:save', async (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, reason: 'Not allowed' };
+  const state = getUpdateDownloadState();
+  if (state.phase !== 'ready' || !state.filePath || !state.filename) return { ok: false, reason: 'No verified download to save' };
+  const ext = path.extname(state.filename).replace(/^\./, '');
+  const choice = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save the CodeTrellis update',
+    defaultPath: path.join(app.getPath('downloads'), state.filename),
+    filters: ext ? [{ name: 'Installer', extensions: [ext] }] : undefined,
+  });
+  if (choice.canceled || !choice.filePath) return { ok: false, reason: 'cancelled' };
+  try {
+    return { ok: true, path: await saveVerifiedUpdateCopy(choice.filePath) };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
 });
 
 // =============================================================

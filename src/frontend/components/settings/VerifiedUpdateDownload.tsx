@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, ShieldCheck, X, FolderOpen, AlertCircle, ExternalLink } from 'lucide-react';
+import { Download, ShieldCheck, X, FolderOpen, AlertCircle, ExternalLink, Save } from 'lucide-react';
 
 /**
  * Downloading an update through the verified path — Phase 29.
@@ -41,7 +41,7 @@ import { Download, ShieldCheck, X, FolderOpen, AlertCircle, ExternalLink } from 
  * "verified against the signed manifest", never "safe".
  */
 
-type DownloadPhase = 'idle' | 'downloading' | 'verifying' | 'ready' | 'error';
+type DownloadPhase = 'idle' | 'preparing' | 'downloading' | 'verifying' | 'ready' | 'error';
 
 interface UpdateDownloadState {
   phase: DownloadPhase;
@@ -51,9 +51,23 @@ interface UpdateDownloadState {
   totalBytes: number | null;
   filePath: string | null;
   error: string | null;
+  savedPath?: string | null;
 }
 
 const POLL_MS = 500;
+/**
+ * How long a pressed Download may read "idle" before the panel believes it.
+ * The first status can arrive before the backend has marked the download
+ * started (over HTTP the POST and the poll race), and stopping on that idle
+ * is what hid the progress for the whole of 0.1.16's download.
+ */
+const START_GRACE_MS = 15_000;
+
+interface UpdateBridge {
+  revealUpdateDownload?: () => Promise<string | null>;
+  saveUpdateDownload?: () => Promise<{ ok: boolean; path?: string; reason?: string }>;
+}
+const bridge = (): UpdateBridge | undefined => (window as { electronAPI?: UpdateBridge }).electronAPI;
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -72,7 +86,10 @@ interface Props {
 export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: Props) {
   const [state, setState] = useState<UpdateDownloadState | null>(null);
   const [starting, setStarting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** When Download was pressed, until a status shows the download under way. */
+  const startedAtRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -84,7 +101,10 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
       if (!res.ok) return;
       const next = (await res.json()) as UpdateDownloadState;
       setState(next);
-      if (next.phase === 'ready' || next.phase === 'error' || next.phase === 'idle') {
+      if (next.phase !== 'idle') startedAtRef.current = null;
+      const stillStarting = startedAtRef.current !== null && Date.now() - startedAtRef.current < START_GRACE_MS;
+      if (next.phase === 'ready' || next.phase === 'error' || (next.phase === 'idle' && !stillStarting)) {
+        startedAtRef.current = null;
         stopPolling();
       }
     } catch {
@@ -102,7 +122,7 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
         if (!res.ok) return;
         const current = (await res.json()) as UpdateDownloadState;
         setState(current);
-        if (current.phase === 'downloading' || current.phase === 'verifying') {
+        if (current.phase === 'preparing' || current.phase === 'downloading' || current.phase === 'verifying') {
           pollRef.current = setInterval(poll, POLL_MS);
         }
       } catch { /* backend may still be booting */ }
@@ -112,6 +132,8 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
 
   const start = async () => {
     setStarting(true);
+    setSaveError(null);
+    startedAtRef.current = Date.now();
 
     // Poll BEFORE the POST, and do not await it.
     //
@@ -139,16 +161,30 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
   };
 
   const reveal = async () => {
-    const api = (window as { electronAPI?: { revealUpdateDownload?: () => Promise<string | null> } }).electronAPI;
+    const api = bridge();
     if (api?.revealUpdateDownload) await api.revealUpdateDownload().catch(() => null);
   };
+
+  // The native save dialog, opened by the main process, which also does the
+  // copy and checks it against the verified digest. The renderer never names
+  // a path.
+  const save = async () => {
+    const api = bridge();
+    if (!api?.saveUpdateDownload) return;
+    setSaveError(null);
+    const out = await api.saveUpdateDownload().catch((err: unknown) => ({ ok: false, reason: String(err) }));
+    if (!out.ok && out.reason && out.reason !== 'cancelled') setSaveError(out.reason);
+    await poll();
+  };
+  const canSave = !!bridge()?.saveUpdateDownload;
 
   // A state left over from a different release must not render as
   // progress for this one — the service records the version for exactly
   // this reason.
   const forThisVersion = state && state.version === latestVersion;
   const phase: DownloadPhase = forThisVersion ? state.phase : 'idle';
-  const inFlight = phase === 'downloading' || phase === 'verifying';
+  const inFlight = phase === 'preparing' || phase === 'downloading' || phase === 'verifying';
+  const savedPath = forThisVersion ? state.savedPath ?? null : null;
 
   const pct =
     forThisVersion && state.totalBytes && state.totalBytes > 0
@@ -159,13 +195,26 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
     <div className="space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
         {phase === 'ready' ? (
-          <button
-            onClick={reveal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium rounded-lg bg-green-500/15 border border-green-500/40 text-green-300 hover:bg-green-500/25 transition-colors"
-          >
-            <FolderOpen size={12} />
-            Show in folder
-          </button>
+          <>
+            {canSave && !savedPath && (
+              <button
+                onClick={save}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium rounded-lg bg-green-500/15 border border-green-500/40 text-green-300 hover:bg-green-500/25 transition-colors"
+              >
+                <Save size={12} />
+                Save to…
+              </button>
+            )}
+            <button
+              onClick={reveal}
+              className={canSave && !savedPath
+                ? 'inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded-lg text-foreground-muted hover:text-foreground hover:bg-white/[0.04] transition-colors'
+                : 'inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium rounded-lg bg-green-500/15 border border-green-500/40 text-green-300 hover:bg-green-500/25 transition-colors'}
+            >
+              <FolderOpen size={12} />
+              Show in folder
+            </button>
+          </>
         ) : (
           <button
             onClick={start}
@@ -173,7 +222,7 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium rounded-lg bg-accent/20 border border-accent/50 text-accent hover:bg-accent/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Download size={12} />
-            {inFlight ? 'Downloading…' : `Download ${filename}`}
+            {phase === 'preparing' ? 'Preparing…' : inFlight ? 'Downloading…' : `Download ${filename}`}
           </button>
         )}
 
@@ -193,12 +242,14 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
           <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden">
             <div
               className="h-full bg-accent/70 transition-[width] duration-200"
-              style={{ width: pct !== null ? `${pct}%` : '40%' }}
+              style={{ width: phase === 'preparing' ? '8%' : pct !== null ? `${pct}%` : '40%' }}
             />
           </div>
           <div className="text-[10.5px] text-foreground-subtle font-mono">
-            {phase === 'verifying'
-              ? 'Checking the signature…'
+            {phase === 'preparing'
+              ? 'Checking the release’s signed checksum list…'
+              : phase === 'verifying'
+              ? 'Checking the file against it…'
               : pct !== null
                 ? `${pct}% · ${formatBytes(state!.bytesDownloaded)} of ${formatBytes(state!.totalBytes!)}`
                 : formatBytes(state!.bytesDownloaded)}
@@ -214,7 +265,19 @@ export function VerifiedUpdateDownload({ latestVersion, browserUrl, filename }: 
             Verified against the release's signed manifest — these are the
             bytes it published. CodeTrellis does not install updates; open
             the file to apply it.
+            {savedPath && (
+              <>
+                {' '}Saved to <span className="font-mono text-green-200/90 break-all">{savedPath}</span>.
+              </>
+            )}
           </span>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="flex items-start gap-1.5 text-[10.5px] text-amber-300/90 leading-snug">
+          <AlertCircle size={12} className="shrink-0 mt-px" />
+          <span>Couldn't save it there: {saveError}</span>
         </div>
       )}
 

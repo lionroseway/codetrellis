@@ -116,6 +116,7 @@ const electronAPI = {
    * to reveal an arbitrary file. Resolves null when nothing is ready.
    */
   revealUpdateDownload: (): Promise<string | null> => ipcRenderer.invoke('updates:reveal'),
+  saveUpdateDownload: (): Promise<{ ok: boolean; path?: string; reason?: string }> => ipcRenderer.invoke('updates:save'),
   getLogPath: (): Promise<string> => ipcRenderer.invoke('logs:get-path'),
   /**
    * Phase 31 §7.4 — show an attachment's file in Finder / Explorer. Takes

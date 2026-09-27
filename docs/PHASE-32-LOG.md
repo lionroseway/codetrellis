@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — carried item 1: the coverage guard credits calls, not names |
-| **Status** | 0.1.17 released (owner, 2026-09-27). `feat/phase-32` fast-forwarded to `main` (`0861ee8`). Guard rewritten: tools, RPC methods and routes (with their method) are credited only where a test sends them; two routes it exposed are tested |
-| **Next action** | PR `feat/phase-32-a-coverage-calls` into `feat/phase-32`; merge when green. Then carried item 2: the authorship guard |
-| **Blockers** | none. The notes as published are on `main` (#139); `feat/phase-32` fast-forwarded to it (`9069079`) |
-| **Branch** | `feat/phase-32-a-coverage-calls` |
+| **Stage / step** | Track A — carried items; an owner-reported fix first (update download, bug 51) |
+| **Status** | Carried 1 merged (#141). Update download: progress and "Save to…" fixed and tested, PR open |
+| **Next action** | Merge the update-download PR when green. Then carried item 2, the authorship guard (owner asked to confirm "unverified" for plain HTTP, in the readout doc) |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-updates-download` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -54,7 +54,8 @@
 - [x] 0.8 Release — v0.1.17, desktop and companion (#136, #137, #138)
 
 ### Track A: awareness
-- [ ] Carried 1: the coverage guard credits calls, not names (bug 50)
+- [x] Carried 1: the coverage guard credits calls, not names (bug 50) (#141)
+- [ ] Owner's report: update download shows progress and asks where to save (bug 51)
 - [ ] Carried 2: no tool or handler writes a fixed author (structural test)
 - [ ] Carried 3: harness and browser suites run in CI, sharded
 - [ ] A0 Parallel-work bugs 1–3
@@ -152,6 +153,32 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: the update download shows progress and asks where to save (bug 51)
+
+The owner updated 0.1.16 → 0.1.17 from Settings and saw no progress and no
+choice of where to save. The progress bar existed; it never ran. The
+backend stayed `idle` while fetching the signed manifest, and the panel's
+first poll after Download took that idle as finished and stopped. The
+browser test that was meant to guard this (M30) stubbed `downloading` the
+moment Download was pressed, so it could not see the gap.
+
+- The download is `preparing` from its first line ("Checking the release's
+  signed checksum list…"), with Cancel, which now also works in that phase.
+- The panel keeps polling for up to 15 s after Download until it sees the
+  download start, so an early idle over HTTP can't stop it either.
+- **Save to…** once verified: the main process opens the native save
+  dialog (default: Downloads), copies the staged file, and re-hashes the
+  copy against the verified digest; a mismatch is refused and nothing is
+  left behind. "Show in folder" then reveals the saved copy, and the panel
+  says where it went.
+
+Tests: 5 unit (preparing before the first await; cancel while preparing;
+save copies and records; a changed file is refused; nothing before
+verified), 2 browser (idle polls then progress — fails on the old panel;
+Save to… and "Saved to"), and the harness status test checks the new
+fields. Readout for the phase published as a page (owner's ask) alongside
+the Docs version.
 
 ### 2026-09-27: Track A, carried 1 — the coverage guard credits calls
 
