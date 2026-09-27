@@ -416,8 +416,10 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 - `npm run typecheck` — Run TypeScript type checking
 - `npm run test:unit` — Pure-logic tests under Node's runner, plus
   `tools/**/*.test.ts` (~975 tests, ~30 s)
-- `npm run test:harness` — Full E2E harness (~380 tests). Budget ~19 min
-  in a 4-core container; ~6 min on an M-series dev machine.
+- `npm run test:harness` — Full E2E harness (~650 tests). Budget ~28 min
+  in a 4-core container. CI runs it on every PR in four shards and blocks
+  on it (Phase 32); the browser suite runs in three shards beside it and
+  reports without blocking until it is green there.
 
 **Run `test:unit` as well as the harness.** It is not just faster
 coverage of the same things — two of its tests are *structural guards*

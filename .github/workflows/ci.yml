@@ -34,41 +34,27 @@
 #   desktop           ~1 min    typecheck, bundle guard, web build, unit tests, lint
 #   mobile            ~30 s     typecheck
 #   html-view         ~1 min    the sandboxed HTML view, a hostile report, real Electron
+#   harness           4 shards  the hermetic E2E harness (Phase 32, below)
 #
 # And what does NOT:
 #
 #   claude-review     varies    advisory permanently, see claude-review.yml
-#   harness           see below
+#   browser           3 shards  the e2e/ browser suite, reported until green here
 #
-# THE HARNESS IS GREEN BUT DOES NOT FIT HERE — AND THE NUMBERS MATTER.
+# THE HARNESS BLOCKS NOW, IN SHARDS (Phase 32, carried item 3).
 #
-#   local (M-series Mac):  139 passed, 16 skipped, 0 failed, 99s
-#   ubuntu-latest:         did not finish in 20 minutes, job cancelled
+# It used to live only in e2e-harness.yml, nightly and on demand: at 139
+# tests it ran 99s on an M-series Mac but did not finish in 20 minutes on
+# ubuntu-latest, because playwright.harness.config.ts runs `workers: 1` and
+# every test boots a real backend subprocess through tsx. By Phase 32 it had
+# grown to 644 tests and ~28 min in a 4-core container, and every Stage 0
+# step ran it by hand before merging. Sharding by file across four jobs is
+# the lever this comment used to point at; the first sharded run's times are
+# in docs/PHASE-32-LOG.md. If a shard nears its 30-minute timeout, add
+# shards rather than raising the timeout.
 #
-# It was briefly promoted into this file on the strength of the local number
-# alone. That was wrong: a >12x slowdown on a 4-core cloud runner is the
-# number that decides whether it can gate a PR, and nobody had measured it.
-#
-# The cause is structural, not a flake. playwright.harness.config.ts runs
-# `workers: 1`, and every one of the 139 tests boots a real backend
-# subprocess through tsx — TypeScript compiled on the fly, sql.js and
-# tree-sitter WASM loaded per test. That is sub-second on fast local hardware
-# and seconds apiece on a shared runner.
-#
-# It therefore runs from e2e-harness.yml — nightly and on demand, where a long
-# runtime costs nothing. Developers get the fast local run, which is where
-# this suite earns its keep.
-#
-# TO BRING IT BACK HERE: make it fit. Raising `workers` is the obvious lever
-# (the config's `workers: 1` was chosen for loaded local machines, not for CI)
-# or shard across jobs. Measure ON CI before promoting it again — that is the
-# mistake this comment exists to stop being repeated.
-#
-# `npm test` (the legacy Playwright suite under e2e/) is not run here at all:
-# it drives a real running app and needs a desktop session, a folder picker
-# and a free port. `npm run test:harness` is the hermetic replacement — it is
-# the right suite, it is just not yet fast or stable enough to gate on.
-# See docs/E2E-HARNESS.md.
+# The browser suite (e2e/) runs in three shards beside it and reports without
+# blocking until its runs here are green. See docs/E2E-HARNESS.md.
 
 name: ci
 
@@ -255,6 +241,116 @@ jobs:
         run: npx tsx tools/spellcheck-check/run.ts
 
   # ---------------------------------------------------------------------------
+  # The hermetic harness, in four shards — blocking (Phase 32, carried item 3).
+  #
+  # 644 tests, ~28 min in one 4-core container with `workers: 1`, because every
+  # test boots a real backend subprocess. That is what kept it out of this file
+  # (see the header). Sharded across four jobs by file, each shard is a
+  # quarter of that. Every Stage 0 step ran it by hand; now every PR does.
+  # ---------------------------------------------------------------------------
+  harness:
+    name: Harness (${{ matrix.shard }}/4)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci
+      # A wrong-architecture native binding fails every backend-booting test at
+      # once and reads as flakiness. Fail here with the fix instead.
+      - name: Verify native binding
+        run: |
+          node -e "const B=require('better-sqlite3');new B(':memory:').exec('create table t(a)');console.log('better-sqlite3 OK on',process.version,process.arch)" \
+            || { echo "::error::better-sqlite3 native binding failed to load — wrong arch or Node version. Try: npm rebuild better-sqlite3"; exit 1; }
+      # The harness git-inits its fixture repos.
+      - name: Configure git for fixtures
+        run: |
+          git config --global user.email "ci@codetrellis.invalid"
+          git config --global user.name "CodeTrellis CI"
+      - name: Install Playwright runner
+        run: npx playwright install --with-deps chromium
+      - name: Harness, shard ${{ matrix.shard }} of 4
+        run: npx playwright test --config=playwright.harness.config.ts --shard=${{ matrix.shard }}/4
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-report-${{ matrix.shard }}-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # The browser suite (e2e/), in three shards — reported, NOT yet blocking.
+  #
+  # It drives the real app through Vite and needs no desktop session on a
+  # runner (the label-gated e2e-pr.yml it replaces proved that). It is not in `ci-passed`
+  # until its own runs here are green: it had known failures when it was last
+  # run on CI, and a gate on a red suite is one people learn to click past.
+  # Promote it by adding `browser` to `ci-passed.needs`.
+  # ---------------------------------------------------------------------------
+  browser:
+    name: Browser suite (${{ matrix.shard }}/3)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      # playwright.config.ts gives each run its own temp data dir and token,
+      # and fails on a busy port rather than reusing a stray server.
+      E2E_WORKERS: '2'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Verify native binding
+        run: |
+          node -e "const B=require('better-sqlite3');new B(':memory:').exec('create table t(a)');console.log('better-sqlite3 OK on',process.version,process.arch)" \
+            || { echo "::error::better-sqlite3 native binding failed to load"; exit 1; }
+      - name: Configure git
+        run: |
+          git config --global user.email "ci@codetrellis.invalid"
+          git config --global user.name "CodeTrellis CI"
+      - name: Install Playwright runner
+        run: npx playwright install --with-deps chromium
+      - name: Browser suite, shard ${{ matrix.shard }} of 3
+        run: npx playwright test --shard=${{ matrix.shard }}/3 --reporter=list,html
+      - name: What each failing page showed
+        # The snapshot Playwright writes beside every failure, in the log itself.
+        if: failure()
+        run: |
+          for f in test-results/*/error-context.md; do
+            [ -f "$f" ] || continue
+            echo "::group::$(dirname "$f")"
+            head -c 20000 "$f"
+            echo "::endgroup::"
+          done
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-report-${{ matrix.shard }}-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # THE ONLY CONTEXT BRANCH PROTECTION PINS.
   #
   # `if: always()` so it runs even when a dependency failed — without it the
@@ -264,10 +360,9 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    # `harness` is NOT here. It is green (139 passed, 0 failed) but it does
-    # not FIT: ~99s locally, >20min on ubuntu-latest, where it hit the job
-    # timeout. See e2e-harness.yml.
-    needs: [no-private-docs, desktop, mobile, html-view]
+    # `harness` blocks, in four shards (Phase 32). `browser` reports only,
+    # until its runs here are green — then add it.
+    needs: [no-private-docs, desktop, mobile, html-view, harness]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - name: Check results

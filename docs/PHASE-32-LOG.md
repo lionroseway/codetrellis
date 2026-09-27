@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — carried item 2: no handler writes a fixed author |
-| **Status** | Update download merged (#142, bug 51). Authorship: one helper per transport, a structural guard (`src/backend/authorship.test.ts`), UI labels "local API, unverified"; full harness running |
-| **Next action** | Fix what the full harness finds (tests that encoded REST writes as `human`, each in its own commit), browser specs that do the same, then PR `feat/phase-32-a-authorship` |
-| **Blockers** | none. Plain HTTP recorded as `unverified` follows the owner's §0.4d decision; asked to confirm in the readout doc |
-| **Branch** | `feat/phase-32-a-authorship` |
+| **Stage / step** | Track A — carried item 3: harness and browser suites in CI, sharded |
+| **Status** | Carried 2 merged (#143, bug 52). CI: harness in 4 blocking shards, browser suite in 3 reporting shards; the label-gated e2e-pr.yml removed |
+| **Next action** | PR `feat/phase-32-a-ci-suites`; record the first sharded run's times; promote the browser suite to blocking if its shards are green, else list what fails |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-a-ci-suites` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -56,7 +56,7 @@
 ### Track A: awareness
 - [x] Carried 1: the coverage guard credits calls, not names (bug 50) (#141)
 - [x] Owner's report: update download shows progress and asks where to save (bug 51) (#142)
-- [ ] Carried 2: no tool or handler writes a fixed author (structural test; bug 52)
+- [x] Carried 2: no tool or handler writes a fixed author (structural test; bug 52) (#143)
 - [ ] Carried 3: harness and browser suites run in CI, sharded
 - [ ] A0 Parallel-work bugs 1–3
 - [ ] A1.1 Session binding
