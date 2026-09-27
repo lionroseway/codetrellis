@@ -154,6 +154,30 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-27: A0 — parallel-work bugs 1–3
+
+The first step of Track A proper, done while #144's CI measured the suites.
+
+- **Bug 1, claims by session.** `claim_item` recorded the agent's type as
+  the assignee, so two Claude Code sessions were one claimant and never saw
+  each other's overlap. The claim now records the session
+  (`plan_items.assignee_session`, runtime only, cleared with the assignee),
+  and overlap is compared by session, falling back to the assignee for a
+  REST claim or an older row. The assignee stays the type, which is what
+  people read. The claim's author is the caller: the agent over MCP, the
+  person (or `unverified`) over REST, which can still claim on an agent's
+  behalf — that closes the REST claim note in bug 52.
+- **Bug 2, register_session in place.** `INSERT OR REPLACE` deleted the row;
+  now an upsert keeps the active plan always, and the model, terminal and
+  capabilities unless the call names them, and when the session connected.
+- **Bug 3, every tool call.** The watcher returned on the first `tool_use`
+  in a message; it now emits one event per block, in order.
+
+Tests: `claim-by-session.test.ts` (3; 2 fail on the old code),
+`session-service.test.ts` (2; 1 fails on the old code),
+`claude-code-watcher.test.ts` (+1; fails on the old code),
+`tests/e2e/parallel-claims.test.ts` (two real sessions over MCP).
+
 ### 2026-09-27: Track A, carried 2 — no handler writes a fixed author (bug 52)
 
 The review's second carried item. Authorship had gone wrong the same way

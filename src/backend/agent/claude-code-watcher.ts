@@ -142,12 +142,12 @@ function parseJsonlEntries(line: string): AgentEvent[] {
 }
 
 /** The event one `tool_use` block becomes. */
-function toolUseEvent(toolName: string, input: Record<string, any>): AgentEvent {
+function toolUseEvent(toolName: string, input: Record<string, unknown>): AgentEvent {
   if (toolName === 'Read') return makeEvent('file_changed', { action: 'read', file: input.file_path, tool: toolName });
   if (toolName === 'Write') return makeEvent('file_changed', { action: 'write', file: input.file_path, tool: toolName });
   if (toolName === 'Edit') return makeEvent('file_changed', { action: 'edit', file: input.file_path, tool: toolName });
   if (toolName === 'Bash') {
-    return makeEvent('file_changed', { action: 'bash', command: (input.command || '').substring(0, 200), tool: toolName });
+    return makeEvent('file_changed', { action: 'bash', command: String(input.command ?? '').substring(0, 200), tool: toolName });
   }
   if (toolName === 'Glob' || toolName === 'Grep') {
     return makeEvent('architecture_query', { tool: toolName, pattern: input.pattern || input.query });
