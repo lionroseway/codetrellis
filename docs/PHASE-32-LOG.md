@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | Track A — A1.2: every Claude Code session, keyed by folder |
-| **Status** | A1.1 PR (#146) waiting on CI. A1.2 written and tested locally (unit 11, harness 2, each failing on the old watcher); branches from `feat/phase-32` once #146 merges |
-| **Next action** | Merge #146 when green; cut `feat/phase-32-a1-2-watcher-sessions`, carry A1.2 over, PR it; then A1.3 (workstream discovery and the TopBar strip) |
+| **Status** | A1.1 merged (#146). A1.2 done on its branch (unit 11, harness 2, each new one failing on the old watcher); PR open |
+| **Next action** | Merge A1.2's PR when green; then A1.3 (workstream discovery, `list_workstreams`, the TopBar strip) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-2-watcher-sessions` (to cut) |
+| **Branch** | `feat/phase-32-a1-2-watcher-sessions` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -59,7 +59,7 @@
 - [x] Carried 2: no tool or handler writes a fixed author (structural test; bug 52) (#143)
 - [x] Carried 3: harness and browser suites run in CI, sharded (#144)
 - [x] A0 Parallel-work bugs 1–3 (#145)
-- [ ] A1.1 Session binding
+- [x] A1.1 Session binding (#146)
 - [ ] A1.2 Multi-session Claude watcher
 - [ ] A1.3 Workstream discovery and strip
 - [ ] A1.4 Folder watching
