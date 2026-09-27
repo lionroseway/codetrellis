@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4k Settings, updates, privacy |
-| **Status** | Started. #128 (0.4j, bugs 36–42) merged; its full harness at `ec235c5` was 592 passed, 0 retries |
-| **Next action** | Owner decided the three open questions (log decisions 2026-09-27): capture grant for shared audio, tag answers to peer questions, flag freeze changes. Build those three first (failing-first), then the domain-k audit: settings sections, update check (`POST /api/updates/check` untested), spell-check bundle, logs |
+| **Status** | The owner's three decisions are built and committed (capture grant, tagged answers, flagged freezes; bug 43) |
+| **Next action** | Domain-k audit: every settings section, update check on/off (`POST /api/updates/check` untested), spell-check bundle, logs; then full harness, PR, merge |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4k-settings` |
 | **Last updated** | 2026-09-27 |
@@ -144,6 +144,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.4k — the owner's three decisions, built (bug 43)
+
+- **Shared audio needs `capture`.** The audio relay (status, chunks,
+  stopped) serves only a confirmed pairing holding `capture`, with
+  "Share audio capture" still on; Settings → Devices can grant it.
+  Correction to what was reported to the owner: nothing calls the
+  chunk forwarder, so today only the capture status crossed — the
+  microphone itself was never forwarded. Gated anyway, so wiring it later
+  cannot skip the grant. Both raw relays now ask one helper
+  (`peer-grants.ts`), and a grant made while connected takes effect at
+  once (the terminal list, the audio state) instead of at the next
+  reconnect. `phone-grants.test.ts` (4), failing-first.
+- **Answers are tagged.** `respond_remote_input`, the phone's
+  `input.respond` and the desktop's route send
+  `respondedBy { actor, actorType, channel }`; the asking side passes it on,
+  an untagged answer from an older peer as unknown. No screen shows it yet:
+  the relay that would send these questions is unfinished (bug 8), so the
+  tag is on the wire and in the event, ready for it.
+- **Bug 43**, found writing that test: every agent was recorded as
+  "agent" (`authorFromExtra` never found the SSE session). Fixed; the 0.4g
+  budget test now names the agent.
+- **Freeze changes flagged.** `project_freeze_changes` records every change
+  with who and how; an agent's is flagged. The freeze bar shows flags with
+  Seen, stays up after an agent lifts the freeze, and updates live; the
+  phone's plan screen has a freeze card (`freeze.get` /
+  `freeze.acknowledge`). `exempt_plan_from_freeze` refuses an unknown plan.
+  A lifted freeze with no reason is stripped from the config file, which
+  first hid the lift from the record. `freeze-flags.test.ts` (5), a browser
+  test in `mcp-ui-tools.spec`, `freeze-words.test.ts` (5). No push for
+  freeze changes (not part of the decision; budgets have one).
 
 ### 2026-09-27: 0.4j — the mobile surface over a real peer (bugs 36–42)
 
