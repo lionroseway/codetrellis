@@ -42,6 +42,18 @@ test.describe.serial('New plans follow the default visibility', () => {
     expect(await linked(onPhone.uid)).toBe(true);
   });
 
+  test('made "Untitled plan" in the window, it waits for its name, so its directory is named for it', async () => {
+    // The window creates the plan before the person types a title. A plan's
+    // directory keeps its first name, so writing it now would leave it in
+    // untitled-plan-… for good.
+    const uid = await createOverRest('Untitled plan');
+    expect(await linked(uid)).toBe(false);
+    expect((await h.client.raw('PUT', `/api/plans/${uid}`, { title: 'Rounding rules' })).ok).toBe(true);
+    const status = await (await h.client.raw('GET', `/api/plans/${uid}/file-status?path=${encodeURIComponent(root)}`)).json();
+    expect(status.linked).toBe(true);
+    expect(status.planDir).toMatch(/\/rounding-rules-[0-9a-f]+$/);
+  });
+
   test('local: made either way, the plan stays in the database', async () => {
     expect((await h.client.raw('PUT', '/api/settings', { plans: { defaultVisibility: 'local' } })).ok).toBe(true);
     expect(await linked(await createOverRest('Local over REST'))).toBe(false);

@@ -174,6 +174,25 @@ trip (it now starts from a Local default) and the phone's
 correct; the source files are compared on their own). Each fixed in its
 own commit with the reason.
 
+The browser suite then showed the cost of writing plans at creation. The
+window makes a plan called "Untitled plan" before the person types, saves
+the title on a 500 ms debounce as they type, and a plan's directory kept
+its first name (the bug 22 fix) — so a person's plan would have lived in
+`untitled-plan-…`, or in a slug of half its title, for good. Two rules
+now:
+
+- A plan is not written while it is still "Untitled plan"; it is written
+  the first time a person gives it a name (`exportOnFirstTitle`).
+- A plan's directory follows its title until anything in it has been
+  committed (`git ls-files`); after that it keeps its name, as bug 22
+  requires. The move is stamped as our own write so the plans watcher does
+  not read it as a deletion. Any doubt keeps the old name.
+
+`plan-tools.test.ts` (bug 22) now commits its plan first, which is the case
+bug 22 is about, and gains a test for the uncommitted case.
+`plan-by-hand.spec.ts` no longer clicks "Local" to share: under the Shared
+default the plan is already shared once named.
+
 ### 2026-09-27: 0.5c — workspace minors
 
 0.5b merged as [#132](https://github.com/lionroseway/codetrellis/pull/132)

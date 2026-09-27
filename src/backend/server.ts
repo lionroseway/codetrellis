@@ -79,7 +79,7 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault } from './services/plan-file-service';
+import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
@@ -1885,6 +1885,12 @@ export function updatePlanAsPerson(
     throw new PlanRequestError(400, `status must be one of: ${PLAN_STATUSES.join(', ')}`);
   }
   planService.updatePlan(planUid, changes, author);
+
+  // A plan made in the window is held back while it is "Untitled plan" and
+  // written into the project once it has a name (bug 48).
+  if (changes.title !== undefined && plan.projectPath) {
+    exportOnFirstTitle(planUid, plan.projectPath, plan.title);
+  }
 
   // Auto-capture trellis snapshot when plan is approved
   if (changes.status === 'approved' && plan.projectPath) {
