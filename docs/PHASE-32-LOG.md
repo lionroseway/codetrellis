@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | 0.4k Settings, updates, privacy |
 | **Status** | Started. #128 (0.4j, bugs 36–42) merged; its full harness at `ec235c5` was 592 passed, 0 retries |
-| **Next action** | Audit domain k: every settings section, update check on/off (`POST /api/updates/check` is untested), the spell-check bundle, logs; drive them with the harness and fill the behaviour column |
+| **Next action** | Owner decided the three open questions (log decisions 2026-09-27): capture grant for shared audio, tag answers to peer questions, flag freeze changes. Build those three first (failing-first), then the domain-k audit: settings sections, update check (`POST /api/updates/check` untested), spell-check bundle, logs |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4k-settings` |
 | **Last updated** | 2026-09-27 |
@@ -136,6 +136,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Cloud-environment CLI is follow-on work, specified in `docs/FOLLOW-ON-CLOUD-ENVIRONMENTS.md`, not part of Phase 32 | Widens Phase 32's one-machine scope |
 | 2026-09-26 | Agents are co-workers: they may add and (where policy allows) close criteria. Every criterion and decision is tagged with who did it, taken from how the call arrived — MCP = that agent, paired phone = the person on that device, the app window (Electron IPC) = the person in the app, plain HTTP = "local API, unverified". Policies unchanged; the sign-off pack shows agent and unverified decisions separately (0.4d) | Owner's decision. Honest provenance over blocking agents |
 | 2026-09-26 | Agents may change a plan's budget; each change is recorded (who, how it arrived, before and after) and an agent's change is flagged on the budget chip until a person marks it seen (0.4g) | Owner's decision ("budget changes can be flagged"). Same stance as 0.4d: tag, don't block |
+| 2026-09-27 | Microphone sharing to paired devices needs the `capture` grant per device, as terminals need `terminal`; the `shareAudio` switch still has to be on (0.4k) | Owner's decision. The switch alone shared the microphone with every connected device |
+| 2026-09-27 | An answer to a peer agent's question for a person carries who gave it (person or agent, which one, how it arrived), shown where it was asked; agents may still answer (0.4k) | Owner's decision. Same stance as 0.4d: tag, don't block |
+| 2026-09-27 | Freeze changes are recorded (who, how, before and after) and an agent's change is flagged on the freeze indicator, desktop and phone, until a person marks it seen (0.4k) | Owner's decision. Same as budgets (0.4g) |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
