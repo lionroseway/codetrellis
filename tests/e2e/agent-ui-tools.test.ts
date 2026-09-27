@@ -172,6 +172,8 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
     expect(report.flaggedChanges).toHaveLength(1);
     const change = report.flaggedChanges[0];
     expect(change).toMatchObject({ channel: 'mcp', flagged: true, before: { minutes: 120 }, after: { minutes: 240, exempt: true } });
+    // In the agent's own name — its type, not the generic "agent" (bug 43).
+    expect(change).toMatchObject({ actor: 'claude-desktop', actorType: 'mcp' });
     // Other agents see it too.
     expect(JSON.parse(await call('check_budget', { plan_uid: flaggedPlan })).flagged_changes).toHaveLength(1);
 

@@ -109,7 +109,8 @@ test.describe.serial('Channels, projects and the rest from the phone', () => {
 
     expect(await phone.rpc('input.respond', { requestId: 'req-1', response: 'no' })).toEqual({ ok: true });
     const answer = await phone.waitForControl((m) => m.method === 'user-input-response');
-    expect(answer.params).toEqual({ requestId: 'req-1', response: 'no' });
+    // Answered on the paired phone: the person, and how it arrived (0.4k).
+    expect(answer.params).toEqual({ requestId: 'req-1', response: 'no', respondedBy: { actor: 'dana@example.com', actorType: 'human', channel: 'phone' } });
     expect((await req('GET', '/api/peers/remote-input-requests')).count).toBe(0);
 
     // Answered already, or never asked: refused, not "ok".
@@ -120,7 +121,9 @@ test.describe.serial('Channels, projects and the rest from the phone', () => {
     phone.sendControl({ method: 'user-input-request', params: { requestId: 'req-2', prompt: 'Run the migration?' } });
     await expect.poll(async () => (await req('GET', '/api/peers/remote-input-requests')).count, { timeout: 5000 }).toBe(1);
     expect(await req('POST', '/api/peers/remote-input-requests/req-2/respond', { response: 'yes' })).toEqual({ sent: true });
-    await phone.waitForControl((m) => m.method === 'user-input-response' && (m.params as { requestId: string }).requestId === 'req-2');
+    const second = await phone.waitForControl((m) => m.method === 'user-input-response' && (m.params as { requestId: string }).requestId === 'req-2');
+    // Plain HTTP cannot say who is behind it: unverified, on the local API (0.4d).
+    expect((second.params as { respondedBy: unknown }).respondedBy).toEqual({ actor: 'dana@example.com', actorType: 'unverified', channel: 'local-api' });
     expect((await h.client.raw('POST', '/api/peers/remote-input-requests/req-2/respond', { response: 'yes' })).status).toBe(404);
     expect((await h.client.raw('POST', '/api/peers/remote-input-requests/req-3/respond', {})).status).toBe(400);
   });

@@ -82,7 +82,9 @@ test.describe.serial('Peer tools with a phone connected', () => {
     await expect.poll(async () => (await json('list_remote_input_requests')).count, { timeout: 5000 }).toBe(1);
     expect((await json('list_remote_input_requests')).requests[0]).toMatchObject({ requestId: 'q-1', prompt: 'Deploy now?' });
     expect(await json('respond_remote_input', { request_id: 'q-1', response: 'wait' })).toMatchObject({ sent: true });
-    await phone.waitForControl((m) => m.method === 'user-input-response' && (m.params as { requestId: string }).requestId === 'q-1');
+    const answer = await phone.waitForControl((m) => m.method === 'user-input-response' && (m.params as { requestId: string }).requestId === 'q-1');
+    // Put to a person, answered by an agent: the asker is told which (owner's decision, 0.4k).
+    expect(answer.params).toEqual({ requestId: 'q-1', response: 'wait', respondedBy: { actor: 'claude-desktop', actorType: 'mcp', channel: 'mcp' } });
     expect(await refused('respond_remote_input', { request_id: 'q-1', response: 'go' })).toMatch(/not found or already answered/);
   });
 

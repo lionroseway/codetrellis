@@ -4451,7 +4451,10 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
     // peer-connection-service is statically imported as `peerService` at top of file
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
-    const sent = peerService.respondToInputRequest(req.params.requestId, response);
+    // The app window is the person; plain HTTP is recorded as unverified (0.4d).
+    const sent = peerService.respondToInputRequest(req.params.requestId, response, cameFromAppWindow(req)
+      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
     if (!sent) { res.status(404).json({ error: 'No pending input request with that id' }); return; }
     res.json({ sent });
   } catch (err) {

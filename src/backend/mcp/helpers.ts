@@ -23,8 +23,13 @@ export function resultWithMeta(data: any, subscribers: number) {
  * Used by plan-item tools and plan template tools.
  */
 export function authorFromExtra(deps: ToolDeps, extra: any): { author: string; authorType: string } {
+  // Each MCP session has its own server instance and `deps`, so `deps.sessionId`
+  // is the caller. The transport's `extra` carries none of the fields read
+  // first on SSE, and without this every agent was recorded as "agent"
+  // (Phase 32 bug 43).
   const sessionId = extra?.sessionInfo?.sessionId
     ?? extra?.requestInfo?.headers?.['mcp-session-id']
+    ?? deps.sessionId
     ?? null;
   const sessions = deps.sessionService.getActiveSessions();
   const session = sessionId ? sessions.find((s: any) => s.sessionId === sessionId) : null;

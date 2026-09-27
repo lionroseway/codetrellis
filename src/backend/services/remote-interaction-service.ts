@@ -174,7 +174,21 @@ export function broadcastInputRequest(
  * Send a response to a remote user-input request.
  * Called when the local user answers a prompt from a remote agent.
  */
-export function respondToInputRequest(requestId: string, response: string): boolean {
+/**
+ * Who answered a peer agent's question (owner's decision, Phase 32 §0.4k).
+ *
+ * The question was put to a person; an agent may answer it too, so the answer
+ * says which it was — as a criterion's decision does (0.4d). Without it, the
+ * asking agent could not tell a person's "yes" from another agent's.
+ */
+export interface InputResponder {
+  actor: string;
+  /** 'human', 'unverified' (the local HTTP API) or the agent's type. */
+  actorType: string;
+  channel: 'desktop' | 'phone' | 'local-api' | 'mcp';
+}
+
+export function respondToInputRequest(requestId: string, response: string, respondedBy: InputResponder): boolean {
   const request = pendingInputRequests.get(requestId);
   if (!request || request.answered) return false;
 
@@ -182,7 +196,7 @@ export function respondToInputRequest(requestId: string, response: string): bool
 
   const msg: ControlMessage = {
     method: 'user-input-response',
-    params: { requestId, response },
+    params: { requestId, response, respondedBy },
     sourceInstanceId: instanceId,
   };
   sendToPeer(request.peerFingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(msg));
@@ -326,10 +340,14 @@ function handleControlMessage(fingerprint: string, data: Buffer | string): void 
 
       case 'user-input-response': {
         // Response from a peer to our local input request
-        const { requestId, response } = msg.params as {
-          requestId: string; response: string;
+        const { requestId, response, respondedBy } = msg.params as {
+          requestId: string; response: string; respondedBy?: InputResponder;
         };
-        emitEvent('remote-input-response', { requestId, response, fingerprint });
+        // An answer from a peer that predates the tag says nothing about who
+        // gave it, and is passed on as exactly that — never as a person's.
+        const by: InputResponder | { actorType: 'unknown' } =
+          respondedBy && typeof respondedBy.actorType === 'string' ? respondedBy : { actorType: 'unknown' };
+        emitEvent('remote-input-response', { requestId, response, fingerprint, respondedBy: by });
         break;
       }
 

@@ -995,7 +995,7 @@ async function routeMethod(
       const response = requireString(params, 'response');
       // An answer that went nowhere is not "ok": the person would think the
       // agent had its reply (0.4j).
-      if (!remoteInteractionService.respondToInputRequest(requestId, response)) {
+      if (!remoteInteractionService.respondToInputRequest(requestId, response, { actor: getAuthorKey('human'), actorType: 'human', channel: 'phone' })) {
         throw new Error(`No pending input request ${requestId}`);
       }
       return { ok: true };
