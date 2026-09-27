@@ -1766,7 +1766,7 @@ app.post('/api/plans', (req, res) => {
   // Phase 13 §E: prefer the configured identity (email) over the
   // legacy "user" role. `getAuthorKey` falls back to "human" if the
   // user hasn't set an identity yet, so old behaviour stays valid.
-  const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, getAuthorKey('human'), 'human', projectPath);
+  const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, personFrom(req).author, personFrom(req).authorType, projectPath);
   const exported = exportIfSharedByDefault(plan.uid, projectPath);
   broadcast('plan-created', { plan, exported });
   saveNow(() => exportDatabase());
@@ -1867,6 +1867,34 @@ app.get('/api/plans/:uid', (req, res) => {
 });
 
 /**
+ * Who a person's write over REST is by, from how it arrived (Phase 32
+ * §0.4d, owner's decision). The app window's IPC is the person. Plain HTTP
+ * with the token could be a person in a browser or a script that read the
+ * token, so it is recorded as `unverified`: it counts, and says what it is
+ * wherever it is shown.
+ *
+ * Every REST handler that records an author takes it from here — never a
+ * literal, and never from the request body. Authorship went wrong the same
+ * way four times in Stage 0 (bugs 43, 47, 49 and the grant escalation), so
+ * `authorship.test.ts` holds this file to it.
+ */
+export interface Person {
+  author: string;
+  authorType: 'human' | 'unverified';
+}
+
+function personFrom(req: express.Request): Person {
+  return { author: getAuthorKey('human'), authorType: cameFromAppWindow(req) ? 'human' : 'unverified' };
+}
+
+/** The same person, in the shape decisions, budgets and freezes record. */
+function actorFrom(req: express.Request) {
+  return cameFromAppWindow(req)
+    ? { actor: getAuthorKey('human'), actorType: 'human' as const, channel: 'desktop' as const }
+    : { actor: getAuthorKey('human'), actorType: 'unverified' as const, channel: 'local-api' as const };
+}
+
+/**
  * A person's edit to a plan, from the app or the paired phone.
  *
  * One function for both, because the phone's copy had drifted: it stored any
@@ -1953,7 +1981,7 @@ app.put('/api/plans/:uid', (req, res) => {
     updatePlanAsPerson(
       req.params.uid,
       { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
-      'user',
+      personFrom(req).author,
     );
   } catch (err) { sendPlanError(res, err); return; }
   res.json({ ok: true });
@@ -2097,6 +2125,8 @@ export function postChannelEventAsPerson(input: {
   respondsTo?: string | null;
   attempted?: unknown;
   options?: unknown;
+  /** How the person reached us: the phone and the app window are `human`, plain HTTP `unverified`. */
+  by: Person['authorType'];
 }) {
   if (!planService.getPlan(input.planUid)) throw new PlanRequestError(404, 'Plan not found');
   const identity = getSettings().identity;
@@ -2111,7 +2141,7 @@ export function postChannelEventAsPerson(input: {
     eventType: input.eventType as any,
     payload,
     author,
-    authorType: 'human',
+    authorType: input.by,
     agentModel: null,
     respondsTo: input.respondsTo ?? null,
   });
@@ -2178,6 +2208,7 @@ app.post('/api/plans/:planUid/channels', (req, res) => {
       respondsTo: responds_to,
       attempted,
       options,
+      by: personFrom(req).authorType,
     }));
   } catch (err) {
     res.status(err instanceof PlanRequestError ? err.status : 400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -2227,8 +2258,7 @@ app.post('/api/plans/:planUid/items', (req, res) => {
       newConnections,
       removedConnections,
       dependencies,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     broadcast('plan-item-created', { planUid: item.planUid, item });
     saveNow(() => exportDatabase());
@@ -2395,7 +2425,7 @@ app.post('/api/plans/:uid/check-runs', async (req, res) => {
   if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   try {
     const run = await criterionLoop.runCheckRun({
-      planUid: req.params.uid, trigger: 'manual', by: getAuthorKey('human'), byType: 'human',
+      planUid: req.params.uid, trigger: 'manual', by: personFrom(req).author, byType: personFrom(req).authorType,
     });
     broadcast('plan-check-run', { planUid: req.params.uid, runUid: run.uid });
     saveNow(() => exportDatabase());
@@ -2425,7 +2455,7 @@ app.post('/api/items/:uid/artefacts', async (req, res) => {
       path: body.path,
       role: body.role,
       note: typeof body.note === 'string' ? body.note : null,
-      actor: { author: getAuthorKey('human'), authorType: 'human' },
+      actor: personFrom(req),
     });
     startArtefactWatching(artefact);
     criteriaChanged(req.params.uid);
@@ -2495,8 +2525,7 @@ app.put('/api/items/:uid', (req, res) => {
     parentUid: body.parentUid,
     sortOrder: body.sortOrder,
     changeSummary: body.changeSummary,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: body });
@@ -2546,8 +2575,7 @@ app.post('/api/items/:uid/code-reference', (req, res) => {
   const item = planItemService.updateItem(existing.uid, {
     fileSpecs,
     changeSummary: `Code reference ${filePath}:${start}${end === start ? '' : `-${end}`}`,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { fileSpecs } });
@@ -2561,8 +2589,7 @@ app.post('/api/items/:uid/move', (req, res) => {
   const item = planItemService.moveItem(req.params.uid, {
     newParentUid: newParentUid === undefined ? undefined : (newParentUid === '' ? null : newParentUid),
     newSortOrder,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-moved', { planUid: item.planUid, itemUid: item.uid, toParentUid: item.parentUid, sortOrder: item.sortOrder });
@@ -2584,8 +2611,7 @@ app.delete('/api/items/:uid', (req, res) => {
   }
   const cascadedUids = planItemService.deleteItem(req.params.uid, {
     cascade,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   broadcast('plan-item-deleted', { planUid: target.planUid, itemUid: req.params.uid, cascadedUids });
   saveNow(() => exportDatabase());
@@ -2597,7 +2623,7 @@ app.post('/api/items/:uid/claim', (req, res) => {
   const { agentId, agentType, model } = req.body || {};
   const result = planItemService.claimItem(
     req.params.uid,
-    agentId || getAuthorKey('human'),
+    agentId || personFrom(req).author,
     agentType || 'human',
     model,
   );
@@ -2618,7 +2644,7 @@ app.post('/api/items/:uid/claim', (req, res) => {
 app.post('/api/items/:uid/restore-version/:version', (req, res) => {
   const v = Number(req.params.version);
   if (!Number.isFinite(v)) { res.status(400).json({ error: 'invalid version' }); return; }
-  const item = planItemService.restoreItemVersion(req.params.uid, v, getAuthorKey('human'), 'human');
+  const item = planItemService.restoreItemVersion(req.params.uid, v, personFrom(req).author, personFrom(req).authorType);
   if (!item) { res.status(404).json({ error: 'Item or version not found' }); return; }
   broadcast('plan-item-version-saved', { planUid: item.planUid, itemUid: item.uid, restoredFrom: v });
   saveNow(() => exportDatabase());
@@ -2642,7 +2668,7 @@ app.get('/api/items/:uid/comments', (req, res) => {
   res.json(commentService.listItemComments(req.params.uid));
 });
 app.post('/api/items/:uid/comments', (req, res) => {
-  const { kind, body, parentCommentUid, source } = req.body || {};
+  const { kind, body, parentCommentUid } = req.body || {};
   if (!body || typeof body !== 'string') { res.status(400).json({ error: 'body is required' }); return; }
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
@@ -2653,10 +2679,12 @@ app.post('/api/items/:uid/comments', (req, res) => {
   const comment = commentService.addComment(
     'item',
     req.params.uid,
-    getAuthorKey('human'),
-    'human',
+    personFrom(req).author,
+    personFrom(req).authorType,
     body,
-    { kind, source: source ?? 'human', commentType: legacyType, parentUid: parentCommentUid },
+    // Whether it came from a person or an agent follows from how it arrived,
+    // never from a `source` in the body.
+    { kind, commentType: legacyType, parentUid: parentCommentUid },
   );
   broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: req.params.uid, comment });
   saveNow(() => exportDatabase());
@@ -2673,9 +2701,9 @@ app.post('/api/items/:uid/progress', (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   if (item.kind !== 'action') { res.status(400).json({ error: 'Progress only applies to Actions.' }); return; }
-  planItemService.updateItem(req.params.uid, { progressPercent: percent, author: getAuthorKey('human'), authorType: 'human' });
+  planItemService.updateItem(req.params.uid, { progressPercent: percent, ...personFrom(req) });
   const body = (typeof message === 'string' && message.trim()) ? message.trim() : `Progress: ${percent}%`;
-  const comment = commentService.addComment('item', req.params.uid, getAuthorKey('human'), 'human', body, {
+  const comment = commentService.addComment('item', req.params.uid, personFrom(req).author, personFrom(req).authorType, body, {
     kind: 'progress', source: 'human', commentType: 'status_update', metadata: { progressPercent: percent },
   });
   broadcast('plan-item-progress', { planUid: item.planUid, itemUid: req.params.uid, percent, message: body, commentUid: comment.uid });
@@ -2691,8 +2719,8 @@ app.post('/api/items/:uid/blocked', (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   if (item.kind !== 'action') { res.status(400).json({ error: 'Only Actions can be blocked.' }); return; }
-  planItemService.updateItem(req.params.uid, { status: 'blocked', blockedReason: reason, author: getAuthorKey('human'), authorType: 'human' });
-  const comment = commentService.addComment('item', req.params.uid, getAuthorKey('human'), 'human', reason, {
+  planItemService.updateItem(req.params.uid, { status: 'blocked', blockedReason: reason, ...personFrom(req) });
+  const comment = commentService.addComment('item', req.params.uid, personFrom(req).author, personFrom(req).authorType, reason, {
     kind: 'blocker', source: 'human', commentType: 'concern',
   });
   broadcast('plan-item-blocked', { planUid: item.planUid, itemUid: req.params.uid, reason, commentUid: comment.uid });
@@ -2720,8 +2748,7 @@ app.post('/api/items/:uid/attachments', (req, res) => {
       targetType: 'item',
       targetUid: req.params.uid,
       kind, value, label, contentType, dataBase64, projectRoot,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     broadcast('plan-item-attachment-added', { planUid: item.planUid, itemUid: req.params.uid, attachment });
     saveNow(() => exportDatabase());
@@ -2849,9 +2876,7 @@ app.post('/api/plans/:uid/reconcile', (req, res) => {
   const { deviations } = req.body ?? {}; // [{id, action}]
   if (!Array.isArray(deviations)) { res.status(400).json({ error: 'deviations array required' }); return; }
   try {
-    const resolved = reconcileDeviations(req.params.uid, deviations, cameFromAppWindow(req)
-      ? { actor: getAuthorKey('human'), actorType: 'human' }
-      : { actor: getAuthorKey('human'), actorType: 'unverified' });
+    const resolved = reconcileDeviations(req.params.uid, deviations, actorFrom(req));
     broadcast('deviations-resolved', { planUid: req.params.uid, ids: deviations.map((d: { id: unknown }) => d.id) });
     saveNow(() => exportDatabase());
     res.json({ ok: true, resolved });
@@ -2872,7 +2897,7 @@ app.get('/api/plans/:uid/docs', (req, res) => {
 });
 
 app.post('/api/plans/:uid/docs', (req, res) => {
-  const { docType, title, body, author, authorType, orderHint, parentDocUid } = req.body || {};
+  const { docType, title, body, orderHint, parentDocUid } = req.body || {};
   if (!docType || !title) {
     res.status(400).json({ error: 'docType and title are required' });
     return;
@@ -2882,8 +2907,7 @@ app.post('/api/plans/:uid/docs', (req, res) => {
     docType,
     title,
     body: body ?? '',
-    author: author ?? getAuthorKey('human'),
-    authorType: authorType ?? 'human',
+    ...personFrom(req),
     orderHint: orderHint ?? null,
     parentDocUid: parentDocUid ?? null,
   });
@@ -2910,9 +2934,10 @@ app.get('/api/plan-docs/:docUid', (req, res) => {
 });
 
 app.put('/api/plan-docs/:docUid', (req, res) => {
-  const { title, body, docType, changeSummary, author, orderHint, parentDocUid } = req.body || {};
+  // The version's author is whoever made the edit, never a name in the body.
+  const { title, body, docType, changeSummary, orderHint, parentDocUid } = req.body || {};
   const doc = updatePlanDocument(req.params.docUid, {
-    title, body, docType, changeSummary, author, orderHint, parentDocUid,
+    title, body, docType, changeSummary, author: personFrom(req).author, orderHint, parentDocUid,
   });
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
   broadcast('plan-doc-updated', { doc });
@@ -3172,7 +3197,7 @@ app.get('/api/plans/:uid/budget/changes', (req, res) => {
 app.post('/api/plans/:uid/budget/changes/:id/acknowledge', (req, res) => {
   if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   const id = Number(req.params.id);
-  const change = Number.isInteger(id) ? budgetService.acknowledgeBudgetChange(req.params.uid, id, getAuthorKey('human')) : null;
+  const change = Number.isInteger(id) ? budgetService.acknowledgeBudgetChange(req.params.uid, id, personFrom(req).author) : null;
   if (!change) { res.status(404).json({ error: 'No such budget change on this plan' }); return; }
   broadcast('plan-budget-changed', { planUid: req.params.uid, acknowledged: change.id });
   res.json(change);
@@ -3207,9 +3232,7 @@ app.put('/api/plans/:uid/budget', (req, res) => {
     exempt: body.exempt,
     // Recorded with who made it, tagged by how it arrived, as a criterion
     // decision is (decisionFrom). A person's change is never flagged.
-    by: cameFromAppWindow(req)
-      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
-      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' },
+    by: actorFrom(req),
   });
   broadcast('plan-budget-changed', { planUid: req.params.uid, budget });
   res.json(budgetService.getBudgetReport(req.params.uid));
@@ -3324,8 +3347,8 @@ app.post('/api/plans/import-external', (req, res) => {
   // Create the plan
   const plan = planService.createPlan(
     { title: result.title, description: result.description, tasks: [] },
-    getAuthorKey('human'),
-    'human',
+    personFrom(req).author,
+    personFrom(req).authorType,
     projectPath,
   );
 
@@ -3339,8 +3362,7 @@ app.post('/api/plans/import-external', (req, res) => {
       body: item.body,
       fileSpecs: item.fileSpecs,
       scopePath: item.scopePath,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     createdItems.push(created.uid);
   }
@@ -3469,7 +3491,7 @@ app.post('/api/plans/:uid/publish-as-template', (req, res) => {
 });
 
 app.post('/api/plans/from-template', (req, res) => {
-  const { templateId, projectPath: rawProjectPath, title, description, author, authorType, placeholderValues } = req.body || {};
+  const { templateId, projectPath: rawProjectPath, title, description, placeholderValues } = req.body || {};
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
   if (!projectPath) return;
   if (!templateId || !projectPath) {
@@ -3478,7 +3500,7 @@ app.post('/api/plans/from-template', (req, res) => {
   }
   try {
     const result = applyTemplate({
-      templateId, projectPath, title, description, author, authorType,
+      templateId, projectPath, title, description, ...personFrom(req),
       placeholderValues,
     });
     broadcast('plan-created', { plan: result.plan });
@@ -3507,8 +3529,7 @@ app.post('/api/plans/:uid/apply-template', (req, res) => {
       planUid: req.params.uid,
       templateId,
       placeholderValues: placeholderValues && typeof placeholderValues === 'object' ? placeholderValues : undefined,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     for (const item of result.items) broadcast('plan-item-created', { planUid: req.params.uid, item });
     broadcast('plan-updated', { planUid: req.params.uid });
@@ -3560,7 +3581,7 @@ app.get('/api/comments', (req, res) => {
 app.post('/api/comments', (req, res) => {
   const { targetType, targetUid, body, commentType, parentUid } = req.body;
   if (!targetUid || !body) { res.status(400).json({ error: 'targetUid and body required' }); return; }
-  const comment = commentService.addComment(targetType || 'plan', targetUid, getAuthorKey('human'), 'human', body, commentType, parentUid);
+  const comment = commentService.addComment(targetType || 'plan', targetUid, personFrom(req).author, personFrom(req).authorType, body, commentType, parentUid);
   broadcast('comment-added', { comment });
   saveNow(() => exportDatabase());
   res.json(comment);
@@ -3595,8 +3616,7 @@ app.post('/api/items/:itemUid/refs', (req, res) => {
       title,
       kind,
       metadata,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     broadcast('external-ref-added', { ref });
     saveNow(() => exportDatabase());
@@ -4169,9 +4189,7 @@ app.put('/api/freeze', (req, res) => {
   }
   // Recorded with who made it and how it arrived, as a budget change is
   // (owner's decision, 0.4k). A person's change is never flagged.
-  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids }, cameFromAppWindow(req)
-    ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
-    : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
+  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids }, actorFrom(req));
   broadcast('freeze-changed', { projectRoot: projectPath, status });
   res.json(status);
 });
@@ -4190,7 +4208,7 @@ app.post('/api/freeze/changes/:id/acknowledge', (req, res) => {
   const projectPath = confineRoot((req.body ?? {}).projectPath, res, 'projectPath');
   if (!projectPath) return;
   const id = Number(req.params.id);
-  const change = Number.isInteger(id) ? acknowledgeFreezeChange(projectPath, id, getAuthorKey('human')) : null;
+  const change = Number.isInteger(id) ? acknowledgeFreezeChange(projectPath, id, personFrom(req).author) : null;
   if (!change) { res.status(404).json({ error: 'No such freeze change on this project' }); return; }
   broadcast('freeze-changed', { projectRoot: projectPath, acknowledged: change.id });
   res.json(change);
@@ -4523,9 +4541,7 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
     // The app window is the person; plain HTTP is recorded as unverified (0.4d).
-    const sent = peerService.respondToInputRequest(req.params.requestId, response, cameFromAppWindow(req)
-      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
-      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
+    const sent = peerService.respondToInputRequest(req.params.requestId, response, actorFrom(req));
     if (!sent) { res.status(404).json({ error: 'No pending input request with that id' }); return; }
     res.json({ sent });
   } catch (err) {
@@ -4687,7 +4703,7 @@ app.post('/api/system-docs', (req, res) => {
     // The app window is the person; plain HTTP is unverified (0.4d).
     const doc = svc.createSystemDoc({
       projectPath, title, body, owner, tags, references, slug,
-      author, authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
+      author, authorType: personFrom(req).authorType,
     });
     broadcast('system-doc-created', { uid: doc.uid, projectPath: doc.projectPath });
     saveNow(() => exportDatabase());
@@ -4708,7 +4724,7 @@ app.put('/api/system-docs/:uid', (req, res) => {
     const updated = svc.updateSystemDoc(req.params.uid, {
       title, body, owner, tags, references,
       author: identity.email || identity.displayName || 'human',
-      authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
+      authorType: personFrom(req).authorType,
     });
     if (!updated) { res.status(404).json({ error: 'not found' }); return; }
     broadcast('system-doc-updated', { uid: updated.uid, projectPath: updated.projectPath });

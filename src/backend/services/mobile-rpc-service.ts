@@ -141,6 +141,19 @@ export function stopMobileRpc(): void {
 
 // --- Message handling --------------------------------------------------------
 
+/**
+ * Who a phone's write is by: the person on that device (Phase 32 §0.4d).
+ * Every phone write that records an author takes it from here, never a
+ * name from the request (`authorship.test.ts`).
+ */
+function phonePerson(): { author: string; authorType: 'human' } {
+  return { author: getAuthorKey('human'), authorType: 'human' };
+}
+
+function phoneActor(): { actor: string; actorType: 'human'; channel: 'phone' } {
+  return { actor: getAuthorKey('human'), actorType: 'human', channel: 'phone' };
+}
+
 function handleControlMessage(fingerprint: string, data: Buffer | string): void {
   try {
     const text = typeof data === 'string' ? data : data.toString('utf-8');
@@ -485,7 +498,7 @@ async function routeMethod(
       if (params.title !== undefined) updates.title = params.title;
       if (params.status !== undefined) updates.status = params.status;
       if (params.description !== undefined) updates.description = params.description;
-      updatePlanAsPerson(uid, updates as any, getAuthorKey('human'));
+      updatePlanAsPerson(uid, updates as any, phonePerson().author);
       return { ok: true };
     }
 
@@ -494,8 +507,8 @@ async function routeMethod(
       const projectPath = peerProjectRoot(params, { required: true })!;
       const plan = planService.createPlan(
         { title, description: (params.description as string) || '', tasks: [] },
-        getAuthorKey('human'),
-        'human',
+        phonePerson().author,
+        phonePerson().authorType,
         projectPath,
       );
       const exported = planFileService.exportIfSharedByDefault(plan.uid, projectPath);
@@ -548,7 +561,7 @@ async function routeMethod(
       if (updates.status !== undefined && !isTaskStatus(updates.status)) {
         throw new Error(`status must be one of: ${TASK_STATUSES.join(', ')}`);
       }
-      const updated = planItemService.updateItem(uid, { ...updates, author: getAuthorKey('human'), authorType: 'human' } as any);
+      const updated = planItemService.updateItem(uid, { ...updates, ...phonePerson() } as any);
       if (!updated) throw new Error(`Item not found: ${uid}`);
       broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: updates });
       return updated;
@@ -564,8 +577,7 @@ async function routeMethod(
         title,
         parentUid: (params.parentUid as string) || null,
         body: (params.body as string) || undefined,
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       broadcast('plan-item-created', { planUid: created.planUid, item: created });
       return created;
@@ -587,8 +599,8 @@ async function routeMethod(
       const comment = commentService.addComment(
         targetType as 'plan' | 'item',
         targetUid,
-        getAuthorKey('human'),
-        'human',
+        phonePerson().author,
+        phonePerson().authorType,
         body,
         { kind: kind as any, parentUid },
       );
@@ -607,8 +619,7 @@ async function routeMethod(
         url,
         title: (params.title as string) || undefined,
         kind: (params.kind as any) || undefined,
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       broadcast('external-ref-added', { ref });
       return ref;
@@ -636,7 +647,7 @@ async function routeMethod(
       // real resolution, recorded as the person on the paired phone.
       const planUid = deviationService.planOfDeviation(id);
       if (!planUid) throw new Error(`No deviation ${id}`);
-      deviationService.reconcileDeviations(planUid, [{ id, action: resolution }], { actor: getAuthorKey('human'), actorType: 'human' });
+      deviationService.reconcileDeviations(planUid, [{ id, action: resolution }], phoneActor());
       return { ok: true };
     }
 
@@ -778,8 +789,7 @@ async function routeMethod(
         body: (params.body as string) || '',
         owner: (params.owner as string) || null,
         tags: (params.tags as string[]) || [],
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       // Every phone write to a system doc tells the desktop windows, as the
       // desktop's own routes do; none of these four did (0.4j).
@@ -789,7 +799,7 @@ async function routeMethod(
 
     case 'sysdoc.update': {
       const uid = requireString(params, 'uid');
-      const updates: Record<string, unknown> = { author: getAuthorKey('human'), authorType: 'human' };
+      const updates: Record<string, unknown> = { ...phonePerson() };
       if (params.title !== undefined) updates.title = params.title;
       if (params.body !== undefined) updates.body = params.body;
       if (params.owner !== undefined) updates.owner = params.owner;
@@ -830,8 +840,7 @@ async function routeMethod(
         title: (params.title as string) || undefined,
         description: (params.description as string) || undefined,
         placeholderValues: (params.placeholderValues as Record<string, string>) || undefined,
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       // `{ plan }`, the shape every other sender uses: the window's handler
       // reads `payload.plan`, and `{ uid }` handed it undefined (0.4j).
@@ -984,6 +993,7 @@ async function routeMethod(
         message: typeof params.message === 'string' ? params.message : '',
         itemUid: typeof params.itemUid === 'string' ? params.itemUid : null,
         respondsTo: (params.parentUid as string) || null,
+        by: phonePerson().authorType,
       });
     }
 
@@ -1011,7 +1021,7 @@ async function routeMethod(
       const response = requireString(params, 'response');
       // An answer that went nowhere is not "ok": the person would think the
       // agent had its reply (0.4j).
-      if (!remoteInteractionService.respondToInputRequest(requestId, response, { actor: getAuthorKey('human'), actorType: 'human', channel: 'phone' })) {
+      if (!remoteInteractionService.respondToInputRequest(requestId, response, phoneActor())) {
         throw new Error(`No pending input request ${requestId}`);
       }
       return { ok: true };

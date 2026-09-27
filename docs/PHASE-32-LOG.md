@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — carried items; an owner-reported fix first (update download, bug 51) |
-| **Status** | Carried 1 merged (#141). Update download: progress and "Save to…" fixed and tested, PR open |
-| **Next action** | Merge the update-download PR when green. Then carried item 2, the authorship guard (owner asked to confirm "unverified" for plain HTTP, in the readout doc) |
-| **Blockers** | none |
-| **Branch** | `feat/phase-32-updates-download` |
+| **Stage / step** | Track A — carried item 2: no handler writes a fixed author |
+| **Status** | Update download merged (#142, bug 51). Authorship: one helper per transport, a structural guard (`src/backend/authorship.test.ts`), UI labels "local API, unverified"; full harness running |
+| **Next action** | Fix what the full harness finds (tests that encoded REST writes as `human`, each in its own commit), browser specs that do the same, then PR `feat/phase-32-a-authorship` |
+| **Blockers** | none. Plain HTTP recorded as `unverified` follows the owner's §0.4d decision; asked to confirm in the readout doc |
+| **Branch** | `feat/phase-32-a-authorship` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -55,7 +55,7 @@
 
 ### Track A: awareness
 - [x] Carried 1: the coverage guard credits calls, not names (bug 50) (#141)
-- [ ] Owner's report: update download shows progress and asks where to save (bug 51)
+- [x] Owner's report: update download shows progress and asks where to save (bug 51) (#142)
 - [ ] Carried 2: no tool or handler writes a fixed author (structural test)
 - [ ] Carried 3: harness and browser suites run in CI, sharded
 - [ ] A0 Parallel-work bugs 1–3

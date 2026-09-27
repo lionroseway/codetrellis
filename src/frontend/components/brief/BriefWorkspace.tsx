@@ -27,6 +27,7 @@ import { openArtefactAt } from '../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../lib/brief-vocabulary';
 import { SignoffPackControls } from './SignoffPackControls';
 import type { ItemCriterion, PlanItem, TaskAttachment } from '@shared/types';
+import { authorKind, authorWithSource } from '../../lib/author-words';
 
 /** The plan's items depth-first, siblings in order — the order the tree shows. */
 function inTreeOrder(items: PlanItem[]): PlanItem[] {
@@ -79,7 +80,7 @@ function ArtefactRows({ title, rows, itemUid, testId }: { title: string; rows: T
                 {folder && <span className="text-[11px] text-foreground-subtle truncate">{folder}</span>}
                 <span className="flex-1" />
                 <span className="text-[10.5px] text-foreground-subtle shrink-0">
-                  added by {a.authorType === 'human' ? 'you' : a.author}
+                  added by {authorKind(a.authorType) === 'person' ? 'you' : authorWithSource(a.author, a.authorType)}
                 </span>
               </button>
             </li>

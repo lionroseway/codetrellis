@@ -1,0 +1,23 @@
+/**
+ * How a record's author type reads on screen (Phase 32, carried item 2).
+ *
+ * `human` is the person in the app window or on their paired phone.
+ * `unverified` is the local API over plain HTTP: a person in a browser or a
+ * script that read the token (§0.4d). It is not an agent, and it is not
+ * proven to be the person, so it is never shown as either. Anything else is
+ * an agent, named by its type.
+ */
+export type AuthorKind = 'person' | 'unverified' | 'agent';
+
+export function authorKind(authorType: string | null | undefined): AuthorKind {
+  if (!authorType || authorType === 'human') return 'person';
+  if (authorType === 'unverified') return 'unverified';
+  return 'agent';
+}
+
+export const UNVERIFIED_WORDS = 'local API, unverified';
+
+/** "dana@example.com (local API, unverified)" for an unverified write; the name otherwise. */
+export function authorWithSource(author: string, authorType: string | null | undefined): string {
+  return authorKind(authorType) === 'unverified' ? `${author} (${UNVERIFIED_WORDS})` : author;
+}
