@@ -153,7 +153,13 @@ test.describe.serial('Graph and review from the phone', () => {
     const changes = await phone.rpc('changes.summary');
     expect(changes.hasBaseline).toBe(true);
     expect(changes.git.unstagedModified.sort()).toEqual(['packages/shared/src/types.ts', VALIDATORS]);
-    expect(changes.changedFiles.sort()).toEqual(['packages/shared/src/types.ts', VALIDATORS]);
+    // The source files agree. The plan this suite made is shared (the
+    // default), so it was written into .codetrellis/plans/ and git sees it
+    // as new too — that is how it reaches the team (bug 48, Phase 32 §0.6).
+    // This compared the whole list when a REST-made plan stayed in the DB.
+    expect(changes.changedFiles.filter((f: string) => !f.startsWith('.codetrellis/')).sort())
+      .toEqual(['packages/shared/src/types.ts', VALIDATORS]);
+    expect(changes.git.untracked.some((f: string) => f.startsWith('.codetrellis/plans/'))).toBe(true);
     expect(await phone.rpcError('changes.summary', { projectPath: '/etc' })).toMatch(/not|trusted|opened/i);
   });
 
