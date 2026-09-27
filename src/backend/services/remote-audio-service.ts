@@ -231,7 +231,9 @@ function handleAudioMessage(fingerprint: string, data: Buffer | string): void {
             const instance = _lazy___audio_buffer_service.audioBuffer;
             if (instance && typeof instance.addChunk === 'function') {
               // Estimate duration from chunk size (~32kbps Opus)
-              const estimatedDurationMs = Math.round((chunkData.length / 4000) * 1000);
+              // Kept inside what the buffer accepts (1 ms – 60 s): a tiny chunk
+              // rounded to 0 and would now be refused, and so dropped.
+              const estimatedDurationMs = Math.min(60_000, Math.max(1, Math.round((chunkData.length / 4000) * 1000)));
               instance.addChunk(chunkData, estimatedDurationMs);
             }
           } catch { /* audio service not available */ }

@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 215 | 201 | 21 | 21 | 98 | 0 |
-| MCP tools | 185 | 147 | 9 | 4 | 115 | 0 |
+| REST routes | 215 | 201 | 16 | 16 | 108 | 0 |
+| MCP tools | 185 | 147 | 9 | 4 | 127 | 0 |
 | Mobile RPC methods | 74 | 47 | 74 | 47 | 2 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 79 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 80 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -211,16 +211,16 @@ is proof of a gap.
 | h | `POST /api/baseline/capture` |  | ✗ none | 2 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
 | h | `PUT /api/freeze` |  | ✗ none | 3 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33 |  |  |
-| i | `DELETE /api/terminals/:id` |  | ✗ none | 1 |  |  |  |
-| i | `GET /api/audio/recent` |  | ✗ none | ✗ none |  |  |  |
-| i | `GET /api/audio/status` |  | ✗ none | ✗ none |  |  |  |
-| i | `GET /api/terminals` |  | 1 | 1 |  |  |  |
-| i | `GET /api/terminals/:id/history` |  | ✗ none | 1 |  |  |  |
-| i | `POST /api/audio/chunk` |  | ✗ none | ✗ none |  |  |  |
-| i | `POST /api/audio/start` |  | ✗ none | ✗ none |  |  |  |
-| i | `POST /api/audio/stop` |  | ✗ none | ✗ none |  |  |  |
-| i | `POST /api/terminals` |  | 1 | 1 |  |  |  |
-| i | `POST /api/terminals/:id/inject` |  | ✗ none | 1 |  |  |  |
+| i | `DELETE /api/terminals/:id` |  | ✗ none | 2 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
+| i | `GET /api/audio/recent` |  | ✗ none | 1 | ✓ 0.4i: chunks concatenated in order with duration and times; seconds narrows; 404 when empty (audio-rest) |  |  |
+| i | `GET /api/audio/status` |  | ✗ none | 1 | ✓ 0.4i: capturing, chunk count, buffered seconds, window (audio-rest) |  |  |
+| i | `GET /api/terminals` |  | 1 | 2 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
+| i | `GET /api/terminals/:id/history` |  | ✗ none | 2 | ✓ 0.4i: scrollback of what ran, paged backwards; unknown id empty and creates nothing (terminal-surface), input-validation |  |  |
+| i | `POST /api/audio/chunk` |  | ✗ none | 1 | ✓ 0.4i: buffered in order; 409 when not capturing; bad length or data 400 (audio-rest); bug 35 |  |  |
+| i | `POST /api/audio/start` |  | ✗ none | 1 | ✓ 0.4i: capturing, clears the buffer, default size when none named; bad sizes 400 (audio-rest); bug 35 |  |  |
+| i | `POST /api/audio/stop` |  | ✗ none | 1 | ✓ 0.4i: stops, keeps the buffer, refuses more chunks (audio-rest) |  |  |
+| i | `POST /api/terminals` |  | 1 | 2 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
+| i | `POST /api/terminals/:id/inject` |  | ✗ none | 2 | ✓ 0.4i: the text runs in the shell (output in history); 400 empty, 404 unknown or dead (terminal-surface) |  |  |
 | j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 1 |  |  |  |
 | j | `DELETE /api/peers/push-tokens/:fingerprint` |  | ✗ none | 1 |  |  |  |
 | j | `GET /api/pairing/status` |  | ✗ none | 2 |  |  |  |
@@ -249,14 +249,14 @@ is proof of a gap.
 | k | `GET /api/logs/path` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/power/status` |  | ✗ none | ✗ none |  |  |  |
-| k | `GET /api/settings` |  | ✗ none | 17 |  |  |  |
+| k | `GET /api/settings` |  | ✗ none | 18 |  |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 2 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | ✗ none |  |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 |  |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 17 |  |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 18 |  |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 2 |  |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
@@ -383,7 +383,7 @@ is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | 1 | 5 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | 1 | 6 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | 1 | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
@@ -417,18 +417,18 @@ is proof of a gap.
 | h | `review_plan` | review · read | 2 | 2 | ✓ 0.4h: landed item, the unclaimed file named, baseline kept after rescan, markdown names its basis (review-governance-tools) |  |  |
 | h | `search_plan_history` | git · read | ✗ none | 1 | ✓ 0.4h: every matching commit with its files, newest first (drift-review-tools); bug 32 |  |  |
 | h | `set_freeze` | governance · write | ✗ none | 1 | ✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6) |  |  |
-| i | `get_audio_context` | audio · capture | ✗ none | 1 |  |  |  |
-| i | `get_audio_status` | audio · capture | ✗ none | 1 |  |  |  |
-| i | `push_audio_chunk` | audio · capture | ✗ none | 1 |  |  |  |
-| i | `start_audio_capture` | audio · capture | 1 | 1 |  |  |  |
-| i | `stop_audio_capture` | audio · capture | ✗ none | 1 |  |  |  |
-| i | `terminal_create` | terminal · terminal | 1 | 1 |  |  |  |
-| i | `terminal_focus` | terminal · terminal | ✗ none | 1 |  |  |  |
-| i | `terminal_kill` | terminal · terminal | 1 | 1 |  |  |  |
-| i | `terminal_list` | terminal · terminal | 1 | 1 |  |  |  |
-| i | `terminal_read` | terminal · terminal | ✗ none | 1 |  |  |  |
-| i | `terminal_resize` | terminal · terminal | ✗ none | 1 |  |  |  |
-| i | `terminal_write` | terminal · terminal | 1 | 1 |  |  |  |
+| i | `get_audio_context` | audio · capture | ✗ none | 1 | ✓ 0.4i: recent audio with duration; seconds narrows (cdev-phase8) |  |  |
+| i | `get_audio_status` | audio · capture | ✗ none | 1 | ✓ 0.4i: not capturing, then buffered seconds and chunks (cdev-phase8) |  |  |
+| i | `push_audio_chunk` | audio · capture | ✗ none | 1 | ✓ 0.4i: chunks buffered; length bounded by the schema (cdev-phase8; bug 35) |  |  |
+| i | `start_audio_capture` | audio · capture | 1 | 1 | ✓ 0.4i: capture starts with the window asked for, bounded 1–600 s (cdev-phase8; bug 35) |  |  |
+| i | `stop_audio_capture` | audio · capture | ✗ none | 1 | ✓ 0.4i: capture stops (cdev-phase8) |  |  |
+| i | `terminal_create` | terminal · terminal | 1 | 1 | ✓ 0.4i: answers with session_id that the other tools take (terminal-session-id) |  |  |
+| i | `terminal_focus` | terminal · terminal | ✗ none | 2 | ✓ 0.4i: tells the window to show that terminal; unknown refused (terminal-surface) |  |  |
+| i | `terminal_kill` | terminal · terminal | 1 | 1 | ✓ 0.4i: kills by session_id (terminal-session-id) |  |  |
+| i | `terminal_list` | terminal · terminal | 1 | 1 | ✓ 0.4i: same shape as create (terminal-session-id) |  |  |
+| i | `terminal_read` | terminal · terminal | ✗ none | 1 | ✓ 0.4i: reads what the shell printed (terminal-session-id) |  |  |
+| i | `terminal_resize` | terminal · terminal | ✗ none | 2 | ✓ 0.4i: the shell sees the new width (tput cols); unknown refused (terminal-surface) |  |  |
+| i | `terminal_write` | terminal · terminal | 1 | 2 | ✓ 0.4i: runs in another terminal; refused on the agent's own host terminal and on a killed one (terminal-surface), terminal-session-id |  |  |
 | j | `get_peer_status` | peer · read | ✗ none | 3 |  |  |  |
 | j | `get_remote_audio` | peer · capture | ✗ none | 1 |  |  |  |
 | j | `get_remote_state` | peer · read | ✗ none | 1 |  |  |  |

@@ -4055,10 +4055,14 @@ app.put('/api/freeze', (req, res) => {
 
 // --- CDev Phase 8 — Audio capture REST surface ---
 
-app.post('/api/audio/start', (_req, res) => {
-  const { audioBuffer } = _lazy___services_audio_buffer_service;
-  const maxSeconds = (_req.body as any)?.maxBufferSeconds;
-  audioBuffer.startCapture(maxSeconds);
+app.post('/api/audio/start', (req, res) => {
+  const { audioBuffer, AudioRequestError } = _lazy___services_audio_buffer_service;
+  try {
+    audioBuffer.startCapture((req.body ?? {}).maxBufferSeconds);
+  } catch (err) {
+    if (err instanceof AudioRequestError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
   res.json(audioBuffer.getStatus());
 });
 
@@ -4074,12 +4078,18 @@ app.get('/api/audio/status', (_req, res) => {
 });
 
 app.post('/api/audio/chunk', (req, res) => {
-  const { audioBuffer } = _lazy___services_audio_buffer_service;
-  const { audioBase64, durationMs } = req.body as { audioBase64?: string; durationMs?: number };
+  const { audioBuffer, checkChunkMs, AudioRequestError } = _lazy___services_audio_buffer_service;
+  const { audioBase64, durationMs } = (req.body ?? {}) as { audioBase64?: unknown; durationMs?: unknown };
 
-  if (!audioBase64 || !durationMs) {
-    res.status(400).json({ error: 'audioBase64 and durationMs required' });
+  if (typeof audioBase64 !== 'string' || !audioBase64) {
+    res.status(400).json({ error: 'audioBase64 (base64 text) and durationMs required' });
     return;
+  }
+  try {
+    checkChunkMs(durationMs);
+  } catch (err) {
+    if (err instanceof AudioRequestError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
   }
 
   if (!audioBuffer.isCapturing()) {
@@ -4088,7 +4098,7 @@ app.post('/api/audio/chunk', (req, res) => {
   }
 
   const data = Buffer.from(audioBase64, 'base64');
-  audioBuffer.addChunk(data, durationMs);
+  audioBuffer.addChunk(data, durationMs as number);
   res.json({ accepted: true, bufferedSeconds: audioBuffer.getStatus().bufferedSeconds });
 });
 

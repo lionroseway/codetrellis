@@ -53,6 +53,32 @@ export interface AudioSnapshot {
 
 const DEFAULT_MAX_BUFFER_MS = 120_000; // 2 minutes
 
+/** Bounds on what a caller may ask for (Phase 32 §0.4i, bug 35). */
+export const MAX_BUFFER_SECONDS_LIMIT = 600;
+export const MAX_CHUNK_MS = 60_000;
+
+export class AudioRequestError extends Error {}
+
+/**
+ * Check a requested window: a whole number of seconds, 1–600. It was used
+ * as given, so a string made the window NaN and nothing was ever trimmed.
+ */
+export function checkBufferSeconds(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 1 || value > MAX_BUFFER_SECONDS_LIMIT) {
+    throw new AudioRequestError(`maxBufferSeconds must be a number from 1 to ${MAX_BUFFER_SECONDS_LIMIT}`);
+  }
+  return value;
+}
+
+/** A chunk's length in ms: a positive number up to a minute. Text was added with `+` and concatenated. */
+export function checkChunkMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > MAX_CHUNK_MS) {
+    throw new AudioRequestError(`durationMs must be a number from 1 to ${MAX_CHUNK_MS}`);
+  }
+  return value;
+}
+
 class AudioBufferService {
   private chunks: AudioChunk[] = [];
   private maxBufferMs: number = DEFAULT_MAX_BUFFER_MS;
@@ -63,9 +89,9 @@ class AudioBufferService {
    * Start accepting audio chunks. Clears any existing buffer.
    */
   startCapture(maxBufferSeconds?: number): void {
-    if (maxBufferSeconds) {
-      this.maxBufferMs = maxBufferSeconds * 1000;
-    }
+    // A start that names no size gets the default, not whatever the last
+    // start chose.
+    this.maxBufferMs = (checkBufferSeconds(maxBufferSeconds) ?? DEFAULT_MAX_BUFFER_MS / 1000) * 1000;
     this.chunks = [];
     this.capturing = true;
     this.startedAt = new Date();
@@ -91,6 +117,7 @@ class AudioBufferService {
    */
   addChunk(data: Buffer, durationMs: number): void {
     if (!this.capturing) return;
+    checkChunkMs(durationMs);
 
     this.chunks.push({
       data,
