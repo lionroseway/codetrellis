@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.6 Known bugs |
-| **Status** | 0.5 desktop audit done (#131–#133; phone screens wait for the owner). 0.6 on the branch: bug 9 (baseline across a restart) and bug 48 (new plans ignored the default visibility) fixed with failing-first tests |
-| **Next action** | Full harness; PR 0.6, merge when green. Then 0.7 stage review (matrix complete, counts, direction review), then 0.8 release with the owner on macOS |
+| **Stage / step** | 0.7 Stage review |
+| **Status** | 0.6 merged (#134). 0.7 on the branch: matrix behaviour complete (217 routes, 185 tools, 76 RPC), bug 49 found and fixed, counts and the direction review below; the plan carries four items into Track A |
+| **Next action** | Full harness; PR 0.7; merge when green. Then 0.8 with the owner: phone screens (before or after, owner's call), merge `feat/phase-32` → `main`, `scripts/release.sh` on macOS, mobile build |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.6-bugs` |
+| **Branch** | `feat/phase-32-0.7-review` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -49,7 +49,7 @@
 - [x] 0.4k Settings, updates, privacy (#129)
 - [x] 0.4l System docs and intake (#130)
 - [ ] 0.5 UX audit — desktop done (#131, #132, #133); the 31 phone screens wait for the owner
-- [ ] 0.6 Known bugs 4–9
+- [x] 0.6 Known bugs 4–9 (#134)
 - [ ] 0.7 Stage review
 - [ ] 0.8 Release (Stage 0 ships before Tracks A–C)
 
@@ -145,6 +145,99 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.7 — stage review
+
+0.6 merged as [#134](https://github.com/lionroseway/codetrellis/pull/134)
+(full harness 632/632; browser plan set 166/166). On the way it also
+gained: untitled plans wait for a name; a plan directory follows its title
+until committed; `openPlan` waits for the plan's items (the tree now says
+`aria-busy` while loading) — the browser suite had been failing a
+different "find the task within 5 s" spec each run under load.
+
+**The matrix.**
+
+| Surface | Rows | Tested | Behaviour verified | UX checked |
+|---|---|---|---|---|
+| REST routes | 217 | 217 | 217 | n/a |
+| MCP tools | 185 | 185 | 185 | n/a |
+| Mobile RPC methods | 76 | 76 | 76 | n/a |
+| Settings sections | 12 | — | 10 (not Appearance, Sync) | 12 |
+| Frontend components | 99 | reachable guard | — | 23 |
+| Mobile screens | 31 | — | — | 0 |
+
+- Domain c's 97 behaviour rows were never written in 0.4c. They are
+  filled from the tests that exercise them, and say so.
+- Filling them found three MCP tools no test ran: `bulk_add_items`,
+  `search_items`, `import_external` — counted as covered because a unit
+  test that phrases tool calls mentions their names. Running them found
+  **bug 49** (search took `%` as a wildcard and answered unknown plans;
+  import wrote "mcp-agent" as the author, filed plans under no project,
+  and ignored the default visibility). Fixed, with
+  `item-batch-search-import.test.ts` (fails on the old code).
+- Components: 23 of 99 have a UX note — the panels and surfaces the 0.5
+  audit photographed. The rest appear inside those screens but were not
+  assessed one by one; they are not marked.
+
+**Allowlists and counts.**
+
+- `untested.json`: empty (0 routes, 0 tools, 0 RPC). It started Stage 0
+  at 58 routes, 45 tools and 47 RPC methods.
+- Skipped tests: 3 unit tests, all conditional on this machine — the
+  material-reader bundle is not built here (CI builds it), and two
+  release-manifest tests need the signing key, which lives only on the
+  release machine; 0 in the harness.
+- Lint: 0 errors, 297 warnings (~291 at 0.3).
+- UX: 4 major found and fixed; 23 minor listed, 16 fixed, 7 open (m4,
+  m17, m19, m21, m22, m23, and the phone screens unreviewed).
+- Bugs: of 4–9, 5, 6, 7 and 9 are fixed, 8 is not a defect, and 4 moves
+  to B4/A4. Stage 0 found bugs 12–49: all fixed except 46, which is
+  A1.7's.
+
+**Direction review** (§1.7).
+
+*Which journeys can be demonstrated end to end now?* None of them in
+full, as planned: every journey needs Track A, B or C. What Stage 0 did
+is make each journey's "what exists" line true under test:
+- A1 (worktrees listed, agents appear): 0.4a, 0.4g.
+- B3 (plan intent against files): 0.4h.
+- C2 (push, pairing, approving from the phone, agent messages): 0.4j,
+  0.4k, and the phone review still to do.
+- D2 and D3 (review, PR draft, criteria, sign-off): 0.4d, 0.4h.
+- E1 and E3 (a changed file marks approvals out of date; reading goes
+  through `read_material`): 0.4e.
+- G2 (decisions with who, when, device, hashes): 0.4d.
+- G3 (planned projection for one plan): 0.4b.
+- H1 (tickets linked to plans): 0.4l.
+- I1 (channel vocabulary, versioned spec pages): 0.4f, 0.4c.
+- J1 (a test criterion refuses a report older than the code): 0.4d.
+- K1 (blocking waits, approval gates): 0.4f, 0.4d.
+- F5 (nothing leaves the machine except what already does): 0.4k — and
+  the update check, the only request the app makes on its own, is proven
+  off when turned off.
+
+*What did we learn that changes the plan?* Four things, now in
+EXECUTION §4 ahead of A0:
+- The coverage guard credits a name, not a call (bug 49).
+- Authorship went wrong the same way four times (43, 47, 49, the grant
+  escalation). Track A's workstream attribution depends on it, so it needs
+  a structural guard, not vigilance.
+- Identity across checkouts is real and is A1.7's (bug 46).
+- The harness and browser suites don't run on PRs.
+
+Also: granting is the person's alone (owner's decision in 0.4l), which
+Track A's per-agent views must respect.
+
+*Is anything getting noisier, slower or harder to read?*
+- **Slower:** the harness is 632 tests and 28 minutes in the container,
+  up from ~380 and ~19 at the start. The browser suite had a
+  timing-dependent helper, now fixed.
+- **Quieter:** the UI is quieter after 0.5 — the change summary is one
+  line, there is no red on a draft plan, and the agent indicator says
+  which agent.
+- **Still busy:** the plan header and the canvas toolbar at 1024 wide
+  (minors m3's remainder and m23).
+- **Harder to read:** 297 lint warnings, and rising slowly.
 
 ### 2026-09-27: 0.6 — known bugs: the baseline across a restart, and new plans' visibility
 

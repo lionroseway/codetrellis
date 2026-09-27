@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 217 | 203 | 0 | 0 | 153 | 0 |
-| MCP tools | 185 | 147 | 3 | 0 | 152 | 0 |
+| REST routes | 217 | 203 | 0 | 0 | 217 | 0 |
+| MCP tools | 185 | 147 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 76 | 49 | 0 | 0 | 76 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 7 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 91 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 92 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -87,92 +87,92 @@ is proof of a gap.
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes a reply from the thread (item-surface) |  |  |
-| c | `DELETE /api/items/:uid` |  | ✗ none | 9 |  |  |  |
-| c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
-| c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `DELETE /api/plans/:uid` |  | 1 | 15 |  |  |  |
-| c | `DELETE /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/attachments/:uid/file` |  | ✗ none | 1 |  |  |  |
+| c | `DELETE /api/items/:uid` |  | ✗ none | 10 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `DELETE /api/plans/:uid` |  | 1 | 16 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `DELETE /api/refs/:uid` |  | ✗ none | 1 | ✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/attachments/:uid/file` |  | ✗ none | 1 | ✓ 0.4c: exercised by filesystem-sinks (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
-| c | `GET /api/contributions` |  | 1 | 3 |  |  |  |
-| c | `GET /api/items/:itemUid/refs` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/items/:uid` |  | ✗ none | 9 |  |  |  |
-| c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/items/:uid/comments` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/items/:uid/criteria` |  | ✗ none | 7 |  |  |  |
+| c | `GET /api/contributions` |  | 1 | 3 | ✓ 0.4c: exercised by cdev-phase7, review-confinement, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:itemUid/refs` |  | ✗ none | 2 | ✓ 0.4c: exercised by phone-plans, references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:uid` |  | ✗ none | 10 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:uid/comments` |  | ✗ none | 3 | ✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:uid/criteria` |  | ✗ none | 7 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/events` |  | ✗ none | 2 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
-| c | `GET /api/items/:uid/full` |  | ✗ none | 2 |  |  |  |
+| c | `GET /api/items/:uid/full` |  | ✗ none | 2 | ✓ 0.4c: exercised by item-surface, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/versions` |  | ✗ none | 1 | ✓ 0.4c-2: each edit a version (item-surface) |  |  |
-| c | `GET /api/pantry/resolve` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plan-docs/:docUid/versions` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/pantry/resolve` |  | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase7, filesystem-sinks, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plan-docs/:docUid` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plan-docs/:docUid/versions` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plan-history/:planSlug` |  | ✗ none | 1 | ✓ 0.4c-1: the commit that touched the plan (plan-rest) |  |  |
-| c | `GET /api/plan-history/:planSlug/at/:commitHash` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plan-history/:planSlug/at/:commitHash` |  | ✗ none | 1 | ✓ 0.4c: exercised by input-validation (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 | ✓ 0.4c: exercised by input-validation (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
-| c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 49 |  |  |  |
-| c | `GET /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 24 |  |  |  |
-| c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid` |  | 1 | 15 |  |  |  |
+| c | `GET /api/plan-templates` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, review-confinement (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans` |  | ✗ none | 49 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:planUid/channels` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 25 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 | ✓ 0.4c: exercised by full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid` |  | 1 | 16 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
-| c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
+| c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
-| c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/deviations` |  | ✗ none | 4 |  |  |  |
-| c | `GET /api/plans/:uid/docs` |  | ✗ none | 6 |  |  |  |
-| c | `GET /api/plans/:uid/docs/by-type/:docType` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/deviations` |  | ✗ none | 4 | ✓ 0.4c: exercised by deviations, drift-review-tools, full-loop, phone-plans (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/docs` |  | ✗ none | 6 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/docs/by-type/:docType` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/docs/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by body with excerpt; no match is empty (plan-rest) |  |  |
-| c | `GET /api/plans/:uid/external-sync` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/file-status` |  | ✗ none | 4 |  |  |  |
-| c | `GET /api/plans/:uid/next-task` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 5 |  |  |  |
+| c | `GET /api/plans/:uid/external-sync` |  | ✗ none | 1 | ✓ 0.4c: exercised by external-sync-endpoint (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/file-status` |  | ✗ none | 5 | ✓ 0.4c: exercised by next-up-and-sync, plan-default-visibility, plan-export, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/next-task` |  | ✗ none | 3 | ✓ 0.4c: exercised by full-loop, next-up-and-sync, phone-plans (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/phases` |  | ✗ none | 3 | ✓ 0.4c: exercised by full-loop, plan-phases, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 5 | ✓ 0.4c: exercised by phone-graph-review, plan-review-surface, plan-review, review-comparand-edges, +1 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/projection` |  | ✗ none | 1 | ✓ 0.4c-1: ghost and modified files from an Action (plan-rest) |  |  |
-| c | `GET /api/plans/:uid/refs` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/review` |  | ✗ none | 6 |  |  |  |
-| c | `GET /api/plans/:uid/versions` |  | ✗ none | 3 |  |  |  |
+| c | `GET /api/plans/:uid/refs` |  | ✗ none | 1 | ✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/review` |  | ✗ none | 6 | ✓ 0.4c: exercised by phone-graph-review, plan-review-surface, plan-review, review-after-rescan, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid/versions` |  | ✗ none | 3 | ✓ 0.4c: exercised by full-loop, plan-tools, plan-versions (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/discover` |  | ✗ none | 1 | ✓ 0.4c-1: exported plan directories (plan-rest) |  |  |
 | c | `GET /api/plans/reconcile` |  | ✗ none | 1 | ✓ 0.4c-1: the orphan once its plan is archived (plan-rest) |  |  |
-| c | `GET /api/plans/stitched` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/team-activity` |  | 1 | 3 |  |  |  |
+| c | `GET /api/plans/stitched` |  | ✗ none | 2 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/team-activity` |  | 1 | 3 | ✓ 0.4c: exercised by cdev-phase6, review-confinement, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: top-level and reply; missing body 400 (item-surface) |  |  |
-| c | `POST /api/contributions/accept` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/contributions/promote` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/contributor-branch` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/items/:itemUid/refs` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/items/:uid/blocked` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/contributions/accept` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/contributions/promote` |  | ✗ none | 1 | ✓ 0.4c: exercised by surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/contributor-branch` |  | ✗ none | 2 | ✓ 0.4c: exercised by contributor-branch-index, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/items/:itemUid/refs` |  | ✗ none | 2 | ✓ 0.4c: exercised by phone-plans, references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/items/:uid/attachments` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/items/:uid/blocked` |  | ✗ none | 1 | ✓ 0.4c: exercised by task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/items/:uid/claim` |  | ✗ none | 1 | ✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop) |  |  |
 | c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
-| c | `POST /api/items/:uid/comments` |  | ✗ none | 3 |  |  |  |
-| c | `POST /api/items/:uid/criteria` |  | ✗ none | 7 |  |  |  |
+| c | `POST /api/items/:uid/comments` |  | ✗ none | 3 | ✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/items/:uid/criteria` |  | ✗ none | 7 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
-| c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/items/:uid/progress` |  | ✗ none | 1 | ✓ 0.4c: exercised by task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 49 |  |  |  |
-| c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 24 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 49 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 25 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
-| c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/docs` |  | ✗ none | 6 |  |  |  |
-| c | `POST /api/plans/:uid/export` |  | ✗ none | 8 |  |  |  |
-| c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
-| c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/plans/:uid/unlink` |  | ✗ none | 3 |  |  |  |
+| c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/docs` |  | ✗ none | 6 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/export` |  | ✗ none | 8 | ✓ 0.4c: exercised by cdev-cross-repo, contributor-branch-index, criteria-signoff, next-up-and-sync, +4 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 | ✓ 0.4c: exercised by full-loop, plan-phases, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 2 | ✓ 0.4c: exercised by drift-review-tools, full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/unlink` |  | ✗ none | 3 | ✓ 0.4c: exercised by next-up-and-sync, plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/bulk-delete` |  | ✗ none | 1 | ✓ 0.4c-1: exactly the named plans; empty list 400 (plan-rest) |  |  |
-| c | `POST /api/plans/from-template` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/plans/import` |  | 1 | 2 |  |  |  |
+| c | `POST /api/plans/from-template` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/import` |  | 1 | 2 | ✓ 0.4c: exercised by plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
-| c | `PUT /api/items/:uid` |  | ✗ none | 9 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
-| c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
-| c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/plans/:uid` |  | 1 | 15 |  |  |  |
+| c | `PUT /api/items/:uid` |  | ✗ none | 10 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
+| c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `PUT /api/plans/:uid` |  | 1 | 16 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
-| c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
+| c | `PUT /api/refs/:uid` |  | ✗ none | 1 | ✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
 | d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 | ✓ 0.4d: append-only record, each tagged by how it arrived — local-api/unverified over HTTP (criteria-signoff, criteria-loops) |  |  |
 | d | `GET /api/plans/:uid/signoff-pack` |  | ✗ none | 1 | ✓ 0.4d: every criterion, unverified approval tagged, file with hash at approval; unknown plan 404 (signoff-surface) |  |  |
@@ -298,56 +298,56 @@ is proof of a gap.
 | b | `list_cross_system_edges` | architecture · read | ✗ none | 1 | ✓ 0.4b: stats and edges (graph-tools) |  |  |
 | b | `search_symbols` | architecture · read | 1 | 1 | ✓ 0.4b: known function with its file (graph-tools) |  |  |
 | b | `ui_ready` | graph · read | ✗ none | 1 | ✓ 0.4b: renderer answer passed through; no window = ready:false within 5 s; real window (graph-tools, e2e mcp-view-tools) |  |  |
-| c | `accept_contributions` | contribution · write | ✗ none | 1 |  |  |  |
+| c | `accept_contributions` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `add_external_ref` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: GitHub issue URL recognised (item-surface) |  |  |
-| c | `add_item` | plan-item · write | 3 | 16 |  |  |  |
-| c | `add_item_attachment` | plan-item · write | ✗ none | 3 |  |  |  |
-| c | `add_item_comment` | plan-item · write | ✗ none | 3 |  |  |  |
-| c | `add_plan_scope` | plan · write | ✗ none | 3 |  |  |  |
-| c | `bulk_add_items` | plan-item · write | 1 | ✗ none |  |  |  |
-| c | `claim_item` | plan-item · write | 1 | 4 |  |  |  |
+| c | `add_item` | plan-item · write | 3 | 16 | ✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, cdev-phase6, +12 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `add_item_attachment` | plan-item · write | ✗ none | 3 | ✓ 0.4c: exercised by item-surface, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `add_item_comment` | plan-item · write | ✗ none | 3 | ✓ 0.4c: exercised by item-surface, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `add_plan_scope` | plan · write | ✗ none | 3 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-cross-repo, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `bulk_add_items` | plan-item · write | 1 | 1 | ✓ 0.7: a tree in one call, parents by temporary id, authored by the calling agent; unknown plan refused (item-batch-search-import) |  |  |
+| c | `claim_item` | plan-item · write | 1 | 4 | ✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
-| c | `create_plan` | plan · write | 1 | 19 |  |  |  |
+| c | `create_plan` | plan · write | 1 | 20 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-channels, cdev-cross-repo, cdev-phase11, +15 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
-| c | `delete_item` | plan-item · write | ✗ none | 1 |  |  |  |
+| c | `delete_item` | plan-item · write | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `delete_item_attachment` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
 | c | `delete_item_comment` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
 | c | `discover_plan_files` | plan · files | ✗ none | 1 | ✓ 0.4c-1: the exported directory (plan-tools) |  |  |
-| c | `export_plan_to_files` | plan · files | ✗ none | 3 |  |  |  |
-| c | `get_item` | plan-item · read | 1 | 4 |  |  |  |
-| c | `get_next_item` | plan-item · read | ✗ none | 2 |  |  |  |
-| c | `get_plan` | plan · read | 2 | 2 |  |  |  |
+| c | `export_plan_to_files` | plan · files | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase3-demo, cdev-phase6, cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `get_item` | plan-item · read | 1 | 4 | ✓ 0.4c: exercised by cdev-phase5, intake, plan-items, short-references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `get_next_item` | plan-item · read | ✗ none | 2 | ✓ 0.4c: exercised by agent-loop, criteria-signoff (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `get_plan` | plan · read | 2 | 2 | ✓ 0.4c: exercised by cdev-sensors, plan-tools (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `get_plan_summary` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: counts by kind, byStatus, completion (item-surface) |  |  |
-| c | `get_plan_timeline` | plan-item · read | ✗ none | 1 |  |  |  |
-| c | `import_external` | plan · write | 1 | ✗ none |  |  |  |
-| c | `import_plan_from_files` | plan · files | 1 | 1 |  |  |  |
-| c | `list_contributions` | contribution · read | 1 | 1 |  |  |  |
+| c | `get_plan_timeline` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `import_external` | plan · write | 1 | 1 | ✓ 0.7: plan and items authored by the caller, in the open project, shared by default; no project refused (item-batch-search-import) |  |  |
+| c | `import_plan_from_files` | plan · files | 1 | 1 | ✓ 0.4c: exercised by cdev-phase3-demo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `list_contributions` | contribution · read | 1 | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_external_refs` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
-| c | `list_item_comments` | plan-item · read | ✗ none | 1 |  |  |  |
+| c | `list_item_comments` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_item_versions` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: newest first, incl. the restore (item-surface) |  |  |
-| c | `list_items` | plan-item · read | ✗ none | 3 |  |  |  |
-| c | `list_plan_pointers` | plan · read | ✗ none | 1 |  |  |  |
+| c | `list_items` | plan-item · read | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase5, intake, plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `list_plan_pointers` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plan_templates` | plan · read | ✗ none | 1 | ✓ 0.4c-1: built-ins; project templates with project_root (plan-tools) |  |  |
-| c | `list_plans` | plan · read | 2 | 2 |  |  |  |
-| c | `list_plans_by_repo` | plan · read | ✗ none | 1 |  |  |  |
+| c | `list_plans` | plan · read | 2 | 2 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `list_plans_by_repo` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `move_item` | plan-item · write | ✗ none | 3 | ✓ 0.4c-2: refuses cycles and foreign/missing parents (item-surface; bug 23) |  |  |
-| c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 |  |  |  |
-| c | `promote_to_contribution` | contribution · write | ✗ none | 1 |  |  |  |
+| c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `promote_to_contribution` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `publish_plan_as_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: writes template.yaml; appears in the list (plan-tools) |  |  |
-| c | `read_item_full` | plan-item · read | ✗ none | 2 |  |  |  |
+| c | `read_item_full` | plan-item · read | ✗ none | 2 | ✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `remove_external_ref` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
-| c | `remove_plan_scope` | plan · write | ✗ none | 1 |  |  |  |
+| c | `remove_plan_scope` | plan · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `request_plan_deletion` | plan · write | ✗ none | 1 | ✓ 0.4c-3: asks the window, deletes nothing; refuses unknown, archived and unopened-project plans; typed confirmation in the app (plan-tools, e2e plan-deletion-request) |  |  |
-| c | `resolve_pantry_references` | contribution · read | ✗ none | 1 |  |  |  |
-| c | `resolve_reference` | plan-item · read | ✗ none | 1 |  |  |  |
-| c | `restore_item_version` | plan-item · write | ✗ none | 1 |  |  |  |
-| c | `search_items` | plan-item · read | 1 | ✗ none |  |  |  |
-| c | `set_item_blocked` | plan-item · write | ✗ none | 1 |  |  |  |
+| c | `resolve_pantry_references` | contribution · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `resolve_reference` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by short-references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `restore_item_version` | plan-item · write | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `search_items` | plan-item · read | 1 | 1 | ✓ 0.7: titles and bodies with an excerpt, case-insensitive; "%" and "_" literal; unknown plan refused (item-batch-search-import) |  |  |
+| c | `set_item_blocked` | plan-item · write | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `set_plan_home_repo` | plan · write | ✗ none | 1 | ✓ 0.4c-1: normalised; empty clears (plan-tools) |  |  |
 | c | `suggest_specs` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: file specs under a scope (item-surface) |  |  |
 | c | `unlink_plan_from_files` | plan · write | ✗ none | 1 | ✓ 0.4c-1: removes the directory, even after a rename; plan survives (plan-tools; bug 22) |  |  |
-| c | `update_item` | plan-item · write | 1 | 10 |  |  |  |
-| c | `update_item_progress` | plan-item · write | ✗ none | 2 |  |  |  |
+| c | `update_item` | plan-item · write | 1 | 10 | ✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, criteria-signoff, +6 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `update_item_progress` | plan-item · write | ✗ none | 2 | ✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `update_plan` | plan · write | ✗ none | 2 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 1 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 | ✓ 0.4d: retired — refuses and points at submit_criterion (criteria-signoff) |  |  |

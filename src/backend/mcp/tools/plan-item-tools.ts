@@ -149,6 +149,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async (args, extra: any) => {
+      if (!deps.planService.getPlan(args.plan_uid)) {
+        return { content: [{ type: 'text' as const, text: `Plan not found: ${args.plan_uid}` }], isError: true };
+      }
       const id = authorFromExtra(deps, extra);
       const tempToReal = new Map<string, string>();
       const created: any[] = [];
@@ -889,11 +892,17 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, query, limit }) => {
+      // An unknown plan is refused, not answered with no results; and the
+      // query is text — "%" or "_" went into LIKE unescaped and matched
+      // every item (Phase 32 §0.7, as the phone's file search in 0.4j).
+      if (!deps.planService.getPlan(plan_uid)) {
+        return { content: [{ type: 'text' as const, text: `Plan not found: ${plan_uid}` }], isError: true };
+      }
       const db = deps.getDb();
-      const q = `%${query}%`;
+      const q = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const r = db.exec(
         `SELECT uid, title, body, kind, status, parent_uid FROM plan_items
-         WHERE plan_uid = ? AND (title LIKE ? COLLATE NOCASE OR body LIKE ? COLLATE NOCASE)
+         WHERE plan_uid = ? AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')
          ORDER BY updated_at DESC
          LIMIT ?`,
         [plan_uid, q, q, limit ?? 20],
