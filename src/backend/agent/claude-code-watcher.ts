@@ -73,7 +73,7 @@ function findActiveSession(projectRoot: string): { sessionId: string; jsonlPath:
 /**
  * Parse a JSONL line into an AgentEvent if relevant.
  */
-function parseJsonlEntry(line: string): AgentEvent | null {
+function parseJsonlEntries(line: string): AgentEvent[] {
   try {
     const entry = JSON.parse(line);
     const type = entry.type;
@@ -106,79 +106,54 @@ function parseJsonlEntry(line: string): AgentEvent | null {
       }
 
       const content = entry.message?.content;
-      if (!Array.isArray(content)) return null;
+      if (!Array.isArray(content)) return [];
 
+      // One event per block. A message routinely carries several tool calls
+      // (Claude Code batches independent reads and edits), and returning on
+      // the first one undercounted every edit after it (Phase 32 bug 3).
+      const events: AgentEvent[] = [];
       for (const block of content) {
         if (block.type === 'tool_use') {
-          const toolName = block.name;
-          const input = block.input || {};
-
-          // File operations
-          if (toolName === 'Read') {
-            return makeEvent('file_changed', {
-              action: 'read',
-              file: input.file_path,
-              tool: toolName,
-            });
-          }
-          if (toolName === 'Write') {
-            return makeEvent('file_changed', {
-              action: 'write',
-              file: input.file_path,
-              tool: toolName,
-            });
-          }
-          if (toolName === 'Edit') {
-            return makeEvent('file_changed', {
-              action: 'edit',
-              file: input.file_path,
-              tool: toolName,
-            });
-          }
-          if (toolName === 'Bash') {
-            return makeEvent('file_changed', {
-              action: 'bash',
-              command: (input.command || '').substring(0, 200),
-              tool: toolName,
-            });
-          }
-          if (toolName === 'Glob' || toolName === 'Grep') {
-            return makeEvent('architecture_query', {
-              tool: toolName,
-              pattern: input.pattern || input.query,
-            });
-          }
-
-          // Generic tool call
-          return makeEvent('file_changed', {
-            action: 'tool',
-            tool: toolName,
-          });
-        }
-
-        if (block.type === 'text') {
+          events.push(toolUseEvent(block.name, block.input || {}));
+        } else if (block.type === 'text') {
           // Check for plan-like content
           const text = block.text || '';
           if (isPlanLike(text)) {
-            return makeEvent('plan_reported', {
+            events.push(makeEvent('plan_reported', {
               text: text.substring(0, 1000),
-            });
+            }));
           }
         }
       }
+      return events;
     }
 
     if (type === 'user') {
-      return makeEvent('session_start', {
+      return [makeEvent('session_start', {
         message: (entry.message?.content || '').substring(0, 200),
         timestamp: entry.timestamp,
-      });
+      })];
     }
 
-    return null;
+    return [];
   } catch {
-    return null;
+    return [];
   }
+}
+
+/** The event one `tool_use` block becomes. */
+function toolUseEvent(toolName: string, input: Record<string, any>): AgentEvent {
+  if (toolName === 'Read') return makeEvent('file_changed', { action: 'read', file: input.file_path, tool: toolName });
+  if (toolName === 'Write') return makeEvent('file_changed', { action: 'write', file: input.file_path, tool: toolName });
+  if (toolName === 'Edit') return makeEvent('file_changed', { action: 'edit', file: input.file_path, tool: toolName });
+  if (toolName === 'Bash') {
+    return makeEvent('file_changed', { action: 'bash', command: (input.command || '').substring(0, 200), tool: toolName });
+  }
+  if (toolName === 'Glob' || toolName === 'Grep') {
+    return makeEvent('architecture_query', { tool: toolName, pattern: input.pattern || input.query });
+  }
+  // Generic tool call
+  return makeEvent('file_changed', { action: 'tool', tool: toolName });
 }
 
 function isPlanLike(text: string): boolean {
@@ -224,8 +199,7 @@ function tailJsonl(): void {
     const lines = buffer.toString('utf-8').split('\n').filter((l) => l.trim());
 
     for (const line of lines) {
-      const event = parseJsonlEntry(line);
-      if (event) {
+      for (const event of parseJsonlEntries(line)) {
         broadcast('agent-event', event);
       }
     }

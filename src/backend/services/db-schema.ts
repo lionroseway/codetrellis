@@ -301,6 +301,9 @@ export const SCHEMA_PLAN_ITEMS = `
     assignee         TEXT,
     assignee_type    TEXT,
     assignee_model   TEXT,
+    -- The MCP session that claimed it (Phase 32 bug 1): two agents of one
+    -- type are two claimants. Runtime only, never written to plan files.
+    assignee_session TEXT,
     progress_percent INTEGER,
     blocked_reason   TEXT,
     scope_path       TEXT,

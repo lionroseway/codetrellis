@@ -2621,11 +2621,16 @@ app.delete('/api/items/:uid', (req, res) => {
 /** Atomically claim an Action. */
 app.post('/api/items/:uid/claim', (req, res) => {
   const { agentId, agentType, model } = req.body || {};
+  // The body names who the work is assigned to — a script or test can claim
+  // on an agent's behalf — but the change is recorded as the caller's.
   const result = planItemService.claimItem(
     req.params.uid,
     agentId || personFrom(req).author,
     agentType || 'human',
     model,
+    undefined,
+    undefined,
+    personFrom(req),
   );
   if (result.ok) {
     const item = planItemService.getItem(req.params.uid);

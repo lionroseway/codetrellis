@@ -69,7 +69,7 @@ const ITEM_COLUMNS = `uid, plan_uid, parent_uid, sort_order, kind,
   skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
   constraints, constraints_mode, requires_approval,
   author, author_type, created_at, updated_at, migrated_from,
-  visibility, visibility_override`;
+  visibility, visibility_override, assignee_session`;
 
 function rowToItem(r: any[]): PlanItem {
   return {
@@ -113,6 +113,7 @@ function rowToItem(r: any[]): PlanItem {
     // Phase 3.2 — per-item sharing
     visibility: ((r[34] as string | null) ?? 'shared') as 'shared' | 'local',
     overrideParentVisibility: !!(r[35] as number),
+    assigneeSession: (r[36] as string | null) ?? null,
   };
 }
 
@@ -495,6 +496,13 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
     if (updates.assigneeModel !== undefined && updates.assigneeModel !== before.assigneeModel) {
       sets.push('assignee_model = ?'); params.push(updates.assigneeModel);
       contentChanged = true;
+    }
+    // The claiming session goes with the claim: set by a claim, and cleared
+    // whenever the assignee is. It is runtime state, not content.
+    if (updates.assigneeSession !== undefined && updates.assigneeSession !== (before.assigneeSession ?? null)) {
+      sets.push('assignee_session = ?'); params.push(updates.assigneeSession);
+    } else if (updates.assignee === null && before.assigneeSession) {
+      sets.push('assignee_session = NULL');
     }
     if (updates.progressPercent !== undefined && updates.progressPercent !== before.progressPercent) {
       sets.push('progress_percent = ?'); params.push(updates.progressPercent);
@@ -928,6 +936,18 @@ export function restoreItemVersion(
 // Action-only operations (claim)
 // =============================================================================
 
+/**
+ * Whether `other` was claimed by the same claimant as this claim. By session
+ * when both have one: the assignee is the agent's TYPE, so two Claude Code
+ * sessions looked like one claimant and never saw each other's overlap
+ * (Phase 32 bug 1). By assignee only when a session is missing (a REST claim,
+ * or a row from before sessions were recorded).
+ */
+function sameClaimant(other: PlanItem, agentId: string, sessionId: string | undefined): boolean {
+  if (sessionId && other.assigneeSession) return other.assigneeSession === sessionId;
+  return other.assignee === agentId;
+}
+
 export interface ClaimItemResult {
   ok: boolean;
   conflicts?: string[];
@@ -1051,6 +1071,8 @@ function claimItemImpl(
   agentType: string,
   model?: string,
   capabilities?: Array<{ name: string; source: string }>,
+  sessionId?: string,
+  actor?: { author: string; authorType: string },
 ): ClaimItemResult {
   const item = getItem(uid);
   if (!item) return { ok: false, reason: 'Item not found' };
@@ -1121,7 +1143,7 @@ function claimItemImpl(
       o.uid !== uid &&
       o.kind === 'action' &&
       (o.status === 'in_progress' || o.status === 'assigned') &&
-      o.assignee !== agentId,
+      !sameClaimant(o, agentId, sessionId),
     );
     for (const other of others) {
       const overlap = (other.fileSpecs ?? []).flatMap((fs) => [fs.path, fs.moveTo].filter(Boolean) as string[])
@@ -1137,8 +1159,12 @@ function claimItemImpl(
     assignee: agentId,
     assigneeType: agentType,
     assigneeModel: model ?? null,
-    author: agentId,
-    authorType: 'agent',
+    assigneeSession: sessionId ?? null,
+    // Who made the claim, from how it arrived: the agent itself over MCP,
+    // the person (or `unverified`) over REST, which can claim on an agent's
+    // behalf. The claimant alone when no caller is given.
+    author: actor?.author ?? agentId,
+    authorType: actor?.authorType ?? 'agent',
     changeSummary: 'Claimed',
   });
 
@@ -1418,8 +1444,10 @@ export function claimItem(
   agentType: string,
   model?: string,
   capabilities?: Array<{ name: string; source: string }>,
+  sessionId?: string,
+  actor?: { author: string; authorType: string },
 ): ClaimItemResult {
-  const result = claimItemImpl(uid, agentId, agentType, model, capabilities);
+  const result = claimItemImpl(uid, agentId, agentType, model, capabilities, sessionId, actor);
   if (result.ok) writeThrough(getItem(uid)?.planUid);
   return result;
 }

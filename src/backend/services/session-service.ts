@@ -2,12 +2,28 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { AgentSessionInfo, AgentCapability } from '../../shared/types';
 
+/**
+ * Register a session, or update it in place.
+ *
+ * `INSERT OR REPLACE` deleted the row and wrote a new one, so an agent calling
+ * register_session after connecting (to say what it is) lost the plan it had
+ * set active and its terminal link (Phase 32 bug 2). Now what the call names
+ * is updated and the rest kept: the active plan always, the model, terminal
+ * and capabilities unless given, and when it first connected.
+ */
 export function registerSession(sessionId: string, agentType: string, model?: string, capabilities?: AgentCapability[], hostTerminalId?: string): void {
   const now = Date.now();
   getDb().run(
-    `INSERT OR REPLACE INTO agent_sessions (session_id, agent_type, model, capabilities, host_terminal_id, connected_at, last_seen, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
-    [sessionId, agentType, model || null, JSON.stringify(capabilities ?? []), hostTerminalId || null, now, now]
+    `INSERT INTO agent_sessions (session_id, agent_type, model, capabilities, host_terminal_id, connected_at, last_seen, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
+     ON CONFLICT(session_id) DO UPDATE SET
+       agent_type = excluded.agent_type,
+       model = COALESCE(excluded.model, agent_sessions.model),
+       capabilities = CASE WHEN ? THEN excluded.capabilities ELSE agent_sessions.capabilities END,
+       host_terminal_id = COALESCE(excluded.host_terminal_id, agent_sessions.host_terminal_id),
+       last_seen = excluded.last_seen,
+       status = 'active'`,
+    [sessionId, agentType, model || null, JSON.stringify(capabilities ?? []), hostTerminalId || null, now, now, capabilities ? 1 : 0]
   );
   markDirty();
 }

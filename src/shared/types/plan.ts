@@ -605,6 +605,11 @@ export interface PlanItem {
   assignee?: string | null;
   assigneeType?: string | null;
   assigneeModel?: string | null;
+  /**
+   * The MCP session that claimed it. The assignee is the agent's type, which
+   * two sessions of one agent share (Phase 32 bug 1). Not in plan files.
+   */
+  assigneeSession?: string | null;
   progressPercent?: number | null;
   blockedReason?: string | null;
   /** Folder this Action is rooted at; relative paths in fileSpecs resolve here. */
@@ -843,6 +848,7 @@ export interface UpdatePlanItemInput {
   assignee?: string | null;
   assigneeType?: string | null;
   assigneeModel?: string | null;
+  assigneeSession?: string | null;
   progressPercent?: number | null;
   blockedReason?: string | null;
   scopePath?: string | null;

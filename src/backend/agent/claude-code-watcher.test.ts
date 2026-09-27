@@ -29,6 +29,7 @@ const PROJECT_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-proj-'));
 
 /** Events the watcher broadcasts, captured via the server module it calls. */
 const started: string[] = [];
+const broadcasted: Array<{ type?: string; payload?: Record<string, unknown> }> = [];
 
 let startClaudeCodeWatcher: (root: string) => void;
 let stopClaudeCodeWatcher: () => void;
@@ -43,6 +44,7 @@ before(async () => {
     loaded: true,
     exports: {
       broadcast: (_channel: string, event: { type?: string; payload?: { sessionId?: string } }) => {
+        broadcasted.push(event as { type?: string; payload?: Record<string, unknown> });
         if (event?.type === 'session_start' && event.payload?.sessionId) {
           started.push(event.payload.sessionId);
         }
@@ -58,6 +60,7 @@ before(async () => {
 afterEach(() => {
   stopClaudeCodeWatcher();
   started.length = 0;
+  broadcasted.length = 0;
   fs.rmSync(path.join(CLAUDE_DIR, 'sessions'), { recursive: true, force: true });
   fs.rmSync(path.join(CLAUDE_DIR, 'projects'), { recursive: true, force: true });
 });
@@ -128,5 +131,33 @@ describe('Claude Code watcher — session binding', () => {
     // No live session is not the same as a new one: rebinding to nothing would
     // churn session_start events for an agent that simply went away.
     assert.deepEqual(started, ['session-one']);
+  });
+});
+
+describe('Claude Code watcher — every tool call in a message (Phase 32 bug 3)', () => {
+  test('a message with two tool calls yields two events, in order', async () => {
+    // Claude Code batches independent calls into one assistant message. The
+    // watcher returned on the first `tool_use`, so the second edit was never
+    // reported.
+    const jsonl = plantSession('session-batch');
+    startClaudeCodeWatcher(PROJECT_ROOT);
+    await settle();
+
+    fs.appendFileSync(jsonl, JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: 'Updating both files.' },
+          { type: 'tool_use', name: 'Edit', input: { file_path: '/repo/src/a.ts' } },
+          { type: 'tool_use', name: 'Write', input: { file_path: '/repo/src/b.ts' } },
+        ],
+      },
+    }) + '\n');
+    await settle();
+
+    const edits = broadcasted
+      .filter((e) => e.type === 'file_changed')
+      .map((e) => [e.payload?.action, e.payload?.file]);
+    assert.deepEqual(edits, [['edit', '/repo/src/a.ts'], ['write', '/repo/src/b.ts']]);
   });
 });
