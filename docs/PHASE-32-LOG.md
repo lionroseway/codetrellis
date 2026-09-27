@@ -142,12 +142,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-27 | Granting is the person's: agent grants, device grants, network exposure, webhook hosts and project scope change only from the app window (a CLI later), never over plain HTTP, MCP or the phone. Refused elsewhere with where to do it | Owner's decision on the settings-escalation finding (private register) |
 | 2026-09-27 | The phone screen review waits until after the release; the phone app is not a priority now | Owner's decision: "Phone screens we can have a look at later"; the release matters more |
 | 2026-09-27 | 0.1.17 is desktop only: no companion build. The phone-side cards (budget, freeze, deviations) ship with the next companion build | Follows from the above; pairing has not changed since 0.1.14, so existing phones keep working |
+| 2026-09-27 | Reversed: 0.1.17 includes the companion after all (Android APK on the release, iOS to TestFlight) — it carries the deviations fix (bug 34), the budget and freeze cards and the splash fix | Owner: "we can do the mobile release"; the phone screen review still waits |
 | 2026-09-27 | `feat/phase-32` merges into `main` for the release, with a merge commit so each step's commit and PR stay visible | Owner's go-ahead ("getting release done and we merge"); `main` history is one commit per PR |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-27: 0.8 — the companion ships with 0.1.17
+
+The owner reversed "desktop only": the companion has real changes since
+0.1.16's build (bug 34's deviations fix, the budget and freeze cards, the
+splash fix from #109). `mobile/app.json` goes to 0.1.17, which
+`scripts/release-mobile.sh` requires (it refuses a companion whose version
+differs from the desktop's). The notes now list the APK and the TestFlight
+build. The phone screen review still waits until after the release.
+
+Order on the release machine: build the APK into `out/make/` first, so
+`scripts/release.sh` attaches it and covers it with the signed manifest;
+then `release.sh`; then `release-mobile.sh` for TestFlight.
 
 ### 2026-09-27: 0.8 — release prepared
 
