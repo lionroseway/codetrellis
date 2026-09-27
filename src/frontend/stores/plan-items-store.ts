@@ -57,6 +57,12 @@ interface PlanItemsState {
   historyDrawerItemUid: string | null;
   /** Loading flag for the initial tree fetch. */
   hydrating: boolean;
+  /**
+   * The plan whose items have finished loading (or failed to), so the tree
+   * can say it is still busy for any other. `hydrating` alone reads false
+   * before a load starts as well as after it ends.
+   */
+  hydratedFor: string | null;
 
   // --- Bulk hydration ---
   hydratePlan: (planUid: string) => Promise<void>;
@@ -147,6 +153,7 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
   activityDrawerOpen: true,
   historyDrawerItemUid: null,
   hydrating: false,
+  hydratedFor: null,
 
   hydratePlan: async (planUid) => {
     const cur = get().activePlanUid;
@@ -168,9 +175,9 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       const events: PlanEvent[] = eventsRes.ok ? await eventsRes.json() : [];
       const itemsByUid: Record<string, PlanItem> = {};
       for (const i of items) itemsByUid[i.uid] = i;
-      set({ itemsByUid, events, hydrating: false });
+      set({ itemsByUid, events, hydrating: false, hydratedFor: planUid });
     } catch {
-      set({ hydrating: false });
+      set({ hydrating: false, hydratedFor: planUid });
     }
   },
 
