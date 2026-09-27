@@ -20,6 +20,7 @@
 import { randomBytes } from 'node:crypto';
 import { spawn, ChildProcess } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
 import { REPO_ROOT } from './paths';
 import { findFreePorts } from './ports';
 
@@ -57,7 +58,27 @@ export interface StartBackendOptions {
   mcpPort?: number;
   /** Wait timeout for `/api/build-info` to return 200. Default: 30s. */
   readyTimeoutMs?: number;
+  /** Extra environment for the backend process. */
+  env?: Record<string, string>;
+  /**
+   * Settings written to `<dataDir>/settings.json` before the backend starts,
+   * merged over the harness default (`{ updates: { autoCheck: false } }`).
+   * Ignored when the file already exists — a restart keeps what was saved.
+   */
+  settings?: Record<string, unknown>;
 }
+
+/**
+ * The backend checks for updates when it starts, and the check goes to
+ * codetrellis.dev and then GitHub. Six hundred harness backends did that on
+ * every run: requests to the internet no test asked for, and a test of "no
+ * update available" that held only while no newer release existed (Phase 32
+ * §0.4k). So the harness starts with the automatic check off, and both
+ * sources point at a closed local port, so a check that does run fails at
+ * once and never leaves the machine. A test of the check opts back in.
+ */
+const HARNESS_SETTINGS = { updates: { autoCheck: false } };
+const NOWHERE = 'http://127.0.0.1:9';
 
 /**
  * Start the backend, wait for it to answer `/api/build-info`, return
@@ -72,8 +93,17 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
   // Unique per spawned backend — see CODETRELLIS_CAPABILITY_TOKEN below.
   const capabilityToken = randomBytes(24).toString('hex');
 
+  const settingsFile = path.join(opts.dataDir, 'settings.json');
+  if (!fs.existsSync(settingsFile)) {
+    fs.mkdirSync(opts.dataDir, { recursive: true });
+    const seeded = { ...HARNESS_SETTINGS, ...(opts.settings ?? {}) };
+    fs.writeFileSync(settingsFile, JSON.stringify(seeded, null, 2));
+  }
+
   const env = {
     ...process.env,
+    CODETRELLIS_OTA_URL: NOWHERE,
+    CODETRELLIS_GITHUB_API: NOWHERE,
     CODETRELLIS_DATA_DIR: opts.dataDir,
     CODETRELLIS_BACKEND_PORT: String(backendPort),
     CODETRELLIS_MCP_PORT: String(mcpPort),
@@ -84,6 +114,7 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     CODETRELLIS_CAPABILITY_TOKEN: capabilityToken,
     PORT: String(backendPort),
     NODE_ENV: 'test',
+    ...(opts.env ?? {}),
   };
 
   const child = spawn(
