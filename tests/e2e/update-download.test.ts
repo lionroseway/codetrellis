@@ -20,13 +20,15 @@ import { test, expect } from '@playwright/test';
 import { setupHarness } from '../harness';
 
 interface DownloadState {
-  phase: 'idle' | 'downloading' | 'verifying' | 'ready' | 'error';
+  phase: 'idle' | 'preparing' | 'downloading' | 'verifying' | 'ready' | 'error';
   version: string | null;
   filename: string | null;
   bytesDownloaded: number;
   totalBytes: number | null;
   filePath: string | null;
   error: string | null;
+  sha256: string | null;
+  savedPath: string | null;
 }
 
 test.describe('Verified update download (Phase 29)', () => {
@@ -47,6 +49,8 @@ test.describe('Verified update download (Phase 29)', () => {
       expect(state).toHaveProperty('filename');
       expect(state).toHaveProperty('totalBytes');
       expect(state).toHaveProperty('error');
+      expect(state.savedPath, 'nothing saved before a download').toBeNull();
+      expect(state.sha256, 'no digest until one is verified').toBeNull();
       expect(state.bytesDownloaded).toBe(0);
     } finally {
       await h.teardown();
