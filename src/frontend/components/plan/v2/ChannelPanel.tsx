@@ -24,6 +24,7 @@ import {
 import { useChannelsStore } from '../../../stores/channels-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { ChannelEvent, ChannelEventStatus, ChannelEventType } from '@shared/types';
+import { authorKind, authorWithSource } from '../../../lib/author-words';
 
 // All six types are now composable from the UI (Phase 2.1).
 const ASK_TYPES: ChannelEventType[] = ['stuck', 'need-decision', 'need-context'];
@@ -600,7 +601,9 @@ function collectDescendants(rootUid: string, childrenByParent: Record<string, Ch
 }
 
 function renderAuthor(event: ChannelEvent): string {
-  if (event.authorType && event.authorType !== 'human') {
+  const kind = authorKind(event.authorType);
+  if (kind === 'unverified') return authorWithSource(event.author, event.authorType);
+  if (kind === 'agent') {
     const model = event.agentModel ? ` (${event.agentModel})` : '';
     return `${event.author}'s ${event.authorType}${model}`;
   }

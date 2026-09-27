@@ -329,19 +329,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
         placeholder_values: z.record(z.string(), z.string()).optional().describe('Values for `{{key}}` placeholders declared by the template (Phase 13 §C). Missing keys fall back to the placeholder default.'),
       },
     },
-    async ({ template_id, project_path, title, description, placeholder_values }) => {
-      const sessions = deps.sessionService.getActiveSessions();
-      const session = sessions.find((s: any) => s.sessionId === deps.sessionId) ?? null;
-      const author = (session as any)?.agentType ?? 'agent';
-
+    async ({ template_id, project_path, title, description, placeholder_values }, extra: unknown) => {
       try {
         const result = deps.applyTemplate({
           templateId: template_id,
           projectPath: project_path,
           title,
           description,
-          author,
-          authorType: 'mcp',
+          ...authorFromExtra(deps, extra),
           placeholderValues: placeholder_values,
         });
 

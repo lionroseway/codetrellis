@@ -39,6 +39,7 @@ import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
 import type {
   PlanItem, TaskStatus, Comment,
 } from '@shared/types';
+import { authorKind, authorWithSource } from '../../../lib/author-words';
 
 const STATUS_META: Record<TaskStatus, { label: string; tint: string; Icon: typeof Circle }> = {
   pending: { label: 'Pending', tint: 'text-zinc-400', Icon: Circle },
@@ -1170,14 +1171,14 @@ function CommentsBlock({
         <div className="space-y-2.5 mb-3">
           {sorted.map((c) => {
             const meta = COMMENT_KIND_META[c.kind ?? 'note'] ?? COMMENT_KIND_META.note;
-            const isAgent = (c.source ?? '') === 'agent' || c.authorType !== 'human';
+            const isAgent = (c.source ?? '') === 'agent' || authorKind(c.authorType) === 'agent';
             return (
               <div key={c.uid} className="group rounded-lg border border-white/[0.05] bg-white/[0.015] px-3.5 py-2.5">
                 <div className="flex items-center gap-2 text-[11.5px] text-foreground-subtle">
                   <meta.Icon size={12} className={meta.tint} />
                   <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
                   <span>·</span>
-                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
+                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{authorWithSource(c.author, c.authorType)}</span>
                   <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
                   <CopyRef kind="comment" uid={c.uid} within={{ kind: isAction ? 'task' : 'page', uid: itemUid }} />
                   <button
