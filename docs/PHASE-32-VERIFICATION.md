@@ -90,7 +90,7 @@ is proof of a gap.
 | c | `DELETE /api/items/:uid` |  | ✗ none | 9 |  |  |  |
 | c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `DELETE /api/plans/:uid` |  | 1 | 14 |  |  |  |
+| c | `DELETE /api/plans/:uid` |  | 1 | 15 |  |  |  |
 | c | `DELETE /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/attachments/:uid/file` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
@@ -115,7 +115,7 @@ is proof of a gap.
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 24 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid` |  | 1 | 14 |  |  |  |
+| c | `GET /api/plans/:uid` |  | 1 | 15 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
@@ -170,7 +170,7 @@ is proof of a gap.
 | c | `PUT /api/items/:uid` |  | ✗ none | 9 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/plans/:uid` |  | 1 | 14 |  |  |  |
+| c | `PUT /api/plans/:uid` |  | 1 | 15 |  |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
