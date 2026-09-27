@@ -16,7 +16,7 @@ is proof of a gap.
 |---|---|---|---|---|---|---|
 | REST routes | 215 | 201 | 21 | 21 | 98 | 0 |
 | MCP tools | 185 | 147 | 9 | 4 | 115 | 0 |
-| Mobile RPC methods | 72 | 47 | 72 | 47 | 0 | 0 |
+| Mobile RPC methods | 74 | 47 | 74 | 47 | 2 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 0 | 0 |
@@ -31,7 +31,7 @@ is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 10 | 26 | 0 | 20 | 0 | 0 |
+| 0.4g Agents and MCP | 10 | 26 | 2 | 20 | 0 | 0 |
 | 0.4h Drift, governance, review | 8 | 24 | 6 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
@@ -455,7 +455,7 @@ is proof of a gap.
 | l | `verify_system_doc` | system-docs · write | ✗ none | 2 |  |  |  |
 | l | `write_system_doc` | system-docs · write | ✗ none | 2 |  |  |  |
 
-## Mobile RPC methods (72)
+## Mobile RPC methods (74)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -508,6 +508,8 @@ is proof of a gap.
 | f | `channel.resolve` | write | ✗ none | ✗ none |  |  |  |
 | f | `channel.thread` | read | ✗ none | ✗ none |  |  |  |
 | f | `input.respond` | write | ✗ none | ✗ none |  |  |  |
+| g | `budget.acknowledge` | write | 1 | ✗ none | ✓ phone: needs a confirmed pairing; unflags in the person's name, audited, desktop told; other plan's or unknown change refused (mobile-budget unit) |  |  |
+| g | `budget.get` | read | 1 | ✗ none | ✓ phone: ceiling, spend (unknown cost stays null) and flagged agent changes in the desktop's words; unknown plan refused (mobile-budget unit) |  |  |
 | h | `deviation.list` | read | ✗ none | ✗ none |  |  |  |
 | h | `deviation.resolve` | write | ✗ none | ✗ none |  |  |  |
 | h | `review.comparands` | read | ✗ none | ✗ none |  |  |  |

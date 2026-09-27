@@ -119,6 +119,8 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // Phase 31 §12 — what is waiting on a person, and one item's criteria.
   'criteria.awaiting': 'read',
   'criteria.list': 'read',
+  // A plan's budget and the agent changes still flagged (mobile-budget.ts).
+  'budget.get': 'read',
 
   // ── write ───────────────────────────────────────────────────────────
   'channel.post': 'write',
@@ -126,6 +128,8 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // the handler also requires a CONFIRMED pairing, because the sign-off is
   // recorded as the person's (mobile-approvals.ts).
   'criterion.decide': 'write',
+  // Marking an agent's budget change seen: also needs a CONFIRMED pairing.
+  'budget.acknowledge': 'write',
   'channel.resolve': 'write',
   'comment.add': 'write',
   'deviation.resolve': 'write',

@@ -691,5 +691,11 @@
   },
   "mcp:set_freeze": {
     "behaviour": "✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6)"
+  },
+  "rpc:budget.get": {
+    "behaviour": "✓ phone: ceiling, spend (unknown cost stays null) and flagged agent changes in the desktop's words; unknown plan refused (mobile-budget unit)"
+  },
+  "rpc:budget.acknowledge": {
+    "behaviour": "✓ phone: needs a confirmed pairing; unflags in the person's name, audited, desktop told; other plan's or unknown change refused (mobile-budget unit)"
   }
 }

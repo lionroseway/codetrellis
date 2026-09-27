@@ -220,6 +220,34 @@ export async function pushForInputRequest(
   }
 }
 
+/**
+ * An agent changed a plan's budget: the change is flagged until a person
+ * sees it (Phase 32 §0.4g). A person away from the desk is told, and the
+ * tap opens the plan, where the phone's budget card shows it. The payload
+ * carries only ids; the words load over WebRTC.
+ */
+export async function pushForBudgetChange(planUid: string, planTitle: string, agent: string): Promise<void> {
+  if (!started) return;
+  const tokens = Array.from(pushTokens.values());
+  if (tokens.length === 0) return;
+
+  const payloads: PushPayload[] = [];
+  for (const { token, fingerprint } of tokens) {
+    if (isDeviceActive(fingerprint)) continue; // already watching live — don't push
+    if (isRateLimited(fingerprint, 'budget-change')) continue;
+    markSent(fingerprint, 'budget-change');
+    payloads.push({
+      to: token,
+      title: 'Budget changed by an agent',
+      body: `${agent} changed the budget on ${planTitle.length > 80 ? planTitle.slice(0, 77) + '...' : planTitle}`,
+      data: { type: 'budget-change', planUid },
+      sound: 'default',
+      channelId: 'codetrellis-events',
+    });
+  }
+  if (payloads.length > 0) await sendExpoPush(payloads);
+}
+
 // --- Internals ---------------------------------------------------------------
 
 function channelEventTitle(event: ChannelEvent): string {
