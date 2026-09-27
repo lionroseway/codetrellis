@@ -1198,13 +1198,13 @@
     "ux": "✓ 0.5a — major fixed: \"Agent active\" vs \"No agents\" (M3)"
   },
   "component:layout/TopBar.tsx": {
-    "ux": "✓ 0.5a — minors: depth tabs lit where no graph shows (m1), tab/branch truncation (m2)"
+    "ux": "✓ 0.5 — depth tabs dim where no graph shows; branch chip one line (0.5c)"
   },
   "component:layout/ConnectedAgents.tsx": {
     "ux": "✓ 0.5a"
   },
   "component:presence/PresencePane.tsx": {
-    "ux": "✓ 0.5a — minor: badge + count, toast over reply, above modal backdrop (m17, m22)"
+    "ux": "✓ 0.5 — one count that names what it counts (0.5c). Minors: toast over reply (m17), above modal backdrop (m22)"
   },
   "component:system-docs/SystemDocsPanel.tsx": {
     "ux": "✓ 0.5a — empty state is content"
@@ -1219,7 +1219,7 @@
     "ux": "✓ 0.5a"
   },
   "component:FolderPickerModal.tsx": {
-    "ux": "✓ 0.5a — minor: opens at home (m18)"
+    "ux": "✓ 0.5 — opens beside the open project (0.5c)"
   },
   "component:terminal/TerminalPanel.tsx": {
     "ux": "✓ 0.5a"
@@ -1237,10 +1237,10 @@
     "ux": "✓ 0.5 — units stay on the ceiling boxes (0.5b)"
   },
   "component:plan/v2/PlanWorkspaceShellV2.tsx": {
-    "ux": "✓ 0.5a — minors: repeated counts, \"V2\" (m3)"
+    "ux": "✓ 0.5 — no \"V2\" badge (0.5c)"
   },
   "component:plan/v2/PlanItemCanvas.tsx": {
-    "ux": "✓ 0.5a — minors: gaps (m4), emoji chips (m5)"
+    "ux": "✓ 0.5 — says status once; icons not emoji (0.5c). Minor: gaps (m4)"
   },
   "component:layout/InspectorPanel.tsx": {
     "ux": "✓ 0.5a — minor: sparse file view (m21)"
@@ -1253,5 +1253,8 @@
   },
   "component:settings/SettingsModal.tsx": {
     "ux": "✓ 0.5 — one height for every section (0.5b)"
+  },
+  "component:layout/CoverageChip.tsx": {
+    "ux": "✓ 0.5 — \"imports linked\" (0.5c)"
   }
 }

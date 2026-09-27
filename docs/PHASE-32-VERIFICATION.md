@@ -17,7 +17,7 @@ is proof of a gap.
 | REST routes | 217 | 203 | 0 | 0 | 153 | 0 |
 | MCP tools | 185 | 147 | 3 | 0 | 152 | 0 |
 | Mobile RPC methods | 76 | 49 | 0 | 0 | 76 | 0 |
-| Frontend components | 99 | n/a | n/a | n/a | 0 | 22 |
+| Frontend components | 99 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
@@ -591,7 +591,7 @@ is proof of a gap.
 | c | `plan/v2/PlanGitContextChip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanHistoryRail.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanImportModal.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/PlanItemCanvas.tsx` |  | n/a | n/a |  | ✓ 0.5a — minors: gaps (m4), emoji chips (m5) |  |
+| c | `plan/v2/PlanItemCanvas.tsx` |  | n/a | n/a |  | ✓ 0.5 — says status once; icons not emoji (0.5c). Minor: gaps (m4) |  |
 | c | `plan/v2/PlanItemHistoryDrawer.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanItemTree.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanQualityNudge.tsx` |  | n/a | n/a |  |  |  |
@@ -603,18 +603,18 @@ is proof of a gap.
 | c | `plan/v2/PlanTemplateChooser.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanTicketSyncChip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanVersionHistory.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/PlanWorkspaceShellV2.tsx` |  | n/a | n/a |  | ✓ 0.5a — minors: repeated counts, "V2" (m3) |  |
+| c | `plan/v2/PlanWorkspaceShellV2.tsx` |  | n/a | n/a |  | ✓ 0.5 — no "V2" badge (0.5c) |  |
 | c | `plan/v2/SlashMenu.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/TargetsStrip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/TeamActivityPanel.tsx` |  | n/a | n/a |  |  |  |
 | e | `artefact/ArtefactViewer.tsx` |  | n/a | n/a |  |  |  |
 | e | `brief/BriefWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5 — agent-agnostic wording (0.5b) |  |
 | e | `brief/SignoffPackControls.tsx` |  | n/a | n/a |  |  |  |
-| f | `presence/PresencePane.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: badge + count, toast over reply, above modal backdrop (m17, m22) |  |
+| f | `presence/PresencePane.tsx` |  | n/a | n/a |  | ✓ 0.5 — one count that names what it counts (0.5c). Minors: toast over reply (m17), above modal backdrop (m22) |  |
 | g | `ActiveAgentProjects.tsx` |  | n/a | n/a |  |  |  |
 | g | `ErrorBoundary.tsx` |  | n/a | n/a |  |  |  |
 | g | `FirstRunWizard.tsx` |  | n/a | n/a |  |  |  |
-| g | `FolderPickerModal.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: opens at home (m18) |  |
+| g | `FolderPickerModal.tsx` |  | n/a | n/a |  | ✓ 0.5 — opens beside the open project (0.5c) |  |
 | g | `GettingStarted.tsx` |  | n/a | n/a |  |  |  |
 | g | `guide/GuideModal.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/AgentPanel.tsx` |  | n/a | n/a |  |  |  |
@@ -622,13 +622,13 @@ is proof of a gap.
 | g | `layout/AgentTurns.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/CodeWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state says what to do |  |
 | g | `layout/ConnectedAgents.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
-| g | `layout/CoverageChip.tsx` |  | n/a | n/a |  |  |  |
+| g | `layout/CoverageChip.tsx` |  | n/a | n/a |  | ✓ 0.5 — "imports linked" (0.5c) |  |
 | g | `layout/InspectorPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: sparse file view (m21) |  |
 | g | `layout/MainCanvas.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: change summary covered the toolbar; now one quiet line (M1). Minor: 4-row toolbar at 1024 (m23) |  |
 | g | `layout/PlanPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: "Agent active" vs "No agents" (M3) |  |
 | g | `layout/Sidebar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/StatusBar.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: "1852/3680 linked" (m16) |  |
-| g | `layout/TopBar.tsx` |  | n/a | n/a |  | ✓ 0.5a — minors: depth tabs lit where no graph shows (m1), tab/branch truncation (m2) |  |
+| g | `layout/TopBar.tsx` |  | n/a | n/a |  | ✓ 0.5 — depth tabs dim where no graph shows; branch chip one line (0.5c) |  |
 | g | `Toast.tsx` |  | n/a | n/a |  |  |  |
 | g | `WelcomeScreen.tsx` |  | n/a | n/a |  |  |  |
 | i | `audio/AudioCaptureBar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
