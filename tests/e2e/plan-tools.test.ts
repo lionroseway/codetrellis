@@ -18,6 +18,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { execFileSync } from 'node:child_process';
 import { setupHarness, waitFor, openEventStream, type Harness, type ScriptedAgent } from '../harness';
 
 test.describe.serial('Plan tools', () => {
@@ -51,6 +52,15 @@ test.describe.serial('Plan tools', () => {
     planUid = created.uid;
     expect(created.exported).toBe(true);
     await json('add_item', { plan_uid: planUid, kind: 'action', title: 'Remove dead handlers' });
+    // Committed, as a shared plan is once the team has it: from then on its
+    // directory keeps its name through a rename, which is what bug 22 was
+    // about. Until it is committed the directory follows the title (0.6; the
+    // last test below).
+    execFileSync('git', ['add', '.codetrellis'], { cwd: root });
+    execFileSync('git', ['commit', '-qm', 'plan'], {
+      cwd: root,
+      env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' },
+    });
   });
 
   test.afterAll(async () => {
@@ -215,5 +225,15 @@ test.describe.serial('Plan tools', () => {
     } finally {
       await h.client.scanProject(root);
     }
+  });
+
+  test('before it is committed, a plan\'s directory follows its title — one directory, named for the latest', async () => {
+    const made = await json('create_plan', { title: 'Draft name', project_path: root });
+    const [first] = dirsFor(made.uid);
+    expect(first).toMatch(/^draft-name-/);
+    await json('update_plan', { plan_uid: made.uid, title: 'Final name' });
+    await waitFor(() => dirsFor(made.uid)[0]?.startsWith('final-name-') ?? false, { timeoutMs: 5000, description: 'the directory to take the new title' });
+    expect(dirsFor(made.uid)).toHaveLength(1);
+    expect(fs.existsSync(path.join(plansDir, first))).toBe(false);
   });
 });

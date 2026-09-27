@@ -277,6 +277,12 @@ export async function openPlan(page: Page, planTitle: string) {
   // sleep: a click that did not open the plan should fail HERE, not three
   // steps later as an item that cannot be found.
   await page.getByTestId('copy-ref-plan').first().waitFor({ timeout: 10_000 });
+  // And for its items. The workspace shows before they load, and opening a
+  // plan over the whole repo's graph can hold the main thread past 5 s with
+  // other workers running — so a spec that looked for a task with a short
+  // timeout failed now and then, a different one each run (Phase 32 §0.6).
+  // The tree says it is busy until this plan's items are in.
+  await page.locator('[data-testid="plan-item-tree"][aria-busy="false"]').first().waitFor({ timeout: 20_000 });
 }
 
 /**

@@ -66,14 +66,14 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 7 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 89 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 91 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
 | b | `GET /api/cross-system` |  | ✗ none | 6 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
 | b | `GET /api/dependencies` |  | ✗ none | 3 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
 | b | `GET /api/dependencies/file` |  | ✗ none | 3 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
-| b | `GET /api/diff` |  | ✗ none | 3 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
+| b | `GET /api/diff` |  | ✗ none | 4 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
 | b | `GET /api/file/at` |  | ✗ none | 2 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
 | b | `GET /api/file/content` |  | ✗ none | 2 | ✓ 0.4b: returns the file's exact content; outside opened projects 403 (misc-endpoints, filesystem-boundary) |  |  |
 | b | `GET /api/file/overlay` |  | ✗ none | 2 | ✓ 0.4b: plan edits mapped onto lines (plan-overlay) |  |  |
@@ -90,7 +90,7 @@ is proof of a gap.
 | c | `DELETE /api/items/:uid` |  | ✗ none | 9 |  |  |  |
 | c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `DELETE /api/plans/:uid` |  | 1 | 14 |  |  |  |
+| c | `DELETE /api/plans/:uid` |  | 1 | 15 |  |  |  |
 | c | `DELETE /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/attachments/:uid/file` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
@@ -111,11 +111,11 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 48 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 49 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 24 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid` |  | 1 | 14 |  |  |  |
+| c | `GET /api/plans/:uid` |  | 1 | 15 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
@@ -125,7 +125,7 @@ is proof of a gap.
 | c | `GET /api/plans/:uid/docs/by-type/:docType` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/docs/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by body with excerpt; no match is empty (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/external-sync` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/file-status` |  | ✗ none | 3 |  |  |  |
+| c | `GET /api/plans/:uid/file-status` |  | ✗ none | 4 |  |  |  |
 | c | `GET /api/plans/:uid/next-task` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 5 |  |  |  |
@@ -151,7 +151,7 @@ is proof of a gap.
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 48 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 49 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 24 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
@@ -170,7 +170,7 @@ is proof of a gap.
 | c | `PUT /api/items/:uid` |  | ✗ none | 9 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/plans/:uid` |  | 1 | 14 |  |  |  |
+| c | `PUT /api/plans/:uid` |  | 1 | 15 |  |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
@@ -203,13 +203,13 @@ is proof of a gap.
 | g | `GET /api/sessions` |  | ✗ none | 4 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
-| h | `GET /api/baseline` |  | ✗ none | 3 | ✓ 0.4h: source, dirty, capturedAt and a label that says what it is; kept across rescans (baseline); bug 29 |  |  |
+| h | `GET /api/baseline` |  | ✗ none | 4 | ✓ 0.4h: source, dirty, capturedAt and a label that says what it is; kept across rescans (baseline); bug 29 |  |  |
 | h | `GET /api/comparands` |  | ✗ none | 5 | ✓ 0.4h: live, baseline, checkpoints by name, commits; outside a project refused (drift-review-tools), plan-review, review-confinement |  |  |
 | h | `GET /api/compare` |  | ✗ none | 6 | ✓ 0.4h: exact diffs, same-point note, commit edges not compared, 404 unknown (plan-review, compare-hash-space, compare-phantom-removals) |  |  |
 | h | `GET /api/conflicts` |  | ✗ none | 4 | ✓ 0.4h: a real merge conflict with per-field ours/theirs (manifest-conflicts, worktree-project) |  |  |
 | h | `GET /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
 | h | `GET /api/freeze/changes` |  | ✗ none | 1 | ✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags) |  |  |
-| h | `POST /api/baseline/capture` |  | ✗ none | 2 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
+| h | `POST /api/baseline/capture` |  | ✗ none | 3 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
 | h | `POST /api/freeze/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools) |  |  |
 | h | `PUT /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33; recorded with who and how, never flagged (freeze-flags, 0.4k) |  |  |
@@ -251,14 +251,14 @@ is proof of a gap.
 | k | `GET /api/logs/path` |  | ✗ none | 2 | ✓ 0.4k: today's file under the data dir's logs (settings-surface) |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 2 | ✓ 0.4k: answers without a file logger; maxBytes must be a whole number (settings-surface) |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
-| k | `GET /api/settings` |  | ✗ none | 24 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
+| k | `GET /api/settings` |  | ✗ none | 25 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 2 | ✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates) |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | 1 | ✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates) |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 2 | ✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 | ✓ 0.4k: answers cleanly with nothing running (update-download) |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 24 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 25 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
@@ -307,7 +307,7 @@ is proof of a gap.
 | c | `bulk_add_items` | plan-item · write | 1 | ✗ none |  |  |  |
 | c | `claim_item` | plan-item · write | 1 | 4 |  |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
-| c | `create_plan` | plan · write | 1 | 18 |  |  |  |
+| c | `create_plan` | plan · write | 1 | 19 |  |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
 | c | `delete_item` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `delete_item_attachment` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
@@ -385,11 +385,11 @@ is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | 1 | 6 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | 1 | 7 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | 1 | 2 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
-| g | `set_baseline` | session · write | ✗ none | 1 | ✓ 0.4h: pins the commit on the backend, the window reads it back; null clears; bad refs refused (baseline); bug 29 |  |  |
+| g | `set_baseline` | session · write | ✗ none | 2 | ✓ 0.4h: pins the commit on the backend, the window reads it back; null clears; bad refs refused (baseline); bug 29 |  |  |
 | g | `set_budget` | budget · write | ✗ none | 2 | ✓ 0.4g: set, exempt, clear one dimension; recorded in the agent's name and flagged until seen; nothing stored for an unknown plan (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `setup_agent_permissions` | session · settings | 1 | 1 | ✓ 0.4g: refused without settings; merges the wildcard; inside an opened project only, never through a link (agent-ui-tools) |  |  |
 | g | `toggle_activity_drawer` | session · write | ✗ none | 1 | ✓ 0.4g: drawer toggles both ways (agent-ui-tools, mcp-ui-tools.spec) |  |  |
@@ -483,7 +483,7 @@ is proof of a gap.
 | c | `item.ref.add` | write | ✗ none | 1 | ✓ 0.4j: link on the item, desktop told; unknown item refused (phone-plans); bug 37 |  |  |
 | c | `item.ref.remove` | write | ✗ none | 1 | ✓ 0.4j: removed, desktop told; unknown refused (phone-plans); bug 37 |  |  |
 | c | `plan.copyAsPrompt` | read | ✗ none | 1 | ✓ 0.4j: the handoff prompt, work not yet started; unknown refused (phone-plans) |  |  |
-| c | `plan.create` | write | 1 | 1 | ✓ 0.4j: in the open project, as the person, desktop told (phone-plans); bug 37 |  |  |
+| c | `plan.create` | write | 1 | 2 | ✓ 0.4j: in the open project, as the person, desktop told (phone-plans); bug 37 |  |  |
 | c | `plan.delete` | write | ✗ none | 1 | ✓ 0.4j: archived, files out of the project and they stay out, desktop told; unknown refused (phone-plans); bugs 37, 39 |  |  |
 | c | `plan.document` | read | ✗ none | 1 | ✓ 0.4j: the doc body; unknown refused (phone-plans) |  |  |
 | c | `plan.file.discover` | write | ✗ none | 1 | ✓ 0.4j: finds the exported folder (phone-plans) |  |  |

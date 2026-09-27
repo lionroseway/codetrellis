@@ -498,7 +498,8 @@ async function routeMethod(
         'human',
         projectPath,
       );
-      broadcast('plan-created', { plan });
+      const exported = planFileService.exportIfSharedByDefault(plan.uid, projectPath);
+      broadcast('plan-created', { plan, exported });
       return plan;
     }
 

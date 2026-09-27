@@ -41,7 +41,8 @@ import { initCapabilityToken, getTokenFilePath } from './services/capability-tok
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
-import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel } from './services/diff-engine';
+import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
+import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
 import { listWorktrees, listWorktreesWithPlans } from './services/worktree-service';
 import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
@@ -78,7 +79,7 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
+import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
@@ -128,6 +129,9 @@ import { BUILD_INFO } from '../shared/build-info';
 import * as peerService from './services/peer-connection-service';
 import { setDeviceCapabilities } from './services/paired-device-service';
 import { listPeerAudit } from './services/peer-audit-service';
+
+// Baselines survive a restart (Phase 32 §0.6, bug 9).
+setBaselineStore(sqliteBaselineStore);
 
 const app = express();
 app.use(express.json());
@@ -1045,9 +1049,11 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     // The baseline is the reference the diff compares against, so a RESCAN
     // of the same project keeps it: re-pinning emptied the diff, and was
     // labelled with the HEAD hash even over uncommitted work (bug 29).
-    // Opening another project, or no baseline yet, sets one here.
-    const current = getBaseline();
-    if (!current || current.projectPath !== projectPath) {
+    // Opening another project, or no baseline yet, sets one here — unless
+    // this project has one stored from before a restart (bug 9).
+    let current = getBaseline();
+    if (!current || current.projectPath !== projectPath) current = restoreBaseline(projectPath);
+    if (!current) {
       const head = getGitHeadCommit(projectPath);
       const status = getGitWorkingTreeStatus(projectPath);
       setBaseline(captureSnapshot(fileData, depEdges), {
@@ -1761,7 +1767,8 @@ app.post('/api/plans', (req, res) => {
   // legacy "user" role. `getAuthorKey` falls back to "human" if the
   // user hasn't set an identity yet, so old behaviour stays valid.
   const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, getAuthorKey('human'), 'human', projectPath);
-  broadcast('plan-created', { plan });
+  const exported = exportIfSharedByDefault(plan.uid, projectPath);
+  broadcast('plan-created', { plan, exported });
   saveNow(() => exportDatabase());
   res.json(plan);
 });
@@ -1878,6 +1885,12 @@ export function updatePlanAsPerson(
     throw new PlanRequestError(400, `status must be one of: ${PLAN_STATUSES.join(', ')}`);
   }
   planService.updatePlan(planUid, changes, author);
+
+  // A plan made in the window is held back while it is "Untitled plan" and
+  // written into the project once it has a name (bug 48).
+  if (changes.title !== undefined && plan.projectPath) {
+    exportOnFirstTitle(planUid, plan.projectPath, plan.title);
+  }
 
   // Auto-capture trellis snapshot when plan is approved
   if (changes.status === 'approved' && plan.projectPath) {

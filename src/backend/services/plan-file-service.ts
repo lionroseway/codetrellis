@@ -29,6 +29,7 @@ import * as _lazy___channel_event_file_service from './channel-event-file-servic
 import * as _lazy____server from '../server';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import * as planService from './plan-service';
@@ -62,6 +63,7 @@ import type {
  * and need their own writes ignored by the same watcher.
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
+import { getEffectiveDefaultVisibility } from './project-config-service';
 
 // --- Public surface ---
 
@@ -92,15 +94,108 @@ export interface ImportPlanResult {
  * Plans with V2 items write the new tree layout (version: 2 + items/).
  * Legacy plans without V2 items fall back to V1 (phases/tasks/docs/).
  */
+/**
+ * Move a plan's directory to the slug of its current title, if nothing in
+ * it has been committed and nothing is already there. Returns where the
+ * plan's directory now is. Any doubt — git failing, a link, a clash —
+ * keeps the existing name, which is what happened before.
+ */
+function followTitleIfUncommitted(projectRoot: string, current: string, wanted: string): string {
+  try {
+    if (fs.existsSync(wanted)) return current;
+    const from = resolveWithin(projectRoot, path.relative(projectRoot, current), 'plan directory');
+    const to = resolveWithin(projectRoot, path.relative(projectRoot, wanted), 'plan directory');
+    if (hasCommittedFiles(projectRoot, from)) return current;
+    // The watcher must not read the move as the plan being deleted and a
+    // new one arriving.
+    const files = listFilesRecursive(from);
+    for (const f of files) {
+      stampSelfWrite(f);
+      stampSelfWrite(path.join(to, path.relative(from, f)));
+    }
+    fs.renameSync(from, to);
+    return to;
+  } catch (err) {
+    console.warn(`[Plans] Kept ${path.basename(current)}: ${(err as Error).message}`);
+    return current;
+  }
+}
+
+/** Whether git tracks anything under `dir`. A project that is not a repo has committed nothing. */
+function hasCommittedFiles(projectRoot: string, dir: string): boolean {
+  if (!fs.existsSync(path.join(projectRoot, '.git'))) return false;
+  const out = execFileSync('git', ['-C', projectRoot, 'ls-files', '--', path.relative(projectRoot, dir)], {
+    encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
+  });
+  return out.trim().length > 0;
+}
+
+function listFilesRecursive(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFilesRecursive(p));
+    else if (entry.isFile()) out.push(p);
+  }
+  return out;
+}
+
+/** The title the window gives a plan before the person names it. */
+export const PLACEHOLDER_PLAN_TITLE = 'Untitled plan';
+
+function isPlaceholderTitle(title: string | undefined): boolean {
+  const t = (title ?? '').trim();
+  return t === '' || t === PLACEHOLDER_PLAN_TITLE;
+}
+
+/**
+ * A plan that was held back while it was untitled is written the first
+ * time it gets a real name, if the default says shared and it is not
+ * already in the project. Returns whether it was written.
+ */
+export function exportOnFirstTitle(planUid: string, projectRoot: string, previousTitle: string | undefined): boolean {
+  if (!isPlaceholderTitle(previousTitle)) return false;
+  if (getLinkedPlanDir(planUid, projectRoot)) return false;
+  return exportIfSharedByDefault(planUid, projectRoot);
+}
+
+/**
+ * A new plan goes where the default visibility says: written into
+ * `.codetrellis/plans/` when it is "shared", left in the database when
+ * "local". Only `create_plan` did this, so a plan made in the app window,
+ * on the phone, or over REST was Local under a Shared default
+ * (Phase 32 §0.6). Returns whether the plan was written.
+ */
+export function exportIfSharedByDefault(planUid: string, projectRoot: string): boolean {
+  try {
+    if (getEffectiveDefaultVisibility(projectRoot) !== 'shared') return false;
+    // Not while it is still "Untitled plan": the window creates a plan
+    // before the person names it, and a plan's directory keeps its first
+    // name, so writing now would leave it in `untitled-plan-…` for good.
+    // `exportOnFirstTitle` writes it once it has a name.
+    if (isPlaceholderTitle(planService.getPlan(planUid)?.title)) return false;
+    exportPlan(planUid, projectRoot);
+    return true;
+  } catch (err) {
+    console.warn(`[Plans] Could not write new plan ${planUid} to the project:`, err);
+    return false;
+  }
+}
+
 export function exportPlan(planUid: string, projectRoot: string): ExportPlanResult {
   const plan = planService.getPlan(planUid);
   if (!plan) throw new Error(`Plan ${planUid} not found`);
 
-  // An existing directory keeps its name when the plan is renamed; writing
-  // to a fresh title-slug beside it would leave two directories carrying
-  // the same plan uid.
-  const planDir = getLinkedPlanDir(planUid, projectRoot)
-    ?? path.join(projectRoot, '.codetrellis', 'plans', makePlanSlug(plan));
+  // An existing directory keeps its name when the plan is renamed — once
+  // it has been committed; writing to a fresh title-slug beside it would
+  // leave two directories carrying the same plan uid. Until then nobody
+  // else has it, so it follows the title (Phase 32 §0.6): the window saves
+  // the title as it is typed, and a plan written at its first save was
+  // otherwise named for half a word.
+  const wanted = path.join(projectRoot, '.codetrellis', 'plans', makePlanSlug(plan));
+  let planDir = getLinkedPlanDir(planUid, projectRoot);
+  if (planDir && planDir !== wanted) planDir = followTitleIfUncommitted(projectRoot, planDir, wanted);
+  planDir ??= wanted;
   ensureDir(planDir);
 
   // Detect V2 items — if any exist, use V2 export path.

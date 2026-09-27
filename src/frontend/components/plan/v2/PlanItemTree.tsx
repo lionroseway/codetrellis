@@ -37,6 +37,9 @@ interface DragState {
  */
 export function PlanItemTree({ planUid }: { planUid: string }) {
   const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  // Busy until this plan's items are in: says so to assistive tech, and
+  // gives tests something to wait on besides a fixed delay (Phase 32 §0.6).
+  const loading = usePlanItemsStore((s) => s.hydratedFor !== s.activePlanUid);
   const selectedItemUid = usePlanItemsStore((s) => s.selectedItemUid);
   const selectItem = usePlanItemsStore((s) => s.selectItem);
   const createItem = usePlanItemsStore((s) => s.createItem);
@@ -153,7 +156,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   };
 
   return (
-    <div data-testid="plan-item-tree" className="h-full flex flex-col border-r border-white/[0.06] bg-[#080915] min-w-0">
+    <div data-testid="plan-item-tree" aria-busy={loading} className="h-full flex flex-col border-r border-white/[0.06] bg-[#080915] min-w-0">
       <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-white/[0.06]">
         <FileText size={13} className="text-foreground-subtle shrink-0" />
         <span className="text-[12px] font-semibold text-foreground uppercase tracking-wider">

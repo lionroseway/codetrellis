@@ -148,7 +148,11 @@ test.describe('Next up + shared/local', () => {
   });
 
   test('shared/local round trip: file-status → export → unlink', async () => {
-    const h = await setupHarness('plan-sync-toggle');
+    // Local by default, so the round trip starts where it means to. This
+    // used to rely on every REST-created plan starting local whatever the
+    // setting said — which was bug 48 (Phase 32 §0.6): under the Shared
+    // default a new plan is now written into the project straight away.
+    const h = await setupHarness('plan-sync-toggle', { settings: { plans: { defaultVisibility: 'local' } } });
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const plan = await h.client.createPlan({
@@ -156,7 +160,7 @@ test.describe('Next up + shared/local', () => {
       });
       const qs = `path=${encodeURIComponent(h.fixture.projectPath)}`;
 
-      // A plan starts local — in the database only.
+      // Under a Local default, a plan starts in the database only.
       const before = await h.client.getPlanFileStatus(plan.uid, h.fixture.projectPath);
       expect(before.linked).toBe(false);
       expect(before.planDir).toBeNull();

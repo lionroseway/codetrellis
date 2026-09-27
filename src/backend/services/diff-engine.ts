@@ -47,6 +47,28 @@ export interface ArchDiff {
 let baselineSnapshot: Baseline | null = null;
 
 /**
+ * Where baselines survive a restart (Phase 32 §0.6, bug 9).
+ *
+ * The baseline lived only in this module, so a restart dropped it and the
+ * next scan captured whatever the tree held then: "diff since baseline"
+ * silently became "diff since this morning's launch", and a pinned commit
+ * was forgotten. The store keeps one baseline per project. It is injected
+ * (server.ts registers the SQLite one) so this module stays pure for the
+ * callers and tests that only diff snapshots.
+ */
+export interface BaselineStore {
+  save(baseline: Baseline): void;
+  load(projectPath: string): Baseline | null;
+  remove(projectPath: string): void;
+}
+
+let store: BaselineStore | null = null;
+
+export function setBaselineStore(next: BaselineStore | null): void {
+  store = next;
+}
+
+/**
  * Capture the current graph state as a snapshot.
  */
 export function captureSnapshot(
@@ -80,11 +102,36 @@ export function setBaseline(snapshot: GraphSnapshot, metadata?: BaselineMeta): v
     capturedAt: Date.now(),
   };
   console.log(`[Diff] Baseline set (${baselineSnapshot.source}): ${snapshot.files.size} files, ${snapshot.edges.size} edges`);
+  if (store && baselineSnapshot.projectPath) {
+    try { store.save(baselineSnapshot); } catch (err) { console.warn(`[Diff] Baseline not saved: ${(err as Error).message}`); }
+  }
 }
 
-/** No baseline: the diff says so until the next scan or capture sets one. */
+/**
+ * No baseline: the diff says so until the next scan or capture sets one.
+ * The stored copy goes too — otherwise the next scan would restore the
+ * baseline that was just cleared.
+ */
 export function clearBaseline(): void {
+  const projectPath = baselineSnapshot?.projectPath;
   baselineSnapshot = null;
+  if (store && projectPath) {
+    try { store.remove(projectPath); } catch (err) { console.warn(`[Diff] Stored baseline not removed: ${(err as Error).message}`); }
+  }
+}
+
+/**
+ * Bring back the baseline this project had before a restart, if one was
+ * stored. Returns it, or null when there is none to restore.
+ */
+export function restoreBaseline(projectPath: string): Baseline | null {
+  if (!store) return null;
+  let stored: Baseline | null = null;
+  try { stored = store.load(projectPath); } catch (err) { console.warn(`[Diff] Stored baseline unreadable: ${(err as Error).message}`); }
+  if (!stored) return null;
+  baselineSnapshot = stored;
+  console.log(`[Diff] Baseline restored (${stored.source}): ${stored.files.size} files, ${stored.edges.size} edges`);
+  return stored;
 }
 
 export function getBaseline(): Baseline | null {
