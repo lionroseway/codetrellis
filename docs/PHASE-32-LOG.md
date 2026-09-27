@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4k Settings, updates, privacy |
-| **Status** | The owner's three decisions are built and committed (capture grant, tagged answers, flagged freezes; bug 43) |
-| **Next action** | Domain-k audit: every settings section, update check on/off (`POST /api/updates/check` untested), spell-check bundle, logs; then full harness, PR, merge |
+| **Status** | 0.4k complete on the branch: the three decisions, bugs 43–45, domain k's behaviour column (all but Appearance and Sync), `POST /api/updates/check` tested |
+| **Next action** | Full harness running; then PR into `feat/phase-32`, merge when green, then 0.4l (system docs and intake). Waiting on the owner: the settings-escalation finding |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4k-settings` |
 | **Last updated** | 2026-09-27 |
@@ -144,6 +144,42 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.4k — settings, updates, spell-check, logs (bugs 44–45)
+
+- **The harness stopped phoning home.** Every harness backend ran the
+  boot-time update check against codetrellis.dev and GitHub — ~600
+  requests to the internet per run, and "no update available" held only
+  while no newer release existed. Harness backends now start with the
+  automatic check off and both sources on a closed local port
+  (`CODETRELLIS_GITHUB_API` joins `CODETRELLIS_OTA_URL`); `setupHarness`
+  takes `env` and `settings`.
+- **`updates.test.ts` (5)** against a stand-in server: the check at start
+  names platform and version; off means no request at all, while a
+  person's own check still goes out; a release with nothing for this
+  platform is not offered; website down → GitHub, both down → an error with
+  the last good answer kept; downloads only over https from the releases
+  repo, nothing fetched otherwise. **Bug 44:** after one refused download
+  every later one returned the same error until restart.
+- **`settings-surface.test.ts` (5):** partial saves keep siblings, the
+  first-run check, a restart returns what was saved, logs path and tail.
+  **Bug 45:** writes checked almost nothing while loading checked
+  everything; now every field is checked (400 with the reason) and the
+  modal says "Not saved: …".
+- **Browser:** `e2e/settings/sections-save.spec.ts` changes one control in
+  each saving section and reads it back (serial: it changes shared
+  settings). All 43 settings specs pass.
+- **Spell-check:** `tools/spellcheck-check` run here too — bundled
+  dictionaries load under en_US, en_GB and fr_FR (French falls back to the
+  English bundle), nothing downloaded; the control run without the bundle
+  does try to download.
+- **Security finding** raised with the owner (private register): the
+  capability token opens the REST API as well as MCP, and every agent can
+  read it, so an agent can widen its own MCP grants through
+  `PUT /api/settings`. Not fixed in passing — the obvious fix breaks the web
+  build and both harnesses. Owner's decision.
+- Not verified: the Appearance and Sync sections' behaviour, and saving the
+  data-dir override. To 0.5.
 
 ### 2026-09-27: 0.4k — the owner's three decisions, built (bug 43)
 
