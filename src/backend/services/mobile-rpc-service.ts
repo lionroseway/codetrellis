@@ -82,7 +82,12 @@ import {
   getGitWorkingTreeStatus,
   computeGitLineAnnotations,
   broadcast,
+  updatePlanAsPerson,
+  deletePlanAsPerson,
+  postChannelEventAsPerson,
+  setChannelEventStatusAsPerson,
 } from '../server';
+import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
 import { handleBudgetMethod } from './mobile-budget';
@@ -457,19 +462,19 @@ async function routeMethod(
     }
 
     case 'plan.items': {
-      const planUid = requireString(params, 'planUid');
+      const planUid = requirePlan(params, 'planUid');
       return planItemService.listAllItems(planUid);
     }
 
     case 'plan.update': {
-      const uid = requireString(params, 'uid');
-      const plan = planService.getPlan(uid);
-      if (!plan) throw new Error(`Plan not found: ${uid}`);
+      // The desktop's own edit path: status checked, approval baseline
+      // captured, the windows told (0.4j).
+      const uid = requirePlan(params, 'uid');
       const updates: Record<string, unknown> = {};
       if (params.title !== undefined) updates.title = params.title;
       if (params.status !== undefined) updates.status = params.status;
       if (params.description !== undefined) updates.description = params.description;
-      planService.updatePlan(uid, updates as any, getAuthorKey('human'));
+      updatePlanAsPerson(uid, updates as any, getAuthorKey('human'));
       return { ok: true };
     }
 
@@ -482,13 +487,16 @@ async function routeMethod(
         'human',
         projectPath,
       );
+      broadcast('plan-created', { plan });
       return plan;
     }
 
     case 'plan.delete': {
-      const uid = requireString(params, 'uid');
-      planService.deletePlan(uid);
-      return { ok: true };
+      // As a delete on the desktop: archived, its files out of the project,
+      // and the windows told (0.4j).
+      const uid = requirePlan(params, 'uid');
+      const { diskRemoved } = deletePlanAsPerson(uid);
+      return { ok: true, diskRemoved };
     }
 
     case 'plan.copyAsPrompt': {
@@ -515,6 +523,9 @@ async function routeMethod(
 
     case 'plan.item.update': {
       const uid = requireString(params, 'uid');
+      // The version row needs an author. Without one every content edit from
+      // the phone — its body editor, a status change — failed on the
+      // NOT NULL constraint, so none of them ever saved (0.4j).
       const updates: Record<string, unknown> = {};
       if (params.status !== undefined) updates.status = params.status;
       if (params.title !== undefined) updates.title = params.title;
@@ -522,13 +533,17 @@ async function routeMethod(
       if (params.body !== undefined) updates.body = params.body;
       if (params.blockedReason !== undefined) updates.blockedReason = params.blockedReason;
       if (params.progressPercent !== undefined) updates.progressPercent = params.progressPercent;
-      const updated = planItemService.updateItem(uid, updates as any);
+      if (updates.status !== undefined && !isTaskStatus(updates.status)) {
+        throw new Error(`status must be one of: ${TASK_STATUSES.join(', ')}`);
+      }
+      const updated = planItemService.updateItem(uid, { ...updates, author: getAuthorKey('human'), authorType: 'human' } as any);
       if (!updated) throw new Error(`Item not found: ${uid}`);
+      broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: updates });
       return updated;
     }
 
     case 'plan.item.create': {
-      const planUid = requireString(params, 'planUid');
+      const planUid = requirePlan(params, 'planUid');
       const title = requireString(params, 'title');
       const kind = (params.kind as string) === 'object' ? 'object' : 'action';
       const created = planItemService.createItem({
@@ -540,6 +555,7 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
+      broadcast('plan-item-created', { planUid: created.planUid, item: created });
       return created;
     }
 
@@ -550,6 +566,12 @@ async function routeMethod(
       const targetType = (params.targetType as string) === 'plan' ? 'plan' : 'item';
       const kind = (params.kind as string) || 'note';
       const parentUid = (params.parentUid as string) || undefined;
+      // A comment on something that exists, and the event the desktop's
+      // thread for that thing listens to: an item's thread hears
+      // `plan-item-comment-added`, not the plan-level `comment-added` (0.4j).
+      const item = targetType === 'item' ? planItemService.getItem(targetUid) : null;
+      if (targetType === 'item' && !item) throw new Error(`Item not found: ${targetUid}`);
+      if (targetType === 'plan' && !planService.getPlan(targetUid)) throw new Error(`Plan not found: ${targetUid}`);
       const comment = commentService.addComment(
         targetType as 'plan' | 'item',
         targetUid,
@@ -558,7 +580,8 @@ async function routeMethod(
         body,
         { kind: kind as any, parentUid },
       );
-      broadcast('comment-added', { comment });
+      if (item) broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: item.uid, comment });
+      else broadcast('comment-added', { comment });
       return comment;
     }
 
@@ -566,6 +589,7 @@ async function routeMethod(
     case 'item.ref.add': {
       const itemUid = requireString(params, 'itemUid');
       const url = requireString(params, 'url');
+      if (!planItemService.getItem(itemUid)) throw new Error(`Item not found: ${itemUid}`);
       const ref = externalRefsService.createExternalRef({
         itemUid,
         url,
@@ -574,18 +598,21 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
+      broadcast('external-ref-added', { ref });
       return ref;
     }
 
     case 'item.ref.remove': {
       const uid = requireString(params, 'uid');
+      if (!externalRefsService.getExternalRef(uid)) throw new Error(`Link not found: ${uid}`);
       externalRefsService.deleteExternalRef(uid);
+      broadcast('external-ref-deleted', { uid });
       return { ok: true };
     }
 
     // --- Deviations ----------------------------------------------------------
     case 'deviation.list': {
-      const planUid = requireString(params, 'planUid');
+      const planUid = requirePlan(params, 'planUid');
       return deviationService.getDeviations(planUid);
     }
 
@@ -783,14 +810,19 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
-      broadcast('plan-created', { uid: result.plan.uid });
+      // `{ plan }`, the shape every other sender uses: the window's handler
+      // reads `payload.plan`, and `{ uid }` handed it undefined (0.4j).
+      broadcast('plan-created', { plan: result.plan });
       return { plan: result.plan, itemCount: result.items.length, version: result.version };
     }
 
     case 'plan.file.export': {
-      const planUid = requireString(params, 'planUid');
-      const projectRoot = peerProjectRoot(params, { required: true })!;
+      const planUid = requirePlan(params, 'planUid');
+      const projectRoot = params.projectPath !== undefined
+        ? peerProjectRoot(params, { required: true })!
+        : planProjectRoot(planUid);
       const result = planFileService.exportPlan(planUid, projectRoot);
+      broadcast('plan-exported', { planUid, planDir: result.planDir, files: result.files.length });
       return { planDir: result.planDir, fileCount: result.files.length };
     }
 
@@ -804,7 +836,7 @@ async function routeMethod(
       // Confined like every other peer path: an opened project's plan dir.
       const planDir = resolveTrustedPlanDir(requireString(params, 'planDir'));
       const result = planFileService.importPlan(planDir);
-      broadcast('plan-created', { uid: result.plan?.uid });
+      if (result.plan) broadcast('plan-imported', { planUid: result.plan.uid, source: planDir });
       return { plan: result.plan, warnings: result.warnings };
     }
 
@@ -909,27 +941,24 @@ async function routeMethod(
     }
 
     case 'channel.post': {
+      // Through the desktop's own path (0.4j): written into a shared plan's
+      // files, routing rules fired, the windows told. The author is the
+      // person, as on the desktop — a phone does not get to name itself.
       const planUid = requireString(params, 'planUid');
       const eventType = requireString(params, 'eventType');
-      const message = (params.message as string) ?? '';
-      const author = (params.author as string) ?? 'mobile-user';
-      const respondsTo = (params.parentUid as string) || undefined;
-      const event = channelEventService.postChannelEvent({
+      return postChannelEventAsPerson({
         planUid,
-        eventType: eventType as any,
-        payload: { message },
-        author,
-        authorType: 'human',
-        respondsTo,
+        eventType,
+        message: typeof params.message === 'string' ? params.message : '',
+        itemUid: typeof params.itemUid === 'string' ? params.itemUid : null,
+        respondsTo: (params.parentUid as string) || null,
       });
-      return event;
     }
 
     case 'channel.resolve': {
       const uid = requireString(params, 'uid');
       const status = (params.status as string) ?? 'resolved';
-      const event = channelEventService.setChannelEventStatus(uid, status as any);
-      return event;
+      return setChannelEventStatusAsPerson(uid, status);
     }
 
     case 'channel.thread': {
@@ -1219,6 +1248,13 @@ async function routeMethod(
 }
 
 // --- Helpers -----------------------------------------------------------------
+
+/** A plan uid that names a plan, or throw. */
+function requirePlan(params: Record<string, unknown>, key: string): string {
+  const uid = requireString(params, key);
+  if (!planService.getPlan(uid)) throw new Error(`Plan not found: ${uid}`);
+  return uid;
+}
 
 function requireString(params: Record<string, unknown>, key: string): string {
   const val = params[key];

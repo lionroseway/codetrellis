@@ -11,12 +11,12 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4i Terminals and audio |
-| **Status** | Started. #126 (phone budget flags, bug 34) merged; its full harness was 521 passed, 0 retries |
-| **Next action** | Bug 35 fixed, domain i complete. Full harness, PR, merge; then 0.4j (mobile) |
+| **Stage / step** | 0.4j Mobile surface |
+| **Status** | Started. #127 (0.4i, bug 35) merged; its full harness at `efb8be0` was 530 passed, 0 retries |
+| **Next action** | `tests/harness/peer.ts` done (a werift phone paired through the real ceremony). `phone-plans.test.ts` (11) green after fixes: phone item edits never saved (no author, bug 36); phone plan and item edits, plan delete, links, item comments and channel posts never reached the desktop windows, delete left the files, channel post took its author from the request and skipped routing and export (bug 37); plan and item status unchecked on REST and phone (bug 38). Next: channels, projects, power, diagnostics, settings over the phone |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4i-terminals` |
-| **Last updated** | 2026-09-26 |
+| **Branch** | `feat/phase-32-0.4j-mobile` |
+| **Last updated** | 2026-09-27 |
 
 ---
 
@@ -44,7 +44,7 @@
 - [x] 0.4f Channels and presence (#123)
 - [x] 0.4g Agents and MCP (#124)
 - [x] 0.4h Drift, governance, review (#125)
-- [ ] 0.4i Terminals and audio
+- [x] 0.4i Terminals and audio (#127)
 - [ ] 0.4j Mobile surface
 - [ ] 0.4k Settings, updates, privacy
 - [ ] 0.4l System docs and intake
