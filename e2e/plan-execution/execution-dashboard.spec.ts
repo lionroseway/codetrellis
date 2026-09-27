@@ -57,8 +57,13 @@ test.describe('Execution dashboard', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    // The task should be visible in the tree with its name
-    await expect(page.getByText('Active Dashboard Task').first()).toBeVisible({ timeout: 5000 });
+    // The task should be visible in the tree with its name. openPlan waits
+    // for the workspace, not its items, and opening a plan over the whole
+    // repo's graph is ~1.5 s of main thread on a dev machine and can pass 5 s
+    // with other workers running — the cause handoff.spec.ts records. It
+    // failed here twice in a row under that load (Phase 32 §0.6), so it
+    // waits for the task in the tree the way handoff.spec.ts does.
+    await expect(page.getByTestId('plan-item-tree').getByText('Active Dashboard Task').first()).toBeVisible({ timeout: 15_000 });
 
     // Progress info should show "1 in progress"
     await expect(page.getByText('in progress').first()).toBeVisible({ timeout: 5000 });
