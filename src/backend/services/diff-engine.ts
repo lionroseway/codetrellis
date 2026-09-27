@@ -6,6 +6,34 @@ export interface GraphSnapshot {
   shortCommitHash?: string | null;
 }
 
+/**
+ * Where a baseline came from (Phase 32 §0.4h, bug 29). It was labelled
+ * with the HEAD hash whatever it held, so "baseline: HEAD" could include
+ * uncommitted work.
+ *  - `scan`: the working tree when the project was opened. `dirty` says
+ *    whether that tree had uncommitted changes.
+ *  - `commit`: a commit's own contents (Pin, the commit picker, set_baseline).
+ *  - `working-tree`: the working tree of a project that is not a git repo.
+ */
+export interface BaselineMeta {
+  commitHash?: string | null;
+  shortCommitHash?: string | null;
+  source?: 'scan' | 'commit' | 'working-tree';
+  dirty?: boolean;
+  projectPath?: string | null;
+}
+
+export type Baseline = GraphSnapshot & Required<Pick<BaselineMeta, 'source' | 'dirty'>> & {
+  capturedAt: number;
+  projectPath: string | null;
+};
+
+/** What the window shows for a baseline: never a bare hash for a tree that was not that commit. */
+export function baselineLabel(b: Pick<Baseline, 'shortCommitHash' | 'dirty'>): string {
+  if (!b.shortCommitHash) return 'working tree';
+  return b.dirty ? `${b.shortCommitHash} + uncommitted changes` : b.shortCommitHash;
+}
+
 export interface ArchDiff {
   addedFiles: string[];
   removedFiles: string[];
@@ -16,7 +44,7 @@ export interface ArchDiff {
   summary: { added: number; removed: number; modified: number; edgesAdded: number; edgesRemoved: number };
 }
 
-let baselineSnapshot: GraphSnapshot | null = null;
+let baselineSnapshot: Baseline | null = null;
 
 /**
  * Capture the current graph state as a snapshot.
@@ -41,19 +69,25 @@ export function captureSnapshot(
 /**
  * Save current state as the baseline snapshot.
  */
-export function setBaseline(
-  snapshot: GraphSnapshot,
-  metadata?: { commitHash?: string | null; shortCommitHash?: string | null },
-): void {
+export function setBaseline(snapshot: GraphSnapshot, metadata?: BaselineMeta): void {
   baselineSnapshot = {
     ...snapshot,
     commitHash: metadata?.commitHash ?? snapshot.commitHash ?? null,
     shortCommitHash: metadata?.shortCommitHash ?? snapshot.shortCommitHash ?? null,
+    source: metadata?.source ?? 'scan',
+    dirty: metadata?.dirty ?? false,
+    projectPath: metadata?.projectPath ?? null,
+    capturedAt: Date.now(),
   };
-  console.log(`[Diff] Baseline set: ${snapshot.files.size} files, ${snapshot.edges.size} edges`);
+  console.log(`[Diff] Baseline set (${baselineSnapshot.source}): ${snapshot.files.size} files, ${snapshot.edges.size} edges`);
 }
 
-export function getBaseline(): GraphSnapshot | null {
+/** No baseline: the diff says so until the next scan or capture sets one. */
+export function clearBaseline(): void {
+  baselineSnapshot = null;
+}
+
+export function getBaseline(): Baseline | null {
   return baselineSnapshot;
 }
 

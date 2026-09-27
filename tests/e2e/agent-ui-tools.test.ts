@@ -74,8 +74,7 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
       ['navigate_to', { target: 'code', file_path: path.join(h.fixture.projectPath, 'packages/web/src/api.ts'), line: 3 }, 'ui-navigate', { target: 'code', line: 3 }],
       ['toggle_panel', { panel: 'inspector' }, 'ui-toggle', { panel: 'inspector' }],
       ['refresh_ui', {}, 'ui-refresh', {}],
-      ['set_baseline', { commit_hash: 'abc1234' }, 'ui-set-baseline', { commitHash: 'abc1234' }],
-      ['set_baseline', { commit_hash: null }, 'ui-set-baseline', { commitHash: null }],
+      // set_baseline really pins now (0.4h, bug 29): tests/e2e/baseline.test.ts.
       ['navigate_item_back', {}, 'ui-navigate-item-back', {}],
       ['navigate_item_forward', {}, 'ui-navigate-item-forward', {}],
       ['toggle_activity_drawer', {}, 'ui-toggle-activity-drawer', {}],

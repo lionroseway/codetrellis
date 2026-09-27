@@ -34,6 +34,7 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import { appendPlanEvent } from './plan-event-service';
 import { unmetHumanCriteria } from './criteria-service';
+import * as _lazy___plan_file_service from './plan-file-service';
 import type {
   PlanItem,
   PlanItemKind,
@@ -281,7 +282,7 @@ export function listItemSummaries(planUid: string): PlanItemSummary[] {
 // Create
 // =============================================================================
 
-export function createItem(input: CreatePlanItemInput): PlanItem {
+function createItemImpl(input: CreatePlanItemInput): PlanItem {
   const db = getDb();
   const uid = input.uid ?? randomUUID();
   assertValidParent(input.planUid, null, input.parentUid);
@@ -424,7 +425,7 @@ export function assertValidParent(planUid: string, itemUid: string | null, paren
   }
 }
 
-export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
+function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
   const db = getDb();
   const before = getItem(uid);
   if (!before) return null;
@@ -683,7 +684,7 @@ export interface MoveItemInput {
  * Re-parent and/or reorder. Single event written even when both
  * change. Used by drag-drop in the sidebar.
  */
-export function moveItem(uid: string, input: MoveItemInput): PlanItem | null {
+function moveItemImpl(uid: string, input: MoveItemInput): PlanItem | null {
   const before = getItem(uid);
   if (!before) return null;
   if (input.newParentUid !== undefined && input.newParentUid !== before.parentUid) {
@@ -746,7 +747,7 @@ export interface DeleteItemInput {
  * Returns the uids of every item actually deleted (caller may use this
  * to broadcast `plan-item-deleted` with the cascadedUids list).
  */
-export function deleteItem(uid: string, input: DeleteItemInput): string[] {
+function deleteItemImpl(uid: string, input: DeleteItemInput): string[] {
   const db = getDb();
   const root = getItem(uid);
   if (!root) return [];
@@ -1044,7 +1045,7 @@ export function resolveConstraints(item: PlanItem): ItemConstraints {
  * Phase 17.O: Enforces claim policy — rejects claims that violate
  * human-only, assigned, agent-type, or skill requirements.
  */
-export function claimItem(
+function claimItemImpl(
   uid: string,
   agentId: string,
   agentType: string,
@@ -1368,3 +1369,58 @@ export function listItemsForExport(planUid: string): Array<{ item: PlanItem; exp
   }
   return result;
 }
+
+// ── Write-through (Phase 32 §0.4h, bug 31) ────────────────────────────
+//
+// A shared plan is written to <project>/.codetrellis/plans/ so teammates
+// get it through git. Plan, phase and doc changes scheduled that write;
+// item changes never did, so an item added, edited, moved or deleted
+// reached the repo only when something else about the plan changed — a
+// teammate pulling saw the items as they were at the last rename. Every
+// item mutation now schedules it (debounced; a no-op for a plan with no
+// directory on disk).
+
+function writeThrough(planUid: string | null | undefined): void {
+  if (!planUid) return;
+  try {
+    _lazy___plan_file_service.scheduleWriteThrough(planUid);
+  } catch { /* auto-sync not wired (early init, unit tests): the DB is still right */ }
+}
+
+export function createItem(input: CreatePlanItemInput): PlanItem {
+  const item = createItemImpl(input);
+  writeThrough(item.planUid);
+  return item;
+}
+
+export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
+  const item = updateItemImpl(uid, updates);
+  writeThrough(item?.planUid);
+  return item;
+}
+
+export function moveItem(uid: string, input: MoveItemInput): PlanItem | null {
+  const item = moveItemImpl(uid, input);
+  writeThrough(item?.planUid);
+  return item;
+}
+
+export function deleteItem(uid: string, input: DeleteItemInput): string[] {
+  const planUid = getItem(uid)?.planUid;
+  const deleted = deleteItemImpl(uid, input);
+  if (deleted.length) writeThrough(planUid);
+  return deleted;
+}
+
+export function claimItem(
+  uid: string,
+  agentId: string,
+  agentType: string,
+  model?: string,
+  capabilities?: Array<{ name: string; source: string }>,
+): ClaimItemResult {
+  const result = claimItemImpl(uid, agentId, agentType, model, capabilities);
+  if (result.ok) writeThrough(getItem(uid)?.planUid);
+  return result;
+}
+

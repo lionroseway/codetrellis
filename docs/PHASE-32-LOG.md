@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4g Agents and MCP |
-| **Status** | Harness clean at `36b3ff7` (499/1/0). Added budget-change flagging (owner's decision); re-running the harness |
-| **Next action** | Full harness on 0.4g; PR; merge when green; then 0.4h (drift, governance, review) |
+| **Stage / step** | 0.4h Drift, governance, review |
+| **Status** | Started. #124 (0.4g) merged; its full harness was 500 passed, 1 skipped, 0 retries |
+| **Next action** | Bugs 29–33 fixed; domain h complete. Full harness, PR, merge when green; then 0.4i (terminals and audio) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4g-agents` |
+| **Branch** | `feat/phase-32-0.4h-drift` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -42,7 +42,7 @@
 - [x] 0.4d Criteria and sign-off (#121)
 - [x] 0.4e Brief and viewer (#122)
 - [x] 0.4f Channels and presence (#123)
-- [ ] 0.4g Agents and MCP
+- [x] 0.4g Agents and MCP (#124)
 - [ ] 0.4h Drift, governance, review
 - [ ] 0.4i Terminals and audio
 - [ ] 0.4j Mobile surface
@@ -142,6 +142,90 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-26: 0.4h — the existing domain-h tests, audited (bug 33)
+
+A read-only audit of the tests for the other 23 domain-h items found
+`PUT /api/freeze` untested; `compare_snapshots`, `review_plan` and
+`get_pr_draft` never run through MCP; `get_drift_report`, the baseline
+routes, `get_plan_history` and `get_team_activity` checked for shape or a
+count. `tests/e2e/review-governance-tools.test.ts` (7) checks their
+answers; `baseline.test.ts` covers the baseline routes.
+
+**Bug 33:** `PUT /api/freeze` stored what it was sent; `active: "no"`
+froze the project and a non-date `until` never expired. Validated now.
+
+**For the owner:** as with budgets before 0.4g, an agent can lift a freeze
+or exempt its own plan (`set_freeze`, `exempt_plan_from_freeze`,
+`governance · write`). Left as is; asked whether freezes should be flagged
+like budget changes.
+
+Domain h's behaviour column is complete. The 6 mobile RPC methods in
+domain h stay with 0.4j.
+
+Full harness at `a2b92385`: 519 passed, 1 skipped, 1 flaky, now fixed.
+The flaky one was `plan-tools` "after a rename, write-through keeps
+writing", root-caused: it waited for plan.yaml's new title, which the
+previous test's export had already written, then read the items before
+the debounced write-through (200 ms) of its `add_item` had run. Before
+bug 31 an item change scheduled no write, and the test passed only on
+update_plan's debounce. It now waits for the item. 3 of 3 clean.
+
+### 2026-09-26: 0.4h — the drift and review tools (bugs 30, 31, 32)
+
+`tests/e2e/drift-review-tools.test.ts` covers the 9 untested tools:
+deviations (get, reconcile), proposed changes (list, summary, one),
+`capture_checkpoint` and `list_comparands`, `resolve_conflict` by side,
+and `search_plan_history`.
+
+- **Bug 30, reconcile.** Resolved deviations by bare id, across plans;
+  counted unknown ids as resolved; REST stored any action; credited the
+  plan change to "codetrellis". Now `reconcileDeviations` checks every id
+  and action against the plan first and records the resolver (new
+  `resolved_by` / `resolved_by_type` columns; the reconciler adds them).
+  The phone's `deviation.resolve` goes through it too. Plan checks on
+  `get_deviations`, `detect_deviations` (no more `process.cwd()`
+  fallback) and `capture_checkpoint`; `get_change_status` not-found is an
+  error.
+- **Bug 31, write-through.** Item and criterion changes never scheduled
+  the write to `.codetrellis/plans/`. Found because the history test's
+  item never reached disk; the 0.4c-1 rename test had passed on the rename
+  debounce firing after its `add_item`. Every item mutation now schedules
+  it. 36 plan, cdev, manifest, worktree and item specs (175 tests) pass.
+- **Bug 32, history search.** The record separator ended each record, so
+  file lists fell into the next one: no `matchedFiles`, and only the
+  first match survived. The separator now starts each record.
+
+Each fix's test fails without it. Untested MCP tools: 4 (mobile_* and
+read_system_doc, later steps).
+
+### 2026-09-26: 0.4h — what the baseline is, and says it is (bug 29)
+
+Logged in 0.4b for decision here. The baseline is what the graph's diff
+compares against, and it was wrong three ways:
+- every scan re-pinned it to the working tree, so a rescan emptied the
+  diff, labelled with the HEAD hash even over uncommitted work;
+- "Pin current HEAD" pinned the working tree, not HEAD;
+- `set_baseline` only broadcast: the window changed its label and the diff
+  kept comparing against the old snapshot.
+
+Decided (reversible; told the owner):
+- A baseline records its source (`scan` / `commit` / `working-tree`), when
+  it was taken, and whether the tree was dirty. The label is the backend's
+  own: `abc1234`, or `abc1234 + uncommitted changes`, never a bare hash
+  for a tree that was not that commit.
+- A rescan of the same project keeps the baseline. Opening another
+  project, or a capture, sets a new one.
+- Pinning with no commit named pins HEAD's contents (via git), so
+  uncommitted work shows against it. A non-git project pins its tree.
+- `set_baseline` pins on the backend (`pinBaseline`, shared with the
+  capture route) and the window reads the baseline back; null clears it.
+  Only an agent's pin switches the window from auto-track to pinned.
+- A commit to capture is checked with `isSafeGitRef` before git sees it.
+
+`tests/e2e/baseline.test.ts` (6) fails on the old code at the first test.
+The 13 harness specs and 7 browser specs that touch the baseline, diff,
+compare or review pass unchanged.
+
 ### 2026-09-26: 0.4g — agents and MCP (bugs 27, 28)
 
 `tests/e2e/agent-ui-tools.test.ts` covers the 2 untested routes and the 20
@@ -192,6 +276,9 @@ refreshes on `plan-budget-changed` now; it loaded once on mount, so an
 agent's change never showed until the plan was reopened. New routes:
 `GET /api/plans/:uid/budget/changes`, `POST …/changes/:id/acknowledge`,
 both tested; `GET` and `PUT /budget` now 404 an unknown plan.
+
+Full harness at `36b3ff7`: 499/1/0, and at `3808be1` (with flagging):
+500 passed, 1 skipped, 0 retries. CI green; merged as #124.
 
 ### 2026-09-26: 0.4f — presence waits and the watcher flake (bugs 25, 26)
 

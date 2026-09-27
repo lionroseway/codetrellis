@@ -6,8 +6,14 @@ import { z } from 'zod';
 import fs from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
+import { authorFromExtra } from '../helpers';
 
 export function register(server: McpServer, deps: ToolDeps): void {
+  // A plan uid is checked before anything is read or written for it (bug 30).
+  const missingPlan = (uid: string) => (deps.planService.getPlan(uid)
+    ? null
+    : { content: [{ type: 'text' as const, text: `Plan ${uid} not found.` }], isError: true });
+
   server.registerTool(
     'get_deviations',
     {
@@ -15,6 +21,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: { plan_uid: z.string() },
     },
     async ({ plan_uid }) => {
+      const refused = missingPlan(plan_uid);
+      if (refused) return refused;
       const devs = deps.getDeviations(plan_uid);
       return { content: [{ type: 'text' as const, text: JSON.stringify(devs, null, 2) }] };
     },
@@ -32,12 +40,19 @@ export function register(server: McpServer, deps: ToolDeps): void {
         })),
       },
     },
-    async ({ plan_uid, deviations }) => {
-      for (const d of deviations) {
-        deps.resolveDeviation(d.id, d.action);
+    async ({ plan_uid, deviations }, extra: any) => {
+      const refused = missingPlan(plan_uid);
+      if (refused) return refused;
+      const id = authorFromExtra(deps, extra);
+      try {
+        const n = deps.reconcileDeviations(plan_uid, deviations, { actor: id.author, actorType: id.authorType });
+        deps.broadcast('deviations-resolved', { planUid: plan_uid, ids: deviations.map((d) => d.id) });
+        deps.saveNow(() => deps.exportDatabase());
+        return { content: [{ type: 'text' as const, text: `Resolved ${n} deviation${n === 1 ? '' : 's'} on plan ${plan_uid}, in your name.` }] };
+      } catch (err) {
+        if (err instanceof deps.DeviationError) return { content: [{ type: 'text' as const, text: err.message }], isError: true };
+        throw err;
       }
-      deps.saveNow(() => deps.exportDatabase());
-      return { content: [{ type: 'text' as const, text: `Resolved ${deviations.length} deviations for plan ${plan_uid}` }] };
     },
   );
 
@@ -51,7 +66,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // Compute changed files from the baseline snapshot so we can detect
       // unexpected files (changed since baseline but not in any fileSpec).
       const plan = deps.planService.getPlan(plan_uid);
-      const projectPath = plan?.projectPath ?? process.cwd();
+      // It fell back to the backend's own working directory for a plan that
+      // does not exist.
+      if (!plan) return missingPlan(plan_uid)!;
+      const projectPath = plan.projectPath;
       const snapshots = deps.listSnapshots(plan_uid);
       let changedFiles: string[] | undefined;
 
@@ -107,7 +125,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async ({ plan_uid, change_id }) => {
       const change = deps.planChangesService.getChange(plan_uid, change_id);
-      if (!change) return { content: [{ type: 'text' as const, text: `Change ${change_id} not found in plan ${plan_uid}` }] };
+      if (!change) return { content: [{ type: 'text' as const, text: `Change ${change_id} not found in plan ${plan_uid}` }], isError: true };
       return { content: [{ type: 'text' as const, text: JSON.stringify(change, null, 2) }] };
     },
   );
@@ -237,6 +255,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, name, project_path }) => {
+      const refused = missingPlan(plan_uid);
+      if (refused) return refused;
       const snapshot = deps.captureCurrentTrellis(project_path, plan_uid, name);
       deps.saveNow(() => deps.exportDatabase());
       return { content: [{ type: 'text' as const, text: `Checkpoint "${name}" captured (snapshot #${snapshot.id}, ${snapshot.filesJson ? JSON.parse(snapshot.filesJson).length : 0} files)` }] };

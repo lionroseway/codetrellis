@@ -139,9 +139,9 @@ function edgeKey(source: string, target: string): string {
 /**
  * What to compare against when the caller does not say.
  *
- * NOT the baseline, and that is the whole point. `scanProject` re-pins the
- * baseline on every run (server.ts, `setBaseline(captureSnapshot(...))`),
- * so the sequence every agent actually follows — edit files, rescan, ask
+ * NOT the baseline, and that is the whole point. `scanProject` re-pinned
+ * the baseline on every run until Phase 32 §0.4h (it keeps it now, but a
+ * baseline still does not survive a restart), so the sequence every agent actually follows — edit files, rescan, ask
  * for a review — moved the baseline to the post-edit state and then
  * compared it against itself. The review answered "untouched" for every
  * item on a plan whose work had genuinely landed, silently, with no error

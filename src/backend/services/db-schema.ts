@@ -180,7 +180,11 @@ export const SCHEMA_PLANS_CORE = `
     description TEXT NOT NULL,
     resolution TEXT NOT NULL DEFAULT 'pending',
     detected_at INTEGER NOT NULL,
-    resolved_at INTEGER
+    resolved_at INTEGER,
+    file_path TEXT,
+    -- Who resolved it, tagged as everything else is (Phase 32 §0.4h).
+    resolved_by TEXT,
+    resolved_by_type TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_tasks_plan ON tasks(plan_uid);

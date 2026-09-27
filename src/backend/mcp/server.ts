@@ -25,7 +25,8 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 // Static imports so Vite's Electron-main bundler resolves them correctly.
 
 import { searchSymbols, getDependencyEdges, getFileDependencies, getDbStats, getDb, exportDatabase } from '../services/database';
-import { broadcast, getActiveProjectPath, getBoundBackendPort, scanProject } from '../server';
+import { broadcast, getActiveProjectPath, getBoundBackendPort, scanProject, pinBaseline, BaselineError } from '../server';
+import { clearBaseline } from '../services/diff-engine';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
@@ -62,7 +63,7 @@ import { readMaterial } from '../services/material-reader/reader-host';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
-import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
+import { getDeviations, resolveDeviation, detectDeviations, reconcileDeviations, DeviationError } from '../services/deviation-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow, getDataDir } from '../services/persistence';
 import { getSettings, updateSettings } from '../services/settings-service';
@@ -294,6 +295,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     publishPlanAsTemplate,
     getDeviations,
     resolveDeviation,
+    reconcileDeviations,
+    DeviationError,
     detectDeviations,
     captureCurrentTrellis,
     listSnapshots,
@@ -322,6 +325,9 @@ function buildToolDeps(sessionId: string): ToolDeps {
     getBoundBackendPort,
     scanProject,
     getActiveProjectPath,
+    pinBaseline,
+    BaselineError,
+    clearBaseline,
     buildSkillGuide,
     captureElectronScreenshot: electronScreenshotCapture,
   };

@@ -9,7 +9,7 @@
  * all four; these are the contracts it depends on.
  *
  * The default comparand matters more than it looks: `scanProject`
- * re-pins the baseline on every run, so baseline→live is empty
+ * re-pinned the baseline on every run (until 0.4h), so baseline→live is empty
  * immediately after a scan — which reads as "nothing changed" at exactly
  * the moment a user opens the panel. `commit:HEAD` is stable across
  * scans, which is why the panel defaults to it and why these tests use

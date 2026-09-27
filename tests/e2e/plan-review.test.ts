@@ -154,12 +154,10 @@ test.describe('Comparison + review (Phase 25)', () => {
 
       await h.client.scanProject(h.fixture.projectPath);
 
-      // Compare against the fixture's commit rather than the baseline.
-      // `scanProject` re-pins the baseline every time it runs, so
-      // baseline → live is empty immediately after a scan — which is
-      // exactly why an explicit comparand picker is the point of this
-      // phase. A commit contributes files only, which is all this
-      // assertion needs.
+      // Compare against the fixture's commit: an explicit comparand is the
+      // point of this phase. (A rescan re-pinned the baseline until 0.4h,
+      // which is why this never used it; it keeps it now.) A commit
+      // contributes files only, which is all this assertion needs.
       const comparands = (await (
         await h.client.raw('GET', `/api/comparands?project=${encodeURIComponent(h.fixture.projectPath)}`)
       ).json()) as Comparand[];
@@ -210,7 +208,7 @@ test.describe('Comparison + review (Phase 25)', () => {
       // what it compared against.
       //
       // This asserted the literal word "Baseline", which pinned a default
-      // that turned out to be wrong: `scanProject` re-pins the baseline on
+      // that turned out to be wrong: `scanProject` re-pinned (until 0.4h) the baseline on
       // every run, so a review after a rescan compared the baseline with
       // itself and reported every item untouched. The default is the newest
       // commit now. What matters here is that the basis is NAMED, not which

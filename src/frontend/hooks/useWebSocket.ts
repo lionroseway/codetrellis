@@ -864,13 +864,14 @@ export function useWebSocket() {
 
           // --- Set baseline (MCP set_baseline tool) ---
           if (type === 'ui-set-baseline') {
-            const commitHash = payload?.commitHash as string | null | undefined;
+            // The baseline moved on the backend (set_baseline, a capture):
+            // the canvas reads it back. This used to set only the label, so it
+            // named a commit the diff was not using (§0.4h, bug 29).
             (async () => {
               const { useGraphStore } = await import('../stores/graph-store');
-              useGraphStore.getState().setBaselineReference({
-                commitHash: commitHash ?? null,
-                shortCommitHash: commitHash ? commitHash.slice(0, 7) : null,
-              });
+              // An agent's pin holds: auto-track would move it at the next commit.
+              if (payload?.by === 'agent' && payload?.commitHash) useGraphStore.getState().setBaselineMode('pinned');
+              window.dispatchEvent(new CustomEvent('baseline-changed'));
             })();
           }
 

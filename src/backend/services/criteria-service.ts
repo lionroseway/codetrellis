@@ -20,6 +20,7 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import { actorTypeOf, isHumanDecision, isUnverifiedDecision, type DecisionAuthority } from './human-decision';
 import { currentHashes } from './artefact-service';
+import * as _lazy___plan_file_service from './plan-file-service';
 import type {
   CriterionEvidence,
   CriterionKind,
@@ -321,6 +322,17 @@ export function parseAcceptanceSection(body: string): string[] {
   return prose ? [prose] : [];
 }
 
+/**
+ * Criteria ride to git with their item (criteriaForExport), so a change to
+ * one schedules the plan's write-through, as an item change does (bug 31).
+ */
+function writeThroughFor(itemUid: string): void {
+  try {
+    const r = rows(`SELECT plan_uid FROM plan_items WHERE uid = ?`, [itemUid])[0];
+    if (r) _lazy___plan_file_service.scheduleWriteThrough(r[0] as string);
+  } catch { /* auto-sync not wired: the DB is still right */ }
+}
+
 function itemRow(itemUid: string): { body: string; requiresApproval: boolean } | null {
   const r = rows(`SELECT body, requires_approval FROM plan_items WHERE uid = ?`, [itemUid])[0];
   return r ? { body: (r[0] as string) ?? '', requiresApproval: !!(r[1] as number) } : null;
@@ -353,6 +365,7 @@ function insertCriterion(input: {
       input.author, input.authorType, input.createdAt ?? now, now,
     ],
   );
+  writeThroughFor(input.itemUid);
   return uid;
 }
 
@@ -473,14 +486,17 @@ export function updateCriterion(
   if (sets.length === 0) return before;
   sets.push('updated_at = ?'); params.push(now);
   getDb().run(`UPDATE item_criteria SET ${sets.join(', ')} WHERE uid = ?`, [...params, uid]);
+  writeThroughFor(before.itemUid);
   markDirty();
   return getCriterion(uid)!;
 }
 
 export function deleteCriterion(uid: string, decision: DecisionAuthority): boolean {
   assertHuman(decision);
-  if (!getCriterion(uid)) return false;
+  const existing = getCriterion(uid);
+  if (!existing) return false;
   getDb().run(`DELETE FROM item_criteria WHERE uid = ?`, [uid]);
+  writeThroughFor(existing.itemUid);
   markDirty();
   return true;
 }
