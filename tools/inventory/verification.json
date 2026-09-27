@@ -1256,5 +1256,296 @@
   },
   "component:layout/CoverageChip.tsx": {
     "ux": "✓ 0.5 — \"imports linked\" (0.5c)"
+  },
+  "rest:GET /api/plans": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/stitched": {
+    "behaviour": "✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid": {
+    "behaviour": "✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:PUT /api/plans/:uid": {
+    "behaviour": "✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:DELETE /api/plans/:uid": {
+    "behaviour": "✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/next-task": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, next-up-and-sync, phone-plans (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:planUid/items": {
+    "behaviour": "✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:planUid/timeline": {
+    "behaviour": "✓ 0.4c: exercised by full-loop (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:planUid/channels": {
+    "behaviour": "✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:planUid/channels": {
+    "behaviour": "✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:planUid/items": {
+    "behaviour": "✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/items/:uid": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/items/:uid/full": {
+    "behaviour": "✓ 0.4c: exercised by item-surface, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/items/:uid/criteria": {
+    "behaviour": "✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/items/:uid/criteria": {
+    "behaviour": "✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/check-runs": {
+    "behaviour": "✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:uid/check-runs": {
+    "behaviour": "✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:DELETE /api/items/:uid": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/items/:uid/comments": {
+    "behaviour": "✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/items/:uid/comments": {
+    "behaviour": "✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/items/:uid/progress": {
+    "behaviour": "✓ 0.4c: exercised by task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/items/:uid/blocked": {
+    "behaviour": "✓ 0.4c: exercised by task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/items/:uid/attachments": {
+    "behaviour": "✓ 0.4c: exercised by filesystem-sinks, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/items/:uid/attachments": {
+    "behaviour": "✓ 0.4c: exercised by filesystem-sinks, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/attachments/:uid/file": {
+    "behaviour": "✓ 0.4c: exercised by filesystem-sinks (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/versions": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, plan-tools, plan-versions (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/deviations": {
+    "behaviour": "✓ 0.4c: exercised by deviations, drift-review-tools, full-loop, phone-plans (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:uid/reconcile": {
+    "behaviour": "✓ 0.4c: exercised by drift-review-tools, full-loop (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/docs": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:uid/docs": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/docs/by-type/:docType": {
+    "behaviour": "✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plan-docs/:docUid": {
+    "behaviour": "✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:PUT /api/plan-docs/:docUid": {
+    "behaviour": "✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:DELETE /api/plan-docs/:docUid": {
+    "behaviour": "✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plan-docs/:docUid/versions": {
+    "behaviour": "✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/phases": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, plan-phases, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:uid/phases": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, plan-phases, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:PUT /api/plan-phases/:phaseUid": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:DELETE /api/plan-phases/:phaseUid": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/changes": {
+    "behaviour": "✓ 0.4c: exercised by full-loop, plan-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/pr-draft": {
+    "behaviour": "✓ 0.4c: exercised by phone-graph-review, plan-review-surface, plan-review, review-comparand-edges, +1 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/review": {
+    "behaviour": "✓ 0.4c: exercised by phone-graph-review, plan-review-surface, plan-review, review-after-rescan, +2 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/external-sync": {
+    "behaviour": "✓ 0.4c: exercised by external-sync-endpoint (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:uid/export": {
+    "behaviour": "✓ 0.4c: exercised by cdev-cross-repo, contributor-branch-index, criteria-signoff, next-up-and-sync, +4 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/import": {
+    "behaviour": "✓ 0.4c: exercised by plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/file-status": {
+    "behaviour": "✓ 0.4c: exercised by next-up-and-sync, plan-default-visibility, plan-export, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:uid/unlink": {
+    "behaviour": "✓ 0.4c: exercised by next-up-and-sync, plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plan-templates": {
+    "behaviour": "✓ 0.4c: exercised by filesystem-sinks, review-confinement (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/:uid/publish-as-template": {
+    "behaviour": "✓ 0.4c: exercised by plan-templates (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/plans/from-template": {
+    "behaviour": "✓ 0.4c: exercised by filesystem-sinks, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/items/:itemUid/refs": {
+    "behaviour": "✓ 0.4c: exercised by phone-plans, references (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plans/:uid/refs": {
+    "behaviour": "✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/items/:itemUid/refs": {
+    "behaviour": "✓ 0.4c: exercised by phone-plans, references (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:PUT /api/refs/:uid": {
+    "behaviour": "✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:DELETE /api/refs/:uid": {
+    "behaviour": "✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/team-activity": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase6, review-confinement, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plan-history/:planSlug/at/:commitHash": {
+    "behaviour": "✓ 0.4c: exercised by input-validation (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/plan-history/:planSlug/diff": {
+    "behaviour": "✓ 0.4c: exercised by input-validation (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/pantry/resolve": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase7, filesystem-sinks, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:GET /api/contributions": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase7, review-confinement, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/contributions/promote": {
+    "behaviour": "✓ 0.4c: exercised by surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/contributions/accept": {
+    "behaviour": "✓ 0.4c: exercised by filesystem-sinks, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "rest:POST /api/contributor-branch": {
+    "behaviour": "✓ 0.4c: exercised by contributor-branch-index, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:accept_contributions": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:add_item": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, cdev-phase6, +12 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:add_item_attachment": {
+    "behaviour": "✓ 0.4c: exercised by item-surface, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:add_item_comment": {
+    "behaviour": "✓ 0.4c: exercised by item-surface, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:add_plan_scope": {
+    "behaviour": "✓ 0.4c: exercised by cdev-central-oversight, cdev-cross-repo, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:claim_item": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:create_plan": {
+    "behaviour": "✓ 0.4c: exercised by cdev-central-oversight, cdev-channels, cdev-cross-repo, cdev-phase11, +15 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:delete_item": {
+    "behaviour": "✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:export_plan_to_files": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase3-demo, cdev-phase6, cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:get_item": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase5, intake, plan-items, short-references (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:get_next_item": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, criteria-signoff (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:get_plan": {
+    "behaviour": "✓ 0.4c: exercised by cdev-sensors, plan-tools (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:get_plan_timeline": {
+    "behaviour": "✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:import_plan_from_files": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase3-demo (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:list_contributions": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:list_item_comments": {
+    "behaviour": "✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:list_items": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase5, intake, plan-items (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:list_plan_pointers": {
+    "behaviour": "✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:list_plans": {
+    "behaviour": "✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:list_plans_by_repo": {
+    "behaviour": "✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:prepare_contributor_branch": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:promote_to_contribution": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:read_item_full": {
+    "behaviour": "✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:remove_plan_scope": {
+    "behaviour": "✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:resolve_pantry_references": {
+    "behaviour": "✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:resolve_reference": {
+    "behaviour": "✓ 0.4c: exercised by short-references (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:restore_item_version": {
+    "behaviour": "✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:set_item_blocked": {
+    "behaviour": "✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:update_item": {
+    "behaviour": "✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, criteria-signoff, +6 (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:update_item_progress": {
+    "behaviour": "✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7)"
+  },
+  "mcp:bulk_add_items": {
+    "behaviour": "✓ 0.7: a tree in one call, parents by temporary id, authored by the calling agent; unknown plan refused (item-batch-search-import)"
+  },
+  "mcp:search_items": {
+    "behaviour": "✓ 0.7: titles and bodies with an excerpt, case-insensitive; \"%\" and \"_\" literal; unknown plan refused (item-batch-search-import)"
+  },
+  "mcp:import_external": {
+    "behaviour": "✓ 0.7: plan and items authored by the caller, in the open project, shared by default; no project refused (item-batch-search-import)"
   }
 }

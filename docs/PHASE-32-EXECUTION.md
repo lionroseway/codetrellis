@@ -314,6 +314,30 @@ Phase 32's features begin (owner's decision, 2026-09-26).
 
 ## 4. Track A: awareness engine
 
+### Carried from the Stage 0 review (0.7)
+
+The review changed the plan in four places. Each is small; they come
+first because Track A leans on them.
+
+- **The coverage guard credits calls, not names.** It counted three MCP
+  tools as tested because a unit test that phrases tool calls for the
+  Timeline mentions their names (bug 49). Credit a test only where it
+  calls the route, tool or method (the harness client, `callTool`,
+  `rpc`), and keep the phrasing test out of it.
+- **No tool writes a fixed author.** Authorship was wrong in the same way
+  four times (bugs 43, 47, 49 and the grant escalation): a handler that
+  forgot `authorFromExtra`, or wrote a literal. Workstream attribution is
+  Track A's core, so add a structural test like `server-confinement`:
+  every handler that creates or changes a record takes its author from
+  the caller.
+- **Identity across checkouts is A1.7's**, with bug 46 as its first case:
+  a second checkout takes the first one's system docs, and plans are keyed
+  the same way.
+- **The harness and browser suites do not run on PRs** (their CI jobs are
+  skipped); every step ran them by hand. At 632 harness tests and 28
+  minutes in a 4-core container, run them in CI, sharded, before Track A
+  adds more.
+
 ### A0: Parallel-work bugs (bugs 1–3)
 
 - `claim_item` records the **session** as assignee, and compares

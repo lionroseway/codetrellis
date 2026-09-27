@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
-import { resultWithMeta } from '../helpers';
+import { resultWithMeta, authorFromExtra } from '../helpers';
 import { buildPlanPrompt, buildItemPrompt } from '../prompt-builders';
 import { getActiveProjectRoot, isTrustedProjectRoot } from '../../services/trusted-roots';
 
@@ -399,15 +399,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ),
       },
     },
-    async ({ text, title, project_path }) => {
+    async ({ text, title, project_path }, extra: unknown) => {
+      // A plan belongs to a project: with none named and none open it was
+      // filed under '' , which nothing lists. And it is the calling agent's,
+      // not a generic "mcp-agent" (Phase 32 §0.7, as 0.4l did for
+      // create_plan_from_external).
+      const projectPath = project_path ?? getActiveProjectRoot();
+      if (!projectPath) {
+        return { content: [{ type: 'text' as const, text: 'No project is open: pass project_path, or open the project first.' }], isError: true };
+      }
+      const id = authorFromExtra(deps, extra);
       try {
         const result = deps.planImportService.importFromConversation({ text, title });
 
-        // Same defect as `create_plan_from_external`: a plan imported from
-        // text belongs to the project you are in, not to nowhere.
         const plan = deps.planService.createPlan(
           { title: result.title, description: result.description, tasks: [] },
-          'mcp-agent', 'mcp', project_path ?? getActiveProjectRoot() ?? '',
+          id.author, id.authorType, projectPath,
         );
 
         let itemCount = 0;
@@ -419,11 +426,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
             body: imported.body,
             fileSpecs: imported.fileSpecs,
             scopePath: imported.scopePath,
-            author: 'mcp-agent',
-            authorType: 'mcp',
+            author: id.author,
+            authorType: id.authorType,
           });
           itemCount++;
         }
+        // Where the default visibility says, as every other way of making a
+        // plan (bug 48). After the items, so the first write carries them.
+        deps.planFileService.exportIfSharedByDefault(plan.uid, projectPath);
 
         deps.broadcast('plan-imported', { planUid: plan.uid, source: 'mcp-import' });
         return {
