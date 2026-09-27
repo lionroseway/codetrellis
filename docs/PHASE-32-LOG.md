@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4l System docs and intake |
-| **Status** | 0.4l complete and verified: full harness 626/626, affected browser specs 91/91 (settings, phase30-settings, remaining-routes, broadcast-events, mcp-ui-tools); PR open into `feat/phase-32` |
-| **Next action** | Merge the 0.4l PR when CI is green. Then 0.5 UX audit (screenshots of every panel; includes Appearance/Sync sections, phone screens with the owner, Presence Pane and toolbar overlap) |
+| **Stage / step** | 0.5 UX audit |
+| **Status** | 0.5a on the branch: every panel captured (`e2e/screenshots/ux-audit.spec.ts`, 34 shots), reviewed against §1.6; 4 majors fixed, 23 minors listed in the 0.5a entry |
+| **Next action** | PR 0.5a into `feat/phase-32`, merge when green. Then 0.5b: the settings copy minors (m6–m13), then 0.5c the workspace minors; phone screens with the owner |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4l-sysdocs` |
+| **Branch** | `feat/phase-32-0.5-ux` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -47,7 +47,7 @@
 - [x] 0.4i Terminals and audio (#127)
 - [x] 0.4j Mobile surface (#128)
 - [x] 0.4k Settings, updates, privacy (#129)
-- [ ] 0.4l System docs and intake
+- [x] 0.4l System docs and intake (#130)
 - [ ] 0.5 UX audit
 - [ ] 0.6 Known bugs 4–9
 - [ ] 0.7 Stage review
@@ -145,6 +145,74 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.5a — the UX audit, and its four majors
+
+0.4l merged as [#130](https://github.com/lionroseway/codetrellis/pull/130)
+(harness 626/626, browser specs 91/91, CI green).
+
+**Capture.** `e2e/screenshots/ux-audit.spec.ts` photographs every
+workspace (graph at three depths, inspector, plan, item, docs, code,
+brief), every settings section, a refused save, the guide, the folder
+picker, the terminal empty and live, the audio bar, the toolbar at 1440,
+1280 and 1024, and an agent at work (connected, presence cards, a
+deletion request, a flagged freeze and budget). Output goes to
+`test-results/ux-audit/`, not the tree. Serial, because its agent's
+broadcasts reach every page.
+
+**Majors, fixed here:**
+
+| # | Rule | What | Fix |
+|---|---|---|---|
+| M1 | Quiet by default; nothing hidden | The working-tree card sat over the canvas toolbar at every width (the baseline picker, the systems filter), and showed two rows of chips always, zeros included, "0 removed" in red | One row for the whole top of the canvas, so the two halves cannot collide; the summary is one line ("Working tree · 8 changes") that opens its breakdown, zero chips hidden, removals neutral |
+| M2 | Glyph + word; no red unless wrong; say what it means | Every draft plan's header had "44%" in red | "1 to do before hand-off" (amber) or "Ready to hand off"; the title counts required checks |
+| M3 | Say what it means | Plan panel "Agent active" beside a top bar reading "No agents": both true (Claude Code was running without MCP), neither said which | The plan panel names what it saw, "Claude Code running", and is silent otherwise |
+| M4 | Say what it means (security copy) | Devices: "Pair your phone … no ports exposed" above "Required to pair … opens a port on every network interface" | Says pairing turns that setting on, which opens a port |
+
+Also fixed: the Devices placeholder named a real person ("e.g. Saif's
+iMac"); Plans settings promised a per-plan toggle as "Phase 13 §A —
+coming" (it exists: the Shared / Local chip) and showed a raw markdown
+link; Logs showed literal backticks; About showed the macOS install
+note in amber on every platform; the browser suite's backend made a
+real update check at start (the Updates panel showed GitHub's 403) —
+it now points at nowhere, as the harness has since 0.4k.
+
+**Minors, open** (none above minor):
+
+- m1 Clusters / Files / Symbols stay highlighted in Code, Docs and the
+  plan workspace, where no graph shows (Brief hides them). Hiding them
+  risks specs whose page is switched by another worker's broadcast.
+- m2 The project tab truncates to "codetr…" and the branch chip wraps to
+  two lines at 1440.
+- m3 The plan header repeats itself: "draft" twice, "0/2 actions"
+  twice, 0% three times; a "V2" badge is internal.
+- m4 Big empty gaps in the plan and item pages between sections.
+- m5 Item chips use emoji (🔓 Gate, 🌐 Shared, 🏠 Local) beside the icon set.
+- m6 A refused setting names its key ("mcp.port must be …").
+- m7 Logs: "(log file empty)" in the web build, where there is no file logger.
+- m8 Telemetry states the database is at `~/.codetrellis/data.db`, which is
+  wrong when the data directory is overridden.
+- m9 Updates footer ("Updates open in your browser … auto-download will
+  land once builds are code-signed") predates the verified download.
+- m10 Native white checkboxes and radios on the dark modal.
+- m11 The settings modal changes height from section to section.
+- m12 Power: "assertion", "union", "Status: idle · web".
+- m13 Data: a static amber ⚠️ note on every visit.
+- m14 Budget ceiling: the minutes box has no unit, beside one labelled USD.
+- m15 Brief empty state says "Ask Claude"; the app is agent-agnostic.
+- m16 Status bar "1852/3680 linked": a count, not a meaning.
+- m17 Presence pane shows both a "1" badge and "2 cards"; a toast covers
+  its reply box; it floats above a modal's backdrop.
+- m18 Folder picker opens at the home directory, not near the open project.
+- m19 Symbols depth looks like Files until a file is picked (the hint says so,
+  but only in its own chip).
+- m20 A plan created over REST is "Local" although the default is Shared
+  (to check in 0.6: may be by design for API-created plans).
+- m21 Inspector for a file shows name, path and "View source" only.
+- m22 The deletion dialog leaves the presence pane and a toast undimmed.
+- m23 At 1024 the canvas toolbar takes four rows.
+
+Not yet reviewed: the 31 phone screens (with the owner).
 
 ### 2026-09-27: 0.4l — system docs, intake, and granting is the person's (bugs 46–47)
 

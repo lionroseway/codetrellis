@@ -91,10 +91,20 @@ export function PlanPanel() {
           </button>
         ))}
         <div className="flex-1" />
-        <span className={`text-[10px] mr-2 flex items-center gap-1.5 ${status === 'active' ? 'text-success' : 'text-foreground-subtle'}`}>
-          {status === 'active' && <span className="w-1 h-1 rounded-full bg-success shadow-[0_0_4px_rgba(34,197,94,0.6)] animate-pulse" />}
-          {status === 'active' ? 'Agent active' : 'Waiting'}
-        </span>
+        {/* This is the Claude Code session-file watcher, not the MCP
+            connection count the top bar shows. It said "Agent active" next
+            to a top bar saying "No agents" — both true, since Claude Code
+            can run here without connecting — so it names what it saw now,
+            and says nothing when it saw nothing (Phase 32 §0.5). */}
+        {status === 'active' && (
+          <span
+            className="text-[10px] mr-2 flex items-center gap-1.5 text-success"
+            title="A Claude Code session is running in this project; its chat is read from the session file. Connect it over MCP to see its tool calls."
+          >
+            <span className="w-1 h-1 rounded-full bg-success shadow-[0_0_4px_rgba(34,197,94,0.6)] animate-pulse" />
+            Claude Code running
+          </span>
+        )}
         <button
           onClick={togglePlanPanelExpanded}
           className="text-foreground-subtle hover:text-foreground p-1 rounded hover:bg-surface-hover transition-colors"

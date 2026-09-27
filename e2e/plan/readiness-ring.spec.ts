@@ -29,7 +29,10 @@ test.describe('Readiness ring', () => {
     await expect(ring).toBeVisible({ timeout: 5000 });
   });
 
-  test('readiness ring shows a percentage', async ({ page, request }) => {
+  // It showed a coloured percentage ("44%" in red on every new draft). It
+  // says what is left in words now (Phase 32 §0.5), and the title counts
+  // the required checks rather than giving a score.
+  test('readiness says what is left before hand-off, in words', async ({ page, request }) => {
     await seedPlan(request, {
       title: PLAN_TITLE,
       actions: [{ title: 'Readiness Action', body: 'Body' }],
@@ -38,10 +41,11 @@ test.describe('Readiness ring', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    // The ring title contains the percentage
-    const ring = page.locator('[title*="Plan readiness"]');
-    const title = await ring.getAttribute('title');
-    expect(title).toMatch(/\d+%/);
+    // One task and no target: the required "Tasks have targets" check fails.
+    const ring = page.getByTestId('plan-readiness');
+    await expect(ring).toContainText('1 to do before hand-off');
+    expect(await ring.getAttribute('title')).toMatch(/\d+ of \d+ required checks pass/);
+    await expect(ring).not.toContainText('%');
   });
 
   test('clicking readiness ring expands checklist', async ({ page, request }) => {
