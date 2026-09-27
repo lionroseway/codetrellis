@@ -73,7 +73,8 @@ export function heartbeat(sessionId: string): void {
 
 export function getActiveSessions(): AgentSessionInfo[] {
   const result = getDb().exec(
-    `SELECT session_id, agent_type, model, active_plan_uid, connected_at, last_seen, status, capabilities
+    `SELECT session_id, agent_type, model, active_plan_uid, connected_at, last_seen, status, capabilities,
+            workstream_root, host_terminal_id
      FROM agent_sessions WHERE status = 'active' ORDER BY connected_at DESC`
   );
   if (!result[0]) return [];
@@ -82,7 +83,23 @@ export function getActiveSessions(): AgentSessionInfo[] {
     sessionId: r[0], agentType: r[1], model: r[2], activePlanUid: r[3],
     connectedAt: r[4], lastSeen: r[5], status: r[6] as 'active' | 'inactive',
     capabilities: (() => { try { return JSON.parse(r[7] as string ?? '[]'); } catch { return []; } })(),
+    workstreamRoot: (r[8] as string | null) ?? null,
+    hostTerminalId: (r[9] as string | null) ?? null,
   }));
+}
+
+/**
+ * Record which workstream a session works in, and its terminal (Phase 32
+ * A1.1). The caller has already validated both — `workstream-binding` for the
+ * root, the terminal service for the terminal — so this only writes. A null
+ * root unbinds; a null terminal leaves the one it had.
+ */
+export function bindSession(sessionId: string, workstreamRoot: string | null, hostTerminalId?: string | null): void {
+  getDb().run(
+    `UPDATE agent_sessions SET workstream_root = ?, host_terminal_id = COALESCE(?, host_terminal_id) WHERE session_id = ?`,
+    [workstreamRoot, hostTerminalId ?? null, sessionId],
+  );
+  markDirty();
 }
 
 export function disconnectSession(sessionId: string): void {

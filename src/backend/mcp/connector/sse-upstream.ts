@@ -14,6 +14,7 @@
  */
 
 import type { JsonRpcMessage, Upstream } from './core';
+import { bindingHeaders, type SessionBindingHint } from '../binding-headers';
 
 export const TOKEN_HEADER = 'x-codetrellis-token';
 
@@ -29,6 +30,8 @@ export interface SseUpstreamOptions {
   token: string;
   /** How long to wait for the server's `endpoint` event. */
   handshakeTimeoutMs?: number;
+  /** Where the agent is working; sent on connect only (Phase 32 A1.1). */
+  binding?: SessionBindingHint;
   fetchImpl?: typeof fetch;
 }
 
@@ -40,7 +43,7 @@ export async function connectSseUpstream(opts: SseUpstreamOptions): Promise<Upst
   let res: Response;
   try {
     res = await doFetch(opts.url, {
-      headers: { ...headers, Accept: 'text/event-stream' },
+      headers: { ...headers, ...bindingHeaders(opts.binding ?? {}), Accept: 'text/event-stream' },
       signal: abort.signal,
     });
   } catch (err) {

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A0: parallel-work bugs 1–3 |
-| **Status** | Carried items 1–3 merged (#141, #143, #144); CI now runs the harness (4 shards) and the browser suite (3) on every PR, both blocking. A0 done on its branch, PR open |
-| **Next action** | Merge A0's PR when green; then A1.1 (session binding: the connector sends the working folder and host terminal; the server validates them against the project's worktrees) |
+| **Stage / step** | Track A — A1.1: session binding |
+| **Status** | A0 merged (#145). A1.1 done on its branch: sessions carry `workstreamRoot` and `hostTerminalId`, from the connector's headers or MCP roots; PR open |
+| **Next action** | Merge A1.1's PR when green; then A1.2 (the Claude Code watcher watches every session, keyed by folder) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a0-parallel-bugs` |
+| **Branch** | `feat/phase-32-a1-1-session-binding` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -58,7 +58,7 @@
 - [x] Owner's report: update download shows progress and asks where to save (bug 51) (#142)
 - [x] Carried 2: no tool or handler writes a fixed author (structural test; bug 52) (#143)
 - [x] Carried 3: harness and browser suites run in CI, sharded (#144)
-- [ ] A0 Parallel-work bugs 1–3
+- [x] A0 Parallel-work bugs 1–3 (#145)
 - [ ] A1.1 Session binding
 - [ ] A1.2 Multi-session Claude watcher
 - [ ] A1.3 Workstream discovery and strip
@@ -153,6 +153,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: A1.1 — every agent session knows which workstream it is in
+
+The first piece of "see every workstream". A session used to know its agent
+type and, if the agent volunteered it, a terminal. Now it knows where it
+works, from the first source that answers:
+
+1. **The connector.** Launched by the agent in its working directory, it
+   sends that folder on connect, plus `CODETRELLIS_HOST_TERMINAL` inside a
+   CodeTrellis terminal (`mcp/binding-headers.ts`).
+2. **MCP roots.** A client that sent no folder but declares `roots` (Claude
+   Code does) is asked for them after it initialises.
+
+The folder is a claim, so it only **chooses** among roots already trusted —
+the opened projects, included clones, and each one's live worktrees — by
+canonical path, deepest match, returned as the user opened it
+(`services/workstream-binding.ts`). A folder outside all of them leaves the
+session unbound and working. A terminal is recorded only if it exists.
+`agent_sessions.workstream_root` is new (reconciled), re-derived on every
+connect; `register_session` keeps it.
+
+Tests: `workstream-binding.test.ts` (6: inside, below, outside, `..` and
+symlink escapes, poisoned input, the opened spelling kept, deepest wins),
+`binding-headers.test.ts` (3, including the connector sending the binding
+on connect and not on messages), and `tests/e2e/session-binding.test.ts` (5:
+the real connector bundle launched in a worktree, in the project, outside
+every root, a roots-only client, and a real terminal vs a made-up one).
+Nothing visible yet: the strip that shows this is A1.3.
 
 ### 2026-09-27: A0 — parallel-work bugs 1–3
 

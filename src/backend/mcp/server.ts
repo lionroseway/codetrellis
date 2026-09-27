@@ -30,6 +30,9 @@ import { clearBaseline } from '../services/diff-engine';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
+import { readBindingHeaders } from './binding-headers';
+import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
+import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
 import * as taskAttachmentsService from '../services/task-attachments-service';
 import * as planItemService from '../services/plan-item-service';
@@ -679,11 +682,38 @@ export async function startMcpServer(): Promise<void> {
         : 'mcp-client';
       sessionService.registerSession(sessionId, inferredAgentType);
 
+      // Bind it to the workstream it works in (Phase 32 A1.1): the folder the
+      // connector reports, checked against roots we already trust, and the
+      // CodeTrellis terminal it runs in if that terminal exists. Session ids
+      // are per connection, so this is derived afresh on every connect.
+      const hint = readBindingHeaders(req.headers);
+      let bound = false;
+      try {
+        const root = matchWorkstreamRoot(hint.cwd, candidateWorkstreamRoots());
+        const terminal = hint.hostTerminal && terminalService.getTerminal(hint.hostTerminal) ? hint.hostTerminal : null;
+        if (root || terminal) sessionService.bindSession(sessionId, root, terminal);
+        bound = root !== null;
+      } catch { /* binding is best-effort; it must never break a connection */ }
+
       // Then name it from what it says it is. The user-agent above is a
       // guess, and through the stdio connector it is always the connector's,
       // whichever agent launched it (see client-identity). `retypeSession`
       // only replaces the guess, so an explicit `register_session` wins.
       mcpServer.server.oninitialized = () => {
+        // A client that sent no folder but exposes MCP roots (Claude Code
+        // does) is asked for them: the second source, after the connector.
+        if (!bound && mcpServer.server.getClientCapabilities()?.roots) {
+          void mcpServer.server.listRoots().then(({ roots }) => {
+            const folders = roots.flatMap((r) => {
+              try { return r.uri.startsWith('file:') ? [fileURLToPath(r.uri)] : []; } catch { return []; }
+            });
+            const root = firstWorkstreamRoot(folders);
+            if (!root) return;
+            sessionService.bindSession(sessionId, root);
+            broadcast('mcp-session-changed', { reason: 'bound', sessionId });
+          }).catch(() => { /* a client that cannot answer stays unbound */ });
+        }
+
         const claimed = agentTypeFromClientInfo(mcpServer.server.getClientVersion()?.name);
         if (!claimed || claimed === inferredAgentType) return;
         try {
