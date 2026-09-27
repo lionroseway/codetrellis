@@ -4650,9 +4650,10 @@ app.post('/api/system-docs', (req, res) => {
   try {
     const identity = getSettings().identity;
     const author = identity.email || identity.displayName || 'human';
+    // The app window is the person; plain HTTP is unverified (0.4d).
     const doc = svc.createSystemDoc({
       projectPath, title, body, owner, tags, references, slug,
-      author, authorType: 'human',
+      author, authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
     });
     broadcast('system-doc-created', { uid: doc.uid, projectPath: doc.projectPath });
     saveNow(() => exportDatabase());
@@ -4665,7 +4666,16 @@ app.post('/api/system-docs', (req, res) => {
 app.put('/api/system-docs/:uid', (req, res) => {
   const svc = _lazy___services_system_docs_service;
   try {
-    const updated = svc.updateSystemDoc(req.params.uid, req.body || {});
+    // Named fields only, and the author from how the request arrived. The
+    // whole body went through, so `author` / `authorType` in it put anyone's
+    // name on the edit (Phase 32 §0.4l).
+    const { title, body, owner, tags, references } = req.body || {};
+    const identity = getSettings().identity;
+    const updated = svc.updateSystemDoc(req.params.uid, {
+      title, body, owner, tags, references,
+      author: identity.email || identity.displayName || 'human',
+      authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
+    });
     if (!updated) { res.status(404).json({ error: 'not found' }); return; }
     broadcast('system-doc-updated', { uid: updated.uid, projectPath: updated.projectPath });
     saveNow(() => exportDatabase());

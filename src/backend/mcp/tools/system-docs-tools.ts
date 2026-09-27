@@ -21,7 +21,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
-import { resultWithMeta } from '../helpers';
+import { resultWithMeta, authorFromExtra } from '../helpers';
 
 export function register(server: McpServer, deps: ToolDeps): void {
 
@@ -97,9 +97,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
         slug: z.string().optional().describe('Override the auto-derived filesystem slug (rare)'),
       },
     },
-    async (args) => {
+    async (args, extra: any) => {
+      // In the agent's own name: without it the service defaulted to
+      // "human", so an agent's doc read as a person's (Phase 32 §0.4l).
+      const { author, authorType } = authorFromExtra(deps, extra);
       if (args.uid) {
         const updated = deps.systemDocsService.updateSystemDoc(args.uid, {
+          author,
+          authorType,
           title: args.title,
           body: args.body,
           owner: args.owner === undefined ? undefined : args.owner,
@@ -124,6 +129,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         tags: args.tags,
         references: args.references,
         slug: args.slug,
+        author,
+        authorType,
       });
       const n = deps.broadcast('system-doc-created', { uid: created.uid, projectPath: created.projectPath });
       deps.saveNow(() => deps.exportDatabase());
@@ -134,12 +141,13 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'delete_system_doc',
     {
-      description: 'Delete a system doc and its on-disk file. Idempotent — unknown UIDs return ok: false.',
+      description: 'Delete a system doc and its on-disk file. An unknown uid is an error.',
       inputSchema: { uid: z.string() },
     },
     async ({ uid }) => {
       const ok = deps.systemDocsService.deleteSystemDoc(uid);
-      const n = ok ? deps.broadcast('system-doc-removed', { uid }) : 0;
+      if (!ok) return { content: [{ type: 'text' as const, text: `System doc ${uid} not found` }], isError: true };
+      const n = deps.broadcast('system-doc-removed', { uid });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta({ ok, uid }, n);
     },

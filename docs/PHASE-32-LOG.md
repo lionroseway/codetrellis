@@ -139,6 +139,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-27 | Microphone sharing to paired devices needs the `capture` grant per device, as terminals need `terminal`; the `shareAudio` switch still has to be on (0.4k) | Owner's decision. The switch alone shared the microphone with every connected device |
 | 2026-09-27 | An answer to a peer agent's question for a person carries who gave it (person or agent, which one, how it arrived), shown where it was asked; agents may still answer (0.4k) | Owner's decision. Same stance as 0.4d: tag, don't block |
 | 2026-09-27 | Freeze changes are recorded (who, how, before and after) and an agent's change is flagged on the freeze indicator, desktop and phone, until a person marks it seen (0.4k) | Owner's decision. Same as budgets (0.4g) |
+| 2026-09-27 | Granting is the person's: agent grants, device grants, network exposure, webhook hosts and project scope change only from the app window (a CLI later), never over plain HTTP, MCP or the phone. Refused elsewhere with where to do it | Owner's decision on the settings-escalation finding (private register) |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
