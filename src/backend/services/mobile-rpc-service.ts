@@ -765,6 +765,9 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
+      // Every phone write to a system doc tells the desktop windows, as the
+      // desktop's own routes do; none of these four did (0.4j).
+      broadcast('system-doc-created', { uid: doc.uid, projectPath: doc.projectPath });
       return doc;
     }
 
@@ -777,18 +780,22 @@ async function routeMethod(
       if (params.tags !== undefined) updates.tags = params.tags;
       const doc = systemDocsService.updateSystemDoc(uid, updates as any);
       if (!doc) throw new Error(`Doc not found: ${uid}`);
+      broadcast('system-doc-updated', { uid: doc.uid, projectPath: doc.projectPath });
       return doc;
     }
 
     case 'sysdoc.delete': {
       const uid = requireString(params, 'uid');
-      return { ok: systemDocsService.deleteSystemDoc(uid) };
+      if (!systemDocsService.deleteSystemDoc(uid)) throw new Error(`Doc not found: ${uid}`);
+      broadcast('system-doc-removed', { uid });
+      return { ok: true };
     }
 
     case 'sysdoc.verify': {
       const uid = requireString(params, 'uid');
       const doc = systemDocsService.verifySystemDoc(uid);
       if (!doc) throw new Error(`Doc not found: ${uid}`);
+      broadcast('system-doc-verified', { uid: doc.uid, capturedAgainstCommit: doc.capturedAgainstCommit });
       return doc;
     }
 
@@ -866,19 +873,22 @@ async function routeMethod(
       return term;
     }
 
+    // A terminal that is not there is an error, not `{ ok: false }` or a
+    // null the phone renders as an empty screen: typing into one looked like
+    // it worked (0.4j).
     case 'terminal.write': {
       const id = requireString(params, 'id');
       const data = requireString(params, 'data');
-      const ok = terminalService.writeTerminal(id, data);
-      return { ok };
+      if (!terminalService.writeTerminal(id, data)) throw new Error(`Terminal not found: ${id}`);
+      return { ok: true };
     }
 
     case 'terminal.kill': {
       const id = requireString(params, 'id');
-      const ok = terminalService.killTerminal(id);
+      if (!terminalService.killTerminal(id)) throw new Error(`Terminal not found: ${id}`);
       // Companion-app sync: remove it from the desktop UI too.
-      if (ok) { try { broadcast('terminal-killed', { id }); } catch { /* */ } }
-      return { ok };
+      try { broadcast('terminal-killed', { id }); } catch { /* */ }
+      return { ok: true };
     }
 
     case 'terminal.read': {
@@ -886,6 +896,7 @@ async function routeMethod(
       const lines = (params.lines as number) ?? 100;
       // raw=true → keep ANSI so the mobile app colours it (parseAnsi).
       const output = terminalService.readTerminalOutput(id, lines, true);
+      if (output === null) throw new Error(`Terminal not found: ${id}`);
       return { output };
     }
 
@@ -902,8 +913,13 @@ async function routeMethod(
       const id = requireString(params, 'id');
       const cols = (params.cols as number) ?? 80;
       const rows = (params.rows as number) ?? 24;
-      const ok = terminalService.resizeTerminal(id, cols, rows);
-      return { ok };
+      // Straight to the PTY, so a size that is not one is refused here.
+      // Narrower than the MCP tool's floor: a phone held upright is ~40 wide.
+      if (!Number.isInteger(cols) || cols < 10 || cols > 500 || !Number.isInteger(rows) || rows < 4 || rows > 300) {
+        throw new Error('cols must be a whole number from 10 to 500, and rows from 4 to 300');
+      }
+      if (!terminalService.resizeTerminal(id, cols, rows)) throw new Error(`Terminal not found: ${id}`);
+      return { ok: true };
     }
 
     // Session-persistence plan §7.6 — paginated read of the
