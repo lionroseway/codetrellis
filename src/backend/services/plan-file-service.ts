@@ -732,6 +732,10 @@ export function getLinkedPlanDir(planUid: string, projectRoot: string): string |
  * is the "Shared → Local" toggle. No-op if the dir doesn't exist.
  */
 export function unlinkPlan(planUid: string, projectRoot: string): { removed: boolean; planDir: string | null } {
+  // A write-through scheduled by the change that led here — deleting a plan
+  // archives it first, and archiving schedules one — would otherwise fire
+  // after the folder is gone and write it straight back (Phase 32 bug 39).
+  cancelWriteThrough(planUid);
   const dir = getLinkedPlanDir(planUid, projectRoot);
   if (!dir) return { removed: false, planDir: null };
   fs.rmSync(dir, { recursive: true, force: true });
@@ -882,6 +886,13 @@ const WRITE_THROUGH_DEBOUNCE_MS = 200;
  */
 let importDepth = 0;
 
+/** Drop a pending write-through for this plan, if any. */
+export function cancelWriteThrough(planUid: string): void {
+  const pending = writeThroughTimers.get(planUid);
+  if (pending) clearTimeout(pending);
+  writeThroughTimers.delete(planUid);
+}
+
 export function scheduleWriteThrough(planUid: string, projectRoot?: string): void {
   if (importDepth > 0) return;
   // Caller may not know the project path (e.g. a deep service that
@@ -896,6 +907,9 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
   if (existing) clearTimeout(existing);
   writeThroughTimers.set(planUid, setTimeout(() => {
     writeThroughTimers.delete(planUid);
+    // Linked when scheduled is not linked now: the folder may have been
+    // removed in the debounce window, and exporting would recreate it.
+    if (!getLinkedPlanDir(planUid, root)) return;
     try {
       const result = exportPlan(planUid, root);
       // Best-effort broadcast (server module may not be imported yet

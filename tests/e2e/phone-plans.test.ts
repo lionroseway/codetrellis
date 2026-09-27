@@ -202,6 +202,11 @@ test.describe.serial('Plans from the phone', () => {
     await events.waitFor('plan-deleted', (p) => p.planUid === planUid);
     expect((await req('GET', `/api/plans/${planUid}`)).status).toBe('archived');
     await expect.poll(() => fs.existsSync(dir), { timeout: 5000 }).toBe(false);
+    // And it stays gone. Archiving schedules the plan's write-through, which
+    // fired 200 ms after the folder was removed and wrote it back — with
+    // `status: archived` — into the repository (bug 39).
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(fs.existsSync(dir), 'the deleted plan\'s folder came back').toBe(false);
     expect(await phone.rpcError('plan.delete', { uid: 'no-such-plan' })).toMatch(/Plan not found/);
   });
 
