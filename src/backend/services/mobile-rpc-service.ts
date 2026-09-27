@@ -1100,18 +1100,23 @@ async function routeMethod(
 
     case 'graph.fileSearch': {
       // Search the files table by path for the mention picker's Files tab.
+      //
+      // The query is text. It went into LIKE unescaped, so `%` or `_` matched
+      // every file; and it was matched against the ABSOLUTE path, so "home"
+      // or "user" did too. The relative path comes from the row, not from
+      // slicing the active project's prefix off (0.4j).
       const query = requireString(params, 'query').toLowerCase();
+      const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const d = getDb();
       const out: Array<{ path: string; relativePath: string; name: string }> = [];
       try {
-        const root = getActiveProjectPath() || recentProjectsService.listRecentProjects()[0]?.path || '';
-        const r = d.exec(`SELECT path FROM files WHERE LOWER(path) LIKE ? ORDER BY path LIMIT 40`, [`%${query}%`]);
-        if (r[0]?.values.length) {
-          for (const row of r[0].values) {
-            const p = row[0] as string;
-            const rel = root && p.startsWith(root) ? path.relative(root, p) : p;
-            out.push({ path: p, relativePath: rel, name: path.basename(p) });
-          }
+        const r = d.exec(
+          `SELECT path, relative_path FROM files WHERE LOWER(relative_path) LIKE ? ESCAPE '\\' ORDER BY relative_path LIMIT 40`,
+          [pattern],
+        );
+        for (const row of r[0]?.values ?? []) {
+          const p = row[0] as string;
+          out.push({ path: p, relativePath: row[1] as string, name: path.basename(p) });
         }
       } catch { /* files table may not exist */ }
       return out;
