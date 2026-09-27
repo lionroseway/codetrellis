@@ -589,7 +589,20 @@ to the hosted service, same reproducible output, but it runs on this Mac
 so there is no queue and no build quota. It needs `fastlane` for iOS,
 which **is now installed** (`/opt/homebrew/bin/fastlane`) — an earlier
 note here called it the one missing piece. Xcode, CocoaPods and the
-Android SDK are all present too, so nothing blocks a local build.
+Android SDK are all present too.
+
+**An Android build also needs `JAVA_HOME` and `ANDROID_HOME`, and the
+shell sets neither.** Without them Gradle dies with "Unable to locate a
+Java Runtime" several minutes in, after EAS has already spent a
+`versionCode` (0.1.17's APK is 10 because 9 went on that failure). Use
+Android Studio's bundled JDK 21, which built 0.1.17. Homebrew's
+`openjdk@26` is also installed but untried, and may be newer than this
+Gradle supports:
+
+```
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+```
 
 Then `npx eas submit --platform ios` uses the submit block above.
 
