@@ -4130,9 +4130,33 @@ app.put('/api/freeze', (req, res) => {
     res.status(400).json({ error: problem });
     return;
   }
-  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids });
+  // Recorded with who made it and how it arrived, as a budget change is
+  // (owner's decision, 0.4k). A person's change is never flagged.
+  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids }, cameFromAppWindow(req)
+    ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+    : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
   broadcast('freeze-changed', { projectRoot: projectPath, status });
   res.json(status);
+});
+
+/** Every recorded change to the project's freeze, newest first, with who made it. */
+app.get('/api/freeze/changes', (req, res) => {
+  const { listFreezeChanges } = _lazy___services_freeze_service;
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  res.json(listFreezeChanges(projectPath));
+});
+
+/** A person has seen an agent's change to the freeze: no longer flagged. */
+app.post('/api/freeze/changes/:id/acknowledge', (req, res) => {
+  const { acknowledgeFreezeChange } = _lazy___services_freeze_service;
+  const projectPath = confineRoot((req.body ?? {}).projectPath, res, 'projectPath');
+  if (!projectPath) return;
+  const id = Number(req.params.id);
+  const change = Number.isInteger(id) ? acknowledgeFreezeChange(projectPath, id, getAuthorKey('human')) : null;
+  if (!change) { res.status(404).json({ error: 'No such freeze change on this project' }); return; }
+  broadcast('freeze-changed', { projectRoot: projectPath, acknowledged: change.id });
+  res.json(change);
 });
 
 // --- CDev Phase 8 — Audio capture REST surface ---

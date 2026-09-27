@@ -618,7 +618,7 @@
     "behaviour": "✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6"
   },
   "rest:PUT /api/freeze": {
-    "behaviour": "✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33"
+    "behaviour": "✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33; recorded with who and how, never flagged (freeze-flags, 0.4k)"
   },
   "mcp:capture_checkpoint": {
     "behaviour": "✓ 0.4h: becomes checkpoint:<id>, compares against live; unknown plan refused (drift-review-tools)"
@@ -642,7 +642,7 @@
     "behaviour": "✓ 0.4h: items added between two commits, by title (cdev-phase6)"
   },
   "mcp:exempt_plan_from_freeze": {
-    "behaviour": "✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6)"
+    "behaviour": "✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6); recorded in the agent's name and flagged; unknown plan refused (freeze-flags, 0.4k)"
   },
   "mcp:get_change_status": {
     "behaviour": "✓ 0.4h: one change by id; unknown id an error (drift-review-tools); bug 30"
@@ -690,7 +690,7 @@
     "behaviour": "✓ 0.4h: every matching commit with its files, newest first (drift-review-tools); bug 32"
   },
   "mcp:set_freeze": {
-    "behaviour": "✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6)"
+    "behaviour": "✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6); recorded in the agent's name and flagged until seen, a lift included (freeze-flags, 0.4k)"
   },
   "rpc:budget.get": {
     "behaviour": "✓ 0.4j: agent's change flagged (phone-sync-and-tools), mobile-budget unit"
@@ -1057,5 +1057,17 @@
   },
   "mcp:respond_remote_input": {
     "behaviour": "✓ 0.4j: answer reaches the peer once; again refused (phone-peer-tools)"
+  },
+  "rest:GET /api/freeze/changes": {
+    "behaviour": "✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags)"
+  },
+  "rest:POST /api/freeze/changes/:id/acknowledge": {
+    "behaviour": "✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools)"
+  },
+  "rpc:freeze.get": {
+    "behaviour": "✓ 0.4k: the plan's project freeze and the agent's changes in the desktop's words; unknown plan refused (freeze-flags)"
+  },
+  "rpc:freeze.acknowledge": {
+    "behaviour": "✓ 0.4k: unflags in the person's name, audited, desktop told; bad id refused (freeze-flags)"
   }
 }

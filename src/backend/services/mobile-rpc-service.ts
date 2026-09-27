@@ -91,6 +91,7 @@ import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
 import { handleBudgetMethod } from './mobile-budget';
+import { handleFreezeMethod } from './mobile-freeze';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -412,6 +413,15 @@ async function routeMethod(
     case 'budget.get':
     case 'budget.acknowledge':
       return handleBudgetMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      });
+
+    // --- A project's freeze, and marking an agent's change seen (0.4k) -------
+    case 'freeze.get':
+    case 'freeze.acknowledge':
+      return handleFreezeMethod(method, params, {
         fingerprint,
         send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
         broadcast,
