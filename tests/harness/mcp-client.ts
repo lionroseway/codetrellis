@@ -12,6 +12,8 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { pathToFileURL } from 'node:url';
 
 export interface McpClientOptions {
   /**
@@ -28,6 +30,12 @@ export interface McpClientOptions {
   clientName?: string;
   /** Default: `1.0.0`. */
   clientVersion?: string;
+  /**
+   * Folders to offer as MCP roots (absolute paths). When set, the client
+   * declares the `roots` capability and answers `roots/list` with them, as
+   * Claude Code does (Phase 32 A1.1's second binding source).
+   */
+  roots?: string[];
 }
 
 export interface McpToolResult {
@@ -70,8 +78,12 @@ export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
       transport = new SSEClientTransport(url);
       client = new Client(
         { name: opts.clientName ?? 'harness-client', version: opts.clientVersion ?? '1.0.0' },
-        { capabilities: {} },
+        { capabilities: opts.roots ? { roots: {} } : {} },
       );
+      if (opts.roots) {
+        const roots = opts.roots.map((p) => ({ uri: pathToFileURL(p).href, name: p }));
+        client.setRequestHandler(ListRootsRequestSchema, async () => ({ roots }));
+      }
       await client.connect(transport);
       connected = true;
     },

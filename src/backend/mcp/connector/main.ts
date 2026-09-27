@@ -39,7 +39,14 @@ const core = new ConnectorCore({
     // rotates on each launch, and the port moves when a second instance runs.
     const target = readConnectTarget(dataDir);
     if (!target.ok) throw new Error(target.reason);
-    return connectSseUpstream({ url: target.url, token: target.token });
+    // The agent launched us in its working directory; a CodeTrellis terminal
+    // also names itself. The server binds the session to a workstream from
+    // these, re-derived on every connect (Phase 32 A1.1).
+    return connectSseUpstream({
+      url: target.url,
+      token: target.token,
+      binding: { cwd: process.cwd(), hostTerminal: process.env.CODETRELLIS_HOST_TERMINAL ?? null },
+    });
   },
 });
 

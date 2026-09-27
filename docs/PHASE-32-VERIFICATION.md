@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 95 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 96 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -198,12 +198,12 @@ records that — but "✗ none" is proof of a gap.
 | f | `POST /api/screenshot-response` |  | ✗ none | 2 | ✓ 0.4f: the renderer's answer resolves the waiting request tool by nonce (graph-tools) |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 1 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
-| g | `GET /api/mcp/setup` |  | ✗ none | 2 | ✓ 0.4g: the agent prompt names the token file and never carries the token (misc-endpoints, mcp-connector) |  |  |
+| g | `GET /api/mcp/setup` |  | ✗ none | 3 | ✓ 0.4g: the agent prompt names the token file and never carries the token (misc-endpoints, mcp-connector) |  |  |
 | g | `GET /api/mcp/status` |  | ✗ none | 1 | ✓ 0.4g: running on the agents' port with connected agents counted (sessions) |  |  |
 | g | `GET /api/plans/:uid/budget/changes` |  | ✗ none | 1 | ✓ 0.4g: every change newest first, with channel and flag; no-op changes not recorded; unknown plan 404 (agent-ui-tools) |  |  |
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
-| g | `GET /api/sessions` |  | ✗ none | 4 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
+| g | `GET /api/sessions` |  | ✗ none | 5 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | h | `GET /api/baseline` |  | ✗ none | 4 | ✓ 0.4h: source, dirty, capturedAt and a label that says what it is; kept across rescans (baseline); bug 29 |  |  |
@@ -216,7 +216,7 @@ records that — but "✗ none" is proof of a gap.
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
 | h | `POST /api/freeze/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools) |  |  |
 | h | `PUT /api/freeze` |  | ✗ none | 2 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33; recorded with who and how, never flagged (freeze-flags, 0.4k) |  |  |
-| i | `DELETE /api/terminals/:id` |  | ✗ none | 4 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
+| i | `DELETE /api/terminals/:id` |  | ✗ none | 5 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
 | i | `GET /api/audio/recent` |  | ✗ none | 1 | ✓ 0.4i: chunks concatenated in order with duration and times; seconds narrows; 404 when empty (audio-rest) |  |  |
 | i | `GET /api/audio/status` |  | ✗ none | 1 | ✓ 0.4i: capturing, chunk count, buffered seconds, window (audio-rest) |  |  |
 | i | `GET /api/terminals` |  | ✗ none | 2 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
@@ -224,7 +224,7 @@ records that — but "✗ none" is proof of a gap.
 | i | `POST /api/audio/chunk` |  | ✗ none | 1 | ✓ 0.4i: buffered in order; 409 when not capturing; bad length or data 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/start` |  | ✗ none | 1 | ✓ 0.4i: capturing, clears the buffer, default size when none named; bad sizes 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/stop` |  | ✗ none | 1 | ✓ 0.4i: stops, keeps the buffer, refuses more chunks (audio-rest) |  |  |
-| i | `POST /api/terminals` |  | ✗ none | 4 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
+| i | `POST /api/terminals` |  | ✗ none | 5 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
 | i | `POST /api/terminals/:id/inject` |  | ✗ none | 3 | ✓ 0.4i: the text runs in the shell (output in history); 400 empty, 404 unknown or dead (terminal-surface) |  |  |
 | j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 1 | ✓ 0.4j: forgotten and disconnected; unknown 404 (phone-sync-and-tools) |  |  |
 | j | `DELETE /api/peers/push-tokens/:fingerprint` |  | ✗ none | 2 | ✓ 0.4j: token gone from the list; unknown 404 (phone-sync-and-tools) |  |  |
@@ -277,7 +277,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `close_project` | session · project | ✗ none | 1 | ✓ 0.4a: broadcasts ui-close-project (project-lifecycle) |  |  |
 | a | `get_project_config` | project-config · read | ✗ none | 2 | ✓ 0.4a: project override and effective merge with defaults (cdev-channels, cdev-sensors) |  |  |
 | a | `get_repo_identity` | session · read | ✗ none | 1 | ✓ 0.4a: alias, branch, origin; unopened refused (project-lifecycle) |  |  |
-| a | `list_recent_projects` | session · read | ✗ none | 2 | ✓ 0.4a: path, branch, pin marker (project-lifecycle) |  |  |
+| a | `list_recent_projects` | session · read | ✗ none | 3 | ✓ 0.4a: path, branch, pin marker (project-lifecycle) |  |  |
 | a | `open_project` | ui · project | ✗ none | 1 | ✓ 0.4a: scans, records, broadcasts ui-open-project (project-lifecycle) |  |  |
 | a | `pin_project` | session · project | ✗ none | 1 | ✓ 0.4a: flag flips; unknown path refused (project-lifecycle; fixed: claimed success) |  |  |
 | a | `refresh_repo_origin` | session · project | ✗ none | 1 | ✓ 0.4a: follows set-url, broadcasts (project-lifecycle) |  |  |
@@ -388,7 +388,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | ✗ none | 7 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | ✗ none | 8 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |

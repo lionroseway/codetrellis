@@ -38,6 +38,14 @@ and proxies to the SSE server.
   passes through untouched, and the server names the session from it
   (`client-identity.ts`), because through the connector the SSE user-agent
   is always the connector's.
+- It says where the agent works (Phase 32 A1.1): on connect it sends its
+  own working directory (`x-codetrellis-cwd`, percent-encoded) and, inside
+  a CodeTrellis terminal, `CODETRELLIS_HOST_TERMINAL` (`x-codetrellis-host-terminal`)
+  — `mcp/binding-headers.ts`. The server binds the session to the trusted
+  root or worktree that folder falls in (`services/workstream-binding.ts`),
+  asks a client with MCP roots for them when no folder came, and records the
+  terminal only if it exists. The folder chooses a root; it is never read
+  from. Sessions carry `workstreamRoot` and `hostTerminalId` in `/api/sessions`.
 - Built by `npm run build:connector` (its own Vite config, one
   self-contained file). Every `package:*` script and `predev` run it.
 

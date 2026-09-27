@@ -169,7 +169,10 @@ export const SCHEMA_PLANS_CORE = `
     active_plan_uid TEXT REFERENCES plans(uid),
     connected_at INTEGER NOT NULL,
     last_seen INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active'
+    status TEXT NOT NULL DEFAULT 'active',
+    -- The workstream it works in (Phase 32 A1.1): a trusted root or one of
+    -- its worktrees, as the user opened it. Re-derived on every connect.
+    workstream_root TEXT
   );
 
   CREATE TABLE IF NOT EXISTS deviations (

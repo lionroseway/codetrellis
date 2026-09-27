@@ -278,6 +278,14 @@ export interface AgentSessionInfo {
   status: 'active' | 'inactive';
   /** Phase 17.N — declared agent capabilities for skill matching. */
   capabilities?: AgentCapability[];
+  /**
+   * Phase 32 A1.1 — the workstream it works in: the opened project, one of
+   * its worktrees, or an included clone. Null when what it reported matched
+   * none of them.
+   */
+  workstreamRoot?: string | null;
+  /** The CodeTrellis terminal it runs in, when it said so and that terminal exists. */
+  hostTerminalId?: string | null;
 }
 
 // =============================================================================
