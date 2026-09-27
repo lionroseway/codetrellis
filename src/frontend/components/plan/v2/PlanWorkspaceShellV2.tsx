@@ -192,9 +192,6 @@ export function PlanWorkspaceShellV2() {
         </button>
         <CopyRef kind="plan" uid={plan.uid} title={plan.title} />
         <PlanSwitcher />
-        <span className="text-[11px] uppercase tracking-wider text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/30">
-          V2
-        </span>
         <StatusBadge status={plan.status} />
         <div className="flex items-center gap-2 text-[12px] text-foreground-subtle">
           <span>{doneActions}/{actions.length} actions</span>

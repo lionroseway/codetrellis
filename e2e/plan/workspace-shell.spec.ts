@@ -35,11 +35,15 @@ test.describe('Workspace shell', () => {
     await expect(page.getByText(PLAN_TITLE).first()).toBeVisible({ timeout: 5000 });
   });
 
-  test('workspace header shows V2 badge', async ({ page }) => {
+  // It showed a "V2" badge, an internal version name that meant nothing
+  // to anyone reading the plan (Phase 32 §0.5). The header's own reference
+  // chip is what identifies it now.
+  test('workspace header shows the plan reference', async ({ page }) => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    await expect(page.getByText('V2').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('copy-ref-plan').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('V2', { exact: true })).toHaveCount(0);
   });
 
   test('workspace header shows status badge', async ({ page }) => {

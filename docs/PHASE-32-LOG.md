@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | 0.5 UX audit |
-| **Status** | 0.5a merged (#131). 0.5b on the branch: the settings minors m6–m15 fixed |
-| **Next action** | PR 0.5b, merge when green. Then 0.5c: the workspace minors (m1–m5, m16–m23); phone screens with the owner |
+| **Status** | 0.5b merged (#132, harness 626/626). 0.5c on the branch: workspace minors m1–m3, m5, m16–m18 fixed; the rest listed, none above minor |
+| **Next action** | PR 0.5c, merge when green. Then close 0.5 (the phone screens need the owner) and start 0.6 known bugs |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.5b-settings-copy` |
+| **Branch** | `feat/phase-32-0.5c-workspace` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -145,6 +145,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.5c — workspace minors
+
+0.5b merged as [#132](https://github.com/lionroseway/codetrellis/pull/132)
+(full harness 626/626).
+
+Fixed, from the 0.5a list:
+
+- m1 The depth tabs dim where no graph is on screen (Code, Docs, a plan
+  without split view). Dimmed rather than hidden: hiding them would make
+  specs flaky whenever another worker's broadcast opens a plan, and they
+  still set the depth the graph comes back at.
+- m2 The branch chip stays on one line and truncates; the project name
+  keeps up to 14 characters.
+- m3 No "V2" badge; the plan page no longer repeats the header's status
+  and action count. Two specs checked the badge; they check the plan's
+  reference chip now.
+- m5 Item chips use the icon set (lock, shared / local) instead of emoji.
+- m16 The coverage chip says what it counts: "imports linked".
+- m17 (part) The presence pane has one count, and it names what it
+  counts: "1 waiting for you", else "2 cards".
+- m18 The folder picker opens beside the open project.
+
+Still open, all minor: m4 (gaps on the plan and item pages), m17 (a toast
+over the presence reply box), m19 (Symbols looks like Files until a file
+is picked), m20 (a REST-created plan is Local although the default is
+Shared — to check in 0.6), m21 (sparse inspector for a file), m22 (the
+deletion dialog leaves the presence pane undimmed), m23 (four toolbar
+rows at 1024). The 31 phone screens are to be reviewed with the owner.
 
 ### 2026-09-27: 0.5b — settings wording (m6–m15)
 

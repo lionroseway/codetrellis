@@ -169,7 +169,9 @@ export function CoverageChip() {
         aria-haspopup="dialog"
       >
         <ScanSearch size={9} className={hasUnexplained ? 'text-warning' : undefined} />
-        {imports.resolved}/{imports.total} linked
+        {/* The noun says what is counted (Phase 32 §0.5): a bare "1852/3680
+            linked" left it to the tooltip. */}
+        {imports.resolved}/{imports.total} imports linked
       </button>
 
       {open && createPortal(
