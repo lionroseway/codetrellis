@@ -23,6 +23,7 @@ import {
   getUnattributedTokenReports,
 } from '../../services/budget-service';
 import { formatCost } from '../../services/pricing';
+import { pushForBudgetChange } from '../../services/push-notification-service';
 
 /** Round for display without pretending to more precision than we have. */
 function round(n: number | null, places = 1): number | null {
@@ -164,11 +165,17 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const refused = missingPlan(deps, plan_uid);
       if (refused) return refused;
       const id = authorFromExtra(deps, extra);
+      const flaggedBefore = getBudgetReport(plan_uid).flaggedChanges.length;
       const budget = setBudget({
         planUid: plan_uid, minutes, costUsd: cost_usd, exempt,
         by: { actor: id.author, actorType: id.authorType, channel: 'mcp' },
       });
       const n = deps.broadcast('plan-budget-changed', { planUid: plan_uid, budget, flagged: true });
+      // Flagged, so a person away from the desk is told on the paired phone.
+      // (Only when something changed: the same values again record nothing.)
+      if (getBudgetReport(plan_uid).flaggedChanges.length > flaggedBefore) {
+        void pushForBudgetChange(plan_uid, deps.planService.getPlan(plan_uid)?.title ?? plan_uid, id.author).catch(() => {});
+      }
       return {
         content: [{
           type: 'text' as const,

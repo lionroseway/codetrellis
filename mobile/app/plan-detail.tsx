@@ -50,13 +50,34 @@ interface PlanItem {
   description: string | null;
 }
 
+// The desktop's Deviation (shared/types/plan.ts). This read `type`,
+// `summary` and a null `resolution`; the backend sends `deviationType`,
+// `description` and `'pending'`, so no deviation was ever listed here
+// (Phase 32, found adding the budget card).
 interface Deviation {
   id: number;
   planUid: string;
-  type: string;
-  summary: string;
-  resolution: string | null;
-  createdAt: number;
+  deviationType: string;
+  description: string;
+  resolution: 'pending' | 'accepted' | 'reverted' | 'ignored' | string;
+  detectedAt: number;
+}
+
+/** A plan's budget as the phone shows it (mobile-budget.ts, budget.get). */
+interface PhoneBudget {
+  planUid: string;
+  budget: { minutes: number | null; costUsd: number | null; exempt: boolean } | null;
+  spentMinutes: number;
+  spentCostUsd: number | null;
+  flaggedChanges: Array<{ id: number; by: string; byType: string; words: string; at: number }>;
+}
+
+function formatMinutes(mins: number): string {
+  if (mins < 1) return '<1m';
+  if (mins < 60) return `${Math.round(mins)}m`;
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 interface PlanPhase {
@@ -183,6 +204,8 @@ export default function PlanDetailScreen() {
   const [titleDraft, setTitleDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
 
+  const [budget, setBudget] = useState<PhoneBudget | null>(null);
+
   const fetchPlan = useCallback(async () => {
     if (!uid) return;
     try {
@@ -191,6 +214,24 @@ export default function PlanDetailScreen() {
       setData(result);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+    // The budget is its own call: an older desktop without budget.get still
+    // shows the plan, just without the card.
+    try {
+      setBudget(await rpc<PhoneBudget>('budget.get', { planUid: uid }));
+    } catch {
+      setBudget(null);
+    }
+  }, [uid]);
+
+  // An agent may change a plan's budget; the change stays flagged until a
+  // person marks it seen, here or on the desktop (Phase 32 §0.4g).
+  const markBudgetChangeSeen = useCallback(async (changeId: number) => {
+    if (!uid) return;
+    try {
+      setBudget(await rpc<PhoneBudget>('budget.acknowledge', { planUid: uid, changeId }));
+    } catch (err: unknown) {
+      Alert.alert('Could not mark it seen', err instanceof Error ? err.message : String(err));
     }
   }, [uid]);
 
@@ -278,8 +319,8 @@ export default function PlanDetailScreen() {
         await rpc('deviation.resolve', { id, resolution });
         // Refetch to update
         await fetchPlan();
-      } catch {
-        // Silently ignore — the user can pull to refresh
+      } catch (err: unknown) {
+        Alert.alert('Could not resolve', err instanceof Error ? err.message : String(err));
       }
     },
     [fetchPlan],
@@ -317,7 +358,7 @@ export default function PlanDetailScreen() {
   const doneItems = items.filter((i) => i.status === 'done' || i.status === 'completed').length;
   const inProgress = items.filter((i) => i.status === 'in_progress' || i.status === 'assigned').length;
   const pct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0;
-  const pendingDeviations = deviations.filter((d) => !d.resolution);
+  const pendingDeviations = deviations.filter((d) => d.resolution === 'pending');
 
   // Group items by parent (null = top-level)
   const topLevelItems = items
@@ -472,6 +513,43 @@ export default function PlanDetailScreen() {
         )}
       </View>
 
+      {/* Budget: spend against the ceiling, and an agent's changes to review */}
+      {budget && (budget.budget || budget.spentMinutes > 0 || budget.flaggedChanges.length > 0) && (
+        <View style={styles.section} testID="plan-budget">
+          <Text style={styles.sectionTitle}>
+            BUDGET{budget.flaggedChanges.length > 0 ? ` · ${budget.flaggedChanges.length} TO REVIEW` : ''}
+          </Text>
+          <View style={styles.budgetCard}>
+            <Text style={styles.budgetLine}>
+              {formatMinutes(budget.spentMinutes)}
+              {budget.budget?.minutes != null ? ` of ${formatMinutes(budget.budget.minutes)}` : ' spent'}
+              {budget.budget?.exempt ? ' · exempt' : ''}
+            </Text>
+            <Text style={styles.budgetSub}>
+              {budget.spentCostUsd === null
+                ? 'Cost not reported'
+                : `$${budget.spentCostUsd.toFixed(2)}${budget.budget?.costUsd != null ? ` of $${budget.budget.costUsd.toFixed(2)}` : ''}`}
+            </Text>
+          </View>
+          {budget.flaggedChanges.map((c) => (
+            <View key={c.id} style={styles.budgetFlag} testID="plan-budget-flag">
+              <Text style={styles.budgetFlagText}>
+                <Text style={styles.budgetFlagWho}>{c.by}</Text> (agent) {c.words}
+              </Text>
+              <View style={styles.budgetFlagFooter}>
+                <Text style={styles.budgetSub}>
+                  {new Date(c.at).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                </Text>
+                <TouchableOpacity style={styles.budgetSeenBtn} onPress={() => markBudgetChangeSeen(c.id)}>
+                  <Text style={styles.budgetSeenText}>Seen</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+          <Text style={styles.budgetNote}>A ceiling is advisory: it tells agents to stop, it cannot stop them.</Text>
+        </View>
+      )}
+
       {/* Pending deviations */}
       {pendingDeviations.length > 0 && (
         <View style={styles.section}>
@@ -484,21 +562,21 @@ export default function PlanDetailScreen() {
                 <View
                   style={[
                     styles.devTypeBadge,
-                    { backgroundColor: deviationTypeColor(dev.type) + '20' },
+                    { backgroundColor: deviationTypeColor(dev.deviationType) + '20' },
                   ]}
                 >
                   <Text
                     style={[
                       styles.devTypeText,
-                      { color: deviationTypeColor(dev.type) },
+                      { color: deviationTypeColor(dev.deviationType) },
                     ]}
                   >
-                    {dev.type.replace(/_/g, ' ')}
+                    {dev.deviationType.replace(/_/g, ' ')}
                   </Text>
                 </View>
               </View>
               <View style={styles.devSummary}>
-                <Markdown compact>{dev.summary}</Markdown>
+                <Markdown compact>{dev.description}</Markdown>
               </View>
               <View style={styles.devActions}>
                 <TouchableOpacity
@@ -904,6 +982,66 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 10,
+  },
+
+  // Budget card
+  budgetCard: {
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  budgetLine: {
+    color: '#e4e4e7',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  budgetSub: {
+    color: '#71717a',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  budgetFlag: {
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f59e0b40',
+  },
+  budgetFlagText: {
+    color: '#fde68a',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  budgetFlagWho: {
+    fontWeight: '700',
+  },
+  budgetFlagFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  budgetSeenBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#71717a60',
+    backgroundColor: '#71717a15',
+  },
+  budgetSeenText: {
+    color: '#e4e4e7',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  budgetNote: {
+    color: '#52525b',
+    fontSize: 11,
+    marginTop: 2,
   },
 
   // Deviation cards

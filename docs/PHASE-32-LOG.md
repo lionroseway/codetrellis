@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4h Drift, governance, review |
-| **Status** | Started. #124 (0.4g) merged; its full harness was 500 passed, 1 skipped, 0 retries |
-| **Next action** | Bugs 29–33 fixed; domain h complete. Full harness, PR, merge when green; then 0.4i (terminals and audio) |
+| **Stage / step** | Owner request: budget flags on the phone (between 0.4h and 0.4i) |
+| **Status** | #125 (0.4h) merged; its full harness was 519 passed, 1 skipped, 1 flaky (root-caused and fixed in #125) |
+| **Next action** | Built and unit-tested; full harness, PR, merge when green; then 0.4i (terminals and audio) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4h-drift` |
+| **Branch** | `feat/phase-32-mobile-budget` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -43,7 +43,7 @@
 - [x] 0.4e Brief and viewer (#122)
 - [x] 0.4f Channels and presence (#123)
 - [x] 0.4g Agents and MCP (#124)
-- [ ] 0.4h Drift, governance, review
+- [x] 0.4h Drift, governance, review (#125)
 - [ ] 0.4i Terminals and audio
 - [ ] 0.4j Mobile surface
 - [ ] 0.4k Settings, updates, privacy
@@ -141,6 +141,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: budget flags on the phone (owner's request; bug 34)
+
+The owner asked for the 0.4g budget flagging on mobile.
+
+- **`budget.get` / `budget.acknowledge`** in a new `mobile-budget.ts`,
+  shaped like `mobile-approvals.ts`: the plan's ceiling and spend, and the
+  agent changes still flagged, in the desktop chip's own words (the
+  describer moved to `shared/lib/budget-words.ts`, so there is one copy).
+  Marking a change seen needs a pairing confirmed on the desktop, is
+  recorded in the person's name, goes in the device audit and tells the
+  desktop windows. Capabilities `read` / `write`. Unit-tested
+  (`mobile-budget.test.ts`, 5).
+- **Budget card** on the phone's plan screen: spend against the ceiling,
+  each flagged change with a **Seen** button, and the advisory note.
+- **Push** when an agent changes a budget (`pushForBudgetChange`), to a
+  phone that is not connected live, ids only, rate-limited like the rest;
+  the tap opens the plan. Only when something changed. Unit-tested with
+  Expo stubbed (`push-budget.test.ts`).
+- **Bug 34**, found in the same screen: the phone read the wrong
+  deviation fields and filtered out every pending one (`'pending'` is
+  truthy), so it never listed a deviation; a failed resolve was silent.
+  Fixed.
+- Inventory: `budget` RPC methods map to domain g; an unmapped RPC prefix
+  now gets the inventory's "rows with no domain" message instead of a
+  crash in the sort.
+
+Mobile typecheck and lint clean (0 errors). The phone UI is not exercised
+by any automated test yet; that is 0.4j's harness peer path.
 
 ### 2026-09-26: 0.4h — the existing domain-h tests, audited (bug 33)
 

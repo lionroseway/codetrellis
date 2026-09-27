@@ -248,7 +248,9 @@ function render(rows: InventoryRow[], recon: ReturnType<typeof reconcileTools>, 
   for (const s of SURFACES) {
     const rs = rows
       .filter((r) => r.surface === s.key)
-      .sort((a, b) => a.domain.localeCompare(b.domain) || a.id.localeCompare(b.id));
+      // A row with no domain sorts last instead of crashing the sort, so main()
+      // reaches its "Rows with no domain" message and names the row.
+      .sort((a, b) => (a.domain ?? '~').localeCompare(b.domain ?? '~') || a.id.localeCompare(b.id));
     L.push(`## ${s.title} (${rs.length})`);
     L.push('');
     L.push('| Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |');

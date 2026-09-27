@@ -85,6 +85,7 @@ import {
 } from '../server';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
+import { handleBudgetMethod } from './mobile-budget';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -397,6 +398,15 @@ async function routeMethod(
     case 'criterion.decide':
     case 'artefact.preview':
       return handleApprovalMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      });
+
+    // --- A plan's budget, and marking an agent's change seen -----------------
+    case 'budget.get':
+    case 'budget.acknowledge':
+      return handleBudgetMethod(method, params, {
         fingerprint,
         send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
         broadcast,
