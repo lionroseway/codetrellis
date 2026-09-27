@@ -650,27 +650,27 @@ async function routeMethod(
     }
 
     case 'project.close': {
-      const projectPath = requireRecentProject(params);
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       // Mirror the desktop close_project tool so the tab closes there too.
       broadcast('ui-close-project', { path: projectPath });
       return { ok: true };
     }
 
     case 'project.pin': {
-      const projectPath = requireRecentProject(params);
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       const pinned = params.pinned !== false; // default true
       recentProjectsService.setRecentProjectPinned(projectPath, pinned);
       return recentProjectsService.getRecentProject(projectPath);
     }
 
     case 'project.remove': {
-      const projectPath = requireRecentProject(params);
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       recentProjectsService.removeRecentProject(projectPath);
       return { ok: true };
     }
 
     case 'project.alias': {
-      const projectPath = requireRecentProject(params);
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       const alias = requireString(params, 'alias');
       return recentProjectsService.setProjectAlias(projectPath, alias);
     }
@@ -1279,8 +1279,7 @@ async function routeMethod(
  * and an unknown path used to answer `{ ok: true }` or `null` having changed
  * nothing (0.4j).
  */
-function requireRecentProject(params: Record<string, unknown>): string {
-  const projectPath = requireString(params, 'projectPath');
+function requireRecentProject(projectPath: string): string {
   if (!recentProjectsService.getRecentProject(projectPath)) {
     throw new Error(`${projectPath} is not a recent project`);
   }
