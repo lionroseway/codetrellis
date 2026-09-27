@@ -35,7 +35,6 @@ import { DATA_CHANNELS } from '../../shared/types';
 import {
   onChannelMessage,
   onConnectionStateChange,
-  broadcastToAllPeers,
   sendToPeer,
 } from './webrtc-service';
 import * as sessionService from './session-service';
@@ -208,7 +207,17 @@ interface SyncMessage {
 
 let running = false;
 let instanceId = '';
-let lastSnapshot: SyncStateSnapshot | null = null;
+/**
+ * What each peer was last sent, snapshot plus patches — the base its next
+ * patch is computed against.
+ *
+ * This was one value shared by every peer, and `sendFullSnapshot` reset it.
+ * So when a second phone connected, the change between the first phone's
+ * last patch and the second phone's snapshot was never sent to the first,
+ * and every later patch assumed it had been: the first phone showed stale
+ * state until it reconnected (Phase 32 bug 42).
+ */
+const lastSent = new Map<string, SyncStateSnapshot>();
 let patchTimer: ReturnType<typeof setInterval> | null = null;
 let unsubMessage: (() => void) | null = null;
 let unsubConnection: (() => void) | null = null;
@@ -259,7 +268,7 @@ export function stopStateSync(): void {
   if (unsubConnection) { unsubConnection(); unsubConnection = null; }
   if (patchTimer) { clearInterval(patchTimer); patchTimer = null; }
 
-  lastSnapshot = null;
+  lastSent.clear();
   remoteStates.clear();
 
   console.log('[StateSync] Stopped');
@@ -481,29 +490,28 @@ function safeAddresses(): string[] {
 // --- Internals: broadcasting -------------------------------------------------
 
 function broadcastPatchIfChanged(): void {
-  if (!running) return;
+  if (!running || lastSent.size === 0) return;
 
   const current = collectSnapshot();
 
-  if (!lastSnapshot) {
-    // First collection — store but don't broadcast (snapshot sent on connect)
-    lastSnapshot = current;
-    return;
+  for (const [fingerprint, base] of lastSent) {
+    // `ts` changes on every collection. Counted as a change, it sent every
+    // phone a patch ten times a second with nothing in it (bug 42).
+    if (jsonPatchCompare({ ...base, ts: 0 }, { ...current, ts: 0 }).length === 0) continue;
+    const msg: SyncMessage = {
+      type: 'patch',
+      patch: jsonPatchCompare(base, current),
+      ts: Date.now(),
+      sourceInstanceId: instanceId,
+    };
+    if (sendToPeer(fingerprint, DATA_CHANNELS.UI, JSON.stringify(msg))) {
+      lastSent.set(fingerprint, current);
+    } else {
+      // Not delivered, so its base is unknown: it gets a snapshot when it
+      // reconnects, or asks for one.
+      lastSent.delete(fingerprint);
+    }
   }
-
-  // Compare and emit patch
-  const patch = jsonPatchCompare(lastSnapshot, current);
-  if (patch.length === 0) return;
-
-  const msg: SyncMessage = {
-    type: 'patch',
-    patch,
-    ts: Date.now(),
-    sourceInstanceId: instanceId,
-  };
-
-  broadcastToAllPeers(DATA_CHANNELS.UI, JSON.stringify(msg));
-  lastSnapshot = current;
 }
 
 function sendFullSnapshot(fingerprint: string): void {
@@ -518,7 +526,7 @@ function sendFullSnapshot(fingerprint: string): void {
   console.log(`[StateSync] Sending full snapshot to ${fingerprint.slice(0, 12)}… (${payload.length} bytes, plans=${snapshot.plans?.length ?? 0})`);
   const sent = sendToPeer(fingerprint, DATA_CHANNELS.UI, payload);
   console.log(`[StateSync] sendToPeer returned ${sent}`);
-  lastSnapshot = snapshot;
+  if (sent) lastSent.set(fingerprint, snapshot);
 }
 
 // --- Internals: receiving ----------------------------------------------------
@@ -577,6 +585,7 @@ function handleConnectionChange(fingerprint: string, state: PeerConnectionState)
     setTimeout(() => sendFullSnapshot(fingerprint), 3000);
   } else if (state === 'disconnected' || state === 'failed') {
     remoteStates.delete(fingerprint);
+    lastSent.delete(fingerprint);
   }
 }
 

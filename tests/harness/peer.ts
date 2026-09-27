@@ -20,7 +20,9 @@
  * phone.
  */
 
-import { RTCPeerConnection, RTCSessionDescription } from 'werift';
+import {
+  RTCPeerConnection, RTCSessionDescription, CipherContext, SignatureAlgorithm, HashAlgorithm, NamedCurveAlgorithm,
+} from 'werift';
 import { applyPatch, type Operation } from 'fast-json-patch';
 import { computeAnswerMac, deriveConfirmationCode } from '../../mobile/lib/peer-auth';
 import { extractSingleFingerprint } from '../../mobile/lib/sdp-fingerprint';
@@ -48,6 +50,10 @@ export interface Phone {
   ui: ControlMessage[];
   waitForState(pred: (state: any) => boolean, timeoutMs?: number): Promise<any>;
   sendUi(msg: unknown): void;
+  /** Every raw message the desktop sent on `terminal` (binary relay frames), in order. */
+  terminal: Buffer[];
+  /** Send a raw frame on `terminal`, as the phone's terminal screen does. */
+  sendTerminal(frame: Buffer): void;
   /** Set this device's capabilities, as the person does in Settings → Devices. */
   grant(capabilities: string[]): Promise<void>;
   close(): Promise<void>;
@@ -65,10 +71,18 @@ export interface PairOptions {
  */
 export async function pairPhone(client: RestClient, opts: PairOptions = {}): Promise<Phone> {
   const alias = opts.alias ?? 'Harness phone';
-  const pc = new RTCPeerConnection({});
+  // Its own certificate. werift otherwise makes one per PROCESS, so two phones
+  // in one test would present the same fingerprint and be one device to the
+  // desktop — each connection replacing the other.
+  const keys = await CipherContext.createSelfSignedCertificateWithKey(
+    { signature: SignatureAlgorithm.ecdsa_3, hash: HashAlgorithm.sha256_4 },
+    NamedCurveAlgorithm.secp256r1_23,
+  );
+  const pc = new RTCPeerConnection({ dtls: { keys } });
   const channels = new Map<string, any>();
   const control: ControlMessage[] = [];
   const ui: ControlMessage[] = [];
+  const terminal: Buffer[] = [];
   const pending = new Map<string, { resolve: (m: any) => void; timer: ReturnType<typeof setTimeout> }>();
   let state: any = null;
   let seq = 0;
@@ -77,6 +91,10 @@ export async function pairPhone(client: RestClient, opts: PairOptions = {}): Pro
     ch.stateChanged.subscribe((s: string) => { if (s === 'open') channels.set(ch.label, ch); });
     if (ch.readyState === 'open') channels.set(ch.label, ch);
     ch.onMessage.subscribe((data: string | Buffer) => {
+      if (ch.label === 'terminal') {
+        terminal.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
+        return;
+      }
       let msg: any;
       try { msg = JSON.parse(String(data)); } catch { return; }
       if (ch.label === 'control') {
@@ -186,6 +204,12 @@ export async function pairPhone(client: RestClient, opts: PairOptions = {}): Pro
       return state;
     },
     sendUi: (msg) => send('ui', msg),
+    terminal,
+    sendTerminal: (frame) => {
+      const ch = channels.get('terminal');
+      if (!ch) throw new Error('terminal channel is not open');
+      ch.send(frame);
+    },
     async grant(capabilities) {
       const res = await client.raw('PATCH', `/api/peers/devices/${encodeURIComponent(fingerprint)}`, { capabilities });
       if (!res.ok) throw new Error(`grant refused: ${res.status} ${await res.text()}`);

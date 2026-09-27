@@ -4418,6 +4418,7 @@ app.post('/api/peers/remote-terminals/:fingerprint/:terminalId/write', (req, res
     const { data } = req.body as { data?: string };
     if (!data) { res.status(400).json({ error: 'data required' }); return; }
     const sent = peerService.writeRemoteTerminal(req.params.fingerprint, req.params.terminalId, data);
+    if (!sent) { res.status(404).json({ error: 'No such remote terminal on a connected peer' }); return; }
     res.json({ sent });
   } catch (err) {
     res.status(500).json({ error: String(err) });
