@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4k Settings, updates, privacy |
-| **Status** | 0.4k complete on the branch: the three decisions, bugs 43–45, domain k's behaviour column (all but Appearance and Sync), `POST /api/updates/check` tested |
-| **Next action** | Full harness running; then PR into `feat/phase-32`, merge when green, then 0.4l (system docs and intake). Waiting on the owner: the settings-escalation finding |
+| **Stage / step** | 0.4l System docs and intake |
+| **Status** | Started. #129 (0.4k, bugs 43–45) merged; its full harness at `db67143` was 611 passed, 0 retries |
+| **Next action** | Audit domain l: system docs (`read_system_doc` and `POST /api/system-docs/:uid/verify` are the last two untested items), freshness, external intake, ticket sync state; also REST `PUT /api/system-docs/:uid` takes author fields from the body. Waiting on the owner: the settings-escalation finding (private register) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4k-settings` |
+| **Branch** | `feat/phase-32-0.4l-sysdocs` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -46,7 +46,7 @@
 - [x] 0.4h Drift, governance, review (#125)
 - [x] 0.4i Terminals and audio (#127)
 - [x] 0.4j Mobile surface (#128)
-- [ ] 0.4k Settings, updates, privacy
+- [x] 0.4k Settings, updates, privacy (#129)
 - [ ] 0.4l System docs and intake
 - [ ] 0.5 UX audit
 - [ ] 0.6 Known bugs 4–9
@@ -180,6 +180,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   build and both harnesses. Owner's decision.
 - Not verified: the Appearance and Sync sections' behaviour, and saving the
   data-dir override. To 0.5.
+- Full harness at `db67143`: 611 passed, 0 retries. CI green; merged as #129.
 
 ### 2026-09-27: 0.4k — the owner's three decisions, built (bug 43)
 
