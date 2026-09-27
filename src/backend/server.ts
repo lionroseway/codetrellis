@@ -4450,6 +4450,7 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
     const sent = peerService.respondToInputRequest(req.params.requestId, response);
+    if (!sent) { res.status(404).json({ error: 'No pending input request with that id' }); return; }
     res.json({ sent });
   } catch (err) {
     res.status(500).json({ error: String(err) });

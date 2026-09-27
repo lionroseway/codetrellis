@@ -650,27 +650,27 @@ async function routeMethod(
     }
 
     case 'project.close': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(params);
       // Mirror the desktop close_project tool so the tab closes there too.
       broadcast('ui-close-project', { path: projectPath });
       return { ok: true };
     }
 
     case 'project.pin': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(params);
       const pinned = params.pinned !== false; // default true
       recentProjectsService.setRecentProjectPinned(projectPath, pinned);
       return recentProjectsService.getRecentProject(projectPath);
     }
 
     case 'project.remove': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(params);
       recentProjectsService.removeRecentProject(projectPath);
       return { ok: true };
     }
 
     case 'project.alias': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(params);
       const alias = requireString(params, 'alias');
       return recentProjectsService.setProjectAlias(projectPath, alias);
     }
@@ -977,7 +977,11 @@ async function routeMethod(
     case 'input.respond': {
       const requestId = requireString(params, 'requestId');
       const response = requireString(params, 'response');
-      remoteInteractionService.respondToInputRequest(requestId, response);
+      // An answer that went nowhere is not "ok": the person would think the
+      // agent had its reply (0.4j).
+      if (!remoteInteractionService.respondToInputRequest(requestId, response)) {
+        throw new Error(`No pending input request ${requestId}`);
+      }
       return { ok: true };
     }
 
@@ -1248,6 +1252,19 @@ async function routeMethod(
 }
 
 // --- Helpers -----------------------------------------------------------------
+
+/**
+ * A path on the recent-projects list, or throw. These four act on the list,
+ * and an unknown path used to answer `{ ok: true }` or `null` having changed
+ * nothing (0.4j).
+ */
+function requireRecentProject(params: Record<string, unknown>): string {
+  const projectPath = requireString(params, 'projectPath');
+  if (!recentProjectsService.getRecentProject(projectPath)) {
+    throw new Error(`${projectPath} is not a recent project`);
+  }
+  return projectPath;
+}
 
 /** A plan uid that names a plan, or throw. */
 function requirePlan(params: Record<string, unknown>, key: string): string {
