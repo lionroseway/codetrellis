@@ -119,7 +119,9 @@ test.describe.serial('Settings', () => {
 
       const tail = await client.raw('GET', '/api/logs/tail?maxBytes=100');
       expect(tail.ok).toBe(true);
-      expect(await tail.json()).toMatchObject({ path: where.logFile, content: expect.any(String) });
+      // The harness runs without the file logger, and the tail says so, so the
+      // panel can tell "not writing a file" from "nothing logged yet" (0.5).
+      expect(await tail.json()).toMatchObject({ path: where.logFile, content: expect.any(String), writing: false });
       expect((await client.raw('GET', '/api/logs/tail?maxBytes=abc')).status).toBe(400);
       expect((await client.raw('GET', '/api/logs/tail?maxBytes=-5')).status).toBe(400);
     } finally {

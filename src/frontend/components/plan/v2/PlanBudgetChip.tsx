@@ -300,20 +300,31 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
           <div className="mt-2.5 pt-2 border-t border-white/[0.06]">
             <div className="text-foreground-subtle mb-1.5">Ceiling</div>
             <div className="flex items-center gap-2">
-              <input
-                value={minutesDraft}
-                onChange={(e) => setMinutesDraft(e.target.value)}
-                inputMode="numeric"
-                placeholder="minutes"
-                className="w-full bg-black/25 border border-white/[0.08] rounded px-2 py-1 text-[11.5px] text-foreground placeholder:text-foreground-subtle/50 focus:outline-none focus:border-accent/40"
-              />
-              <input
-                value={costDraft}
-                onChange={(e) => setCostDraft(e.target.value)}
-                inputMode="decimal"
-                placeholder="USD"
-                className="w-full bg-black/25 border border-white/[0.08] rounded px-2 py-1 text-[11.5px] text-foreground placeholder:text-foreground-subtle/50 focus:outline-none focus:border-accent/40"
-              />
+              {/* Each box keeps its unit once it has a value; the placeholder
+                  was the only label, so a saved "240" read as a bare number
+                  beside one marked USD (Phase 32 §0.5). */}
+              <label className="flex w-full items-center gap-1 bg-black/25 border border-white/[0.08] rounded px-2 py-1 focus-within:border-accent/40">
+                <input
+                  value={minutesDraft}
+                  onChange={(e) => setMinutesDraft(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="none"
+                  aria-label="Time ceiling in minutes"
+                  className="w-full min-w-0 bg-transparent text-[11.5px] text-foreground placeholder:text-foreground-subtle/50 focus:outline-none"
+                />
+                <span className="text-foreground-subtle">min</span>
+              </label>
+              <label className="flex w-full items-center gap-1 bg-black/25 border border-white/[0.08] rounded px-2 py-1 focus-within:border-accent/40">
+                <input
+                  value={costDraft}
+                  onChange={(e) => setCostDraft(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="none"
+                  aria-label="Cost ceiling in US dollars"
+                  className="w-full min-w-0 bg-transparent text-[11.5px] text-foreground placeholder:text-foreground-subtle/50 focus:outline-none"
+                />
+                <span className="text-foreground-subtle">USD</span>
+              </label>
               <button
                 onClick={save}
                 disabled={saving}

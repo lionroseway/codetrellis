@@ -113,7 +113,7 @@ import * as terminalService from './services/terminal-service';
 import * as powerService from './services/power-service';
 import * as terminalHistoryService from './services/terminal-history-service';
 import * as planImportService from './services/plan-import-service';
-import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
+import { tailLog, getCurrentLogPath, getLogDir, isWritingLogFile } from './services/logger';
 import {
   getUpdateState,
   checkForUpdate,
@@ -3698,6 +3698,8 @@ app.get('/api/logs/tail', (req, res) => {
   res.json({
     path: getCurrentLogPath(),
     content: tailLog(maxBytes),
+    // An empty tail means two different things; the panel says which.
+    writing: isWritingLogFile(),
   });
 });
 

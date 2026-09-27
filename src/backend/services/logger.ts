@@ -105,6 +105,11 @@ export function getCurrentLogPath(): string {
   return currentLogPath || path.join(logDir(), `${ymd(new Date())}.log`);
 }
 
+/** Whether this run writes a log file at all (the packaged app does; dev, web and the harness do not). */
+export function isWritingLogFile(): boolean {
+  return installed;
+}
+
 export function getLogDir(): string {
   return logDir();
 }

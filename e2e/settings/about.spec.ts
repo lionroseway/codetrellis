@@ -40,14 +40,16 @@ test.describe('Settings about', () => {
     await page.getByRole('button', { name: 'About' }).click();
     await page.waitForTimeout(300);
 
-    const copyBtn = page.locator('button:has-text("Copy")').first();
+    // Scoped to the dialog: unscoped, the first "Copy" button was the branch
+    // chip whenever the checked-out branch's name contained "copy".
+    const copyBtn = page.getByRole('dialog', { name: 'Settings' }).locator('button:has-text("Copy")').first();
     await expect(copyBtn).toBeVisible({ timeout: 3000 });
 
     await copyBtn.click();
     await page.waitForTimeout(500);
 
     // Button text should change to "Copied"
-    await expect(page.locator('button:has-text("Copied")').first()).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog', { name: 'Settings' }).locator('button:has-text("Copied")').first()).toBeVisible({ timeout: 3000 });
   });
 
   test('"Open Updates" button is visible', async ({ page }) => {

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
+import { explainSaveError } from '../../lib/settings-words';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
@@ -54,6 +55,13 @@ interface PeerAuditRow {
  * `services/peer-capabilities.ts` — deliberately without `terminal` or
  * `settings`.
  */
+/** Why the desktop is being kept awake, in words (Settings → Power). */
+const POWER_REASON_WORDS: Record<string, string> = {
+  'mobile-connected': 'a paired phone is connected',
+  'agent-active': 'an agent is working',
+  always: 'you asked for always',
+};
+
 /** The renderer's own platform, for advice that only applies on one. */
 const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
 
@@ -210,7 +218,7 @@ export function SettingsModal({
       // A refused save used to show nothing: the control simply did not
       // take, and nothing said why (Phase 32 §0.4k).
       const body = await res.json().catch(() => null) as { error?: string } | null;
-      setSaveError(body?.error ?? `The change was not saved (${res.status})`);
+      setSaveError(body?.error ? explainSaveError(body.error) : `The change was not saved (${res.status})`);
     }
   };
 
@@ -226,7 +234,7 @@ export function SettingsModal({
   return createPortal(
     <Backdrop onClose={onClose}>
       <div
-        className="w-full max-w-3xl max-h-[85vh] flex rounded-2xl border border-white/[0.08] bg-[#0b1020] shadow-[0_24px_80px_rgba(0,0,0,0.6)] overflow-hidden"
+        className="w-full max-w-3xl h-[min(640px,85vh)] flex rounded-2xl border border-white/[0.08] bg-[#0b1020] shadow-[0_24px_80px_rgba(0,0,0,0.6)] overflow-hidden [color-scheme:dark]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Sidebar */}
@@ -1073,8 +1081,8 @@ function DataSection({
         />
       </Field>
 
-      <p className="text-[10px] text-amber-200/80">
-        ⚠️ Changes take effect on next server restart. The current session keeps using the previous path.
+      <p className="text-[10px] text-foreground-subtle">
+        Takes effect when CodeTrellis restarts; until then it keeps using the current directory.
       </p>
     </>
   );
@@ -1707,7 +1715,10 @@ function LogsSection() {
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
-        setContent(data.content || '(log file empty)');
+        setContent(data.content
+          || (data.writing === false
+            ? 'This run is not writing a log file: development and browser builds log to the terminal that started them.'
+            : 'Nothing logged yet today.'));
         setLogFile(data.path || '');
         setLoading(false);
       })
@@ -1778,7 +1789,7 @@ function TelemetrySection() {
       </p>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
         Everything stays on your machine. Your project's plans live in your repo (committed via git, your transport).
-        Your DB lives at <code className="font-mono">~/.codetrellis/data.db</code>. The MCP server binds to <code className="font-mono">127.0.0.1</code> only — no remote agents reach it.
+        Its database is in this app's data directory (Settings → Data). The MCP server binds to <code className="font-mono">127.0.0.1</code> only — no remote agents reach it.
       </p>
       <div className="text-[11px] text-foreground-muted leading-relaxed" data-testid="telemetry-outbound">
         <p>What does leave this machine, and only when:</p>
@@ -2138,8 +2149,8 @@ function UpdatesSection({
       <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-1">
         CodeTrellis checks <span className="text-foreground-muted">codetrellis.dev</span> for new
         builds, and falls back to the GitHub Releases feed if the website's API is unreachable.
-        Updates open in your browser — install the new DMG / EXE / AppImage to upgrade.
-        Auto-download will land once builds are code-signed.
+        A download made here is checked against the release's signed checksum list before it
+        is offered to you; it does not install itself.
       </p>
     </>
   );
@@ -2217,7 +2228,7 @@ function PowerSection({
   return (
     <>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
-        Keep this desktop awake based on what you&apos;re doing. Toggles are independent — the blocker engages on the union of what&apos;s checked, then disengaged by the battery safety net if that&apos;s on.
+        Keep this desktop from sleeping while you need it. Any one of the ticked reasons is enough; on battery, the safety net below can override them.
       </p>
 
       <Field label="Keep awake when…">
@@ -2226,7 +2237,7 @@ function PowerSection({
             checked={triggers.whileMobileConnected}
             onChange={(v) => patchTriggers({ whileMobileConnected: v })}
             label="A mobile companion is connected"
-            sub="Holds the assertion while the paired mobile app's heartbeat is fresh."
+            sub="While the paired phone has checked in recently."
           />
           <Toggle
             checked={triggers.whileAgentActive}
@@ -2238,7 +2249,7 @@ function PowerSection({
             checked={triggers.always}
             onChange={(v) => patchTriggers({ always: v })}
             label="Always (while CodeTrellis runs)"
-            sub="Blunt — holds the assertion the entire time the app is open."
+            sub="The whole time the app is open."
           />
         </div>
       </Field>
@@ -2269,17 +2280,17 @@ function PowerSection({
       <div className="mt-3 rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10.5px] text-foreground-subtle">
         {status ? (
           <>
-            <span className="font-mono text-foreground-muted">Status:</span>{' '}
-            {status.shouldBlock ? (
+            {status.platform === 'web' ? (
+              <span>Keeping the machine awake needs the desktop app; this browser build cannot.</span>
+            ) : status.shouldBlock ? (
               <>
-                <span className="text-emerald-300">awake</span>
-                {status.reason && <> ({status.reason})</>}
+                <span className="text-emerald-300">Keeping this desktop awake</span>
+                {status.reason && <> — {POWER_REASON_WORDS[status.reason] ?? status.reason}</>}
               </>
             ) : (
-              <span>idle</span>
+              <span>Sleep allowed: none of the reasons above applies right now.</span>
             )}
-            {status.ac !== 'unknown' && <> · AC: <span className="font-mono">{status.ac}</span></>}
-            {' · '}<span className="font-mono">{status.platform}</span>
+            {status.ac !== 'unknown' && <> · {status.ac === 'plugged' ? 'on mains power' : 'on battery'}</>}
           </>
         ) : (
           <>Loading current status…</>
