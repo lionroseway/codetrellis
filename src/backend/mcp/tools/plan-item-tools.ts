@@ -405,6 +405,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         args.agent_type ?? 'mcp',
         args.model,
         capabilities,
+        deps.sessionId,
+        id,
       );
       if (!result.ok) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
