@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4j Mobile surface |
-| **Status** | 0.4j complete on the branch: harness phone peer, 62 tests over the peer path, bugs 36–42 fixed, domain j's behaviour column filled, RPC untested list empty |
-| **Next action** | Full harness running; then PR into `feat/phase-32`, merge when green, then 0.4k (settings, updates, privacy) |
+| **Stage / step** | 0.4k Settings, updates, privacy |
+| **Status** | 0.4k complete on the branch: the three decisions, bugs 43–45, domain k's behaviour column (all but Appearance and Sync), `POST /api/updates/check` tested |
+| **Next action** | Full harness running; then PR into `feat/phase-32`, merge when green, then 0.4l (system docs and intake). Waiting on the owner: the settings-escalation finding |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4j-mobile` |
+| **Branch** | `feat/phase-32-0.4k-settings` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -45,7 +45,7 @@
 - [x] 0.4g Agents and MCP (#124)
 - [x] 0.4h Drift, governance, review (#125)
 - [x] 0.4i Terminals and audio (#127)
-- [ ] 0.4j Mobile surface
+- [x] 0.4j Mobile surface (#128)
 - [ ] 0.4k Settings, updates, privacy
 - [ ] 0.4l System docs and intake
 - [ ] 0.5 UX audit
@@ -136,11 +136,81 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Cloud-environment CLI is follow-on work, specified in `docs/FOLLOW-ON-CLOUD-ENVIRONMENTS.md`, not part of Phase 32 | Widens Phase 32's one-machine scope |
 | 2026-09-26 | Agents are co-workers: they may add and (where policy allows) close criteria. Every criterion and decision is tagged with who did it, taken from how the call arrived — MCP = that agent, paired phone = the person on that device, the app window (Electron IPC) = the person in the app, plain HTTP = "local API, unverified". Policies unchanged; the sign-off pack shows agent and unverified decisions separately (0.4d) | Owner's decision. Honest provenance over blocking agents |
 | 2026-09-26 | Agents may change a plan's budget; each change is recorded (who, how it arrived, before and after) and an agent's change is flagged on the budget chip until a person marks it seen (0.4g) | Owner's decision ("budget changes can be flagged"). Same stance as 0.4d: tag, don't block |
+| 2026-09-27 | Microphone sharing to paired devices needs the `capture` grant per device, as terminals need `terminal`; the `shareAudio` switch still has to be on (0.4k) | Owner's decision. The switch alone shared the microphone with every connected device |
+| 2026-09-27 | An answer to a peer agent's question for a person carries who gave it (person or agent, which one, how it arrived), shown where it was asked; agents may still answer (0.4k) | Owner's decision. Same stance as 0.4d: tag, don't block |
+| 2026-09-27 | Freeze changes are recorded (who, how, before and after) and an agent's change is flagged on the freeze indicator, desktop and phone, until a person marks it seen (0.4k) | Owner's decision. Same as budgets (0.4g) |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-27: 0.4k — settings, updates, spell-check, logs (bugs 44–45)
+
+- **The harness stopped phoning home.** Every harness backend ran the
+  boot-time update check against codetrellis.dev and GitHub — ~600
+  requests to the internet per run, and "no update available" held only
+  while no newer release existed. Harness backends now start with the
+  automatic check off and both sources on a closed local port
+  (`CODETRELLIS_GITHUB_API` joins `CODETRELLIS_OTA_URL`); `setupHarness`
+  takes `env` and `settings`.
+- **`updates.test.ts` (5)** against a stand-in server: the check at start
+  names platform and version; off means no request at all, while a
+  person's own check still goes out; a release with nothing for this
+  platform is not offered; website down → GitHub, both down → an error with
+  the last good answer kept; downloads only over https from the releases
+  repo, nothing fetched otherwise. **Bug 44:** after one refused download
+  every later one returned the same error until restart.
+- **`settings-surface.test.ts` (5):** partial saves keep siblings, the
+  first-run check, a restart returns what was saved, logs path and tail.
+  **Bug 45:** writes checked almost nothing while loading checked
+  everything; now every field is checked (400 with the reason) and the
+  modal says "Not saved: …".
+- **Browser:** `e2e/settings/sections-save.spec.ts` changes one control in
+  each saving section and reads it back (serial: it changes shared
+  settings). All 43 settings specs pass.
+- **Spell-check:** `tools/spellcheck-check` run here too — bundled
+  dictionaries load under en_US, en_GB and fr_FR (French falls back to the
+  English bundle), nothing downloaded; the control run without the bundle
+  does try to download.
+- **Security finding** raised with the owner (private register): the
+  capability token opens the REST API as well as MCP, and every agent can
+  read it, so an agent can widen its own MCP grants through
+  `PUT /api/settings`. Not fixed in passing — the obvious fix breaks the web
+  build and both harnesses. Owner's decision.
+- Not verified: the Appearance and Sync sections' behaviour, and saving the
+  data-dir override. To 0.5.
+
+### 2026-09-27: 0.4k — the owner's three decisions, built (bug 43)
+
+- **Shared audio needs `capture`.** The audio relay (status, chunks,
+  stopped) serves only a confirmed pairing holding `capture`, with
+  "Share audio capture" still on; Settings → Devices can grant it.
+  Correction to what was reported to the owner: nothing calls the
+  chunk forwarder, so today only the capture status crossed — the
+  microphone itself was never forwarded. Gated anyway, so wiring it later
+  cannot skip the grant. Both raw relays now ask one helper
+  (`peer-grants.ts`), and a grant made while connected takes effect at
+  once (the terminal list, the audio state) instead of at the next
+  reconnect. `phone-grants.test.ts` (4), failing-first.
+- **Answers are tagged.** `respond_remote_input`, the phone's
+  `input.respond` and the desktop's route send
+  `respondedBy { actor, actorType, channel }`; the asking side passes it on,
+  an untagged answer from an older peer as unknown. No screen shows it yet:
+  the relay that would send these questions is unfinished (bug 8), so the
+  tag is on the wire and in the event, ready for it.
+- **Bug 43**, found writing that test: every agent was recorded as
+  "agent" (`authorFromExtra` never found the SSE session). Fixed; the 0.4g
+  budget test now names the agent.
+- **Freeze changes flagged.** `project_freeze_changes` records every change
+  with who and how; an agent's is flagged. The freeze bar shows flags with
+  Seen, stays up after an agent lifts the freeze, and updates live; the
+  phone's plan screen has a freeze card (`freeze.get` /
+  `freeze.acknowledge`). `exempt_plan_from_freeze` refuses an unknown plan.
+  A lifted freeze with no reason is stripped from the config file, which
+  first hid the lift from the record. `freeze-flags.test.ts` (5), a browser
+  test in `mcp-ui-tools.spec`, `freeze-words.test.ts` (5). No push for
+  freeze changes (not part of the decision; budgets have one).
 
 ### 2026-09-27: 0.4j — the mobile surface over a real peer (bugs 36–42)
 
@@ -191,6 +261,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 - **Not verified here:** the 31 phone screens and the desktop's two
   pairing components. The phone UI needs a device or simulator; they go
   to 0.5 with the owner on a device.
+- Full harness at `ec235c5`: 592 passed, 0 retries (the first run, at
+  `9a0a6a5`, had one failure: the phase-10 test pinning the old
+  `respond_remote_input` contract). CI green; merged as #128.
 - For the owner: remote audio is forwarded to every connected peer when
   `shareAudio` is on (off by default), with no per-device `capture`
   grant; and `respond_remote_input` lets an agent answer a question a

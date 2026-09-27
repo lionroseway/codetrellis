@@ -90,6 +90,10 @@ export interface Harness {
 }
 
 export interface SetupHarnessOptions {
+  /** Extra environment for the backend process. */
+  env?: Record<string, string>;
+  /** Settings seeded before boot (see `StartBackendOptions.settings`). */
+  settings?: Record<string, unknown>;
   /** Pipe backend stdout/stderr to the parent. Default: false. */
   verbose?: boolean;
   /** Override the backend ready timeout. Default: 30s. */
@@ -115,6 +119,8 @@ export async function setupHarness(
       dataDir: fixture.dataDir,
       verbose: opts.verbose,
       readyTimeoutMs: opts.readyTimeoutMs,
+      env: opts.env,
+      settings: opts.settings,
     });
   } catch (err) {
     // Backend failed to come up — cleanup the fixture so we don't

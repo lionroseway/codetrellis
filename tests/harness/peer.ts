@@ -52,6 +52,8 @@ export interface Phone {
   sendUi(msg: unknown): void;
   /** Every raw message the desktop sent on `terminal` (binary relay frames), in order. */
   terminal: Buffer[];
+  /** Every raw message the desktop sent on `audio` (binary relay frames), in order. */
+  audio: Buffer[];
   /** Send a raw frame on `terminal`, as the phone's terminal screen does. */
   sendTerminal(frame: Buffer): void;
   /** Set this device's capabilities, as the person does in Settings → Devices. */
@@ -83,6 +85,7 @@ export async function pairPhone(client: RestClient, opts: PairOptions = {}): Pro
   const control: ControlMessage[] = [];
   const ui: ControlMessage[] = [];
   const terminal: Buffer[] = [];
+  const audio: Buffer[] = [];
   const pending = new Map<string, { resolve: (m: any) => void; timer: ReturnType<typeof setTimeout> }>();
   let state: any = null;
   let seq = 0;
@@ -91,8 +94,8 @@ export async function pairPhone(client: RestClient, opts: PairOptions = {}): Pro
     ch.stateChanged.subscribe((s: string) => { if (s === 'open') channels.set(ch.label, ch); });
     if (ch.readyState === 'open') channels.set(ch.label, ch);
     ch.onMessage.subscribe((data: string | Buffer) => {
-      if (ch.label === 'terminal') {
-        terminal.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
+      if (ch.label === 'terminal' || ch.label === 'audio') {
+        (ch.label === 'terminal' ? terminal : audio).push(Buffer.isBuffer(data) ? data : Buffer.from(data));
         return;
       }
       let msg: any;
@@ -205,6 +208,7 @@ export async function pairPhone(client: RestClient, opts: PairOptions = {}): Pro
     },
     sendUi: (msg) => send('ui', msg),
     terminal,
+    audio,
     sendTerminal: (frame) => {
       const ch = channels.get('terminal');
       if (!ch) throw new Error('terminal channel is not open');

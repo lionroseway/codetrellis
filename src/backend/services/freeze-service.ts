@@ -19,6 +19,26 @@ import {
 } from './project-config-service';
 
 import type { FreezeConfig } from '../../shared/types';
+import { getDb } from './database';
+import { markDirty } from './persistence';
+import { isFlaggedActor, type BudgetChangeBy } from './budget-service';
+import type { FreezeSettings } from '../../shared/lib/freeze-words';
+
+/** Who changed a freeze, and how the change arrived — as for budgets (0.4g). */
+export type FreezeChangeBy = BudgetChangeBy;
+
+export interface FreezeChange extends FreezeChangeBy {
+  id: number;
+  projectPath: string;
+  /** Null when the project had never been frozen. */
+  before: FreezeSettings | null;
+  after: FreezeSettings;
+  at: number;
+  /** An agent's change, not yet acknowledged by a person. */
+  flagged: boolean;
+  acknowledgedAt: number | null;
+  acknowledgedBy: string | null;
+}
 
 export interface FreezeStatus {
   active: boolean;
@@ -31,6 +51,12 @@ export interface FreezeStatus {
   elapsedMs: number | null;
   /** How long until the freeze expires, in ms. Null when indefinite or inactive. */
   remainingMs: number | null;
+  /**
+   * An agent's changes to the freeze that no person has acknowledged, oldest
+   * first (owner's decision, Phase 32 §0.4k). Present whether or not the
+   * freeze is active: an agent lifting it is the change most worth seeing.
+   */
+  flaggedChanges: FreezeChange[];
 }
 
 // --- Public API --------------------------------------------------------------
@@ -41,6 +67,10 @@ export interface FreezeStatus {
  * inactive (but not cleared from config — the team can see it happened).
  */
 export function getFreezeStatus(projectRoot: string): FreezeStatus {
+  return { ...freezeState(projectRoot), flaggedChanges: flaggedFreezeChanges(projectRoot) };
+}
+
+function freezeState(projectRoot: string): Omit<FreezeStatus, 'flaggedChanges'> {
   const cfg = getProjectConfig(projectRoot);
   const freeze = (cfg as any).freeze as FreezeConfig | undefined;
 
@@ -87,7 +117,10 @@ export function setFreeze(
     until?: string | null;
     allowedPlanUids?: string[];
   },
+  /** Who is changing it. Recorded with the settings before and after. */
+  by?: FreezeChangeBy,
 ): FreezeStatus {
+  const before = currentSettings(projectRoot);
   const patch: any = {
     freeze: {
       active: opts.active,
@@ -106,6 +139,7 @@ export function setFreeze(
   }
 
   updateProjectConfig(projectRoot, patch);
+  recordFreezeChange(projectRoot, before, by);
   return getFreezeStatus(projectRoot);
 }
 
@@ -124,7 +158,8 @@ export function isPlanAllowedDuringFreeze(projectRoot: string, planUid: string):
  * Add a plan UID to the freeze exemption list without changing the
  * active state.
  */
-export function exemptPlanFromFreeze(projectRoot: string, planUid: string): FreezeStatus {
+export function exemptPlanFromFreeze(projectRoot: string, planUid: string, by?: FreezeChangeBy): FreezeStatus {
+  const before = currentSettings(projectRoot);
   const cfg = getProjectConfig(projectRoot);
   const freeze = (cfg as any).freeze as FreezeConfig | undefined;
   const current = freeze?.allowedPlanUids ?? [];
@@ -141,5 +176,101 @@ export function exemptPlanFromFreeze(projectRoot: string, planUid: string): Free
   };
 
   updateProjectConfig(projectRoot, patch);
+  recordFreezeChange(projectRoot, before, by);
   return getFreezeStatus(projectRoot);
+}
+
+// --- Who changed it (owner's decision, Phase 32 §0.4k) -----------------------
+
+/** The settings a person cares about, as stored — null when never frozen. */
+function currentSettings(projectRoot: string): FreezeSettings | null {
+  const freeze = (getProjectConfig(projectRoot) as any).freeze as FreezeConfig | undefined;
+  if (!freeze) return null;
+  return {
+    active: Boolean(freeze.active),
+    reason: freeze.reason ?? null,
+    until: freeze.until ?? null,
+    allowedPlanUids: [...(freeze.allowedPlanUids ?? [])],
+  };
+}
+
+const sameSettings = (a: FreezeSettings | null, b: FreezeSettings | null): boolean =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Not frozen. A lifted freeze with no reason is stripped from the config
+ * file entirely, so "no freeze section" means this, not "nothing happened".
+ */
+const NOT_FROZEN: FreezeSettings = { active: false, reason: null, until: null, allowedPlanUids: [] };
+
+/** Record a change, when there was one and we know who made it. */
+function recordFreezeChange(projectRoot: string, before: FreezeSettings | null, by?: FreezeChangeBy): void {
+  if (!by) return;
+  const after = currentSettings(projectRoot) ?? NOT_FROZEN;
+  if (sameSettings(before ?? NOT_FROZEN, after)) return;
+  try {
+    getDb().run(
+      `INSERT INTO project_freeze_changes (project_path, actor, actor_type, channel, before_json, after_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [projectRoot, by.actor, by.actorType, by.channel, before ? JSON.stringify(before) : null, JSON.stringify(after), Date.now()],
+    );
+    markDirty();
+  } catch (err) {
+    console.warn('[Freeze] could not record the change:', err);
+  }
+}
+
+const CHANGE_COLUMNS = 'id, project_path, actor, actor_type, channel, before_json, after_json, created_at, acknowledged_at, acknowledged_by';
+
+function toChange(r: unknown[]): FreezeChange {
+  const actorType = r[3] as string;
+  const acknowledgedAt = (r[8] as number | null) ?? null;
+  return {
+    id: r[0] as number,
+    projectPath: r[1] as string,
+    actor: r[2] as string,
+    actorType,
+    channel: r[4] as FreezeChange['channel'],
+    before: r[5] ? JSON.parse(r[5] as string) : null,
+    after: JSON.parse(r[6] as string),
+    at: r[7] as number,
+    flagged: isFlaggedActor(actorType) && acknowledgedAt === null,
+    acknowledgedAt,
+    acknowledgedBy: (r[9] as string | null) ?? null,
+  };
+}
+
+/** Every recorded change to a project's freeze, newest first. */
+export function listFreezeChanges(projectRoot: string, limit = 50): FreezeChange[] {
+  try {
+    const res = getDb().exec(
+      `SELECT ${CHANGE_COLUMNS} FROM project_freeze_changes WHERE project_path = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [projectRoot, limit],
+    );
+    return (res[0]?.values ?? []).map(toChange);
+  } catch {
+    return [];
+  }
+}
+
+/** An agent's changes no person has acknowledged, oldest first. */
+export function flaggedFreezeChanges(projectRoot: string): FreezeChange[] {
+  return listFreezeChanges(projectRoot, 500).filter((c) => c.flagged).reverse();
+}
+
+/**
+ * A person has seen an agent's change. Returns the change, or null when the
+ * project has no such change. Acknowledging again changes nothing.
+ */
+export function acknowledgeFreezeChange(projectRoot: string, id: number, by: string): FreezeChange | null {
+  const db = getDb();
+  db.run(
+    `UPDATE project_freeze_changes SET acknowledged_at = ?, acknowledged_by = ?
+     WHERE project_path = ? AND id = ? AND acknowledged_at IS NULL`,
+    [Date.now(), by, projectRoot, id],
+  );
+  markDirty();
+  const res = db.exec(`SELECT ${CHANGE_COLUMNS} FROM project_freeze_changes WHERE project_path = ? AND id = ?`, [projectRoot, id]);
+  const row = res[0]?.values[0];
+  return row ? toChange(row) : null;
 }

@@ -165,7 +165,7 @@ const RPC_DOMAINS: Record<string, DomainKey> = {
   artefact: 'e',
   channel: 'f', input: 'f',
   budget: 'g',
-  deviation: 'h', review: 'h',
+  deviation: 'h', review: 'h', freeze: 'h',
   terminal: 'i',
   settings: 'k', power: 'k',
   sysdoc: 'l',

@@ -29,8 +29,8 @@ import {
   getPeerConnections,
   sendToPeer,
 } from './webrtc-service';
-import { getPairedDevice } from './paired-device-service';
-import { DEFAULT_GRANTS } from './peer-capabilities';
+import { getPairedDevice, onDeviceGrantsChanged } from './paired-device-service';
+import { peerHolds } from './peer-grants';
 import { recordPeerAudit } from './peer-audit-service';
 import {
   listTerminals,
@@ -81,6 +81,7 @@ let unsubMessage: (() => void) | null = null;
 let unsubConnection: (() => void) | null = null;
 let unsubTerminalData: (() => void) | null = null;
 let unsubTerminalExit: (() => void) | null = null;
+let unsubGrants: (() => void) | null = null;
 
 /**
  * Remote terminals received from peers.
@@ -110,9 +111,7 @@ let localTerminalIds: string[] = [];
  * bug 41).
  */
 function mayUseTerminals(fingerprint: string): boolean {
-  const device = getPairedDevice(fingerprint);
-  if (!device?.confirmedAt) return false;
-  return (device.capabilities ?? DEFAULT_GRANTS).includes('terminal');
+  return peerHolds(fingerprint, 'terminal');
 }
 
 /** Send a relay frame to every connected peer that may use terminals. */
@@ -180,6 +179,15 @@ export function startRemoteTerminals(): void {
     }
   });
 
+  // Granted `terminal` while connected: send what a connecting device gets,
+  // rather than nothing until it reconnects.
+  unsubGrants = onDeviceGrantsChanged((fingerprint, added) => {
+    if (added.includes('terminal') && mayUseTerminals(fingerprint)) {
+      sendTerminalList(fingerprint);
+      sendTerminalSnapshots(fingerprint);
+    }
+  });
+
   // Forward local terminal output to all peers
   unsubTerminalData = onTerminalData((id, data) => {
     const idx = localTerminalIds.indexOf(id);
@@ -222,6 +230,7 @@ export function stopRemoteTerminals(): void {
   if (unsubConnection) { unsubConnection(); unsubConnection = null; }
   if (unsubTerminalData) { unsubTerminalData(); unsubTerminalData = null; }
   if (unsubTerminalExit) { unsubTerminalExit(); unsubTerminalExit = null; }
+  if (unsubGrants) { unsubGrants(); unsubGrants = null; }
 
   remoteTerminals.clear();
   localTerminalIds = [];

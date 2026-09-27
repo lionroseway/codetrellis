@@ -57,10 +57,79 @@ export function getSettings(): AppSettings {
 }
 
 /**
+ * What is wrong with a settings patch, or null when nothing is.
+ *
+ * Loading normalises every field (`mergeWithDefaults`); writing checked only
+ * the port range and the webhook hosts. So `{ mcp: { port: "abc" } }` or an
+ * unknown capability name was stored and used as sent, then silently became
+ * the default at the next restart — the setting a person saw was not the one
+ * they would get (Phase 32 §0.4k). Now a value that is not one is refused
+ * with the reason, and nothing is stored. Only fields present are checked;
+ * unknown keys are ignored, as they always were.
+ */
+export function settingsPatchProblem(patch: unknown): string | null {
+  if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) return 'settings must be an object';
+  const p = patch as Record<string, any>;
+  const section = (name: string): Record<string, any> | null | string => {
+    const v = p[name];
+    if (v === undefined) return null;
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return `${name} must be an object`;
+    return v;
+  };
+  const checks: Array<[string, (v: any) => boolean, string]> = [
+    ['identity.displayName', (v) => typeof v === 'string', 'text'],
+    ['identity.email', (v) => typeof v === 'string', 'text'],
+    ['mcp.port', (v) => Number.isInteger(v) && v >= 1024 && v <= 65535, 'a port from 1024 to 65535'],
+    ['mcp.autodetectOnCollision', (v) => typeof v === 'boolean', 'true or false'],
+    ['mcp.capabilities', (v) => Array.isArray(v) && v.every((c: unknown) => typeof c === 'string' && (ALL_CAPABILITIES as readonly string[]).includes(c)),
+      `a list of: ${ALL_CAPABILITIES.join(', ')}`],
+    ['mcp.projectScope', (v) => v === 'opened' || v === 'anywhere', 'opened or anywhere'],
+    ['plans.defaultVisibility', (v) => v === 'shared' || v === 'local', 'shared or local'],
+    ['plans.attachmentLocation', (v) => v === 'project' || v === 'user', 'project or user'],
+    ['data.dataDirOverride', (v) => typeof v === 'string', 'text'],
+    ['data.personalSyncPath', (v) => typeof v === 'string', 'text'],
+    ['data.personalSyncMode', (v) => ['none', 'selective', 'full'].includes(v), 'none, selective or full'],
+    ['device.deviceName', (v) => typeof v === 'string', 'text'],
+    ['device.advertise', (v) => typeof v === 'boolean', 'true or false'],
+    ['device.exposeMobileApi', (v) => typeof v === 'boolean', 'true or false'],
+    ['device.shareAudio', (v) => typeof v === 'boolean', 'true or false'],
+    ['device.mobileApiPort', (v) => Number.isInteger(v) && v >= 1024 && v <= 65535, 'a port from 1024 to 65535'],
+    ['power.preventLidCloseSleep', (v) => typeof v === 'boolean', 'true or false'],
+    ['power.onlyWhenOnAC', (v) => typeof v === 'boolean', 'true or false'],
+    ['webhooks.allowedHosts', (v) => Array.isArray(v) && v.every((h: unknown) => typeof h === 'string'), 'a list of host names'],
+    ['webhooks.allowLoopback', (v) => typeof v === 'boolean', 'true or false'],
+    ['updates.autoCheck', (v) => typeof v === 'boolean', 'true or false'],
+  ];
+  for (const name of ['identity', 'mcp', 'plans', 'data', 'device', 'power', 'webhooks', 'updates']) {
+    const sec = section(name);
+    if (typeof sec === 'string') return sec;
+  }
+  for (const [dotted, ok, want] of checks) {
+    const [sec, key] = dotted.split('.');
+    const v = p[sec]?.[key];
+    if (v !== undefined && !ok(v)) return `${dotted} must be ${want}`;
+  }
+  const triggers = p.power?.triggers;
+  if (triggers !== undefined) {
+    if (triggers === null || typeof triggers !== 'object' || Array.isArray(triggers)) return 'power.triggers must be an object';
+    for (const k of ['whileMobileConnected', 'whileAgentActive', 'always']) {
+      if (triggers[k] !== undefined && typeof triggers[k] !== 'boolean') return `power.triggers.${k} must be true or false`;
+    }
+  }
+  if (p.firstRunComplete !== undefined && typeof p.firstRunComplete !== 'boolean') return 'firstRunComplete must be true or false';
+  return null;
+}
+
+export class SettingsError extends Error {}
+
+/**
  * Apply a partial update. Persists immediately (settings are small).
- * Returns the merged result.
+ * Returns the merged result. Throws `SettingsError` for a patch that is not
+ * one (`settingsPatchProblem`), storing nothing.
  */
 export function updateSettings(patch: DeepPartial<AppSettings>): AppSettings {
+  const problem = settingsPatchProblem(patch);
+  if (problem) throw new SettingsError(problem);
   const current = getSettings();
   const next: AppSettings = {
     identity: { ...current.identity, ...(patch.identity ?? {}) },

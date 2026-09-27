@@ -156,6 +156,17 @@ export function renamePairedDevice(fingerprint: string, alias: string): boolean 
  * persisted would look like a grant in the settings UI and deny at runtime,
  * which is the worst of both.
  */
+/**
+ * Told when a device's grants change, so a relay can start (or stop) serving
+ * it without waiting for the device to reconnect.
+ */
+type GrantsListener = (fingerprint: string, added: PeerCapabilityName[], removed: PeerCapabilityName[]) => void;
+const grantsListeners = new Set<GrantsListener>();
+export function onDeviceGrantsChanged(cb: GrantsListener): () => void {
+  grantsListeners.add(cb);
+  return () => { grantsListeners.delete(cb); };
+}
+
 export function setDeviceCapabilities(
   fingerprint: string,
   capabilities: string[],
@@ -185,6 +196,9 @@ export function setDeviceCapabilities(
         removed.length ? `revoked ${removed.join(', ')}` : '',
       ].filter(Boolean).join('; '),
     });
+    for (const cb of grantsListeners) {
+      try { cb(fingerprint, added, removed); } catch { /* a listener's failure is its own */ }
+    }
   }
 
   return valid;

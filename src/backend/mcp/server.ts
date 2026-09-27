@@ -547,7 +547,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerReviewTools(mcpServer, deps);
   registerContributionTools(mcpServer);
   registerAudioTools(mcpServer);
-  registerPeerTools(mcpServer);
+  registerPeerTools(mcpServer, deps);
   registerResources(mcpServer, deps);
 
   return mcpServer;

@@ -280,7 +280,7 @@ export function startUpdateDownload(
   if (inFlight) return inFlight;
 
   cancelled = false;
-  inFlight = (async (): Promise<UpdateDownloadState> => {
+  const run = (async (): Promise<UpdateDownloadState> => {
     try {
       const url = assertAllowedUrl(info.url);
       const filename = safeFilename(info.filename || path.basename(url.pathname));
@@ -338,12 +338,18 @@ export function startUpdateDownload(
         filePath: null,
       };
       return state;
-    } finally {
-      inFlight = null;
     }
   })();
 
-  return inFlight;
+  // Cleared once it settles, from outside the function. A refusal before its
+  // first `await` (a URL that is not https, a host that is not the releases
+  // repo) ran the whole body synchronously — a `finally` in there cleared
+  // `inFlight` before this line assigned it, so the finished promise stayed
+  // "in flight" and every later download returned that first error until
+  // restart (Phase 32 bug 44).
+  inFlight = run;
+  void run.finally(() => { if (inFlight === run) inFlight = null; });
+  return run;
 }
 
 /**

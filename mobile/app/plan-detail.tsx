@@ -72,6 +72,16 @@ interface PhoneBudget {
   flaggedChanges: Array<{ id: number; by: string; byType: string; words: string; at: number }>;
 }
 
+/** The freeze on a plan's project as the phone shows it (mobile-freeze.ts, freeze.get). */
+interface PhoneFreeze {
+  planUid: string;
+  active: boolean;
+  reason: string | null;
+  until: string | null;
+  planExempt: boolean;
+  flaggedChanges: Array<{ id: number; by: string; byType: string; words: string; at: number }>;
+}
+
 function formatMinutes(mins: number): string {
   if (mins < 1) return '<1m';
   if (mins < 60) return `${Math.round(mins)}m`;
@@ -205,6 +215,7 @@ export default function PlanDetailScreen() {
   const [savingTitle, setSavingTitle] = useState(false);
 
   const [budget, setBudget] = useState<PhoneBudget | null>(null);
+  const [freeze, setFreeze] = useState<PhoneFreeze | null>(null);
 
   const fetchPlan = useCallback(async () => {
     if (!uid) return;
@@ -221,6 +232,23 @@ export default function PlanDetailScreen() {
       setBudget(await rpc<PhoneBudget>('budget.get', { planUid: uid }));
     } catch {
       setBudget(null);
+    }
+    // Likewise the freeze (Phase 32 §0.4k).
+    try {
+      setFreeze(await rpc<PhoneFreeze>('freeze.get', { planUid: uid }));
+    } catch {
+      setFreeze(null);
+    }
+  }, [uid]);
+
+  // An agent may freeze, lift or exempt; the change stays flagged until a
+  // person marks it seen, here or on the desktop (Phase 32 §0.4k).
+  const markFreezeChangeSeen = useCallback(async (changeId: number) => {
+    if (!uid) return;
+    try {
+      setFreeze(await rpc<PhoneFreeze>('freeze.acknowledge', { planUid: uid, changeId }));
+    } catch (err: unknown) {
+      Alert.alert('Could not mark it seen', err instanceof Error ? err.message : String(err));
     }
   }, [uid]);
 
@@ -512,6 +540,41 @@ export default function PlanDetailScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Freeze on this plan's project, and an agent's changes to it to review */}
+      {freeze && (freeze.active || freeze.flaggedChanges.length > 0) && (
+        <View style={styles.section} testID="plan-freeze">
+          <Text style={styles.sectionTitle}>
+            FREEZE{freeze.flaggedChanges.length > 0 ? ` · ${freeze.flaggedChanges.length} TO REVIEW` : ''}
+          </Text>
+          {freeze.active && (
+            <View style={styles.budgetCard}>
+              <Text style={styles.budgetLine}>
+                {freeze.planExempt ? 'Project frozen · this plan is exempt' : 'Project frozen'}
+              </Text>
+              <Text style={styles.budgetSub}>
+                {[freeze.reason, freeze.until ? `until ${new Date(freeze.until).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}` : 'no end date']
+                  .filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          )}
+          {freeze.flaggedChanges.map((c) => (
+            <View key={c.id} style={styles.budgetFlag} testID="plan-freeze-flag">
+              <Text style={styles.budgetFlagText}>
+                <Text style={styles.budgetFlagWho}>{c.by}</Text> (agent) {c.words}
+              </Text>
+              <View style={styles.budgetFlagFooter}>
+                <Text style={styles.budgetSub}>
+                  {new Date(c.at).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                </Text>
+                <TouchableOpacity style={styles.budgetSeenBtn} onPress={() => markFreezeChangeSeen(c.id)}>
+                  <Text style={styles.budgetSeenText}>Seen</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Budget: spend against the ceiling, and an agent's changes to review */}
       {budget && (budget.budget || budget.spentMinutes > 0 || budget.flaggedChanges.length > 0) && (

@@ -91,6 +91,7 @@ import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
 import { handleBudgetMethod } from './mobile-budget';
+import { handleFreezeMethod } from './mobile-freeze';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -412,6 +413,15 @@ async function routeMethod(
     case 'budget.get':
     case 'budget.acknowledge':
       return handleBudgetMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      });
+
+    // --- A project's freeze, and marking an agent's change seen (0.4k) -------
+    case 'freeze.get':
+    case 'freeze.acknowledge':
+      return handleFreezeMethod(method, params, {
         fingerprint,
         send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
         broadcast,
@@ -995,7 +1005,7 @@ async function routeMethod(
       const response = requireString(params, 'response');
       // An answer that went nowhere is not "ok": the person would think the
       // agent had its reply (0.4j).
-      if (!remoteInteractionService.respondToInputRequest(requestId, response)) {
+      if (!remoteInteractionService.respondToInputRequest(requestId, response, { actor: getAuthorKey('human'), actorType: 'human', channel: 'phone' })) {
         throw new Error(`No pending input request ${requestId}`);
       }
       return { ok: true };

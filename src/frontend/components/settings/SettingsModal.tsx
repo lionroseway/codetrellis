@@ -68,6 +68,12 @@ const DEVICE_CAPABILITIES: Array<{
   { name: 'project', label: 'Open and close projects', hint: 'Switch which project this desktop is working on.' },
   { name: 'files', label: 'Read file contents', hint: 'Open source files and browse folders on this machine.' },
   {
+    name: 'capture',
+    label: 'Receive your microphone audio',
+    hint: 'When "Share audio capture" is on, this device gets the audio this machine records. Off, nothing is shared with it.',
+    sensitive: true,
+  },
+  {
     name: 'terminal',
     label: 'Run commands and read terminal output',
     hint: 'Create terminals, type into them, and read scrollback and live output. This is command execution on this machine.',
@@ -86,9 +92,8 @@ const DEVICE_CAPABILITIES: Array<{
  *
  * Separate from `DEVICE_CAPABILITIES` because the surfaces differ in what
  * they can reach, not because the vocabulary differs: both read the same
- * seven names. `capture` is absent from the device list because no peer RPC
- * method needs it yet, and showing a toggle that governs nothing would be
- * worse than not showing it.
+ * seven names. For a device, `capture` governs the shared-audio relay
+ * (Phase 32 §0.4k): the switch below and this grant, both.
  */
 const MCP_DEFAULT_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
 
@@ -167,6 +172,7 @@ export function SettingsModal({
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [boundPort, setBoundPort] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Load + reload on focus so external changes (or mcp-port-changed
   // events) reflect.
@@ -187,6 +193,7 @@ export function SettingsModal({
   const update = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
     setSaving(true);
+    setSaveError(null);
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -196,6 +203,11 @@ export function SettingsModal({
     if (res.ok) {
       const next = await res.json();
       setSettings(next);
+    } else {
+      // A refused save used to show nothing: the control simply did not
+      // take, and nothing said why (Phase 32 §0.4k).
+      const body = await res.json().catch(() => null) as { error?: string } | null;
+      setSaveError(body?.error ?? `The change was not saved (${res.status})`);
     }
   };
 
@@ -278,6 +290,11 @@ export function SettingsModal({
 
           {saving && (
             <div className="px-5 py-2 text-[10px] text-foreground-subtle border-t border-white/[0.04]">Saving…</div>
+          )}
+          {!saving && saveError && (
+            <div role="alert" data-testid="settings-save-error" className="px-5 py-2 text-[10.5px] text-red-300 border-t border-white/[0.04]">
+              Not saved: {saveError}
+            </div>
           )}
         </div>
       </div>
@@ -1547,7 +1564,7 @@ function DevicesSection({
             <span className="text-[12px]">Share audio capture with paired devices</span>
           </label>
           <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
-            When enabled, agents on paired devices can access audio captured on this machine.
+            When enabled, audio captured on this machine goes to paired devices you have allowed to receive it (each device&apos;s &ldquo;Receive your microphone audio&rdquo;).
           </p>
         </Field>
 

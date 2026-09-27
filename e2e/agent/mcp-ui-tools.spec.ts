@@ -10,7 +10,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, seedPlan, cleanupPlans, API, authHeaders } from '../helpers/setup';
+import { gotoWithProject, seedPlan, cleanupPlans, API, authHeaders, PROJECT_PATH } from '../helpers/setup';
 import { createMcpClient } from '../helpers/mcp-client';
 
 type Client = Awaited<ReturnType<typeof createMcpClient>>;
@@ -100,6 +100,38 @@ test.describe('UI tools against the window', () => {
     await change.getByRole('button', { name: 'Seen' }).click();
     await expect(page.getByTestId('budget-flagged-changes')).toHaveCount(0);
     await expect(chip.getByLabel(/budget change/)).toHaveCount(0);
+  });
+
+  test('an agent\'s freeze changes show on the freeze bar until the person marks them seen, lifting included (0.4k)', async ({ page, request }) => {
+    const seeded = await seedPlan(request, { title: TITLE, actions: [{ title: 'Frozen work' }] });
+    await gotoWithProject(page);
+    await client.callTool('open_plan', { plan_uid: seeded.uid });
+    await expect(page.getByTestId('plan-item-tree').getByText('Frozen work')).toBeVisible({ timeout: 15_000 });
+    try {
+      // The agent freezes, then lifts it — the lift is the change that used
+      // to make the bar vanish.
+      await client.callTool('set_freeze', { project_path: PROJECT_PATH, active: true, reason: 'Release week' });
+      await expect(page.getByTestId('freeze-bar')).toContainText('Project frozen', { timeout: 10_000 });
+      await client.callTool('set_freeze', { project_path: PROJECT_PATH, active: false });
+
+      const flags = page.getByTestId('freeze-flagged-change');
+      await expect(flags).toHaveCount(2, { timeout: 10_000 });
+      await expect(flags.nth(0)).toContainText('(agent) froze the project ("Release week") with no end');
+      await expect(flags.nth(1)).toContainText('(agent) lifted the freeze');
+      await expect(page.getByTestId('freeze-bar')).not.toContainText('Project frozen');
+
+      await flags.nth(0).getByRole('button', { name: 'Seen' }).click();
+      await expect(flags).toHaveCount(1);
+      await flags.nth(0).getByRole('button', { name: 'Seen' }).click();
+      await expect(page.getByTestId('freeze-bar')).toHaveCount(0);
+    } finally {
+      // Leave the shared project unfrozen and nothing flagged for the next spec.
+      await request.put(`${API}/freeze`, { headers: authHeaders(), data: { projectPath: PROJECT_PATH, active: false } });
+      const st = await (await request.get(`${API}/freeze?project=${encodeURIComponent(PROJECT_PATH)}`, { headers: authHeaders() })).json();
+      for (const c of st.flaggedChanges ?? []) {
+        await request.post(`${API}/freeze/changes/${c.id}/acknowledge`, { headers: authHeaders(), data: { projectPath: PROJECT_PATH } });
+      }
+    }
   });
 });
 

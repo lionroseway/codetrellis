@@ -121,6 +121,7 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'criteria.list': 'read',
   // A plan's budget and the agent changes still flagged (mobile-budget.ts).
   'budget.get': 'read',
+  'freeze.get': 'read',
 
   // ── write ───────────────────────────────────────────────────────────
   'channel.post': 'write',
@@ -130,6 +131,7 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'criterion.decide': 'write',
   // Marking an agent's budget change seen: also needs a CONFIRMED pairing.
   'budget.acknowledge': 'write',
+  'freeze.acknowledge': 'write',
   'channel.resolve': 'write',
   'comment.add': 'write',
   'deviation.resolve': 'write',

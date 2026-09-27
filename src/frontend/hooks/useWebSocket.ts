@@ -953,6 +953,11 @@ export function useWebSocket() {
           if (type === 'plan-budget-changed') {
             window.dispatchEvent(new CustomEvent('plan-budget-changed', { detail: payload }));
           }
+          // The freeze bar polled once a minute, so a freeze an agent set or
+          // lifted — flagged since 0.4k — took up to a minute to show.
+          if (type === 'freeze-changed') {
+            window.dispatchEvent(new CustomEvent('freeze-changed', { detail: payload }));
+          }
 
           // --- An agent asked to delete plans (request_plan_deletion) ---
           // The person confirms in PlanDeletionRequest; nothing is deleted here.

@@ -22,8 +22,10 @@
 import * as _lazy_______services_peer_connection_service from '../../services/peer-connection-service';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolDeps } from '../types';
+import { authorFromExtra } from '../helpers';
 
-export function registerPeerTools(server: McpServer): void {
+export function registerPeerTools(server: McpServer, deps: ToolDeps): void {
   server.tool(
     'get_peer_status',
     'Get the status of the peer connection manager: discovery state, paired device count, connected peer count, whether pairing is active.',
@@ -318,15 +320,17 @@ export function registerPeerTools(server: McpServer): void {
   server.tool(
     'respond_remote_input',
     'Respond to a pending user-input request from a remote agent. The response is sent to the peer where the agent is running, ' +
-    'unblocking the agent. First response wins — if the local user already answered, this is a no-op.',
+    'unblocking the agent. First response wins — if the local user already answered, this is a no-op. ' +
+    'The question was put to a person: your answer reaches the asker marked as yours (your agent type), not as theirs.',
     {
       request_id: z.string().describe('ID of the input request to respond to.'),
       response: z.string().describe('The response text to send back to the remote agent.'),
     },
-    async ({ request_id, response }) => {
+    async ({ request_id, response }, extra: any) => {
       try {
         const peerService = _lazy_______services_peer_connection_service;
-        const sent = peerService.respondToInputRequest(request_id, response);
+        const { author, authorType } = authorFromExtra(deps, extra);
+        const sent = peerService.respondToInputRequest(request_id, response, { actor: author, actorType: authorType, channel: 'mcp' });
         return {
           ...(sent ? {} : { isError: true }),
           content: [{

@@ -618,7 +618,7 @@
     "behaviour": "✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6"
   },
   "rest:PUT /api/freeze": {
-    "behaviour": "✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33"
+    "behaviour": "✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33; recorded with who and how, never flagged (freeze-flags, 0.4k)"
   },
   "mcp:capture_checkpoint": {
     "behaviour": "✓ 0.4h: becomes checkpoint:<id>, compares against live; unknown plan refused (drift-review-tools)"
@@ -642,7 +642,7 @@
     "behaviour": "✓ 0.4h: items added between two commits, by title (cdev-phase6)"
   },
   "mcp:exempt_plan_from_freeze": {
-    "behaviour": "✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6)"
+    "behaviour": "✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6); recorded in the agent's name and flagged; unknown plan refused (freeze-flags, 0.4k)"
   },
   "mcp:get_change_status": {
     "behaviour": "✓ 0.4h: one change by id; unknown id an error (drift-review-tools); bug 30"
@@ -690,7 +690,7 @@
     "behaviour": "✓ 0.4h: every matching commit with its files, newest first (drift-review-tools); bug 32"
   },
   "mcp:set_freeze": {
-    "behaviour": "✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6)"
+    "behaviour": "✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6); recorded in the agent's name and flagged until seen, a lift included (freeze-flags, 0.4k)"
   },
   "rpc:budget.get": {
     "behaviour": "✓ 0.4j: agent's change flagged (phone-sync-and-tools), mobile-budget unit"
@@ -1057,5 +1057,77 @@
   },
   "mcp:respond_remote_input": {
     "behaviour": "✓ 0.4j: answer reaches the peer once; again refused (phone-peer-tools)"
+  },
+  "rest:GET /api/freeze/changes": {
+    "behaviour": "✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags)"
+  },
+  "rest:POST /api/freeze/changes/:id/acknowledge": {
+    "behaviour": "✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools)"
+  },
+  "rpc:freeze.get": {
+    "behaviour": "✓ 0.4k: the plan's project freeze and the agent's changes in the desktop's words; unknown plan refused (freeze-flags)"
+  },
+  "rpc:freeze.acknowledge": {
+    "behaviour": "✓ 0.4k: unflags in the person's name, audited, desktop told; bad id refused (freeze-flags)"
+  },
+  "rest:GET /api/settings": {
+    "behaviour": "✓ 0.4k: every section; what was saved comes back after a restart (settings-surface)"
+  },
+  "rest:PUT /api/settings": {
+    "behaviour": "✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects)"
+  },
+  "rest:GET /api/settings/first-run-check": {
+    "behaviour": "✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface)"
+  },
+  "rest:GET /api/logs/path": {
+    "behaviour": "✓ 0.4k: today's file under the data dir's logs (settings-surface)"
+  },
+  "rest:GET /api/logs/tail": {
+    "behaviour": "✓ 0.4k: answers without a file logger; maxBytes must be a whole number (settings-surface)"
+  },
+  "rest:GET /api/updates/status": {
+    "behaviour": "✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates)"
+  },
+  "rest:POST /api/updates/check": {
+    "behaviour": "✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates)"
+  },
+  "rest:POST /api/updates/download": {
+    "behaviour": "✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download"
+  },
+  "rest:GET /api/updates/download/status": {
+    "behaviour": "✓ 0.4k: idle and complete before anything is downloaded (update-download)"
+  },
+  "rest:POST /api/updates/download/cancel": {
+    "behaviour": "✓ 0.4k: answers cleanly with nothing running (update-download)"
+  },
+  "settings:identity": {
+    "behaviour": "✓ 0.4k: display name saves on leaving the box (e2e sections-save); pull from git config (e2e identity)"
+  },
+  "settings:mcp": {
+    "behaviour": "✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools)"
+  },
+  "settings:plans": {
+    "behaviour": "✓ 0.4k: default visibility saves (e2e sections-save, e2e plans)"
+  },
+  "settings:devices": {
+    "behaviour": "✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access)"
+  },
+  "settings:power": {
+    "behaviour": "✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface)"
+  },
+  "settings:updates": {
+    "behaviour": "✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates)"
+  },
+  "settings:logs": {
+    "behaviour": "✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface)"
+  },
+  "settings:data": {
+    "behaviour": "✓ 0.4k: override box and the restart note (e2e data) — saving not checked"
+  },
+  "settings:about": {
+    "behaviour": "✓ 0.4k: name, version, copy build info, jump to Updates (e2e about)"
+  },
+  "settings:telemetry": {
+    "behaviour": "✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI)"
   }
 }

@@ -80,7 +80,7 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
 import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
-import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
+import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
@@ -3686,7 +3686,14 @@ app.get('/api/mcp/setup', (_req, res) => {
 // --- Logs API (Phase 13 follow-up) ---
 
 app.get('/api/logs/tail', (req, res) => {
-  const maxBytes = req.query.maxBytes ? Math.min(Number(req.query.maxBytes), 1024 * 1024) : 64 * 1024;
+  // A size, or the default. `Number('abc')` is NaN, and NaN went straight
+  // through `Math.min` into the read (Phase 32 §0.4k).
+  const asked = req.query.maxBytes === undefined ? 64 * 1024 : Number(req.query.maxBytes);
+  if (!Number.isInteger(asked) || asked < 1) {
+    res.status(400).json({ error: 'maxBytes must be a whole number of bytes' });
+    return;
+  }
+  const maxBytes = Math.min(asked, 1024 * 1024);
   res.json({
     path: getCurrentLogPath(),
     content: tailLog(maxBytes),
@@ -3862,7 +3869,13 @@ app.get('/api/settings', (_req, res) => {
 
 app.put('/api/settings', (req, res) => {
   const before = getSettings();
-  const next = updateSettings(req.body || {});
+  let next: ReturnType<typeof updateSettings>;
+  try {
+    next = updateSettings(req.body || {});
+  } catch (err) {
+    if (err instanceof SettingsError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
   // Tell the frontend (and any open Settings panels in other windows)
   // that settings changed.
   broadcast('settings-changed', { settings: next });
@@ -4130,9 +4143,33 @@ app.put('/api/freeze', (req, res) => {
     res.status(400).json({ error: problem });
     return;
   }
-  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids });
+  // Recorded with who made it and how it arrived, as a budget change is
+  // (owner's decision, 0.4k). A person's change is never flagged.
+  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids }, cameFromAppWindow(req)
+    ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+    : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
   broadcast('freeze-changed', { projectRoot: projectPath, status });
   res.json(status);
+});
+
+/** Every recorded change to the project's freeze, newest first, with who made it. */
+app.get('/api/freeze/changes', (req, res) => {
+  const { listFreezeChanges } = _lazy___services_freeze_service;
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  res.json(listFreezeChanges(projectPath));
+});
+
+/** A person has seen an agent's change to the freeze: no longer flagged. */
+app.post('/api/freeze/changes/:id/acknowledge', (req, res) => {
+  const { acknowledgeFreezeChange } = _lazy___services_freeze_service;
+  const projectPath = confineRoot((req.body ?? {}).projectPath, res, 'projectPath');
+  if (!projectPath) return;
+  const id = Number(req.params.id);
+  const change = Number.isInteger(id) ? acknowledgeFreezeChange(projectPath, id, getAuthorKey('human')) : null;
+  if (!change) { res.status(404).json({ error: 'No such freeze change on this project' }); return; }
+  broadcast('freeze-changed', { projectRoot: projectPath, acknowledged: change.id });
+  res.json(change);
 });
 
 // --- CDev Phase 8 — Audio capture REST surface ---
@@ -4451,7 +4488,10 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
     // peer-connection-service is statically imported as `peerService` at top of file
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
-    const sent = peerService.respondToInputRequest(req.params.requestId, response);
+    // The app window is the person; plain HTTP is recorded as unverified (0.4d).
+    const sent = peerService.respondToInputRequest(req.params.requestId, response, cameFromAppWindow(req)
+      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
     if (!sent) { res.status(404).json({ error: 'No pending input request with that id' }); return; }
     res.json({ sent });
   } catch (err) {

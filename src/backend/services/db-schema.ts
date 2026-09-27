@@ -485,6 +485,23 @@ export const SCHEMA_PLAN_ITEMS = `
   );
   CREATE INDEX IF NOT EXISTS idx_plan_budget_changes_plan ON plan_budget_changes(plan_uid, created_at);
 
+  -- Every change to a project's freeze, who made it and how it arrived
+  -- (owner's decision, Phase 32 §0.4k). The freeze itself lives in the
+  -- project's .codetrellis/config.json; this is the record of who changed it.
+  CREATE TABLE IF NOT EXISTS project_freeze_changes (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_path     TEXT NOT NULL,
+    actor            TEXT NOT NULL,
+    actor_type       TEXT NOT NULL,
+    channel          TEXT NOT NULL,
+    before_json      TEXT,
+    after_json       TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    acknowledged_at  INTEGER,
+    acknowledged_by  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_project_freeze_changes_project ON project_freeze_changes(project_path, created_at);
+
   CREATE TABLE IF NOT EXISTS plan_item_versions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     item_uid        TEXT NOT NULL REFERENCES plan_items(uid),

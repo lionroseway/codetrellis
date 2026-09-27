@@ -14,12 +14,12 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 215 | 201 | 2 | 2 | 138 | 0 |
+| REST routes | 217 | 203 | 1 | 1 | 150 | 0 |
 | MCP tools | 185 | 147 | 5 | 1 | 141 | 0 |
-| Mobile RPC methods | 74 | 47 | 0 | 0 | 74 | 0 |
+| Mobile RPC methods | 76 | 49 | 0 | 0 | 76 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
-| Settings sections | 12 | n/a | n/a | n/a | 0 | 0 |
+| Settings sections | 12 | n/a | n/a | n/a | 10 | 0 |
 
 ## By domain
 
@@ -32,7 +32,7 @@ is proof of a gap.
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 10 | 26 | 2 | 20 | 0 | 0 |
-| 0.4h Drift, governance, review | 8 | 24 | 6 | 0 | 0 | 0 |
+| 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
 | 0.4k Settings, updates, privacy | 11 | 0 | 3 | 4 | 0 | 12 |
@@ -45,7 +45,7 @@ is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (215)
+## REST routes (217)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 7 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 86 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 88 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -111,7 +111,7 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 47 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 48 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 23 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
@@ -151,7 +151,7 @@ is proof of a gap.
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 47 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 48 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 23 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
@@ -207,24 +207,26 @@ is proof of a gap.
 | h | `GET /api/comparands` |  | ✗ none | 5 | ✓ 0.4h: live, baseline, checkpoints by name, commits; outside a project refused (drift-review-tools), plan-review, review-confinement |  |  |
 | h | `GET /api/compare` |  | ✗ none | 6 | ✓ 0.4h: exact diffs, same-point note, commit edges not compared, 404 unknown (plan-review, compare-hash-space, compare-phantom-removals) |  |  |
 | h | `GET /api/conflicts` |  | ✗ none | 4 | ✓ 0.4h: a real merge conflict with per-field ours/theirs (manifest-conflicts, worktree-project) |  |  |
-| h | `GET /api/freeze` |  | ✗ none | 3 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
+| h | `GET /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
+| h | `GET /api/freeze/changes` |  | ✗ none | 1 | ✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags) |  |  |
 | h | `POST /api/baseline/capture` |  | ✗ none | 2 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
-| h | `PUT /api/freeze` |  | ✗ none | 3 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33 |  |  |
-| i | `DELETE /api/terminals/:id` |  | ✗ none | 3 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
+| h | `POST /api/freeze/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools) |  |  |
+| h | `PUT /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33; recorded with who and how, never flagged (freeze-flags, 0.4k) |  |  |
+| i | `DELETE /api/terminals/:id` |  | ✗ none | 4 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
 | i | `GET /api/audio/recent` |  | ✗ none | 1 | ✓ 0.4i: chunks concatenated in order with duration and times; seconds narrows; 404 when empty (audio-rest) |  |  |
 | i | `GET /api/audio/status` |  | ✗ none | 1 | ✓ 0.4i: capturing, chunk count, buffered seconds, window (audio-rest) |  |  |
-| i | `GET /api/terminals` |  | 1 | 3 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
+| i | `GET /api/terminals` |  | 1 | 4 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
 | i | `GET /api/terminals/:id/history` |  | ✗ none | 3 | ✓ 0.4i: scrollback of what ran, paged backwards; unknown id empty and creates nothing (terminal-surface), input-validation |  |  |
 | i | `POST /api/audio/chunk` |  | ✗ none | 1 | ✓ 0.4i: buffered in order; 409 when not capturing; bad length or data 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/start` |  | ✗ none | 1 | ✓ 0.4i: capturing, clears the buffer, default size when none named; bad sizes 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/stop` |  | ✗ none | 1 | ✓ 0.4i: stops, keeps the buffer, refuses more chunks (audio-rest) |  |  |
-| i | `POST /api/terminals` |  | 1 | 3 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
+| i | `POST /api/terminals` |  | 1 | 4 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
 | i | `POST /api/terminals/:id/inject` |  | ✗ none | 3 | ✓ 0.4i: the text runs in the shell (output in history); 400 empty, 404 unknown or dead (terminal-surface) |  |  |
-| j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 6 | ✓ 0.4j: forgotten and disconnected; unknown 404 (phone-sync-and-tools) |  |  |
+| j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 7 | ✓ 0.4j: forgotten and disconnected; unknown 404 (phone-sync-and-tools) |  |  |
 | j | `DELETE /api/peers/push-tokens/:fingerprint` |  | ✗ none | 2 | ✓ 0.4j: token gone from the list; unknown 404 (phone-sync-and-tools) |  |  |
 | j | `GET /api/pairing/status` |  | ✗ none | 2 | ✓ 0.4j: codeReady once the phone answers, never the code itself (gate4-reconnect-identity, harness peer) |  |  |
-| j | `GET /api/peers/audit` |  | ✗ none | 3 | ✓ 0.4j: refusals, terminal access (RPC and relay, output never recorded), grants; survives restart (peer-device-access, phone-sync-and-tools, phone-terminals-sysdocs) |  |  |
+| j | `GET /api/peers/audit` |  | ✗ none | 4 | ✓ 0.4j: refusals, terminal access (RPC and relay, output never recorded), grants; survives restart (peer-device-access, phone-sync-and-tools, phone-terminals-sysdocs) |  |  |
 | j | `GET /api/peers/connections` |  | ✗ none | 1 | ✓ 0.4j: the phone, named as paired, all four channels (phone-sync-and-tools) |  |  |
 | j | `GET /api/peers/devices` |  | ✗ none | 2 | ✓ 0.4j: paired devices without the reconnect secret; forgotten one gone (peer-device-access, phone-sync-and-tools) |  |  |
 | j | `GET /api/peers/discovered` |  | ✗ none | 1 | ✓ 0.4j: a list (mDNS off in the harness) (phone-sync-and-tools) |  |  |
@@ -237,7 +239,7 @@ is proof of a gap.
 | j | `GET /api/peers/status` |  | ✗ none | 3 | ✓ 0.4j: running, mobile API port actually bound, counts (gate4-reconnect-identity, pairing-enables-lan, cdev-phase11) |  |  |
 | j | `GET /api/sync/peek` |  | ✗ none | 2 | ✓ 0.4j: what an import would bring, before it does (cdev-phase5, surfaced-rest) |  |  |
 | j | `GET /api/sync/status` |  | ✗ none | 1 | ✓ 0.4j: personal sync state (cdev-phase5) |  |  |
-| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 6 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
+| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 7 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
 | j | `POST /api/pairing/cancel` |  | ✗ none | 2 | ✓ 0.4j: window closed (pairing-transport, peer-reconnect-auth) |  |  |
 | j | `POST /api/pairing/confirm` |  | ✗ none | 2 | ✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer) |  |  |
 | j | `POST /api/pairing/initiate` |  | ✗ none | 4 | ✓ 0.4j: v5 QR payload, scannable size; code only in the body (gate4-reconnect-identity, pairing-transport, harness peer) |  |  |
@@ -246,17 +248,17 @@ is proof of a gap.
 | j | `POST /api/peers/remote-terminals/:fingerprint/:terminalId/write` |  | ✗ none | 1 | ✓ 0.4j: input reaches the peer; unknown terminal 404, no data 400 (phone-sync-and-tools) |  |  |
 | j | `POST /api/sync/export` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
 | j | `POST /api/sync/import` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
-| k | `GET /api/logs/path` |  | ✗ none | 1 |  |  |  |
-| k | `GET /api/logs/tail` |  | ✗ none | 1 |  |  |  |
+| k | `GET /api/logs/path` |  | ✗ none | 2 | ✓ 0.4k: today's file under the data dir's logs (settings-surface) |  |  |
+| k | `GET /api/logs/tail` |  | ✗ none | 2 | ✓ 0.4k: answers without a file logger; maxBytes must be a whole number (settings-surface) |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
-| k | `GET /api/settings` |  | ✗ none | 21 |  |  |  |
-| k | `GET /api/settings/first-run-check` |  | ✗ none | 2 |  |  |  |
-| k | `GET /api/updates/download/status` |  | ✗ none | 1 |  |  |  |
-| k | `GET /api/updates/status` |  | ✗ none | 1 |  |  |  |
-| k | `POST /api/updates/check` |  | ✗ none | ✗ none |  |  |  |
-| k | `POST /api/updates/download` |  | ✗ none | 1 |  |  |  |
-| k | `POST /api/updates/download/cancel` |  | ✗ none | 1 |  |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 21 |  |  |  |
+| k | `GET /api/settings` |  | ✗ none | 23 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
+| k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
+| k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
+| k | `GET /api/updates/status` |  | ✗ none | 2 | ✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates) |  |  |
+| k | `POST /api/updates/check` |  | ✗ none | 1 | ✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates) |  |  |
+| k | `POST /api/updates/download` |  | ✗ none | 2 | ✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download |  |  |
+| k | `POST /api/updates/download/cancel` |  | ✗ none | 1 | ✓ 0.4k: answers cleanly with nothing running (update-download) |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 23 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 3 |  |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
@@ -400,12 +402,12 @@ is proof of a gap.
 | h | `detect_conflicts` | git · read | ✗ none | 2 | ✓ 0.4h: names the conflicted manifest during a real merge; empty when clean (drift-review-tools), cdev-phase6 |  |  |
 | h | `detect_deviations` | drift · read | ✗ none | 4 | ✓ 0.4h: missing_file for a done action's absent file; unknown plan refused (drift-review-tools), full-loop, cdev-sensors |  |  |
 | h | `diff_plan_between_commits` | git · read | ✗ none | 1 | ✓ 0.4h: items added between two commits, by title (cdev-phase6) |  |  |
-| h | `exempt_plan_from_freeze` | governance · write | ✗ none | 1 | ✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6) |  |  |
+| h | `exempt_plan_from_freeze` | governance · write | ✗ none | 2 | ✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6); recorded in the agent's name and flagged; unknown plan refused (freeze-flags, 0.4k) |  |  |
 | h | `get_change_status` | drift · read | ✗ none | 1 | ✓ 0.4h: one change by id; unknown id an error (drift-review-tools); bug 30 |  |  |
 | h | `get_changes_summary` | drift · read | ✗ none | 1 | ✓ 0.4h: totals by kind (drift-review-tools) |  |  |
 | h | `get_deviations` | drift · read | ✗ none | 1 | ✓ 0.4h: the plan's own, same as REST; unknown plan refused (drift-review-tools) |  |  |
 | h | `get_drift_report` | drift · read | ✗ none | 2 | ✓ 0.4h: planned file satisfied, the other unexpected, against the checkpoint (review-governance-tools) |  |  |
-| h | `get_freeze_status` | governance · read | ✗ none | 1 | ✓ 0.4h: inactive, active with reason and remaining time, inactive again (cdev-phase6) |  |  |
+| h | `get_freeze_status` | governance · read | ✗ none | 2 | ✓ 0.4h: inactive, active with reason and remaining time, inactive again (cdev-phase6) |  |  |
 | h | `get_plan_at_commit` | git · read | ✗ none | 1 | ✓ 0.4h: title and items as of each commit (cdev-phase6) |  |  |
 | h | `get_plan_history` | git · read | ✗ none | 2 | ✓ 0.4h: the plan's commits, newest first, with subject and author (review-governance-tools) |  |  |
 | h | `get_pr_draft` | review · read | 1 | 1 | ✓ 0.4h: title, review, acceptance criteria table and warnings; git untouched (review-governance-tools), plan-review |  |  |
@@ -416,7 +418,7 @@ is proof of a gap.
 | h | `resolve_conflict` | git · write | ✗ none | 1 | ✓ 0.4h: by_side takes theirs and stages; missing side and escaping path refused (drift-review-tools) |  |  |
 | h | `review_plan` | review · read | 2 | 2 | ✓ 0.4h: landed item, the unclaimed file named, baseline kept after rescan, markdown names its basis (review-governance-tools) |  |  |
 | h | `search_plan_history` | git · read | ✗ none | 1 | ✓ 0.4h: every matching commit with its files, newest first (drift-review-tools); bug 32 |  |  |
-| h | `set_freeze` | governance · write | ✗ none | 1 | ✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6) |  |  |
+| h | `set_freeze` | governance · write | ✗ none | 2 | ✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6); recorded in the agent's name and flagged until seen, a lift included (freeze-flags, 0.4k) |  |  |
 | i | `get_audio_context` | audio · capture | ✗ none | 1 | ✓ 0.4i: recent audio with duration; seconds narrows (cdev-phase8) |  |  |
 | i | `get_audio_status` | audio · capture | ✗ none | 1 | ✓ 0.4i: not capturing, then buffered seconds and chunks (cdev-phase8) |  |  |
 | i | `push_audio_chunk` | audio · capture | ✗ none | 1 | ✓ 0.4i: chunks buffered; length bounded by the schema (cdev-phase8; bug 35) |  |  |
@@ -455,7 +457,7 @@ is proof of a gap.
 | l | `verify_system_doc` | system-docs · write | ✗ none | 2 |  |  |  |
 | l | `write_system_doc` | system-docs · write | ✗ none | 2 |  |  |  |
 
-## Mobile RPC methods (74)
+## Mobile RPC methods (76)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -512,6 +514,8 @@ is proof of a gap.
 | g | `budget.get` | read | 1 | 1 | ✓ 0.4j: agent's change flagged (phone-sync-and-tools), mobile-budget unit |  |  |
 | h | `deviation.list` | read | ✗ none | 1 | ✓ 0.4j: same as REST; unknown plan refused (phone-plans) |  |  |
 | h | `deviation.resolve` | write | ✗ none | 1 | ✓ 0.4j: resolved as the person; bad action and unknown id refused (phone-plans) |  |  |
+| h | `freeze.acknowledge` | write | ✗ none | 1 | ✓ 0.4k: unflags in the person's name, audited, desktop told; bad id refused (freeze-flags) |  |  |
+| h | `freeze.get` | read | ✗ none | 1 | ✓ 0.4k: the plan's project freeze and the agent's changes in the desktop's words; unknown plan refused (freeze-flags) |  |  |
 | h | `review.comparands` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's; unknown plan refused (phone-graph-review) |  |  |
 | h | `review.compare` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's; unknown checkpoint refused (phone-graph-review) |  |  |
 | h | `review.get` | read | ✗ none | 1 | ✓ 0.4j: same review as the desktop; unknown plan refused (phone-graph-review) |  |  |
@@ -678,15 +682,15 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| k | `about` |  | n/a | n/a |  |  |  |
+| k | `about` |  | n/a | n/a | ✓ 0.4k: name, version, copy build info, jump to Updates (e2e about) |  |  |
 | k | `appearance` |  | n/a | n/a |  |  |  |
-| k | `data` |  | n/a | n/a |  |  |  |
-| k | `devices` |  | n/a | n/a |  |  |  |
-| k | `identity` |  | n/a | n/a |  |  |  |
-| k | `logs` |  | n/a | n/a |  |  |  |
-| k | `mcp` |  | n/a | n/a |  |  |  |
-| k | `plans` |  | n/a | n/a |  |  |  |
-| k | `power` |  | n/a | n/a |  |  |  |
+| k | `data` |  | n/a | n/a | ✓ 0.4k: override box and the restart note (e2e data) — saving not checked |  |  |
+| k | `devices` |  | n/a | n/a | ✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access) |  |  |
+| k | `identity` |  | n/a | n/a | ✓ 0.4k: display name saves on leaving the box (e2e sections-save); pull from git config (e2e identity) |  |  |
+| k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) |  |  |
+| k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) |  |  |
+| k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) |  |  |
+| k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) |  |  |
 | k | `sync` |  | n/a | n/a |  |  |  |
-| k | `telemetry` |  | n/a | n/a |  |  |  |
-| k | `updates` |  | n/a | n/a |  |  |  |
+| k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) |  |  |
+| k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) |  |  |
