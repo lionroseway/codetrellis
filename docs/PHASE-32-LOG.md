@@ -167,6 +167,13 @@ Of bugs 4–9, only 9 was left for 0.6 (4 is B4/A4, 5–7 were fixed in
   `exportIfSharedByDefault`, now serves all three. Test
   `plan-default-visibility.test.ts` fails on the old code.
 
+The full harness then found two tests that had encoded bug 48, each
+assuming a REST-made plan stays in the database: the Shared/Local round
+trip (it now starts from a Local default) and the phone's
+`changes.summary` check (a shared plan's files are new to git, which is
+correct; the source files are compared on their own). Each fixed in its
+own commit with the reason.
+
 ### 2026-09-27: 0.5c — workspace minors
 
 0.5b merged as [#132](https://github.com/lionroseway/codetrellis/pull/132)
