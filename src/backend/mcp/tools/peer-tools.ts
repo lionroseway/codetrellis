@@ -138,7 +138,10 @@ export function registerPeerTools(server: McpServer): void {
       try {
         const peerService = _lazy_______services_peer_connection_service;
         const removed = await peerService.unpairDevice(fingerprint);
+        // Nothing removed is an error the agent should see, not a success
+        // whose text happens to say otherwise (0.4j).
         return {
+          ...(removed ? {} : { isError: true }),
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
@@ -176,7 +179,7 @@ export function registerPeerTools(server: McpServer): void {
         if (fingerprint) {
           const state = peerService.getRemoteState(fingerprint);
           if (!state) {
-            return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No state from this peer — not connected or no snapshot received yet.' }) }] };
+            return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No state from this peer — not connected or no snapshot received yet.' }) }], isError: true };
           }
           return { content: [{ type: 'text' as const, text: JSON.stringify(state) }] };
         }
@@ -249,6 +252,7 @@ export function registerPeerTools(server: McpServer): void {
         const peerService = _lazy_______services_peer_connection_service;
         const sent = peerService.writeRemoteTerminal(fingerprint, terminal_id, data);
         return {
+          ...(sent ? {} : { isError: true }),
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
@@ -324,6 +328,7 @@ export function registerPeerTools(server: McpServer): void {
         const peerService = _lazy_______services_peer_connection_service;
         const sent = peerService.respondToInputRequest(request_id, response);
         return {
+          ...(sent ? {} : { isError: true }),
           content: [{
             type: 'text' as const,
             text: JSON.stringify({

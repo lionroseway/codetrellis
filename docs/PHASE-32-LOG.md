@@ -11,12 +11,12 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4i Terminals and audio |
-| **Status** | Started. #126 (phone budget flags, bug 34) merged; its full harness was 521 passed, 0 retries |
-| **Next action** | Bug 35 fixed, domain i complete. Full harness, PR, merge; then 0.4j (mobile) |
+| **Stage / step** | 0.4j Mobile surface |
+| **Status** | 0.4j complete on the branch: harness phone peer, 62 tests over the peer path, bugs 36–42 fixed, domain j's behaviour column filled, RPC untested list empty |
+| **Next action** | Full harness running; then PR into `feat/phase-32`, merge when green, then 0.4k (settings, updates, privacy) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4i-terminals` |
-| **Last updated** | 2026-09-26 |
+| **Branch** | `feat/phase-32-0.4j-mobile` |
+| **Last updated** | 2026-09-27 |
 
 ---
 
@@ -44,7 +44,7 @@
 - [x] 0.4f Channels and presence (#123)
 - [x] 0.4g Agents and MCP (#124)
 - [x] 0.4h Drift, governance, review (#125)
-- [ ] 0.4i Terminals and audio
+- [x] 0.4i Terminals and audio (#127)
 - [ ] 0.4j Mobile surface
 - [ ] 0.4k Settings, updates, privacy
 - [ ] 0.4l System docs and intake
@@ -141,6 +141,60 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.4j — the mobile surface over a real peer (bugs 36–42)
+
+- **`tests/harness/peer.ts`**: a phone for the harness. A werift peer with
+  its own certificate (werift otherwise makes one per process, so two
+  phones would be one device) pairs through the real v5 ceremony, types
+  the code it derived into the desktop, and speaks the phone's protocol:
+  RPC on `control`, snapshot plus patches applied on `ui`, raw frames on
+  `terminal`. Nothing is stubbed on the desktop. The harness backend also
+  keeps its recent output (`backend.output()`), since the file logger is
+  the Electron shell's.
+- **Six test files, 62 tests**, every RPC method through the peer:
+  `phone-plans` (11), `phone-channels-projects` (10), `phone-graph-review`
+  (11), `phone-terminals-sysdocs` (11), `phone-sync-and-tools` (13),
+  `phone-peer-tools` (6). They check agreement with the desktop's own
+  route, the refusals, the capability gates, and the companion rule
+  (what the person does on the phone shows on the desktop, checked by the
+  broadcast the window listens for).
+- **Bug 36:** no item edit from the phone ever saved (no author for the
+  version row).
+- **Bug 37:** most phone writes never reached the desktop windows. The
+  delete left the plan's folder; the channel post named its own author and
+  skipped routing and export. Plan edits, deletion and channel posts now
+  share one function with REST.
+- **Bug 38:** plan and item statuses were unchecked on REST and the phone.
+- **Bug 39:** a deleted plan's folder was written back 200 ms later by the
+  archive's write-through, from the desktop too. Found as leftovers of the
+  browser suite's by-hand spec in the fixture.
+- **Bug 40:** the phone's file search took `%`/`_` as wildcards and
+  matched the machine's own path.
+- **Bug 41:** a security finding, recorded in `docs/private/` and raised
+  with the owner. Fixed with a failing-first harness test.
+- **Bug 42:** state sync shared one patch base across phones (a change as
+  another phone took a snapshot never reached the first), and sent every
+  phone ten empty patches a second. Per-peer base; `ts` alone is not a
+  change.
+- Smaller, same class as bug 27: `input.respond`, the project list
+  methods, terminal methods, `sysdoc.delete`, `item.ref.remove`,
+  `mobile_navigate`, the peer MCP tools, and the peer and system-doc
+  DELETE routes refuse what is not there instead of answering ok.
+  Connections are named from the paired device (the Devices panel showed
+  a confirmed phone as "Pending…").
+- **Inventory:** all 47 RPC methods, the 3 `mobile_*` tools and 14 routes
+  left `untested.json` (3 items remain, for 0.4k/0.4l). The inventory
+  credits a route when its path appears in a test, whatever the method;
+  where that had credited PUT/DELETE from a GET, real calls were added.
+  Domain j's behaviour column is filled for every route and tool.
+- **Not verified here:** the 31 phone screens and the desktop's two
+  pairing components. The phone UI needs a device or simulator; they go
+  to 0.5 with the owner on a device.
+- For the owner: remote audio is forwarded to every connected peer when
+  `shareAudio` is on (off by default), with no per-device `capture`
+  grant; and `respond_remote_input` lets an agent answer a question a
+  peer's agent put to a person, with nothing marking it as the agent's.
 
 ### 2026-09-27: 0.4i — terminals and audio (bug 35)
 

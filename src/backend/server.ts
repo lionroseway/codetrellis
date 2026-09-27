@@ -18,6 +18,7 @@ import * as _lazy___services_contribution_service from './services/contribution-
 import * as _lazy___services_sensor_bridge_service from './services/sensor-bridge-service';
 import * as _lazy___services_channel_dispatcher_service from './services/channel-dispatcher-service';
 import express from 'express';
+import { PLAN_STATUSES, TASK_STATUSES, isPlanStatus, isTaskStatus } from '../shared/lib/plan-vocab';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -1857,6 +1858,74 @@ app.get('/api/plans/:uid', (req, res) => {
   res.json(plan);
 });
 
+/**
+ * A person's edit to a plan, from the app or the paired phone.
+ *
+ * One function for both, because the phone's copy had drifted: it stored any
+ * status it was sent, never captured the approval baseline, and never told the
+ * desktop windows, so a plan renamed on the phone kept its old name on screen
+ * (Phase 32 §0.4j).
+ */
+export function updatePlanAsPerson(
+  planUid: string,
+  changes: Parameters<typeof planService.updatePlan>[1],
+  author: string,
+): void {
+  const plan = planService.getPlan(planUid);
+  if (!plan) throw new PlanRequestError(404, 'Plan not found');
+  if (changes.status !== undefined && !isPlanStatus(changes.status)) {
+    throw new PlanRequestError(400, `status must be one of: ${PLAN_STATUSES.join(', ')}`);
+  }
+  planService.updatePlan(planUid, changes, author);
+
+  // Auto-capture trellis snapshot when plan is approved
+  if (changes.status === 'approved' && plan.projectPath) {
+    try {
+      const snapshot = captureCurrentTrellis(plan.projectPath, planUid, `Baseline for "${plan.title}"`);
+      broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name } });
+    } catch (err) {
+      console.warn('[API] Failed to capture trellis snapshot:', err);
+    }
+  }
+
+  broadcast('plan-updated', { planUid, status: changes.status });
+  saveNow(() => exportDatabase());
+}
+
+/**
+ * A person deletes a plan: archived, its files removed from the project unless
+ * asked not to, and the windows told. The phone's delete used to archive the
+ * row and stop — the plan stayed on the desktop's screen and its folder stayed
+ * in the repository (Phase 32 §0.4j).
+ */
+export function deletePlanAsPerson(planUid: string, opts: { removeDisk?: boolean } = {}): { diskRemoved: boolean } {
+  const plan = planService.getPlan(planUid);
+  if (!plan) throw new PlanRequestError(404, 'Plan not found');
+  planService.deletePlan(planUid);
+
+  // Also remove on-disk .codetrellis/plans/<slug>/ if the plan has a project path
+  let diskRemoved = false;
+  if (opts.removeDisk !== false && plan.projectPath) {
+    try {
+      const result = unlinkPlan(planUid, plan.projectPath);
+      diskRemoved = result.removed;
+    } catch { /* best-effort */ }
+  }
+
+  broadcast('plan-deleted', { planUid });
+  saveNow(() => exportDatabase());
+  return { diskRemoved };
+}
+
+export class PlanRequestError extends Error {
+  constructor(readonly status: 400 | 404, message: string) { super(message); }
+}
+
+function sendPlanError(res: express.Response, err: unknown): void {
+  if (err instanceof PlanRequestError) { res.status(err.status).json({ error: err.message }); return; }
+  throw err;
+}
+
 // Update plan
 app.put('/api/plans/:uid', (req, res) => {
   // Phase 15 §15.D — accept the git-context fields alongside the
@@ -1866,48 +1935,22 @@ app.put('/api/plans/:uid', (req, res) => {
     title, description, status,
     baseRef, targetBranch, targetWorktree, autoCreateBranch,
   } = req.body;
-  const plan = planService.getPlan(req.params.uid);
-  planService.updatePlan(
-    req.params.uid,
-    { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
-    'user',
-  );
-
-  // Auto-capture trellis snapshot when plan is approved
-  if (status === 'approved' && plan?.projectPath) {
-    try {
-      const snapshot = captureCurrentTrellis(plan.projectPath, req.params.uid, `Baseline for "${plan.title}"`);
-      broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name } });
-    } catch (err) {
-      console.warn('[API] Failed to capture trellis snapshot:', err);
-    }
-  }
-
-  broadcast('plan-updated', { planUid: req.params.uid, status });
-  saveNow(() => exportDatabase());
+  try {
+    updatePlanAsPerson(
+      req.params.uid,
+      { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
+      'user',
+    );
+  } catch (err) { sendPlanError(res, err); return; }
   res.json({ ok: true });
 });
 
 // Delete (archive) plan
 app.delete('/api/plans/:uid', (req, res) => {
-  const planUid = req.params.uid;
-  const plan = planService.getPlan(planUid);
-  const removeDisk = req.query.disk !== 'false'; // default: also remove disk files
-
-  planService.deletePlan(planUid);
-
-  // Also remove on-disk .codetrellis/plans/<slug>/ if the plan has a project path
-  let diskRemoved = false;
-  if (removeDisk && plan?.projectPath) {
-    try {
-      const result = unlinkPlan(planUid, plan.projectPath);
-      diskRemoved = result.removed;
-    } catch { /* best-effort */ }
-  }
-
-  broadcast('plan-deleted', { planUid });
-  saveNow(() => exportDatabase());
-  res.json({ ok: true, diskRemoved });
+  try {
+    const { diskRemoved } = deletePlanAsPerson(req.params.uid, { removeDisk: req.query.disk !== 'false' });
+    res.json({ ok: true, diskRemoved });
+  } catch (err) { sendPlanError(res, err); }
 });
 
 // Bulk delete plans
@@ -2023,6 +2066,88 @@ app.get('/api/channels/:eventUid/thread', (req, res) => {
   res.json(channelEventService.listThread(req.params.eventUid));
 });
 
+/**
+ * A person posts to a plan's channel, from the app or the paired phone.
+ *
+ * Shared because the phone's copy did none of the rest: it took its author
+ * name from the request, never wrote the event into a shared plan's files,
+ * never fired the routing rules, and never told the desktop windows — a
+ * message sent from the phone did not appear on the desktop until something
+ * else refreshed the pane (Phase 32 §0.4j).
+ */
+export function postChannelEventAsPerson(input: {
+  planUid: string;
+  eventType: string;
+  message: string;
+  itemUid?: string | null;
+  respondsTo?: string | null;
+  attempted?: unknown;
+  options?: unknown;
+}) {
+  if (!planService.getPlan(input.planUid)) throw new PlanRequestError(404, 'Plan not found');
+  const identity = getSettings().identity;
+  const author = identity.email || 'human';
+  const payload: any = { message: input.message };
+  if (Array.isArray(input.attempted) && input.attempted.length) payload.attempted = input.attempted;
+  if (Array.isArray(input.options) && input.options.length) payload.options = input.options;
+
+  const created = channelEventService.postChannelEvent({
+    planUid: input.planUid,
+    itemUid: input.itemUid ?? null,
+    eventType: input.eventType as any,
+    payload,
+    author,
+    authorType: 'human',
+    agentModel: null,
+    respondsTo: input.respondsTo ?? null,
+  });
+
+  // Auto-export when the plan is shared (linked to disk).
+  try {
+    const plan = planService.getPlan(created.planUid);
+    if (plan && getLinkedPlanDir(created.planUid, plan.projectPath)) {
+      exportChannelEvent(created, plan.projectPath);
+    }
+  } catch (err) {
+    console.warn('[Channels] auto-export failed:', err);
+  }
+
+  broadcast('channel-event-posted', {
+    uid: created.uid,
+    planUid: created.planUid,
+    itemUid: created.itemUid,
+    eventType: created.eventType,
+    respondsTo: created.respondsTo,
+  });
+
+  // Phase 2.3 — fire any matching routing rules.
+  dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
+  return created;
+}
+
+/** A person resolves, dismisses or reopens a channel event — app or phone, as above. */
+export function setChannelEventStatusAsPerson(eventUid: string, status: string) {
+  if (!channelEventService.getChannelEvent(eventUid)) throw new PlanRequestError(404, 'Channel event not found');
+  const updated = channelEventService.setChannelEventStatus(eventUid, status as any);
+  try {
+    const plan = planService.getPlan(updated.planUid);
+    if (plan && getLinkedPlanDir(updated.planUid, plan.projectPath)) {
+      exportChannelEvent(updated, plan.projectPath);
+    }
+  } catch (err) {
+    console.warn('[Channels] auto-export failed:', err);
+  }
+  broadcast('channel-event-status-changed', {
+    uid: updated.uid,
+    planUid: updated.planUid,
+    status: updated.status,
+  });
+  // Phase 2.3 — status changes can also match rules (e.g., "page on
+  // resolved" or "alert on dismissed").
+  dispatchChannelEvent(updated).catch((err) => console.warn('[Channels] dispatch failed:', err));
+  return updated;
+}
+
 /** Post a new channel event from the frontend (human author). */
 app.post('/api/plans/:planUid/channels', (req, res) => {
   const { event_type, message, item_uid, attempted, options, responds_to } = req.body || {};
@@ -2031,47 +2156,17 @@ app.post('/api/plans/:planUid/channels', (req, res) => {
     return;
   }
   try {
-    const identity = getSettings().identity;
-    const author = identity.email || 'human';
-    const payload: any = { message };
-    if (Array.isArray(attempted) && attempted.length) payload.attempted = attempted;
-    if (Array.isArray(options) && options.length) payload.options = options;
-
-    const created = channelEventService.postChannelEvent({
+    res.json(postChannelEventAsPerson({
       planUid: req.params.planUid,
-      itemUid: item_uid ?? null,
       eventType: event_type,
-      payload,
-      author,
-      authorType: 'human',
-      agentModel: null,
-      respondsTo: responds_to ?? null,
-    });
-
-    // Auto-export when the plan is shared (linked to disk).
-    try {
-      const plan = planService.getPlan(created.planUid);
-      if (plan && getLinkedPlanDir(created.planUid, plan.projectPath)) {
-        exportChannelEvent(created, plan.projectPath);
-      }
-    } catch (err) {
-      console.warn('[Channels] auto-export failed:', err);
-    }
-
-    broadcast('channel-event-posted', {
-      uid: created.uid,
-      planUid: created.planUid,
-      itemUid: created.itemUid,
-      eventType: created.eventType,
-      respondsTo: created.respondsTo,
-    });
-
-    // Phase 2.3 — fire any matching routing rules.
-    dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
-
-    res.json(created);
+      message,
+      itemUid: item_uid,
+      respondsTo: responds_to,
+      attempted,
+      options,
+    }));
   } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    res.status(err instanceof PlanRequestError ? err.status : 400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -2082,31 +2177,10 @@ app.post('/api/channels/:eventUid/status', (req, res) => {
     res.status(400).json({ error: 'status is required' });
     return;
   }
-  if (!channelEventService.getChannelEvent(req.params.eventUid)) {
-    res.status(404).json({ error: 'Channel event not found' });
-    return;
-  }
   try {
-    const updated = channelEventService.setChannelEventStatus(req.params.eventUid, status);
-    try {
-      const plan = planService.getPlan(updated.planUid);
-      if (plan && getLinkedPlanDir(updated.planUid, plan.projectPath)) {
-        exportChannelEvent(updated, plan.projectPath);
-      }
-    } catch (err) {
-      console.warn('[Channels] auto-export failed:', err);
-    }
-    broadcast('channel-event-status-changed', {
-      uid: updated.uid,
-      planUid: updated.planUid,
-      status: updated.status,
-    });
-    // Phase 2.3 — status changes can also match rules (e.g., "page on
-    // resolved" or "alert on dismissed").
-    dispatchChannelEvent(updated).catch((err) => console.warn('[Channels] dispatch failed:', err));
-    res.json(updated);
+    res.json(setChannelEventStatusAsPerson(req.params.eventUid, status));
   } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    res.status(err instanceof PlanRequestError ? err.status : 400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -2118,6 +2192,10 @@ app.post('/api/plans/:planUid/items', (req, res) => {
   } = req.body || {};
   if (!kind || !title) {
     res.status(400).json({ error: 'kind and title are required' });
+    return;
+  }
+  if (status !== undefined && !isTaskStatus(status)) {
+    res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
     return;
   }
   try {
@@ -2369,6 +2447,10 @@ app.put('/api/items/:uid', (req, res) => {
   }
   if (body.visibility !== undefined && !ITEM_VISIBILITIES.has(body.visibility)) {
     res.status(400).json({ error: 'visibility must be shared or local' });
+    return;
+  }
+  if (body.status !== undefined && !isTaskStatus(body.status)) {
+    res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
     return;
   }
   const item = planItemService.updateItem(req.params.uid, {
@@ -4234,6 +4316,7 @@ app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
     const removed = await peerService.unpairDevice(req.params.fingerprint);
+    if (!removed) { res.status(404).json({ error: 'device not found' }); return; }
     res.json({ removed });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4336,6 +4419,7 @@ app.post('/api/peers/remote-terminals/:fingerprint/:terminalId/write', (req, res
     const { data } = req.body as { data?: string };
     if (!data) { res.status(400).json({ error: 'data required' }); return; }
     const sent = peerService.writeRemoteTerminal(req.params.fingerprint, req.params.terminalId, data);
+    if (!sent) { res.status(404).json({ error: 'No such remote terminal on a connected peer' }); return; }
     res.json({ sent });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4368,6 +4452,7 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
     const sent = peerService.respondToInputRequest(req.params.requestId, response);
+    if (!sent) { res.status(404).json({ error: 'No pending input request with that id' }); return; }
     res.json({ sent });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4404,7 +4489,10 @@ app.post('/api/peers/push-tokens', (req, res) => {
 app.delete('/api/peers/push-tokens/:fingerprint', (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
-    peerService.unregisterPushToken(req.params.fingerprint);
+    if (!peerService.unregisterPushToken(req.params.fingerprint)) {
+      res.status(404).json({ error: 'no push token for that device' });
+      return;
+    }
     res.json({ unregistered: true });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4550,10 +4638,9 @@ app.put('/api/system-docs/:uid', (req, res) => {
 app.delete('/api/system-docs/:uid', (req, res) => {
   const svc = _lazy___services_system_docs_service;
   const ok = svc.deleteSystemDoc(req.params.uid);
-  if (ok) {
-    broadcast('system-doc-removed', { uid: req.params.uid });
-    saveNow(() => exportDatabase());
-  }
+  if (!ok) { res.status(404).json({ error: 'not found' }); return; }
+  broadcast('system-doc-removed', { uid: req.params.uid });
+  saveNow(() => exportDatabase());
   res.json({ ok, uid: req.params.uid });
 });
 

@@ -66,6 +66,7 @@ export {
   type ScriptedAgent,
   type ScriptedAgentOptions,
 } from './scripted-agent';
+export { pairPhone, type Phone, type PairOptions, type ControlMessage } from './peer';
 
 import { prepareFixture, PreparedFixture } from './fixture';
 import { startBackend, RunningBackend } from './backend';

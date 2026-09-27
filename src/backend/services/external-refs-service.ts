@@ -104,6 +104,16 @@ export function getExternalRefs(itemUid: string): ExternalRef[] {
   return (result[0]?.values ?? []).map(rowToRef);
 }
 
+export function getExternalRef(uid: string): ExternalRef | null {
+  const result = getDb().exec(
+    `SELECT uid, item_uid, kind, url, title, metadata, external_key, author, author_type, created_at
+     FROM external_refs WHERE uid = ?`,
+    [uid],
+  );
+  const row = result[0]?.values[0];
+  return row ? rowToRef(row) : null;
+}
+
 export function getExternalRefsByPlan(planUid: string): ExternalRef[] {
   const d = getDb();
   const result = d.exec(

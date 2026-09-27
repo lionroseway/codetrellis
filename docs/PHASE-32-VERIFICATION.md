@@ -14,9 +14,9 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 215 | 201 | 16 | 16 | 108 | 0 |
-| MCP tools | 185 | 147 | 9 | 4 | 127 | 0 |
-| Mobile RPC methods | 74 | 47 | 74 | 47 | 2 | 0 |
+| REST routes | 215 | 201 | 2 | 2 | 138 | 0 |
+| MCP tools | 185 | 147 | 5 | 1 | 141 | 0 |
+| Mobile RPC methods | 74 | 47 | 0 | 0 | 74 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 0 | 0 |
@@ -49,7 +49,7 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| a | `DELETE /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: removes a listed entry, including one whose directory is gone (project-open) |  |  |
+| a | `DELETE /api/recent-projects` |  | 1 | 7 | ✓ 0.4a: removes a listed entry, including one whose directory is gone (project-open) |  |  |
 | a | `GET /api/auto-detect` |  | ✗ none | 1 | ✓ 0.4a: live sessions only, with branch (auto-detect) |  |  |
 | a | `GET /api/build-info` |  | ✗ none | 1 | ✓ 0.4a: version/commit stamp, token-gated (smoke, transport-auth) |  |  |
 | a | `GET /api/fs/browse` |  | ✗ none | 2 | ✓ 0.4a: lists a home dir; / /etc /var refused (misc-endpoints, filesystem-boundary) |  |  |
@@ -64,22 +64,22 @@ is proof of a gap.
 | a | `GET /api/identity/git-defaults` |  | ✗ none | 2 | ✓ 0.4a: the project's own git identity (project-open) |  |  |
 | a | `GET /api/onboarding-state` |  | ✗ none | 3 | ✓ 0.4a: moves with plans and connected agents (project-open) |  |  |
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
-| a | `GET /api/recent-projects` |  | 1 | 6 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
+| a | `GET /api/recent-projects` |  | 1 | 7 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 80 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 86 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
-| b | `GET /api/architecture-summary` |  | ✗ none | 2 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
+| b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
 | b | `GET /api/cross-system` |  | ✗ none | 6 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
 | b | `GET /api/dependencies` |  | ✗ none | 3 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
-| b | `GET /api/dependencies/file` |  | ✗ none | 2 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
+| b | `GET /api/dependencies/file` |  | ✗ none | 3 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
 | b | `GET /api/diff` |  | ✗ none | 3 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
 | b | `GET /api/file/at` |  | ✗ none | 2 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
 | b | `GET /api/file/content` |  | ✗ none | 2 | ✓ 0.4b: returns the file's exact content; outside opened projects 403 (misc-endpoints, filesystem-boundary) |  |  |
 | b | `GET /api/file/overlay` |  | ✗ none | 2 | ✓ 0.4b: plan edits mapped onto lines (plan-overlay) |  |  |
 | b | `GET /api/playback` |  | ✗ none | 2 | ✓ 0.4b: discrete frames between comparands (playback) |  |  |
-| b | `GET /api/symbols/file` |  | ✗ none | 5 | ✓ 0.4b: flat qualified symbols per language (go/ruby/jvm-apple support, smoke) |  |  |
-| b | `GET /api/symbols/search` |  | ✗ none | 2 | ✓ 0.4b: finds symbols by name, incl. through a workspace alias (smoke, input-validation) |  |  |
+| b | `GET /api/symbols/file` |  | ✗ none | 6 | ✓ 0.4b: flat qualified symbols per language (go/ruby/jvm-apple support, smoke) |  |  |
+| b | `GET /api/symbols/search` |  | ✗ none | 3 | ✓ 0.4b: finds symbols by name, incl. through a workspace alias (smoke, input-validation) |  |  |
 | b | `GET /api/systems` |  | ✗ none | 3 | ✓ 0.4b: the fixture's services by path (graph-rest) |  |  |
 | b | `GET /api/trellis/:id` |  | ✗ none | 3 | ✓ 0.4b: includes the branch (baselines) |  |  |
 | b | `GET /api/trellis/:id/diff` |  | ✗ none | 2 | ✓ 0.4b: empty at capture; then the new file and its edge, live; 404 unknown (baselines) |  |  |
@@ -90,16 +90,16 @@ is proof of a gap.
 | c | `DELETE /api/items/:uid` |  | ✗ none | 8 |  |  |  |
 | c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `DELETE /api/plans/:uid` |  | 1 | 12 |  |  |  |
+| c | `DELETE /api/plans/:uid` |  | 1 | 14 |  |  |  |
 | c | `DELETE /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/attachments/:uid/file` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
 | c | `GET /api/contributions` |  | 1 | 3 |  |  |  |
-| c | `GET /api/items/:itemUid/refs` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/items/:itemUid/refs` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid` |  | ✗ none | 8 |  |  |  |
 | c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/items/:uid/criteria` |  | ✗ none | 6 |  |  |  |
+| c | `GET /api/items/:uid/comments` |  | ✗ none | 3 |  |  |  |
+| c | `GET /api/items/:uid/criteria` |  | ✗ none | 7 |  |  |  |
 | c | `GET /api/items/:uid/events` |  | ✗ none | 2 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
 | c | `GET /api/items/:uid/full` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/versions` |  | ✗ none | 1 | ✓ 0.4c-2: each edit a version (item-surface) |  |  |
@@ -111,27 +111,27 @@ is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans` |  | ✗ none | 44 |  |  |  |
-| c | `GET /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 20 |  |  |  |
+| c | `GET /api/plans` |  | ✗ none | 47 |  |  |  |
+| c | `GET /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 23 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid` |  | 1 | 12 |  |  |  |
+| c | `GET /api/plans/:uid` |  | 1 | 14 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/deviations` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
+| c | `GET /api/plans/:uid/deviations` |  | ✗ none | 4 |  |  |  |
+| c | `GET /api/plans/:uid/docs` |  | ✗ none | 6 |  |  |  |
 | c | `GET /api/plans/:uid/docs/by-type/:docType` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/docs/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by body with excerpt; no match is empty (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/external-sync` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/file-status` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/:uid/next-task` |  | ✗ none | 2 |  |  |  |
+| c | `GET /api/plans/:uid/next-task` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 4 |  |  |  |
+| c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 5 |  |  |  |
 | c | `GET /api/plans/:uid/projection` |  | ✗ none | 1 | ✓ 0.4c-1: ghost and modified files from an Action (plan-rest) |  |  |
 | c | `GET /api/plans/:uid/refs` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/:uid/review` |  | ✗ none | 5 |  |  |  |
+| c | `GET /api/plans/:uid/review` |  | ✗ none | 6 |  |  |  |
 | c | `GET /api/plans/:uid/versions` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/plans/discover` |  | ✗ none | 1 | ✓ 0.4c-1: exported plan directories (plan-rest) |  |  |
 | c | `GET /api/plans/reconcile` |  | ✗ none | 1 | ✓ 0.4c-1: the orphan once its plan is archived (plan-rest) |  |  |
@@ -141,22 +141,22 @@ is proof of a gap.
 | c | `POST /api/contributions/accept` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/contributions/promote` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/contributor-branch` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/items/:itemUid/refs` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/items/:itemUid/refs` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/items/:uid/blocked` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/claim` |  | ✗ none | 1 | ✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop) |  |  |
 | c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
-| c | `POST /api/items/:uid/comments` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/items/:uid/criteria` |  | ✗ none | 6 |  |  |  |
+| c | `POST /api/items/:uid/comments` |  | ✗ none | 3 |  |  |  |
+| c | `POST /api/items/:uid/criteria` |  | ✗ none | 7 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
-| c | `POST /api/plans` |  | ✗ none | 44 |  |  |  |
-| c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 20 |  |  |  |
+| c | `POST /api/plans` |  | ✗ none | 47 |  |  |  |
+| c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 23 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans/:uid/docs` |  | ✗ none | 5 |  |  |  |
+| c | `POST /api/plans/:uid/docs` |  | ✗ none | 6 |  |  |  |
 | c | `POST /api/plans/:uid/export` |  | ✗ none | 8 |  |  |  |
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 3 |  |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 |  |  |  |
@@ -170,7 +170,7 @@ is proof of a gap.
 | c | `PUT /api/items/:uid` |  | ✗ none | 8 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/plans/:uid` |  | 1 | 12 |  |  |  |
+| c | `PUT /api/plans/:uid` |  | 1 | 14 |  |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 |  |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
@@ -204,66 +204,66 @@ is proof of a gap.
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | h | `GET /api/baseline` |  | ✗ none | 3 | ✓ 0.4h: source, dirty, capturedAt and a label that says what it is; kept across rescans (baseline); bug 29 |  |  |
-| h | `GET /api/comparands` |  | ✗ none | 4 | ✓ 0.4h: live, baseline, checkpoints by name, commits; outside a project refused (drift-review-tools), plan-review, review-confinement |  |  |
-| h | `GET /api/compare` |  | ✗ none | 5 | ✓ 0.4h: exact diffs, same-point note, commit edges not compared, 404 unknown (plan-review, compare-hash-space, compare-phantom-removals) |  |  |
+| h | `GET /api/comparands` |  | ✗ none | 5 | ✓ 0.4h: live, baseline, checkpoints by name, commits; outside a project refused (drift-review-tools), plan-review, review-confinement |  |  |
+| h | `GET /api/compare` |  | ✗ none | 6 | ✓ 0.4h: exact diffs, same-point note, commit edges not compared, 404 unknown (plan-review, compare-hash-space, compare-phantom-removals) |  |  |
 | h | `GET /api/conflicts` |  | ✗ none | 4 | ✓ 0.4h: a real merge conflict with per-field ours/theirs (manifest-conflicts, worktree-project) |  |  |
 | h | `GET /api/freeze` |  | ✗ none | 3 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
 | h | `POST /api/baseline/capture` |  | ✗ none | 2 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
 | h | `PUT /api/freeze` |  | ✗ none | 3 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33 |  |  |
-| i | `DELETE /api/terminals/:id` |  | ✗ none | 2 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
+| i | `DELETE /api/terminals/:id` |  | ✗ none | 3 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
 | i | `GET /api/audio/recent` |  | ✗ none | 1 | ✓ 0.4i: chunks concatenated in order with duration and times; seconds narrows; 404 when empty (audio-rest) |  |  |
 | i | `GET /api/audio/status` |  | ✗ none | 1 | ✓ 0.4i: capturing, chunk count, buffered seconds, window (audio-rest) |  |  |
-| i | `GET /api/terminals` |  | 1 | 2 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
-| i | `GET /api/terminals/:id/history` |  | ✗ none | 2 | ✓ 0.4i: scrollback of what ran, paged backwards; unknown id empty and creates nothing (terminal-surface), input-validation |  |  |
+| i | `GET /api/terminals` |  | 1 | 3 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
+| i | `GET /api/terminals/:id/history` |  | ✗ none | 3 | ✓ 0.4i: scrollback of what ran, paged backwards; unknown id empty and creates nothing (terminal-surface), input-validation |  |  |
 | i | `POST /api/audio/chunk` |  | ✗ none | 1 | ✓ 0.4i: buffered in order; 409 when not capturing; bad length or data 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/start` |  | ✗ none | 1 | ✓ 0.4i: capturing, clears the buffer, default size when none named; bad sizes 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/stop` |  | ✗ none | 1 | ✓ 0.4i: stops, keeps the buffer, refuses more chunks (audio-rest) |  |  |
-| i | `POST /api/terminals` |  | 1 | 2 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
-| i | `POST /api/terminals/:id/inject` |  | ✗ none | 2 | ✓ 0.4i: the text runs in the shell (output in history); 400 empty, 404 unknown or dead (terminal-surface) |  |  |
-| j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 1 |  |  |  |
-| j | `DELETE /api/peers/push-tokens/:fingerprint` |  | ✗ none | 1 |  |  |  |
-| j | `GET /api/pairing/status` |  | ✗ none | 2 |  |  |  |
-| j | `GET /api/peers/audit` |  | ✗ none | 1 |  |  |  |
-| j | `GET /api/peers/connections` |  | ✗ none | ✗ none |  |  |  |
-| j | `GET /api/peers/devices` |  | ✗ none | 1 |  |  |  |
-| j | `GET /api/peers/discovered` |  | ✗ none | ✗ none |  |  |  |
-| j | `GET /api/peers/push-tokens` |  | ✗ none | 1 |  |  |  |
-| j | `GET /api/peers/remote-audio` |  | ✗ none | ✗ none |  |  |  |
-| j | `GET /api/peers/remote-input-requests` |  | ✗ none | ✗ none |  |  |  |
-| j | `GET /api/peers/remote-state` |  | ✗ none | ✗ none |  |  |  |
-| j | `GET /api/peers/remote-state/:fingerprint` |  | ✗ none | ✗ none |  |  |  |
-| j | `GET /api/peers/remote-terminals` |  | ✗ none | ✗ none |  |  |  |
-| j | `GET /api/peers/status` |  | ✗ none | 3 |  |  |  |
-| j | `GET /api/sync/peek` |  | ✗ none | 2 |  |  |  |
-| j | `GET /api/sync/status` |  | ✗ none | 1 |  |  |  |
-| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 1 |  |  |  |
-| j | `POST /api/pairing/cancel` |  | ✗ none | 2 |  |  |  |
-| j | `POST /api/pairing/confirm` |  | ✗ none | 2 |  |  |  |
-| j | `POST /api/pairing/initiate` |  | ✗ none | 4 |  |  |  |
-| j | `POST /api/peers/push-tokens` |  | ✗ none | 1 |  |  |  |
-| j | `POST /api/peers/remote-input-requests/:requestId/respond` |  | ✗ none | ✗ none |  |  |  |
-| j | `POST /api/peers/remote-terminals/:fingerprint/:terminalId/write` |  | ✗ none | ✗ none |  |  |  |
-| j | `POST /api/sync/export` |  | ✗ none | 1 |  |  |  |
-| j | `POST /api/sync/import` |  | ✗ none | 1 |  |  |  |
+| i | `POST /api/terminals` |  | 1 | 3 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
+| i | `POST /api/terminals/:id/inject` |  | ✗ none | 3 | ✓ 0.4i: the text runs in the shell (output in history); 400 empty, 404 unknown or dead (terminal-surface) |  |  |
+| j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 6 | ✓ 0.4j: forgotten and disconnected; unknown 404 (phone-sync-and-tools) |  |  |
+| j | `DELETE /api/peers/push-tokens/:fingerprint` |  | ✗ none | 2 | ✓ 0.4j: token gone from the list; unknown 404 (phone-sync-and-tools) |  |  |
+| j | `GET /api/pairing/status` |  | ✗ none | 2 | ✓ 0.4j: codeReady once the phone answers, never the code itself (gate4-reconnect-identity, harness peer) |  |  |
+| j | `GET /api/peers/audit` |  | ✗ none | 3 | ✓ 0.4j: refusals, terminal access (RPC and relay, output never recorded), grants; survives restart (peer-device-access, phone-sync-and-tools, phone-terminals-sysdocs) |  |  |
+| j | `GET /api/peers/connections` |  | ✗ none | 1 | ✓ 0.4j: the phone, named as paired, all four channels (phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/devices` |  | ✗ none | 2 | ✓ 0.4j: paired devices without the reconnect secret; forgotten one gone (peer-device-access, phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/discovered` |  | ✗ none | 1 | ✓ 0.4j: a list (mDNS off in the harness) (phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/push-tokens` |  | ✗ none | 2 | ✓ 0.4j: the phone's registered token (cdev-phase11, phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/remote-audio` |  | ✗ none | 1 | ✓ 0.4j: counts peers (phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/remote-input-requests` |  | ✗ none | 1 | ✓ 0.4j: a peer's pending question with its context (phone-channels-projects) |  |  |
+| j | `GET /api/peers/remote-state` |  | ✗ none | 1 | ✓ 0.4j: holds the peer's own snapshot (phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/remote-state/:fingerprint` |  | ✗ none | 1 | ✓ 0.4j: that peer's snapshot; unknown 404 (phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/remote-terminals` |  | ✗ none | 1 | ✓ 0.4j: a peer's shared terminals, all or by fingerprint (phone-sync-and-tools) |  |  |
+| j | `GET /api/peers/status` |  | ✗ none | 3 | ✓ 0.4j: running, mobile API port actually bound, counts (gate4-reconnect-identity, pairing-enables-lan, cdev-phase11) |  |  |
+| j | `GET /api/sync/peek` |  | ✗ none | 2 | ✓ 0.4j: what an import would bring, before it does (cdev-phase5, surfaced-rest) |  |  |
+| j | `GET /api/sync/status` |  | ✗ none | 1 | ✓ 0.4j: personal sync state (cdev-phase5) |  |  |
+| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 6 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
+| j | `POST /api/pairing/cancel` |  | ✗ none | 2 | ✓ 0.4j: window closed (pairing-transport, peer-reconnect-auth) |  |  |
+| j | `POST /api/pairing/confirm` |  | ✗ none | 2 | ✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer) |  |  |
+| j | `POST /api/pairing/initiate` |  | ✗ none | 4 | ✓ 0.4j: v5 QR payload, scannable size; code only in the body (gate4-reconnect-identity, pairing-transport, harness peer) |  |  |
+| j | `POST /api/peers/push-tokens` |  | ✗ none | 2 | ✓ 0.4j: register and list (cdev-phase11) |  |  |
+| j | `POST /api/peers/remote-input-requests/:requestId/respond` |  | ✗ none | 1 | ✓ 0.4j: answer reaches the peer; answered twice 404, no response 400 (phone-channels-projects) |  |  |
+| j | `POST /api/peers/remote-terminals/:fingerprint/:terminalId/write` |  | ✗ none | 1 | ✓ 0.4j: input reaches the peer; unknown terminal 404, no data 400 (phone-sync-and-tools) |  |  |
+| j | `POST /api/sync/export` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
+| j | `POST /api/sync/import` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
 | k | `GET /api/logs/path` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 1 |  |  |  |
-| k | `GET /api/power/status` |  | ✗ none | ✗ none |  |  |  |
-| k | `GET /api/settings` |  | ✗ none | 18 |  |  |  |
+| k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
+| k | `GET /api/settings` |  | ✗ none | 21 |  |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 2 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | ✗ none |  |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 |  |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 18 |  |  |  |
-| l | `DELETE /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
-| l | `GET /api/system-docs` |  | ✗ none | 2 |  |  |  |
-| l | `GET /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
-| l | `GET /api/system-docs/:uid/freshness` |  | ✗ none | ✗ none |  |  |  |
-| l | `POST /api/system-docs` |  | ✗ none | 2 |  |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 21 |  |  |  |
+| l | `DELETE /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
+| l | `GET /api/system-docs` |  | ✗ none | 3 |  |  |  |
+| l | `GET /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
+| l | `GET /api/system-docs/:uid/freshness` |  | ✗ none | 1 | ✓ 0.4j: the report; unknown 404 (phone-terminals-sysdocs) |  |  |
+| l | `POST /api/system-docs` |  | ✗ none | 3 |  |  |  |
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | ✗ none |  |  |  |
-| l | `PUT /api/system-docs/:uid` |  | ✗ none | ✗ none |  |  |  |
+| l | `PUT /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown 404 (phone-terminals-sysdocs) |  |  |
 
 ## MCP tools (185)
 
@@ -353,7 +353,7 @@ is proof of a gap.
 | d | `get_worklist` | plan-item · read | ✗ none | 1 | ✓ 0.4d: hands back the send-back note and where it points (criteria-loops) |  |  |
 | d | `list_criteria` | plan-item · read | 1 | 2 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
-| d | `submit_criterion` | plan-item · write | 1 | 4 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
+| d | `submit_criterion` | plan-item · write | 1 | 5 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
 | e | `get_brief` | plan-item · read | 2 | 1 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
 | e | `list_materials` | plan-item · read | 1 | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
 | e | `read_material` | plan-item · files | 2 | 1 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
@@ -384,21 +384,21 @@ is proof of a gap.
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
 | g | `register_session` | session · read | 1 | 6 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
-| g | `screenshot` | ui · capture | 1 | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
+| g | `screenshot` | ui · capture | 1 | 2 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
 | g | `set_baseline` | session · write | ✗ none | 1 | ✓ 0.4h: pins the commit on the backend, the window reads it back; null clears; bad refs refused (baseline); bug 29 |  |  |
-| g | `set_budget` | budget · write | ✗ none | 1 | ✓ 0.4g: set, exempt, clear one dimension; recorded in the agent's name and flagged until seen; nothing stored for an unknown plan (agent-ui-tools, mcp-ui-tools.spec) |  |  |
+| g | `set_budget` | budget · write | ✗ none | 2 | ✓ 0.4g: set, exempt, clear one dimension; recorded in the agent's name and flagged until seen; nothing stored for an unknown plan (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `setup_agent_permissions` | session · settings | 1 | 1 | ✓ 0.4g: refused without settings; merges the wildcard; inside an opened project only, never through a link (agent-ui-tools) |  |  |
 | g | `toggle_activity_drawer` | session · write | ✗ none | 1 | ✓ 0.4g: drawer toggles both ways (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `toggle_panel` | session · write | ✗ none | 1 | ✓ 0.4g: sends the panel (agent-ui-tools) |  |  |
 | g | `update_settings` | ui · settings | ✗ none | 1 | ✓ 0.4g: persists first-run and data fields (cdev-phase5) |  |  |
-| h | `capture_checkpoint` | drift · write | ✗ none | 2 | ✓ 0.4h: becomes checkpoint:<id>, compares against live; unknown plan refused (drift-review-tools) |  |  |
+| h | `capture_checkpoint` | drift · write | ✗ none | 3 | ✓ 0.4h: becomes checkpoint:<id>, compares against live; unknown plan refused (drift-review-tools) |  |  |
 | h | `check_freeze` | governance · read | ✗ none | 2 | ✓ 0.4h: blocked during a freeze, allowed when exempt or lifted (review-governance-tools), cdev-phase6 |  |  |
 | h | `commit_manifest_changes` | git · write | ✗ none | 4 | ✓ 0.4h: HEAD is the returned sha, [cdev] subject, attribution lines, clean status (worktree-project, cdev-channels) |  |  |
 | h | `compare_snapshots` | review · read | ✗ none | 3 | ✓ 0.4h: checkpoint → live names exactly the changed files; unknown comparand refused (review-governance-tools) |  |  |
 | h | `detect_conflicts` | git · read | ✗ none | 2 | ✓ 0.4h: names the conflicted manifest during a real merge; empty when clean (drift-review-tools), cdev-phase6 |  |  |
-| h | `detect_deviations` | drift · read | ✗ none | 3 | ✓ 0.4h: missing_file for a done action's absent file; unknown plan refused (drift-review-tools), full-loop, cdev-sensors |  |  |
+| h | `detect_deviations` | drift · read | ✗ none | 4 | ✓ 0.4h: missing_file for a done action's absent file; unknown plan refused (drift-review-tools), full-loop, cdev-sensors |  |  |
 | h | `diff_plan_between_commits` | git · read | ✗ none | 1 | ✓ 0.4h: items added between two commits, by title (cdev-phase6) |  |  |
 | h | `exempt_plan_from_freeze` | governance · write | ✗ none | 1 | ✓ 0.4h: check_freeze allows the exempt plan afterwards (cdev-phase6) |  |  |
 | h | `get_change_status` | drift · read | ✗ none | 1 | ✓ 0.4h: one change by id; unknown id an error (drift-review-tools); bug 30 |  |  |
@@ -429,20 +429,20 @@ is proof of a gap.
 | i | `terminal_read` | terminal · terminal | ✗ none | 1 | ✓ 0.4i: reads what the shell printed (terminal-session-id) |  |  |
 | i | `terminal_resize` | terminal · terminal | ✗ none | 2 | ✓ 0.4i: the shell sees the new width (tput cols); unknown refused (terminal-surface) |  |  |
 | i | `terminal_write` | terminal · terminal | 1 | 2 | ✓ 0.4i: runs in another terminal; refused on the agent's own host terminal and on a killed one (terminal-surface), terminal-session-id |  |  |
-| j | `get_peer_status` | peer · read | ✗ none | 3 |  |  |  |
-| j | `get_remote_audio` | peer · capture | ✗ none | 1 |  |  |  |
-| j | `get_remote_state` | peer · read | ✗ none | 1 |  |  |  |
-| j | `list_discovered_peers` | peer · read | ✗ none | 1 |  |  |  |
-| j | `list_paired_devices` | peer · read | ✗ none | 1 |  |  |  |
-| j | `list_peer_connections` | peer · read | ✗ none | 1 |  |  |  |
-| j | `list_remote_input_requests` | peer · read | ✗ none | 1 |  |  |  |
-| j | `list_remote_terminals` | peer · terminal | ✗ none | 1 |  |  |  |
-| j | `mobile_navigate` | mobile · write | ✗ none | ✗ none |  |  |  |
-| j | `mobile_present` | mobile · write | ✗ none | ✗ none |  |  |  |
-| j | `mobile_screenshot` | mobile · capture | ✗ none | ✗ none |  |  |  |
-| j | `respond_remote_input` | peer · write | ✗ none | 1 |  |  |  |
-| j | `unpair_device` | peer · settings | ✗ none | 1 |  |  |  |
-| j | `write_remote_terminal` | peer · terminal | 1 | ✗ none |  |  |  |
+| j | `get_peer_status` | peer · read | ✗ none | 4 | ✓ 0.4j: paired and connected counts with a phone connected (phone-peer-tools) |  |  |
+| j | `get_remote_audio` | peer · capture | ✗ none | 2 | ✓ 0.4j: counts peers (phone-peer-tools) |  |  |
+| j | `get_remote_state` | peer · read | ✗ none | 2 | ✓ 0.4j: the peer's snapshot, one or all; none yet refused (phone-peer-tools) |  |  |
+| j | `list_discovered_peers` | peer · read | ✗ none | 2 | ✓ 0.4j: a list (mDNS off in the harness) (phone-peer-tools) |  |  |
+| j | `list_paired_devices` | peer · read | ✗ none | 2 | ✓ 0.4j: the phone, no secret (phone-peer-tools) |  |  |
+| j | `list_peer_connections` | peer · read | ✗ none | 2 | ✓ 0.4j: the phone, named as paired, connected (phone-peer-tools) |  |  |
+| j | `list_remote_input_requests` | peer · read | ✗ none | 2 | ✓ 0.4j: the peer's question with its prompt (phone-peer-tools) |  |  |
+| j | `list_remote_terminals` | peer · terminal | ✗ none | 2 | ✓ 0.4j: the peer's shared terminal, all or by peer (phone-peer-tools) |  |  |
+| j | `mobile_navigate` | mobile · write | ✗ none | 1 | ✓ 0.4j: view, plan and item routes reach the phone; unknown plan or item refused (phone-sync-and-tools) |  |  |
+| j | `mobile_present` | mobile · write | ✗ none | 1 | ✓ 0.4j: card reaches the phone through the snapshot (phone-sync-and-tools) |  |  |
+| j | `mobile_screenshot` | mobile · capture | ✗ none | 1 | ✓ 0.4j: chunks reassembled in any order; the phone's error passed on (phone-sync-and-tools) |  |  |
+| j | `respond_remote_input` | peer · write | ✗ none | 2 | ✓ 0.4j: answer reaches the peer once; again refused (phone-peer-tools) |  |  |
+| j | `unpair_device` | peer · settings | ✗ none | 2 | ✓ 0.4j: forgotten and disconnected; unknown refused (isError) (phone-peer-tools, cdev-phase9) |  |  |
+| j | `write_remote_terminal` | peer · terminal | 1 | 1 | ✓ 0.4j: input reaches the peer's terminal; unknown refused (phone-peer-tools) |  |  |
 | l | `check_doc_freshness` | system-docs · read | ✗ none | 1 |  |  |  |
 | l | `create_plan_from_external` | intake · write | 3 | 3 |  |  |  |
 | l | `delete_system_doc` | system-docs · write | ✗ none | 1 |  |  |  |
@@ -459,80 +459,80 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| a | `diagnostics.flush` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `fs.browse` | files | 2 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.active` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.alias` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.close` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.list` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.open` | project | 2 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.pin` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.remove` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| a | `project.rescan` | project | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `changes.summary` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `graph.directory` | read | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `graph.file` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `graph.fileSearch` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `graph.fileSource` | files | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `graph.overview` | read | 1 | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `graph.scene` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| b | `graph.search` | read | ✗ none | ✗ none |  |  | Deferred to 0.4j: no harness peer path to the RPC surface yet |
-| c | `comment.add` | write | ✗ none | ✗ none |  |  |  |
-| c | `item.ref.add` | write | ✗ none | ✗ none |  |  |  |
-| c | `item.ref.remove` | write | ✗ none | ✗ none |  |  |  |
-| c | `plan.copyAsPrompt` | read | ✗ none | ✗ none |  |  |  |
-| c | `plan.create` | write | 1 | ✗ none |  |  |  |
-| c | `plan.delete` | write | ✗ none | ✗ none |  |  |  |
-| c | `plan.document` | read | ✗ none | ✗ none |  |  |  |
-| c | `plan.file.discover` | write | ✗ none | ✗ none |  |  |  |
-| c | `plan.file.export` | write | 1 | ✗ none |  |  |  |
-| c | `plan.file.import` | write | 1 | ✗ none |  |  |  |
-| c | `plan.get` | read | ✗ none | ✗ none |  |  |  |
-| c | `plan.item.create` | write | ✗ none | ✗ none |  |  |  |
-| c | `plan.item.get` | read | ✗ none | ✗ none |  |  |  |
-| c | `plan.item.update` | write | ✗ none | ✗ none |  |  |  |
-| c | `plan.items` | read | ✗ none | ✗ none |  |  |  |
-| c | `plan.list` | read | 1 | ✗ none |  |  |  |
-| c | `plan.nextItem` | read | ✗ none | ✗ none |  |  |  |
-| c | `plan.template.create` | write | 1 | ✗ none |  |  |  |
-| c | `plan.template.list` | read | ✗ none | ✗ none |  |  |  |
-| c | `plan.update` | write | ✗ none | ✗ none |  |  |  |
-| d | `criteria.awaiting` | read | 1 | ✗ none |  |  |  |
-| d | `criteria.list` | read | ✗ none | ✗ none |  |  |  |
-| d | `criterion.decide` | write | 1 | ✗ none |  |  |  |
-| e | `artefact.preview` | files | 1 | ✗ none |  |  |  |
-| f | `channel.events` | read | ✗ none | ✗ none |  |  |  |
-| f | `channel.eventsSinceSeq` | read | ✗ none | ✗ none |  |  |  |
-| f | `channel.get` | read | ✗ none | ✗ none |  |  |  |
-| f | `channel.post` | write | ✗ none | ✗ none |  |  |  |
-| f | `channel.resolve` | write | ✗ none | ✗ none |  |  |  |
-| f | `channel.thread` | read | ✗ none | ✗ none |  |  |  |
-| f | `input.respond` | write | ✗ none | ✗ none |  |  |  |
-| g | `budget.acknowledge` | write | 1 | ✗ none | ✓ phone: needs a confirmed pairing; unflags in the person's name, audited, desktop told; other plan's or unknown change refused (mobile-budget unit) |  |  |
-| g | `budget.get` | read | 1 | ✗ none | ✓ phone: ceiling, spend (unknown cost stays null) and flagged agent changes in the desktop's words; unknown plan refused (mobile-budget unit) |  |  |
-| h | `deviation.list` | read | ✗ none | ✗ none |  |  |  |
-| h | `deviation.resolve` | write | ✗ none | ✗ none |  |  |  |
-| h | `review.comparands` | read | ✗ none | ✗ none |  |  |  |
-| h | `review.compare` | read | ✗ none | ✗ none |  |  |  |
-| h | `review.get` | read | ✗ none | ✗ none |  |  |  |
-| h | `review.prDraft` | read | ✗ none | ✗ none |  |  |  |
-| i | `terminal.create` | terminal | 2 | ✗ none |  |  |  |
-| i | `terminal.history` | terminal | ✗ none | ✗ none |  |  |  |
-| i | `terminal.kill` | terminal | ✗ none | ✗ none |  |  |  |
-| i | `terminal.list` | terminal | 2 | ✗ none |  |  |  |
-| i | `terminal.read` | terminal | 1 | ✗ none |  |  |  |
-| i | `terminal.resize` | terminal | ✗ none | ✗ none |  |  |  |
-| i | `terminal.stream` | terminal | ✗ none | ✗ none |  |  |  |
-| i | `terminal.write` | terminal | 2 | ✗ none |  |  |  |
-| k | `power.status` | read | ✗ none | ✗ none |  |  |  |
-| k | `settings.get` | read | 1 | ✗ none |  |  |  |
-| k | `settings.update` | settings | 1 | ✗ none |  |  |  |
-| l | `sysdoc.create` | write | 1 | ✗ none |  |  |  |
-| l | `sysdoc.delete` | write | ✗ none | ✗ none |  |  |  |
-| l | `sysdoc.list` | read | ✗ none | ✗ none |  |  |  |
-| l | `sysdoc.read` | read | ✗ none | ✗ none |  |  |  |
-| l | `sysdoc.update` | write | ✗ none | ✗ none |  |  |  |
-| l | `sysdoc.verify` | write | ✗ none | ✗ none |  |  |  |
+| a | `diagnostics.flush` | read | ✗ none | 1 | ✓ 0.4j: entries in the desktop log tagged with the phone; non-text skipped (phone-channels-projects) |  |  |
+| a | `fs.browse` | files | 2 | 1 | ✓ 0.4j: folders, project-looking first; needs files (phone-graph-review) |  |  |
+| a | `project.active` | read | ✗ none | 1 | ✓ 0.4j: the open project (phone-channels-projects) |  |  |
+| a | `project.alias` | project | 1 | 1 | ✓ 0.4j: display name; not recent refused (phone-channels-projects) |  |  |
+| a | `project.close` | project | 1 | 1 | ✓ 0.4j: desktop closes the tab; not recent refused (phone-channels-projects) |  |  |
+| a | `project.list` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's recent list (phone-channels-projects) |  |  |
+| a | `project.open` | project | 2 | 1 | ✓ 0.4j: scans, opens on the desktop too; a missing folder refused (phone-channels-projects) |  |  |
+| a | `project.pin` | project | 1 | 1 | ✓ 0.4j: pin and unpin; not recent refused (phone-channels-projects) |  |  |
+| a | `project.remove` | project | 1 | 1 | ✓ 0.4j: gone from the list; not recent refused (phone-channels-projects) |  |  |
+| a | `project.rescan` | project | 1 | 1 | ✓ 0.4j: picks up a new file; unopened refused (phone-channels-projects) |  |  |
+| b | `changes.summary` | read | ✗ none | 1 | ✓ 0.4j: git and the architecture diff agree; unopened refused (phone-graph-review) |  |  |
+| b | `graph.directory` | read | 1 | 1 | ✓ 0.4j: one level of files and subdirectories (phone-graph-review) |  |  |
+| b | `graph.file` | read | ✗ none | 1 | ✓ 0.4j: symbols and imports as the desktop has them (phone-graph-review) |  |  |
+| b | `graph.fileSearch` | read | ✗ none | 1 | ✓ 0.4j: by project-relative path, query is text not a pattern (phone-graph-review); bug 40 |  |  |
+| b | `graph.fileSource` | files | 1 | 1 | ✓ 0.4j: content and git gutter; outside, sibling-prefix and link refused; needs files (phone-graph-review) |  |  |
+| b | `graph.overview` | read | 1 | 1 | ✓ 0.4j: the desktop's summary, most-imported as absolute paths (phone-graph-review) |  |  |
+| b | `graph.scene` | read | ✗ none | 1 | ✓ 0.4j: clusters and edges; live marks changed, planned marks the plan's file (phone-graph-review) |  |  |
+| b | `graph.search` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's symbol search (phone-graph-review) |  |  |
+| c | `comment.add` | write | ✗ none | 1 | ✓ 0.4j: item comment reaches the item thread, plan comment the plan; unknown target refused (phone-plans); bug 37 |  |  |
+| c | `item.ref.add` | write | ✗ none | 1 | ✓ 0.4j: link on the item, desktop told; unknown item refused (phone-plans); bug 37 |  |  |
+| c | `item.ref.remove` | write | ✗ none | 1 | ✓ 0.4j: removed, desktop told; unknown refused (phone-plans); bug 37 |  |  |
+| c | `plan.copyAsPrompt` | read | ✗ none | 1 | ✓ 0.4j: the handoff prompt, work not yet started; unknown refused (phone-plans) |  |  |
+| c | `plan.create` | write | 1 | 1 | ✓ 0.4j: in the open project, as the person, desktop told (phone-plans); bug 37 |  |  |
+| c | `plan.delete` | write | ✗ none | 1 | ✓ 0.4j: archived, files out of the project and they stay out, desktop told; unknown refused (phone-plans); bugs 37, 39 |  |  |
+| c | `plan.document` | read | ✗ none | 1 | ✓ 0.4j: the doc body; unknown refused (phone-plans) |  |  |
+| c | `plan.file.discover` | write | ✗ none | 1 | ✓ 0.4j: finds the exported folder (phone-plans) |  |  |
+| c | `plan.file.export` | write | 1 | 1 | ✓ 0.4j: into the plan's own project; unknown plan refused (phone-plans) |  |  |
+| c | `plan.file.import` | write | 1 | 1 | ✓ 0.4j: reads it back; outside an opened project refused (phone-plans) |  |  |
+| c | `plan.get` | read | ✗ none | 1 | ✓ 0.4j: plan, items, documents, deviations, links, comments; unknown refused (phone-plans) |  |  |
+| c | `plan.item.create` | write | ✗ none | 1 | ✓ 0.4j: as the person, desktop told; unknown plan refused (phone-plans); bug 37 |  |  |
+| c | `plan.item.get` | read | ✗ none | 1 | ✓ 0.4j: item with comments, links, attachments; unknown refused (phone-plans) |  |  |
+| c | `plan.item.update` | write | ✗ none | 1 | ✓ 0.4j: edits save (author recorded), desktop told, status checked (phone-plans); bugs 36, 37, 38 |  |  |
+| c | `plan.items` | read | ✗ none | 1 | ✓ 0.4j: items with status; unknown plan refused (phone-plans) |  |  |
+| c | `plan.list` | read | 1 | 1 | ✓ 0.4j: counts per plan; filter by an opened project only (phone-plans) |  |  |
+| c | `plan.nextItem` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's next-task; none while nothing is pending (phone-plans) |  |  |
+| c | `plan.template.create` | write | 1 | 1 | ✓ 0.4j: plan with items; desktop told with the plan; unknown template refused (phone-plans); bug 37 |  |  |
+| c | `plan.template.list` | read | ✗ none | 1 | ✓ 0.4j: same templates as the desktop (phone-plans) |  |  |
+| c | `plan.update` | write | ✗ none | 1 | ✓ 0.4j: the desktop's edit path — desktop told, status checked, unknown refused (phone-plans); bugs 37, 38 |  |  |
+| d | `criteria.awaiting` | read | 1 | 1 | ✓ 0.4j: empty until the agent submits, then the criterion; empty after deciding (phone-sync-and-tools), mobile-approvals unit |  |  |
+| d | `criteria.list` | read | ✗ none | 1 | ✓ 0.4j: the item's criteria (phone-sync-and-tools), mobile-approvals unit |  |  |
+| d | `criterion.decide` | write | 1 | 1 | ✓ 0.4j: approved from the phone (phone-sync-and-tools), mobile-approvals unit |  |  |
+| e | `artefact.preview` | files | 1 | 1 | ✓ 0.4j: unknown file and bad transfer id refused (phone-sync-and-tools), mobile-approvals unit |  |  |
+| f | `channel.events` | read | ✗ none | 1 | ✓ 0.4j: same as REST; limit (phone-channels-projects) |  |  |
+| f | `channel.eventsSinceSeq` | read | ✗ none | 1 | ✓ 0.4j: all since 0, empty when caught up, then only the new one (phone-channels-projects) |  |  |
+| f | `channel.get` | read | ✗ none | 1 | ✓ 0.4j: one event; unknown refused (phone-channels-projects) |  |  |
+| f | `channel.post` | write | ✗ none | 1 | ✓ 0.4j: the desktop's path — author is the person whatever the request says, routing, export, desktop told; bad type/empty/unknown plan refused (phone-channels-projects); bug 37 |  |  |
+| f | `channel.resolve` | write | ✗ none | 1 | ✓ 0.4j: status changes, desktop told; bad status and unknown refused (phone-channels-projects) |  |  |
+| f | `channel.thread` | read | ✗ none | 1 | ✓ 0.4j: root then reply (phone-channels-projects) |  |  |
+| f | `input.respond` | write | ✗ none | 1 | ✓ 0.4j: answer reaches the asking peer once; not pending refused (phone-channels-projects) |  |  |
+| g | `budget.acknowledge` | write | 1 | 1 | ✓ 0.4j: unflagged, desktop told (phone-sync-and-tools), mobile-budget unit |  |  |
+| g | `budget.get` | read | 1 | 1 | ✓ 0.4j: agent's change flagged (phone-sync-and-tools), mobile-budget unit |  |  |
+| h | `deviation.list` | read | ✗ none | 1 | ✓ 0.4j: same as REST; unknown plan refused (phone-plans) |  |  |
+| h | `deviation.resolve` | write | ✗ none | 1 | ✓ 0.4j: resolved as the person; bad action and unknown id refused (phone-plans) |  |  |
+| h | `review.comparands` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's; unknown plan refused (phone-graph-review) |  |  |
+| h | `review.compare` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's; unknown checkpoint refused (phone-graph-review) |  |  |
+| h | `review.get` | read | ✗ none | 1 | ✓ 0.4j: same review as the desktop; unknown plan refused (phone-graph-review) |  |  |
+| h | `review.prDraft` | read | ✗ none | 1 | ✓ 0.4j: same draft as the desktop (phone-graph-review) |  |  |
+| i | `terminal.create` | terminal | 2 | 1 | ✓ 0.4j: shell in the project, shown on the desktop (phone-terminals-sysdocs) |  |  |
+| i | `terminal.history` | terminal | ✗ none | 1 | ✓ 0.4j: scrollback, paged (phone-terminals-sysdocs) |  |  |
+| i | `terminal.kill` | terminal | ✗ none | 1 | ✓ 0.4j: ended for phone and desktop; history kept (phone-terminals-sysdocs) |  |  |
+| i | `terminal.list` | terminal | 2 | 1 | ✓ 0.4j: needs the terminal grant (refusal audited); lists the new shell (phone-terminals-sysdocs) |  |  |
+| i | `terminal.read` | terminal | 1 | 1 | ✓ 0.4j: what the shell printed; not there refused (phone-terminals-sysdocs) |  |  |
+| i | `terminal.resize` | terminal | ✗ none | 1 | ✓ 0.4j: shell sees the width; bad sizes and not there refused (phone-terminals-sysdocs) |  |  |
+| i | `terminal.stream` | terminal | ✗ none | 1 | ✓ 0.4j: whole buffer, then only what is new (phone-terminals-sysdocs) |  |  |
+| i | `terminal.write` | terminal | 2 | 1 | ✓ 0.4j: runs in the shell; not there refused (phone-terminals-sysdocs) |  |  |
+| k | `power.status` | read | ✗ none | 1 | ✓ 0.4j: the desktop's answer, and the snapshot's (phone-channels-projects) |  |  |
+| k | `settings.get` | read | 1 | 1 | ✓ 0.4j: same as the desktop's (phone-channels-projects) |  |  |
+| k | `settings.update` | settings | 1 | 1 | ✓ 0.4j: needs the settings grant; phone-safe part only — ports, paths, webhook hosts untouched (phone-channels-projects) |  |  |
+| l | `sysdoc.create` | write | 1 | 1 | ✓ 0.4j: file in the project, desktop told (phone-terminals-sysdocs) |  |  |
+| l | `sysdoc.delete` | write | ✗ none | 1 | ✓ 0.4j: removed, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
+| l | `sysdoc.list` | read | ✗ none | 1 | ✓ 0.4j: same as REST; search; unopened refused (phone-terminals-sysdocs) |  |  |
+| l | `sysdoc.read` | read | ✗ none | 1 | ✓ 0.4j: doc and freshness as REST; unknown refused (phone-terminals-sysdocs) |  |  |
+| l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
+| l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
 ## Frontend components (99)
 

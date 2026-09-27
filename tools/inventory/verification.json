@@ -93,34 +93,34 @@
     "behaviour": "✓ 0.4a: writes .codetrellis/config.json; effective config follows (cdev-channels, cdev-sensors, cdev-routing)"
   },
   "rpc:diagnostics.flush": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: entries in the desktop log tagged with the phone; non-text skipped (phone-channels-projects)"
   },
   "rpc:fs.browse": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: folders, project-looking first; needs files (phone-graph-review)"
   },
   "rpc:project.active": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: the open project (phone-channels-projects)"
   },
   "rpc:project.alias": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: display name; not recent refused (phone-channels-projects)"
   },
   "rpc:project.close": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: desktop closes the tab; not recent refused (phone-channels-projects)"
   },
   "rpc:project.list": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: same as the desktop's recent list (phone-channels-projects)"
   },
   "rpc:project.open": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: scans, opens on the desktop too; a missing folder refused (phone-channels-projects)"
   },
   "rpc:project.pin": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: pin and unpin; not recent refused (phone-channels-projects)"
   },
   "rpc:project.remove": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: gone from the list; not recent refused (phone-channels-projects)"
   },
   "rpc:project.rescan": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: picks up a new file; unopened refused (phone-channels-projects)"
   },
   "rest:GET /api/architecture-summary": {
     "behaviour": "✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest)"
@@ -219,28 +219,28 @@
     "behaviour": "✓ 0.4b: renderer answer passed through; no window = ready:false within 5 s; real window (graph-tools, e2e mcp-view-tools)"
   },
   "rpc:changes.summary": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: git and the architecture diff agree; unopened refused (phone-graph-review)"
   },
   "rpc:graph.directory": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: one level of files and subdirectories (phone-graph-review)"
   },
   "rpc:graph.file": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: symbols and imports as the desktop has them (phone-graph-review)"
   },
   "rpc:graph.fileSearch": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: by project-relative path, query is text not a pattern (phone-graph-review); bug 40"
   },
   "rpc:graph.fileSource": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: content and git gutter; outside, sibling-prefix and link refused; needs files (phone-graph-review)"
   },
   "rpc:graph.overview": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: the desktop's summary, most-imported as absolute paths (phone-graph-review)"
   },
   "rpc:graph.scene": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: clusters and edges; live marks changed, planned marks the plan's file (phone-graph-review)"
   },
   "rpc:graph.search": {
-    "notes": "Deferred to 0.4j: no harness peer path to the RPC surface yet"
+    "behaviour": "✓ 0.4j: same as the desktop's symbol search (phone-graph-review)"
   },
   "mcp:update_plan": {
     "behaviour": "✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22)"
@@ -693,10 +693,10 @@
     "behaviour": "✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6)"
   },
   "rpc:budget.get": {
-    "behaviour": "✓ phone: ceiling, spend (unknown cost stays null) and flagged agent changes in the desktop's words; unknown plan refused (mobile-budget unit)"
+    "behaviour": "✓ 0.4j: agent's change flagged (phone-sync-and-tools), mobile-budget unit"
   },
   "rpc:budget.acknowledge": {
-    "behaviour": "✓ phone: needs a confirmed pairing; unflags in the person's name, audited, desktop told; other plan's or unknown change refused (mobile-budget unit)"
+    "behaviour": "✓ 0.4j: unflagged, desktop told (phone-sync-and-tools), mobile-budget unit"
   },
   "rest:POST /api/audio/start": {
     "behaviour": "✓ 0.4i: capturing, clears the buffer, default size when none named; bad sizes 400 (audio-rest); bug 35"
@@ -763,5 +763,299 @@
   },
   "mcp:terminal_write": {
     "behaviour": "✓ 0.4i: runs in another terminal; refused on the agent's own host terminal and on a killed one (terminal-surface), terminal-session-id"
+  },
+  "mcp:mobile_navigate": {
+    "behaviour": "✓ 0.4j: view, plan and item routes reach the phone; unknown plan or item refused (phone-sync-and-tools)"
+  },
+  "mcp:mobile_present": {
+    "behaviour": "✓ 0.4j: card reaches the phone through the snapshot (phone-sync-and-tools)"
+  },
+  "mcp:mobile_screenshot": {
+    "behaviour": "✓ 0.4j: chunks reassembled in any order; the phone's error passed on (phone-sync-and-tools)"
+  },
+  "rest:DELETE /api/system-docs/:uid": {
+    "behaviour": "✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs)"
+  },
+  "rest:GET /api/peers/connections": {
+    "behaviour": "✓ 0.4j: the phone, named as paired, all four channels (phone-sync-and-tools)"
+  },
+  "rest:GET /api/peers/discovered": {
+    "behaviour": "✓ 0.4j: a list (mDNS off in the harness) (phone-sync-and-tools)"
+  },
+  "rest:GET /api/peers/remote-audio": {
+    "behaviour": "✓ 0.4j: counts peers (phone-sync-and-tools)"
+  },
+  "rest:GET /api/peers/remote-input-requests": {
+    "behaviour": "✓ 0.4j: a peer's pending question with its context (phone-channels-projects)"
+  },
+  "rest:GET /api/peers/remote-state": {
+    "behaviour": "✓ 0.4j: holds the peer's own snapshot (phone-sync-and-tools)"
+  },
+  "rest:GET /api/peers/remote-state/:fingerprint": {
+    "behaviour": "✓ 0.4j: that peer's snapshot; unknown 404 (phone-sync-and-tools)"
+  },
+  "rest:GET /api/peers/remote-terminals": {
+    "behaviour": "✓ 0.4j: a peer's shared terminals, all or by fingerprint (phone-sync-and-tools)"
+  },
+  "rest:GET /api/power/status": {
+    "behaviour": "✓ 0.4j: same as the phone's power.status (phone-channels-projects)"
+  },
+  "rest:GET /api/system-docs/:uid": {
+    "behaviour": "✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l"
+  },
+  "rest:GET /api/system-docs/:uid/freshness": {
+    "behaviour": "✓ 0.4j: the report; unknown 404 (phone-terminals-sysdocs)"
+  },
+  "rest:POST /api/peers/remote-input-requests/:requestId/respond": {
+    "behaviour": "✓ 0.4j: answer reaches the peer; answered twice 404, no response 400 (phone-channels-projects)"
+  },
+  "rest:POST /api/peers/remote-terminals/:fingerprint/:terminalId/write": {
+    "behaviour": "✓ 0.4j: input reaches the peer; unknown terminal 404, no data 400 (phone-sync-and-tools)"
+  },
+  "rest:PUT /api/system-docs/:uid": {
+    "behaviour": "✓ 0.4j: saved, desktop told; unknown 404 (phone-terminals-sysdocs)"
+  },
+  "rpc:artefact.preview": {
+    "behaviour": "✓ 0.4j: unknown file and bad transfer id refused (phone-sync-and-tools), mobile-approvals unit"
+  },
+  "rpc:channel.events": {
+    "behaviour": "✓ 0.4j: same as REST; limit (phone-channels-projects)"
+  },
+  "rpc:channel.eventsSinceSeq": {
+    "behaviour": "✓ 0.4j: all since 0, empty when caught up, then only the new one (phone-channels-projects)"
+  },
+  "rpc:channel.get": {
+    "behaviour": "✓ 0.4j: one event; unknown refused (phone-channels-projects)"
+  },
+  "rpc:channel.post": {
+    "behaviour": "✓ 0.4j: the desktop's path — author is the person whatever the request says, routing, export, desktop told; bad type/empty/unknown plan refused (phone-channels-projects); bug 37"
+  },
+  "rpc:channel.resolve": {
+    "behaviour": "✓ 0.4j: status changes, desktop told; bad status and unknown refused (phone-channels-projects)"
+  },
+  "rpc:channel.thread": {
+    "behaviour": "✓ 0.4j: root then reply (phone-channels-projects)"
+  },
+  "rpc:comment.add": {
+    "behaviour": "✓ 0.4j: item comment reaches the item thread, plan comment the plan; unknown target refused (phone-plans); bug 37"
+  },
+  "rpc:criteria.awaiting": {
+    "behaviour": "✓ 0.4j: empty until the agent submits, then the criterion; empty after deciding (phone-sync-and-tools), mobile-approvals unit"
+  },
+  "rpc:criteria.list": {
+    "behaviour": "✓ 0.4j: the item's criteria (phone-sync-and-tools), mobile-approvals unit"
+  },
+  "rpc:criterion.decide": {
+    "behaviour": "✓ 0.4j: approved from the phone (phone-sync-and-tools), mobile-approvals unit"
+  },
+  "rpc:deviation.list": {
+    "behaviour": "✓ 0.4j: same as REST; unknown plan refused (phone-plans)"
+  },
+  "rpc:deviation.resolve": {
+    "behaviour": "✓ 0.4j: resolved as the person; bad action and unknown id refused (phone-plans)"
+  },
+  "rpc:input.respond": {
+    "behaviour": "✓ 0.4j: answer reaches the asking peer once; not pending refused (phone-channels-projects)"
+  },
+  "rpc:item.ref.add": {
+    "behaviour": "✓ 0.4j: link on the item, desktop told; unknown item refused (phone-plans); bug 37"
+  },
+  "rpc:item.ref.remove": {
+    "behaviour": "✓ 0.4j: removed, desktop told; unknown refused (phone-plans); bug 37"
+  },
+  "rpc:plan.copyAsPrompt": {
+    "behaviour": "✓ 0.4j: the handoff prompt, work not yet started; unknown refused (phone-plans)"
+  },
+  "rpc:plan.create": {
+    "behaviour": "✓ 0.4j: in the open project, as the person, desktop told (phone-plans); bug 37"
+  },
+  "rpc:plan.delete": {
+    "behaviour": "✓ 0.4j: archived, files out of the project and they stay out, desktop told; unknown refused (phone-plans); bugs 37, 39"
+  },
+  "rpc:plan.document": {
+    "behaviour": "✓ 0.4j: the doc body; unknown refused (phone-plans)"
+  },
+  "rpc:plan.file.discover": {
+    "behaviour": "✓ 0.4j: finds the exported folder (phone-plans)"
+  },
+  "rpc:plan.file.export": {
+    "behaviour": "✓ 0.4j: into the plan's own project; unknown plan refused (phone-plans)"
+  },
+  "rpc:plan.file.import": {
+    "behaviour": "✓ 0.4j: reads it back; outside an opened project refused (phone-plans)"
+  },
+  "rpc:plan.get": {
+    "behaviour": "✓ 0.4j: plan, items, documents, deviations, links, comments; unknown refused (phone-plans)"
+  },
+  "rpc:plan.item.create": {
+    "behaviour": "✓ 0.4j: as the person, desktop told; unknown plan refused (phone-plans); bug 37"
+  },
+  "rpc:plan.item.get": {
+    "behaviour": "✓ 0.4j: item with comments, links, attachments; unknown refused (phone-plans)"
+  },
+  "rpc:plan.item.update": {
+    "behaviour": "✓ 0.4j: edits save (author recorded), desktop told, status checked (phone-plans); bugs 36, 37, 38"
+  },
+  "rpc:plan.items": {
+    "behaviour": "✓ 0.4j: items with status; unknown plan refused (phone-plans)"
+  },
+  "rpc:plan.list": {
+    "behaviour": "✓ 0.4j: counts per plan; filter by an opened project only (phone-plans)"
+  },
+  "rpc:plan.nextItem": {
+    "behaviour": "✓ 0.4j: same as the desktop's next-task; none while nothing is pending (phone-plans)"
+  },
+  "rpc:plan.template.create": {
+    "behaviour": "✓ 0.4j: plan with items; desktop told with the plan; unknown template refused (phone-plans); bug 37"
+  },
+  "rpc:plan.template.list": {
+    "behaviour": "✓ 0.4j: same templates as the desktop (phone-plans)"
+  },
+  "rpc:plan.update": {
+    "behaviour": "✓ 0.4j: the desktop's edit path — desktop told, status checked, unknown refused (phone-plans); bugs 37, 38"
+  },
+  "rpc:power.status": {
+    "behaviour": "✓ 0.4j: the desktop's answer, and the snapshot's (phone-channels-projects)"
+  },
+  "rpc:review.comparands": {
+    "behaviour": "✓ 0.4j: same as the desktop's; unknown plan refused (phone-graph-review)"
+  },
+  "rpc:review.compare": {
+    "behaviour": "✓ 0.4j: same as the desktop's; unknown checkpoint refused (phone-graph-review)"
+  },
+  "rpc:review.get": {
+    "behaviour": "✓ 0.4j: same review as the desktop; unknown plan refused (phone-graph-review)"
+  },
+  "rpc:review.prDraft": {
+    "behaviour": "✓ 0.4j: same draft as the desktop (phone-graph-review)"
+  },
+  "rpc:settings.get": {
+    "behaviour": "✓ 0.4j: same as the desktop's (phone-channels-projects)"
+  },
+  "rpc:settings.update": {
+    "behaviour": "✓ 0.4j: needs the settings grant; phone-safe part only — ports, paths, webhook hosts untouched (phone-channels-projects)"
+  },
+  "rpc:sysdoc.create": {
+    "behaviour": "✓ 0.4j: file in the project, desktop told (phone-terminals-sysdocs)"
+  },
+  "rpc:sysdoc.delete": {
+    "behaviour": "✓ 0.4j: removed, desktop told; unknown refused (phone-terminals-sysdocs)"
+  },
+  "rpc:sysdoc.list": {
+    "behaviour": "✓ 0.4j: same as REST; search; unopened refused (phone-terminals-sysdocs)"
+  },
+  "rpc:sysdoc.read": {
+    "behaviour": "✓ 0.4j: doc and freshness as REST; unknown refused (phone-terminals-sysdocs)"
+  },
+  "rpc:sysdoc.update": {
+    "behaviour": "✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs)"
+  },
+  "rpc:sysdoc.verify": {
+    "behaviour": "✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.create": {
+    "behaviour": "✓ 0.4j: shell in the project, shown on the desktop (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.history": {
+    "behaviour": "✓ 0.4j: scrollback, paged (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.kill": {
+    "behaviour": "✓ 0.4j: ended for phone and desktop; history kept (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.list": {
+    "behaviour": "✓ 0.4j: needs the terminal grant (refusal audited); lists the new shell (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.read": {
+    "behaviour": "✓ 0.4j: what the shell printed; not there refused (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.resize": {
+    "behaviour": "✓ 0.4j: shell sees the width; bad sizes and not there refused (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.stream": {
+    "behaviour": "✓ 0.4j: whole buffer, then only what is new (phone-terminals-sysdocs)"
+  },
+  "rpc:terminal.write": {
+    "behaviour": "✓ 0.4j: runs in the shell; not there refused (phone-terminals-sysdocs)"
+  },
+  "rest:DELETE /api/peers/devices/:fingerprint": {
+    "behaviour": "✓ 0.4j: forgotten and disconnected; unknown 404 (phone-sync-and-tools)"
+  },
+  "rest:DELETE /api/peers/push-tokens/:fingerprint": {
+    "behaviour": "✓ 0.4j: token gone from the list; unknown 404 (phone-sync-and-tools)"
+  },
+  "rest:GET /api/pairing/status": {
+    "behaviour": "✓ 0.4j: codeReady once the phone answers, never the code itself (gate4-reconnect-identity, harness peer)"
+  },
+  "rest:GET /api/peers/audit": {
+    "behaviour": "✓ 0.4j: refusals, terminal access (RPC and relay, output never recorded), grants; survives restart (peer-device-access, phone-sync-and-tools, phone-terminals-sysdocs)"
+  },
+  "rest:GET /api/peers/devices": {
+    "behaviour": "✓ 0.4j: paired devices without the reconnect secret; forgotten one gone (peer-device-access, phone-sync-and-tools)"
+  },
+  "rest:GET /api/peers/push-tokens": {
+    "behaviour": "✓ 0.4j: the phone's registered token (cdev-phase11, phone-sync-and-tools)"
+  },
+  "rest:GET /api/peers/status": {
+    "behaviour": "✓ 0.4j: running, mobile API port actually bound, counts (gate4-reconnect-identity, pairing-enables-lan, cdev-phase11)"
+  },
+  "rest:GET /api/sync/peek": {
+    "behaviour": "✓ 0.4j: what an import would bring, before it does (cdev-phase5, surfaced-rest)"
+  },
+  "rest:GET /api/sync/status": {
+    "behaviour": "✓ 0.4j: personal sync state (cdev-phase5)"
+  },
+  "rest:PATCH /api/peers/devices/:fingerprint": {
+    "behaviour": "✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer)"
+  },
+  "rest:POST /api/pairing/cancel": {
+    "behaviour": "✓ 0.4j: window closed (pairing-transport, peer-reconnect-auth)"
+  },
+  "rest:POST /api/pairing/confirm": {
+    "behaviour": "✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer)"
+  },
+  "rest:POST /api/pairing/initiate": {
+    "behaviour": "✓ 0.4j: v5 QR payload, scannable size; code only in the body (gate4-reconnect-identity, pairing-transport, harness peer)"
+  },
+  "rest:POST /api/peers/push-tokens": {
+    "behaviour": "✓ 0.4j: register and list (cdev-phase11)"
+  },
+  "rest:POST /api/sync/export": {
+    "behaviour": "✓ 0.4j: export then import round trip (cdev-phase5)"
+  },
+  "rest:POST /api/sync/import": {
+    "behaviour": "✓ 0.4j: export then import round trip (cdev-phase5)"
+  },
+  "mcp:get_peer_status": {
+    "behaviour": "✓ 0.4j: paired and connected counts with a phone connected (phone-peer-tools)"
+  },
+  "mcp:list_discovered_peers": {
+    "behaviour": "✓ 0.4j: a list (mDNS off in the harness) (phone-peer-tools)"
+  },
+  "mcp:list_paired_devices": {
+    "behaviour": "✓ 0.4j: the phone, no secret (phone-peer-tools)"
+  },
+  "mcp:list_peer_connections": {
+    "behaviour": "✓ 0.4j: the phone, named as paired, connected (phone-peer-tools)"
+  },
+  "mcp:unpair_device": {
+    "behaviour": "✓ 0.4j: forgotten and disconnected; unknown refused (isError) (phone-peer-tools, cdev-phase9)"
+  },
+  "mcp:get_remote_state": {
+    "behaviour": "✓ 0.4j: the peer's snapshot, one or all; none yet refused (phone-peer-tools)"
+  },
+  "mcp:list_remote_terminals": {
+    "behaviour": "✓ 0.4j: the peer's shared terminal, all or by peer (phone-peer-tools)"
+  },
+  "mcp:write_remote_terminal": {
+    "behaviour": "✓ 0.4j: input reaches the peer's terminal; unknown refused (phone-peer-tools)"
+  },
+  "mcp:get_remote_audio": {
+    "behaviour": "✓ 0.4j: counts peers (phone-peer-tools)"
+  },
+  "mcp:list_remote_input_requests": {
+    "behaviour": "✓ 0.4j: the peer's question with its prompt (phone-peer-tools)"
+  },
+  "mcp:respond_remote_input": {
+    "behaviour": "✓ 0.4j: answer reaches the peer once; again refused (phone-peer-tools)"
   }
 }

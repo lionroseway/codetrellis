@@ -34,6 +34,12 @@ export interface RunningBackend {
   capabilityToken: string;
   /** Stop the backend cleanly. Idempotent — safe to call twice. */
   stop(): Promise<void>;
+  /**
+   * The backend's recent console output (stdout and stderr, last ~256 KB).
+   * The file logger is the Electron shell's, so under the harness this is
+   * where a `console.log` lands. Empty when `verbose` sent it to the parent.
+   */
+  output(): string;
 }
 
 export interface StartBackendOptions {
@@ -106,14 +112,25 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
 
   // Buffer recent stderr so we can show it on a startup failure.
   const stderrTail: string[] = [];
+  // And all recent output, for tests that check what the backend logged.
+  const outputTail: string[] = [];
+  let outputSize = 0;
+  const keepOutput = (chunk: Buffer) => {
+    const text = chunk.toString();
+    outputTail.push(text);
+    outputSize += text.length;
+    while (outputSize > 262144 && outputTail.length > 1) outputSize -= outputTail.shift()!.length;
+  };
   if (!opts.verbose && child.stderr) {
     child.stderr.on('data', (chunk: Buffer) => {
       stderrTail.push(chunk.toString());
       // Keep ~32 KB of recent stderr — enough to diagnose, not so much
       // we OOM on an infinite-loop crash.
       while (stderrTail.join('').length > 32768) stderrTail.shift();
+      keepOutput(chunk);
     });
   }
+  if (!opts.verbose && child.stdout) child.stdout.on('data', keepOutput);
 
   // Watch for early exit during boot.
   let earlyExit: { code: number | null; signal: NodeJS.Signals | null } | null = null;
@@ -143,7 +160,7 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
   // `backend.dataDir` was silently undefined. A test asserting on paths
   // under it therefore checked the wrong location and passed regardless —
   // found while writing the finding-7 test.
-  return { backendPort, mcpPort, baseUrl, capabilityToken, dataDir: opts.dataDir, stop };
+  return { backendPort, mcpPort, baseUrl, capabilityToken, dataDir: opts.dataDir, stop, output: () => outputTail.join('') };
 }
 
 async function pickPort(): Promise<number> {

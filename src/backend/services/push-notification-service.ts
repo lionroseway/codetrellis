@@ -123,8 +123,9 @@ export function registerPushToken(fingerprint: string, token: string): void {
 /**
  * Remove the push token for a device (e.g. when it disconnects).
  */
-export function unregisterPushToken(fingerprint: string): void {
-  pushTokens.delete(fingerprint);
+/** Forget a device's push token. False when it had none. */
+export function unregisterPushToken(fingerprint: string): boolean {
+  return pushTokens.delete(fingerprint);
 }
 
 /**
