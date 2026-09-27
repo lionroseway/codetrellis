@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.1: session binding |
-| **Status** | A0 merged (#145). A1.1 done on its branch: sessions carry `workstreamRoot` and `hostTerminalId`, from the connector's headers or MCP roots; PR open |
-| **Next action** | Merge A1.1's PR when green; then A1.2 (the Claude Code watcher watches every session, keyed by folder) |
+| **Stage / step** | Track A — A1.2: every Claude Code session, keyed by folder |
+| **Status** | A1.1 PR (#146) waiting on CI. A1.2 written and tested locally (unit 11, harness 2, each failing on the old watcher); branches from `feat/phase-32` once #146 merges |
+| **Next action** | Merge #146 when green; cut `feat/phase-32-a1-2-watcher-sessions`, carry A1.2 over, PR it; then A1.3 (workstream discovery and the TopBar strip) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-1-session-binding` |
+| **Branch** | `feat/phase-32-a1-2-watcher-sessions` (to cut) |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -153,6 +153,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: A1.2 — the Claude Code watcher follows every session
+- **What was wrong.** The watcher followed one session: the first live one
+  whose cwd equalled the opened project exactly. An agent in a worktree, or
+  one started from a package folder, never reached the Timeline. And its
+  events carried no session, so two Claude sessions merged into one turn.
+- **Now.** It follows every live session whose cwd is inside a folder
+  CodeTrellis trusts: the opened project, every trusted root, and their live
+  worktrees (`candidateWorkstreamRoots`, cached 30 s because it runs git).
+  The cwd is matched with A1.1's `matchWorkstreamRoot`, so the deepest
+  folder wins and the root is recorded as the user opened it. Every event
+  carries `sessionId` and `workstreamRoot`.
+- **Found along the way, fixed:**
+  - A line Claude was still writing was parsed half-way, failed, and was
+    skipped for good. Only complete lines are read now.
+  - Current Claude Code names the jsonl folder with every non-alphanumeric
+    character as `-`, not just `/`, so a path with a `.` in it was never
+    found. Both namings are tried.
+  - The harness backend read the machine's real `~/.claude`. Each backend
+    now gets its own empty Claude folder (same class as §0.4k's update
+    check).
+- **An agent that exits** is read one last time and dropped, with no event.
+- **`/api/agent/status`** keeps `sessionId` / `jsonlPath` (the one most
+  recently followed) and adds `sessions`, all of them.
+- **UX.** Nothing new to look at yet: the Timeline now keeps two Claude
+  sessions' turns apart, and the strip that shows workstreams is A1.3.
+- **Noted for A1.3/A1.4.** A Claude session connected over MCP too appears
+  as two sessions (its Claude id and its MCP id). Both now carry the same
+  workstream, which is the key to join them on.
+- **Tests.** Unit: 7 new in `claude-code-watcher.test.ts` (two worktrees at
+  once, tagging, nesting, outsiders, new naming, a half-written line, exit).
+  Harness: `claude-watcher-sessions.test.ts` (the running backend builds
+  the folder list from the project and git's worktrees). All fail on the
+  old watcher. Unit 1090 pass / 3 environment skips; lint 0 errors / 295.
 
 ### 2026-09-27: A1.1 — every agent session knows which workstream it is in
 
