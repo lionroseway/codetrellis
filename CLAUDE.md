@@ -31,6 +31,34 @@ Deep-dive docs live in `docs/claude/`:
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.
 
+## Phase 32 — Parallel awareness (in progress on `feat/phase-32`)
+
+**Read [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md) first.** Its
+**Now** block names the current step and the very next action. The work
+is long-running and runs across sessions, so the log, not the
+conversation, is the state. Update it at the start and end of every
+step, after every decision, before any long command, and at least every
+30 minutes ([`docs/PHASE-32-EXECUTION.md`](docs/PHASE-32-EXECUTION.md)
+§1).
+
+- **Branches:** one step, one branch `feat/phase-32-<step>-<slug>`, one
+  PR into `feat/phase-32`. The phase merges into `main` once, at the end.
+- **The suite was fully green at the start**, so any failure is ours.
+  Never skip, disable or quarantine a test.
+- **Stage 0 verifies what exists** (inventory, tests for everything,
+  clean UX) before new features.
+- **`docs/PHASE-32-VERIFICATION.md` is generated** by `npm run inventory`
+  (every REST route, MCP tool, RPC method, component, mobile screen and
+  settings section, with its test references). A unit test fails when it
+  is stale, so adding a route, a tool or a test that mentions one means
+  re-running `npm run inventory` and committing the result.
+- **Every REST route, MCP tool and RPC method needs a test.**
+  `tools/inventory/coverage.test.ts` fails on anything untested that
+  isn't listed in `tools/inventory/untested.json`, and that list can only
+  shrink: a listed item that gains a test must be deleted from it. Never
+  add to the list to get green; write the test. Skipped tests don't
+  count as coverage.
+
 ## Phase 19 — Security Hardening (in progress)
 
 CodeTrellis runs on developer workstations with network reach into the
@@ -371,7 +399,8 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 - `npm run package:win` — Build Windows installers (Setup + Portable exe)
 - `npm run package:linux` — Build Linux packages (AppImage, deb, rpm)
 - `npm run lint` — Run ESLint. Flat config in `eslint.config.mjs`;
-  it must exit **0 errors** (warnings are allowed and currently ~277).
+  it must exit **0 errors** (warnings are allowed and currently ~291).
+  CI gates on it since Phase 32 §0.3.
   The severity split is a decision and the config explains it inline:
   error for what is almost always a defect, warn for what needs
   judgement (`no-explicit-any`, `exhaustive-deps`) — as blocking errors
@@ -379,9 +408,10 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
   for backend/electron, which are CommonJS, and on for the bundled
   frontend.
 - `npm run typecheck` — Run TypeScript type checking
-- `npm run test:unit` — Pure-logic tests under Node's runner (461, ~2s)
-- `npm run test:harness` — Full E2E harness (328 passed + 16 skipped).
-  Budget ~17 min; it runs in ~6 min on an M-series dev machine.
+- `npm run test:unit` — Pure-logic tests under Node's runner, plus
+  `tools/**/*.test.ts` (~975 tests, ~30 s)
+- `npm run test:harness` — Full E2E harness (~380 tests). Budget ~19 min
+  in a 4-core container; ~6 min on an M-series dev machine.
 
 **Run `test:unit` as well as the harness.** It is not just faster
 coverage of the same things — two of its tests are *structural guards*

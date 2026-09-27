@@ -14,7 +14,9 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { setupHarness, type Harness } from '../harness';
+import fs from 'node:fs';
+import path from 'node:path';
+import { setupHarness, waitFor, type Harness } from '../harness';
 
 test.describe.serial('Baselines & Trellis snapshots', () => {
   test.setTimeout(120_000);
@@ -90,14 +92,27 @@ test.describe.serial('Baselines & Trellis snapshots', () => {
     const body = await res.json();
     expect(body.id).toBe(snapshotId);
     expect(body.name).toBe('Test snapshot');
+    expect(body.gitBranch).toBe('main');
   });
 
-  test('GET /api/trellis/:id/diff returns a diff object', async () => {
-    const res = await h.client.raw('GET', `/api/trellis/${snapshotId}/diff`);
-    expect(res.ok).toBe(true);
-    const body = await res.json();
-    // Diff should have added/removed/modified arrays
-    expect(body).toBeTruthy();
-    expect(typeof body).toBe('object');
+  test('GET /api/trellis/:id/diff is empty at first, then reports work done since the snapshot', async () => {
+    type TDiff = { addedFiles: string[]; modifiedFiles: string[]; addedEdges: Array<{ source: string; target: string }> };
+    const first = (await (await h.client.raw('GET', `/api/trellis/${snapshotId}/diff`)).json()) as TDiff;
+    expect(first.addedFiles).toEqual([]);
+    expect(first.modifiedFiles).toEqual([]);
+
+    // Work lands after the snapshot. No rescan: the watcher keeps the
+    // live side current (Phase 32 0.4b, bug 20).
+    const root = h.fixture.projectPath;
+    fs.writeFileSync(path.join(root, 'packages/web/src/SinceSnapshot.ts'), "import { listUsers } from './api';\nexport const s = listUsers;\n");
+    const diff = await waitFor(async () => {
+      const d = (await (await h.client.raw('GET', `/api/trellis/${snapshotId}/diff`)).json()) as TDiff;
+      return d.addedEdges.length > 0 ? d : null;
+    }, { timeoutMs: 15_000, description: 'the new file and its edge to appear in the snapshot diff' });
+    expect(diff.addedFiles).toContain('packages/web/src/SinceSnapshot.ts');
+    expect(diff.addedEdges).toContainEqual({ source: 'packages/web/src/SinceSnapshot.ts', target: 'packages/web/src/api.ts' });
+
+    const missing = await h.client.raw('GET', '/api/trellis/999999/diff');
+    expect(missing.status).toBe(404);
   });
 });

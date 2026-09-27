@@ -41,18 +41,17 @@ export interface ScriptedAgent {
   /** Pass-through to MCP `callTool`. */
   callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
 
-  /** Convenience: claim a specific task. */
-  claimTask(planUid: string, taskUid: string): Promise<McpToolResult>;
+  /** Convenience: claim a V2 Action (`claim_item`), as this agent's type. */
+  claimItem(itemUid: string): Promise<McpToolResult>;
 
-  /** Convenience: update a task status. */
-  updateTaskStatus(
-    planUid: string,
-    taskUid: string,
+  /** Convenience: set a V2 item's status (`update_item`). */
+  updateItemStatus(
+    itemUid: string,
     status: 'pending' | 'assigned' | 'in_progress' | 'done' | 'blocked' | 'skipped',
   ): Promise<McpToolResult>;
 
-  /** Convenience: ask MCP for the next available task on a plan. */
-  getNextTask(planUid: string, phaseUid?: string): Promise<McpToolResult>;
+  /** Convenience: ask MCP for the next available Action on a plan (`get_next_item`). */
+  getNextItem(planUid: string): Promise<McpToolResult>;
 
   /**
    * Write content to a file relative to the project path. If the
@@ -101,27 +100,16 @@ export function createScriptedAgent(opts: ScriptedAgentOptions): ScriptedAgent {
       return mcp.callTool(name, args);
     },
 
-    async claimTask(planUid, taskUid) {
-      return mcp.callTool('claim_task', {
-        plan_uid: planUid,
-        task_uid: taskUid,
-        agent_type: agentType,
-        model,
-      });
+    async claimItem(itemUid) {
+      return mcp.callTool('claim_item', { uid: itemUid, agent_type: agentType, model });
     },
 
-    async updateTaskStatus(planUid, taskUid, status) {
-      return mcp.callTool('update_task', {
-        plan_uid: planUid,
-        task_uid: taskUid,
-        status,
-      });
+    async updateItemStatus(itemUid, status) {
+      return mcp.callTool('update_item', { uid: itemUid, status });
     },
 
-    async getNextTask(planUid, phaseUid) {
-      const args: Record<string, unknown> = { plan_uid: planUid };
-      if (phaseUid !== undefined) args.phase_uid = phaseUid;
-      return mcp.callTool('get_next_task', args);
+    async getNextItem(planUid) {
+      return mcp.callTool('get_next_item', { plan_uid: planUid });
     },
 
     writeFile,

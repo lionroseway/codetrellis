@@ -4,14 +4,17 @@
  * Exercises the complete CodeTrellis lifecycle end-to-end:
  *
  *   1. Scan project
- *   2. Create a plan with phases, tasks, and a spec doc
+ *   2. Create a plan with Actions, a phase and a spec doc
  *   3. Approve the plan (triggers baseline snapshot)
  *   4. Agent connects via MCP and picks up the plan
- *   5. Agent claims & executes tasks (file writes, status updates)
+ *   5. Agent claims & executes Actions (file writes, status updates)
  *   6. Detect deviations (missing file, unexpected file)
  *   7. Reconcile deviations
  *   8. Verify proposed-changes drift tracking
- *   9. Agent completes all tasks → plan marked completed
+ *   9. Agent completes all Actions → plan marked completed
+ *
+ * On V2 plan items throughout. It used V1 tasks for the claim / status /
+ * completion steps until the V1 task API was retired (Phase 32 §0.4c-2).
  *  10. Verify trellis diff shows changes since baseline
  *
  * No real LLM. No API keys. Fully offline.
@@ -27,7 +30,7 @@ test.describe.serial('Full lifecycle loop', () => {
 
   let h: Harness;
   let planUid: string;
-  let taskUids: string[];
+  let actionUids: string[];
   let phaseUid: string;
 
   // ── Setup ──────────────────────────────────────────────────────
@@ -43,36 +46,44 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 1. Plan creation with tasks ────────────────────────────────
 
-  test('create a plan with two tasks targeting fixture files', async () => {
+  test('create a plan for the fixture', async () => {
     const plan = await h.client.createPlan({
       title: 'Full-loop refactor',
       description: 'Refactor validators and add a new utility module',
       projectPath: h.fixture.projectPath,
-      tasks: [
-        {
-          description: 'Refactor the validator module',
-          affectedFiles: ['packages/shared/src/validators.ts'],
-        },
-        {
-          description: 'Add a new string-utils module',
-          affectedFiles: ['packages/shared/src/string-utils.ts'],
-        },
-      ],
     });
 
     expect(plan.uid).toBeTruthy();
     expect(plan.title).toBe('Full-loop refactor');
     expect(plan.status).toBe('draft');
     planUid = plan.uid;
+  });
 
-    const detail = await h.client.getPlan(planUid);
-    expect(detail.tasks).toHaveLength(2);
-    taskUids = detail.tasks.map((t) => t.uid);
+  test('seed the work as Actions with file specs', async () => {
+    const seeder = await h.spawnAgent({ agentType: 'seeder-agent' });
+    const specs = [
+      { title: 'Refactor the validator module', path: 'packages/shared/src/validators.ts', action: 'modify' },
+      { title: 'Add a new string-utils module', path: 'packages/shared/src/string-utils.ts', action: 'create' },
+    ];
+    actionUids = [];
+    for (const spec of specs) {
+      const res = await seeder.callTool('add_item', {
+        plan_uid: planUid,
+        kind: 'action',
+        title: spec.title,
+        file_specs: [{ path: spec.path, action: spec.action }],
+      });
+      expect(res.isError).not.toBe(true);
+      const item = JSON.parse(res.text);
+      expect(item.uid).toBeTruthy();
+      expect(item.kind).toBe('action');
+      actionUids.push(item.uid);
+    }
   });
 
   // ── 2. Add a phase and a spec doc ──────────────────────────────
 
-  test('add a phase and bind tasks to it', async () => {
+  test('add a phase', async () => {
     const phaseRes = await h.client.raw('POST', `/api/plans/${planUid}/phases`, {
       title: 'Phase 1 — Core refactor',
       scope: 'Validators and new utils',
@@ -81,14 +92,6 @@ test.describe.serial('Full lifecycle loop', () => {
     const phase = await phaseRes.json();
     expect(phase.uid).toBeTruthy();
     phaseUid = phase.uid;
-
-    // Bind both tasks to this phase
-    for (const taskUid of taskUids) {
-      const res = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUid}`, {
-        phaseUid,
-      });
-      expect(res.ok).toBe(true);
-    }
   });
 
   test('add a spec doc to the plan', async () => {
@@ -172,30 +175,29 @@ test.describe.serial('Full lifecycle loop', () => {
     const nextRes = await h.client.raw('GET', `/api/plans/${planUid}/next-task`);
     expect(nextRes.ok).toBe(true);
     const next = await nextRes.json();
-    // Should get one of our tasks
+    // With V2 Actions present, next-task offers one of them: plan_items is
+    // the model the workspace and the agent tools use.
     expect(next.uid).toBeTruthy();
-    expect(taskUids).toContain(next.uid);
+    expect(actionUids).toContain(next.uid);
   });
 
-  test('agent edits the validator file and marks task 1 done', async () => {
+  test('agent claims Action 1, edits the validator file and marks it done', async () => {
     // Move plan to in_progress
     const statusRes = await h.client.raw('PUT', `/api/plans/${planUid}`, {
       status: 'in_progress',
     });
     expect(statusRes.ok).toBe(true);
 
-    // Claim task 1 via REST
+    // Claim Action 1 via REST
     const claimRes = await h.client.raw(
       'POST',
-      `/api/plans/${planUid}/tasks/${taskUids[0]}/claim`,
+      `/api/items/${actionUids[0]}/claim`,
       { agentId: 'full-loop-agent-1', agentType: 'full-loop-agent', model: 'harness/1.0' },
     );
     expect(claimRes.ok).toBe(true);
+    expect(((await claimRes.json()) as { ok: boolean }).ok).toBe(true);
 
-    // Update task to in_progress
-    const ipRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[0]}`, {
-      status: 'in_progress',
-    });
+    const ipRes = await h.client.raw('PUT', `/api/items/${actionUids[0]}`, { status: 'in_progress' });
     expect(ipRes.ok).toBe(true);
 
     // Agent edits the file
@@ -210,26 +212,22 @@ test.describe.serial('Full lifecycle loop', () => {
     );
 
     // Mark done
-    const doneRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[0]}`, {
-      status: 'done',
-    });
+    const doneRes = await h.client.raw('PUT', `/api/items/${actionUids[0]}`, { status: 'done' });
     expect(doneRes.ok).toBe(true);
 
     // Verify via REST
-    const detail = await h.client.getPlan(planUid);
-    const task1 = detail.tasks.find((t) => t.uid === taskUids[0]);
-    expect(task1?.status).toBe('done');
+    const item = (await (await h.client.raw('GET', `/api/items/${actionUids[0]}`)).json()) as { status: string; assignee: string | null };
+    expect(item.status).toBe('done');
+    expect(item.assignee).toBe('full-loop-agent-1');
   });
 
   // ── 6. Deviation detection ─────────────────────────────────────
 
-  test('detect deviations — task 2 expected file is missing', async () => {
-    // Task 2 expects `packages/shared/src/string-utils.ts` which
+  test('detect deviations — Action 2 expected file is missing', async () => {
+    // Action 2 expects `packages/shared/src/string-utils.ts` which
     // doesn't exist yet.  Mark it in_progress so it's in scope for
     // deviation checking, then detect.
-    const ipRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[1]}`, {
-      status: 'in_progress',
-    });
+    const ipRes = await h.client.raw('PUT', `/api/items/${actionUids[1]}`, { status: 'in_progress' });
     expect(ipRes.ok).toBe(true);
 
     // Deviation detection via REST
@@ -243,19 +241,7 @@ test.describe.serial('Full lifecycle loop', () => {
     expect(Array.isArray(devs)).toBe(true);
   });
 
-  // SKIPPED — this asserts across the V1/V2 seam and cannot pass as written.
-  //
-  // The test seeds tasks through the REST plan API (h.client.createPlan with
-  // `affectedFiles`), which is the V1 task model. But Phase B of the V2 MCP
-  // migration moved `detect_deviations` onto plan_items (kind='action'), so it
-  // never sees those files and no `missing_file` deviation is produced. The
-  // earlier assertion in this test still passes — deviations ARE detected —
-  // it is specifically the missing_file type that cannot appear.
-  //
-  // The behaviour is worth testing; the fixture is what is wrong. Unskip once
-  // this file seeds V2 items via add_item / bulk_add_items rather than V1
-  // tasks. Tracked as part of the V1 sunset, not as a flake.
-  test.skip('write unexpected file → deviation detected after explicit detect', async () => {
+  test('write unexpected file → deviation detected after explicit detect', async () => {
     // Write a file NOT in any task's affected files
     const unexpectedPath = path.join(
       h.fixture.projectPath,
@@ -269,18 +255,18 @@ test.describe.serial('Full lifecycle loop', () => {
     // Re-scan so the file is in the DB
     await h.client.scanProject(h.fixture.projectPath);
 
-    // Now mark task 2 done WITHOUT creating its expected file
-    const doneRes = await h.client.raw('PUT', `/api/plans/${planUid}/tasks/${taskUids[1]}`, {
-      status: 'done',
-    });
-    expect(doneRes.ok).toBe(true);
+    // Now mark Action 2 done WITHOUT creating its expected file, through
+    // the agent tool: the validator work really happened; the
+    // string-utils file was never created.
+    const detector = await h.spawnAgent({ agentType: 'detector-agent' });
+    const upd = await detector.callTool('update_item', { uid: actionUids[1], status: 'done' });
+    expect(upd.isError).not.toBe(true);
 
     // Use the MCP detect_deviations tool (spawned agent is still connected)
     // We can also use the REST endpoint. Let's use REST for the detect
     // trigger and then read deviations.
     // Actually, detect_deviations is MCP-only. Let's spawn a second agent
     // to call it.
-    const detector = await h.spawnAgent({ agentType: 'detector-agent' });
     const detectResult = await detector.callTool('detect_deviations', {
       plan_uid: planUid,
     });
@@ -297,16 +283,7 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 7. Reconcile deviations ────────────────────────────────────
 
-  // SKIPPED — depends on the skipped test above.
-  //
-  // full-loop.test.ts is a SEQUENTIAL CHAIN: each test builds on state the
-  // previous one left behind. This step accepts the pending deviations that
-  // step 6 was supposed to create, so skipping step 6 leaves it with nothing
-  // to reconcile and it fails on an empty list rather than on its own logic.
-  //
-  // Unskip together with the one above, in the same change that reseeds this
-  // file onto V2 items. Skipping them separately just moves the failure.
-  test.skip('reconcile — accept the missing-file deviation', async () => {
+  test('reconcile — accept the missing-file deviation', async () => {
     const devsRes = await h.client.raw('GET', `/api/plans/${planUid}/deviations`);
     const devs = await devsRes.json();
     const pending = devs.filter(
@@ -372,23 +349,11 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 9. Plan completion ─────────────────────────────────────────
 
-  // SKIPPED — third and last link in the same broken chain.
-  //
-  // Task 2 only reaches `done` via the reconcile step above, which is skipped,
-  // so this asserts every task is done and finds one still in_progress. Its
-  // own logic is fine.
-  //
-  // The three skips in this file are ONE piece of work, not three: reseed
-  // full-loop onto V2 items (add_item / bulk_add_items) instead of V1 tasks,
-  // then unskip all three together. The remaining 17 tests in this file still
-  // pass and still cover real REST + plan behaviour, which is why the file is
-  // skipped surgically rather than wholesale.
-  test.skip('all tasks done — mark plan completed', async () => {
-    // Verify both tasks are done
-    const detail = await h.client.getPlan(planUid);
-    for (const task of detail.tasks) {
-      expect(task.status).toBe('done');
-    }
+  test('all Actions done — mark plan completed', async () => {
+    // The two seeded Actions, plus the one reconciliation recorded.
+    const items = (await (await h.client.raw('GET', `/api/plans/${planUid}/items?kind=action`)).json()) as Array<{ uid: string; status: string }>;
+    expect(items.map((i) => i.uid)).toEqual(expect.arrayContaining(actionUids));
+    for (const item of items) expect(item.status).toBe('done');
 
     // Mark plan completed
     const res = await h.client.raw('PUT', `/api/plans/${planUid}`, {
@@ -480,12 +445,7 @@ test.describe.serial('Full lifecycle loop', () => {
 
   // ── 14. Final consistency checks ──────────────────────────────
 
-  // SKIPPED — terminal assertion of the same chain.
-  //
-  // Asserts the end state of a lifecycle that no longer completes, because
-  // three earlier steps are skipped. Fourth and last link; unskip with the
-  // other three when this file is reseeded onto V2 items.
-  test.skip('final plan state is consistent', async () => {
+  test('final plan state is consistent', async () => {
     const plan = await h.client.getPlan(planUid);
     expect(plan.status).toBe('completed');
     expect(plan.tasks.every((t) => t.status === 'done')).toBe(true);

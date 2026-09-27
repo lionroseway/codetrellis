@@ -159,11 +159,14 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
       <button
         ref={btnRef}
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-        className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20 shrink-0 transition-all"
-        title="Branch info — click to see branches and worktrees"
+        // One line, truncated: a long branch name wrapped to two lines and
+        // squeezed the project's name to "codetr…" (Phase 32 §0.5). The
+        // full name is in the title and the popover.
+        className="flex min-w-0 max-w-[18ch] items-center gap-1 whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20 transition-all"
+        title={`Branch info${gitInfo?.currentBranch ? ` — on ${gitInfo.currentBranch}` : ''} — click to see branches and worktrees`}
       >
-        <GitBranch size={10} />
-        {gitInfo?.currentBranch || '...'}
+        <GitBranch size={10} className="shrink-0" />
+        <span className="truncate">{gitInfo?.currentBranch || '...'}</span>
         {gitInfo && !gitInfo.hasCommits && <AlertCircle size={8} className="text-warning" />}
       </button>
 
@@ -281,7 +284,7 @@ function TabItem({ tab, isActive }: { tab: ProjectTab; isActive: boolean }) {
           : 'text-foreground-muted hover:text-foreground hover:bg-surface-hover border border-transparent'
       }`}
     >
-      <span className="truncate font-medium">{tab.name}</span>
+      <span className="truncate font-medium shrink-0 max-w-[14ch]" title={tab.root}>{tab.name}</span>
       {inBrief ? null : isActive ? (
         <BranchPopover projectPath={tab.root} />
       ) : (
@@ -401,6 +404,7 @@ export function TopBar() {
   const activeTabId = useProjectStore((s) => s.activeTabId);
   const root = useProjectStore((s) => s.root);
   const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const splitView = useUiStore((s) => s.splitView);
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const setViewDepth = useGraphStore((s) => s.setViewDepth);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -442,11 +446,21 @@ export function TopBar() {
         </button>
       )}
 
-      {workspaceMode !== 'brief' && <div className="flex items-center bg-surface rounded-lg p-0.5 gap-0.5 border border-border shrink-0">
+      {/* Dimmed, not hidden, where no graph is on screen (Code, Docs, a plan
+          without split view): lit up there, it claimed a view the reader
+          could not see (Phase 32 §0.5). It still works — it sets the depth
+          the graph comes back at. */}
+      {workspaceMode !== 'brief' && <div
+        className={`flex items-center bg-surface rounded-lg p-0.5 gap-0.5 border border-border shrink-0 transition-opacity ${
+          workspaceMode === 'graph' || (workspaceMode === 'plan' && splitView) ? '' : 'opacity-40 hover:opacity-100'
+        }`}
+        title={workspaceMode === 'graph' || (workspaceMode === 'plan' && splitView) ? undefined : 'The depth the graph shows when you go back to it'}
+      >
         {depthOptions.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setViewDepth(opt.value)}
+            aria-pressed={viewDepth === opt.value}
             className={`px-3 py-1 text-[11px] font-medium rounded-md transition-all ${
               viewDepth === opt.value
                 ? 'bg-accent text-white shadow-[0_0_12px_rgba(59,130,246,0.3)]'

@@ -82,9 +82,17 @@ import {
   getGitWorkingTreeStatus,
   computeGitLineAnnotations,
   broadcast,
+  updatePlanAsPerson,
+  deletePlanAsPerson,
+  postChannelEventAsPerson,
+  setChannelEventStatusAsPerson,
 } from '../server';
+import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
+import { grantChange, grantRefusal } from './grant-guard';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
+import { handleBudgetMethod } from './mobile-budget';
+import { handleFreezeMethod } from './mobile-freeze';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -402,6 +410,24 @@ async function routeMethod(
         broadcast,
       });
 
+    // --- A plan's budget, and marking an agent's change seen -----------------
+    case 'budget.get':
+    case 'budget.acknowledge':
+      return handleBudgetMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      });
+
+    // --- A project's freeze, and marking an agent's change seen (0.4k) -------
+    case 'freeze.get':
+    case 'freeze.acknowledge':
+      return handleFreezeMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      });
+
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {
       // Optional filter. Confined all the same: an unopened path here
@@ -447,19 +473,19 @@ async function routeMethod(
     }
 
     case 'plan.items': {
-      const planUid = requireString(params, 'planUid');
+      const planUid = requirePlan(params, 'planUid');
       return planItemService.listAllItems(planUid);
     }
 
     case 'plan.update': {
-      const uid = requireString(params, 'uid');
-      const plan = planService.getPlan(uid);
-      if (!plan) throw new Error(`Plan not found: ${uid}`);
+      // The desktop's own edit path: status checked, approval baseline
+      // captured, the windows told (0.4j).
+      const uid = requirePlan(params, 'uid');
       const updates: Record<string, unknown> = {};
       if (params.title !== undefined) updates.title = params.title;
       if (params.status !== undefined) updates.status = params.status;
       if (params.description !== undefined) updates.description = params.description;
-      planService.updatePlan(uid, updates as any, getAuthorKey('human'));
+      updatePlanAsPerson(uid, updates as any, getAuthorKey('human'));
       return { ok: true };
     }
 
@@ -472,13 +498,17 @@ async function routeMethod(
         'human',
         projectPath,
       );
+      const exported = planFileService.exportIfSharedByDefault(plan.uid, projectPath);
+      broadcast('plan-created', { plan, exported });
       return plan;
     }
 
     case 'plan.delete': {
-      const uid = requireString(params, 'uid');
-      planService.deletePlan(uid);
-      return { ok: true };
+      // As a delete on the desktop: archived, its files out of the project,
+      // and the windows told (0.4j).
+      const uid = requirePlan(params, 'uid');
+      const { diskRemoved } = deletePlanAsPerson(uid);
+      return { ok: true, diskRemoved };
     }
 
     case 'plan.copyAsPrompt': {
@@ -505,6 +535,9 @@ async function routeMethod(
 
     case 'plan.item.update': {
       const uid = requireString(params, 'uid');
+      // The version row needs an author. Without one every content edit from
+      // the phone — its body editor, a status change — failed on the
+      // NOT NULL constraint, so none of them ever saved (0.4j).
       const updates: Record<string, unknown> = {};
       if (params.status !== undefined) updates.status = params.status;
       if (params.title !== undefined) updates.title = params.title;
@@ -512,13 +545,17 @@ async function routeMethod(
       if (params.body !== undefined) updates.body = params.body;
       if (params.blockedReason !== undefined) updates.blockedReason = params.blockedReason;
       if (params.progressPercent !== undefined) updates.progressPercent = params.progressPercent;
-      const updated = planItemService.updateItem(uid, updates as any);
+      if (updates.status !== undefined && !isTaskStatus(updates.status)) {
+        throw new Error(`status must be one of: ${TASK_STATUSES.join(', ')}`);
+      }
+      const updated = planItemService.updateItem(uid, { ...updates, author: getAuthorKey('human'), authorType: 'human' } as any);
       if (!updated) throw new Error(`Item not found: ${uid}`);
+      broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: updates });
       return updated;
     }
 
     case 'plan.item.create': {
-      const planUid = requireString(params, 'planUid');
+      const planUid = requirePlan(params, 'planUid');
       const title = requireString(params, 'title');
       const kind = (params.kind as string) === 'object' ? 'object' : 'action';
       const created = planItemService.createItem({
@@ -530,6 +567,7 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
+      broadcast('plan-item-created', { planUid: created.planUid, item: created });
       return created;
     }
 
@@ -540,6 +578,12 @@ async function routeMethod(
       const targetType = (params.targetType as string) === 'plan' ? 'plan' : 'item';
       const kind = (params.kind as string) || 'note';
       const parentUid = (params.parentUid as string) || undefined;
+      // A comment on something that exists, and the event the desktop's
+      // thread for that thing listens to: an item's thread hears
+      // `plan-item-comment-added`, not the plan-level `comment-added` (0.4j).
+      const item = targetType === 'item' ? planItemService.getItem(targetUid) : null;
+      if (targetType === 'item' && !item) throw new Error(`Item not found: ${targetUid}`);
+      if (targetType === 'plan' && !planService.getPlan(targetUid)) throw new Error(`Plan not found: ${targetUid}`);
       const comment = commentService.addComment(
         targetType as 'plan' | 'item',
         targetUid,
@@ -548,7 +592,8 @@ async function routeMethod(
         body,
         { kind: kind as any, parentUid },
       );
-      broadcast('comment-added', { comment });
+      if (item) broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: item.uid, comment });
+      else broadcast('comment-added', { comment });
       return comment;
     }
 
@@ -556,6 +601,7 @@ async function routeMethod(
     case 'item.ref.add': {
       const itemUid = requireString(params, 'itemUid');
       const url = requireString(params, 'url');
+      if (!planItemService.getItem(itemUid)) throw new Error(`Item not found: ${itemUid}`);
       const ref = externalRefsService.createExternalRef({
         itemUid,
         url,
@@ -564,26 +610,33 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
+      broadcast('external-ref-added', { ref });
       return ref;
     }
 
     case 'item.ref.remove': {
       const uid = requireString(params, 'uid');
+      if (!externalRefsService.getExternalRef(uid)) throw new Error(`Link not found: ${uid}`);
       externalRefsService.deleteExternalRef(uid);
+      broadcast('external-ref-deleted', { uid });
       return { ok: true };
     }
 
     // --- Deviations ----------------------------------------------------------
     case 'deviation.list': {
-      const planUid = requireString(params, 'planUid');
+      const planUid = requirePlan(params, 'planUid');
       return deviationService.getDeviations(planUid);
     }
 
     case 'deviation.resolve': {
       const id = params.id as number;
-      const resolution = params.resolution as 'accepted' | 'reverted' | 'ignored';
+      const resolution = params.resolution;
       if (!id || !resolution) throw new Error('id and resolution required');
-      deviationService.resolveDeviation(id, resolution);
+      // Through the same checks as the desktop (bug 30): a real deviation, a
+      // real resolution, recorded as the person on the paired phone.
+      const planUid = deviationService.planOfDeviation(id);
+      if (!planUid) throw new Error(`No deviation ${id}`);
+      deviationService.reconcileDeviations(planUid, [{ id, action: resolution }], { actor: getAuthorKey('human'), actorType: 'human' });
       return { ok: true };
     }
 
@@ -609,27 +662,27 @@ async function routeMethod(
     }
 
     case 'project.close': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       // Mirror the desktop close_project tool so the tab closes there too.
       broadcast('ui-close-project', { path: projectPath });
       return { ok: true };
     }
 
     case 'project.pin': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       const pinned = params.pinned !== false; // default true
       recentProjectsService.setRecentProjectPinned(projectPath, pinned);
       return recentProjectsService.getRecentProject(projectPath);
     }
 
     case 'project.remove': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       recentProjectsService.removeRecentProject(projectPath);
       return { ok: true };
     }
 
     case 'project.alias': {
-      const projectPath = requireString(params, 'projectPath');
+      const projectPath = requireRecentProject(requireString(params, 'projectPath'));
       const alias = requireString(params, 'alias');
       return recentProjectsService.setProjectAlias(projectPath, alias);
     }
@@ -656,6 +709,10 @@ async function routeMethod(
       // state machine after the patch lands so a toggle alone can
       // engage / disengage the blocker.
       if (params.power !== undefined) patch.power = params.power;
+      // Exposure and sharing are the person's at the desktop, even from their
+      // own phone (owner's decision; grant-guard.ts).
+      const grant = grantChange(patch, getSettings());
+      if (grant) throw new Error(grantRefusal(grant.field, grant.where));
       const updated = updateSettings(patch as any);
       if (params.power !== undefined) notifyPowerSettingsChanged();
       broadcast('settings-changed', { settings: updated });
@@ -724,6 +781,9 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
+      // Every phone write to a system doc tells the desktop windows, as the
+      // desktop's own routes do; none of these four did (0.4j).
+      broadcast('system-doc-created', { uid: doc.uid, projectPath: doc.projectPath });
       return doc;
     }
 
@@ -736,18 +796,22 @@ async function routeMethod(
       if (params.tags !== undefined) updates.tags = params.tags;
       const doc = systemDocsService.updateSystemDoc(uid, updates as any);
       if (!doc) throw new Error(`Doc not found: ${uid}`);
+      broadcast('system-doc-updated', { uid: doc.uid, projectPath: doc.projectPath });
       return doc;
     }
 
     case 'sysdoc.delete': {
       const uid = requireString(params, 'uid');
-      return { ok: systemDocsService.deleteSystemDoc(uid) };
+      if (!systemDocsService.deleteSystemDoc(uid)) throw new Error(`Doc not found: ${uid}`);
+      broadcast('system-doc-removed', { uid });
+      return { ok: true };
     }
 
     case 'sysdoc.verify': {
       const uid = requireString(params, 'uid');
       const doc = systemDocsService.verifySystemDoc(uid);
       if (!doc) throw new Error(`Doc not found: ${uid}`);
+      broadcast('system-doc-verified', { uid: doc.uid, capturedAgainstCommit: doc.capturedAgainstCommit });
       return doc;
     }
 
@@ -769,14 +833,19 @@ async function routeMethod(
         author: getAuthorKey('human'),
         authorType: 'human',
       });
-      broadcast('plan-created', { uid: result.plan.uid });
+      // `{ plan }`, the shape every other sender uses: the window's handler
+      // reads `payload.plan`, and `{ uid }` handed it undefined (0.4j).
+      broadcast('plan-created', { plan: result.plan });
       return { plan: result.plan, itemCount: result.items.length, version: result.version };
     }
 
     case 'plan.file.export': {
-      const planUid = requireString(params, 'planUid');
-      const projectRoot = peerProjectRoot(params, { required: true })!;
+      const planUid = requirePlan(params, 'planUid');
+      const projectRoot = params.projectPath !== undefined
+        ? peerProjectRoot(params, { required: true })!
+        : planProjectRoot(planUid);
       const result = planFileService.exportPlan(planUid, projectRoot);
+      broadcast('plan-exported', { planUid, planDir: result.planDir, files: result.files.length });
       return { planDir: result.planDir, fileCount: result.files.length };
     }
 
@@ -790,7 +859,7 @@ async function routeMethod(
       // Confined like every other peer path: an opened project's plan dir.
       const planDir = resolveTrustedPlanDir(requireString(params, 'planDir'));
       const result = planFileService.importPlan(planDir);
-      broadcast('plan-created', { uid: result.plan?.uid });
+      if (result.plan) broadcast('plan-imported', { planUid: result.plan.uid, source: planDir });
       return { plan: result.plan, warnings: result.warnings };
     }
 
@@ -820,19 +889,22 @@ async function routeMethod(
       return term;
     }
 
+    // A terminal that is not there is an error, not `{ ok: false }` or a
+    // null the phone renders as an empty screen: typing into one looked like
+    // it worked (0.4j).
     case 'terminal.write': {
       const id = requireString(params, 'id');
       const data = requireString(params, 'data');
-      const ok = terminalService.writeTerminal(id, data);
-      return { ok };
+      if (!terminalService.writeTerminal(id, data)) throw new Error(`Terminal not found: ${id}`);
+      return { ok: true };
     }
 
     case 'terminal.kill': {
       const id = requireString(params, 'id');
-      const ok = terminalService.killTerminal(id);
+      if (!terminalService.killTerminal(id)) throw new Error(`Terminal not found: ${id}`);
       // Companion-app sync: remove it from the desktop UI too.
-      if (ok) { try { broadcast('terminal-killed', { id }); } catch { /* */ } }
-      return { ok };
+      try { broadcast('terminal-killed', { id }); } catch { /* */ }
+      return { ok: true };
     }
 
     case 'terminal.read': {
@@ -840,6 +912,7 @@ async function routeMethod(
       const lines = (params.lines as number) ?? 100;
       // raw=true → keep ANSI so the mobile app colours it (parseAnsi).
       const output = terminalService.readTerminalOutput(id, lines, true);
+      if (output === null) throw new Error(`Terminal not found: ${id}`);
       return { output };
     }
 
@@ -856,8 +929,13 @@ async function routeMethod(
       const id = requireString(params, 'id');
       const cols = (params.cols as number) ?? 80;
       const rows = (params.rows as number) ?? 24;
-      const ok = terminalService.resizeTerminal(id, cols, rows);
-      return { ok };
+      // Straight to the PTY, so a size that is not one is refused here.
+      // Narrower than the MCP tool's floor: a phone held upright is ~40 wide.
+      if (!Number.isInteger(cols) || cols < 10 || cols > 500 || !Number.isInteger(rows) || rows < 4 || rows > 300) {
+        throw new Error('cols must be a whole number from 10 to 500, and rows from 4 to 300');
+      }
+      if (!terminalService.resizeTerminal(id, cols, rows)) throw new Error(`Terminal not found: ${id}`);
+      return { ok: true };
     }
 
     // Session-persistence plan §7.6 — paginated read of the
@@ -895,27 +973,24 @@ async function routeMethod(
     }
 
     case 'channel.post': {
+      // Through the desktop's own path (0.4j): written into a shared plan's
+      // files, routing rules fired, the windows told. The author is the
+      // person, as on the desktop — a phone does not get to name itself.
       const planUid = requireString(params, 'planUid');
       const eventType = requireString(params, 'eventType');
-      const message = (params.message as string) ?? '';
-      const author = (params.author as string) ?? 'mobile-user';
-      const respondsTo = (params.parentUid as string) || undefined;
-      const event = channelEventService.postChannelEvent({
+      return postChannelEventAsPerson({
         planUid,
-        eventType: eventType as any,
-        payload: { message },
-        author,
-        authorType: 'human',
-        respondsTo,
+        eventType,
+        message: typeof params.message === 'string' ? params.message : '',
+        itemUid: typeof params.itemUid === 'string' ? params.itemUid : null,
+        respondsTo: (params.parentUid as string) || null,
       });
-      return event;
     }
 
     case 'channel.resolve': {
       const uid = requireString(params, 'uid');
       const status = (params.status as string) ?? 'resolved';
-      const event = channelEventService.setChannelEventStatus(uid, status as any);
-      return event;
+      return setChannelEventStatusAsPerson(uid, status);
     }
 
     case 'channel.thread': {
@@ -934,7 +1009,11 @@ async function routeMethod(
     case 'input.respond': {
       const requestId = requireString(params, 'requestId');
       const response = requireString(params, 'response');
-      remoteInteractionService.respondToInputRequest(requestId, response);
+      // An answer that went nowhere is not "ok": the person would think the
+      // agent had its reply (0.4j).
+      if (!remoteInteractionService.respondToInputRequest(requestId, response, { actor: getAuthorKey('human'), actorType: 'human', channel: 'phone' })) {
+        throw new Error(`No pending input request ${requestId}`);
+      }
       return { ok: true };
     }
 
@@ -1053,18 +1132,23 @@ async function routeMethod(
 
     case 'graph.fileSearch': {
       // Search the files table by path for the mention picker's Files tab.
+      //
+      // The query is text. It went into LIKE unescaped, so `%` or `_` matched
+      // every file; and it was matched against the ABSOLUTE path, so "home"
+      // or "user" did too. The relative path comes from the row, not from
+      // slicing the active project's prefix off (0.4j).
       const query = requireString(params, 'query').toLowerCase();
+      const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const d = getDb();
       const out: Array<{ path: string; relativePath: string; name: string }> = [];
       try {
-        const root = getActiveProjectPath() || recentProjectsService.listRecentProjects()[0]?.path || '';
-        const r = d.exec(`SELECT path FROM files WHERE LOWER(path) LIKE ? ORDER BY path LIMIT 40`, [`%${query}%`]);
-        if (r[0]?.values.length) {
-          for (const row of r[0].values) {
-            const p = row[0] as string;
-            const rel = root && p.startsWith(root) ? path.relative(root, p) : p;
-            out.push({ path: p, relativePath: rel, name: path.basename(p) });
-          }
+        const r = d.exec(
+          `SELECT path, relative_path FROM files WHERE LOWER(relative_path) LIKE ? ESCAPE '\\' ORDER BY relative_path LIMIT 40`,
+          [pattern],
+        );
+        for (const row of r[0]?.values ?? []) {
+          const p = row[0] as string;
+          out.push({ path: p, relativePath: row[1] as string, name: path.basename(p) });
         }
       } catch { /* files table may not exist */ }
       return out;
@@ -1205,6 +1289,25 @@ async function routeMethod(
 }
 
 // --- Helpers -----------------------------------------------------------------
+
+/**
+ * A path on the recent-projects list, or throw. These four act on the list,
+ * and an unknown path used to answer `{ ok: true }` or `null` having changed
+ * nothing (0.4j).
+ */
+function requireRecentProject(projectPath: string): string {
+  if (!recentProjectsService.getRecentProject(projectPath)) {
+    throw new Error(`${projectPath} is not a recent project`);
+  }
+  return projectPath;
+}
+
+/** A plan uid that names a plan, or throw. */
+function requirePlan(params: Record<string, unknown>, key: string): string {
+  const uid = requireString(params, key);
+  if (!planService.getPlan(uid)) throw new Error(`Plan not found: ${uid}`);
+  return uid;
+}
 
 function requireString(params: Record<string, unknown>, key: string): string {
   const val = params[key];

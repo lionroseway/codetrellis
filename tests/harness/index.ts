@@ -53,6 +53,7 @@ export {
   slugify,
 } from './paths';
 export { waitFor, sleep, type WaitForOptions } from './wait';
+export { openEventStream, type EventStream, type BackendEvent } from './events';
 export { authFetch } from './client';
 export {
   createMcpClient,
@@ -65,6 +66,7 @@ export {
   type ScriptedAgent,
   type ScriptedAgentOptions,
 } from './scripted-agent';
+export { pairPhone, type Phone, type PairOptions, type ControlMessage } from './peer';
 
 import { prepareFixture, PreparedFixture } from './fixture';
 import { startBackend, RunningBackend } from './backend';
@@ -88,6 +90,10 @@ export interface Harness {
 }
 
 export interface SetupHarnessOptions {
+  /** Extra environment for the backend process. */
+  env?: Record<string, string>;
+  /** Settings seeded before boot (see `StartBackendOptions.settings`). */
+  settings?: Record<string, unknown>;
   /** Pipe backend stdout/stderr to the parent. Default: false. */
   verbose?: boolean;
   /** Override the backend ready timeout. Default: 30s. */
@@ -113,6 +119,8 @@ export async function setupHarness(
       dataDir: fixture.dataDir,
       verbose: opts.verbose,
       readyTimeoutMs: opts.readyTimeoutMs,
+      env: opts.env,
+      settings: opts.settings,
     });
   } catch (err) {
     // Backend failed to come up — cleanup the fixture so we don't

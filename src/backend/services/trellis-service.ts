@@ -1,7 +1,6 @@
 import { getDb, getDependencyEdges } from './database';
 import { markDirty } from './persistence';
-import fs from 'node:fs';
-import path from 'node:path';
+import { currentBranch } from './git-checkout';
 
 export interface TrellisSnapshot {
   id: number;
@@ -80,15 +79,7 @@ export function captureCurrentTrellis(
   }));
 
   // Get git branch
-  let gitBranch: string | null = null;
-  try {
-    const headPath = path.join(projectPath, '.git', 'HEAD');
-    if (fs.existsSync(headPath)) {
-      const head = fs.readFileSync(headPath, 'utf-8').trim();
-      const match = head.match(/^ref: refs\/heads\/(.+)$/);
-      gitBranch = match ? match[1] : 'detached';
-    }
-  } catch { /* ignore */ }
+  const gitBranch = currentBranch(projectPath);
 
   const snapshotName = name || `Snapshot at ${new Date().toLocaleString()}`;
   const now = Date.now();

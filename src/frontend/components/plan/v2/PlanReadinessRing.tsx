@@ -1,8 +1,8 @@
 /**
  * Phase 17.G — Plan Readiness Score.
  *
- * A ring/badge in the workspace header that grades the plan from
- * "not ready" (red) to "good to go" (green). Checks:
+ * A chip in the workspace header that says whether the plan is ready to
+ * hand to an agent, and what is left if not. Checks:
  *
  *   ✓ Has title and intent (plan.title + plan.description non-empty)
  *   ✓ Tasks have targets (every action has ≥1 fileSpec)
@@ -14,11 +14,12 @@
  *   ○ Constraints defined (at least one guardrail set)
  *   ○ Agent can reach files (connected agent has the right skills)
  *
- * ✓ = required (red if missing), ○ = suggested (amber if missing)
+ * ✓ = required (amber if missing), ○ = suggested (muted if missing).
+ * Nothing here is red: an unfinished plan is not a fault (Phase 32 §0.5).
  */
 
 import { useMemo, useState } from 'react';
-import { CheckCircle2, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, CircleDashed, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { PlanItem, Plan } from '@shared/types';
@@ -202,43 +203,38 @@ export function PlanReadinessRing() {
   const requiredChecks = checks.filter((c) => c.level === 'required');
   const suggestedChecks = checks.filter((c) => c.level === 'suggested');
   const requiredPassed = requiredChecks.filter((c) => c.passed).length;
-  const allRequiredPassed = requiredPassed === requiredChecks.length;
+  const requiredLeft = requiredChecks.length - requiredPassed;
+  const suggestionsLeft = suggestedChecks.filter((c) => !c.passed).length;
   const totalPassed = checks.filter((c) => c.passed).length;
-  const pct = Math.round((totalPassed / checks.length) * 100);
 
-  // Color: red if required fail, amber if all required pass but suggested missing, green if all pass
-  const color = !allRequiredPassed
-    ? 'text-red-400 border-red-500/30 bg-red-500/10'
+  // Glyph + word, not a coloured percentage (Phase 32 §0.5). "44%" in red
+  // was on every new draft: it said neither what was missing nor that a
+  // draft is supposed to be unfinished. Red is kept for things that are
+  // wrong; an unfinished plan is amber until its required checks pass.
+  const label = requiredLeft > 0
+    ? `${requiredLeft} to do before hand-off`
+    : 'Ready to hand off';
+  const color = requiredLeft > 0
+    ? 'text-amber-300 border-amber-500/25 bg-amber-500/10'
     : totalPassed === checks.length
     ? 'text-green-400 border-green-500/30 bg-green-500/10'
-    : 'text-amber-400 border-amber-500/30 bg-amber-500/10';
-
-  const ringColor = !allRequiredPassed
-    ? 'stroke-red-400'
-    : totalPassed === checks.length
-    ? 'stroke-green-400'
-    : 'stroke-amber-400';
+    : 'text-foreground-muted border-border bg-surface';
+  const Glyph = requiredLeft > 0 ? CircleDashed : CheckCircle2;
 
   return (
     <div className="relative">
       <button
         onClick={() => setExpanded((p) => !p)}
+        aria-expanded={expanded}
+        data-testid="plan-readiness"
         className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-medium transition-colors ${color}`}
-        title={`Plan readiness: ${pct}% — ${allRequiredPassed ? 'ready to hand off' : 'needs attention'}`}
+        title={`Plan readiness: ${requiredPassed} of ${requiredChecks.length} required checks pass${suggestionsLeft ? `, ${suggestionsLeft} suggestion${suggestionsLeft === 1 ? '' : 's'} open` : ''}. Click for the checklist.`}
       >
-        {/* Mini SVG ring */}
-        <svg width="16" height="16" viewBox="0 0 20 20" className="shrink-0">
-          <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.15" />
-          <circle
-            cx="10" cy="10" r="8" fill="none"
-            className={ringColor}
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeDasharray={`${(pct / 100) * 50.26} 50.26`}
-            transform="rotate(-90 10 10)"
-          />
-        </svg>
-        <span>{pct}%</span>
+        <Glyph size={12} className={requiredLeft === 0 && totalPassed === checks.length ? 'text-green-400' : undefined} />
+        <span>{label}</span>
+        {requiredLeft === 0 && suggestionsLeft > 0 && (
+          <span className="text-foreground-subtle font-normal">· {suggestionsLeft} suggestion{suggestionsLeft === 1 ? '' : 's'}</span>
+        )}
         {expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
       </button>
 
@@ -274,12 +270,12 @@ export function PlanReadinessRing() {
 }
 
 function CheckRow({ check }: { check: ReadinessCheck }) {
-  const Icon = check.passed ? CheckCircle2 : check.level === 'required' ? XCircle : AlertTriangle;
+  const Icon = check.passed ? CheckCircle2 : check.level === 'required' ? CircleDashed : AlertTriangle;
   const tint = check.passed
     ? 'text-green-400'
     : check.level === 'required'
-    ? 'text-red-400'
-    : 'text-amber-400';
+    ? 'text-amber-300'
+    : 'text-foreground-subtle';
 
   return (
     <div className="flex items-start gap-2 px-1 py-0.5">

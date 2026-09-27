@@ -26,9 +26,12 @@ import { DATA_CHANNELS } from '../../shared/types';
 import {
   onChannelMessage,
   onConnectionStateChange,
-  broadcastToAllPeers,
+  getPeerConnections,
   sendToPeer,
 } from './webrtc-service';
+import { getPairedDevice, onDeviceGrantsChanged } from './paired-device-service';
+import { peerHolds } from './peer-grants';
+import { recordPeerAudit } from './peer-audit-service';
 import {
   listTerminals,
   onTerminalData,
@@ -78,6 +81,7 @@ let unsubMessage: (() => void) | null = null;
 let unsubConnection: (() => void) | null = null;
 let unsubTerminalData: (() => void) | null = null;
 let unsubTerminalExit: (() => void) | null = null;
+let unsubGrants: (() => void) | null = null;
 
 /**
  * Remote terminals received from peers.
@@ -93,6 +97,56 @@ const remoteTerminalListeners = new Set<(event: string, data: unknown) => void>(
  * index for efficiency; we map IDs to indices on each list broadcast.
  */
 let localTerminalIds: string[] = [];
+
+// --- Who may use the relay --------------------------------------------------
+
+/**
+ * Whether a peer may see and type into this machine's terminals.
+ *
+ * The same rule as the RPC `terminal.*` methods: the `terminal` grant, on a
+ * pairing confirmed on the desktop. This relay applied none of it — every
+ * connected peer was sent the terminal list, each terminal's scrollback and
+ * all live output, and any input it sent was written into the shell. The
+ * capability matrix gated the RPC door and left this one open (Phase 32
+ * bug 41).
+ */
+function mayUseTerminals(fingerprint: string): boolean {
+  return peerHolds(fingerprint, 'terminal');
+}
+
+/** Send a relay frame to every connected peer that may use terminals. */
+function sendToTerminalPeers(payload: Buffer): void {
+  for (const peer of getPeerConnections()) {
+    if (peer.state === 'connected' && mayUseTerminals(peer.fingerprint)) {
+      sendToPeer(peer.fingerprint, DATA_CHANNELS.TERMINAL, payload);
+    }
+  }
+}
+
+/**
+ * Audit what came in over the relay. Refusals every time; accepted input
+ * once a minute per peer and terminal, because it arrives a keystroke at a
+ * time and the audit is for "did this device use a terminal", not a log of
+ * what it typed — which is never recorded.
+ */
+const lastInputAudit = new Map<string, number>();
+function auditRelay(fingerprint: string, kind: 'refused' | 'terminal-access', method: string, terminalId: string | null): void {
+  if (kind === 'terminal-access') {
+    const key = `${fingerprint}|${terminalId}`;
+    const last = lastInputAudit.get(key) ?? 0;
+    if (Date.now() - last < 60_000) return;
+    lastInputAudit.set(key, Date.now());
+  }
+  recordPeerAudit({
+    kind,
+    fingerprint,
+    alias: getPairedDevice(fingerprint)?.alias ?? 'unknown device',
+    method,
+    detail: kind === 'refused'
+      ? 'terminal relay: no terminal grant on a confirmed pairing'
+      : `terminal relay: ${terminalId ?? 'unknown terminal'}`,
+  });
+}
 
 // --- Public API --------------------------------------------------------------
 
@@ -116,12 +170,21 @@ export function startRemoteTerminals(): void {
   // arrive. Replaying the buffered scrollback here primes their xterm
   // so it never renders empty, with no client-side change required.
   unsubConnection = onConnectionStateChange((fingerprint, state) => {
-    if (state === 'connected') {
+    if (state === 'connected' && mayUseTerminals(fingerprint)) {
       sendTerminalList(fingerprint);
       sendTerminalSnapshots(fingerprint);
     } else if (state === 'disconnected' || state === 'failed') {
       remoteTerminals.delete(fingerprint);
       emitEvent('remote-terminals-changed', { fingerprint });
+    }
+  });
+
+  // Granted `terminal` while connected: send what a connecting device gets,
+  // rather than nothing until it reconnects.
+  unsubGrants = onDeviceGrantsChanged((fingerprint, added) => {
+    if (added.includes('terminal') && mayUseTerminals(fingerprint)) {
+      sendTerminalList(fingerprint);
+      sendTerminalSnapshots(fingerprint);
     }
   });
 
@@ -139,7 +202,7 @@ export function startRemoteTerminals(): void {
     payload[0] = MSG.TERMINAL_OUTPUT;
     payload[1] = idx;
     payload.write(data, 2, 'utf-8');
-    broadcastToAllPeers(DATA_CHANNELS.TERMINAL, payload);
+    sendToTerminalPeers(payload);
   });
 
   // Notify peers when a local terminal exits
@@ -148,7 +211,7 @@ export function startRemoteTerminals(): void {
       String.fromCharCode(MSG.TERMINAL_EXITED) +
       JSON.stringify({ id, exitCode }),
     );
-    broadcastToAllPeers(DATA_CHANNELS.TERMINAL, msg);
+    sendToTerminalPeers(msg);
     refreshLocalTerminalList();
     broadcastTerminalList();
   });
@@ -167,6 +230,7 @@ export function stopRemoteTerminals(): void {
   if (unsubConnection) { unsubConnection(); unsubConnection = null; }
   if (unsubTerminalData) { unsubTerminalData(); unsubTerminalData = null; }
   if (unsubTerminalExit) { unsubTerminalExit(); unsubTerminalExit = null; }
+  if (unsubGrants) { unsubGrants(); unsubGrants = null; }
 
   remoteTerminals.clear();
   localTerminalIds = [];
@@ -266,7 +330,7 @@ function broadcastTerminalList(): void {
   const msg = Buffer.from(
     String.fromCharCode(MSG.TERMINAL_LIST) + JSON.stringify(list),
   );
-  broadcastToAllPeers(DATA_CHANNELS.TERMINAL, msg);
+  sendToTerminalPeers(msg);
 }
 
 /**
@@ -368,7 +432,12 @@ function handleTerminalMessage(fingerprint: string, data: Buffer | string): void
         const idx = buf[1];
         const input = buf.slice(2).toString('utf-8');
         const terminalId = localTerminalIds[idx];
+        if (!mayUseTerminals(fingerprint)) {
+          auditRelay(fingerprint, 'refused', 'terminal-relay.input', terminalId ?? null);
+          return;
+        }
         if (terminalId) {
+          auditRelay(fingerprint, 'terminal-access', 'terminal-relay.input', terminalId);
           writeTerminal(terminalId, input);
         }
         break;
@@ -394,7 +463,11 @@ function handleTerminalMessage(fingerprint: string, data: Buffer | string): void
         // Peer wants to resize one of our local terminals
         const json = buf.slice(1).toString('utf-8');
         const { id, cols, rows } = JSON.parse(json);
-        if (id && cols && rows) {
+        if (!mayUseTerminals(fingerprint)) {
+          auditRelay(fingerprint, 'refused', 'terminal-relay.resize', typeof id === 'string' ? id : null);
+          return;
+        }
+        if (id && Number.isInteger(cols) && Number.isInteger(rows) && cols > 0 && rows > 0 && cols <= 500 && rows <= 300) {
           resizeTerminal(id, cols, rows);
         }
         break;

@@ -83,6 +83,21 @@ const SERIAL_SPECS = [
   '**/live-agent/agent-authored-flow.spec.ts',
   '**/golden-chain/mcp-agent-flow.spec.ts',
   '**/mcp-tools/changes-drift-templates.spec.ts',
+  // The graph view tools act on every open page.
+  '**/graph/mcp-view-tools.spec.ts',
+  // So do the UI tools (open_plan, select_item, the drawers and dialogs).
+  '**/agent/mcp-ui-tools.spec.ts',
+  // Changes shared settings — plan visibility, identity — that a parallel
+  // spec creating plans would pick up.
+  '**/settings/sections-save.spec.ts',
+  // Answers about whichever project was scanned last.
+  '**/mcp-tools/graph-tools.spec.ts',
+  // Opens the sample app, which swaps the one project every parallel spec reads.
+  '**/inspector/add-to-plan.spec.ts',
+  // request_plan_deletion opens its confirmation on every open page.
+  '**/plan/plan-deletion-request.spec.ts',
+  // Its agent posts presence cards, asks to delete a plan and freezes the project.
+  '**/screenshots/ux-audit.spec.ts',
   // navigate_to 'artefact' opens the viewer over every open page.
   '**/plan/brief-mode.spec.ts',
   // They read the graph of whichever project was scanned last.
@@ -117,6 +132,18 @@ export default defineConfig({
       env: {
         CODETRELLIS_DATA_DIR: E2E_DATA_DIR,
         CODETRELLIS_CAPABILITY_TOKEN: E2E_TOKEN,
+        // The web build has no app window; granting is otherwise its alone
+        // (src/backend/services/grant-guard.ts). Test backends only.
+        NODE_ENV: 'test',
+        CODETRELLIS_ALLOW_HTTP_GRANTS: '1',
+        // The update check the backend makes at start went to the real
+        // codetrellis.dev and GitHub, so every run asked the internet and the
+        // Updates panel showed whatever it answered (a GitHub 403 in CI-like
+        // containers). The harness has pointed both at nowhere since 0.4k;
+        // this suite now does too. Automatic checks stay on, because
+        // e2e/settings/updates.spec.ts turns them off.
+        CODETRELLIS_OTA_URL: 'http://127.0.0.1:9',
+        CODETRELLIS_GITHUB_API: 'http://127.0.0.1:9',
         // No conversion engine unless a run asks for one (pw.local.config.ts
         // does). From source the backend otherwise uses resources/rendition/
         // engine, which packaging fills with the pinned engine — so the same

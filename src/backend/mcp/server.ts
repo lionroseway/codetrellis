@@ -25,7 +25,8 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 // Static imports so Vite's Electron-main bundler resolves them correctly.
 
 import { searchSymbols, getDependencyEdges, getFileDependencies, getDbStats, getDb, exportDatabase } from '../services/database';
-import { broadcast, getBoundBackendPort, scanProject } from '../server';
+import { broadcast, getActiveProjectPath, getBoundBackendPort, scanProject, pinBaseline, BaselineError } from '../server';
+import { clearBaseline } from '../services/diff-engine';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
@@ -53,6 +54,7 @@ import {
   recordArtefact,
   refreshArtefactHashes,
   listArtefacts,
+  getArtefact,
   ArtefactError,
 } from '../services/artefact-service';
 import { startArtefactWatching } from '../services/artefact-watcher';
@@ -61,7 +63,7 @@ import { readMaterial } from '../services/material-reader/reader-host';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
 import { publishPlanAsTemplate } from '../services/plan-template-publish-service';
-import { getDeviations, resolveDeviation, detectDeviations } from '../services/deviation-service';
+import { getDeviations, resolveDeviation, detectDeviations, reconcileDeviations, DeviationError } from '../services/deviation-service';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff } from '../services/trellis-service';
 import { saveNow, getDataDir } from '../services/persistence';
 import { getSettings, updateSettings } from '../services/settings-service';
@@ -150,14 +152,15 @@ const pendingResponses: PendingResponses = new Map();
   }
 };
 
-// Presence ack / reply resolver — same pattern as screenshot.
-(globalThis as any).__presenceResolve = (nonce: string, data: string) => {
+// Presence ack / reply resolver — same pattern as screenshot. Says whether
+// anyone was still waiting, so a reply nobody received is kept (bug 25).
+(globalThis as any).__presenceResolve = (nonce: string, data: string): boolean => {
   const pending = pendingResponses.get(nonce);
-  if (pending) {
-    clearTimeout(pending.timer);
-    pendingResponses.delete(nonce);
-    pending.resolve(data);
-  }
+  if (!pending) return false;
+  clearTimeout(pending.timer);
+  pendingResponses.delete(nonce);
+  pending.resolve(data);
+  return true;
 };
 
 /**
@@ -281,7 +284,7 @@ function buildToolDeps(sessionId: string): ToolDeps {
     // An agent's view of criteria only — see ToolDeps.criteriaService.
     criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, CriterionError },
     criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun },
-    artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, ArtefactError },
+    artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, getArtefact, ArtefactError },
     startArtefactWatching,
     briefService: { getBrief, listMaterials },
     readMaterial,
@@ -292,6 +295,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     publishPlanAsTemplate,
     getDeviations,
     resolveDeviation,
+    reconcileDeviations,
+    DeviationError,
     detectDeviations,
     captureCurrentTrellis,
     listSnapshots,
@@ -319,6 +324,10 @@ function buildToolDeps(sessionId: string): ToolDeps {
     getLogDir,
     getBoundBackendPort,
     scanProject,
+    getActiveProjectPath,
+    pinBaseline,
+    BaselineError,
+    clearBaseline,
     buildSkillGuide,
     captureElectronScreenshot: electronScreenshotCapture,
   };
@@ -376,6 +385,18 @@ export function listRegisteredTools(): string[] {
   return [...REGISTERED_TOOLS].sort();
 }
 
+/**
+ * Every registered tool's argument names (its input schema's keys), from
+ * the same interception. Lets a test check that the agent guides only
+ * document arguments a tool actually takes — a guide that names a
+ * parameter the tool ignores is an agent calling it wrong.
+ */
+const REGISTERED_TOOL_ARGS = new Map<string, string[]>();
+
+export function listRegisteredToolArgs(): ReadonlyMap<string, string[]> {
+  return REGISTERED_TOOL_ARGS;
+}
+
 function setupMcpServerInstance(sessionId: string): McpServer {
   const mcpServer = new McpServer(
     { name: 'codetrellis', version: '0.1.0' },
@@ -407,7 +428,10 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   // `write_remote_terminal` — which drives a terminal on a paired
   // device — that was not true. Anything added here that covers only one
   // API covers seven eighths of the surface.
-  const registerName = (name: string) => { REGISTERED_TOOLS.add(name); };
+  const registerName = (name: string, schema?: unknown) => {
+    REGISTERED_TOOLS.add(name);
+    REGISTERED_TOOL_ARGS.set(name, schema && typeof schema === 'object' ? Object.keys(schema) : []);
+  };
 
   const instrument = (name: string, handler: any) => async (args: any, extra: any) => {
     const start = Date.now();
@@ -480,7 +504,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
 
   const originalRegisterTool = (mcpServer.registerTool as any).bind(mcpServer);
   (mcpServer as any).registerTool = (name: string, config: any, handler: any) => {
-    registerName(name);
+    registerName(name, config?.inputSchema);
     return originalRegisterTool(name, config, instrument(name, handler));
   };
 
@@ -492,7 +516,9 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   (mcpServer as any).tool = (...args: any[]) => {
     const name = args[0] as string;
     const last = args.length - 1;
-    registerName(name);
+    // The schema, when present, is the one plain-object argument between
+    // the name and the callback (the description is a string).
+    registerName(name, args.slice(1, last).find((a) => a && typeof a === 'object' && !Array.isArray(a)));
     const next = [...args];
     next[last] = instrument(name, args[last]);
     return originalTool(...next);
@@ -521,7 +547,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerReviewTools(mcpServer, deps);
   registerContributionTools(mcpServer);
   registerAudioTools(mcpServer);
-  registerPeerTools(mcpServer);
+  registerPeerTools(mcpServer, deps);
   registerResources(mcpServer, deps);
 
   return mcpServer;

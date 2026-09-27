@@ -9,6 +9,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
+import { authorFromExtra } from '../helpers';
+
+/** Said after an agent changes a freeze, so it knows the change is visible. */
+const FLAGGED_NOTE = ' Recorded in your name and flagged for a person to review.';
 import {
   getFreezeStatus,
   setFreeze,
@@ -59,19 +63,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
         allowed_plan_uids: z.array(z.string()).optional().describe('Plan UIDs exempt from the freeze.'),
       },
     },
-    async ({ project_path, active, reason, until, allowed_plan_uids }) => {
+    async ({ project_path, active, reason, until, allowed_plan_uids }, extra: any) => {
+      // Allowed, in the agent's own name, and flagged until a person has seen
+      // it (owner's decision, Phase 32 §0.4k).
+      const { author, authorType } = authorFromExtra(deps, extra);
       const status = setFreeze(project_path, {
         active,
         reason,
         until,
         allowedPlanUids: allowed_plan_uids,
-      });
+      }, { actor: author, actorType: authorType, channel: 'mcp' });
 
       deps.broadcast('freeze-changed', { projectRoot: project_path, status });
 
-      const msg = active
+      const msg = (active
         ? `Freeze activated${reason ? `: ${reason}` : ''}${until ? ` (expires ${until})` : ' (indefinite)'}. ${(allowed_plan_uids ?? []).length} plan(s) exempt.`
-        : 'Freeze lifted.';
+        : 'Freeze lifted.') + FLAGGED_NOTE;
 
       return {
         content: [{ type: 'text' as const, text: msg }],
@@ -125,14 +132,18 @@ export function register(server: McpServer, deps: ToolDeps): void {
         plan_uid: z.string().describe('UID of the plan to exempt.'),
       },
     },
-    async ({ project_path, plan_uid }) => {
-      const status = exemptPlanFromFreeze(project_path, plan_uid);
+    async ({ project_path, plan_uid }, extra: any) => {
+      if (!deps.planService.getPlan(plan_uid)) {
+        return { content: [{ type: 'text' as const, text: `Plan not found: ${plan_uid}` }], isError: true };
+      }
+      const { author, authorType } = authorFromExtra(deps, extra);
+      const status = exemptPlanFromFreeze(project_path, plan_uid, { actor: author, actorType: authorType, channel: 'mcp' });
       deps.broadcast('freeze-changed', { projectRoot: project_path, status });
 
       return {
         content: [{
           type: 'text' as const,
-          text: `Plan ${plan_uid} is now exempt from the freeze. ${status.allowedPlanUids.length} plan(s) total exempt.`,
+          text: `Plan ${plan_uid} is now exempt from the freeze. ${status.allowedPlanUids.length} plan(s) total exempt.${FLAGGED_NOTE}`,
         }],
       };
     },

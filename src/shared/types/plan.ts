@@ -405,6 +405,9 @@ export interface Deviation {
   resolvedAt: number | null;
   /** The file path this deviation refers to (for unexpected_file / missing_file). */
   filePath: string | null;
+  /** Who resolved it, and as what: 'human', 'unverified' (local API) or the agent's type. */
+  resolvedBy?: string | null;
+  resolvedByType?: string | null;
 }
 
 /**

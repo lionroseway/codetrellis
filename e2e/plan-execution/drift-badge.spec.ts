@@ -45,6 +45,6 @@ test.describe('Drift badge', () => {
 
     // The workspace should load without crashing
     await expect(page.getByText(PLAN_TITLE).first()).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('V2').first()).toBeVisible();
+    await expect(page.getByTestId('copy-ref-plan').first()).toBeVisible();
   });
 });

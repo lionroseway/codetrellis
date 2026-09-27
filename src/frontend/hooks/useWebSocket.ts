@@ -602,13 +602,12 @@ export function useWebSocket() {
           // --- Graph mode (MCP graph_set_mode tool) ---
           if (type === 'ui-graph-mode') {
             const mode = payload?.mode as string | undefined;
-            if (mode) {
+            // Only modes the canvas can draw; anything else used to be
+            // stored as-is and left the canvas in no mode at all.
+            if (mode === 'live' || mode === 'current' || mode === 'planned' || mode === 'diff') {
               (async () => {
                 const { useGraphStore } = await import('../stores/graph-store');
-                const store = useGraphStore.getState();
-                if ('setTrellisMode' in store) {
-                  (store as any).setTrellisMode(mode);
-                }
+                useGraphStore.getState().setTrellisMode(mode);
               })();
             }
           }
@@ -865,13 +864,14 @@ export function useWebSocket() {
 
           // --- Set baseline (MCP set_baseline tool) ---
           if (type === 'ui-set-baseline') {
-            const commitHash = payload?.commitHash as string | null | undefined;
+            // The baseline moved on the backend (set_baseline, a capture):
+            // the canvas reads it back. This used to set only the label, so it
+            // named a commit the diff was not using (§0.4h, bug 29).
             (async () => {
               const { useGraphStore } = await import('../stores/graph-store');
-              useGraphStore.getState().setBaselineReference({
-                commitHash: commitHash ?? null,
-                shortCommitHash: commitHash ? commitHash.slice(0, 7) : null,
-              });
+              // An agent's pin holds: auto-track would move it at the next commit.
+              if (payload?.by === 'agent' && payload?.commitHash) useGraphStore.getState().setBaselineMode('pinned');
+              window.dispatchEvent(new CustomEvent('baseline-changed'));
             })();
           }
 
@@ -945,6 +945,24 @@ export function useWebSocket() {
           // --- Settings modal (MCP open_settings tool) ---
           if (type === 'ui-open-settings') {
             window.dispatchEvent(new CustomEvent('open-settings'));
+          }
+
+          // --- A plan's budget changed (set_budget, the chip, an acknowledgement) ---
+          // The chip loaded once on mount and nothing told it, so an agent's
+          // change (flagged, §0.4g) did not show until the plan was reopened.
+          if (type === 'plan-budget-changed') {
+            window.dispatchEvent(new CustomEvent('plan-budget-changed', { detail: payload }));
+          }
+          // The freeze bar polled once a minute, so a freeze an agent set or
+          // lifted — flagged since 0.4k — took up to a minute to show.
+          if (type === 'freeze-changed') {
+            window.dispatchEvent(new CustomEvent('freeze-changed', { detail: payload }));
+          }
+
+          // --- An agent asked to delete plans (request_plan_deletion) ---
+          // The person confirms in PlanDeletionRequest; nothing is deleted here.
+          if (type === 'ui-confirm-plan-deletion') {
+            window.dispatchEvent(new CustomEvent('plan-deletion-request', { detail: payload }));
           }
 
           // --- MCP guide modal (MCP open_mcp_guide tool) ---

@@ -7,8 +7,8 @@
  * the diff badge.
  *
  * This service watches the same `file_changed` events the watcher
- * broadcasts and, for every active plan whose task lists include the
- * changed file:
+ * broadcasts and, for every active plan whose task lists (V1 tasks) or
+ * Action file specs (V2 plan_items) include the changed file:
  *
  *   - Auto-advances matching `pending` / `assigned` tasks to
  *     `in_progress` and broadcasts `task-updated` (so the UI lights
@@ -27,6 +27,7 @@
  */
 
 import * as planService from './plan-service';
+import * as planItemService from './plan-item-service';
 import * as planChangesService from './plan-changes-service';
 import { broadcast } from '../server';
 import type { Plan } from '../../shared/types';
@@ -82,6 +83,26 @@ export function recordFileChange(relativePath: string): void {
         // Reset any prior "completion suggestion" — we're back in flight.
         suggestedDone.delete(`${plan.uid}:${task.uid}`);
       }
+    }
+
+    // V2 Actions (plan_items) are what the workspace renders since the V2
+    // migration, and until Phase 32 §0.3b this service only knew V1 tasks —
+    // so an agent editing an Action's files never lit that Action up. Same
+    // rule as above: a touched pending/assigned Action moves to in_progress.
+    // Completion is still never automatic.
+    for (const item of planItemService.listAllItems(plan.uid)) {
+      if (item.kind !== 'action') continue;
+      if (item.status !== 'pending' && item.status !== 'assigned') continue;
+      const paths = (item.fileSpecs ?? []).flatMap((spec) => [spec.path, spec.moveTo].filter((p): p is string => !!p));
+      if (!touchesTask(paths, relativePath)) continue;
+      if (!planItemService.updateItem(item.uid, { status: 'in_progress', author: 'auto-progress', authorType: 'system' })) continue;
+      broadcast('plan-item-updated', {
+        planUid: plan.uid,
+        itemUid: item.uid,
+        kind: 'action',
+        changes: { status: 'in_progress' },
+        source: 'auto-progress',
+      });
     }
 
     // (b) For tasks already in_progress, check if every ProposedChange

@@ -3,7 +3,7 @@ import {
   ChevronRight, FileText, Zap, Folder, Copy, History,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User,
   AlertTriangle, MessageSquare, HelpCircle, Activity, 
-  X, Import, GitPullRequest,
+  X, Import, GitPullRequest, Lock, LockOpen, Users, HardDrive,
 } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { usePlanStore } from '../../../stores/plan-store';
@@ -383,8 +383,8 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
               ? 'Approval gate ON — the next task waits until you approve "Reviewed and approved" under Acceptance criteria'
               : 'No approval gate — click to require human approval before next task starts'}
           >
-            {item.requiresApproval ? '🔒' : '🔓'}
-            Gate
+            {item.requiresApproval ? <Lock size={11} /> : <LockOpen size={11} />}
+            {item.requiresApproval ? 'Gate on' : 'Gate'}
           </button>
         </>
       )}
@@ -404,7 +404,7 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
           ? 'Local — this item stays in your DB only, not exported to .codetrellis/. Click to share with the team.'
           : 'Shared — this item is exported to .codetrellis/plans/ and travels via git. Click to keep local.'}
       >
-        {item.visibility === 'local' ? '🏠' : '🌐'}
+        {item.visibility === 'local' ? <HardDrive size={11} /> : <Users size={11} />}
         {item.visibility === 'local' ? 'Local' : 'Shared'}
       </button>
 
@@ -545,17 +545,9 @@ function PlanHomePage() {
               <span className="px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] uppercase tracking-wider text-[11.5px] font-medium">
                 Plan
               </span>
-              <span className={`px-2.5 py-1 rounded-full border text-[12.5px] ${
-                plan.status === 'approved' ? 'border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300' :
-                plan.status === 'in_progress' ? 'border-accent/30 bg-accent/[0.08] text-accent' :
-                plan.status === 'completed' ? 'border-green-500/30 bg-green-500/[0.08] text-green-400' :
-                'border-white/[0.08] bg-white/[0.02]'
-              }`}>
-                {plan.status}
-              </span>
-              <span className="px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] text-[12.5px]">
-                {plan.completedTaskCount ?? 0}/{plan.taskCount ?? 0} actions
-              </span>
+              {/* Status and progress are in the workspace header, which is
+                  always on screen; they were said twice more here, and the
+                  progress card below says it a fourth time (Phase 32 §0.5). */}
               <PlanGitContextChip plan={plan} />
               {/* Phase 29 — Phase 23 built all of this and shipped it
                   MCP-only. See PlanBudgetChip. */}

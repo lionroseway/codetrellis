@@ -54,23 +54,7 @@ export function stateOf(report: BudgetStateInput): BudgetState {
   return 'ok';
 }
 
-export function formatMinutes(mins: number): string {
-  if (mins < 1) return '<1m';
-  if (mins < 60) return `${Math.round(mins)}m`;
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
-}
-
-/**
- * Cost, where null means **not reported** and never "$0.00".
- *
- * `spentCostUsd` is null when no agent on the plan reported a model, so
- * nothing could be priced. Rendering that as zero would quietly report a
- * plan as free when the truth is that its cost is invisible to us.
- */
-export function formatCost(usd: number | null): string {
-  if (usd === null) return 'not reported';
-  if (usd < 0.01) return '<$0.01';
-  return `$${usd.toFixed(2)}`;
-}
+// The words for a budget — durations, costs, and an agent's change to a
+// ceiling — are shared with the backend, which sends the same sentences to
+// the phone (Phase 32, budget flags on mobile).
+export { formatMinutes, formatCost, describeBudgetChange, type BudgetCeiling } from '../../shared/lib/budget-words';

@@ -379,14 +379,28 @@ export function renameDevice(fingerprint: string, alias: string): boolean {
  * Get all active peer connections.
  */
 export function getConnections(): PeerConnectionInfo[] {
-  return getPeerConnections();
+  return getPeerConnections().map(withDeviceName);
 }
 
 /**
  * Get a specific peer connection.
  */
 export function getConnection(fingerprint: string): PeerConnectionInfo | undefined {
-  return getPeerConnection(fingerprint);
+  const c = getPeerConnection(fingerprint);
+  return c ? withDeviceName(c) : undefined;
+}
+
+/**
+ * A connection named as the paired device is named.
+ *
+ * The connection is made when the phone answers, before the person has
+ * confirmed and named it, so it starts as "Pending…" — and it stayed that way:
+ * the Devices panel listed a paired, connected phone as "Pending…" until it
+ * reconnected, and a rename never reached it (Phase 32 §0.4j).
+ */
+function withDeviceName<T extends PeerConnectionInfo>(c: T): T {
+  const device = getPairedDevice(c.fingerprint);
+  return device ? { ...c, alias: device.alias, deviceType: device.deviceType } : c;
 }
 
 /**

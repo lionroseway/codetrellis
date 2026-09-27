@@ -180,7 +180,11 @@ export const SCHEMA_PLANS_CORE = `
     description TEXT NOT NULL,
     resolution TEXT NOT NULL DEFAULT 'pending',
     detected_at INTEGER NOT NULL,
-    resolved_at INTEGER
+    resolved_at INTEGER,
+    file_path TEXT,
+    -- Who resolved it, tagged as everything else is (Phase 32 §0.4h).
+    resolved_by TEXT,
+    resolved_by_type TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_tasks_plan ON tasks(plan_uid);
@@ -461,6 +465,49 @@ export const SCHEMA_PLAN_ITEMS = `
     exempt      INTEGER NOT NULL DEFAULT 0,
     notified_at INTEGER,
     updated_at  INTEGER NOT NULL
+  );
+
+  -- Every change to a plan's ceiling, append-only: who made it, how it
+  -- arrived, and what it was before. An agent may change a budget (it is
+  -- advisory), and a change an agent made is flagged until a person has
+  -- seen it (Phase 32 §0.4g, owner's decision).
+  CREATE TABLE IF NOT EXISTS plan_budget_changes (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_uid         TEXT NOT NULL,
+    actor            TEXT NOT NULL,
+    actor_type       TEXT NOT NULL,
+    channel          TEXT NOT NULL,
+    before_json      TEXT,
+    after_json       TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    acknowledged_at  INTEGER,
+    acknowledged_by  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_plan_budget_changes_plan ON plan_budget_changes(plan_uid, created_at);
+
+  -- Every change to a project's freeze, who made it and how it arrived
+  -- (owner's decision, Phase 32 §0.4k). The freeze itself lives in the
+  -- project's .codetrellis/config.json; this is the record of who changed it.
+  CREATE TABLE IF NOT EXISTS project_freeze_changes (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_path     TEXT NOT NULL,
+    actor            TEXT NOT NULL,
+    actor_type       TEXT NOT NULL,
+    channel          TEXT NOT NULL,
+    before_json      TEXT,
+    after_json       TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    acknowledged_at  INTEGER,
+    acknowledged_by  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_project_freeze_changes_project ON project_freeze_changes(project_path, created_at);
+
+  -- The graph diff's baseline, per project, so a restart restores it
+  -- instead of re-capturing the tree at launch (Phase 32 §0.6, bug 9).
+  CREATE TABLE IF NOT EXISTS project_baselines (
+    project_path  TEXT PRIMARY KEY,
+    data_json     TEXT NOT NULL,
+    updated_at    INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS plan_item_versions (

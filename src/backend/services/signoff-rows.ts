@@ -11,6 +11,8 @@
  * A self-approval is marked as one. On an `agent`-policy criterion the
  * agent's own submission is its approval, recorded in the agent's name
  * (criteria-service) — a reader must never mistake it for a person's.
+ * So is an unverified decision (§0.4d): one taken through the local HTTP
+ * API, which could have been a person or a script holding the token.
  */
 
 import { listAllItems } from './plan-item-service';
@@ -64,7 +66,8 @@ export function rowsForCriterion(item: PlanItem, c: ItemCriterion): SignoffRow {
         note: s.note, at: s.createdAt, evidenceHashes: recorded, device: s.device ?? null,
       }
       : null,
-    selfApproved: !!s && s.decision === 'approved' && s.actorType !== 'human',
+    selfApproved: !!s && s.decision === 'approved' && s.actorType !== 'human' && s.actorType !== 'unverified',
+    unverified: !!s && s.actorType === 'unverified',
     changedFiles,
   };
 }
@@ -97,6 +100,10 @@ export function renderCriteriaTable(rows: SignoffRow[]): string {
   const self = rows.filter((r) => r.selfApproved);
   if (self.length > 0) {
     lines.push('', `_${self.length} of these ${self.length === 1 ? 'was' : 'were'} approved by the agent's own checks (agent policy), not by a person._`);
+  }
+  const unverified = rows.filter((r) => r.unverified && r.decision?.decision === 'approved');
+  if (unverified.length > 0) {
+    lines.push('', `_${unverified.length} of these ${unverified.length === 1 ? 'was' : 'were'} approved through the local API, not from the CodeTrellis app or a paired phone, so it is not verified that a person approved ${unverified.length === 1 ? 'it' : 'them'}._`);
   }
   return lines.join('\n');
 }

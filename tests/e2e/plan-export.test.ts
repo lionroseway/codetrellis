@@ -238,18 +238,14 @@ test.describe('Plan export — Phase 13 §A round-trip', () => {
   // pre-creating `<project>/.codetrellis/plans/` inside
   // `startPlanFileWatcher()` so chokidar always binds to a real,
   // empty directory.
-  // SKIPPED — genuinely flaky, not stale.
-  //
-  // This waits up to 15s for chokidar to notice an on-disk plan edit and
-  // auto-sync it. It passes in isolation and fails under load — exactly the
-  // class of test playwright.harness.config.ts added `retries: 2` for, and it
-  // still exhausts them.
-  //
-  // Skipped rather than deleted because the behaviour is real and worth
-  // covering. Fixing it means making the wait deterministic — an event, or a
-  // poll on a sync counter — instead of racing a filesystem watcher on a
-  // timer. Unskip with that change, NOT by raising the timeout.
-  test.skip(
+  // Was skipped as flaky (#55, 2026-09-20): it raced chokidar's start-up on
+  // a timer. #73 (2026-09-23) made that deterministic — `scanProject` now
+  // awaits `startPlanFileWatcher`, which resolves on chokidar's 'ready'
+  // event — so the watcher is bound before the edit. The one fixed pause
+  // left below outlasts the 1 s self-write window by design, not by guess.
+  // Re-verified for Phase 32 §0.3b: 10/10 alone, 10/10 with every core
+  // saturated, retries off.
+  test(
     'chokidar auto-detects on-disk plan edits (Phase 13 §B)',
     async () => {
       const h = await setupHarness('plan-export-autosync-chokidar');

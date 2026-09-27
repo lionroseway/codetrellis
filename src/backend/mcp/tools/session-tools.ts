@@ -3,13 +3,34 @@
  */
 
 import { z } from 'zod';
-import fs from 'node:fs';
 import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta } from '../helpers';
+import { ConfinementError, readTextWithin, writeFileWithin } from '../../services/confined-fs';
+
+/**
+ * The recent-projects tools update a row by path. With no row the UPDATE
+ * matches nothing, and they used to report success anyway.
+ */
+function notInRecents(projectPath: string) {
+  return {
+    isError: true,
+    content: [{ type: 'text' as const, text: `Project not in recents: ${projectPath}` }],
+  };
+}
 
 export function register(server: McpServer, deps: ToolDeps): void {
+  // A uid an agent passes to a UI tool is checked before anything is sent to
+  // the window: it was not, so a wrong one was reported to the agent as
+  // shown while the window said "Could not load plan" (Phase 32 §0.4g, bug 27).
+  const notFound = (what: string, uid: string) => ({
+    content: [{ type: 'text' as const, text: `${what} ${uid} not found.` }],
+    isError: true,
+  });
+  const missingPlan = (uid: string | undefined) => (uid && !deps.planService.getPlan(uid) ? notFound('Plan', uid) : null);
+  const missingItem = (uid: string | undefined) => (uid && !deps.planItemService.getItem(uid) ? notFound('Item', uid) : null);
+
   server.registerTool(
     'register_session',
     {
@@ -59,6 +80,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: { plan_uid: z.string() },
     },
     async ({ plan_uid }) => {
+      const refused = missingPlan(plan_uid);
+      if (refused) return refused;
       const sessionId = deps.sessionId;
       if (sessionId) {
         deps.sessionService.setActivePlan(sessionId, plan_uid);
@@ -108,6 +131,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (target === 'artefact' && !attachment_uid) {
         return { content: [{ type: 'text' as const, text: 'target "artefact" needs attachment_uid' }], isError: true };
       }
+      const refused = missingPlan(plan_uid) ?? missingItem(item_uid)
+        ?? (attachment_uid && !deps.artefactService.getArtefact(attachment_uid) ? notFound('Recorded file', attachment_uid) : null);
+      if (refused) return refused;
       deps.broadcast('ui-navigate', {
         target, planUid: plan_uid, filePath: file_path, line, itemUid: item_uid, attachmentUid: attachment_uid, locator: locator ?? null,
       });
@@ -125,6 +151,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, split_view }) => {
+      const refused = missingPlan(plan_uid);
+      if (refused) return refused;
       deps.broadcast('ui-navigate', { target: split_view ? 'split' : 'plan', planUid: plan_uid });
       return { content: [{ type: 'text' as const, text: `Opened plan ${plan_uid}${split_view ? ' in split view' : ''}` }] };
     },
@@ -175,9 +203,21 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      // No path means the open project, as the description says. This
+      // used to fall back to process.cwd() — the backend's own working
+      // directory, which is `/` in a packaged app and never a project the
+      // user opened, and which the project-scope check (keyed on
+      // project_path) never saw.
+      const target = project_path ?? deps.getActiveProjectPath();
+      if (!target) {
+        return {
+          content: [{ type: 'text' as const, text: 'Rescan failed: no project is open. Pass project_path, or open one with open_project.' }],
+          isError: true,
+        };
+      }
       try {
-        const stats = await deps.scanProject(project_path ?? process.cwd());
-        return { content: [{ type: 'text' as const, text: `Rescan complete${project_path ? ` for ${project_path}` : ''} — ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports (${stats.resolvedImports} resolved)` }] };
+        const stats = await deps.scanProject(target);
+        return { content: [{ type: 'text' as const, text: `Rescan complete for ${target} — ${stats.fileCount} files, ${stats.symbolCount} symbols, ${stats.importCount} imports (${stats.resolvedImports} resolved)` }] };
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Rescan failed: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
@@ -188,18 +228,40 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'set_baseline',
     {
       description:
-        'Set the baseline commit hash for diff mode. The graph\'s "diff" and "baseline" modes compare ' +
-        'the current state against this reference point. Pass null to clear.',
+        'Pin the baseline the graph\'s "diff" and "baseline" modes compare against to a commit\'s own contents ' +
+        '(full or short hash, or a ref such as a branch name), in the open project. Uncommitted work then shows ' +
+        'as changes against it. Pass null to clear the baseline; the next scan sets one again.',
       inputSchema: {
-        commit_hash: z.string().nullable().describe('Full or short git commit hash to use as the baseline. Null to clear.'),
+        commit_hash: z.string().nullable().describe('Commit hash or ref to pin to. Null to clear.'),
       },
     },
     async ({ commit_hash }) => {
-      deps.broadcast('ui-set-baseline', { commitHash: commit_hash });
-      const msg = commit_hash
-        ? `Set baseline to commit ${commit_hash}`
-        : 'Cleared baseline reference';
-      return { content: [{ type: 'text' as const, text: msg }] };
+      // It used to broadcast only, so the window changed its label and the
+      // diff kept comparing against the old snapshot (bug 29).
+      if (commit_hash === null) {
+        deps.clearBaseline();
+        deps.broadcast('ui-set-baseline', { commitHash: null, by: 'agent' });
+        return { content: [{ type: 'text' as const, text: 'Cleared the baseline. The next scan sets one again.' }] };
+      }
+      const projectPath = deps.getActiveProjectPath();
+      if (!projectPath) {
+        return { content: [{ type: 'text' as const, text: 'No project is open to pin a baseline in.' }], isError: true };
+      }
+      try {
+        const baseline = await deps.pinBaseline(projectPath, commit_hash);
+        const n = deps.broadcast('ui-set-baseline', { commitHash: baseline.commitHash ?? null, by: 'agent' });
+        return resultWithMeta({
+          ok: true,
+          commitHash: baseline.commitHash,
+          shortCommitHash: baseline.shortCommitHash,
+          files: baseline.files.size,
+        }, n);
+      } catch (err) {
+        if (err instanceof deps.BaselineError) {
+          return { content: [{ type: 'text' as const, text: err.message }], isError: true };
+        }
+        throw err;
+      }
     },
   );
 
@@ -232,6 +294,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      if (!deps.getRecentProject(project_path)) return notInRecents(project_path);
       deps.setRecentProjectPinned(project_path, true);
       deps.saveNow(() => deps.exportDatabase());
       return { content: [{ type: 'text' as const, text: `Pinned project: ${project_path}` }] };
@@ -247,6 +310,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      if (!deps.getRecentProject(project_path)) return notInRecents(project_path);
       deps.setRecentProjectPinned(project_path, false);
       deps.saveNow(() => deps.exportDatabase());
       return { content: [{ type: 'text' as const, text: `Unpinned project: ${project_path}` }] };
@@ -262,6 +326,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => {
+      if (!deps.getRecentProject(project_path)) return notInRecents(project_path);
       deps.removeRecentProject(project_path);
       deps.saveNow(() => deps.exportDatabase());
       return { content: [{ type: 'text' as const, text: `Removed from recents: ${project_path}` }] };
@@ -416,6 +481,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ item_uid }) => {
+      const refused = missingItem(item_uid);
+      if (refused) return refused;
       deps.broadcast('ui-open-history-drawer', { itemUid: item_uid });
       return { content: [{ type: 'text' as const, text: `Opened history drawer for item ${item_uid}` }] };
     },
@@ -460,24 +527,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path: projectPath }) => {
-      const claudeDir = path.join(projectPath, '.claude');
-      const settingsPath = path.join(claudeDir, 'settings.local.json');
+      // Read and written through the confined-file helper, inside the
+      // project: a `.claude` that is a link, or a settings file that is one,
+      // is refused rather than followed (CLAUDE.md security rules).
+      const rel = path.join('.claude', 'settings.local.json');
+      let settingsPath = path.join(projectPath, rel);
 
       try {
-        // Ensure .claude/ directory exists
-        if (!fs.existsSync(claudeDir)) {
-          fs.mkdirSync(claudeDir, { recursive: true });
-        }
-
         // Read existing settings if any — merge rather than clobber
         let settings: any = {};
-        if (fs.existsSync(settingsPath)) {
-          try {
-            settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-          } catch {
-            // Malformed JSON — overwrite
-          }
+        try {
+          settings = JSON.parse(readTextWithin(projectPath, rel, 'agent settings'));
+        } catch (err) {
+          if (err instanceof ConfinementError) throw err;
+          // Missing or malformed JSON — start fresh
         }
+        if (!settings || typeof settings !== 'object' || Array.isArray(settings)) settings = {};
 
         // Ensure permissions.allow exists and contains the wildcard
         if (!settings.permissions) settings.permissions = {};
@@ -492,7 +557,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           settings.permissions.allow.push(wildcard);
         }
 
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+        settingsPath = writeFileWithin(projectPath, rel, JSON.stringify(settings, null, 2) + '\n', 'agent settings');
 
         return {
           content: [{

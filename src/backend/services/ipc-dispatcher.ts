@@ -74,14 +74,35 @@ export interface IpcResponse {
  * launching the packaged binary and LOOKING at it catches this.
  */
 export function dispatchAuthorised(app: Express, req: IpcRequest): Promise<IpcResponse> {
-  return dispatch(app, {
+  return run(app, {
     ...req,
     headers: {
       ...(req.headers ?? {}),
       // Last, deliberately: a caller cannot override it with a wrong value.
       [TOKEN_HEADER]: getCapabilityToken(),
     },
-  });
+  }, true);
+}
+
+/**
+ * Requests that came from our own app window (Phase 32 §0.4d).
+ *
+ * The token proves a caller may use the API; it does not prove a person is
+ * at the keyboard — any script that can read the token file holds it too.
+ * A request from the app window's IPC is different: it has no socket and
+ * nothing outside this process can produce one. So a decision taken there
+ * is a person's, and one taken over plain HTTP is recorded as unverified.
+ *
+ * A WeakSet of the request objects this module built, rather than a header
+ * or a property: neither could be told apart from one an HTTP caller sent.
+ * Express keeps the same request object through its middleware, so the
+ * route handler sees the one registered here.
+ */
+const appWindowRequests = new WeakSet<object>();
+
+/** True only for a request `dispatchAuthorised` built for the app window. */
+export function cameFromAppWindow(req: object): boolean {
+  return appWindowRequests.has(req);
 }
 
 /**
@@ -93,8 +114,13 @@ export function dispatchAuthorised(app: Express, req: IpcRequest): Promise<IpcRe
  * Express's default error handler would do over the wire.
  */
 export function dispatch(app: Express, req: IpcRequest): Promise<IpcResponse> {
+  return run(app, req, false);
+}
+
+function run(app: Express, req: IpcRequest, fromAppWindow: boolean): Promise<IpcResponse> {
   return new Promise((resolve) => {
     const fakeReq = buildFakeRequest(req);
+    if (fromAppWindow) appWindowRequests.add(fakeReq);
     const fakeRes = buildFakeResponse(fakeReq, (response) => resolve(response));
 
     try {

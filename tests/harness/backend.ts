@@ -20,6 +20,7 @@
 import { randomBytes } from 'node:crypto';
 import { spawn, ChildProcess } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
 import { REPO_ROOT } from './paths';
 import { findFreePorts } from './ports';
 
@@ -34,6 +35,12 @@ export interface RunningBackend {
   capabilityToken: string;
   /** Stop the backend cleanly. Idempotent — safe to call twice. */
   stop(): Promise<void>;
+  /**
+   * The backend's recent console output (stdout and stderr, last ~256 KB).
+   * The file logger is the Electron shell's, so under the harness this is
+   * where a `console.log` lands. Empty when `verbose` sent it to the parent.
+   */
+  output(): string;
 }
 
 export interface StartBackendOptions {
@@ -51,7 +58,27 @@ export interface StartBackendOptions {
   mcpPort?: number;
   /** Wait timeout for `/api/build-info` to return 200. Default: 30s. */
   readyTimeoutMs?: number;
+  /** Extra environment for the backend process. */
+  env?: Record<string, string>;
+  /**
+   * Settings written to `<dataDir>/settings.json` before the backend starts,
+   * merged over the harness default (`{ updates: { autoCheck: false } }`).
+   * Ignored when the file already exists — a restart keeps what was saved.
+   */
+  settings?: Record<string, unknown>;
 }
+
+/**
+ * The backend checks for updates when it starts, and the check goes to
+ * codetrellis.dev and then GitHub. Six hundred harness backends did that on
+ * every run: requests to the internet no test asked for, and a test of "no
+ * update available" that held only while no newer release existed (Phase 32
+ * §0.4k). So the harness starts with the automatic check off, and both
+ * sources point at a closed local port, so a check that does run fails at
+ * once and never leaves the machine. A test of the check opts back in.
+ */
+const HARNESS_SETTINGS = { updates: { autoCheck: false } };
+const NOWHERE = 'http://127.0.0.1:9';
 
 /**
  * Start the backend, wait for it to answer `/api/build-info`, return
@@ -66,8 +93,20 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
   // Unique per spawned backend — see CODETRELLIS_CAPABILITY_TOKEN below.
   const capabilityToken = randomBytes(24).toString('hex');
 
+  const settingsFile = path.join(opts.dataDir, 'settings.json');
+  if (!fs.existsSync(settingsFile)) {
+    fs.mkdirSync(opts.dataDir, { recursive: true });
+    const seeded = { ...HARNESS_SETTINGS, ...(opts.settings ?? {}) };
+    fs.writeFileSync(settingsFile, JSON.stringify(seeded, null, 2));
+  }
+
   const env = {
     ...process.env,
+    CODETRELLIS_OTA_URL: NOWHERE,
+    CODETRELLIS_GITHUB_API: NOWHERE,
+    // The harness has no app window, and granting is otherwise the app
+    // window's alone (grant-guard.ts). A test of that rule turns this off.
+    CODETRELLIS_ALLOW_HTTP_GRANTS: '1',
     CODETRELLIS_DATA_DIR: opts.dataDir,
     CODETRELLIS_BACKEND_PORT: String(backendPort),
     CODETRELLIS_MCP_PORT: String(mcpPort),
@@ -78,6 +117,7 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     CODETRELLIS_CAPABILITY_TOKEN: capabilityToken,
     PORT: String(backendPort),
     NODE_ENV: 'test',
+    ...(opts.env ?? {}),
   };
 
   const child = spawn(
@@ -106,14 +146,25 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
 
   // Buffer recent stderr so we can show it on a startup failure.
   const stderrTail: string[] = [];
+  // And all recent output, for tests that check what the backend logged.
+  const outputTail: string[] = [];
+  let outputSize = 0;
+  const keepOutput = (chunk: Buffer) => {
+    const text = chunk.toString();
+    outputTail.push(text);
+    outputSize += text.length;
+    while (outputSize > 262144 && outputTail.length > 1) outputSize -= outputTail.shift()!.length;
+  };
   if (!opts.verbose && child.stderr) {
     child.stderr.on('data', (chunk: Buffer) => {
       stderrTail.push(chunk.toString());
       // Keep ~32 KB of recent stderr — enough to diagnose, not so much
       // we OOM on an infinite-loop crash.
       while (stderrTail.join('').length > 32768) stderrTail.shift();
+      keepOutput(chunk);
     });
   }
+  if (!opts.verbose && child.stdout) child.stdout.on('data', keepOutput);
 
   // Watch for early exit during boot.
   let earlyExit: { code: number | null; signal: NodeJS.Signals | null } | null = null;
@@ -143,7 +194,7 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
   // `backend.dataDir` was silently undefined. A test asserting on paths
   // under it therefore checked the wrong location and passed regardless —
   // found while writing the finding-7 test.
-  return { backendPort, mcpPort, baseUrl, capabilityToken, dataDir: opts.dataDir, stop };
+  return { backendPort, mcpPort, baseUrl, capabilityToken, dataDir: opts.dataDir, stop, output: () => outputTail.join('') };
 }
 
 async function pickPort(): Promise<number> {

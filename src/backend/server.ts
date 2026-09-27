@@ -18,6 +18,7 @@ import * as _lazy___services_contribution_service from './services/contribution-
 import * as _lazy___services_sensor_bridge_service from './services/sensor-bridge-service';
 import * as _lazy___services_channel_dispatcher_service from './services/channel-dispatcher-service';
 import express from 'express';
+import { PLAN_STATUSES, TASK_STATUSES, isPlanStatus, isTaskStatus } from '../shared/lib/plan-vocab';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -37,12 +38,14 @@ import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, set
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
-import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles } from './services/database';
+import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
-import { captureSnapshot, setBaseline, computeDiff, getBaseline } from './services/diff-engine';
+import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
+import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
-import { listWorktreesWithPlans } from './services/worktree-service';
+import { listWorktrees, listWorktreesWithPlans } from './services/worktree-service';
+import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
@@ -76,9 +79,10 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
+import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
-import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
+import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
+import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
@@ -87,10 +91,11 @@ import * as artefactService from './services/artefact-service';
 import * as _lazy___services_artefact_watcher from './services/artefact-watcher';
 const startArtefactWatching = (a: Parameters<typeof _lazy___services_artefact_watcher.startArtefactWatching>[0]) =>
   _lazy___services_artefact_watcher.startArtefactWatching(a);
-import { issueHumanDecision } from './services/human-decision';
+import { issueHumanDecision, issueUnverifiedDecision } from './services/human-decision';
+import { cameFromAppWindow } from './services/ipc-dispatcher';
 import { captureCurrentTrellis, listSnapshots, computeTrellisDiff, getSnapshot } from './services/trellis-service';
 import { computeProjection } from './services/projection-service';
-import { getDeviations, resolveDeviation } from './services/deviation-service';
+import { getDeviations, reconcileDeviations, DeviationError } from './services/deviation-service';
 import * as presenceService from './services/presence-service';
 import { applyTemplate, applyTemplateToPlan } from './services/plan-templates-service';
 import { listTemplates } from './services/plan-templates';
@@ -109,7 +114,7 @@ import * as terminalService from './services/terminal-service';
 import * as powerService from './services/power-service';
 import * as terminalHistoryService from './services/terminal-history-service';
 import * as planImportService from './services/plan-import-service';
-import { tailLog, getCurrentLogPath, getLogDir } from './services/logger';
+import { tailLog, getCurrentLogPath, getLogDir, isWritingLogFile } from './services/logger';
 import {
   getUpdateState,
   checkForUpdate,
@@ -124,6 +129,9 @@ import { BUILD_INFO } from '../shared/build-info';
 import * as peerService from './services/peer-connection-service';
 import { setDeviceCapabilities } from './services/paired-device-service';
 import { listPeerAudit } from './services/peer-audit-service';
+
+// Baselines survive a restart (Phase 32 §0.6, bug 9).
+setBaselineStore(sqliteBaselineStore);
 
 const app = express();
 app.use(express.json());
@@ -560,18 +568,14 @@ app.post('/api/presence/reply', (req, res) => {
     res.status(400).json({ error: 'text is required' });
     return;
   }
-  const reply = presenceService.postReply(text);
-
-  // Resolve the pending await_user_input promise if one exists
-  const nonce = (globalThis as any).__presenceReplyNonce as string | undefined;
-  if (nonce) {
-    const resolver = (globalThis as any).__presenceResolve as
-      ((nonce: string, data: string) => void) | undefined;
-    if (resolver) {
-      resolver(nonce, JSON.stringify({ text: reply.text, at: reply.createdAt }));
-    }
-    (globalThis as any).__presenceReplyNonce = undefined;
-  }
+  // The agent waiting on the box gets it; with nobody waiting it is queued
+  // for the next question (presence-service, bug 25).
+  const nonce = presenceService.takeReplyWaiter();
+  const resolver = (globalThis as any).__presenceResolve as
+    ((nonce: string, data: string) => boolean) | undefined;
+  const at = Date.now();
+  const delivered = !!nonce && !!resolver && resolver(nonce, JSON.stringify({ text, at }));
+  const reply = presenceService.postReply(text, { queue: !delivered });
 
   broadcast('presence-reply', { reply });
   res.json({ ok: true, reply });
@@ -603,19 +607,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/git/branch', (req, res) => {
   const projectPath = requireProjectPath(req, res);
   if (!projectPath) return;
-
-  try {
-    const headPath = path.join(projectPath, '.git', 'HEAD');
-    if (fs.existsSync(headPath)) {
-      const head = fs.readFileSync(headPath, 'utf-8').trim();
-      const match = head.match(/^ref: refs\/heads\/(.+)$/);
-      res.json({ branch: match ? match[1] : 'detached' });
-    } else {
-      res.json({ branch: null });
-    }
-  } catch {
-    res.json({ branch: null });
-  }
+  res.json({ branch: currentBranch(projectPath) });
 });
 
 // Every worktree of the opened project's repo, with the plans on each
@@ -628,77 +620,26 @@ app.get('/api/git/worktrees', (req, res) => {
   res.json(listWorktreesWithPlans(projectRoot));
 });
 
-// List git branches and worktrees for a project
+// Branches and the OTHER worktrees of a project's repository, for the
+// branch popover. services/git-checkout follows a linked worktree's `.git`
+// file and reads packed refs; the previous hand-read of `.git/` did
+// neither. The other checkouts come from `git worktree list`.
 app.get('/api/git/info', (req, res) => {
   const projectPath = requireProjectPath(req, res);
   if (!projectPath) return;
 
-  const gitDir = path.join(projectPath, '.git');
-  if (!fs.existsSync(gitDir)) { res.json({ branches: [], worktrees: [], status: null }); return; }
+  if (!checkoutGitDir(projectPath)) { res.json({ branches: [], worktrees: [], status: null }); return; }
 
-  // Current branch
-  let currentBranch: string | null = null;
-  try {
-    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf-8').trim();
-    const match = head.match(/^ref: refs\/heads\/(.+)$/);
-    currentBranch = match ? match[1] : 'detached';
-  } catch { /* ignore */ }
+  const worktrees = listWorktrees(projectPath)
+    .filter((w) => !w.isCurrent && !w.bare)
+    .map((w) => ({ path: w.path, branch: w.branch }));
 
-  // List branches
-  const branches: string[] = [];
-  const refsDir = path.join(gitDir, 'refs', 'heads');
-  if (fs.existsSync(refsDir)) {
-    try {
-      const readBranches = (dir: string, prefix = '') => {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          if (entry.isDirectory()) {
-            readBranches(path.join(dir, entry.name), `${prefix}${entry.name}/`);
-          } else {
-            branches.push(`${prefix}${entry.name}`);
-          }
-        }
-      };
-      readBranches(refsDir);
-    } catch { /* ignore */ }
-  }
-
-  // List worktrees
-  const worktrees: Array<{ path: string; branch: string | null }> = [];
-  const worktreesDir = path.join(gitDir, 'worktrees');
-  if (fs.existsSync(worktreesDir)) {
-    try {
-      for (const entry of fs.readdirSync(worktreesDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const wtDir = path.join(worktreesDir, entry.name);
-        let wtBranch: string | null = null;
-        try {
-          const head = fs.readFileSync(path.join(wtDir, 'HEAD'), 'utf-8').trim();
-          const match = head.match(/^ref: refs\/heads\/(.+)$/);
-          wtBranch = match ? match[1] : null;
-        } catch { /* ignore */ }
-        // Read gitdir to find worktree path
-        let wtPath: string | null = null;
-        try {
-          wtPath = fs.readFileSync(path.join(wtDir, 'gitdir'), 'utf-8').trim();
-          wtPath = path.dirname(wtPath); // gitdir points to .git inside worktree
-        } catch { /* ignore */ }
-        worktrees.push({ path: wtPath || entry.name, branch: wtBranch });
-      }
-    } catch { /* ignore */ }
-  }
-
-  // Git status summary (untracked, modified, staged counts)
-  let untracked = 0;
-  try {
-    // Quick scan — check if index exists
-    const indexExists = fs.existsSync(path.join(gitDir, 'index'));
-    if (!indexExists) {
-      // No index = no commits yet, everything is untracked
-      untracked = -1; // signal "no commits"
-    }
-  } catch { /* ignore */ }
-
-  res.json({ currentBranch, branches, worktrees, hasCommits: untracked !== -1 });
+  res.json({
+    currentBranch: currentBranch(projectPath),
+    branches: localBranches(projectPath),
+    worktrees,
+    hasCommits: hasCommits(projectPath),
+  });
 });
 
 app.get('/api/git/status', (req, res) => {
@@ -787,16 +728,7 @@ app.get('/api/auto-detect', (_req, res) => {
       if (seenPaths.has(session.cwd)) continue;
       seenPaths.add(session.cwd);
 
-      // Get branch
-      let branch: string | null = null;
-      try {
-        const headPath = path.join(session.cwd, '.git', 'HEAD');
-        if (fs.existsSync(headPath)) {
-          const head = fs.readFileSync(headPath, 'utf-8').trim();
-          const match = head.match(/^ref: refs\/heads\/(.+)$/);
-          branch = match ? match[1] : 'detached';
-        }
-      } catch { /* ignore */ }
+      const branch = currentBranch(session.cwd);
 
       activeSessions.push({
         projectPath: session.cwd,
@@ -1028,7 +960,7 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     console.log(`[Scan] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
 
     try {
-      const branchInfo = getGitBranchName(projectPath);
+      const branchInfo = currentBranch(projectPath);
       recordProjectOpen(projectPath, branchInfo);
     } catch (err) {
       console.warn('[Scan] Failed to record recent project:', err);
@@ -1096,6 +1028,7 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     console.log(`[Scan] Discovered ${systems.length} systems, ${aliasMap.length} aliases`);
 
     resolveImports(projectPath, aliasMap, systems);
+    setImportResolutionContext(projectPath, aliasMap, systems);
 
     try {
       recomputeCrossSystemEdges();
@@ -1113,7 +1046,25 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       hash,
       symbolCount: 0,
     }));
-    setBaseline(captureSnapshot(fileData, depEdges), getGitHeadCommit(projectPath) || undefined);
+    // The baseline is the reference the diff compares against, so a RESCAN
+    // of the same project keeps it: re-pinning emptied the diff, and was
+    // labelled with the HEAD hash even over uncommitted work (bug 29).
+    // Opening another project, or no baseline yet, sets one here — unless
+    // this project has one stored from before a restart (bug 9).
+    let current = getBaseline();
+    if (!current || current.projectPath !== projectPath) current = restoreBaseline(projectPath);
+    if (!current) {
+      const head = getGitHeadCommit(projectPath);
+      const status = getGitWorkingTreeStatus(projectPath);
+      setBaseline(captureSnapshot(fileData, depEdges), {
+        ...(head ?? {}),
+        source: head?.commitHash ? 'scan' : 'working-tree',
+        dirty: !!status && (status.staged.length + status.unstaged.length + status.untracked.length) > 0,
+        projectPath,
+      });
+    } else {
+      console.log('[Diff] Rescan of the same project: baseline kept');
+    }
 
     // Awaited: the scan response is the signal that CodeTrellis is
     // live on this project, and a caller (or an agent that was just
@@ -1704,96 +1655,96 @@ export function readFilesSnapshot(projectPath: string): Array<{ path: string; ha
   }));
 }
 
-// Baseline snapshot captured during scan
+/** The baseline as the window and agents read it: where it came from, and a label that says so. */
+function baselineView(b: NonNullable<ReturnType<typeof getBaseline>>) {
+  return {
+    id: 0,
+    name: 'Baseline',
+    commitHash: b.commitHash || null,
+    shortCommitHash: b.shortCommitHash || null,
+    source: b.source,
+    dirty: b.dirty,
+    capturedAt: b.capturedAt,
+    label: baselineLabel(b),
+    data: {
+      files: [...b.files.entries()].map(([filePath, info]) => ({
+        path: filePath,
+        contentHash: info.hash,
+        symbolCount: info.symbolCount,
+      })),
+      edges: [...b.edges].map((edge) => {
+        const [source, target] = edge.split('->');
+        return { source, target, specifiers: [] };
+      }),
+    },
+  };
+}
+
+export class BaselineError extends Error {}
+
+/**
+ * Pin the baseline to a commit's own contents — HEAD when no commit is
+ * named ("Pin current HEAD", which used to pin the working tree). A
+ * project that is not a git repo pins its working tree. Used by the
+ * capture route and by `set_baseline`, which used to change only the
+ * window's label (bug 29).
+ */
+export async function pinBaseline(projectPath: string, commitHash?: string | null) {
+  const head = getGitHeadCommit(projectPath);
+  const ref = commitHash || head?.commitHash || null;
+  if (ref) {
+    // Checked before git sees it: a value starting with "-" is an option.
+    if (!isSafeGitRef(ref)) throw new BaselineError(`"${String(ref).slice(0, 80)}" is not a commit`);
+    const commitSnapshot = await captureGitCommitSnapshot(projectPath, ref);
+    if (!commitSnapshot) throw new BaselineError(`No commit "${ref}" in this project`);
+    setBaseline(commitSnapshot.snapshot, {
+      commitHash: commitSnapshot.commitHash,
+      shortCommitHash: commitSnapshot.shortCommitHash,
+      source: 'commit',
+      dirty: false,
+      projectPath,
+    });
+  } else {
+    const fileTree = scanDirectory(projectPath);
+    const filePaths = collectFilePaths(fileTree);
+    const parsedFiles = await parseFiles(filePaths);
+    for (const parsed of parsedFiles) storeParsedFile(parsed, projectPath);
+    resolveImports(projectPath);
+    const snapshot = captureSnapshot(parsedFiles.map((f) => ({
+      path: path.relative(projectPath, f.path),
+      hash: f.contentHash,
+      symbolCount: f.symbols.length,
+    })), getDependencyEdges());
+    setBaseline(snapshot, { source: 'working-tree', dirty: false, projectPath });
+  }
+  return getBaseline()!;
+}
+
 app.get('/api/baseline', (_req, res) => {
   const baseline = getBaseline();
   if (!baseline) {
     res.status(404).json({ error: 'No baseline captured yet. Scan a project first.' });
     return;
   }
-
-  res.json({
-    id: 0,
-    name: 'Baseline',
-    commitHash: baseline.commitHash || null,
-    shortCommitHash: baseline.shortCommitHash || null,
-    data: {
-      files: [...baseline.files.entries()].map(([path, info]) => ({
-        path,
-        contentHash: info.hash,
-        symbolCount: info.symbolCount,
-      })),
-      edges: [...baseline.edges].map((edge) => {
-        const [source, target] = edge.split('->');
-        return { source, target, specifiers: [] };
-      }),
-    },
-  });
+  res.json(baselineView(baseline));
 });
 
 app.post('/api/baseline/capture', async (req, res) => {
   const { projectPath: rawProjectPath, commitHash } = req.body || {};
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
   if (!projectPath) return;
-  if (!projectPath || typeof projectPath !== 'string') {
-    res.status(400).json({ error: 'projectPath is required' });
-    return;
-  }
-
-  if (commitHash && typeof commitHash !== 'string') {
+  if (commitHash !== undefined && commitHash !== null && typeof commitHash !== 'string') {
     res.status(400).json({ error: 'commitHash must be a string when provided' });
     return;
   }
-
-  if (commitHash) {
-    const commitSnapshot = await captureGitCommitSnapshot(projectPath, commitHash);
-    if (!commitSnapshot) {
-      res.status(400).json({ error: 'Unable to capture baseline for the selected commit' });
-      return;
-    }
-    setBaseline(commitSnapshot.snapshot, {
-      commitHash: commitSnapshot.commitHash,
-      shortCommitHash: commitSnapshot.shortCommitHash,
-    });
-  } else {
-    const fileTree = scanDirectory(projectPath);
-    const filePaths = collectFilePaths(fileTree);
-    const parsedFiles = await parseFiles(filePaths);
-
-    for (const parsed of parsedFiles) {
-      storeParsedFile(parsed, projectPath);
-    }
-    resolveImports(projectPath);
-
-    const depEdges = getDependencyEdges();
-    const fileData = parsedFiles.map((f) => ({
-      path: path.relative(projectPath, f.path),
-      hash: f.contentHash,
-      symbolCount: f.symbols.length,
-    }));
-    const snapshot = captureSnapshot(fileData, depEdges);
-    const head = getGitHeadCommit(projectPath);
-    setBaseline(snapshot, head || undefined);
+  try {
+    const baseline = await pinBaseline(projectPath, commitHash || null);
+    broadcast('ui-set-baseline', { commitHash: baseline.commitHash ?? null });
+    res.json(baselineView(baseline));
+  } catch (err) {
+    if (err instanceof BaselineError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
   }
-
-  const baseline = getBaseline();
-  res.json({
-    id: 0,
-    name: 'Baseline',
-    commitHash: baseline?.commitHash || null,
-    shortCommitHash: baseline?.shortCommitHash || null,
-    data: {
-      files: [...(baseline?.files.entries() || [])].map(([filePath, info]) => ({
-        path: filePath,
-        contentHash: info.hash,
-        symbolCount: info.symbolCount,
-      })),
-      edges: [...(baseline?.edges || [])].map((edge) => {
-        const [source, target] = edge.split('->');
-        return { source, target, specifiers: [] };
-      }),
-    },
-  });
 });
 
 // --- Plan API ---
@@ -1816,7 +1767,8 @@ app.post('/api/plans', (req, res) => {
   // legacy "user" role. `getAuthorKey` falls back to "human" if the
   // user hasn't set an identity yet, so old behaviour stays valid.
   const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, getAuthorKey('human'), 'human', projectPath);
-  broadcast('plan-created', { plan });
+  const exported = exportIfSharedByDefault(plan.uid, projectPath);
+  broadcast('plan-created', { plan, exported });
   saveNow(() => exportDatabase());
   res.json(plan);
 });
@@ -1892,15 +1844,19 @@ app.get('/api/plans/stitched', (req, res) => {
   }
 });
 
-// Prune orphaned plan directories from disk
+// Prune orphaned plan directories of an opened project. The project is
+// confined like every other root; the body only SELECTS among that
+// project's current orphans (see pruneOrphanedDirs).
 app.post('/api/plans/prune-orphans', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
   const { dirPaths } = req.body || {};
   if (!Array.isArray(dirPaths) || dirPaths.length === 0) {
-    res.status(400).json({ error: 'dirPaths must be a non-empty array of absolute paths' });
+    res.status(400).json({ error: 'dirPaths must be a non-empty array of orphaned plan directories' });
     return;
   }
-  const removed = pruneOrphanedDirs(dirPaths);
-  res.json({ ok: true, removed });
+  const { removed, skipped } = pruneOrphanedDirs(projectRoot, dirPaths);
+  res.json({ ok: true, removed, skipped });
 });
 
 // Get plan
@@ -1909,6 +1865,80 @@ app.get('/api/plans/:uid', (req, res) => {
   if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(plan);
 });
+
+/**
+ * A person's edit to a plan, from the app or the paired phone.
+ *
+ * One function for both, because the phone's copy had drifted: it stored any
+ * status it was sent, never captured the approval baseline, and never told the
+ * desktop windows, so a plan renamed on the phone kept its old name on screen
+ * (Phase 32 §0.4j).
+ */
+export function updatePlanAsPerson(
+  planUid: string,
+  changes: Parameters<typeof planService.updatePlan>[1],
+  author: string,
+): void {
+  const plan = planService.getPlan(planUid);
+  if (!plan) throw new PlanRequestError(404, 'Plan not found');
+  if (changes.status !== undefined && !isPlanStatus(changes.status)) {
+    throw new PlanRequestError(400, `status must be one of: ${PLAN_STATUSES.join(', ')}`);
+  }
+  planService.updatePlan(planUid, changes, author);
+
+  // A plan made in the window is held back while it is "Untitled plan" and
+  // written into the project once it has a name (bug 48).
+  if (changes.title !== undefined && plan.projectPath) {
+    exportOnFirstTitle(planUid, plan.projectPath, plan.title);
+  }
+
+  // Auto-capture trellis snapshot when plan is approved
+  if (changes.status === 'approved' && plan.projectPath) {
+    try {
+      const snapshot = captureCurrentTrellis(plan.projectPath, planUid, `Baseline for "${plan.title}"`);
+      broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name } });
+    } catch (err) {
+      console.warn('[API] Failed to capture trellis snapshot:', err);
+    }
+  }
+
+  broadcast('plan-updated', { planUid, status: changes.status });
+  saveNow(() => exportDatabase());
+}
+
+/**
+ * A person deletes a plan: archived, its files removed from the project unless
+ * asked not to, and the windows told. The phone's delete used to archive the
+ * row and stop — the plan stayed on the desktop's screen and its folder stayed
+ * in the repository (Phase 32 §0.4j).
+ */
+export function deletePlanAsPerson(planUid: string, opts: { removeDisk?: boolean } = {}): { diskRemoved: boolean } {
+  const plan = planService.getPlan(planUid);
+  if (!plan) throw new PlanRequestError(404, 'Plan not found');
+  planService.deletePlan(planUid);
+
+  // Also remove on-disk .codetrellis/plans/<slug>/ if the plan has a project path
+  let diskRemoved = false;
+  if (opts.removeDisk !== false && plan.projectPath) {
+    try {
+      const result = unlinkPlan(planUid, plan.projectPath);
+      diskRemoved = result.removed;
+    } catch { /* best-effort */ }
+  }
+
+  broadcast('plan-deleted', { planUid });
+  saveNow(() => exportDatabase());
+  return { diskRemoved };
+}
+
+export class PlanRequestError extends Error {
+  constructor(readonly status: 400 | 404, message: string) { super(message); }
+}
+
+function sendPlanError(res: express.Response, err: unknown): void {
+  if (err instanceof PlanRequestError) { res.status(err.status).json({ error: err.message }); return; }
+  throw err;
+}
 
 // Update plan
 app.put('/api/plans/:uid', (req, res) => {
@@ -1919,48 +1949,22 @@ app.put('/api/plans/:uid', (req, res) => {
     title, description, status,
     baseRef, targetBranch, targetWorktree, autoCreateBranch,
   } = req.body;
-  const plan = planService.getPlan(req.params.uid);
-  planService.updatePlan(
-    req.params.uid,
-    { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
-    'user',
-  );
-
-  // Auto-capture trellis snapshot when plan is approved
-  if (status === 'approved' && plan?.projectPath) {
-    try {
-      const snapshot = captureCurrentTrellis(plan.projectPath, req.params.uid, `Baseline for "${plan.title}"`);
-      broadcast('trellis-captured', { snapshot: { id: snapshot.id, name: snapshot.name } });
-    } catch (err) {
-      console.warn('[API] Failed to capture trellis snapshot:', err);
-    }
-  }
-
-  broadcast('plan-updated', { planUid: req.params.uid, status });
-  saveNow(() => exportDatabase());
+  try {
+    updatePlanAsPerson(
+      req.params.uid,
+      { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
+      'user',
+    );
+  } catch (err) { sendPlanError(res, err); return; }
   res.json({ ok: true });
 });
 
 // Delete (archive) plan
 app.delete('/api/plans/:uid', (req, res) => {
-  const planUid = req.params.uid;
-  const plan = planService.getPlan(planUid);
-  const removeDisk = req.query.disk !== 'false'; // default: also remove disk files
-
-  planService.deletePlan(planUid);
-
-  // Also remove on-disk .codetrellis/plans/<slug>/ if the plan has a project path
-  let diskRemoved = false;
-  if (removeDisk && plan?.projectPath) {
-    try {
-      const result = unlinkPlan(planUid, plan.projectPath);
-      diskRemoved = result.removed;
-    } catch { /* best-effort */ }
-  }
-
-  broadcast('plan-deleted', { planUid });
-  saveNow(() => exportDatabase());
-  res.json({ ok: true, diskRemoved });
+  try {
+    const { diskRemoved } = deletePlanAsPerson(req.params.uid, { removeDisk: req.query.disk !== 'false' });
+    res.json({ ok: true, diskRemoved });
+  } catch (err) { sendPlanError(res, err); }
 });
 
 // Bulk delete plans
@@ -1989,149 +1993,15 @@ app.post('/api/plans/bulk-delete', (req, res) => {
   res.json({ ok: true, deleted });
 });
 
-// List tasks for a plan
-app.get('/api/plans/:uid/tasks', (req, res) => {
-  res.json(planService.getTasksByPlan(req.params.uid));
-});
+// The V1 task REST routes (/api/plans/:uid/tasks*, /api/tasks/*) were retired
+// in Phase 32 §0.4c-2: nothing live called them once the inspector's
+// "Add to plan" moved to V2 (bug 21). Plan work is V2 plan items; see
+// the unified surface below.
 
-// Update task — accepts the full set of task fields, including the
-// Phase 14 §A task-as-context fields.
-app.put('/api/plans/:uid/tasks/:taskUid', (req, res) => {
-  const {
-    status, assignee, assigneeType, assigneeModel, description,
-    affectedFiles, affectedSymbols, newConnections, removedConnections,
-    dependencies, fileSpec, symbolSpecs, phaseUid,
-    // Phase 14 §A
-    parentTaskUid, body, prompt, scopePath, fileSpecs,
-    progressPercent, blockedReason,
-  } = req.body;
-  planService.updateTask(req.params.taskUid, {
-    status, assignee, assigneeType, assigneeModel, description,
-    affectedFiles, affectedSymbols, newConnections, removedConnections,
-    dependencies, fileSpec, symbolSpecs, phaseUid,
-    parentTaskUid, body, prompt, scopePath, fileSpecs,
-    progressPercent, blockedReason,
-  });
-  broadcast('task-updated', { planUid: req.params.uid, taskUid: req.params.taskUid, status });
-  saveNow(() => exportDatabase());
-  res.json({ ok: true });
-});
-
-// Append a code reference (path + line range + note) to an existing task.
-app.post('/api/plans/:uid/tasks/:taskUid/code-reference', (req, res) => {
-  const { filePath, startLine, endLine, note, codeSnippet } = req.body || {};
-  if (!filePath || typeof filePath !== 'string') {
-    res.status(400).json({ error: 'filePath is required' });
-    return;
-  }
-  const task = planService.appendTaskCodeReference(req.params.taskUid, {
-    filePath, startLine, endLine, note, codeSnippet,
-  });
-  if (!task) {
-    res.status(404).json({ error: 'Task not found' });
-    return;
-  }
-  broadcast('task-updated', { planUid: req.params.uid, taskUid: req.params.taskUid });
-  saveNow(() => exportDatabase());
-  res.json(task);
-});
-
-// Append a brand-new task to a plan (used by the "Add to plan as new task" flow).
-app.post('/api/plans/:uid/tasks', (req, res) => {
-  const {
-    description, affectedFiles, affectedSymbols, fileSpec,
-    // Phase 14 §A
-    body, prompt, scopePath, fileSpecs, parentTaskUid,
-  } = req.body || {};
-  if (!description || typeof description !== 'string') {
-    res.status(400).json({ error: 'description is required' });
-    return;
-  }
-  const task = planService.appendTaskToPlan(req.params.uid, {
-    description, affectedFiles, affectedSymbols, fileSpec,
-    body, prompt, scopePath, fileSpecs, parentTaskUid,
-  });
-  if (!task) {
-    res.status(404).json({ error: 'Plan not found' });
-    return;
-  }
-  broadcast('task-updated', { planUid: req.params.uid, taskUid: task.uid });
-  saveNow(() => exportDatabase());
-  res.json(task);
-});
-
-// Claim task
-app.post('/api/plans/:uid/tasks/:taskUid/claim', (req, res) => {
-  const { agentId, agentType, model } = req.body;
-  const result = planService.claimTask(req.params.taskUid, agentId, agentType, model);
-  if (result.ok) {
-    broadcast('task-claimed', { planUid: req.params.uid, taskUid: req.params.taskUid, agentId });
-    if (result.conflicts) {
-      broadcast('conflict-detected', { planUid: req.params.uid, taskUid: req.params.taskUid, message: result.conflicts.join('; ') });
-    }
-  }
-  res.json(result);
-});
-
-// Get next available task
+// The next thing to work on: a V2 Action when the plan has any.
 app.get('/api/plans/:uid/next-task', (req, res) => {
   const task = planService.getNextTask(req.params.uid);
   res.json(task || { none: true });
-});
-
-// --- Phase 14 §A — Task-as-context endpoints ---
-// REST mirrors of the new MCP tools so the frontend Plan Workspace
-// can hydrate task context, attachments, comments, and subtasks
-// without going through the SSE wire.
-
-/** Full task context: task + parent + subtasks + phase + attachments + comments. */
-app.get('/api/tasks/:taskUid/full', (req, res) => {
-  const taskUid = req.params.taskUid;
-  const task = planService.getTaskByUid(taskUid);
-  if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
-  const parent = task.parentTaskUid ? planService.getTaskByUid(task.parentTaskUid) : null;
-  const subtasks = planService.getSubtasks(taskUid);
-  const attachments = taskAttachmentsService.listTaskAttachments(taskUid);
-  const comments = commentService.listCommentsFlat(taskUid);
-  res.json({ task, parent, subtasks, attachments, comments });
-});
-
-/** List task attachments. */
-app.get('/api/tasks/:taskUid/attachments', (req, res) => {
-  res.json(taskAttachmentsService.listTaskAttachments(req.params.taskUid));
-});
-
-/** Add a task attachment (URL, file_ref, code_block, transcript, image-via-base64). */
-app.post('/api/tasks/:taskUid/attachments', (req, res) => {
-  const { kind, value, label, contentType, dataBase64, projectRoot: rawProjectRoot } = req.body || {};
-  // Optional here: an attachment with no project root lands in the user
-  // directory rather than a per-project one. Absent stays absent.
-  const projectRoot = confineRootOptional(rawProjectRoot, res);
-  if (projectRoot === null) return;
-  if (!kind || value == null) {
-    res.status(400).json({ error: 'kind and value are required' });
-    return;
-  }
-  try {
-    const attachment = taskAttachmentsService.addAttachment({
-      targetType: 'task',
-      targetUid: req.params.taskUid,
-      kind,
-      value,
-      label,
-      contentType,
-      dataBase64,
-      projectRoot,
-      author: getAuthorKey('human'),
-      authorType: 'human',
-    });
-    const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
-    broadcast('task-attachment-added', { planUid, taskUid: req.params.taskUid, attachment });
-    saveNow(() => exportDatabase());
-    res.json(attachment);
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
 });
 
 /** Delete a task attachment. */
@@ -2141,100 +2011,6 @@ app.delete('/api/attachments/:uid', (req, res) => {
   broadcast('task-attachment-removed', { uid: req.params.uid });
   saveNow(() => exportDatabase());
   res.json({ ok: true });
-});
-
-/** List task comments (flat, ordered, includes Phase 14 kind/source/metadata). */
-app.get('/api/tasks/:taskUid/comments', (req, res) => {
-  res.json(commentService.listCommentsFlat(req.params.taskUid));
-});
-
-/** Add a structured task comment (kind: note / blocker / progress / question). */
-app.post('/api/tasks/:taskUid/comments', (req, res) => {
-  const { kind, body, parentCommentUid, source } = req.body || {};
-  if (!body || typeof body !== 'string') {
-    res.status(400).json({ error: 'body is required' });
-    return;
-  }
-  // Map the Phase 14 §A kind onto the legacy commentType chip so old
-  // UI keeps showing something sensible.
-  const legacyType = kind === 'progress' ? 'status_update'
-    : kind === 'blocker' ? 'concern'
-    : kind === 'question' ? 'suggestion'
-    : 'comment';
-  const comment = commentService.addComment(
-    'task', req.params.taskUid, getAuthorKey('human'), 'human', body,
-    { kind, source: source ?? 'human', commentType: legacyType, parentUid: parentCommentUid },
-  );
-  const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
-  broadcast('task-comment-added', { planUid, taskUid: req.params.taskUid, comment });
-  saveNow(() => exportDatabase());
-  res.json(comment);
-});
-
-/** Report mid-task progress: 0–100 + optional message. */
-app.post('/api/tasks/:taskUid/progress', (req, res) => {
-  const { percent, message } = req.body || {};
-  if (typeof percent !== 'number' || percent < 0 || percent > 100) {
-    res.status(400).json({ error: 'percent must be a number between 0 and 100' });
-    return;
-  }
-  planService.updateTask(req.params.taskUid, { progressPercent: percent });
-  const body = (typeof message === 'string' && message.trim()) ? message.trim() : `Progress: ${percent}%`;
-  const comment = commentService.addComment(
-    'task', req.params.taskUid, getAuthorKey('human'), 'human', body,
-    { kind: 'progress', source: 'human', commentType: 'status_update', metadata: { progressPercent: percent } },
-  );
-  const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
-  broadcast('task-progress', { planUid, taskUid: req.params.taskUid, percent, message: body, commentUid: comment.uid });
-  broadcast('task-comment-added', { planUid, taskUid: req.params.taskUid, comment });
-  saveNow(() => exportDatabase());
-  res.json({ ok: true, percent, message: body, commentUid: comment.uid });
-});
-
-/** Mark a task blocked with a reason. */
-app.post('/api/tasks/:taskUid/blocked', (req, res) => {
-  const { reason } = req.body || {};
-  if (!reason || typeof reason !== 'string') {
-    res.status(400).json({ error: 'reason is required' });
-    return;
-  }
-  planService.updateTask(req.params.taskUid, { status: 'blocked', blockedReason: reason });
-  const comment = commentService.addComment(
-    'task', req.params.taskUid, getAuthorKey('human'), 'human', reason,
-    { kind: 'blocker', source: 'human', commentType: 'concern' },
-  );
-  const planUid = planService.getTaskByUid(req.params.taskUid)?.planUid ?? null;
-  broadcast('task-blocked', { planUid, taskUid: req.params.taskUid, reason, commentUid: comment.uid });
-  broadcast('task-updated', { planUid, taskUid: req.params.taskUid, status: 'blocked' });
-  broadcast('task-comment-added', { planUid, taskUid: req.params.taskUid, comment });
-  saveNow(() => exportDatabase());
-  res.json({ ok: true });
-});
-
-/** Add a subtask under an existing task. */
-app.post('/api/tasks/:taskUid/subtasks', (req, res) => {
-  const parent = planService.getTaskByUid(req.params.taskUid);
-  if (!parent) { res.status(404).json({ error: 'Parent task not found' }); return; }
-  const { description, body, prompt, scopePath, fileSpecs } = req.body || {};
-  if (!description || typeof description !== 'string') {
-    res.status(400).json({ error: 'description is required' });
-    return;
-  }
-  const subtask = planService.appendTaskToPlan(parent.planUid, {
-    description, body, prompt,
-    scopePath: scopePath ?? parent.scopePath ?? null,
-    fileSpecs,
-    parentTaskUid: req.params.taskUid,
-  });
-  if (!subtask) { res.status(500).json({ error: 'Failed to create subtask' }); return; }
-  broadcast('task-created', { planUid: parent.planUid, task: subtask, parentTaskUid: req.params.taskUid });
-  saveNow(() => exportDatabase());
-  res.json(subtask);
-});
-
-/** Direct subtask listing (useful for refreshing without /full). */
-app.get('/api/tasks/:taskUid/subtasks', (req, res) => {
-  res.json(planService.getSubtasks(req.params.taskUid));
 });
 
 // =============================================================================
@@ -2304,6 +2080,88 @@ app.get('/api/channels/:eventUid/thread', (req, res) => {
   res.json(channelEventService.listThread(req.params.eventUid));
 });
 
+/**
+ * A person posts to a plan's channel, from the app or the paired phone.
+ *
+ * Shared because the phone's copy did none of the rest: it took its author
+ * name from the request, never wrote the event into a shared plan's files,
+ * never fired the routing rules, and never told the desktop windows — a
+ * message sent from the phone did not appear on the desktop until something
+ * else refreshed the pane (Phase 32 §0.4j).
+ */
+export function postChannelEventAsPerson(input: {
+  planUid: string;
+  eventType: string;
+  message: string;
+  itemUid?: string | null;
+  respondsTo?: string | null;
+  attempted?: unknown;
+  options?: unknown;
+}) {
+  if (!planService.getPlan(input.planUid)) throw new PlanRequestError(404, 'Plan not found');
+  const identity = getSettings().identity;
+  const author = identity.email || 'human';
+  const payload: any = { message: input.message };
+  if (Array.isArray(input.attempted) && input.attempted.length) payload.attempted = input.attempted;
+  if (Array.isArray(input.options) && input.options.length) payload.options = input.options;
+
+  const created = channelEventService.postChannelEvent({
+    planUid: input.planUid,
+    itemUid: input.itemUid ?? null,
+    eventType: input.eventType as any,
+    payload,
+    author,
+    authorType: 'human',
+    agentModel: null,
+    respondsTo: input.respondsTo ?? null,
+  });
+
+  // Auto-export when the plan is shared (linked to disk).
+  try {
+    const plan = planService.getPlan(created.planUid);
+    if (plan && getLinkedPlanDir(created.planUid, plan.projectPath)) {
+      exportChannelEvent(created, plan.projectPath);
+    }
+  } catch (err) {
+    console.warn('[Channels] auto-export failed:', err);
+  }
+
+  broadcast('channel-event-posted', {
+    uid: created.uid,
+    planUid: created.planUid,
+    itemUid: created.itemUid,
+    eventType: created.eventType,
+    respondsTo: created.respondsTo,
+  });
+
+  // Phase 2.3 — fire any matching routing rules.
+  dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
+  return created;
+}
+
+/** A person resolves, dismisses or reopens a channel event — app or phone, as above. */
+export function setChannelEventStatusAsPerson(eventUid: string, status: string) {
+  if (!channelEventService.getChannelEvent(eventUid)) throw new PlanRequestError(404, 'Channel event not found');
+  const updated = channelEventService.setChannelEventStatus(eventUid, status as any);
+  try {
+    const plan = planService.getPlan(updated.planUid);
+    if (plan && getLinkedPlanDir(updated.planUid, plan.projectPath)) {
+      exportChannelEvent(updated, plan.projectPath);
+    }
+  } catch (err) {
+    console.warn('[Channels] auto-export failed:', err);
+  }
+  broadcast('channel-event-status-changed', {
+    uid: updated.uid,
+    planUid: updated.planUid,
+    status: updated.status,
+  });
+  // Phase 2.3 — status changes can also match rules (e.g., "page on
+  // resolved" or "alert on dismissed").
+  dispatchChannelEvent(updated).catch((err) => console.warn('[Channels] dispatch failed:', err));
+  return updated;
+}
+
 /** Post a new channel event from the frontend (human author). */
 app.post('/api/plans/:planUid/channels', (req, res) => {
   const { event_type, message, item_uid, attempted, options, responds_to } = req.body || {};
@@ -2312,47 +2170,17 @@ app.post('/api/plans/:planUid/channels', (req, res) => {
     return;
   }
   try {
-    const identity = getSettings().identity;
-    const author = identity.email || 'human';
-    const payload: any = { message };
-    if (Array.isArray(attempted) && attempted.length) payload.attempted = attempted;
-    if (Array.isArray(options) && options.length) payload.options = options;
-
-    const created = channelEventService.postChannelEvent({
+    res.json(postChannelEventAsPerson({
       planUid: req.params.planUid,
-      itemUid: item_uid ?? null,
       eventType: event_type,
-      payload,
-      author,
-      authorType: 'human',
-      agentModel: null,
-      respondsTo: responds_to ?? null,
-    });
-
-    // Auto-export when the plan is shared (linked to disk).
-    try {
-      const plan = planService.getPlan(created.planUid);
-      if (plan && getLinkedPlanDir(created.planUid, plan.projectPath)) {
-        exportChannelEvent(created, plan.projectPath);
-      }
-    } catch (err) {
-      console.warn('[Channels] auto-export failed:', err);
-    }
-
-    broadcast('channel-event-posted', {
-      uid: created.uid,
-      planUid: created.planUid,
-      itemUid: created.itemUid,
-      eventType: created.eventType,
-      respondsTo: created.respondsTo,
-    });
-
-    // Phase 2.3 — fire any matching routing rules.
-    dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
-
-    res.json(created);
+      message,
+      itemUid: item_uid,
+      respondsTo: responds_to,
+      attempted,
+      options,
+    }));
   } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    res.status(err instanceof PlanRequestError ? err.status : 400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -2364,26 +2192,9 @@ app.post('/api/channels/:eventUid/status', (req, res) => {
     return;
   }
   try {
-    const updated = channelEventService.setChannelEventStatus(req.params.eventUid, status);
-    try {
-      const plan = planService.getPlan(updated.planUid);
-      if (plan && getLinkedPlanDir(updated.planUid, plan.projectPath)) {
-        exportChannelEvent(updated, plan.projectPath);
-      }
-    } catch (err) {
-      console.warn('[Channels] auto-export failed:', err);
-    }
-    broadcast('channel-event-status-changed', {
-      uid: updated.uid,
-      planUid: updated.planUid,
-      status: updated.status,
-    });
-    // Phase 2.3 — status changes can also match rules (e.g., "page on
-    // resolved" or "alert on dismissed").
-    dispatchChannelEvent(updated).catch((err) => console.warn('[Channels] dispatch failed:', err));
-    res.json(updated);
+    res.json(setChannelEventStatusAsPerson(req.params.eventUid, status));
   } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    res.status(err instanceof PlanRequestError ? err.status : 400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -2395,6 +2206,10 @@ app.post('/api/plans/:planUid/items', (req, res) => {
   } = req.body || {};
   if (!kind || !title) {
     res.status(400).json({ error: 'kind and title are required' });
+    return;
+  }
+  if (status !== undefined && !isTaskStatus(status)) {
+    res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
     return;
   }
   try {
@@ -2419,7 +2234,8 @@ app.post('/api/plans/:planUid/items', (req, res) => {
     saveNow(() => exportDatabase());
     res.json(item);
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    const status = err instanceof planItemService.PlanItemStructureError ? 400 : 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -2447,13 +2263,21 @@ app.get('/api/items/:uid/full', async (req, res) => {
 
 // ── Phase 31 §4.1–4.3: acceptance criteria and sign-off ──────────────
 //
-// This is the desktop's route to a person's decision: each handler below
-// that changes how work is judged issues a HumanDecision, which is the
-// only thing criteria-service accepts for it. MCP tools cannot reach
+// This is the desktop's route to a person's decision. Each handler below
+// that changes how work is judged issues a decision authority, which is
+// the only thing criteria-service accepts for it. MCP tools cannot reach
 // these operations at all (human-decision.test.ts).
+//
+// Which authority depends on how the request arrived (§0.4d, owner's
+// decision: decisions are tagged by who made them). From the app window's
+// IPC it is a person, `desktop`. Over plain HTTP with the token it could be
+// a person in a browser or a script that read the token, so it is recorded
+// as `unverified` over `local-api`: it counts, and says what it is wherever
+// it is shown.
 
-function desktopDecision() {
-  return issueHumanDecision('desktop', getAuthorKey('human'));
+function decisionFrom(req: express.Request) {
+  const actor = getAuthorKey('human');
+  return cameFromAppWindow(req) ? issueHumanDecision('desktop', actor) : issueUnverifiedDecision(actor);
 }
 
 function criteriaChanged(itemUid: string): void {
@@ -2481,7 +2305,7 @@ app.post('/api/items/:uid/criteria', (req, res) => {
   try {
     const body = req.body ?? {};
     const criterion = criteriaService.addCriterionAsHuman(
-      req.params.uid, { text: body.text, kind: body.kind, policy: body.policy }, desktopDecision(),
+      req.params.uid, { text: body.text, kind: body.kind, policy: body.policy }, decisionFrom(req),
     );
     criteriaChanged(criterion.itemUid);
     res.status(201).json(criterion);
@@ -2494,7 +2318,7 @@ app.put('/api/criteria/:uid', (req, res) => {
   try {
     const body = req.body ?? {};
     const criterion = criteriaService.updateCriterion(
-      req.params.uid, { text: body.text, policy: body.policy, sortOrder: body.sortOrder }, desktopDecision(),
+      req.params.uid, { text: body.text, policy: body.policy, sortOrder: body.sortOrder }, decisionFrom(req),
     );
     criteriaChanged(criterion.itemUid);
     res.json(criterion);
@@ -2506,7 +2330,7 @@ app.put('/api/criteria/:uid', (req, res) => {
 app.delete('/api/criteria/:uid', (req, res) => {
   try {
     const before = criteriaService.getCriterion(req.params.uid);
-    if (!before || !criteriaService.deleteCriterion(req.params.uid, desktopDecision())) {
+    if (!before || !criteriaService.deleteCriterion(req.params.uid, decisionFrom(req))) {
       res.status(404).json({ error: 'Criterion not found' });
       return;
     }
@@ -2525,7 +2349,7 @@ app.post('/api/criteria/:uid/decide', async (req, res) => {
     const before = criteriaService.getCriterion(req.params.uid);
     if (before) await artefactService.refreshArtefactHashes(before.itemUid).catch(() => []);
     const criterion = criteriaService.decideCriterion(
-      req.params.uid, { decision: body.decision, note: body.note, anchor: body.anchor }, desktopDecision(),
+      req.params.uid, { decision: body.decision, note: body.note, anchor: body.anchor }, decisionFrom(req),
     );
     // The notices that asked for this decision are answered (§12).
     const decidedPlan = planItemService.getItem(criterion.itemUid)?.planUid;
@@ -2639,6 +2463,10 @@ app.put('/api/items/:uid', (req, res) => {
     res.status(400).json({ error: 'visibility must be shared or local' });
     return;
   }
+  if (body.status !== undefined && !isTaskStatus(body.status)) {
+    res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
+    return;
+  }
   const item = planItemService.updateItem(req.params.uid, {
     title: body.title,
     body: body.body,
@@ -2672,6 +2500,57 @@ app.put('/api/items/:uid', (req, res) => {
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: body });
+  saveNow(() => exportDatabase());
+  res.json(item);
+});
+
+/**
+ * Append a code reference — a line range in one file — to an Action.
+ *
+ * The inspector's "Add to plan" (select lines in the code view) used the
+ * V1 task routes: it listed V1 tasks, so a V2 plan's Actions never
+ * appeared, and what it created was a V1 task the workspace never shows.
+ * This is its V2 target. The merge into `fileSpecs` happens here, in one
+ * synchronous step, so it cannot race an agent updating the same item —
+ * a read-modify-write from the renderer could.
+ */
+app.post('/api/items/:uid/code-reference', (req, res) => {
+  const { filePath, startLine, endLine, note, codeSnippet } = req.body || {};
+  if (!filePath || typeof filePath !== 'string' || path.isAbsolute(filePath)) {
+    res.status(400).json({ error: 'filePath is required, relative to the project root' });
+    return;
+  }
+  const start = Number(startLine);
+  const end = endLine === undefined ? start : Number(endLine);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+    res.status(400).json({ error: 'startLine and endLine must be line numbers, with endLine >= startLine' });
+    return;
+  }
+  const existing = planItemService.getItem(req.params.uid);
+  if (!existing) { res.status(404).json({ error: 'Item not found' }); return; }
+  if (existing.kind !== 'action') {
+    res.status(400).json({ error: 'Code references attach to Actions' });
+    return;
+  }
+
+  const parts = [typeof note === 'string' && note.trim() ? note.trim() : `See ${filePath}:${start}${end === start ? '' : `-${end}`}`];
+  if (typeof codeSnippet === 'string' && codeSnippet.trim()) {
+    parts.push('', '```', codeSnippet.replace(/```/g, '`​``'), '```');
+  }
+  const edit = { lineRange: { start, end }, instruction: parts.join('\n') };
+  const fileSpecs = [...(existing.fileSpecs ?? [])];
+  const at = fileSpecs.findIndex((s) => s.path === filePath);
+  if (at >= 0) fileSpecs[at] = { ...fileSpecs[at], edits: [...(fileSpecs[at].edits ?? []), edit] };
+  else fileSpecs.push({ path: filePath, action: 'modify', edits: [edit] });
+
+  const item = planItemService.updateItem(existing.uid, {
+    fileSpecs,
+    changeSummary: `Code reference ${filePath}:${start}${end === start ? '' : `-${end}`}`,
+    author: getAuthorKey('human'),
+    authorType: 'human',
+  });
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { fileSpecs } });
   saveNow(() => exportDatabase());
   res.json(item);
 });
@@ -2960,17 +2839,26 @@ app.get('/api/plans/:uid/projection', (req, res) => {
 
 // Plan deviations
 app.get('/api/plans/:uid/deviations', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(getDeviations(req.params.uid));
 });
 
-// Reconcile deviations
+// Reconcile deviations — only this plan's, each checked first (bug 30)
 app.post('/api/plans/:uid/reconcile', (req, res) => {
-  const { deviations } = req.body; // [{id, action}]
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  const { deviations } = req.body ?? {}; // [{id, action}]
   if (!Array.isArray(deviations)) { res.status(400).json({ error: 'deviations array required' }); return; }
-  for (const d of deviations) {
-    resolveDeviation(d.id, d.action);
+  try {
+    const resolved = reconcileDeviations(req.params.uid, deviations, cameFromAppWindow(req)
+      ? { actor: getAuthorKey('human'), actorType: 'human' }
+      : { actor: getAuthorKey('human'), actorType: 'unverified' });
+    broadcast('deviations-resolved', { planUid: req.params.uid, ids: deviations.map((d: { id: unknown }) => d.id) });
+    saveNow(() => exportDatabase());
+    res.json({ ok: true, resolved });
+  } catch (err) {
+    if (err instanceof DeviationError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
   }
-  res.json({ ok: true, resolved: deviations.length });
 });
 
 // --- Plan Spec Documents API ---
@@ -3270,10 +3158,28 @@ app.get('/api/plans/:uid/review', (req, res) => {
 // model we have prices for. An unknown cost comes back as null, never
 // zero — see services/pricing.ts.
 app.get('/api/plans/:uid/budget', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(budgetService.getBudgetReport(req.params.uid));
 });
 
+/** Every change to the ceiling, newest first: who, how, before and after (§0.4g). */
+app.get('/api/plans/:uid/budget/changes', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(budgetService.listBudgetChanges(req.params.uid));
+});
+
+/** A person has seen an agent's change to the ceiling: it is no longer flagged. */
+app.post('/api/plans/:uid/budget/changes/:id/acknowledge', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  const id = Number(req.params.id);
+  const change = Number.isInteger(id) ? budgetService.acknowledgeBudgetChange(req.params.uid, id, getAuthorKey('human')) : null;
+  if (!change) { res.status(404).json({ error: 'No such budget change on this plan' }); return; }
+  broadcast('plan-budget-changed', { planUid: req.params.uid, acknowledged: change.id });
+  res.json(change);
+});
+
 app.put('/api/plans/:uid/budget', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   const body = (req.body ?? {}) as { minutes?: number | null; costUsd?: number | null; exempt?: boolean };
 
   // A ceiling is a positive number or an explicit null to clear it. Nothing
@@ -3299,6 +3205,11 @@ app.put('/api/plans/:uid/budget', (req, res) => {
     minutes: body.minutes,
     costUsd: body.costUsd,
     exempt: body.exempt,
+    // Recorded with who made it, tagged by how it arrived, as a criterion
+    // decision is (decisionFrom). A person's change is never flagged.
+    by: cameFromAppWindow(req)
+      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' },
   });
   broadcast('plan-budget-changed', { planUid: req.params.uid, budget });
   res.json(budgetService.getBudgetReport(req.params.uid));
@@ -3321,6 +3232,7 @@ app.get('/api/plans/:uid/external-sync', (req, res) => {
 });
 
 app.get('/api/plans/:uid/budget/check', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(budgetService.checkBudget(req.params.uid));
 });
 
@@ -3720,6 +3632,12 @@ app.post('/api/sessions/:sessionId/assign-plan', (req, res) => {
   const { sessionId } = req.params;
   const { planUid } = req.body;
   if (!planUid) { res.status(400).json({ error: 'planUid required' }); return; }
+  // Both checked: an unknown one was accepted and broadcast (bug 27).
+  if (!planService.getPlan(planUid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  if (!sessionService.getActiveSessions().some((s) => s.sessionId === sessionId)) {
+    res.status(404).json({ error: 'No active agent session with that id' });
+    return;
+  }
   sessionService.setActivePlan(sessionId, planUid);
   broadcast('plan-assigned', { sessionId, planUid });
   broadcast('mcp-session-changed', { reason: 'assign_plan', sessionId, planUid });
@@ -3782,10 +3700,19 @@ app.get('/api/mcp/setup', (_req, res) => {
 // --- Logs API (Phase 13 follow-up) ---
 
 app.get('/api/logs/tail', (req, res) => {
-  const maxBytes = req.query.maxBytes ? Math.min(Number(req.query.maxBytes), 1024 * 1024) : 64 * 1024;
+  // A size, or the default. `Number('abc')` is NaN, and NaN went straight
+  // through `Math.min` into the read (Phase 32 §0.4k).
+  const asked = req.query.maxBytes === undefined ? 64 * 1024 : Number(req.query.maxBytes);
+  if (!Number.isInteger(asked) || asked < 1) {
+    res.status(400).json({ error: 'maxBytes must be a whole number of bytes' });
+    return;
+  }
+  const maxBytes = Math.min(asked, 1024 * 1024);
   res.json({
     path: getCurrentLogPath(),
     content: tailLog(maxBytes),
+    // An empty tail means two different things; the panel says which.
+    writing: isWritingLogFile(),
   });
 });
 
@@ -3956,9 +3883,23 @@ app.get('/api/settings', (_req, res) => {
   res.json(getSettings());
 });
 
+/** Granting is the person's: the app window, or a test backend (grant-guard.ts). */
+const mayGrant = (req: express.Request): boolean => cameFromAppWindow(req) || httpGrantsAllowed();
+
 app.put('/api/settings', (req, res) => {
   const before = getSettings();
-  const next = updateSettings(req.body || {});
+  const grant = grantChange(req.body, before);
+  if (grant && !mayGrant(req)) {
+    res.status(403).json({ error: grantRefusal(grant.field, grant.where) });
+    return;
+  }
+  let next: ReturnType<typeof updateSettings>;
+  try {
+    next = updateSettings(req.body || {});
+  } catch (err) {
+    if (err instanceof SettingsError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
   // Tell the frontend (and any open Settings panels in other windows)
   // that settings changed.
   broadcast('settings-changed', { settings: next });
@@ -4209,24 +4150,62 @@ app.get('/api/freeze', (req, res) => {
 
 app.put('/api/freeze', (req, res) => {
   const { setFreeze } = _lazy___services_freeze_service;
-  const { projectPath: rawProjectPath, active, reason, until, allowedPlanUids } = req.body;
+  const { projectPath: rawProjectPath, active, reason, until, allowedPlanUids } = req.body ?? {};
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
   if (!projectPath) return;
-  if (!projectPath || active === undefined) {
-    res.status(400).json({ error: 'projectPath and active required' });
+  // Each field checked: it stored what it was sent, so `active: "no"` (truthy)
+  // froze the project and an `until` that is not a date never expired
+  // (Phase 32 §0.4h, bug 33).
+  const problem =
+    typeof active !== 'boolean' ? 'active must be true or false'
+      : reason !== undefined && reason !== null && typeof reason !== 'string' ? 'reason must be text'
+        : until !== undefined && until !== null && (typeof until !== 'string' || Number.isNaN(Date.parse(until))) ? 'until must be an ISO date, or null'
+          : allowedPlanUids !== undefined && (!Array.isArray(allowedPlanUids) || !allowedPlanUids.every((u: unknown) => typeof u === 'string'))
+            ? 'allowedPlanUids must be a list of plan uids'
+            : null;
+  if (problem) {
+    res.status(400).json({ error: problem });
     return;
   }
-  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids });
+  // Recorded with who made it and how it arrived, as a budget change is
+  // (owner's decision, 0.4k). A person's change is never flagged.
+  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids }, cameFromAppWindow(req)
+    ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+    : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
   broadcast('freeze-changed', { projectRoot: projectPath, status });
   res.json(status);
 });
 
+/** Every recorded change to the project's freeze, newest first, with who made it. */
+app.get('/api/freeze/changes', (req, res) => {
+  const { listFreezeChanges } = _lazy___services_freeze_service;
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  res.json(listFreezeChanges(projectPath));
+});
+
+/** A person has seen an agent's change to the freeze: no longer flagged. */
+app.post('/api/freeze/changes/:id/acknowledge', (req, res) => {
+  const { acknowledgeFreezeChange } = _lazy___services_freeze_service;
+  const projectPath = confineRoot((req.body ?? {}).projectPath, res, 'projectPath');
+  if (!projectPath) return;
+  const id = Number(req.params.id);
+  const change = Number.isInteger(id) ? acknowledgeFreezeChange(projectPath, id, getAuthorKey('human')) : null;
+  if (!change) { res.status(404).json({ error: 'No such freeze change on this project' }); return; }
+  broadcast('freeze-changed', { projectRoot: projectPath, acknowledged: change.id });
+  res.json(change);
+});
+
 // --- CDev Phase 8 — Audio capture REST surface ---
 
-app.post('/api/audio/start', (_req, res) => {
-  const { audioBuffer } = _lazy___services_audio_buffer_service;
-  const maxSeconds = (_req.body as any)?.maxBufferSeconds;
-  audioBuffer.startCapture(maxSeconds);
+app.post('/api/audio/start', (req, res) => {
+  const { audioBuffer, AudioRequestError } = _lazy___services_audio_buffer_service;
+  try {
+    audioBuffer.startCapture((req.body ?? {}).maxBufferSeconds);
+  } catch (err) {
+    if (err instanceof AudioRequestError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
   res.json(audioBuffer.getStatus());
 });
 
@@ -4242,12 +4221,18 @@ app.get('/api/audio/status', (_req, res) => {
 });
 
 app.post('/api/audio/chunk', (req, res) => {
-  const { audioBuffer } = _lazy___services_audio_buffer_service;
-  const { audioBase64, durationMs } = req.body as { audioBase64?: string; durationMs?: number };
+  const { audioBuffer, checkChunkMs, AudioRequestError } = _lazy___services_audio_buffer_service;
+  const { audioBase64, durationMs } = (req.body ?? {}) as { audioBase64?: unknown; durationMs?: unknown };
 
-  if (!audioBase64 || !durationMs) {
-    res.status(400).json({ error: 'audioBase64 and durationMs required' });
+  if (typeof audioBase64 !== 'string' || !audioBase64) {
+    res.status(400).json({ error: 'audioBase64 (base64 text) and durationMs required' });
     return;
+  }
+  try {
+    checkChunkMs(durationMs);
+  } catch (err) {
+    if (err instanceof AudioRequestError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
   }
 
   if (!audioBuffer.isCapturing()) {
@@ -4256,7 +4241,7 @@ app.post('/api/audio/chunk', (req, res) => {
   }
 
   const data = Buffer.from(audioBase64, 'base64');
-  audioBuffer.addChunk(data, durationMs);
+  audioBuffer.addChunk(data, durationMs as number);
   res.json({ accepted: true, bufferedSeconds: audioBuffer.getStatus().bufferedSeconds });
 });
 
@@ -4355,6 +4340,11 @@ app.get('/api/pairing/status', (_req, res) => {
 
 // Step 2: User confirms the codes match — stores paired device.
 app.post('/api/pairing/confirm', (req, res) => {
+  // Confirming a pairing gives a device access: the person's (grant-guard.ts).
+  if (!mayGrant(req)) {
+    res.status(403).json({ error: grantRefusal('pairings', 'Settings → Devices → Pair Mobile Device') });
+    return;
+  }
   try {
     const { code, alias, deviceType } = req.body;
     if (!code || !alias) {
@@ -4392,6 +4382,7 @@ app.delete('/api/peers/devices/:fingerprint', async (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
     const removed = await peerService.unpairDevice(req.params.fingerprint);
+    if (!removed) { res.status(404).json({ error: 'device not found' }); return; }
     res.json({ removed });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4405,6 +4396,11 @@ app.patch('/api/peers/devices/:fingerprint', (req, res) => {
 
     if (!alias && !Array.isArray(capabilities)) {
       res.status(400).json({ error: 'alias or capabilities required' });
+      return;
+    }
+    // What a paired device may do is the person's to decide (grant-guard.ts).
+    if (Array.isArray(capabilities) && !mayGrant(req)) {
+      res.status(403).json({ error: grantRefusal('a device\'s capabilities', 'Settings → Devices') });
       return;
     }
 
@@ -4494,6 +4490,7 @@ app.post('/api/peers/remote-terminals/:fingerprint/:terminalId/write', (req, res
     const { data } = req.body as { data?: string };
     if (!data) { res.status(400).json({ error: 'data required' }); return; }
     const sent = peerService.writeRemoteTerminal(req.params.fingerprint, req.params.terminalId, data);
+    if (!sent) { res.status(404).json({ error: 'No such remote terminal on a connected peer' }); return; }
     res.json({ sent });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4525,7 +4522,11 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
     // peer-connection-service is statically imported as `peerService` at top of file
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
-    const sent = peerService.respondToInputRequest(req.params.requestId, response);
+    // The app window is the person; plain HTTP is recorded as unverified (0.4d).
+    const sent = peerService.respondToInputRequest(req.params.requestId, response, cameFromAppWindow(req)
+      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
+      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
+    if (!sent) { res.status(404).json({ error: 'No pending input request with that id' }); return; }
     res.json({ sent });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4562,7 +4563,10 @@ app.post('/api/peers/push-tokens', (req, res) => {
 app.delete('/api/peers/push-tokens/:fingerprint', (req, res) => {
   try {
     // peer-connection-service is statically imported as `peerService` at top of file
-    peerService.unregisterPushToken(req.params.fingerprint);
+    if (!peerService.unregisterPushToken(req.params.fingerprint)) {
+      res.status(404).json({ error: 'no push token for that device' });
+      return;
+    }
     res.json({ unregistered: true });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -4680,9 +4684,10 @@ app.post('/api/system-docs', (req, res) => {
   try {
     const identity = getSettings().identity;
     const author = identity.email || identity.displayName || 'human';
+    // The app window is the person; plain HTTP is unverified (0.4d).
     const doc = svc.createSystemDoc({
       projectPath, title, body, owner, tags, references, slug,
-      author, authorType: 'human',
+      author, authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
     });
     broadcast('system-doc-created', { uid: doc.uid, projectPath: doc.projectPath });
     saveNow(() => exportDatabase());
@@ -4695,7 +4700,16 @@ app.post('/api/system-docs', (req, res) => {
 app.put('/api/system-docs/:uid', (req, res) => {
   const svc = _lazy___services_system_docs_service;
   try {
-    const updated = svc.updateSystemDoc(req.params.uid, req.body || {});
+    // Named fields only, and the author from how the request arrived. The
+    // whole body went through, so `author` / `authorType` in it put anyone's
+    // name on the edit (Phase 32 §0.4l).
+    const { title, body, owner, tags, references } = req.body || {};
+    const identity = getSettings().identity;
+    const updated = svc.updateSystemDoc(req.params.uid, {
+      title, body, owner, tags, references,
+      author: identity.email || identity.displayName || 'human',
+      authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
+    });
     if (!updated) { res.status(404).json({ error: 'not found' }); return; }
     broadcast('system-doc-updated', { uid: updated.uid, projectPath: updated.projectPath });
     saveNow(() => exportDatabase());
@@ -4708,10 +4722,9 @@ app.put('/api/system-docs/:uid', (req, res) => {
 app.delete('/api/system-docs/:uid', (req, res) => {
   const svc = _lazy___services_system_docs_service;
   const ok = svc.deleteSystemDoc(req.params.uid);
-  if (ok) {
-    broadcast('system-doc-removed', { uid: req.params.uid });
-    saveNow(() => exportDatabase());
-  }
+  if (!ok) { res.status(404).json({ error: 'not found' }); return; }
+  broadcast('system-doc-removed', { uid: req.params.uid });
+  saveNow(() => exportDatabase());
   res.json({ ok, uid: req.params.uid });
 });
 
@@ -4759,6 +4772,12 @@ app.get('/api/sensors/doc-check', (req, res) => {
 // Catches synchronous throws in route handlers that slip past local
 // try/catch blocks.  Without this, unhandled errors crash the process.
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // A tree change the item tree cannot hold (see assertValidParent) is the
+  // caller's mistake, not the server's.
+  if (err instanceof planItemService.PlanItemStructureError) {
+    if (!res.headersSent) res.status(400).json({ error: err.message });
+    return;
+  }
   console.error('[Backend] Unhandled route error:', err);
   if (!res.headersSent) {
     res.status(500).json({ error: 'Internal server error' });
@@ -5101,6 +5120,8 @@ function getRecentGitCommits(projectPath: string, limit = 20): GitCommitSummary[
 }
 
 async function captureGitCommitSnapshot(projectPath: string, commitHash: string): Promise<GitCommitSnapshotResult | null> {
+  // Never hand git something it would read as an option (git-safety).
+  if (!isSafeGitRef(commitHash)) return null;
   try {
     const commitMeta = execFileSync(
       'git',
@@ -5310,18 +5331,6 @@ export function getGitWorkingTreeStatus(projectPath: string): {
       commitHash: head?.commitHash || null,
       shortCommitHash: head?.shortCommitHash || null,
     };
-  } catch {
-    return null;
-  }
-}
-
-function getGitBranchName(projectPath: string): string | null {
-  try {
-    const headPath = path.join(projectPath, '.git', 'HEAD');
-    if (!fs.existsSync(headPath)) return null;
-    const head = fs.readFileSync(headPath, 'utf-8').trim();
-    const match = head.match(/^ref: refs\/heads\/(.+)$/);
-    return match ? match[1] : 'detached';
   } catch {
     return null;
   }

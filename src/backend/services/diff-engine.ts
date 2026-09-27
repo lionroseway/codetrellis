@@ -6,6 +6,34 @@ export interface GraphSnapshot {
   shortCommitHash?: string | null;
 }
 
+/**
+ * Where a baseline came from (Phase 32 §0.4h, bug 29). It was labelled
+ * with the HEAD hash whatever it held, so "baseline: HEAD" could include
+ * uncommitted work.
+ *  - `scan`: the working tree when the project was opened. `dirty` says
+ *    whether that tree had uncommitted changes.
+ *  - `commit`: a commit's own contents (Pin, the commit picker, set_baseline).
+ *  - `working-tree`: the working tree of a project that is not a git repo.
+ */
+export interface BaselineMeta {
+  commitHash?: string | null;
+  shortCommitHash?: string | null;
+  source?: 'scan' | 'commit' | 'working-tree';
+  dirty?: boolean;
+  projectPath?: string | null;
+}
+
+export type Baseline = GraphSnapshot & Required<Pick<BaselineMeta, 'source' | 'dirty'>> & {
+  capturedAt: number;
+  projectPath: string | null;
+};
+
+/** What the window shows for a baseline: never a bare hash for a tree that was not that commit. */
+export function baselineLabel(b: Pick<Baseline, 'shortCommitHash' | 'dirty'>): string {
+  if (!b.shortCommitHash) return 'working tree';
+  return b.dirty ? `${b.shortCommitHash} + uncommitted changes` : b.shortCommitHash;
+}
+
 export interface ArchDiff {
   addedFiles: string[];
   removedFiles: string[];
@@ -16,7 +44,29 @@ export interface ArchDiff {
   summary: { added: number; removed: number; modified: number; edgesAdded: number; edgesRemoved: number };
 }
 
-let baselineSnapshot: GraphSnapshot | null = null;
+let baselineSnapshot: Baseline | null = null;
+
+/**
+ * Where baselines survive a restart (Phase 32 §0.6, bug 9).
+ *
+ * The baseline lived only in this module, so a restart dropped it and the
+ * next scan captured whatever the tree held then: "diff since baseline"
+ * silently became "diff since this morning's launch", and a pinned commit
+ * was forgotten. The store keeps one baseline per project. It is injected
+ * (server.ts registers the SQLite one) so this module stays pure for the
+ * callers and tests that only diff snapshots.
+ */
+export interface BaselineStore {
+  save(baseline: Baseline): void;
+  load(projectPath: string): Baseline | null;
+  remove(projectPath: string): void;
+}
+
+let store: BaselineStore | null = null;
+
+export function setBaselineStore(next: BaselineStore | null): void {
+  store = next;
+}
 
 /**
  * Capture the current graph state as a snapshot.
@@ -41,19 +91,50 @@ export function captureSnapshot(
 /**
  * Save current state as the baseline snapshot.
  */
-export function setBaseline(
-  snapshot: GraphSnapshot,
-  metadata?: { commitHash?: string | null; shortCommitHash?: string | null },
-): void {
+export function setBaseline(snapshot: GraphSnapshot, metadata?: BaselineMeta): void {
   baselineSnapshot = {
     ...snapshot,
     commitHash: metadata?.commitHash ?? snapshot.commitHash ?? null,
     shortCommitHash: metadata?.shortCommitHash ?? snapshot.shortCommitHash ?? null,
+    source: metadata?.source ?? 'scan',
+    dirty: metadata?.dirty ?? false,
+    projectPath: metadata?.projectPath ?? null,
+    capturedAt: Date.now(),
   };
-  console.log(`[Diff] Baseline set: ${snapshot.files.size} files, ${snapshot.edges.size} edges`);
+  console.log(`[Diff] Baseline set (${baselineSnapshot.source}): ${snapshot.files.size} files, ${snapshot.edges.size} edges`);
+  if (store && baselineSnapshot.projectPath) {
+    try { store.save(baselineSnapshot); } catch (err) { console.warn(`[Diff] Baseline not saved: ${(err as Error).message}`); }
+  }
 }
 
-export function getBaseline(): GraphSnapshot | null {
+/**
+ * No baseline: the diff says so until the next scan or capture sets one.
+ * The stored copy goes too — otherwise the next scan would restore the
+ * baseline that was just cleared.
+ */
+export function clearBaseline(): void {
+  const projectPath = baselineSnapshot?.projectPath;
+  baselineSnapshot = null;
+  if (store && projectPath) {
+    try { store.remove(projectPath); } catch (err) { console.warn(`[Diff] Stored baseline not removed: ${(err as Error).message}`); }
+  }
+}
+
+/**
+ * Bring back the baseline this project had before a restart, if one was
+ * stored. Returns it, or null when there is none to restore.
+ */
+export function restoreBaseline(projectPath: string): Baseline | null {
+  if (!store) return null;
+  let stored: Baseline | null = null;
+  try { stored = store.load(projectPath); } catch (err) { console.warn(`[Diff] Stored baseline unreadable: ${(err as Error).message}`); }
+  if (!stored) return null;
+  baselineSnapshot = stored;
+  console.log(`[Diff] Baseline restored (${stored.source}): ${stored.files.size} files, ${stored.edges.size} edges`);
+  return stored;
+}
+
+export function getBaseline(): Baseline | null {
   return baselineSnapshot;
 }
 

@@ -4,9 +4,11 @@
 
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy_______services_mdns_service from '../../services/mdns-service';
+import fs from 'node:fs';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
+import { grantChange, grantRefusal } from '../../services/grant-guard';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Screenshot ---
@@ -136,14 +138,16 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ item_uid, plan_uid }) => {
-      let resolvedPlanUid = plan_uid;
-      if (!resolvedPlanUid) {
-        const item = deps.planItemService.getItem(item_uid);
-        if (!item) {
-          return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found.` }], isError: true };
-        }
-        resolvedPlanUid = item.planUid;
+      // Always looked up: with plan_uid given, a wrong item_uid was sent to the
+      // window and reported as selected (bug 27).
+      const item = deps.planItemService.getItem(item_uid);
+      if (!item) {
+        return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found.` }], isError: true };
       }
+      if (plan_uid && plan_uid !== item.planUid) {
+        return { content: [{ type: 'text' as const, text: `Item ${item_uid} is in plan ${item.planUid}, not ${plan_uid}.` }], isError: true };
+      }
+      const resolvedPlanUid = item.planUid;
       deps.broadcast('ui-navigate', { target: 'plan', planUid: resolvedPlanUid });
       deps.broadcast('ui-select-item', { planUid: resolvedPlanUid, itemUid: item_uid });
       return { content: [{ type: 'text' as const, text: `Selected item ${item_uid} in plan ${resolvedPlanUid}` }] };
@@ -309,6 +313,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (device) patch.device = device;
       if (firstRunComplete !== undefined) patch.firstRunComplete = firstRunComplete;
 
+      // An agent does not grant (owner's decision; grant-guard.ts): LAN
+      // advertising and audio sharing are the person's, in the app.
+      const grant = grantChange(patch, deps.getSettings());
+      if (grant) {
+        return { content: [{ type: 'text' as const, text: grantRefusal(grant.field, grant.where) }], isError: true };
+      }
       const updated = deps.updateSettings(patch);
 
       // Phase 9 — live-restart mDNS when device settings change.
@@ -358,7 +368,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ lines, filter }) => {
-      const maxBytes = Math.min((lines ?? 500) * 200, 64 * 1024);
+      // File logging is the desktop app's (installFileLogger in Electron's
+      // main). Elsewhere there is no file, and "(no log entries found)" read
+      // as "nothing happened" (Phase 32 §0.4g).
+      if (!fs.existsSync(deps.getCurrentLogPath())) {
+        return { content: [{ type: 'text' as const, text:
+          'No log file: file logging runs in the CodeTrellis desktop app. This backend (web or dev build) logs to its console instead.' }] };
+      }
+      const maxBytes = Math.min(Math.max(1, lines ?? 500) * 200, 64 * 1024);
       let content = deps.tailLog(maxBytes);
 
       if (filter) {

@@ -189,6 +189,15 @@ function getOtaUrl(): string {
   return process.env.CODETRELLIS_OTA_URL || DEFAULT_OTA_URL;
 }
 
+/**
+ * The GitHub API base. Overridable for the same reason `CODETRELLIS_OTA_URL`
+ * is: a test (or an air-gapped install) must be able to point the check
+ * somewhere that is not the internet (Phase 32 §0.4k).
+ */
+function getGithubApi(): string {
+  return (process.env.CODETRELLIS_GITHUB_API || 'https://api.github.com').replace(/\/+$/, '');
+}
+
 function getGithubRepo(): string {
   return process.env.CODETRELLIS_GITHUB_REPO || DEFAULT_GITHUB_REPO;
 }
@@ -276,7 +285,7 @@ async function checkViaGithub(
   current: string,
 ): Promise<UpdateCheckResult> {
   const repo = getGithubRepo();
-  const url = `https://api.github.com/repos/${repo}/releases/latest`;
+  const url = `${getGithubApi()}/repos/${repo}/releases/latest`;
   const res = await timedFetch(url, {
     headers: {
       Accept: 'application/vnd.github+json',

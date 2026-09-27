@@ -47,6 +47,16 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!mobileConnected()) {
         return { content: [{ type: 'text' as const, text: 'No mobile device is connected. Pair + connect a phone first.' }], isError: true };
       }
+      // Sending the phone to a plan or item that does not exist opens an
+      // empty screen with an error on someone else's device (0.4j).
+      if (!route && item_uid) {
+        const item = deps.planItemService.getItem(item_uid);
+        if (!item) return { content: [{ type: 'text' as const, text: `Item not found: ${item_uid}` }], isError: true };
+        if (!plan_uid) plan_uid = item.planUid;
+      }
+      if (!route && plan_uid && !deps.planService.getPlan(plan_uid)) {
+        return { content: [{ type: 'text' as const, text: `Plan not found: ${plan_uid}` }], isError: true };
+      }
       let target = route;
       if (!target && item_uid) {
         target = `/item-detail?uid=${encodeURIComponent(item_uid)}${plan_uid ? `&planUid=${encodeURIComponent(plan_uid)}` : ''}`;

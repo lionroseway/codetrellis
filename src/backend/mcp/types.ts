@@ -80,7 +80,7 @@ export interface ToolDeps {
   /** Phase 31 §4.2 — record a file that matters; hashes kept current. */
   artefactService: Pick<
     typeof import('../services/artefact-service'),
-    'recordArtefact' | 'refreshArtefactHashes' | 'listArtefacts' | 'ArtefactError'
+    'recordArtefact' | 'refreshArtefactHashes' | 'listArtefacts' | 'getArtefact' | 'ArtefactError'
   >;
   startArtefactWatching: typeof import('../services/artefact-watcher').startArtefactWatching;
   /** Phase 31 §5 — the Brief, and reading a material through us (§5.1). */
@@ -93,6 +93,8 @@ export interface ToolDeps {
   publishPlanAsTemplate: typeof import('../services/plan-template-publish-service').publishPlanAsTemplate;
   getDeviations: typeof import('../services/deviation-service').getDeviations;
   resolveDeviation: typeof import('../services/deviation-service').resolveDeviation;
+  reconcileDeviations: typeof import('../services/deviation-service').reconcileDeviations;
+  DeviationError: typeof import('../services/deviation-service').DeviationError;
   detectDeviations: typeof import('../services/deviation-service').detectDeviations;
   captureCurrentTrellis: typeof import('../services/trellis-service').captureCurrentTrellis;
   listSnapshots: typeof import('../services/trellis-service').listSnapshots;
@@ -120,6 +122,11 @@ export interface ToolDeps {
   getLogDir: typeof import('../services/logger').getLogDir;
   getBoundBackendPort: typeof import('../server').getBoundBackendPort;
   scanProject: typeof import('../server').scanProject;
+  getActiveProjectPath: typeof import('../server').getActiveProjectPath;
+  /** Pin the graph's baseline to a commit (HEAD when none is named). */
+  pinBaseline: typeof import('../server').pinBaseline;
+  BaselineError: typeof import('../server').BaselineError;
+  clearBaseline: typeof import('../services/diff-engine').clearBaseline;
   buildSkillGuide: typeof import('./skill-guide').buildSkillGuide;
 
   /**

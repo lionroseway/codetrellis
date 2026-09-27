@@ -46,3 +46,45 @@ export function issueHumanDecision(channel: HumanChannel, actor: string, device:
 export function isHumanDecision(value: unknown): value is HumanDecision {
   return typeof value === 'object' && value !== null && issued.has(value);
 }
+
+/**
+ * Phase 32 §0.4c-d — a decision that arrived over the local HTTP API.
+ *
+ * The desktop's own window reaches the backend over IPC (ipc-dispatcher),
+ * which a network caller cannot imitate. Plain HTTP with the capability
+ * token is a different thing: that token is readable by any local process,
+ * agents included, so a decision arriving that way is NOT evidence that a
+ * person pressed anything. It used to be stamped `human` on the `desktop`
+ * anyway.
+ *
+ * The owner's rule (2026-09-26): agents are co-workers, so their work is
+ * labelled, not blocked. Such a decision is recorded, and counts, but is
+ * tagged `unverified` on the `local-api` channel, and every surface that
+ * shows it says so. Issued like a HumanDecision, so nothing can forge one.
+ */
+export interface UnverifiedDecision {
+  readonly actor: string;
+  readonly channel: 'local-api';
+  readonly device?: null;
+  readonly [brand]: 'unverified';
+}
+
+const unverified = new WeakSet<object>();
+
+export function issueUnverifiedDecision(actor: string): UnverifiedDecision {
+  const decision = Object.freeze({ actor, channel: 'local-api' as const, device: null }) as UnverifiedDecision;
+  unverified.add(decision);
+  return decision;
+}
+
+export function isUnverifiedDecision(value: unknown): value is UnverifiedDecision {
+  return typeof value === 'object' && value !== null && unverified.has(value);
+}
+
+/** Who may take a decision that changes how work is judged: a person, or the unverified local API. */
+export type DecisionAuthority = HumanDecision | UnverifiedDecision;
+
+/** The actor type a sign-off records for this authority. */
+export function actorTypeOf(decision: DecisionAuthority): 'human' | 'unverified' {
+  return isHumanDecision(decision) ? 'human' : 'unverified';
+}

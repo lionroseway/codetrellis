@@ -21,8 +21,7 @@ import {
   Pencil,
   ShieldAlert,
   X,
-  Plus,
-} from 'lucide-react';
+  Plus, Lock } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { PlanItem, Skill, ClaimPolicy, ExecutionConfig, ItemConstraints } from '@shared/types';
 
@@ -457,7 +456,7 @@ function ConstraintsEditor({
           </div>
         )}
         {constraints.lockInterfaces && (
-          <div className="text-[11px] text-amber-300/80">🔒 Interfaces locked</div>
+          <div className="flex items-center gap-1 text-[11px] text-amber-300/80"><Lock size={10} /> Interfaces locked</div>
         )}
         {constraints.requireTests && (
           <div className="text-[11px] text-green-300/80">✓ Tests required</div>

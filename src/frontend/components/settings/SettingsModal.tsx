@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
+import { explainSaveError } from '../../lib/settings-words';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
@@ -54,6 +55,16 @@ interface PeerAuditRow {
  * `services/peer-capabilities.ts` — deliberately without `terminal` or
  * `settings`.
  */
+/** Why the desktop is being kept awake, in words (Settings → Power). */
+const POWER_REASON_WORDS: Record<string, string> = {
+  'mobile-connected': 'a paired phone is connected',
+  'agent-active': 'an agent is working',
+  always: 'you asked for always',
+};
+
+/** The renderer's own platform, for advice that only applies on one. */
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
+
 const DEFAULT_DEVICE_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
 
 const DEVICE_CAPABILITIES: Array<{
@@ -67,6 +78,12 @@ const DEVICE_CAPABILITIES: Array<{
   { name: 'write', label: 'Edit plans and docs', hint: 'Create, update and delete plans, items, docs and comments.' },
   { name: 'project', label: 'Open and close projects', hint: 'Switch which project this desktop is working on.' },
   { name: 'files', label: 'Read file contents', hint: 'Open source files and browse folders on this machine.' },
+  {
+    name: 'capture',
+    label: 'Receive your microphone audio',
+    hint: 'When "Share audio capture" is on, this device gets the audio this machine records. Off, nothing is shared with it.',
+    sensitive: true,
+  },
   {
     name: 'terminal',
     label: 'Run commands and read terminal output',
@@ -86,9 +103,8 @@ const DEVICE_CAPABILITIES: Array<{
  *
  * Separate from `DEVICE_CAPABILITIES` because the surfaces differ in what
  * they can reach, not because the vocabulary differs: both read the same
- * seven names. `capture` is absent from the device list because no peer RPC
- * method needs it yet, and showing a toggle that governs nothing would be
- * worse than not showing it.
+ * seven names. For a device, `capture` governs the shared-audio relay
+ * (Phase 32 §0.4k): the switch below and this grant, both.
  */
 const MCP_DEFAULT_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
 
@@ -167,6 +183,7 @@ export function SettingsModal({
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [boundPort, setBoundPort] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Load + reload on focus so external changes (or mcp-port-changed
   // events) reflect.
@@ -187,6 +204,7 @@ export function SettingsModal({
   const update = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
     setSaving(true);
+    setSaveError(null);
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -196,6 +214,11 @@ export function SettingsModal({
     if (res.ok) {
       const next = await res.json();
       setSettings(next);
+    } else {
+      // A refused save used to show nothing: the control simply did not
+      // take, and nothing said why (Phase 32 §0.4k).
+      const body = await res.json().catch(() => null) as { error?: string } | null;
+      setSaveError(body?.error ? explainSaveError(body.error) : `The change was not saved (${res.status})`);
     }
   };
 
@@ -211,7 +234,7 @@ export function SettingsModal({
   return createPortal(
     <Backdrop onClose={onClose}>
       <div
-        className="w-full max-w-3xl max-h-[85vh] flex rounded-2xl border border-white/[0.08] bg-[#0b1020] shadow-[0_24px_80px_rgba(0,0,0,0.6)] overflow-hidden"
+        className="w-full max-w-3xl h-[min(640px,85vh)] flex rounded-2xl border border-white/[0.08] bg-[#0b1020] shadow-[0_24px_80px_rgba(0,0,0,0.6)] overflow-hidden [color-scheme:dark]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Sidebar */}
@@ -278,6 +301,11 @@ export function SettingsModal({
 
           {saving && (
             <div className="px-5 py-2 text-[10px] text-foreground-subtle border-t border-white/[0.04]">Saving…</div>
+          )}
+          {!saving && saveError && (
+            <div role="alert" data-testid="settings-save-error" className="px-5 py-2 text-[10.5px] text-red-300 border-t border-white/[0.04]">
+              Not saved: {saveError}
+            </div>
           )}
         </div>
       </div>
@@ -671,7 +699,7 @@ function PlansSection({
   return (
     <>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
-        Default visibility for plans you create. You can toggle this per-plan in the plan header (Phase 13 §A — coming).
+        Default visibility for plans you create. Each plan can be switched from the Shared / Local chip in its header.
       </p>
 
       <Field label="Default visibility">
@@ -693,7 +721,7 @@ function PlansSection({
       </Field>
 
       <p className="text-[10px] text-foreground-subtle">
-        Shared plans land at <code className="font-mono">&lt;project&gt;/.codetrellis/plans/&lt;slug&gt;/</code>. See [PLAN-EXPORT.md](docs/PLAN-EXPORT.md).
+        Shared plans are written to <code className="font-mono">&lt;project&gt;/.codetrellis/plans/&lt;slug&gt;/</code>, so they are committed with the code. Local plans stay in this machine's database.
       </p>
 
       <Field label="Attachment storage">
@@ -1053,8 +1081,8 @@ function DataSection({
         />
       </Field>
 
-      <p className="text-[10px] text-amber-200/80">
-        ⚠️ Changes take effect on next server restart. The current session keeps using the previous path.
+      <p className="text-[10px] text-foreground-subtle">
+        Takes effect when CodeTrellis restarts; until then it keeps using the current directory.
       </p>
     </>
   );
@@ -1471,7 +1499,7 @@ function DevicesSection({
 
         {pairingState === 'idle' && (
           <p className="text-[10px] text-foreground-subtle mt-2">
-            Pair your phone to monitor agents, view plans, and interact remotely — no ports exposed.
+            Pair your phone to watch agents, read plans and answer questions from it. Pairing turns on “Allow phones on this network to connect” below, which opens a port.
           </p>
         )}
       </Field>
@@ -1488,7 +1516,7 @@ function DevicesSection({
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => onChange({ device: { ...settings.device, deviceName: name.trim() } })}
-            placeholder="e.g. Saif's iMac"
+            placeholder="e.g. Studio iMac"
             className="w-full bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
           />
         </Field>
@@ -1547,7 +1575,7 @@ function DevicesSection({
             <span className="text-[12px]">Share audio capture with paired devices</span>
           </label>
           <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
-            When enabled, agents on paired devices can access audio captured on this machine.
+            When enabled, audio captured on this machine goes to paired devices you have allowed to receive it (each device&apos;s &ldquo;Receive your microphone audio&rdquo;).
           </p>
         </Field>
 
@@ -1687,7 +1715,10 @@ function LogsSection() {
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
-        setContent(data.content || '(log file empty)');
+        setContent(data.content
+          || (data.writing === false
+            ? 'This run is not writing a log file: development and browser builds log to the terminal that started them.'
+            : 'Nothing logged yet today.'));
         setLogFile(data.path || '');
         setLoading(false);
       })
@@ -1713,7 +1744,7 @@ function LogsSection() {
   return (
     <>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
-        Backend logs (everything `console.log` / `console.warn` / `console.error` emits) mirrored to a daily file at:
+        Everything the backend logs is also written to a daily file at:
       </p>
       <div className="flex items-center gap-2">
         <code className="flex-1 bg-white/[0.05] border border-white/[0.06] rounded px-2 py-1.5 text-[10.5px] font-mono text-foreground-muted truncate">
@@ -1758,7 +1789,7 @@ function TelemetrySection() {
       </p>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
         Everything stays on your machine. Your project's plans live in your repo (committed via git, your transport).
-        Your DB lives at <code className="font-mono">~/.codetrellis/data.db</code>. The MCP server binds to <code className="font-mono">127.0.0.1</code> only — no remote agents reach it.
+        Its database is in this app's data directory (Settings → Data). The MCP server binds to <code className="font-mono">127.0.0.1</code> only — no remote agents reach it.
       </p>
       <div className="text-[11px] text-foreground-muted leading-relaxed" data-testid="telemetry-outbound">
         <p>What does leave this machine, and only when:</p>
@@ -1872,9 +1903,11 @@ function AboutSection({ onJumpToSection }: { onJumpToSection: (section: Section)
         </button>
       </p>
 
-      <p className="text-[10px] text-amber-200/80 leading-relaxed">
+      {/* Only where it applies, and not as a warning: it is advice about
+          installing, shown on every platform in amber before (Phase 32 §0.5). */}
+      {IS_MAC && <p className="text-[10px] text-foreground-subtle leading-relaxed">
         <strong>Installing on macOS:</strong> open the <code className="font-mono bg-white/[0.05] px-1 rounded">.dmg</code> file, then drag the <code className="font-mono bg-white/[0.05] px-1 rounded">CodeTrellis.app</code> icon onto the <code className="font-mono bg-white/[0.05] px-1 rounded">Applications</code> shortcut in the same window. Don't run the .app from the DMG mount or your Downloads folder — it won't update cleanly.
-      </p>
+      </p>}
     </>
   );
 }
@@ -2116,8 +2149,8 @@ function UpdatesSection({
       <p className="text-[10.5px] text-foreground-subtle leading-relaxed pt-1">
         CodeTrellis checks <span className="text-foreground-muted">codetrellis.dev</span> for new
         builds, and falls back to the GitHub Releases feed if the website's API is unreachable.
-        Updates open in your browser — install the new DMG / EXE / AppImage to upgrade.
-        Auto-download will land once builds are code-signed.
+        A download made here is checked against the release's signed checksum list before it
+        is offered to you; it does not install itself.
       </p>
     </>
   );
@@ -2195,7 +2228,7 @@ function PowerSection({
   return (
     <>
       <p className="text-[11px] text-foreground-muted leading-relaxed">
-        Keep this desktop awake based on what you&apos;re doing. Toggles are independent — the blocker engages on the union of what&apos;s checked, then disengaged by the battery safety net if that&apos;s on.
+        Keep this desktop from sleeping while you need it. Any one of the ticked reasons is enough; on battery, the safety net below can override them.
       </p>
 
       <Field label="Keep awake when…">
@@ -2204,7 +2237,7 @@ function PowerSection({
             checked={triggers.whileMobileConnected}
             onChange={(v) => patchTriggers({ whileMobileConnected: v })}
             label="A mobile companion is connected"
-            sub="Holds the assertion while the paired mobile app's heartbeat is fresh."
+            sub="While the paired phone has checked in recently."
           />
           <Toggle
             checked={triggers.whileAgentActive}
@@ -2216,7 +2249,7 @@ function PowerSection({
             checked={triggers.always}
             onChange={(v) => patchTriggers({ always: v })}
             label="Always (while CodeTrellis runs)"
-            sub="Blunt — holds the assertion the entire time the app is open."
+            sub="The whole time the app is open."
           />
         </div>
       </Field>
@@ -2247,17 +2280,17 @@ function PowerSection({
       <div className="mt-3 rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10.5px] text-foreground-subtle">
         {status ? (
           <>
-            <span className="font-mono text-foreground-muted">Status:</span>{' '}
-            {status.shouldBlock ? (
+            {status.platform === 'web' ? (
+              <span>Keeping the machine awake needs the desktop app; this browser build cannot.</span>
+            ) : status.shouldBlock ? (
               <>
-                <span className="text-emerald-300">awake</span>
-                {status.reason && <> ({status.reason})</>}
+                <span className="text-emerald-300">Keeping this desktop awake</span>
+                {status.reason && <> — {POWER_REASON_WORDS[status.reason] ?? status.reason}</>}
               </>
             ) : (
-              <span>idle</span>
+              <span>Sleep allowed: none of the reasons above applies right now.</span>
             )}
-            {status.ac !== 'unknown' && <> · AC: <span className="font-mono">{status.ac}</span></>}
-            {' · '}<span className="font-mono">{status.platform}</span>
+            {status.ac !== 'unknown' && <> · {status.ac === 'plugged' ? 'on mains power' : 'on battery'}</>}
           </>
         ) : (
           <>Loading current status…</>

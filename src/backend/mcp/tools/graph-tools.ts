@@ -35,7 +35,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ mode }) => {
-      deps.broadcast('ui-graph-mode', { mode });
+      // The renderer calls the Baseline view 'current' (TrellisMode). It
+      // was sent 'baseline', a mode it doesn't have: no button lit up and
+      // the Baseline view never rendered.
+      deps.broadcast('ui-graph-mode', { mode: mode === 'baseline' ? 'current' : mode });
       return { content: [{ type: 'text' as const, text: `Set graph mode to ${mode}` }] };
     },
   );
@@ -187,7 +190,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         deps.pendingResponses.set(nonce, { resolve, reject, timer });
       });
 
-      deps.broadcast('ui-graph-snapshot-request', { nonce, includeMetadata: include_metadata !== false });
+      // Metadata only when asked, as the description says. `!== false`
+      // made the "compact" default the full dump.
+      deps.broadcast('ui-graph-snapshot-request', { nonce, includeMetadata: include_metadata === true });
 
       try {
         const json = await p;

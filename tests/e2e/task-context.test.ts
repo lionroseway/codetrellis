@@ -1,516 +1,276 @@
 /**
- * Phase 14 §A — task-as-context MCP regression tests.
+ * Item-as-context regression tests (formerly Phase 14 §A "task-as-context").
  *
- * Covers the new MCP tools end-to-end through the same SSE wire that
- * Claude Code / Codex / Cursor use:
+ * An agent should get everything it needs about a piece of work in one
+ * round-trip, and that context should survive every path it travels:
+ * MCP, REST, and a plan export → import through git.
  *
- *  - `create_plan` accepts the rich task shape (body / prompt /
- *    scope_path / file_specs / parent_task_uid)
- *  - `claim_task` returns the full task context in one round-trip
- *  - `read_task_full` returns task + parent + subtasks + phase +
- *    attachments + comments
- *  - `add_task_comment` (kind: blocker / progress / question / note)
- *  - `update_task_progress` updates the percent column AND stores a
- *    `kind: 'progress'` comment with `metadata.progressPercent`
- *  - `set_task_blocked` flips status + comment
- *  - `add_subtask` creates a child task whose `parent_task_uid` is set
- *  - `add_task_attachment` (URL kind, no disk write)
- *  - `update_task` with body / prompt / scope_path / file_specs and
- *    `affected_files` derived from `file_specs`
- *  - Plan export round-trip preserves the new fields + comments +
- *    attachments
+ * Rewritten onto V2 plan_items for Phase 32 §0.3b. The V1 file drove
+ * tools the V2 migration removed (claim_task, add_subtask, update_task,
+ * add_task_attachment, …; docs/V2-MCP-MIGRATION.md §6). Its header said
+ * plan-items.test.ts covered the V2 equivalents — checked scenario by
+ * scenario, three of seven were covered there and four were not:
+ *
+ *   covered in plan-items.test.ts          covered here
+ *   ─────────────────────────────          ─────────────────────────────
+ *   progress + blocked + comment kinds     claim_item returns full context
+ *   mixed Object/Action trees              child Action context + url
+ *   tool registry                            attachment + update file specs
+ *                                          export → import round-trip
+ *                                          REST endpoints match MCP
+ *
+ * No real LLM. No API keys. Fully offline.
  */
 
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
-import { setupHarness } from '../harness';
+import { setupHarness, type Harness } from '../harness';
+import type { ScriptedAgent } from '../harness/scripted-agent';
 
-interface TaskJson {
+interface ItemJson {
   uid: string;
-  description: string;
-  status: string;
+  planUid: string;
+  kind: string;
+  title: string;
+  status: string | null;
   body?: string | null;
-  prompt?: string | null;
   scopePath?: string | null;
-  fileSpecs?: Array<{ path: string; action: string; moveTo?: string }>;
-  affectedFiles?: string[];
-  parentTaskUid?: string | null;
+  fileSpecs?: Array<{ path: string; action: string; description?: string }>;
+  parentUid?: string | null;
   progressPercent?: number | null;
   blockedReason?: string | null;
 }
 
-function parseToolJson<T = unknown>(text: string): T {
+interface ContextJson {
+  ok?: boolean;
+  item: ItemJson;
+  parent: ItemJson | null;
+  children: ItemJson[];
+  attachments: Array<{ kind: string; value: string; label?: string | null }>;
+  comments: Array<{ kind: string; body: string; metadata?: { progressPercent?: number } | null }>;
+  criteria: unknown[];
+}
+
+function json<T>(text: string): T {
   return JSON.parse(text) as T;
 }
 
-/*
- * ─────────────────────────────────────────────────────────────────────────
- * SKIPPED — this file tests MCP tools that NO LONGER EXIST.
- *
- * The V2 MCP migration REMOVED (not deprecated) all 19 V1 plan tools:
- * claim_task, add_subtask, update_task, update_task_progress,
- * set_task_blocked, add_task_comment, add_task_attachment, get_next_task,
- * add_plan_doc, add_plan_phase and the rest. `create_plan` also no longer
- * accepts inline tasks, so `getPlan(...).tasks` comes back empty and every
- * assertion here fails on an empty array rather than on its own logic.
- *
- * See docs/V2-MCP-MIGRATION.md §6 for the removal list.
- *
- * KEPT, NOT DELETED, because the SCENARIOS are still worth covering — the
- * V1 plumbing underneath them is what went away. Whoever reseeds these onto
- * the V2 surface (add_item / bulk_add_items / claim_item) gets the intent
- * for free instead of rediscovering it.
- *
- * Coverage status: the V2 equivalents of these scenarios live in
- * plan-items.test.ts (add_item trees, read_item_full, update/move, delete +
- * restore, item comments/progress/blocked, get_plan_timeline). This file is
- * the V1 mirror of that surface, so nothing is currently uncovered.
- *
- * To re-enable: rewrite against the V2 tools, then change
- * `test.describe.skip` back to `test.describe`.
- * ─────────────────────────────────────────────────────────────────────────
- */
-test.describe.skip('Phase 14 §A — task-as-context MCP tools', () => {
+async function addItem(agent: ScriptedAgent, args: Record<string, unknown>): Promise<ItemJson> {
+  const res = await agent.callTool('add_item', args);
+  expect(res.isError, res.text).not.toBe(true);
+  return json<ItemJson>(res.text);
+}
+
+async function newPlan(h: Harness, title: string): Promise<string> {
+  const plan = await h.client.createPlan({ title, projectPath: h.fixture.projectPath });
+  return plan.uid;
+}
+
+test.describe('Item as context (V2)', () => {
   test.setTimeout(120_000);
 
-  test('create_plan + claim_task returns the full task context blob', async () => {
+  test('claim_item returns the full context of a rich Action in one round-trip', async () => {
     const h = await setupHarness('task-context-claim-full');
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const agent = await h.spawnAgent({ agentType: 'harness-claim' });
+      const planUid = await newPlan(h, 'Rich plan');
 
-      const create = await agent.callTool('create_plan', {
-        title: 'Rich plan',
-        description: 'Plan with one rich task',
-        project_path: h.fixture.projectPath,
-        tasks: [
-          {
-            description: 'Build the login form',
-            body: '## Why\nUsers need to log in.\n\n## Approach\nStandard email + password.',
-            prompt: 'Read the design doc, then create the form.',
-            scope_path: 'packages/web/src/',
-            file_specs: [
-              { path: 'auth/LoginForm.tsx', action: 'create', description: 'New form component' },
-              { path: 'api.ts', action: 'modify' },
-            ],
-          },
+      const action = await addItem(agent, {
+        plan_uid: planUid,
+        kind: 'action',
+        title: 'Build the login form',
+        body: '## Why\nUsers need to log in.\n\n## Approach\nStandard email + password.',
+        scope_path: 'packages/web/src/',
+        file_specs: [
+          { path: 'auth/LoginForm.tsx', action: 'create', description: 'New form component' },
+          { path: 'api.ts', action: 'modify' },
         ],
       });
-      expect(create.isError).toBeFalsy();
 
-      const plans = await h.client.listPlans();
-      const planSummary = plans.find((p) => p.title === 'Rich plan');
-      expect(planSummary).toBeDefined();
-      const detail = await h.client.getPlan(planSummary!.uid);
-      expect(detail.tasks).toHaveLength(1);
-      const taskUid = detail.tasks[0].uid;
-
-      // The DB-side task should already carry the new fields.
-      const task = detail.tasks[0] as unknown as TaskJson;
-      expect(task.body).toContain('## Why');
-      expect(task.prompt).toContain('Read the design doc');
-      expect(task.scopePath).toBe('packages/web/src/');
-      expect(task.fileSpecs).toEqual([
+      // The stored Action carries every rich field.
+      expect(action.body).toContain('## Why');
+      expect(action.scopePath).toBe('packages/web/src/');
+      expect(action.fileSpecs).toEqual([
         { path: 'auth/LoginForm.tsx', action: 'create', description: 'New form component' },
         { path: 'api.ts', action: 'modify' },
       ]);
-      // affectedFiles derived from fileSpecs.
-      expect(task.affectedFiles).toEqual(
-        expect.arrayContaining(['auth/LoginForm.tsx', 'api.ts']),
-      );
 
-      // claim_task returns the full context.
-      const claim = await agent.callTool('claim_task', {
-        plan_uid: planSummary!.uid,
-        task_uid: taskUid,
-        agent_type: 'harness-claim',
-      });
-      expect(claim.isError).toBeFalsy();
-      const claimResult = parseToolJson<{
-        ok: boolean;
-        task: TaskJson;
-        parent: unknown;
-        subtasks: unknown[];
-        phase: unknown;
-        attachments: unknown[];
-        comments: unknown[];
-      }>(claim.text);
-      expect(claimResult.ok).toBe(true);
-      expect(claimResult.task.uid).toBe(taskUid);
-      expect(claimResult.task.body).toContain('## Why');
-      expect(claimResult.subtasks).toEqual([]);
-      expect(claimResult.attachments).toEqual([]);
-      // Auto-created session_start broadcast doesn't seed comments.
-      expect(claimResult.comments).toEqual([]);
+      // claim_item hands the agent the whole context, not just an ack.
+      const claim = await agent.claimItem(action.uid);
+      expect(claim.isError).not.toBe(true);
+      const ctx = json<ContextJson>(claim.text);
+      expect(ctx.ok).toBe(true);
+      expect(ctx.item.uid).toBe(action.uid);
+      expect(ctx.item.body).toContain('## Why');
+      expect(ctx.item.fileSpecs).toHaveLength(2);
+      expect(ctx.parent).toBeNull();
+      expect(ctx.children).toEqual([]);
+      expect(ctx.attachments).toEqual([]);
+      expect(ctx.comments).toEqual([]);
+      expect(Array.isArray(ctx.criteria)).toBe(true);
     } finally {
       await h.teardown();
     }
   });
 
-  test('update_task_progress + set_task_blocked + add_task_comment round-trip', async () => {
-    const h = await setupHarness('task-context-progress-block');
+  test('a child Action sees its parent; url attachments and file-spec updates round-trip', async () => {
+    const h = await setupHarness('task-context-child-attach');
     try {
       await h.client.scanProject(h.fixture.projectPath);
-      const agent = await h.spawnAgent({ agentType: 'harness-prog' });
+      const agent = await h.spawnAgent({ agentType: 'harness-child' });
+      const planUid = await newPlan(h, 'Tree plan');
 
-      await agent.callTool('create_plan', {
-        title: 'Progress plan',
-        project_path: h.fixture.projectPath,
-        tasks: [{ description: 'Long task' }],
+      const parent = await addItem(agent, { plan_uid: planUid, kind: 'object', title: 'Auth' });
+      const child = await addItem(agent, {
+        plan_uid: planUid,
+        kind: 'action',
+        parent_uid: parent.uid,
+        title: 'Session refresh',
       });
-      const plans = await h.client.listPlans();
-      const plan = plans.find((p) => p.title === 'Progress plan')!;
-      const taskUid = (await h.client.getPlan(plan.uid)).tasks[0].uid;
+      expect(child.parentUid).toBe(parent.uid);
 
-      // Heartbeat at 25%, 50%.
-      const r1 = await agent.callTool('update_task_progress', {
-        task_uid: taskUid,
-        percent: 25,
-        message: 'Set up scaffold',
-      });
-      expect(r1.isError).toBeFalsy();
-      const r2 = await agent.callTool('update_task_progress', {
-        task_uid: taskUid,
-        percent: 50,
-        message: 'Backend wired',
-      });
-      expect(r2.isError).toBeFalsy();
-
-      // Read comments back — should have two progress entries.
-      const list = await agent.callTool('list_task_comments', { task_uid: taskUid });
-      const comments = parseToolJson<Array<{ kind: string; body: string; metadata?: { progressPercent?: number } }>>(list.text);
-      const progress = comments.filter((c) => c.kind === 'progress');
-      expect(progress).toHaveLength(2);
-      expect(progress.map((p) => p.metadata?.progressPercent)).toEqual([25, 50]);
-
-      // Add a question comment.
-      const q = await agent.callTool('add_task_comment', {
-        task_uid: taskUid,
-        kind: 'question',
-        body: 'Should we redirect to /home or /dashboard after login?',
-      });
-      expect(q.isError).toBeFalsy();
-
-      // Set blocked — status flips, blockedReason persists.
-      const block = await agent.callTool('set_task_blocked', {
-        task_uid: taskUid,
-        reason: 'Waiting on copy from design.',
-      });
-      expect(block.isError).toBeFalsy();
-
-      // The DB row should reflect status + blockedReason + progress.
-      const detail = await h.client.getPlan(plan.uid);
-      const t = detail.tasks[0] as unknown as TaskJson;
-      expect(t.status).toBe('blocked');
-      expect(t.blockedReason).toBe('Waiting on copy from design.');
-      expect(t.progressPercent).toBe(50);
-
-      // Final comment list: 2 progress + 1 question + 1 blocker.
-      const list2 = await agent.callTool('list_task_comments', { task_uid: taskUid });
-      const all = parseToolJson<Array<{ kind: string }>>(list2.text);
-      expect(all.filter((c) => c.kind === 'progress')).toHaveLength(2);
-      expect(all.filter((c) => c.kind === 'question')).toHaveLength(1);
-      expect(all.filter((c) => c.kind === 'blocker')).toHaveLength(1);
-    } finally {
-      await h.teardown();
-    }
-  });
-
-  test('add_subtask creates a child task with parent_task_uid set', async () => {
-    const h = await setupHarness('task-context-subtask');
-    try {
-      await h.client.scanProject(h.fixture.projectPath);
-      const agent = await h.spawnAgent({ agentType: 'harness-sub' });
-
-      await agent.callTool('create_plan', {
-        title: 'Sub plan',
-        project_path: h.fixture.projectPath,
-        tasks: [{ description: 'Parent task', scope_path: 'src/auth/' }],
-      });
-      const plan = (await h.client.listPlans()).find((p) => p.title === 'Sub plan')!;
-      const parentUid = (await h.client.getPlan(plan.uid)).tasks[0].uid;
-
-      const sub = await agent.callTool('add_subtask', {
-        parent_task_uid: parentUid,
-        description: 'Validate inputs',
-        body: 'Check email format before submit.',
-        file_specs: [{ path: 'validate.ts', action: 'create' }],
-      });
-      expect(sub.isError).toBeFalsy();
-      const subtask = parseToolJson<TaskJson>(sub.text);
-      expect(subtask.parentTaskUid).toBe(parentUid);
-      // scope_path should inherit from the parent when not overridden.
-      expect(subtask.scopePath).toBe('src/auth/');
-      expect(subtask.fileSpecs).toEqual([{ path: 'validate.ts', action: 'create' }]);
-
-      // read_task_full on the parent shows the subtask.
-      const full = await agent.callTool('read_task_full', { task_uid: parentUid });
-      const parentFull = parseToolJson<{ subtasks: TaskJson[] }>(full.text);
-      expect(parentFull.subtasks).toHaveLength(1);
-      expect(parentFull.subtasks[0].uid).toBe(subtask.uid);
-    } finally {
-      await h.teardown();
-    }
-  });
-
-  test('add_task_attachment (URL kind) + update_task with file_specs', async () => {
-    const h = await setupHarness('task-context-attach-update');
-    try {
-      await h.client.scanProject(h.fixture.projectPath);
-      const agent = await h.spawnAgent({ agentType: 'harness-attach' });
-
-      await agent.callTool('create_plan', {
-        title: 'Attach plan',
-        project_path: h.fixture.projectPath,
-        tasks: [{ description: 'Implement feature' }],
-      });
-      const plan = (await h.client.listPlans()).find((p) => p.title === 'Attach plan')!;
-      const taskUid = (await h.client.getPlan(plan.uid)).tasks[0].uid;
-
-      // Pin a URL.
-      const att = await agent.callTool('add_task_attachment', {
-        task_uid: taskUid,
+      // A URL attachment: recorded, no disk write.
+      const att = await agent.callTool('add_item_attachment', {
+        uid: child.uid,
         kind: 'url',
-        value: 'https://design.example/spec',
-        label: 'Design spec',
+        value: 'https://example.com/design',
+        label: 'Design',
       });
-      expect(att.isError).toBeFalsy();
+      expect(att.isError, att.text).not.toBe(true);
 
-      // update_task with body + prompt + scope_path + file_specs.
-      const upd = await agent.callTool('update_task', {
-        plan_uid: plan.uid,
-        task_uid: taskUid,
-        body: 'New body content',
-        prompt: 'Implement the feature using the design spec',
-        scope_path: 'packages/web/src/',
-        file_specs: [
-          { path: 'feature.ts', action: 'create' },
-          { path: 'feature.test.ts', action: 'create' },
-        ],
+      // update_item sets file specs after the fact.
+      const upd = await agent.callTool('update_item', {
+        uid: child.uid,
+        file_specs: [{ path: 'packages/web/src/api.ts', action: 'modify' }],
       });
-      expect(upd.isError).toBeFalsy();
+      expect(upd.isError, upd.text).not.toBe(true);
 
-      const full = await agent.callTool('read_task_full', { task_uid: taskUid });
-      const ctx = parseToolJson<{
-        task: TaskJson;
-        attachments: Array<{ kind: string; value: string; label?: string }>;
-      }>(full.text);
-      expect(ctx.task.body).toBe('New body content');
-      expect(ctx.task.prompt).toBe('Implement the feature using the design spec');
-      expect(ctx.task.scopePath).toBe('packages/web/src/');
-      expect(ctx.task.fileSpecs).toHaveLength(2);
-      expect(ctx.task.affectedFiles).toEqual(
-        expect.arrayContaining(['feature.ts', 'feature.test.ts']),
-      );
+      const claim = await agent.claimItem(child.uid);
+      const ctx = json<ContextJson>(claim.text);
+      expect(ctx.ok).toBe(true);
+      expect(ctx.parent?.uid).toBe(parent.uid);
+      expect(ctx.item.fileSpecs).toEqual([{ path: 'packages/web/src/api.ts', action: 'modify' }]);
       expect(ctx.attachments).toHaveLength(1);
-      expect(ctx.attachments[0].kind).toBe('url');
-      expect(ctx.attachments[0].value).toBe('https://design.example/spec');
-      expect(ctx.attachments[0].label).toBe('Design spec');
+      expect(ctx.attachments[0]).toMatchObject({ kind: 'url', value: 'https://example.com/design', label: 'Design' });
     } finally {
       await h.teardown();
     }
   });
 
-  test('plan export YAML round-trips body / prompt / fileSpecs / attachments / comments', async () => {
+  test('plan export → import round-trips body, file specs, attachments, comments and progress', async () => {
     const h = await setupHarness('task-context-export-roundtrip');
     try {
       await h.client.scanProject(h.fixture.projectPath);
       const agent = await h.spawnAgent({ agentType: 'harness-export' });
+      const planUid = await newPlan(h, 'Export plan');
 
-      // Build a richly-described plan via MCP.
-      await agent.callTool('create_plan', {
-        title: 'Export round-trip plan',
-        project_path: h.fixture.projectPath,
-        tasks: [
-          {
-            description: 'Rich task',
-            body: 'Body text',
-            prompt: 'Prompt text',
-            scope_path: 'src/',
-            file_specs: [{ path: 'a.ts', action: 'create' }],
-          },
-        ],
+      const action = await addItem(agent, {
+        plan_uid: planUid,
+        kind: 'action',
+        title: 'Portable work',
+        body: 'Body text',
+        scope_path: 'src/',
+        file_specs: [{ path: 'a.ts', action: 'create' }],
       });
-      const plan = (await h.client.listPlans()).find((p) => p.title === 'Export round-trip plan')!;
-      const taskUid = (await h.client.getPlan(plan.uid)).tasks[0].uid;
+      await agent.callTool('add_item_attachment', { uid: action.uid, kind: 'url', value: 'https://example.com/ref' });
+      await agent.callTool('add_item_comment', { uid: action.uid, kind: 'note', body: 'A note' });
+      const prog = await agent.callTool('update_item_progress', { uid: action.uid, percent: 33, message: 'A third' });
+      expect(prog.isError, prog.text).not.toBe(true);
 
-      // Add an attachment + a couple of comments.
-      await agent.callTool('add_task_attachment', {
-        task_uid: taskUid,
-        kind: 'url',
-        value: 'https://example.com/ref',
-        label: 'Reference',
-      });
-      await agent.callTool('add_task_comment', {
-        task_uid: taskUid,
-        kind: 'note',
-        body: 'Reminder: cover edge cases.',
-      });
-      await agent.callTool('update_task_progress', {
-        task_uid: taskUid,
-        percent: 33,
-        message: 'A third of the way.',
-      });
-
-      // Export to disk.
-      const exported = await h.client.exportPlan(plan.uid, h.fixture.projectPath);
-      const taskFiles = fs
-        .readdirSync(path.join(exported.planDir, 'tasks'))
-        .filter((f) => f.endsWith('.yaml'));
-      expect(taskFiles).toHaveLength(1);
-      const yamlText = fs.readFileSync(
-        path.join(exported.planDir, 'tasks', taskFiles[0]),
-        'utf-8',
-      );
-      const parsed = yaml.parse(yamlText);
+      // Export writes one YAML per item under items/.
+      const exported = await h.client.exportPlan(planUid, h.fixture.projectPath);
+      const itemsDir = path.join(exported.planDir, 'items');
+      const files = fs.readdirSync(itemsDir).filter((f) => f.endsWith('.yaml'));
+      expect(files).toHaveLength(1);
+      const parsed = yaml.parse(fs.readFileSync(path.join(itemsDir, files[0]), 'utf-8'));
+      expect(parsed.uid).toBe(action.uid);
       expect(parsed.body).toBe('Body text');
-      expect(parsed.prompt).toBe('Prompt text');
       expect(parsed.scopePath).toBe('src/');
       expect(parsed.fileSpecs).toEqual([{ path: 'a.ts', action: 'create' }]);
+      expect(parsed.progressPercent).toBe(33);
       expect(parsed.attachments).toHaveLength(1);
       expect(parsed.attachments[0].value).toBe('https://example.com/ref');
-      expect(parsed.comments.length).toBeGreaterThanOrEqual(2);
       const kinds = parsed.comments.map((c: { kind: string }) => c.kind);
       expect(kinds).toContain('note');
       expect(kinds).toContain('progress');
       const progressComment = parsed.comments.find((c: { kind: string }) => c.kind === 'progress');
       expect(progressComment.metadata?.progressPercent).toBe(33);
 
-      // Re-import (round-trip) — fields should survive.
-      // Copy the exported dir aside FIRST (before the unlink wipes
-      // it), then drop the in-DB plan, then re-import from the copy.
-      const transitDir = path.join(h.fixture.tmpDir, 'plan-transit-14a');
+      // Re-import, as a teammate pulling the plan would: copy it aside
+      // (unlink wipes the dir), drop the plan, put the files back where git
+      // would — inside the project's .codetrellis/plans/ — and import them.
+      // Imports are confined to plan dirs of opened projects (Phase 19), so
+      // importing straight from the temp copy is correctly refused.
+      const transitDir = path.join(h.fixture.tmpDir, 'plan-transit-v2');
       fs.cpSync(exported.planDir, transitDir, { recursive: true });
-      await h.client.unlinkPlan(plan.uid, h.fixture.projectPath);
-      await h.client.raw('DELETE', `/api/plans/${plan.uid}`);
+      await h.client.unlinkPlan(planUid, h.fixture.projectPath);
+      await h.client.raw('DELETE', `/api/plans/${planUid}`);
+      fs.cpSync(transitDir, exported.planDir, { recursive: true });
 
-      const reimported = await h.client.importPlan(transitDir);
-      expect(reimported.plan.uid).toBe(plan.uid);
-      const fresh = await h.client.getPlan(plan.uid);
-      const t = fresh.tasks[0] as unknown as TaskJson;
-      expect(t.body).toBe('Body text');
-      expect(t.prompt).toBe('Prompt text');
-      expect(t.scopePath).toBe('src/');
-      expect(t.fileSpecs).toEqual([{ path: 'a.ts', action: 'create' }]);
-      expect(t.progressPercent).toBe(33);
+      const reimported = await h.client.importPlan(exported.planDir);
+      expect(reimported.plan.uid).toBe(planUid);
+      const fullRes = await h.client.raw('GET', `/api/items/${action.uid}/full`);
+      expect(fullRes.ok).toBe(true);
+      const full = (await fullRes.json()) as ContextJson;
+      expect(full.item.body).toBe('Body text');
+      expect(full.item.scopePath).toBe('src/');
+      expect(full.item.fileSpecs).toEqual([{ path: 'a.ts', action: 'create' }]);
+      expect(full.item.progressPercent).toBe(33);
+      expect(full.attachments.map((a) => a.value)).toContain('https://example.com/ref');
+      expect(full.comments.map((c) => c.kind)).toEqual(expect.arrayContaining(['note', 'progress']));
     } finally {
       await h.teardown();
     }
   });
 
-  test('REST task-context endpoints (Phase 14 §B) round-trip the same way the MCP tools do', async () => {
-    const h = await setupHarness('task-context-rest-mirror');
+  test('REST item endpoints round-trip the same way the MCP tools do', async () => {
+    const h = await setupHarness('task-context-rest');
     try {
       await h.client.scanProject(h.fixture.projectPath);
+      const agent = await h.spawnAgent({ agentType: 'harness-rest' });
+      const planUid = await newPlan(h, 'REST plan');
+      const action = await addItem(agent, { plan_uid: planUid, kind: 'action', title: 'Through REST' });
 
-      // Build a plan with one rich task via REST.
-      const plan = await h.client.createPlan({
-        title: 'REST mirror plan',
-        projectPath: h.fixture.projectPath,
+      const comment = await h.client.raw('POST', `/api/items/${action.uid}/comments`, {
+        kind: 'question',
+        body: 'Redirect to /home or /dashboard?',
       });
-      const detail = await h.client.getPlan(plan.uid);
-      // No tasks initially — append one with the new fields via REST.
-      const taskRes = await h.client.raw('POST', `/api/plans/${plan.uid}/tasks`, {
-        description: 'Implement feature',
-        body: 'Why this matters',
-        prompt: 'Run the implementation',
-        scopePath: 'src/',
-        fileSpecs: [{ path: 'feature.ts', action: 'create' }],
-      });
-      expect(taskRes.ok).toBe(true);
-      const newTask = await taskRes.json();
-      expect(newTask.body).toBe('Why this matters');
-      expect(newTask.prompt).toBe('Run the implementation');
-      expect(newTask.scopePath).toBe('src/');
-      expect(newTask.fileSpecs).toEqual([{ path: 'feature.ts', action: 'create' }]);
+      expect(comment.ok).toBe(true);
 
-      // /api/tasks/:taskUid/full
-      const fullRes = await h.client.raw('GET', `/api/tasks/${newTask.uid}/full`);
-      expect(fullRes.ok).toBe(true);
-      const full = await fullRes.json();
-      expect(full.task.uid).toBe(newTask.uid);
-      expect(full.subtasks).toEqual([]);
-      expect(full.attachments).toEqual([]);
-      expect(full.comments).toEqual([]);
+      const progress = await h.client.raw('POST', `/api/items/${action.uid}/progress`, { percent: 50, message: 'Half' });
+      expect(progress.ok).toBe(true);
 
-      // POST attachment
-      const attRes = await h.client.raw('POST', `/api/tasks/${newTask.uid}/attachments`, {
+      const attach = await h.client.raw('POST', `/api/items/${action.uid}/attachments`, {
         kind: 'url',
         value: 'https://example.com/spec',
-        label: 'Spec link',
       });
-      expect(attRes.ok).toBe(true);
+      expect(attach.ok).toBe(true);
 
-      // POST comment
-      const commentRes = await h.client.raw('POST', `/api/tasks/${newTask.uid}/comments`, {
-        kind: 'note',
-        body: 'A reminder.',
-      });
-      expect(commentRes.ok).toBe(true);
+      const blocked = await h.client.raw('POST', `/api/items/${action.uid}/blocked`, { reason: 'Waiting on copy.' });
+      expect(blocked.ok).toBe(true);
 
-      // POST progress
-      const progressRes = await h.client.raw('POST', `/api/tasks/${newTask.uid}/progress`, {
-        percent: 42,
-        message: 'Almost halfway',
-      });
-      expect(progressRes.ok).toBe(true);
+      // What REST wrote, MCP reads — and the other way round.
+      const viaMcp = json<ContextJson>((await agent.callTool('read_item_full', { uid: action.uid })).text);
+      expect(viaMcp.item.status).toBe('blocked');
+      expect(viaMcp.item.blockedReason).toBe('Waiting on copy.');
+      expect(viaMcp.item.progressPercent).toBe(50);
+      expect(viaMcp.comments.map((c) => c.kind)).toEqual(expect.arrayContaining(['question', 'progress']));
+      expect(viaMcp.attachments.map((a) => a.value)).toContain('https://example.com/spec');
 
-      // POST blocked
-      const blockedRes = await h.client.raw('POST', `/api/tasks/${newTask.uid}/blocked`, {
-        reason: 'Need design approval',
-      });
-      expect(blockedRes.ok).toBe(true);
+      await agent.callTool('add_item_comment', { uid: action.uid, kind: 'note', body: 'From MCP' });
+      const listRes = await h.client.raw('GET', `/api/items/${action.uid}/comments`);
+      expect(listRes.ok).toBe(true);
+      const listed = (await listRes.json()) as Array<{ body: string }>;
+      expect(listed.map((c) => c.body)).toContain('From MCP');
 
-      // POST subtask
-      const subRes = await h.client.raw('POST', `/api/tasks/${newTask.uid}/subtasks`, {
-        description: 'Validate inputs',
-      });
-      expect(subRes.ok).toBe(true);
-
-      // /full now contains everything
-      const fullAfter = await (await h.client.raw('GET', `/api/tasks/${newTask.uid}/full`)).json();
-      expect(fullAfter.task.status).toBe('blocked');
-      expect(fullAfter.task.blockedReason).toBe('Need design approval');
-      expect(fullAfter.task.progressPercent).toBe(42);
-      expect(fullAfter.attachments).toHaveLength(1);
-      expect(fullAfter.subtasks).toHaveLength(1);
-      // Comments include the explicit note + auto-generated progress + auto-generated blocker.
-      const commentKinds = (fullAfter.comments as Array<{ kind: string }>).map((c) => c.kind);
-      expect(commentKinds).toEqual(expect.arrayContaining(['note', 'progress', 'blocker']));
-
-      // Sanity: getPlan still returns the parent task with the new fields.
-      const finalPlan = await h.client.getPlan(plan.uid);
-      expect(finalPlan.tasks.length).toBe(2); // parent + subtask
-      const parent = finalPlan.tasks.find((t: { uid: string }) => t.uid === newTask.uid)!;
-      expect(parent.status).toBe('blocked');
-      expect((parent as unknown as { progressPercent: number }).progressPercent).toBe(42);
-
-      // Use original detail to ensure the test compiles even if listed.
-      void detail;
-    } finally {
-      await h.teardown();
-    }
-  });
-
-  test('lists every new tool in the MCP tool registry', async () => {
-    const h = await setupHarness('task-context-tool-registry');
-    try {
-      const agent = await h.spawnAgent({ agentType: 'harness-tools' });
-      const tools = await agent.mcp.listTools();
-      const names = new Set(tools.map((t) => t.name));
-      for (const expected of [
-        'read_task_full',
-        'list_task_comments',
-        'add_task_comment',
-        'update_task_progress',
-        'set_task_blocked',
-        'add_subtask',
-        'add_task_attachment',
-      ]) {
-        expect(names.has(expected), `missing tool: ${expected}`).toBe(true);
-      }
+      // Validation is the same shape on both sides: bad input is refused.
+      const badProgress = await h.client.raw('POST', `/api/items/${action.uid}/progress`, { percent: 150 });
+      expect(badProgress.status).toBe(400);
+      const noReason = await h.client.raw('POST', `/api/items/${action.uid}/blocked`, {});
+      expect(noReason.status).toBe(400);
     } finally {
       await h.teardown();
     }

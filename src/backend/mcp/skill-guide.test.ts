@@ -134,3 +134,38 @@ describe('the guide tells an agent what to offer, and what it may be refused', (
     }
   });
 });
+
+describe('the guide documents arguments the tools actually take', () => {
+  // Phase 32 §0.6 found 21 guide entries naming parameters a tool does not
+  // accept — `claim_item(item_uid)` for a tool that takes `uid`, the
+  // history tools taking `plan_slug` documented as `plan_uid`. An agent
+  // following the guide gets a validation error and has to guess. The
+  // argument names come from what the server REGISTERS, not from a list.
+  //
+  // Convention checked: in `name(a, b?, c=value)` each token before `?`,
+  // `=` or `:` is an argument name. Write example values as `arg=value`.
+  test('every `tool(args)` in every flavour names only real arguments', async () => {
+    const mcp = await import('./server');
+    mcp.enumerateRegisteredTools();
+    const args = mcp.listRegisteredToolArgs();
+    assert.ok(args.size > 100, `only ${args.size} tools registered — the probe did not run`);
+
+    const wrong: string[] = [];
+    let checked = 0;
+    for (const flavour of FLAVOURS) {
+      for (const m of buildSkillGuide(flavour).matchAll(/`([a-z_][a-z0-9_]*)\(([^)`]*)\)`/g)) {
+        const known = args.get(m[1]);
+        if (!known) continue; // not a tool call (a function name in prose, say)
+        checked++;
+        const used = m[2]
+          .split(',')
+          .map((part) => part.trim().split(/[?=:]/)[0].trim())
+          .filter((name) => /^[a-z_][a-z0-9_]*$/.test(name));
+        const unknown = used.filter((name) => !known.includes(name));
+        if (unknown.length) wrong.push(`${flavour}: ${m[0]} — no such argument ${unknown.join(', ')} (takes ${known.join(', ') || 'nothing'})`);
+      }
+    }
+    assert.ok(checked > 100, `only ${checked} documented calls were checked — the pattern stopped matching`);
+    assert.deepEqual(wrong, []);
+  });
+});

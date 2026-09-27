@@ -16,7 +16,7 @@ import {
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -87,6 +87,9 @@ export function MainCanvas() {
   const setBaselineMode = useGraphStore((s) => s.setBaselineMode);
   const baselineCommitHash = useGraphStore((s) => s.baselineCommitHash);
   const baselineShortCommitHash = useGraphStore((s) => s.baselineShortCommitHash);
+  // The backend's own words for the baseline (§0.4h): "abc1234", or
+  // "abc1234 + uncommitted changes" for a tree that was not that commit.
+  const [baselineText, setBaselineText] = useState<string | null>(null);
   const setBaselineReference = useGraphStore((s) => s.setBaselineReference);
   const currentSnapshot = useGraphStore((s) => s.currentSnapshot);
   const setCurrentSnapshot = useGraphStore((s) => s.setCurrentSnapshot);
@@ -188,12 +191,23 @@ export function MainCanvas() {
             commitHash: snapshot.commitHash ?? null,
             shortCommitHash: snapshot.shortCommitHash ?? null,
           });
+          setBaselineText(typeof snapshot.label === 'string' ? snapshot.label : null);
           return;
         }
         setCurrentSnapshot(null);
+        setBaselineText(null);
       })
       .catch(() => setCurrentSnapshot(null));
   }, [setBaselineReference, setCurrentSnapshot]);
+
+  // An agent's set_baseline, or a capture from another window: read the
+  // baseline back rather than trusting a hash in the broadcast, which is
+  // how the label came to say one commit while the diff used another.
+  useEffect(() => {
+    const onChanged = () => fetchBaselineSnapshot();
+    window.addEventListener('baseline-changed', onChanged);
+    return () => window.removeEventListener('baseline-changed', onChanged);
+  }, [fetchBaselineSnapshot]);
 
   /**
    * Phase 29 §4.16 — capture a trellis checkpoint for the active plan.
@@ -265,6 +279,7 @@ export function MainCanvas() {
             commitHash: snapshot.commitHash ?? null,
             shortCommitHash: snapshot.shortCommitHash ?? null,
           });
+          setBaselineText(typeof snapshot.label === 'string' ? snapshot.label : null);
         }
       })
       .catch(() => {});
@@ -1049,258 +1064,272 @@ export function MainCanvas() {
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
-        {viewDepth === 'symbol' && (
-          <Panel position="top-left">
-            <div
-              data-testid="symbols-status"
-              className="rounded-lg border border-white/[0.08] bg-[#0b1120]/90 px-3 py-1.5 text-[11px] text-zinc-300"
-            >
-              {!symbolsStatus && 'Symbols: click a file to see what it defines.'}
-              {symbolsStatus?.state === 'loading' && `Loading symbols in ${symbolsStatus.path.split('/').pop()}…`}
-              {symbolsStatus?.state === 'error' && (
-                <span className="text-amber-300">Couldn&apos;t load symbols for {symbolsStatus.path.split('/').pop()}. Try Rescan.</span>
-              )}
-              {symbolsStatus?.state === 'ready' && (symbolsStatus.count === 0
-                ? `${symbolsStatus.path.split('/').pop()} has no top-level symbols. Click another file.`
-                : `${symbolsStatus.count} symbol${symbolsStatus.count === 1 ? '' : 's'} in ${symbolsStatus.path.split('/').pop()} · click another file to switch`)}
-            </div>
-          </Panel>
-        )}
-
-        <Panel position="top-right">
-          <div className="flex max-w-[min(880px,calc(100vw-620px))] flex-wrap items-center justify-end gap-2">
-            {/* Trellis mode selector */}
-            <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
-              {([
-                { mode: 'live' as const, icon: Radio, label: 'Live', color: 'text-green-400' },
-                { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-blue-400' },
-                { mode: 'planned' as const, icon: Target, label: 'Planned', color: 'text-amber-400' },
-                { mode: 'diff' as const, icon: GitCompare, label: 'Diff', color: 'text-violet-400' },
-              ] as const).map(({ mode, icon: Icon, label, color }) => (
-                <button
-                  key={mode}
-                  onClick={() => setTrellisMode(mode)}
-                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
-                    trellisMode === mode
-                      ? `bg-white/[0.08] ${color} shadow-[0_0_6px_currentColor]`
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
-                  title={`${label} view`}
+        {/* One row across the top of the canvas: what changed on the left,
+            the view controls on the right. They used to be two Panels that
+            knew nothing of each other, so the controls wrapped leftwards
+            under the change summary and hid the baseline picker at every
+            window width (Phase 32 §0.5). The row itself lets pointer
+            events through to the graph; only its two halves take them. */}
+        <Panel position="top-right" style={{ left: 0 }} className="pointer-events-none">
+          <div className="flex items-start justify-between gap-3">
+            <div className="pointer-events-auto flex shrink-0 flex-col items-start gap-2">
+              <DiffSummary
+                trellisMode={trellisMode}
+                diff={activeDiff}
+                progress={snapshotDiff?.progress}
+                gitStatus={diffData?.git || null}
+                planSummary={summarizePlanVsLive(activeDiff, projectionData)}
+                snapshotName={currentSnapshot?.name}
+              />
+              {viewDepth === 'symbol' && (
+                <div
+                  data-testid="symbols-status"
+                  className="rounded-lg border border-white/[0.08] bg-[#0b1120]/90 px-3 py-1.5 text-[11px] text-zinc-300"
                 >
-                  <Icon size={11} />
-                  {label}
-                </button>
-              ))}
+                  {!symbolsStatus && 'Symbols: click a file to see what it defines.'}
+                  {symbolsStatus?.state === 'loading' && `Loading symbols in ${symbolsStatus.path.split('/').pop()}…`}
+                  {symbolsStatus?.state === 'error' && (
+                    <span className="text-amber-300">Couldn&apos;t load symbols for {symbolsStatus.path.split('/').pop()}. Try Rescan.</span>
+                  )}
+                  {symbolsStatus?.state === 'ready' && (symbolsStatus.count === 0
+                    ? `${symbolsStatus.path.split('/').pop()} has no top-level symbols. Click another file.`
+                    : `${symbolsStatus.count} symbol${symbolsStatus.count === 1 ? '' : 's'} in ${symbolsStatus.path.split('/').pop()} · click another file to switch`)}
+                </div>
+              )}
             </div>
-
-            {/* Card style. Glass is the frosted, glowing look; Performance
-                draws the same status as bold outlines and pans smoothly
-                on large graphs. Also in Settings → Appearance. */}
-            <button
-              onClick={() => setGraphStyle(graphStyle === 'performance' ? 'glass' : 'performance')}
-              className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200 hover:border-white/15"
-              title={graphStyle === 'performance'
-                ? 'Performance style: status shown as bold outlines. Click for Glass (frosted cards, glows — slower on large graphs)'
-                : 'Glass style: frosted cards and glows. Click for Performance (bold outlines, smooth on large graphs)'}
-              data-testid="graph-style-toggle"
-            >
-              {graphStyle === 'performance' ? <Zap size={11} /> : <Sparkles size={11} />}
-              {graphStyle === 'performance' ? 'Performance' : 'Glass'}
-            </button>
-
-            {/* Phase 29 §4.16 — give Diff mode something of your own to
-                compare against. Only shown with a plan open, because a
-                checkpoint is scoped to one. */}
-            {activePlanUid && (
-              <button
-                onClick={captureTrellisCheckpoint}
-                disabled={capturingTrellis}
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] text-zinc-400 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all hover:text-zinc-200 hover:border-white/15 disabled:opacity-50"
-                title="Capture the architecture as it stands now, as a checkpoint for this plan. Diff mode compares against the newest one."
-              >
-                <Camera size={11} />
-                {capturingTrellis ? 'Capturing…' : 'Checkpoint'}
-              </button>
-            )}
-
-            <div className="flex min-w-0 shrink items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
-              <button
-                onClick={() => {
-                  setBaselineMode('pinned');
-                  captureBaseline();
-                }}
-                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${baselineMode === 'pinned' ? 'bg-blue-500/14 text-blue-200' : 'text-zinc-400 hover:text-zinc-200'}`}
-                title="Pin baseline to the current commit/state"
-              >
-                Pin
-              </button>
-              <button
-                onClick={() => setBaselineMode('auto')}
-                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${baselineMode === 'auto' ? 'bg-emerald-500/14 text-emerald-200' : 'text-zinc-400 hover:text-zinc-200'}`}
-                title="Automatically move baseline forward when HEAD advances cleanly"
-              >
-                Auto-track
-              </button>
-              <span className="rounded-md border border-white/8 bg-black/12 px-2 py-1 text-[10px] text-zinc-300">
-                {baselineMode === 'auto' ? 'HEAD' : baselineShortCommitHash ? baselineShortCommitHash : 'baseline'}
-              </span>
-              <select
-                value={baselineMode === 'auto' ? '__AUTO__' : (baselineCommitHash || '__CURRENT__')}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === '__AUTO__') {
-                    setBaselineMode('auto');
-                    return;
-                  }
-
-                  setBaselineMode('pinned');
-                  if (value === '__CURRENT__') {
-                    captureBaseline();
-                    return;
-                  }
-                  captureBaseline(value);
-                }}
-                className="w-[140px] rounded-md border border-white/8 bg-black/20 px-2 py-1 text-[10px] text-zinc-200 outline-none transition-all hover:border-white/15 sm:w-[180px] lg:w-[240px] xl:w-[320px]"
-                title="Choose which commit the baseline should be pinned to"
-              >
-                <option value="__AUTO__">Track HEAD</option>
-                <option value="__CURRENT__">Pin current HEAD</option>
-                {commitsState === 'loading' && (
-                  <option disabled value="__LOADING__">Loading recent commits...</option>
-                )}
-                {commitsState === 'error' && (
-                  <option disabled value="__ERROR__">Recent commits unavailable</option>
-                )}
-                {commitsState === 'ready' && recentCommits.length === 0 && (
-                  <option disabled value="__EMPTY__">No recent commits found</option>
-                )}
-                {recentCommits.map((commit) => (
-                  <option key={commit.commitHash} value={commit.commitHash}>
-                    {commit.shortCommitHash} · {commit.subject} · {commit.committedAt}
-                  </option>
+            <div className="pointer-events-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+              {/* Trellis mode selector */}
+              <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+                {([
+                  { mode: 'live' as const, icon: Radio, label: 'Live', color: 'text-green-400' },
+                  { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-blue-400' },
+                  { mode: 'planned' as const, icon: Target, label: 'Planned', color: 'text-amber-400' },
+                  { mode: 'diff' as const, icon: GitCompare, label: 'Diff', color: 'text-violet-400' },
+                ] as const).map(({ mode, icon: Icon, label, color }) => (
+                  <button
+                    key={mode}
+                    onClick={() => setTrellisMode(mode)}
+                    aria-pressed={trellisMode === mode}
+                    className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
+                      trellisMode === mode
+                        ? `bg-white/[0.08] ${color} shadow-[0_0_6px_currentColor]`
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    title={`${label} view`}
+                  >
+                    <Icon size={11} />
+                    {label}
+                  </button>
                 ))}
-              </select>
-            </div>
+              </div>
 
-            {/* Scope picker — limit graph to one system / dir */}
-            <div
-              className={`flex shrink-0 items-center gap-1 rounded-lg border p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
-                scopePath ? 'border-accent/40 bg-accent/10' : 'border-white/[0.08] bg-white/[0.03]'
-              }`}
-              title="Filter the graph to a single system / directory"
-            >
-              <Filter size={11} className={`ml-1.5 ${scopePath ? 'text-accent' : 'text-zinc-400'}`} />
-              <select
-                value={scopePath ?? ''}
-                onChange={(e) => setScopePath(e.target.value || null)}
-                className={`bg-transparent border-0 px-1 py-1 text-[10px] outline-none cursor-pointer max-w-[180px] ${
-                  scopePath ? 'text-accent' : 'text-zinc-300'
-                }`}
+              {/* Card style. Glass is the frosted, glowing look; Performance
+                  draws the same status as bold outlines and pans smoothly
+                  on large graphs. Also in Settings → Appearance. */}
+              <button
+                onClick={() => setGraphStyle(graphStyle === 'performance' ? 'glass' : 'performance')}
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200 hover:border-white/15"
+                title={graphStyle === 'performance'
+                  ? 'Performance style: status shown as bold outlines. Click for Glass (frosted cards, glows — slower on large graphs)'
+                  : 'Glass style: frosted cards and glows. Click for Performance (bold outlines, smooth on large graphs)'}
+                data-testid="graph-style-toggle"
               >
-                <option value="" className="bg-[#0b1020]">All systems</option>
-                {systems.length > 0 && (
-                  <optgroup label="Discovered systems" className="bg-[#0b1020]">
-                    {systems
-                      .filter((s) => s.relativeRoot)
-                      .map((s) => (
-                        <option key={s.id} value={s.relativeRoot} className="bg-[#0b1020]">
-                          {s.relativeRoot} {s.packageName ? `· ${s.packageName}` : ''} · {s.language}
-                        </option>
-                      ))}
-                  </optgroup>
-                )}
-              </select>
-              {scopePath && (
+                {graphStyle === 'performance' ? <Zap size={11} /> : <Sparkles size={11} />}
+                {graphStyle === 'performance' ? 'Performance' : 'Glass'}
+              </button>
+
+              {/* Phase 29 §4.16 — give Diff mode something of your own to
+                  compare against. Only shown with a plan open, because a
+                  checkpoint is scoped to one. */}
+              {activePlanUid && (
                 <button
-                  onClick={() => setScopePath(null)}
-                  className="px-1.5 text-[10px] text-accent hover:text-foreground transition-colors"
-                  title="Clear scope"
+                  onClick={captureTrellisCheckpoint}
+                  disabled={capturingTrellis}
+                  className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] text-zinc-400 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all hover:text-zinc-200 hover:border-white/15 disabled:opacity-50"
+                  title="Capture the architecture as it stands now, as a checkpoint for this plan. Diff mode compares against the newest one."
                 >
-                  ×
+                  <Camera size={11} />
+                  {capturingTrellis ? 'Capturing…' : 'Checkpoint'}
                 </button>
               )}
-            </div>
 
-            {/* Layout toggle */}
-            <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
-              <button
-                onClick={() => setLayoutMode('map')}
-                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
-                  layoutMode === 'map' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-                title="Map view (force-directed)"
-              >
-                <Network size={11} />
-                Map
-              </button>
-              <button
-                onClick={() => setLayoutMode('tree')}
-                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
-                  layoutMode === 'tree' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-                title="Tree view (hierarchical)"
-              >
-                <GitFork size={11} />
-                Tree
-              </button>
-            </div>
+              <div className="flex min-w-0 shrink items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+                <button
+                  onClick={() => {
+                    setBaselineMode('pinned');
+                    captureBaseline();
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${baselineMode === 'pinned' ? 'bg-blue-500/14 text-blue-200' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  title="Pin baseline to the current commit/state"
+                >
+                  Pin
+                </button>
+                <button
+                  onClick={() => setBaselineMode('auto')}
+                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${baselineMode === 'auto' ? 'bg-emerald-500/14 text-emerald-200' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  title="Automatically move baseline forward when HEAD advances cleanly"
+                >
+                  Auto-track
+                </button>
+                <span
+                  className="rounded-md border border-white/8 bg-black/12 px-2 py-1 text-[10px] text-zinc-300"
+                  data-testid="baseline-label"
+                  title="What the diff compares against"
+                >
+                  {baselineMode === 'auto'
+                    ? `HEAD${baselineText ? ` · ${baselineText}` : ''}`
+                    : baselineText ?? baselineShortCommitHash ?? 'baseline'}
+                </span>
+                <select
+                  value={baselineMode === 'auto' ? '__AUTO__' : (baselineCommitHash || '__CURRENT__')}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (value === '__AUTO__') {
+                      setBaselineMode('auto');
+                      return;
+                    }
 
-            {activePlanUid && (
-              <button
-                onClick={toggleProjection}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg backdrop-blur-md border transition-all shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
-                  projectionEnabled
-                    ? 'bg-accent/20 border-accent/30 text-accent shadow-[0_0_12px_rgba(59,130,246,0.2)]'
-                    : 'bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]'
+                    setBaselineMode('pinned');
+                    if (value === '__CURRENT__') {
+                      captureBaseline();
+                      return;
+                    }
+                    captureBaseline(value);
+                  }}
+                  className="w-[140px] rounded-md border border-white/8 bg-black/20 px-2 py-1 text-[10px] text-zinc-200 outline-none transition-all hover:border-white/15 sm:w-[180px] lg:w-[240px] xl:w-[320px]"
+                  title="Choose which commit the baseline should be pinned to"
+                >
+                  <option value="__AUTO__">Track HEAD</option>
+                  <option value="__CURRENT__">Pin current HEAD</option>
+                  {commitsState === 'loading' && (
+                    <option disabled value="__LOADING__">Loading recent commits...</option>
+                  )}
+                  {commitsState === 'error' && (
+                    <option disabled value="__ERROR__">Recent commits unavailable</option>
+                  )}
+                  {commitsState === 'ready' && recentCommits.length === 0 && (
+                    <option disabled value="__EMPTY__">No recent commits found</option>
+                  )}
+                  {recentCommits.map((commit) => (
+                    <option key={commit.commitHash} value={commit.commitHash}>
+                      {commit.shortCommitHash} · {commit.subject} · {commit.committedAt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Scope picker — limit graph to one system / dir */}
+              <div
+                className={`flex shrink-0 items-center gap-1 rounded-lg border p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
+                  scopePath ? 'border-accent/40 bg-accent/10' : 'border-white/[0.08] bg-white/[0.03]'
                 }`}
-                title={projectionEnabled ? 'Hide plan projection' : 'Show plan projection on graph'}
+                title="Filter the graph to a single system / directory"
               >
-                <Layers size={12} />
-                Projection
-              </button>
-            )}
-            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
-              <button
-                onClick={() => setAutoRefreshEnabled((value) => !value)}
-                className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${autoRefreshEnabled ? 'text-green-300 bg-green-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
-                title={autoRefreshEnabled ? 'Pause automatic refresh checks' : 'Resume automatic refresh checks'}
-              >
-                {autoRefreshEnabled ? <Pause size={11} /> : <Play size={11} />}
-                {autoRefreshEnabled ? 'Auto' : 'Paused'}
-              </button>
-              <button
-                onClick={refreshWorkingTreeDiff}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md text-zinc-400 transition-all hover:text-zinc-200"
-                title="Check for changes now"
-              >
-                <RefreshCw size={11} />
-                Check now
-              </button>
-              <select
-                value={refreshIntervalMs}
-                onChange={(event) => setRefreshIntervalMs(Number(event.target.value))}
-                className="rounded-md border-0 bg-transparent px-2 py-1 text-[10px] text-zinc-300 outline-none"
-                title="Automatic refresh interval"
-              >
-                <option value={5000}>5s</option>
-                <option value={10000}>10s</option>
-                <option value={30000}>30s</option>
-              </select>
-            </div>
-            <div className="shrink-0">
-              <ExportButton />
+                <Filter size={11} className={`ml-1.5 ${scopePath ? 'text-accent' : 'text-zinc-400'}`} />
+                <select
+                  value={scopePath ?? ''}
+                  onChange={(e) => setScopePath(e.target.value || null)}
+                  className={`bg-transparent border-0 px-1 py-1 text-[10px] outline-none cursor-pointer max-w-[180px] ${
+                    scopePath ? 'text-accent' : 'text-zinc-300'
+                  }`}
+                >
+                  <option value="" className="bg-[#0b1020]">All systems</option>
+                  {systems.length > 0 && (
+                    <optgroup label="Discovered systems" className="bg-[#0b1020]">
+                      {systems
+                        .filter((s) => s.relativeRoot)
+                        .map((s) => (
+                          <option key={s.id} value={s.relativeRoot} className="bg-[#0b1020]">
+                            {s.relativeRoot} {s.packageName ? `· ${s.packageName}` : ''} · {s.language}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                </select>
+                {scopePath && (
+                  <button
+                    onClick={() => setScopePath(null)}
+                    className="px-1.5 text-[10px] text-accent hover:text-foreground transition-colors"
+                    title="Clear scope"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Layout toggle */}
+              <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+                <button
+                  onClick={() => setLayoutMode('map')}
+                  aria-pressed={layoutMode === 'map'}
+                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
+                    layoutMode === 'map' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="Map view (force-directed)"
+                >
+                  <Network size={11} />
+                  Map
+                </button>
+                <button
+                  onClick={() => setLayoutMode('tree')}
+                  aria-pressed={layoutMode === 'tree'}
+                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
+                    layoutMode === 'tree' ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="Tree view (hierarchical)"
+                >
+                  <GitFork size={11} />
+                  Tree
+                </button>
+              </div>
+
+              {activePlanUid && (
+                <button
+                  onClick={toggleProjection}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg backdrop-blur-md border transition-all shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
+                    projectionEnabled
+                      ? 'bg-accent/20 border-accent/30 text-accent shadow-[0_0_12px_rgba(59,130,246,0.2)]'
+                      : 'bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]'
+                  }`}
+                  title={projectionEnabled ? 'Hide plan projection' : 'Show plan projection on graph'}
+                >
+                  <Layers size={12} />
+                  Projection
+                </button>
+              )}
+              <div className="flex shrink-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.3)]">
+                <button
+                  onClick={() => setAutoRefreshEnabled((value) => !value)}
+                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${autoRefreshEnabled ? 'text-green-300 bg-green-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  title={autoRefreshEnabled ? 'Pause automatic refresh checks' : 'Resume automatic refresh checks'}
+                >
+                  {autoRefreshEnabled ? <Pause size={11} /> : <Play size={11} />}
+                  {autoRefreshEnabled ? 'Auto' : 'Paused'}
+                </button>
+                <button
+                  onClick={refreshWorkingTreeDiff}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md text-zinc-400 transition-all hover:text-zinc-200"
+                  title="Check for changes now"
+                >
+                  <RefreshCw size={11} />
+                  Check now
+                </button>
+                <select
+                  value={refreshIntervalMs}
+                  onChange={(event) => setRefreshIntervalMs(Number(event.target.value))}
+                  className="rounded-md border-0 bg-transparent px-2 py-1 text-[10px] text-zinc-300 outline-none"
+                  title="Automatic refresh interval"
+                >
+                  <option value={5000}>5s</option>
+                  <option value={10000}>10s</option>
+                  <option value={30000}>30s</option>
+                </select>
+              </div>
+              <div className="shrink-0">
+                <ExportButton />
+              </div>
             </div>
           </div>
-        </Panel>
-        <Panel position="top-left">
-          <DiffSummary
-            trellisMode={trellisMode}
-            diff={activeDiff}
-            progress={snapshotDiff?.progress}
-            gitStatus={diffData?.git || null}
-            planSummary={summarizePlanVsLive(activeDiff, projectionData)}
-            snapshotName={currentSnapshot?.name}
-          />
         </Panel>
 
         {/* Phase 17.C — Multi-select action bar (must be inside ReactFlow for useReactFlow()) */}
@@ -1708,92 +1737,83 @@ function DiffSummary({
   const isPlanned = trellisMode === 'planned';
   const isDiff = trellisMode === 'diff';
 
+  // Quiet by default (Phase 32 §0.5): one line that says what changed, and
+  // the breakdown behind it. The breakdown used to be open all the time —
+  // two rows of chips, zeros included, "0 removed" in red — and it was big
+  // enough to sit over the canvas toolbar.
+  const [open, setOpen] = useState(false);
+
   if (!hasDiff && !hasGitStatus && !isDiff && !(isPlanned && planSummary)) return null;
 
+  const frame = isDiff
+    ? planSummary ? 'Plan vs live' : 'Baseline vs live'
+    : isPlanned
+      ? 'Planned'
+      : trellisMode === 'current'
+        ? 'Baseline'
+        : 'Working tree';
+  const headline = isDiff
+    ? planSummary
+      ? 'Live work against the plan'
+      : 'Live workspace against the baseline'
+    : isPlanned && planSummary
+      ? `${planSummary.planned} planned change${planSummary.planned === 1 ? '' : 's'}`
+      : totalChangedFiles > 0
+        ? `${totalChangedFiles} change${totalChangedFiles === 1 ? '' : 's'}`
+        : 'No changes yet';
+
+  const chip = (count: number, label: string, tone: string) => count > 0 && (
+    <span className={`rounded-full border px-2 py-0.5 ${tone}`}>{count} {label}</span>
+  );
+
   return (
-    <div className="min-w-[220px] rounded-xl border border-white/[0.08] bg-[#0b1020]/80 px-3 py-2.5 backdrop-blur-md shadow-[0_0_18px_rgba(0,0,0,0.35)]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-            {isDiff
-              ? planSummary ? 'Plan vs Live' : 'Baseline vs Live'
-              : isPlanned
-                ? 'Planned Target'
-                : trellisMode === 'current'
-                  ? 'Baseline Reference'
-                  : 'Working Tree Changes'}
-          </div>
-          <div className="mt-1 text-[12px] font-medium text-zinc-100">
-            {isDiff
-              ? planSummary
-                ? 'Monitoring live work against the plan'
-                : 'Comparing live workspace to the baseline'
-              : isPlanned && planSummary
-                ? `${planSummary.planned} planned changes`
-                : totalChangedFiles > 0
-                  ? `${totalChangedFiles} changes detected`
-                  : 'No tracked changes yet'}
-          </div>
+    <div data-testid="diff-summary" className="rounded-lg border border-white/[0.08] bg-[#0b1020]/85 backdrop-blur-md shadow-[0_0_12px_rgba(0,0,0,0.3)]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px]"
+        title={open ? 'Hide the breakdown' : 'Show the breakdown'}
+      >
+        <span className="text-zinc-500">{frame}</span>
+        <span className="font-medium text-zinc-100">{headline}</span>
+        {typeof progress === 'number' && <span className="text-zinc-400">· {progress}% changed</span>}
+        {open ? <ChevronDown size={11} className="text-zinc-500" /> : <ChevronRight size={11} className="text-zinc-500" />}
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-2 border-t border-white/[0.06] px-2.5 py-2 text-[11px]">
           {snapshotName && (trellisMode === 'current' || isDiff) && (
-            <div className="mt-1 text-[10px] text-zinc-400/80">
-              source: {snapshotName}
+            <div className="text-[10px] text-zinc-400/80">source: {snapshotName}</div>
+          )}
+
+          {/* Plan alignment — planned and diff modes */}
+          {(isDiff || isPlanned) && planSummary && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {chip(planSummary.onTrack, 'on track', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
+              {chip(planSummary.planned, 'planned', 'border-blue-300/18 bg-blue-500/10 text-blue-100')}
+              {chip(planSummary.pending, 'pending', 'border-amber-300/18 bg-amber-500/10 text-amber-100')}
+              {chip(planSummary.unexpected, 'unexpected', 'border-fuchsia-300/18 bg-fuchsia-500/10 text-fuchsia-100')}
             </div>
           )}
-        </div>
-        {typeof progress === 'number' && (
-          <div className="rounded-full border border-blue-300/18 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-100">
-            {progress}% changed
-          </div>
-        )}
-      </div>
 
-      {/* Plan alignment stats — shown in both planned and diff modes */}
-      {(isDiff || isPlanned) && planSummary && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
-            on track {planSummary.onTrack}
-          </span>
-          <span className="rounded-full border border-blue-300/18 bg-blue-500/10 px-2 py-1 text-blue-100">
-            planned {planSummary.planned}
-          </span>
-          <span className="rounded-full border border-amber-300/18 bg-amber-500/10 px-2 py-1 text-amber-100">
-            pending {planSummary.pending}
-          </span>
-          {planSummary.unexpected > 0 && (
-            <span className="rounded-full border border-fuchsia-300/18 bg-fuchsia-500/10 px-2 py-1 text-fuchsia-100">
-              unexpected {planSummary.unexpected}
-            </span>
+          {/* Files against the baseline — not in planned mode, where alignment leads */}
+          {diff && !isPlanned && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {chip(diff.addedFiles.length, 'added', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
+              {chip(diff.modifiedFiles.length, 'modified', 'border-amber-300/18 bg-amber-500/10 text-amber-100')}
+              {chip(diff.removedFiles.length, 'removed', 'border-white/10 bg-white/[0.04] text-zinc-200')}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* File-level diff stats — hide in planned mode (plan alignment takes priority) */}
-      {diff && !isPlanned && (
-        <div className="mt-3 flex items-center gap-2 text-[11px]">
-          <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
-            + {diff.addedFiles.length} added
-          </span>
-          <span className="rounded-full border border-amber-300/18 bg-amber-500/10 px-2 py-1 text-amber-100">
-            ~ {diff.modifiedFiles.length} modified
-          </span>
-          <span className="rounded-full border border-red-300/18 bg-red-500/10 px-2 py-1 text-red-100">
-            - {diff.removedFiles.length} removed
-          </span>
-        </div>
-      )}
-
-      {/* Git status — only in live and diff modes, not planned/current */}
-      {gitStatus && !isPlanned && trellisMode !== 'current' && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="rounded-full border border-sky-300/18 bg-sky-500/10 px-2 py-1 text-sky-100">
-            staged {gitStatus.staged.length}
-          </span>
-          <span className="rounded-full border border-orange-300/18 bg-orange-500/10 px-2 py-1 text-orange-100">
-            unstaged {gitStatus.unstaged.length}
-          </span>
-          <span className="rounded-full border border-emerald-300/18 bg-emerald-500/10 px-2 py-1 text-emerald-100">
-            untracked {gitStatus.untracked.length}
-          </span>
+          {/* Git — live and diff modes only */}
+          {gitStatus && !isPlanned && trellisMode !== 'current' && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {chip(gitStatus.staged.length, 'staged', 'border-sky-300/18 bg-sky-500/10 text-sky-100')}
+              {chip(gitStatus.unstaged.length, 'not staged', 'border-orange-300/18 bg-orange-500/10 text-orange-100')}
+              {chip(gitStatus.untracked.length, 'new to git', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
+            </div>
+          )}
         </div>
       )}
     </div>

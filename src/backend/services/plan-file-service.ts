@@ -29,6 +29,7 @@ import * as _lazy___channel_event_file_service from './channel-event-file-servic
 import * as _lazy____server from '../server';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import * as planService from './plan-service';
@@ -39,7 +40,7 @@ import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
 import * as criteriaService from './criteria-service';
 import { getDb } from './database';
-import { readTextWithin } from './confined-fs';
+import { readTextWithin, resolveWithin } from './confined-fs';
 import type {
   Plan,
   PlanItem,
@@ -62,6 +63,7 @@ import type {
  * and need their own writes ignored by the same watcher.
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
+import { getEffectiveDefaultVisibility } from './project-config-service';
 
 // --- Public surface ---
 
@@ -92,12 +94,108 @@ export interface ImportPlanResult {
  * Plans with V2 items write the new tree layout (version: 2 + items/).
  * Legacy plans without V2 items fall back to V1 (phases/tasks/docs/).
  */
+/**
+ * Move a plan's directory to the slug of its current title, if nothing in
+ * it has been committed and nothing is already there. Returns where the
+ * plan's directory now is. Any doubt — git failing, a link, a clash —
+ * keeps the existing name, which is what happened before.
+ */
+function followTitleIfUncommitted(projectRoot: string, current: string, wanted: string): string {
+  try {
+    if (fs.existsSync(wanted)) return current;
+    const from = resolveWithin(projectRoot, path.relative(projectRoot, current), 'plan directory');
+    const to = resolveWithin(projectRoot, path.relative(projectRoot, wanted), 'plan directory');
+    if (hasCommittedFiles(projectRoot, from)) return current;
+    // The watcher must not read the move as the plan being deleted and a
+    // new one arriving.
+    const files = listFilesRecursive(from);
+    for (const f of files) {
+      stampSelfWrite(f);
+      stampSelfWrite(path.join(to, path.relative(from, f)));
+    }
+    fs.renameSync(from, to);
+    return to;
+  } catch (err) {
+    console.warn(`[Plans] Kept ${path.basename(current)}: ${(err as Error).message}`);
+    return current;
+  }
+}
+
+/** Whether git tracks anything under `dir`. A project that is not a repo has committed nothing. */
+function hasCommittedFiles(projectRoot: string, dir: string): boolean {
+  if (!fs.existsSync(path.join(projectRoot, '.git'))) return false;
+  const out = execFileSync('git', ['-C', projectRoot, 'ls-files', '--', path.relative(projectRoot, dir)], {
+    encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
+  });
+  return out.trim().length > 0;
+}
+
+function listFilesRecursive(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFilesRecursive(p));
+    else if (entry.isFile()) out.push(p);
+  }
+  return out;
+}
+
+/** The title the window gives a plan before the person names it. */
+export const PLACEHOLDER_PLAN_TITLE = 'Untitled plan';
+
+function isPlaceholderTitle(title: string | undefined): boolean {
+  const t = (title ?? '').trim();
+  return t === '' || t === PLACEHOLDER_PLAN_TITLE;
+}
+
+/**
+ * A plan that was held back while it was untitled is written the first
+ * time it gets a real name, if the default says shared and it is not
+ * already in the project. Returns whether it was written.
+ */
+export function exportOnFirstTitle(planUid: string, projectRoot: string, previousTitle: string | undefined): boolean {
+  if (!isPlaceholderTitle(previousTitle)) return false;
+  if (getLinkedPlanDir(planUid, projectRoot)) return false;
+  return exportIfSharedByDefault(planUid, projectRoot);
+}
+
+/**
+ * A new plan goes where the default visibility says: written into
+ * `.codetrellis/plans/` when it is "shared", left in the database when
+ * "local". Only `create_plan` did this, so a plan made in the app window,
+ * on the phone, or over REST was Local under a Shared default
+ * (Phase 32 §0.6). Returns whether the plan was written.
+ */
+export function exportIfSharedByDefault(planUid: string, projectRoot: string): boolean {
+  try {
+    if (getEffectiveDefaultVisibility(projectRoot) !== 'shared') return false;
+    // Not while it is still "Untitled plan": the window creates a plan
+    // before the person names it, and a plan's directory keeps its first
+    // name, so writing now would leave it in `untitled-plan-…` for good.
+    // `exportOnFirstTitle` writes it once it has a name.
+    if (isPlaceholderTitle(planService.getPlan(planUid)?.title)) return false;
+    exportPlan(planUid, projectRoot);
+    return true;
+  } catch (err) {
+    console.warn(`[Plans] Could not write new plan ${planUid} to the project:`, err);
+    return false;
+  }
+}
+
 export function exportPlan(planUid: string, projectRoot: string): ExportPlanResult {
   const plan = planService.getPlan(planUid);
   if (!plan) throw new Error(`Plan ${planUid} not found`);
 
-  const slug = makePlanSlug(plan);
-  const planDir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  // An existing directory keeps its name when the plan is renamed — once
+  // it has been committed; writing to a fresh title-slug beside it would
+  // leave two directories carrying the same plan uid. Until then nobody
+  // else has it, so it follows the title (Phase 32 §0.6): the window saves
+  // the title as it is typed, and a plan written at its first save was
+  // otherwise named for half a word.
+  const wanted = path.join(projectRoot, '.codetrellis', 'plans', makePlanSlug(plan));
+  let planDir = getLinkedPlanDir(planUid, projectRoot);
+  if (planDir && planDir !== wanted) planDir = followTitleIfUncommitted(projectRoot, planDir, wanted);
+  planDir ??= wanted;
   ensureDir(planDir);
 
   // Detect V2 items — if any exist, use V2 export path.
@@ -674,7 +772,9 @@ export function discoverPlanDirs(projectRoot: string): string[] {
     .map((name) => path.join(root, name))
     .filter((p) => {
       try {
-        return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml'));
+        // lstat: a link in the plans dir is not a plan directory, wherever
+        // it points.
+        return fs.lstatSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml'));
       } catch {
         return false;
       }
@@ -692,9 +792,33 @@ export function discoverPlanDirs(projectRoot: string): string[] {
 export function getLinkedPlanDir(planUid: string, projectRoot: string): string | null {
   const plan = planService.getPlan(planUid);
   if (!plan) return null;
-  const slug = makePlanSlug(plan);
-  const dir = path.join(projectRoot, '.codetrellis', 'plans', slug);
+  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  const dir = path.join(plansRoot, makePlanSlug(plan));
   if (fs.existsSync(path.join(dir, 'plan.yaml'))) return dir;
+
+  // Renamed since it was exported. The slug is title + uid prefix, and the
+  // directory keeps the name it was created under — so looking it up by
+  // the CURRENT title found nothing. That silently ended write-through for
+  // the rest of the plan's life (the repo copy froze at the old title) and
+  // made delete / unlink leave the directory behind, to be re-imported on
+  // the next pull (Phase 32 §0.4c, bug 22). Match on the uid prefix, and
+  // confirm by the uid inside plan.yaml. Dirents do not follow symlinks,
+  // and plan.yaml is read through the confined helper.
+  const suffix = `-${plan.uid.split('-')[0]}`;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(plansRoot, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.endsWith(suffix)) continue;
+    const candidate = path.join(plansRoot, entry.name);
+    try {
+      const raw = parseYaml(readTextWithin(candidate, 'plan.yaml', 'plan file')) as { uid?: unknown } | null;
+      if (raw?.uid === plan.uid) return candidate;
+    } catch { /* unreadable or not a plan: not this one */ }
+  }
   return null;
 }
 
@@ -703,6 +827,10 @@ export function getLinkedPlanDir(planUid: string, projectRoot: string): string |
  * is the "Shared → Local" toggle. No-op if the dir doesn't exist.
  */
 export function unlinkPlan(planUid: string, projectRoot: string): { removed: boolean; planDir: string | null } {
+  // A write-through scheduled by the change that led here — deleting a plan
+  // archives it first, and archiving schedules one — would otherwise fire
+  // after the folder is gone and write it straight back (Phase 32 bug 39).
+  cancelWriteThrough(planUid);
   const dir = getLinkedPlanDir(planUid, projectRoot);
   if (!dir) return { removed: false, planDir: null };
   fs.rmSync(dir, { recursive: true, force: true });
@@ -798,19 +926,35 @@ export function reconcilePlanState(projectRoot: string): {
  * absolute directory paths (from `reconcilePlanState().orphanedOnDisk`).
  * Returns the count actually removed.
  */
-export function pruneOrphanedDirs(dirPaths: string[]): number {
+/**
+ * Remove orphaned plan directories of ONE opened project.
+ *
+ * A requested path is removed only if it is, right now, one of that
+ * project's orphans as `reconcilePlanState` computes them: a real
+ * directory (not a link) directly under `<root>/.codetrellis/plans/`, with
+ * a plan.yaml, and no active plan behind it. Anything else is skipped and
+ * reported, never removed — the caller's list is a selection from the
+ * orphans it was shown, not a set of paths to delete.
+ */
+export function pruneOrphanedDirs(projectRoot: string, dirPaths: string[]): { removed: number; skipped: string[] } {
+  const orphans = new Set(reconcilePlanState(projectRoot).orphanedOnDisk.map((o) => o.dirPath));
+  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
   let removed = 0;
+  const skipped: string[] = [];
   for (const dir of dirPaths) {
     try {
-      if (fs.existsSync(dir)) {
-        fs.rmSync(dir, { recursive: true, force: true });
-        removed++;
-      }
+      if (typeof dir !== 'string' || !orphans.has(dir)) { skipped.push(String(dir)); continue; }
+      // Re-checked immediately before removal: still a direct child, still
+      // a real directory, and inside the plans dir once canonicalised.
+      resolveWithin(plansRoot, path.basename(dir), 'plan directory');
+      if (path.dirname(dir) !== plansRoot || !fs.lstatSync(dir).isDirectory()) { skipped.push(dir); continue; }
+      fs.rmSync(dir, { recursive: true, force: true });
+      removed++;
     } catch {
-      // best-effort — skip dirs that can't be removed
+      skipped.push(String(dir));
     }
   }
-  return removed;
+  return { removed, skipped };
 }
 
 // --- Auto-sync (Phase 13 §B) ---
@@ -837,6 +981,13 @@ const WRITE_THROUGH_DEBOUNCE_MS = 200;
  */
 let importDepth = 0;
 
+/** Drop a pending write-through for this plan, if any. */
+export function cancelWriteThrough(planUid: string): void {
+  const pending = writeThroughTimers.get(planUid);
+  if (pending) clearTimeout(pending);
+  writeThroughTimers.delete(planUid);
+}
+
 export function scheduleWriteThrough(planUid: string, projectRoot?: string): void {
   if (importDepth > 0) return;
   // Caller may not know the project path (e.g. a deep service that
@@ -851,6 +1002,9 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
   if (existing) clearTimeout(existing);
   writeThroughTimers.set(planUid, setTimeout(() => {
     writeThroughTimers.delete(planUid);
+    // Linked when scheduled is not linked now: the folder may have been
+    // removed in the debounce window, and exporting would recreate it.
+    if (!getLinkedPlanDir(planUid, root)) return;
     try {
       const result = exportPlan(planUid, root);
       // Best-effort broadcast (server module may not be imported yet
@@ -883,6 +1037,8 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
 const watchersByProject = new Map<string, FSWatcher>();
 const watcherReady = new Map<string, Promise<void>>();
 const PLAN_WATCHER_READY_TIMEOUT_MS = 10_000;
+/** How long after a folder appears the watcher looks in it for files it was not told about (bug 26). */
+const NEW_FOLDER_SWEEP_MS = 500;
 
 export function startPlanFileWatcher(projectRoot: string): Promise<void> {
   if (watchersByProject.has(projectRoot)) {
@@ -919,12 +1075,52 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     depth: 10, // V2 items/ tree can nest deeply
   });
 
-  watcher.on('all', (event, filePath) => {
+  // Files the watcher has handled, and when: the new-folder sweep below
+  // replays only what it did not get.
+  const handledAt = new Map<string, number>();
+
+  // Bug 26 (Phase 32 §0.4f). A file written into a folder chokidar has not
+  // yet attached to is never reported — a pull that brings a new
+  // `channels/` folder with its files lost one in about six in a probe,
+  // and the event did not appear until something else touched that plan.
+  // So when a folder appears inside the plans tree, look in it once things
+  // settle and hand over whatever was missed.
+  const sweepNewFolder = (dir: string, seenAt: number): void => {
+    setTimeout(() => {
+      if (watchersByProject.get(projectRoot) !== watcher) return; // closed meanwhile
+      const missed = new Map<string, string[]>(); // planDir → files
+      const walk = (d: string, depth: number): void => {
+        if (depth > 10) return;
+        let entries: fs.Dirent[];
+        try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+        for (const e of entries) {
+          const p = path.join(d, e.name);
+          if (e.isDirectory()) { walk(p, depth + 1); continue; }
+          if (!e.isFile()) continue; // never follow a link
+          if ((handledAt.get(p) ?? 0) >= seenAt || wasJustWrittenByUs(p)) continue;
+          const planDir = findContainingPlanDir(p, plansRoot);
+          if (!planDir) continue;
+          (missed.get(planDir) ?? missed.set(planDir, []).get(planDir)!).push(p);
+        }
+      };
+      walk(dir, 0);
+      const { isChannelEventFile } = _lazy___channel_event_file_service;
+      for (const files of missed.values()) {
+        // A whole-plan import reads its channel events too, so one is enough.
+        const other = files.find((f) => !isChannelEventFile(f));
+        for (const f of other ? [other] : files) handle('add', f);
+      }
+    }, NEW_FOLDER_SWEEP_MS);
+  };
+
+  const handle = (event: string, filePath: string): void => {
     if (event !== 'add' && event !== 'change' && event !== 'unlink') return;
     if (!filePath) return;
 
     // Skip self-writes (we just stamped them in writeFileAtomic).
     if (wasJustWrittenByUs(filePath)) return;
+    if (handledAt.size > 5000) handledAt.clear(); // only the last few seconds matter to the sweep
+    handledAt.set(filePath, Date.now());
 
     // Resolve the plan directory containing this file.
     const planDir = findContainingPlanDir(filePath, plansRoot);
@@ -994,6 +1190,14 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     } catch (err) {
       console.warn(`[Auto-sync] Failed to re-import ${planDir}:`, err);
     }
+  };
+
+  watcher.on('all', (event, filePath) => {
+    if (event === 'addDir') {
+      if (filePath && filePath !== plansRoot) sweepNewFolder(filePath, Date.now());
+      return;
+    }
+    handle(event, filePath);
   });
 
   watcher.on('error', (err) => {

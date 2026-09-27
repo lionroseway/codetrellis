@@ -15,6 +15,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { resolveWithin, writeFileWithin } from './confined-fs';
+import { checkoutGitDir } from './git-checkout';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -63,8 +64,10 @@ export interface ResolveFieldInput {
  */
 export function detectManifestConflicts(projectRoot: string): ConflictSummary {
   // Check if we're in a merge state
-  const mergeHeadPath = path.join(projectRoot, '.git', 'MERGE_HEAD');
-  if (!fs.existsSync(mergeHeadPath)) {
+  // MERGE_HEAD is per-checkout: in a linked worktree it lives under
+  // <common>/worktrees/<name>, not <root>/.git (which is a file there).
+  const gitDir = checkoutGitDir(projectRoot);
+  if (!gitDir || !fs.existsSync(path.join(gitDir, 'MERGE_HEAD'))) {
     return { hasConflicts: false, files: [], totalConflicts: 0, autoResolvable: 0 };
   }
 

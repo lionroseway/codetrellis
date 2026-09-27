@@ -9,6 +9,7 @@
 
 import { test, expect } from '@playwright/test';
 import { gotoWithProject, seedPlan, openPlan, cleanupPlans } from '../helpers/setup';
+import { createMcpClient } from '../helpers/mcp-client';
 
 test.describe('Acceptance criteria', () => {
   // Unique per test: openPlan clicks the first plan with this title, and on a
@@ -84,5 +85,32 @@ test.describe('Acceptance criteria', () => {
     await expect(block.getByText('0/2 met')).toBeVisible();
     await page.getByRole('button', { name: /Gate/ }).click();
     await expect(block.getByText('Reviewed and approved')).toHaveCount(0, { timeout: 10_000 });
+  });
+
+  test('each line says who added it and each decision how it was taken (0.4d)', async ({ page, request }) => {
+    const PLAN_TITLE = planTitle();
+    const seeded = await seedPlan(request, { title: PLAN_TITLE, actions: [{ title: 'Board memo', body: 'Write it.' }] });
+    const item = seeded.actionUids[0];
+
+    // An agent adds a criterion as it works, and it is kept, tagged.
+    const agent = await createMcpClient();
+    try {
+      const added = await agent.callTool('add_criterion', { item_uid: item, text: 'Every figure has a source', kind: 'manual' });
+      expect(added.isError, added.content?.[0]?.text).toBeFalsy();
+    } finally {
+      agent.close();
+    }
+
+    await gotoWithProject(page);
+    await openPlan(page, PLAN_TITLE);
+    await page.getByTestId('plan-item-tree').getByText('Board memo').first().click();
+    const row = page.getByTestId('criterion-row').filter({ hasText: 'Every figure has a source' });
+    await expect(row.getByTestId('criterion-origin')).toHaveText(/^added by .+ \(agent\)$/, { timeout: 10_000 });
+
+    // The browser build talks plain HTTP: the approval counts, and says it
+    // came through the local API rather than the app window or a phone.
+    await row.getByRole('button', { name: /Approve/ }).click();
+    await expect(row).toHaveAttribute('data-state', 'met');
+    await expect(row).toContainText('(local API, unverified)');
   });
 });

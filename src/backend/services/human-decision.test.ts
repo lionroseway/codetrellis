@@ -22,6 +22,7 @@ const MCP_DIR = path.join(BACKEND, 'mcp');
 const HUMAN_ONLY = [
   'human-decision',
   'issueHumanDecision',
+  'issueUnverifiedDecision',
   'decideCriterion',
   'updateCriterion',
   'deleteCriterion',
@@ -63,6 +64,28 @@ test('the guard still guards: the issuer exists and the desktop transport uses i
   assert.match(server, /issueHumanDecision\('desktop'/, 'the REST layer is where a desktop decision is issued');
   const service = fs.readFileSync(path.join(BACKEND, 'services', 'criteria-service.ts'), 'utf-8');
   assert.match(service, /isHumanDecision\(decision\)/, 'the service checks at runtime, not only by type');
+});
+
+test('the desktop is a person only from the app window; plain HTTP is unverified (0.4d)', () => {
+  const server = fs.readFileSync(path.join(BACKEND, 'server.ts'), 'utf-8');
+  assert.match(
+    server,
+    /cameFromAppWindow\(req\)\s*\?\s*issueHumanDecision\('desktop'[^:]+:\s*issueUnverifiedDecision\(/,
+    'a desktop decision is a person\'s only when the request came over the app window\'s IPC',
+  );
+  const dispatcher = fs.readFileSync(path.join(BACKEND, 'services', 'ipc-dispatcher.ts'), 'utf-8');
+  assert.match(dispatcher, /new WeakSet/, 'app-window requests are marked by identity, not by a header');
+  // Only the authorised dispatch (the app window's) marks a request.
+  const marks = dispatcher.match(/appWindowRequests\.add\(/g) ?? [];
+  assert.equal(marks.length, 1);
+  assert.match(dispatcher, /return run\(app, \{[\s\S]*?\}, true\);/, 'dispatchAuthorised passes fromAppWindow');
+  assert.match(dispatcher, /return run\(app, req, false\);/, 'plain dispatch does not');
+
+  const callers = walk(BACKEND)
+    .filter((f) => !f.endsWith(path.join('services', 'human-decision.ts')))
+    .filter((f) => /\bissueUnverifiedDecision\(/.test(fs.readFileSync(f, 'utf-8')))
+    .map((f) => path.relative(BACKEND, f));
+  assert.deepEqual(callers, ['server.ts']);
 });
 
 test('a decision is issued in exactly two places: the desktop REST layer and the phone', () => {

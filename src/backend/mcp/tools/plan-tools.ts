@@ -5,9 +5,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
-import { resultWithMeta } from '../helpers';
+import { resultWithMeta, authorFromExtra } from '../helpers';
 import { buildPlanPrompt, buildItemPrompt } from '../prompt-builders';
-import { getActiveProjectRoot } from '../../services/trusted-roots';
+import { getActiveProjectRoot, isTrustedProjectRoot } from '../../services/trusted-roots';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Plan CRUD ---
@@ -126,72 +126,55 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
-  server.registerTool(
-    'delete_plan',
-    {
-      description: 'Delete (archive) a plan from CodeTrellis. Removes it from the plan list. Use list_plans first to find the uid.',
-      inputSchema: {
-        plan_uid: z.string().describe('UID of the plan to delete'),
-      },
-    },
-    async ({ plan_uid }) => {
-      const plan = deps.planService.getPlan(plan_uid);
-      deps.planService.deletePlan(plan_uid);
-      // Clean up disk files (parity with REST DELETE /api/plans/:uid)
-      let diskRemoved = false;
-      if (plan?.projectPath) {
-        try {
-          const result = deps.planFileService.unlinkPlan(plan_uid, plan.projectPath);
-          diskRemoved = result.removed;
-        } catch { /* best-effort */ }
-      }
-      const n = deps.broadcast('plan-deleted', { planUid: plan_uid });
-      deps.saveNow(() => deps.exportDatabase());
-      return resultWithMeta({ ok: true, planUid: plan_uid, diskRemoved }, n);
-    },
-  );
+  // --- Plan deletion: a person decides ---
+  //
+  // `delete_plan` and `bulk_delete_plans` were removed (Phase 32 §0.4c-3,
+  // owner's decision). Deleting a plan removes its files from the repo's
+  // `.codetrellis/plans/`, which teammates share through git, and
+  // `bulk_delete_plans("all")` reached every plan in every project. An
+  // agent may now only ASK: this opens a confirmation in the app, where
+  // the person types the plan's name. Nothing is deleted here.
 
   server.registerTool(
-    'bulk_delete_plans',
+    'request_plan_deletion',
     {
-      description: 'Delete multiple plans at once. Useful for cleaning up test/demo plans. Pass "all" to delete every plan, or a list of uids.',
+      description:
+        'Ask the person to delete one or more plans. Opens a confirmation in the CodeTrellis window listing the plans '
+        + 'and your reason; they must type the plan name (or "delete N plans") to go ahead. This tool deletes '
+        + 'nothing and returns immediately: check list_plans later to see whether they did. Plans outside the '
+        + 'projects this app has opened are refused.',
       inputSchema: {
-        plan_uids: z.union([
-          z.literal('all'),
-          z.array(z.string()),
-        ]).describe('"all" to delete every plan, or an array of plan UIDs to delete'),
+        plan_uids: z.array(z.string()).min(1).max(50).describe('UIDs of the plans to propose deleting'),
+        reason: z.string().max(500).describe('One or two sentences the person will read: why these plans should go'),
       },
     },
-    async ({ plan_uids }) => {
-      let uids: string[];
-      if (plan_uids === 'all') {
-        const allPlans = deps.planService.listPlans();
-        uids = allPlans.map((p: any) => p.uid);
-      } else {
-        uids = plan_uids;
-      }
-      let deleted = 0;
-      let lastN = 0;
-      for (const uid of uids) {
-        try {
-          const plan = deps.planService.getPlan(uid);
-          deps.planService.deletePlan(uid);
-          // Clean up disk files (parity with REST POST /api/plans/bulk-delete)
-          if (plan?.projectPath) {
-            try { deps.planFileService.unlinkPlan(uid, plan.projectPath); } catch { /* best-effort */ }
-          }
-          lastN = deps.broadcast('plan-deleted', { planUid: uid });
-          deleted++;
-        } catch {
-          // skip plans that don't exist
+    async ({ plan_uids, reason }) => {
+      const plans: Array<{ uid: string; title: string; projectPath: string | null }> = [];
+      for (const uid of [...new Set(plan_uids)]) {
+        const plan = deps.planService.getPlan(uid);
+        if (!plan || plan.status === 'archived') {
+          return { content: [{ type: 'text' as const, text: `No active plan ${uid}` }], isError: true };
         }
+        if (!plan.projectPath || !isTrustedProjectRoot(plan.projectPath)) {
+          return {
+            content: [{ type: 'text' as const, text: `Plan ${uid} belongs to a project that is not open; it can only be deleted from there.` }],
+            isError: true,
+          };
+        }
+        plans.push({ uid: plan.uid, title: plan.title, projectPath: plan.projectPath });
       }
-      deps.saveNow(() => deps.exportDatabase());
-      return resultWithMeta({ ok: true, deleted }, lastN);
+      const requestId = `pd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const n = deps.broadcast('ui-confirm-plan-deletion', { requestId, plans, reason });
+      return resultWithMeta({
+        requested: true,
+        requestId,
+        plans: plans.map((p) => ({ uid: p.uid, title: p.title })),
+        note: n > 0
+          ? 'Asked the person to confirm in the CodeTrellis window. Nothing has been deleted.'
+          : 'No CodeTrellis window is open to ask. Nothing has been deleted.',
+      }, n);
     },
   );
-
-  // --- Plan File Sync ---
 
   server.registerTool(
     'export_plan_to_files',
@@ -416,15 +399,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ),
       },
     },
-    async ({ text, title, project_path }) => {
+    async ({ text, title, project_path }, extra: unknown) => {
+      // A plan belongs to a project: with none named and none open it was
+      // filed under '' , which nothing lists. And it is the calling agent's,
+      // not a generic "mcp-agent" (Phase 32 §0.7, as 0.4l did for
+      // create_plan_from_external).
+      const projectPath = project_path ?? getActiveProjectRoot();
+      if (!projectPath) {
+        return { content: [{ type: 'text' as const, text: 'No project is open: pass project_path, or open the project first.' }], isError: true };
+      }
+      const id = authorFromExtra(deps, extra);
       try {
         const result = deps.planImportService.importFromConversation({ text, title });
 
-        // Same defect as `create_plan_from_external`: a plan imported from
-        // text belongs to the project you are in, not to nowhere.
         const plan = deps.planService.createPlan(
           { title: result.title, description: result.description, tasks: [] },
-          'mcp-agent', 'mcp', project_path ?? getActiveProjectRoot() ?? '',
+          id.author, id.authorType, projectPath,
         );
 
         let itemCount = 0;
@@ -436,11 +426,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
             body: imported.body,
             fileSpecs: imported.fileSpecs,
             scopePath: imported.scopePath,
-            author: 'mcp-agent',
-            authorType: 'mcp',
+            author: id.author,
+            authorType: id.authorType,
           });
           itemCount++;
         }
+        // Where the default visibility says, as every other way of making a
+        // plan (bug 48). After the items, so the first write carries them.
+        deps.planFileService.exportIfSharedByDefault(plan.uid, projectPath);
 
         deps.broadcast('plan-imported', { planUid: plan.uid, source: 'mcp-import' });
         return {

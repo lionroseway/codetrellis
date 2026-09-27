@@ -154,13 +154,12 @@ test.describe('planning by hand', () => {
     // the share MENU in the same header also says "Shared", and a
     // loose locator matched that instead and "passed" instantly while
     // the export was still in flight.
-    const chip = page.locator('button[title^="Local —"]');
-    await expect(chip).toBeVisible({ timeout: 10_000 });
-    await Promise.all([
-      page.waitForResponse((r) => r.url().includes('/export') && r.request().method() === 'POST'),
-      chip.click(),
-    ]);
-    await expect(page.locator('button[title^="Shared —"]')).toBeVisible({ timeout: 8000 });
+    //
+    // Under the Shared default the plan is already in the repo: it was
+    // written the moment it had a name (Phase 32 §0.6, bug 48). It used to
+    // start Local whatever the setting said, and this journey clicked the
+    // chip to share it; the chip now shows what the setting promised.
+    await expect(page.locator('button[title^="Shared —"]')).toBeVisible({ timeout: 10_000 });
 
     // ── and confirm what is actually on disk ──────────────────────
     const plansDir = path.join(PROJECT, '.codetrellis', 'plans');

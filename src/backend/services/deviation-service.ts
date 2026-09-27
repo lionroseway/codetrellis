@@ -261,7 +261,8 @@ function createDeviation(
 
 export function getDeviations(planUid: string): Deviation[] {
   const result = getDb().exec(
-    `SELECT id, plan_uid, deviation_type, severity, description, resolution, detected_at, resolved_at, file_path
+    `SELECT id, plan_uid, deviation_type, severity, description, resolution, detected_at, resolved_at, file_path,
+            resolved_by, resolved_by_type
      FROM deviations WHERE plan_uid = ? ORDER BY detected_at DESC`,
     [planUid]
   );
@@ -272,7 +273,44 @@ export function getDeviations(planUid: string): Deviation[] {
     description: r[4], resolution: r[5] as Deviation['resolution'],
     detectedAt: r[6], resolvedAt: r[7],
     filePath: (r[8] as string) ?? null,
+    resolvedBy: (r[9] as string) ?? null,
+    resolvedByType: (r[10] as string) ?? null,
   }));
+}
+
+export class DeviationError extends Error {}
+
+/** Which plan a deviation belongs to, or null when there is no such deviation. */
+export function planOfDeviation(id: number): string | null {
+  const row = getDb().exec(`SELECT plan_uid FROM deviations WHERE id = ?`, [id])[0]?.values[0];
+  return row ? (row[0] as string) : null;
+}
+
+const RESOLUTIONS = ['accepted', 'reverted', 'ignored'] as const;
+type Resolution = typeof RESOLUTIONS[number];
+
+/**
+ * Resolve several of ONE plan's deviations (Phase 32 §0.4h, bug 30).
+ *
+ * Every id is checked against the plan, and every action against the
+ * three there are, before anything changes: resolving by bare id let a
+ * call on one plan resolve another plan's deviations, and reported ids
+ * that did not exist as resolved. Recorded in the caller's name.
+ */
+export function reconcileDeviations(
+  planUid: string,
+  requested: Array<{ id: unknown; action: unknown }>,
+  by: { actor: string; actorType: string },
+): number {
+  const own = new Set(getDeviations(planUid).map((d) => d.id));
+  const problems: string[] = [];
+  for (const d of requested) {
+    if (typeof d.id !== 'number' || !own.has(d.id)) problems.push(`${String(d.id)} is not a deviation on this plan`);
+    if (!(RESOLUTIONS as readonly unknown[]).includes(d.action)) problems.push(`"${String(d.action)}" is not one of ${RESOLUTIONS.join(', ')}`);
+  }
+  if (problems.length) throw new DeviationError(`Nothing resolved: ${problems.join('; ')}.`);
+  for (const d of requested) resolveDeviation(d.id as number, d.action as Resolution, by);
+  return requested.length;
 }
 
 /** Sentinel title for the auto-created reconciliation action. */
@@ -283,13 +321,17 @@ const RECONCILED_ITEM_TITLE = 'Reconciled changes';
  * has a file_path (unexpected_file), the file is added to the plan's
  * fileSpecs so it stops being flagged as drift.
  */
-export function resolveDeviation(deviationId: number, resolution: 'accepted' | 'reverted' | 'ignored'): void {
+export function resolveDeviation(
+  deviationId: number,
+  resolution: 'accepted' | 'reverted' | 'ignored',
+  by: { actor: string; actorType: string } = { actor: 'codetrellis', actorType: 'system' },
+): void {
   const db = getDb();
   const now = Date.now();
 
   db.run(
-    `UPDATE deviations SET resolution = ?, resolved_at = ? WHERE id = ?`,
-    [resolution, now, deviationId]
+    `UPDATE deviations SET resolution = ?, resolved_at = ?, resolved_by = ?, resolved_by_type = ? WHERE id = ?`,
+    [resolution, now, by.actor, by.actorType, deviationId]
   );
   markDirty();
 
@@ -315,8 +357,9 @@ export function resolveDeviation(deviationId: number, resolution: 'accepted' | '
       if (!already) {
         updateItem(reconciledItem.uid, {
           fileSpecs: [...existingSpecs, { path: filePath, action: 'modify' }],
-          author: 'codetrellis',
-          authorType: 'system',
+          // The plan changes because someone accepted the drift: in their name.
+          author: by.actor,
+          authorType: by.actorType,
           changeSummary: `Accepted deviation: ${filePath}`,
         });
       }
@@ -329,8 +372,8 @@ export function resolveDeviation(deviationId: number, resolution: 'accepted' | '
         body: 'Files accepted from drift detection — originally not in the plan but confirmed as intentional.',
         fileSpecs: [{ path: filePath, action: 'modify' }],
         status: 'done',
-        author: 'codetrellis',
-        authorType: 'system',
+        author: by.actor,
+        authorType: by.actorType,
       });
     }
 
