@@ -18,7 +18,7 @@ export function registerAudioTools(server: McpServer): void {
     'start_audio_capture',
     'Start capturing audio from the user\'s microphone. Audio streams into a rolling buffer (default 120 seconds). Use get_audio_context to retrieve the buffered audio.',
     {
-      max_buffer_seconds: z.number().optional().describe('Maximum buffer duration in seconds (default: 120)'),
+      max_buffer_seconds: z.number().min(1).max(600).optional().describe('Maximum buffer duration in seconds, 1–600 (default: 120)'),
     },
     async ({ max_buffer_seconds }) => {
       audioBuffer.startCapture(max_buffer_seconds);
@@ -47,7 +47,7 @@ export function registerAudioTools(server: McpServer): void {
     'Push a chunk of audio data into the capture buffer. Used internally by the frontend — agents should use get_audio_context to read audio.',
     {
       audio_base64: z.string().describe('Base64-encoded audio data (WebM/Opus)'),
-      duration_ms: z.number().describe('Duration of this chunk in milliseconds'),
+      duration_ms: z.number().positive().max(60_000).describe('Duration of this chunk in milliseconds (up to 60000)'),
     },
     async ({ audio_base64, duration_ms }) => {
       if (!audioBuffer.isCapturing()) {

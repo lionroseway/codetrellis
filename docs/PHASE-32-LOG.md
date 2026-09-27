@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Owner request: budget flags on the phone (between 0.4h and 0.4i) |
-| **Status** | #125 (0.4h) merged; its full harness was 519 passed, 1 skipped, 1 flaky (root-caused and fixed in #125) |
-| **Next action** | Built and unit-tested; full harness, PR, merge when green; then 0.4i (terminals and audio) |
+| **Stage / step** | 0.4i Terminals and audio |
+| **Status** | Started. #126 (phone budget flags, bug 34) merged; its full harness was 521 passed, 0 retries |
+| **Next action** | Bug 35 fixed, domain i complete. Full harness, PR, merge; then 0.4j (mobile) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-mobile-budget` |
+| **Branch** | `feat/phase-32-0.4i-terminals` |
 | **Last updated** | 2026-09-26 |
 
 ---
@@ -142,6 +142,23 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-27: 0.4i — terminals and audio (bug 35)
+
+- `tests/e2e/audio-rest.test.ts` (4): the 5 untested audio routes.
+  **Bug 35:** none of them checked their input; a non-number window made
+  the buffer unbounded, a text length concatenated, and a start with no
+  size kept the last one's. Validated in the service (so REST, MCP and
+  the phone's path all get it), with matching bounds in the MCP schemas;
+  the phone's estimated chunk length is clamped into range so a tiny chunk
+  is not dropped.
+- `tests/e2e/terminal-surface.test.ts` (5): injected text runs and lands
+  in scrollback; history pages backwards and a missing id creates
+  nothing; resize (the shell sees 120 columns) and focus; the self-write
+  guard; a killed terminal refused everywhere with its scrollback kept.
+  No terminal defects.
+- The existing audio MCP test (cdev-phase8) asserts behaviour. Domain i's
+  behaviour column is complete; the 8 terminal RPC methods stay with 0.4j.
+
 ### 2026-09-27: budget flags on the phone (owner's request; bug 34)
 
 The owner asked for the 0.4g budget flagging on mobile.
@@ -170,6 +187,8 @@ The owner asked for the 0.4g budget flagging on mobile.
 
 Mobile typecheck and lint clean (0 errors). The phone UI is not exercised
 by any automated test yet; that is 0.4j's harness peer path.
+
+Full harness at `8314ea8`: 521 passed, 0 retries. CI green; merged as #126.
 
 ### 2026-09-26: 0.4h — the existing domain-h tests, audited (bug 33)
 

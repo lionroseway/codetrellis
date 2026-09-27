@@ -1,8 +1,6 @@
 {
   "rest": [
     "DELETE /api/system-docs/:uid",
-    "GET /api/audio/recent",
-    "GET /api/audio/status",
     "GET /api/peers/connections",
     "GET /api/peers/discovered",
     "GET /api/peers/remote-audio",
@@ -13,9 +11,6 @@
     "GET /api/power/status",
     "GET /api/system-docs/:uid",
     "GET /api/system-docs/:uid/freshness",
-    "POST /api/audio/chunk",
-    "POST /api/audio/start",
-    "POST /api/audio/stop",
     "POST /api/peers/remote-input-requests/:requestId/respond",
     "POST /api/peers/remote-terminals/:fingerprint/:terminalId/write",
     "POST /api/system-docs/:uid/verify",

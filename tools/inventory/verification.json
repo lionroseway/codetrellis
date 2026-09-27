@@ -697,5 +697,71 @@
   },
   "rpc:budget.acknowledge": {
     "behaviour": "✓ phone: needs a confirmed pairing; unflags in the person's name, audited, desktop told; other plan's or unknown change refused (mobile-budget unit)"
+  },
+  "rest:POST /api/audio/start": {
+    "behaviour": "✓ 0.4i: capturing, clears the buffer, default size when none named; bad sizes 400 (audio-rest); bug 35"
+  },
+  "rest:POST /api/audio/chunk": {
+    "behaviour": "✓ 0.4i: buffered in order; 409 when not capturing; bad length or data 400 (audio-rest); bug 35"
+  },
+  "rest:GET /api/audio/status": {
+    "behaviour": "✓ 0.4i: capturing, chunk count, buffered seconds, window (audio-rest)"
+  },
+  "rest:GET /api/audio/recent": {
+    "behaviour": "✓ 0.4i: chunks concatenated in order with duration and times; seconds narrows; 404 when empty (audio-rest)"
+  },
+  "rest:POST /api/audio/stop": {
+    "behaviour": "✓ 0.4i: stops, keeps the buffer, refuses more chunks (audio-rest)"
+  },
+  "rest:POST /api/terminals": {
+    "behaviour": "✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals)"
+  },
+  "rest:GET /api/terminals": {
+    "behaviour": "✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface)"
+  },
+  "rest:DELETE /api/terminals/:id": {
+    "behaviour": "✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals"
+  },
+  "rest:GET /api/terminals/:id/history": {
+    "behaviour": "✓ 0.4i: scrollback of what ran, paged backwards; unknown id empty and creates nothing (terminal-surface), input-validation"
+  },
+  "rest:POST /api/terminals/:id/inject": {
+    "behaviour": "✓ 0.4i: the text runs in the shell (output in history); 400 empty, 404 unknown or dead (terminal-surface)"
+  },
+  "mcp:get_audio_context": {
+    "behaviour": "✓ 0.4i: recent audio with duration; seconds narrows (cdev-phase8)"
+  },
+  "mcp:get_audio_status": {
+    "behaviour": "✓ 0.4i: not capturing, then buffered seconds and chunks (cdev-phase8)"
+  },
+  "mcp:push_audio_chunk": {
+    "behaviour": "✓ 0.4i: chunks buffered; length bounded by the schema (cdev-phase8; bug 35)"
+  },
+  "mcp:start_audio_capture": {
+    "behaviour": "✓ 0.4i: capture starts with the window asked for, bounded 1–600 s (cdev-phase8; bug 35)"
+  },
+  "mcp:stop_audio_capture": {
+    "behaviour": "✓ 0.4i: capture stops (cdev-phase8)"
+  },
+  "mcp:terminal_create": {
+    "behaviour": "✓ 0.4i: answers with session_id that the other tools take (terminal-session-id)"
+  },
+  "mcp:terminal_focus": {
+    "behaviour": "✓ 0.4i: tells the window to show that terminal; unknown refused (terminal-surface)"
+  },
+  "mcp:terminal_kill": {
+    "behaviour": "✓ 0.4i: kills by session_id (terminal-session-id)"
+  },
+  "mcp:terminal_list": {
+    "behaviour": "✓ 0.4i: same shape as create (terminal-session-id)"
+  },
+  "mcp:terminal_read": {
+    "behaviour": "✓ 0.4i: reads what the shell printed (terminal-session-id)"
+  },
+  "mcp:terminal_resize": {
+    "behaviour": "✓ 0.4i: the shell sees the new width (tput cols); unknown refused (terminal-surface)"
+  },
+  "mcp:terminal_write": {
+    "behaviour": "✓ 0.4i: runs in another terminal; refused on the agent's own host terminal and on a killed one (terminal-surface), terminal-session-id"
   }
 }
