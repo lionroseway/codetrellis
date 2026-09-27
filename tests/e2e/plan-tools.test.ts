@@ -74,13 +74,16 @@ test.describe.serial('Plan tools', () => {
   test('after a rename, write-through keeps writing to the same directory', async () => {
     const [dir] = dirsFor(planUid);
     await json('add_item', { plan_uid: planUid, kind: 'action', title: 'Added after the rename' });
-    await waitFor(() => {
-      const yaml = parseYaml(fs.readFileSync(path.join(plansDir, dir, 'plan.yaml'), 'utf-8'));
-      return yaml?.title === 'Payments cleanup (phase 1)';
-    }, { timeoutMs: 5000, description: 'plan.yaml to carry the new title' });
-    const files = fs.readdirSync(path.join(plansDir, dir), { recursive: true }).map(String);
-    const texts = files.filter((f) => f.endsWith('.yaml')).map((f) => fs.readFileSync(path.join(plansDir, dir, f), 'utf-8')).join('\n');
-    expect(texts).toContain('Added after the rename');
+    // Wait for the item itself. This waited for plan.yaml's title, which the
+    // previous test's export had already written, then looked for the item
+    // before the debounced write-through (200 ms) had run. Until 0.4h an
+    // item change scheduled no write at all, and this passed only because
+    // update_plan's debounce happened to fire after the add_item.
+    const texts = () => fs.readdirSync(path.join(plansDir, dir), { recursive: true }).map(String)
+      .filter((f) => f.endsWith('.yaml'))
+      .map((f) => fs.readFileSync(path.join(plansDir, dir, f), 'utf-8')).join('\n');
+    await waitFor(() => texts().includes('Added after the rename'), { timeoutMs: 5000, description: 'the new item written through' });
+    expect(parseYaml(fs.readFileSync(path.join(plansDir, dir, 'plan.yaml'), 'utf-8'))?.title).toBe('Payments cleanup (phase 1)');
     // One directory for this plan, not a second one under the new title.
     expect(dirsFor(planUid)).toEqual([dir]);
   });

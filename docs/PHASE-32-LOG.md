@@ -162,6 +162,14 @@ like budget changes.
 Domain h's behaviour column is complete. The 6 mobile RPC methods in
 domain h stay with 0.4j.
 
+Full harness at `a2b92385`: 519 passed, 1 skipped, 1 flaky, now fixed.
+The flaky one was `plan-tools` "after a rename, write-through keeps
+writing", root-caused: it waited for plan.yaml's new title, which the
+previous test's export had already written, then read the items before
+the debounced write-through (200 ms) of its `add_item` had run. Before
+bug 31 an item change scheduled no write, and the test passed only on
+update_plan's debounce. It now waits for the item. 3 of 3 clean.
+
 ### 2026-09-26: 0.4h — the drift and review tools (bugs 30, 31, 32)
 
 `tests/e2e/drift-review-tools.test.ts` covers the 9 untested tools:
