@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.7 Stage review |
-| **Status** | 0.6 merged (#134). 0.7 on the branch: matrix behaviour complete (217 routes, 185 tools, 76 RPC), bug 49 found and fixed, counts and the direction review below; the plan carries four items into Track A |
-| **Next action** | Full harness; PR 0.7; merge when green. Then 0.8 with the owner: phone screens (before or after, owner's call), merge `feat/phase-32` → `main`, `scripts/release.sh` on macOS, mobile build |
+| **Stage / step** | 0.8 Release |
+| **Status** | 0.7 merged (#135, harness 636/636). 0.8 prepared: version 0.1.17, release notes drafted (`docs/releases/v0.1.17.md`); desktop only |
+| **Next action** | Merge this into `feat/phase-32`, then `feat/phase-32` → `main`. Then the owner on macOS: `npm ci`, `npm run test:unit` (the signing tests run there), `scripts/release.sh`, open the packaged app, publish the notes |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.7-review` |
+| **Branch** | `feat/phase-32-0.8-release` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -48,9 +48,9 @@
 - [x] 0.4j Mobile surface (#128)
 - [x] 0.4k Settings, updates, privacy (#129)
 - [x] 0.4l System docs and intake (#130)
-- [ ] 0.5 UX audit — desktop done (#131, #132, #133); the 31 phone screens wait for the owner
+- [x] 0.5 UX audit — desktop (#131, #132, #133); the 31 phone screens after the release (owner's decision)
 - [x] 0.6 Known bugs 4–9 (#134)
-- [ ] 0.7 Stage review
+- [x] 0.7 Stage review (#135)
 - [ ] 0.8 Release (Stage 0 ships before Tracks A–C)
 
 ### Track A: awareness
@@ -140,11 +140,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-27 | An answer to a peer agent's question for a person carries who gave it (person or agent, which one, how it arrived), shown where it was asked; agents may still answer (0.4k) | Owner's decision. Same stance as 0.4d: tag, don't block |
 | 2026-09-27 | Freeze changes are recorded (who, how, before and after) and an agent's change is flagged on the freeze indicator, desktop and phone, until a person marks it seen (0.4k) | Owner's decision. Same as budgets (0.4g) |
 | 2026-09-27 | Granting is the person's: agent grants, device grants, network exposure, webhook hosts and project scope change only from the app window (a CLI later), never over plain HTTP, MCP or the phone. Refused elsewhere with where to do it | Owner's decision on the settings-escalation finding (private register) |
+| 2026-09-27 | The phone screen review waits until after the release; the phone app is not a priority now | Owner's decision: "Phone screens we can have a look at later"; the release matters more |
+| 2026-09-27 | 0.1.17 is desktop only: no companion build. The phone-side cards (budget, freeze, deviations) ship with the next companion build | Follows from the above; pairing has not changed since 0.1.14, so existing phones keep working |
+| 2026-09-27 | `feat/phase-32` merges into `main` for the release, with a merge commit so each step's commit and PR stay visible | Owner's go-ahead ("getting release done and we merge"); `main` history is one commit per PR |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-27: 0.8 — release prepared
+
+0.7 merged as [#135](https://github.com/lionroseway/codetrellis/pull/135)
+(harness 636/636). The owner's decisions for the release (table above):
+the phone screen review waits; 0.1.17 is desktop only; `feat/phase-32`
+merges into `main`.
+
+- `package.json` / `package-lock.json` at 0.1.17. `mobile/app.json` is not
+  bumped: no companion build.
+- `docs/releases/v0.1.17.md`: the notes, drafted with the release-notes
+  skill from the bugs table (12–49, 46 open). A comment at the top lists
+  what to check before publishing — signing (`spctl`), the attached
+  assets, the commit — and is removed then.
+- What only the release machine can do: `npm ci`; `npm run test:unit`,
+  where the two release-manifest tests run because the signing key is
+  there; `scripts/release.sh`; open the packaged app and confirm it opens
+  its database (CLAUDE.md, "A packaged build is the only thing that
+  proves this"); `gh release edit` with the notes.
 
 ### 2026-09-27: 0.7 — stage review
 
