@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 217 | 217 | 0 | 0 | 217 | 0 |
-| MCP tools | 185 | 185 | 0 | 0 | 185 | 0 |
+| REST routes | 218 | 218 | 0 | 0 | 217 | 0 |
+| MCP tools | 186 | 186 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 76 | 71 | 0 | 0 | 76 | 0 |
-| Frontend components | 99 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 100 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 10 | 26 | 2 | 20 | 0 | 0 |
+| 0.4g Agents and MCP | 11 | 27 | 2 | 21 | 0 | 0 |
 | 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
@@ -43,12 +43,12 @@ records that — but "✗ none" is proof of a gap.
 
 ## MCP tools: registry vs capability matrix
 
-- Registered by the server: **185**
-- Rows in `TOOL_CAPABILITIES`: **185**
+- Registered by the server: **186**
+- Rows in `TOOL_CAPABILITIES`: **186**
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (217)
+## REST routes (218)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 97 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 98 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -204,6 +204,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 5 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
+| g | `GET /api/workstreams` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | h | `GET /api/baseline` |  | ✗ none | 4 | ✓ 0.4h: source, dirty, capturedAt and a label that says what it is; kept across rescans (baseline); bug 29 |  |  |
@@ -270,7 +271,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 1 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
 | l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
-## MCP tools (185)
+## MCP tools (186)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -380,6 +381,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `get_log_path` | ui · read | ✗ none | 1 | ✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28 |  |  |
 | g | `get_logs` | ui · read | ✗ none | 1 | ✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28 |  |  |
 | g | `get_settings` | ui · read | ✗ none | 1 | ✓ 0.4g: reads back what update_settings wrote; no secrets in settings (cdev-phase5) |  |  |
+| g | `list_workstreams` | awareness · read | ✗ none | 1 |  |  |  |
 | g | `navigate_item_back` | session · write | ✗ none | 1 | ✓ 0.4g: selection steps back (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `navigate_item_forward` | session · write | ✗ none | 1 | ✓ 0.4g: and forward (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `navigate_to` | session · write | ✗ none | 1 | ✓ 0.4g: every target's payload; unknown plan/item/file refused (agent-ui-tools); bug 27 |  |  |
@@ -388,7 +390,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | ✗ none | 8 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | ✗ none | 9 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
@@ -541,7 +543,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (99)
+## Frontend components (100)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -632,6 +634,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/Sidebar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/StatusBar.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: "1852/3680 linked" (m16) |  |
 | g | `layout/TopBar.tsx` |  | n/a | n/a |  | ✓ 0.5 — depth tabs dim where no graph shows; branch chip one line (0.5c) |  |
+| g | `layout/WorkstreamStrip.tsx` |  | n/a | n/a |  |  |  |
 | g | `Toast.tsx` |  | n/a | n/a |  |  |  |
 | g | `WelcomeScreen.tsx` |  | n/a | n/a |  |  |  |
 | i | `audio/AudioCaptureBar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |

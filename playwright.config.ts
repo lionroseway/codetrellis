@@ -150,6 +150,11 @@ export default defineConfig({
         // specs saw no engine in CI and a real one on a machine that had
         // packaged, and the "without the engine" specs failed only there.
         CODETRELLIS_RENDITION_ENGINE: process.env.CODETRELLIS_RENDITION_ENGINE || path.join(E2E_DATA_DIR, 'no-rendition-engine'),
+        // Claude Code's session records. The backend follows every live Claude
+        // session in a folder it trusts (Phase 32 A1.2), and this suite opens
+        // the repository itself — so on a developer's machine it picked up
+        // their own Claude sessions in this checkout. An empty folder instead.
+        CODETRELLIS_CLAUDE_DIR: path.join(E2E_DATA_DIR, 'claude-home'),
       },
       // Reusing whatever is on :3001 meant testing against the developer's
       // dev backend and its real data, with a token this run does not

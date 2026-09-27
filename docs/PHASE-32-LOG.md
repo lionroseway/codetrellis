@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.2: every Claude Code session, keyed by folder |
-| **Status** | A1.1 merged (#146). A1.2 done on its branch (unit 11, harness 2, each new one failing on the old watcher); PR open |
-| **Next action** | Merge A1.2's PR when green; then A1.3 (workstream discovery, `list_workstreams`, the TopBar strip) |
+| **Stage / step** | Track A — A1.3: workstreams and the TopBar strip |
+| **Status** | A1.2 PR (#147) in CI. A1.3 built and tested on a local branch off A1.2 (unit 16, harness 6, browser 4, screenshots); it moves to its own branch once #147 merges |
+| **Next action** | Merge #147 when green; cut `feat/phase-32-a1-3-workstreams`, carry A1.3 over, PR it; then A1.4 (folder watching: debounced diff and status per workstream) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-2-watcher-sessions` |
+| **Branch** | `feat/phase-32-a1-3-workstreams` (to cut) |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -153,6 +153,61 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: A1.3 — workstreams, `list_workstreams`, and the strip
+- **Model.** `services/workstream-service.ts`: a pure `deriveWorkstreams`
+  over git's worktree list, the bound MCP sessions (A1.1) and the Claude
+  log sessions (A1.2). One workstream per live working tree, the main
+  checkout included. Two or more agents in one folder make it `shared`.
+  Idle ones (no agent) are hidden unless asked for; "has changes" joins
+  that rule with A1.4. A folder that isn't a git repository is one
+  workstream with no branch.
+- **One Claude agent seen twice.** A connected Claude Code session is an
+  MCP session and a log session under unrelated ids. Within a folder, each
+  Claude MCP session accounts for one log session. Only the leftovers are
+  added, as "from its log". Two Claude agents with one connected count as
+  two, which is right.
+- **Surfaces.**
+  - `GET /api/workstreams?project=` (confined like `/api/git/worktrees`,
+    `idle=1` for all).
+  - `list_workstreams(project_path?, include_idle?)` in a new
+    `awareness-tools.ts`, capability `read`, with `yours` marking the
+    caller's own. Named in the agent guide and in `docs/claude/mcp-tools.md`.
+- **UX journey (Sam, JOURNEYS A1).** Sam starts agents in two worktrees.
+  The TopBar gains a chip per workstream beside `ConnectedAgents`: a green
+  dot, the branch, the agents' icons, and ⚠ when agents share a folder.
+  Clicking a chip opens its details: branch, what kind it is ("Worktree,
+  shared by 2 agents"), the folder shortened from the left, each agent with
+  its model and last seen, and for a shared folder what to do about it
+  ("Give one of them a worktree of its own"). Escape or a click outside
+  closes it, and another chip swaps it. More than five collapse into `+N`.
+  **Decision:** one agent in the main checkout shows no strip, because
+  `ConnectedAgents` already says that. The strip is for parallel work, and a
+  chip that is always there teaches people to ignore it. Clicking a chip
+  does not focus the graph yet; that needs footprints (A1.5).
+- **Screenshots** from `e2e/agent/workstream-strip.spec.ts` in
+  `test-results/ux-audit/`: `workstreams-strip.png`,
+  `workstreams-shared-detail.png`, `workstreams-detail.png`. Checked:
+  - The first pass showed the folder with its leading `/` moved to the end
+    (an `rtl` truncation trick). Replaced with left truncation in code.
+  - It also showed "No agents" beside a strip full of agents. That came
+    from mocking `/api/workstreams` but not `/api/sessions`; the spec now
+    answers both from one fixture.
+- **Also.** The browser suite's backend now gets its own empty Claude
+  folder, as the harness did in A1.2. It opens this repository, so on a
+  developer's machine it was picking up their own Claude sessions.
+- **Known minor, for A1.8.** A Claude session only in its log shows in the
+  strip but not in `ConnectedAgents` ("2 agents" beside a strip showing 3).
+  The strip's row says "from its log", with a tooltip. Worth one wording
+  pass once the Awareness tab exists.
+- **Tests.**
+  - Unit: `workstream-service.test.ts` (8, from real porcelain output) and
+    `workstream-strip.test.ts` (8).
+  - Harness: `workstreams.test.ts` (6: idle hidden, an MCP agent bound to
+    a worktree, a log-only Claude session, shared, `yours`, confinement).
+  - Browser: `workstream-strip.spec.ts` (4).
+  - Reachable passes (TopBar renders it). Inventory regenerated. Unit 1107
+    pass / 3 environment skips. Lint 0 errors / 295.
 
 ### 2026-09-27: A1.2 — the Claude Code watcher follows every session
 - **What was wrong.** The watcher followed one session: the first live one
