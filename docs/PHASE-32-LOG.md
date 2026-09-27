@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4j Mobile surface |
-| **Status** | 0.4j complete on the branch: harness phone peer, 62 tests over the peer path, bugs 36–42 fixed, domain j's behaviour column filled, RPC untested list empty |
-| **Next action** | Full harness running; then PR into `feat/phase-32`, merge when green, then 0.4k (settings, updates, privacy) |
+| **Stage / step** | 0.4k Settings, updates, privacy |
+| **Status** | Started. #128 (0.4j, bugs 36–42) merged; its full harness at `ec235c5` was 592 passed, 0 retries |
+| **Next action** | Audit domain k: every settings section, update check on/off (`POST /api/updates/check` is untested), the spell-check bundle, logs; drive them with the harness and fill the behaviour column |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4j-mobile` |
+| **Branch** | `feat/phase-32-0.4k-settings` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -45,7 +45,7 @@
 - [x] 0.4g Agents and MCP (#124)
 - [x] 0.4h Drift, governance, review (#125)
 - [x] 0.4i Terminals and audio (#127)
-- [ ] 0.4j Mobile surface
+- [x] 0.4j Mobile surface (#128)
 - [ ] 0.4k Settings, updates, privacy
 - [ ] 0.4l System docs and intake
 - [ ] 0.5 UX audit
@@ -191,6 +191,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 - **Not verified here:** the 31 phone screens and the desktop's two
   pairing components. The phone UI needs a device or simulator; they go
   to 0.5 with the owner on a device.
+- Full harness at `ec235c5`: 592 passed, 0 retries (the first run, at
+  `9a0a6a5`, had one failure: the phase-10 test pinning the old
+  `respond_remote_input` contract). CI green; merged as #128.
 - For the owner: remote audio is forwarded to every connected peer when
   `shareAudio` is on (off by default), with no per-device `capture`
   grant; and `respond_remote_input` lets an agent answer a question a
