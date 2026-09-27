@@ -40,6 +40,9 @@ test.describe('Run checks', () => {
 
     const runs = await (await request.get(`${API}/plans/${plan.uid}/check-runs`)).json();
     expect(runs).toHaveLength(2);
-    expect(runs[0].byType).toBe('human');
+    // The browser suite talks to the backend over plain HTTP, which records
+    // the person as `unverified` (§0.4d); the app window records `human`.
+    // Before carried item 2 every REST write said `human` whoever sent it.
+    expect(runs[0].byType).toBe('unverified');
   });
 });
