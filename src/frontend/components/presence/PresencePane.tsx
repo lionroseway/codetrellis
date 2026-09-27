@@ -295,14 +295,18 @@ export function PresencePane() {
         <span className="text-[12px] font-medium text-foreground flex-1">
           Agent
         </span>
-        {unreadCount > 0 && (
+        {/* One count, and it says what it counts: a bare "1" badge beside
+            "2 cards" left the reader to work out that the 1 was the card
+            an agent is blocked on (Phase 32 §0.5). */}
+        {unreadCount > 0 ? (
           <span className="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded-full font-medium">
-            {unreadCount}
+            {unreadCount} waiting for you
+          </span>
+        ) : (
+          <span className="text-[10px] text-foreground-muted">
+            {cards.length} card{cards.length !== 1 ? 's' : ''}
           </span>
         )}
-        <span className="text-[10px] text-foreground-muted">
-          {cards.length} card{cards.length !== 1 ? 's' : ''}
-        </span>
         <button
           onClick={() => setMinimized(!minimized)}
           className="text-foreground-muted hover:text-foreground transition-colors p-0.5"

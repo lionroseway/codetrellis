@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Folder, ChevronUp, X } from 'lucide-react';
+import { useProjectStore } from '../stores/project-store';
 
 interface DirEntry {
   name: string;
@@ -32,7 +33,11 @@ export function FolderPickerModal() {
   useEffect(() => {
     const handler = () => {
       setOpen(true);
-      browse();
+      // Start beside the open project, where the next one most likely is,
+      // not in the home directory every time (Phase 32 §0.5).
+      const root = useProjectStore.getState().root;
+      const parent = root ? root.replace(/[\\/][^\\/]+[\\/]?$/, '') : '';
+      browse(parent || undefined);
     };
     window.addEventListener('open-folder-picker', handler);
     return () => window.removeEventListener('open-folder-picker', handler);
