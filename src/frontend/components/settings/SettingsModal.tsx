@@ -172,6 +172,7 @@ export function SettingsModal({
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [boundPort, setBoundPort] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Load + reload on focus so external changes (or mcp-port-changed
   // events) reflect.
@@ -192,6 +193,7 @@ export function SettingsModal({
   const update = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
     setSaving(true);
+    setSaveError(null);
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -201,6 +203,11 @@ export function SettingsModal({
     if (res.ok) {
       const next = await res.json();
       setSettings(next);
+    } else {
+      // A refused save used to show nothing: the control simply did not
+      // take, and nothing said why (Phase 32 §0.4k).
+      const body = await res.json().catch(() => null) as { error?: string } | null;
+      setSaveError(body?.error ?? `The change was not saved (${res.status})`);
     }
   };
 
@@ -283,6 +290,11 @@ export function SettingsModal({
 
           {saving && (
             <div className="px-5 py-2 text-[10px] text-foreground-subtle border-t border-white/[0.04]">Saving…</div>
+          )}
+          {!saving && saveError && (
+            <div role="alert" data-testid="settings-save-error" className="px-5 py-2 text-[10.5px] text-red-300 border-t border-white/[0.04]">
+              Not saved: {saveError}
+            </div>
           )}
         </div>
       </div>

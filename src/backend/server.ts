@@ -80,7 +80,7 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
 import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
-import { getSettings, updateSettings, getAuthorKey, readGitIdentity } from './services/settings-service';
+import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
@@ -3686,7 +3686,14 @@ app.get('/api/mcp/setup', (_req, res) => {
 // --- Logs API (Phase 13 follow-up) ---
 
 app.get('/api/logs/tail', (req, res) => {
-  const maxBytes = req.query.maxBytes ? Math.min(Number(req.query.maxBytes), 1024 * 1024) : 64 * 1024;
+  // A size, or the default. `Number('abc')` is NaN, and NaN went straight
+  // through `Math.min` into the read (Phase 32 §0.4k).
+  const asked = req.query.maxBytes === undefined ? 64 * 1024 : Number(req.query.maxBytes);
+  if (!Number.isInteger(asked) || asked < 1) {
+    res.status(400).json({ error: 'maxBytes must be a whole number of bytes' });
+    return;
+  }
+  const maxBytes = Math.min(asked, 1024 * 1024);
   res.json({
     path: getCurrentLogPath(),
     content: tailLog(maxBytes),
@@ -3862,7 +3869,13 @@ app.get('/api/settings', (_req, res) => {
 
 app.put('/api/settings', (req, res) => {
   const before = getSettings();
-  const next = updateSettings(req.body || {});
+  let next: ReturnType<typeof updateSettings>;
+  try {
+    next = updateSettings(req.body || {});
+  } catch (err) {
+    if (err instanceof SettingsError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
   // Tell the frontend (and any open Settings panels in other windows)
   // that settings changed.
   broadcast('settings-changed', { settings: next });

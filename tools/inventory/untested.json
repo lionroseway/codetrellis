@@ -1,7 +1,6 @@
 {
   "rest": [
-    "POST /api/system-docs/:uid/verify",
-    "POST /api/updates/check"
+    "POST /api/system-docs/:uid/verify"
   ],
   "mcp": [
     "read_system_doc"

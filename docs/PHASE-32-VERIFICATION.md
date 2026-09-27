@@ -14,12 +14,12 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 217 | 203 | 2 | 2 | 140 | 0 |
+| REST routes | 217 | 203 | 1 | 1 | 150 | 0 |
 | MCP tools | 185 | 147 | 5 | 1 | 141 | 0 |
 | Mobile RPC methods | 76 | 49 | 0 | 0 | 76 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
-| Settings sections | 12 | n/a | n/a | n/a | 0 | 0 |
+| Settings sections | 12 | n/a | n/a | n/a | 10 | 0 |
 
 ## By domain
 
@@ -248,17 +248,17 @@ is proof of a gap.
 | j | `POST /api/peers/remote-terminals/:fingerprint/:terminalId/write` |  | ✗ none | 1 | ✓ 0.4j: input reaches the peer; unknown terminal 404, no data 400 (phone-sync-and-tools) |  |  |
 | j | `POST /api/sync/export` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
 | j | `POST /api/sync/import` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
-| k | `GET /api/logs/path` |  | ✗ none | 1 |  |  |  |
-| k | `GET /api/logs/tail` |  | ✗ none | 1 |  |  |  |
+| k | `GET /api/logs/path` |  | ✗ none | 2 | ✓ 0.4k: today's file under the data dir's logs (settings-surface) |  |  |
+| k | `GET /api/logs/tail` |  | ✗ none | 2 | ✓ 0.4k: answers without a file logger; maxBytes must be a whole number (settings-surface) |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
-| k | `GET /api/settings` |  | ✗ none | 22 |  |  |  |
-| k | `GET /api/settings/first-run-check` |  | ✗ none | 2 |  |  |  |
-| k | `GET /api/updates/download/status` |  | ✗ none | 1 |  |  |  |
-| k | `GET /api/updates/status` |  | ✗ none | 1 |  |  |  |
-| k | `POST /api/updates/check` |  | ✗ none | ✗ none |  |  |  |
-| k | `POST /api/updates/download` |  | ✗ none | 1 |  |  |  |
-| k | `POST /api/updates/download/cancel` |  | ✗ none | 1 |  |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 22 |  |  |  |
+| k | `GET /api/settings` |  | ✗ none | 23 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
+| k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
+| k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
+| k | `GET /api/updates/status` |  | ✗ none | 2 | ✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates) |  |  |
+| k | `POST /api/updates/check` |  | ✗ none | 1 | ✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates) |  |  |
+| k | `POST /api/updates/download` |  | ✗ none | 2 | ✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download |  |  |
+| k | `POST /api/updates/download/cancel` |  | ✗ none | 1 | ✓ 0.4k: answers cleanly with nothing running (update-download) |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 23 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 3 |  |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
@@ -682,15 +682,15 @@ is proof of a gap.
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| k | `about` |  | n/a | n/a |  |  |  |
+| k | `about` |  | n/a | n/a | ✓ 0.4k: name, version, copy build info, jump to Updates (e2e about) |  |  |
 | k | `appearance` |  | n/a | n/a |  |  |  |
-| k | `data` |  | n/a | n/a |  |  |  |
-| k | `devices` |  | n/a | n/a |  |  |  |
-| k | `identity` |  | n/a | n/a |  |  |  |
-| k | `logs` |  | n/a | n/a |  |  |  |
-| k | `mcp` |  | n/a | n/a |  |  |  |
-| k | `plans` |  | n/a | n/a |  |  |  |
-| k | `power` |  | n/a | n/a |  |  |  |
+| k | `data` |  | n/a | n/a | ✓ 0.4k: override box and the restart note (e2e data) — saving not checked |  |  |
+| k | `devices` |  | n/a | n/a | ✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access) |  |  |
+| k | `identity` |  | n/a | n/a | ✓ 0.4k: display name saves on leaving the box (e2e sections-save); pull from git config (e2e identity) |  |  |
+| k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) |  |  |
+| k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) |  |  |
+| k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) |  |  |
+| k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) |  |  |
 | k | `sync` |  | n/a | n/a |  |  |  |
-| k | `telemetry` |  | n/a | n/a |  |  |  |
-| k | `updates` |  | n/a | n/a |  |  |  |
+| k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) |  |  |
+| k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) |  |  |

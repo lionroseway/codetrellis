@@ -210,9 +210,9 @@ test.describe.serial('Channels, projects and the rest from the phone', () => {
 
     await phone.grant(['read', 'write', 'project', 'files', 'settings']);
     try {
-      const updated = await phone.rpc('settings.update', { identity: { name: 'Dana from the phone' }, mcp: { port: 1 }, webhooks: { allowedHosts: ['evil.test'] } });
-      expect(updated.identity.name).toBe('Dana from the phone');
-      await events.waitFor('settings-changed', (p) => p.settings?.identity?.name === 'Dana from the phone');
+      const updated = await phone.rpc('settings.update', { identity: { displayName: 'Dana from the phone' }, mcp: { port: 1 }, webhooks: { allowedHosts: ['evil.test'] } });
+      expect(updated.identity.displayName).toBe('Dana from the phone');
+      await events.waitFor('settings-changed', (p) => p.settings?.identity?.displayName === 'Dana from the phone');
       // Ports, paths and where webhooks may go are not the phone's to change.
       const after = await req('GET', '/api/settings');
       expect(after.mcp).toEqual(settings.mcp);
