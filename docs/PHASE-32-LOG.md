@@ -56,7 +56,7 @@
 ### Track A: awareness
 - [x] Carried 1: the coverage guard credits calls, not names (bug 50) (#141)
 - [x] Owner's report: update download shows progress and asks where to save (bug 51) (#142)
-- [ ] Carried 2: no tool or handler writes a fixed author (structural test)
+- [ ] Carried 2: no tool or handler writes a fixed author (structural test; bug 52)
 - [ ] Carried 3: harness and browser suites run in CI, sharded
 - [ ] A0 Parallel-work bugs 1–3
 - [ ] A1.1 Session binding
@@ -153,6 +153,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: Track A, carried 2 — no handler writes a fixed author (bug 52)
+
+The review's second carried item. Authorship had gone wrong the same way
+four times in Stage 0 (43, 47, 49, the grant escalation), each fixed where
+it was found. Building the guard found the rest (bug 52): about twenty REST
+writes recorded `human` over plain HTTP, four handlers took the author or
+its type from the body, the plan edit wrote `'user'`, and an agent that
+never registered posted to channels as the person.
+
+The rule is §0.4d's, the owner's decision, now in one place per transport:
+
+| Transport | Helper | Records |
+|---|---|---|
+| REST (`server.ts`) | `personFrom(req)`, `actorFrom(req)`, `decisionFrom(req)` | the app window `human`; plain HTTP `unverified` |
+| phone (`mobile-rpc-service.ts`) | `phonePerson()`, `phoneActor()` | the person on that device |
+| MCP (`mcp/tools/*`) | `authorFromExtra(deps, extra)` | the agent that called |
+
+- `src/backend/authorship.test.ts`: only those helpers may name the person,
+  nothing reads an author from the body or params, and no tool writes a
+  literal author or lets the agent set one. Six failures on the old code.
+- The UI says "local API, unverified" (`lib/author-words.ts`) where it used
+  to call anything not `human` an agent: comments, the channel pane, the
+  Brief's "added by", the old comment thread.
+- REST claim still takes `agentId` from the body. It sets the assignee, and
+  A0 reworks claims to record the session, so it is left to A0.
+- The owner was asked (readout doc) to confirm `unverified` for plain HTTP;
+  it follows the §0.4d decision already applied to decisions, budgets,
+  freezes and system docs.
+
+Tests: guard (27), `author-words` (2), `tests/e2e/authorship.test.ts` (4).
+Full harness 644/644 after two tests that encoded REST as `human` were
+updated in their own commit; one browser spec likewise. Lint 295 warnings
+(from 297).
 
 ### 2026-09-27: the update download shows progress and asks where to save (bug 51)
 

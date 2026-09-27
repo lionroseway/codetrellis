@@ -384,6 +384,12 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 - Mobile uses `mobile/lib/rpc.ts` for JSON-RPC over the `control`
   channel; state syncs via snapshots + `fast-json-patch` diffs on
   the `ui` channel.
+- **Every record's author comes from how the call arrived**, through one
+  helper per transport: `personFrom(req)` / `actorFrom(req)` in `server.ts`
+  (app window `human`, plain HTTP `unverified`), `phonePerson()` /
+  `phoneActor()` for the phone, `authorFromExtra(deps, extra)` for MCP tools.
+  Never a literal, never a name from the request. `src/backend/authorship.test.ts`
+  enforces it (Phase 32, bug 52).
 - Per-service services follow `*-service.ts` naming; remote variants
   (`remote-terminal-service`, `remote-audio-service`,
   `remote-interaction-service`, `mobile-rpc-service`) wrap local
