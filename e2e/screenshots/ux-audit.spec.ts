@@ -185,7 +185,9 @@ test.describe.serial('UX audit capture', () => {
       await client.callTool('request_plan_deletion', { plan_uids: [planUid], reason: 'Superseded by the new loader plan' });
       await page.waitForTimeout(1500);
       await shot(page, '21-deletion-request');
-      await page.keyboard.press('Escape');
+      // Answered, not dismissed: a pending request opens on every page that
+      // loads afterwards, including the next spec's.
+      await page.getByRole('button', { name: 'Keep it' }).click();
 
       await client.callTool('set_freeze', { project_path: PROJECT_PATH, active: true, reason: 'Release week' });
       await client.callTool('set_budget', { plan_uid: planUid, minutes: 240 });

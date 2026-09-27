@@ -134,7 +134,7 @@ function PickABrief() {
         <h2 className="text-[16px] font-semibold mb-2">Pick a brief</h2>
         <p className="text-[13px] text-foreground-muted leading-relaxed mb-4">
           A brief is a piece of work: the tasks in it, the materials you gave, and what good looks like for each.
-          Ask Claude to start one from your request, or open one below.
+          Ask your agent to start one from your request, or open one below.
         </p>
         {here.length === 0 ? (
           <p className="text-[12px] text-foreground-subtle">No briefs in this folder yet.</p>
@@ -268,7 +268,7 @@ export function BriefWorkspace() {
             <ArtefactRows title={BRIEF_WORDS.evidence} rows={files.filter((a) => a.role === 'evidence')} itemUid={task.uid} testId="brief-evidence" />
             {files.length === 0 && ctx && (
               <p className="mt-6 text-[12px] text-foreground-subtle">
-                No materials yet. Ask Claude to add the files this task needs, or give them in your request.
+                No materials yet. Ask your agent to add the files this task needs, or give them in your request.
               </p>
             )}
           </>

@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | 0.5 UX audit |
-| **Status** | 0.5a on the branch: every panel captured (`e2e/screenshots/ux-audit.spec.ts`, 34 shots), reviewed against §1.6; 4 majors fixed, 23 minors listed in the 0.5a entry |
-| **Next action** | PR 0.5a into `feat/phase-32`, merge when green. Then 0.5b: the settings copy minors (m6–m13), then 0.5c the workspace minors; phone screens with the owner |
+| **Status** | 0.5a merged (#131). 0.5b on the branch: the settings minors m6–m15 fixed |
+| **Next action** | PR 0.5b, merge when green. Then 0.5c: the workspace minors (m1–m5, m16–m23); phone screens with the owner |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.5-ux` |
+| **Branch** | `feat/phase-32-0.5b-settings-copy` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -145,6 +145,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.5b — settings wording (m6–m15)
+
+0.5a merged as [#131](https://github.com/lionroseway/codetrellis/pull/131).
+
+Fixed, from the 0.5a list:
+
+- m6 A refused setting is named as a person reads it ("The MCP port must
+  be a number from 1024 to 65535"); the API keeps the key, which is right
+  for agents. `lib/settings-words.ts`, with a unit test.
+- m7 The log tail says whether this run writes a file (`writing`), so
+  the panel tells "not writing a log file" from "nothing logged yet".
+- m8 Telemetry no longer states a database path that is wrong when the
+  data directory is overridden.
+- m9 Updates says what the verified download does, not that
+  auto-download "will land".
+- m10, m11 Native controls are dark; the modal keeps one height.
+- m12 Power speaks plainly, and its status line says what is happening
+  ("Keeping this desktop awake — an agent is working").
+- m13 The data-directory note is advice, not an amber warning.
+- m14 The budget boxes keep their units (min, USD) once filled.
+- m15 The Brief says "your agent", not "Claude".
+
+Found on the way: `e2e/settings/about.spec.ts` clicked the first "Copy"
+button on the page, which was the branch chip on a branch named
+`…-settings-copy`. Scoped to the dialog, in its own commit.
+
+Open: m1–m5, m16–m23 (0.5c).
 
 ### 2026-09-27: 0.5a — the UX audit, and its four majors
 

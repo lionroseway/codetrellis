@@ -1106,7 +1106,7 @@
   },
   "settings:mcp": {
     "behaviour": "✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools)",
-    "ux": "✓ 0.5a — minors: refusal names the key (m6), native checkboxes (m10)"
+    "ux": "✓ 0.5 — a refused value is named as a person reads it (0.5b)"
   },
   "settings:plans": {
     "behaviour": "✓ 0.4k: default visibility saves (e2e sections-save, e2e plans)",
@@ -1118,19 +1118,19 @@
   },
   "settings:power": {
     "behaviour": "✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface)",
-    "ux": "✓ 0.5a — minor: jargon (m12)"
+    "ux": "✓ 0.5 — plain words, status says what is happening (0.5b)"
   },
   "settings:updates": {
     "behaviour": "✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates)",
-    "ux": "✓ 0.5a — error state says why and offers retry; minor: stale footer (m9)"
+    "ux": "✓ 0.5 — error says why with retry; footer describes the verified download (0.5b)"
   },
   "settings:logs": {
     "behaviour": "✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface)",
-    "ux": "✓ 0.5a — backticks fixed; minor: \"(log file empty)\" in web (m7)"
+    "ux": "✓ 0.5 — says when this run writes no log file (0.5b)"
   },
   "settings:data": {
     "behaviour": "✓ 0.4k: override box and the restart note (e2e data) — saving not checked",
-    "ux": "✓ 0.5a — minor: static amber note (m13); saving the override still unverified"
+    "ux": "✓ 0.5 — note is advice, not a warning (0.5b); saving the override still unverified"
   },
   "settings:about": {
     "behaviour": "✓ 0.4k: name, version, copy build info, jump to Updates (e2e about)",
@@ -1138,7 +1138,7 @@
   },
   "settings:telemetry": {
     "behaviour": "✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI)",
-    "ux": "✓ 0.5a — minor: database path hard-coded (m8)"
+    "ux": "✓ 0.5 — no hard-coded database path (0.5b)"
   },
   "rest:GET /api/system-docs": {
     "behaviour": "✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs)"
@@ -1183,7 +1183,7 @@
     "behaviour": "✓ 0.4l: advances the watermark; unknown plan refused (sysdocs-intake)"
   },
   "settings:appearance": {
-    "ux": "✓ 0.5a — minor: native white radios (m10)"
+    "ux": "✓ 0.5 — dark native controls (0.5b)"
   },
   "settings:sync": {
     "ux": "✓ 0.5a"
@@ -1213,7 +1213,7 @@
     "ux": "✓ 0.5a — empty state says what to do"
   },
   "component:brief/BriefWorkspace.tsx": {
-    "ux": "✓ 0.5a — minor: \"Ask Claude\" (m15)"
+    "ux": "✓ 0.5 — agent-agnostic wording (0.5b)"
   },
   "component:guide/GuideModal.tsx": {
     "ux": "✓ 0.5a"
@@ -1234,7 +1234,7 @@
     "ux": "✓ 0.5a — flagged change named, with Seen"
   },
   "component:plan/v2/PlanBudgetChip.tsx": {
-    "ux": "✓ 0.5a — minor: minutes box unlabelled (m14)"
+    "ux": "✓ 0.5 — units stay on the ceiling boxes (0.5b)"
   },
   "component:plan/v2/PlanWorkspaceShellV2.tsx": {
     "ux": "✓ 0.5a — minors: repeated counts, \"V2\" (m3)"
@@ -1252,6 +1252,6 @@
     "ux": "✓ 0.5a"
   },
   "component:settings/SettingsModal.tsx": {
-    "ux": "✓ 0.5a — minor: height jumps between sections (m11)"
+    "ux": "✓ 0.5 — one height for every section (0.5b)"
   }
 }

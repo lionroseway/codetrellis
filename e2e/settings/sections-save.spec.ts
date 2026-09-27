@@ -40,7 +40,7 @@ test.describe('Settings sections save', () => {
     const port = page.getByRole('dialog').locator('input[type="number"]').first();
     await port.fill('80');
     await port.blur();
-    await expect(page.getByTestId('settings-save-error')).toContainText('Not saved: mcp.port must be a port from 1024 to 65535');
+    await expect(page.getByTestId('settings-save-error')).toContainText('Not saved: The MCP port must be a number from 1024 to 65535');
     expect((await settingsNow(request)).mcp.port).toBe(before.mcp.port);
   });
 

@@ -584,7 +584,7 @@ is proof of a gap.
 | c | `plan/v2/NextUpStrip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PantryPlaceholder.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanActivityDrawer.tsx` |  | n/a | n/a |  |  |  |
-| c | `plan/v2/PlanBudgetChip.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: minutes box unlabelled (m14) |  |
+| c | `plan/v2/PlanBudgetChip.tsx` |  | n/a | n/a |  | ✓ 0.5 — units stay on the ceiling boxes (0.5b) |  |
 | c | `plan/v2/PlanCheckRunPanel.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanCompletionSummary.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanDiffPanel.tsx` |  | n/a | n/a |  |  |  |
@@ -608,7 +608,7 @@ is proof of a gap.
 | c | `plan/v2/TargetsStrip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/TeamActivityPanel.tsx` |  | n/a | n/a |  |  |  |
 | e | `artefact/ArtefactViewer.tsx` |  | n/a | n/a |  |  |  |
-| e | `brief/BriefWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: "Ask Claude" (m15) |  |
+| e | `brief/BriefWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5 — agent-agnostic wording (0.5b) |  |
 | e | `brief/SignoffPackControls.tsx` |  | n/a | n/a |  |  |  |
 | f | `presence/PresencePane.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: badge + count, toast over reply, above modal backdrop (m17, m22) |  |
 | g | `ActiveAgentProjects.tsx` |  | n/a | n/a |  |  |  |
@@ -637,7 +637,7 @@ is proof of a gap.
 | j | `pairing/DeviceIndicator.tsx` |  | n/a | n/a |  |  |  |
 | j | `pairing/RemotePeersPanel.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToClaudeDesktop.tsx` |  | n/a | n/a |  |  |  |
-| k | `settings/SettingsModal.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: height jumps between sections (m11) |  |
+| k | `settings/SettingsModal.tsx` |  | n/a | n/a |  | ✓ 0.5 — one height for every section (0.5b) |  |
 | k | `settings/VerifiedUpdateDownload.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
 | l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state is content |  |
@@ -683,14 +683,14 @@ is proof of a gap.
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
 | k | `about` |  | n/a | n/a | ✓ 0.4k: name, version, copy build info, jump to Updates (e2e about) | ✓ 0.5a — macOS note only on macOS, no longer amber |  |
-| k | `appearance` |  | n/a | n/a |  | ✓ 0.5a — minor: native white radios (m10) |  |
-| k | `data` |  | n/a | n/a | ✓ 0.4k: override box and the restart note (e2e data) — saving not checked | ✓ 0.5a — minor: static amber note (m13); saving the override still unverified |  |
+| k | `appearance` |  | n/a | n/a |  | ✓ 0.5 — dark native controls (0.5b) |  |
+| k | `data` |  | n/a | n/a | ✓ 0.4k: override box and the restart note (e2e data) — saving not checked | ✓ 0.5 — note is advice, not a warning (0.5b); saving the override still unverified |  |
 | k | `devices` |  | n/a | n/a | ✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access) | ✓ 0.5a — major fixed: "no ports exposed" contradicted the port it opens; placeholder no longer a real name |  |
 | k | `identity` |  | n/a | n/a | ✓ 0.4k: display name saves on leaving the box (e2e sections-save); pull from git config (e2e identity) | ✓ 0.5a |  |
-| k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) | ✓ 0.5a — backticks fixed; minor: "(log file empty)" in web (m7) |  |
-| k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) | ✓ 0.5a — minors: refusal names the key (m6), native checkboxes (m10) |  |
+| k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) | ✓ 0.5 — says when this run writes no log file (0.5b) |  |
+| k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) | ✓ 0.5 — a refused value is named as a person reads it (0.5b) |  |
 | k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) | ✓ 0.5a — stale "coming" note and raw markdown link fixed |  |
-| k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) | ✓ 0.5a — minor: jargon (m12) |  |
+| k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) | ✓ 0.5 — plain words, status says what is happening (0.5b) |  |
 | k | `sync` |  | n/a | n/a |  | ✓ 0.5a |  |
-| k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) | ✓ 0.5a — minor: database path hard-coded (m8) |  |
-| k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) | ✓ 0.5a — error state says why and offers retry; minor: stale footer (m9) |  |
+| k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) | ✓ 0.5 — no hard-coded database path (0.5b) |  |
+| k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) | ✓ 0.5 — error says why with retry; footer describes the verified download (0.5b) |  |
