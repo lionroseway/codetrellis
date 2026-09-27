@@ -108,7 +108,7 @@ test.describe('CDev Phase 10 — multi-device', () => {
     }
   });
 
-  test('remote input requests — empty initially, respond handles unknown gracefully', async () => {
+  test('remote input requests — empty initially, responding to an unknown one is refused', async () => {
     const h = await setupHarness('cdev-phase10-input');
     try {
       const agent = await h.spawnAgent({ agentType: 'claude-code', model: 'opus-4-7' });
@@ -120,12 +120,13 @@ test.describe('CDev Phase 10 — multi-device', () => {
       expect(listData.count).toBe(0);
       expect(Array.isArray(listData.requests)).toBe(true);
 
-      // Respond to a non-existent request should return sent=false
+      // A non-existent request is an error the agent sees, with sent=false
+      // (Phase 32 §0.4j, like bug 27's unknown ids).
       const respondRes = await agent.callTool('respond_remote_input', {
         request_id: 'nonexistent-request',
         response: 'test response',
       });
-      expect(respondRes.isError).not.toBe(true);
+      expect(respondRes.isError).toBe(true);
       const respondData = JSON.parse(respondRes.text);
       expect(respondData.sent).toBe(false);
     } finally {
