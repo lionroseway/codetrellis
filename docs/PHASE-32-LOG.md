@@ -14,7 +14,7 @@
 | **Stage / step** | Track A — carried item 1: the coverage guard credits calls, not names |
 | **Status** | 0.1.17 released (owner, 2026-09-27). `feat/phase-32` fast-forwarded to `main` (`0861ee8`). Guard rewritten: tools, RPC methods and routes (with their method) are credited only where a test sends them; two routes it exposed are tested |
 | **Next action** | PR `feat/phase-32-a-coverage-calls` into `feat/phase-32`; merge when green. Then carried item 2: the authorship guard |
-| **Blockers** | none. The published v0.1.17 notes (build number, commit filled in) are not back in `docs/releases/v0.1.17.md` yet — the release machine's notes PR hasn't been opened |
+| **Blockers** | none. The notes as published are on `main` (#139); `feat/phase-32` fast-forwarded to it (`9069079`) |
 | **Branch** | `feat/phase-32-a-coverage-calls` |
 | **Last updated** | 2026-09-27 |
 
