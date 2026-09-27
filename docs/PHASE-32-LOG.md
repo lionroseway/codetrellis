@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4l System docs and intake |
-| **Status** | 0.4l complete on the branch: domain l tested and filled, bugs 47 fixed and 46 recorded for A1.7, the owner's granting decision built, `untested.json` empty |
-| **Next action** | Full harness; PR into `feat/phase-32`; merge when green. Then 0.5 UX audit (screenshots of every panel; includes Appearance/Sync sections, phone screens with the owner, Presence Pane and toolbar overlap) |
+| **Status** | 0.4l complete and verified: full harness 626/626, affected browser specs 91/91 (settings, phase30-settings, remaining-routes, broadcast-events, mcp-ui-tools); PR open into `feat/phase-32` |
+| **Next action** | Merge the 0.4l PR when CI is green. Then 0.5 UX audit (screenshots of every panel; includes Appearance/Sync sections, phone screens with the owner, Presence Pane and toolbar overlap) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4l-sysdocs` |
 | **Last updated** | 2026-09-27 |
