@@ -68,6 +68,12 @@ const DEVICE_CAPABILITIES: Array<{
   { name: 'project', label: 'Open and close projects', hint: 'Switch which project this desktop is working on.' },
   { name: 'files', label: 'Read file contents', hint: 'Open source files and browse folders on this machine.' },
   {
+    name: 'capture',
+    label: 'Receive your microphone audio',
+    hint: 'When "Share audio capture" is on, this device gets the audio this machine records. Off, nothing is shared with it.',
+    sensitive: true,
+  },
+  {
     name: 'terminal',
     label: 'Run commands and read terminal output',
     hint: 'Create terminals, type into them, and read scrollback and live output. This is command execution on this machine.',
@@ -86,9 +92,8 @@ const DEVICE_CAPABILITIES: Array<{
  *
  * Separate from `DEVICE_CAPABILITIES` because the surfaces differ in what
  * they can reach, not because the vocabulary differs: both read the same
- * seven names. `capture` is absent from the device list because no peer RPC
- * method needs it yet, and showing a toggle that governs nothing would be
- * worse than not showing it.
+ * seven names. For a device, `capture` governs the shared-audio relay
+ * (Phase 32 §0.4k): the switch below and this grant, both.
  */
 const MCP_DEFAULT_CAPABILITIES: PeerCapabilityName[] = ['read', 'write', 'project', 'files'];
 
@@ -1547,7 +1552,7 @@ function DevicesSection({
             <span className="text-[12px]">Share audio capture with paired devices</span>
           </label>
           <p className="text-[10px] text-foreground-subtle mt-1 ml-5">
-            When enabled, agents on paired devices can access audio captured on this machine.
+            When enabled, audio captured on this machine goes to paired devices you have allowed to receive it (each device&apos;s &ldquo;Receive your microphone audio&rdquo;).
           </p>
         </Field>
 

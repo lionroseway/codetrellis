@@ -17,8 +17,20 @@
  *     0x03 = audio stopped (no payload)
  *
  * Privacy: forwarding only happens if `settings.device.shareAudio` is
- * true on the sender. The receiver's agent sees the audio as local.
+ * true on the sender, and only to a device holding the `capture` grant on a
+ * pairing confirmed on the desktop (owner's decision, Phase 32 §0.4k). The
+ * switch alone sent it to every connected device. The receiver's agent sees
+ * the audio as local.
  */
+
+/** Send an audio frame to every connected device that may receive the microphone. */
+function sendToCapturePeers(payload: Buffer): void {
+  for (const peer of getPeerConnections()) {
+    if (peer.state === 'connected' && peerHolds(peer.fingerprint, 'capture')) {
+      sendToPeer(peer.fingerprint, DATA_CHANNELS.AUDIO, payload);
+    }
+  }
+}
 
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy___audio_buffer_service from './audio-buffer-service';
@@ -26,9 +38,11 @@ import { DATA_CHANNELS } from '../../shared/types';
 import {
   onChannelMessage,
   onConnectionStateChange,
-  broadcastToAllPeers,
+  getPeerConnections,
   sendToPeer,
 } from './webrtc-service';
+import { onDeviceGrantsChanged } from './paired-device-service';
+import { peerHolds } from './peer-grants';
 import { getSettings } from './settings-service';
 
 // --- Constants ---------------------------------------------------------------
@@ -55,6 +69,7 @@ export interface RemoteAudioStatus {
 let running = false;
 let unsubMessage: (() => void) | null = null;
 let unsubConnection: (() => void) | null = null;
+let unsubGrants: (() => void) | null = null;
 
 /** Remote audio status from connected peers. */
 const remoteAudioStatus = new Map<string, RemoteAudioStatus>();
@@ -83,6 +98,11 @@ export function startRemoteAudio(): void {
     }
   });
 
+  // Granted `capture` while connected: tell it the state now.
+  unsubGrants = onDeviceGrantsChanged((fingerprint, added) => {
+    if (added.includes('capture')) sendAudioStatus(fingerprint);
+  });
+
   console.log('[RemoteAudio] Started');
 }
 
@@ -95,6 +115,7 @@ export function stopRemoteAudio(): void {
 
   if (unsubMessage) { unsubMessage(); unsubMessage = null; }
   if (unsubConnection) { unsubConnection(); unsubConnection = null; }
+  if (unsubGrants) { unsubGrants(); unsubGrants = null; }
 
   remoteAudioStatus.clear();
 
@@ -117,7 +138,7 @@ export function forwardAudioChunk(chunkData: Buffer): void {
   const payload = Buffer.alloc(1 + chunkData.length);
   payload[0] = MSG.AUDIO_CHUNK;
   chunkData.copy(payload, 1);
-  broadcastToAllPeers(DATA_CHANNELS.AUDIO, payload);
+  sendToCapturePeers(payload);
 }
 
 /**
@@ -132,7 +153,7 @@ export function broadcastAudioStatus(capturing: boolean, bufferedSeconds: number
 
   const status = JSON.stringify({ capturing, bufferedSeconds });
   const msg = Buffer.from(String.fromCharCode(MSG.AUDIO_STATUS) + status);
-  broadcastToAllPeers(DATA_CHANNELS.AUDIO, msg);
+  sendToCapturePeers(msg);
 }
 
 /**
@@ -142,7 +163,7 @@ export function broadcastAudioStopped(): void {
   if (!running) return;
 
   const msg = Buffer.from([MSG.AUDIO_STOPPED]);
-  broadcastToAllPeers(DATA_CHANNELS.AUDIO, msg);
+  sendToCapturePeers(msg);
 }
 
 /**
@@ -181,6 +202,7 @@ export function isRemoteAudioRunning(): boolean {
 function sendAudioStatus(fingerprint: string): void {
   const settings = getSettings();
   if (!settings.device.shareAudio) return;
+  if (!peerHolds(fingerprint, 'capture')) return;
 
   let capturing = false;
   let bufferedSeconds = 0;
