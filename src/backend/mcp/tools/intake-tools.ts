@@ -62,6 +62,9 @@ const deepSchema = leafSchema.extend({ children: z.array(leafSchema).optional() 
 const midSchema = leafSchema.extend({ children: z.array(deepSchema).optional() });
 const rootSchema = leafSchema.extend({ children: z.array(midSchema).optional() });
 
+/** Refusal for a plan uid that names no plan (as bug 27's tools do). */
+const noPlan = (uid: string) => ({ content: [{ type: 'text' as const, text: `Plan not found: ${uid}` }], isError: true });
+
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- create_plan_from_external ---
 
@@ -124,11 +127,17 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // perfectly normal. Found because the drift feed reported 0 of 3
       // satisfied on a plan whose work had demonstrably landed: with no
       // project there is no working tree to ask.
+      // A plan belongs to a project. With none named and none open it was
+      // created with an empty path, which nothing lists (Phase 32 §0.4l).
+      const projectPath = args.project_path ?? getActiveProjectRoot();
+      if (!projectPath) {
+        return { content: [{ type: 'text' as const, text: 'No project is open: pass project_path, or open the project first.' }], isError: true };
+      }
       const plan = deps.planService.createPlan(
         { title: args.title, description: args.description ?? '', tasks: [] },
         author.author,
         author.authorType,
-        args.project_path ?? getActiveProjectRoot() ?? '',
+        projectPath,
       );
 
       if (args.external) {
@@ -219,6 +228,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, url, key, title }, extra: any) => {
+      if (!deps.planService.getPlan(plan_uid)) return noPlan(plan_uid);
       // Every other write path in this file resolves the author first.
       // This one did not, so the service defaulted to 'human' and the row
       // claimed a person attached the ticket — an agent's epic was
@@ -252,6 +262,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid }) => {
+      if (!deps.planService.getPlan(plan_uid)) return noPlan(plan_uid);
       const state = getSyncState(plan_uid);
       return {
         content: [{
@@ -294,6 +305,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, note }, extra: any) => {
+      // A watermark for a plan that does not exist was recorded all the same.
+      if (!deps.planService.getPlan(plan_uid)) return noPlan(plan_uid);
       const author = authorFromExtra(deps, extra);
       const result = markSynced(plan_uid, author.author, note);
       return {
@@ -313,8 +326,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description: 'The tickets attached to a plan itself (as opposed to its items).',
       inputSchema: { plan_uid: z.string() },
     },
-    async ({ plan_uid }) => ({
-      content: [{ type: 'text' as const, text: JSON.stringify(getPlanExternalRefs(plan_uid), null, 2) }],
-    }),
+    async ({ plan_uid }) => {
+      if (!deps.planService.getPlan(plan_uid)) return noPlan(plan_uid);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(getPlanExternalRefs(plan_uid), null, 2) }] };
+    },
   );
 }

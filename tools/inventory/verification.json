@@ -813,7 +813,7 @@
     "behaviour": "✓ 0.4j: input reaches the peer; unknown terminal 404, no data 400 (phone-sync-and-tools)"
   },
   "rest:PUT /api/system-docs/:uid": {
-    "behaviour": "✓ 0.4j: saved, desktop told; unknown 404 (phone-terminals-sysdocs)"
+    "behaviour": "✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47"
   },
   "rpc:artefact.preview": {
     "behaviour": "✓ 0.4j: unknown file and bad transfer id refused (phone-sync-and-tools), mobile-approvals unit"
@@ -1129,5 +1129,47 @@
   },
   "settings:telemetry": {
     "behaviour": "✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI)"
+  },
+  "rest:GET /api/system-docs": {
+    "behaviour": "✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs)"
+  },
+  "rest:POST /api/system-docs": {
+    "behaviour": "✓ 0.4l: file and row; unverified over plain HTTP whatever the body claims (sysdocs-intake); bug 47"
+  },
+  "rest:POST /api/system-docs/:uid/verify": {
+    "behaviour": "✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake)"
+  },
+  "mcp:list_system_docs": {
+    "behaviour": "✓ 0.4l: the project's docs; search over title and body (sysdocs-intake)"
+  },
+  "mcp:read_system_doc": {
+    "behaviour": "✓ 0.4l: by uid or by slug; unknown refused (sysdocs-intake)"
+  },
+  "mcp:write_system_doc": {
+    "behaviour": "✓ 0.4l: creates in the agent's name (was recorded as a person's); update renames the file with the title; unknown uid refused (sysdocs-intake); bug 47"
+  },
+  "mcp:verify_system_doc": {
+    "behaviour": "✓ 0.4l: stamps HEAD (sysdocs-intake)"
+  },
+  "mcp:check_doc_freshness": {
+    "behaviour": "✓ 0.4l: fresh after verify; names the referenced file after a commit changes it; same as REST (sysdocs-intake)"
+  },
+  "mcp:delete_system_doc": {
+    "behaviour": "✓ 0.4l: row and file gone; unknown refused (sysdocs-intake)"
+  },
+  "mcp:create_plan_from_external": {
+    "behaviour": "✓ 0.4l: nested items with ticket keys (derived from URLs), fourth level levelled into the third, criteria as a checklist; duplicate epic refused naming the plan; no project refused (sysdocs-intake)"
+  },
+  "mcp:set_plan_external_ref": {
+    "behaviour": "✓ 0.4l: idempotent on the key; unknown plan refused (sysdocs-intake)"
+  },
+  "mcp:list_plan_external_refs": {
+    "behaviour": "✓ 0.4l: the plan's own ticket; unknown plan refused (sysdocs-intake)"
+  },
+  "mcp:get_external_sync_state": {
+    "behaviour": "✓ 0.4l: all ticketed items before the first sync, reading does not advance it, then only what moved with a suggested transition; unknown plan refused (sysdocs-intake)"
+  },
+  "mcp:mark_external_synced": {
+    "behaviour": "✓ 0.4l: advances the watermark; unknown plan refused (sysdocs-intake)"
   }
 }

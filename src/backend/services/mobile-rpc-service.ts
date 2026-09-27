@@ -88,6 +88,7 @@ import {
   setChannelEventStatusAsPerson,
 } from '../server';
 import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
+import { grantChange, grantRefusal } from './grant-guard';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
 import { handleBudgetMethod } from './mobile-budget';
@@ -707,6 +708,10 @@ async function routeMethod(
       // state machine after the patch lands so a toggle alone can
       // engage / disengage the blocker.
       if (params.power !== undefined) patch.power = params.power;
+      // Exposure and sharing are the person's at the desktop, even from their
+      // own phone (owner's decision; grant-guard.ts).
+      const grant = grantChange(patch, getSettings());
+      if (grant) throw new Error(grantRefusal(grant.field, grant.where));
       const updated = updateSettings(patch as any);
       if (params.power !== undefined) notifyPowerSettingsChanged();
       broadcast('settings-changed', { settings: updated });

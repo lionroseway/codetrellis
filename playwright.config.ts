@@ -130,6 +130,10 @@ export default defineConfig({
       env: {
         CODETRELLIS_DATA_DIR: E2E_DATA_DIR,
         CODETRELLIS_CAPABILITY_TOKEN: E2E_TOKEN,
+        // The web build has no app window; granting is otherwise its alone
+        // (src/backend/services/grant-guard.ts). Test backends only.
+        NODE_ENV: 'test',
+        CODETRELLIS_ALLOW_HTTP_GRANTS: '1',
         // No conversion engine unless a run asks for one (pw.local.config.ts
         // does). From source the backend otherwise uses resources/rendition/
         // engine, which packaging fills with the pinned engine — so the same

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.4k Settings, updates, privacy |
-| **Status** | 0.4k complete on the branch: the three decisions, bugs 43–45, domain k's behaviour column (all but Appearance and Sync), `POST /api/updates/check` tested |
-| **Next action** | Full harness running; then PR into `feat/phase-32`, merge when green, then 0.4l (system docs and intake). Waiting on the owner: the settings-escalation finding |
+| **Stage / step** | 0.4l System docs and intake |
+| **Status** | 0.4l complete and verified: full harness 626/626, affected browser specs 91/91 (settings, phase30-settings, remaining-routes, broadcast-events, mcp-ui-tools); PR open into `feat/phase-32` |
+| **Next action** | Merge the 0.4l PR when CI is green. Then 0.5 UX audit (screenshots of every panel; includes Appearance/Sync sections, phone screens with the owner, Presence Pane and toolbar overlap) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.4k-settings` |
+| **Branch** | `feat/phase-32-0.4l-sysdocs` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -46,7 +46,7 @@
 - [x] 0.4h Drift, governance, review (#125)
 - [x] 0.4i Terminals and audio (#127)
 - [x] 0.4j Mobile surface (#128)
-- [ ] 0.4k Settings, updates, privacy
+- [x] 0.4k Settings, updates, privacy (#129)
 - [ ] 0.4l System docs and intake
 - [ ] 0.5 UX audit
 - [ ] 0.6 Known bugs 4–9
@@ -139,11 +139,39 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-27 | Microphone sharing to paired devices needs the `capture` grant per device, as terminals need `terminal`; the `shareAudio` switch still has to be on (0.4k) | Owner's decision. The switch alone shared the microphone with every connected device |
 | 2026-09-27 | An answer to a peer agent's question for a person carries who gave it (person or agent, which one, how it arrived), shown where it was asked; agents may still answer (0.4k) | Owner's decision. Same stance as 0.4d: tag, don't block |
 | 2026-09-27 | Freeze changes are recorded (who, how, before and after) and an agent's change is flagged on the freeze indicator, desktop and phone, until a person marks it seen (0.4k) | Owner's decision. Same as budgets (0.4g) |
+| 2026-09-27 | Granting is the person's: agent grants, device grants, network exposure, webhook hosts and project scope change only from the app window (a CLI later), never over plain HTTP, MCP or the phone. Refused elsewhere with where to do it | Owner's decision on the settings-escalation finding (private register) |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 
 ---
 
 ## Entries
+
+### 2026-09-27: 0.4l — system docs, intake, and granting is the person's (bugs 46–47)
+
+- **`sysdocs-intake.test.ts` (11):** create, list/search/read across MCP and
+  REST, verify and freshness against real commits, rename on retitle, a
+  pulled doc file indexed and stamped, delete; intake tree with levelling,
+  criteria and derived keys, duplicate epic refused, sync watermark,
+  refusals. `read_system_doc` and the verify route were never called
+  before. **Bug 47** (authorship and unknown plans) fixed.
+- **Bug 46, open for A1.7:** a second checkout of the same repo takes the
+  first one's docs (rows keyed by the file's `uid`). Plans share the
+  keying; identity across checkouts is A1.7's design, so not patched here.
+  Also noted: sync state lists every ticketed item edited since the last
+  sync, not only status changes — a redundant suggestion, harmless.
+- **Granting is the person's (owner's decision).** `grant-guard.ts`: agent
+  grants, project scope, LAN exposure and advertising, audio sharing, the
+  webhook allowlist, device grants and confirming a pairing change only from
+  the app window (Electron IPC; a CLI later). Plain HTTP and the phone get
+  403 / an error naming where to do it, and MCP `update_settings` refuses
+  advertising and audio sharing. Only a CHANGE counts — the Settings window
+  saves whole sections. Test backends may grant over HTTP (`NODE_ENV=test`
+  and `CODETRELLIS_ALLOW_HTTP_GRANTS=1`, set by both harnesses; no packaged
+  build sets it). `grant-guard.test.ts` (unit 4, harness 4, with test grants
+  off), a phone case, failing-first. The private finding is closed.
+- **`untested.json` is empty**: every REST route, MCP tool and RPC method has
+  a test. Domain l's behaviour column is filled (the panel component is
+  0.5's).
 
 ### 2026-09-27: 0.4k — settings, updates, spell-check, logs (bugs 44–45)
 
@@ -180,6 +208,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   build and both harnesses. Owner's decision.
 - Not verified: the Appearance and Sync sections' behaviour, and saving the
   data-dir override. To 0.5.
+- Full harness at `db67143`: 611 passed, 0 retries. CI green; merged as #129.
 
 ### 2026-09-27: 0.4k — the owner's three decisions, built (bug 43)
 
