@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | 0.4l System docs and intake |
-| **Status** | Started. #129 (0.4k, bugs 43–45) merged; its full harness at `db67143` was 611 passed, 0 retries |
-| **Next action** | Audit domain l: system docs (`read_system_doc` and `POST /api/system-docs/:uid/verify` are the last two untested items), freshness, external intake, ticket sync state; also REST `PUT /api/system-docs/:uid` takes author fields from the body. Waiting on the owner: the settings-escalation finding (private register) |
+| **Status** | 0.4l complete on the branch: domain l tested and filled, bugs 47 fixed and 46 recorded for A1.7, the owner's granting decision built, `untested.json` empty |
+| **Next action** | Full harness; PR into `feat/phase-32`; merge when green. Then 0.5 UX audit (screenshots of every panel; includes Appearance/Sync sections, phone screens with the owner, Presence Pane and toolbar overlap) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-0.4l-sysdocs` |
 | **Last updated** | 2026-09-27 |
@@ -145,6 +145,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.4l — system docs, intake, and granting is the person's (bugs 46–47)
+
+- **`sysdocs-intake.test.ts` (11):** create, list/search/read across MCP and
+  REST, verify and freshness against real commits, rename on retitle, a
+  pulled doc file indexed and stamped, delete; intake tree with levelling,
+  criteria and derived keys, duplicate epic refused, sync watermark,
+  refusals. `read_system_doc` and the verify route were never called
+  before. **Bug 47** (authorship and unknown plans) fixed.
+- **Bug 46, open for A1.7:** a second checkout of the same repo takes the
+  first one's docs (rows keyed by the file's `uid`). Plans share the
+  keying; identity across checkouts is A1.7's design, so not patched here.
+  Also noted: sync state lists every ticketed item edited since the last
+  sync, not only status changes — a redundant suggestion, harmless.
+- **Granting is the person's (owner's decision).** `grant-guard.ts`: agent
+  grants, project scope, LAN exposure and advertising, audio sharing, the
+  webhook allowlist, device grants and confirming a pairing change only from
+  the app window (Electron IPC; a CLI later). Plain HTTP and the phone get
+  403 / an error naming where to do it, and MCP `update_settings` refuses
+  advertising and audio sharing. Only a CHANGE counts — the Settings window
+  saves whole sections. Test backends may grant over HTTP (`NODE_ENV=test`
+  and `CODETRELLIS_ALLOW_HTTP_GRANTS=1`, set by both harnesses; no packaged
+  build sets it). `grant-guard.test.ts` (unit 4, harness 4, with test grants
+  off), a phone case, failing-first. The private finding is closed.
+- **`untested.json` is empty**: every REST route, MCP tool and RPC method has
+  a test. Domain l's behaviour column is filled (the panel component is
+  0.5's).
 
 ### 2026-09-27: 0.4k — settings, updates, spell-check, logs (bugs 44–45)
 

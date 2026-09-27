@@ -218,6 +218,10 @@ test.describe.serial('Channels, projects and the rest from the phone', () => {
       expect(after.mcp).toEqual(settings.mcp);
       expect(after.data).toEqual(settings.data);
       expect(after.webhooks).toEqual(settings.webhooks);
+      // Exposure and sharing are the person's at the desktop, even from their
+      // own phone with the settings grant (owner's decision, grant-guard.ts).
+      expect(await phone.rpcError('settings.update', { device: { advertise: true } }))
+        .toMatch(/Only you can change device\.advertise — in the CodeTrellis app/);
     } finally {
       await phone.grant(['read', 'write', 'project', 'files']);
     }

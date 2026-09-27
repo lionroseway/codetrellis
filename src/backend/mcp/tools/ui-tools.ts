@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
+import { grantChange, grantRefusal } from '../../services/grant-guard';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Screenshot ---
@@ -312,6 +313,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (device) patch.device = device;
       if (firstRunComplete !== undefined) patch.firstRunComplete = firstRunComplete;
 
+      // An agent does not grant (owner's decision; grant-guard.ts): LAN
+      // advertising and audio sharing are the person's, in the app.
+      const grant = grantChange(patch, deps.getSettings());
+      if (grant) {
+        return { content: [{ type: 'text' as const, text: grantRefusal(grant.field, grant.where) }], isError: true };
+      }
       const updated = deps.updateSettings(patch);
 
       // Phase 9 — live-restart mDNS when device settings change.

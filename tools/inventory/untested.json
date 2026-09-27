@@ -1,9 +1,5 @@
 {
-  "rest": [
-    "POST /api/system-docs/:uid/verify"
-  ],
-  "mcp": [
-    "read_system_doc"
-  ],
+  "rest": [],
+  "mcp": [],
   "rpc": []
 }

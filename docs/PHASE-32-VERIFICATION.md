@@ -14,8 +14,8 @@ is proof of a gap.
 
 | Surface | Rows | No unit mention | No harness mention | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 217 | 203 | 1 | 1 | 150 | 0 |
-| MCP tools | 185 | 147 | 5 | 1 | 141 | 0 |
+| REST routes | 217 | 203 | 0 | 0 | 153 | 0 |
+| MCP tools | 185 | 147 | 3 | 0 | 152 | 0 |
 | Mobile RPC methods | 76 | 49 | 0 | 0 | 76 | 0 |
 | Frontend components | 99 | n/a | n/a | n/a | 0 | 0 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
@@ -66,7 +66,7 @@ is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | 1 | 7 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 3 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | 2 | 88 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | 2 | 89 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | 1 | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -87,7 +87,7 @@ is proof of a gap.
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes a reply from the thread (item-surface) |  |  |
-| c | `DELETE /api/items/:uid` |  | ✗ none | 8 |  |  |  |
+| c | `DELETE /api/items/:uid` |  | ✗ none | 9 |  |  |  |
 | c | `DELETE /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `DELETE /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
 | c | `DELETE /api/plans/:uid` |  | 1 | 14 |  |  |  |
@@ -96,7 +96,7 @@ is proof of a gap.
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
 | c | `GET /api/contributions` |  | 1 | 3 |  |  |  |
 | c | `GET /api/items/:itemUid/refs` |  | ✗ none | 2 |  |  |  |
-| c | `GET /api/items/:uid` |  | ✗ none | 8 |  |  |  |
+| c | `GET /api/items/:uid` |  | ✗ none | 9 |  |  |  |
 | c | `GET /api/items/:uid/attachments` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/comments` |  | ✗ none | 3 |  |  |  |
 | c | `GET /api/items/:uid/criteria` |  | ✗ none | 7 |  |  |  |
@@ -113,7 +113,7 @@ is proof of a gap.
 | c | `GET /api/plan-templates` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/plans` |  | ✗ none | 48 |  |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
-| c | `GET /api/plans/:planUid/items` |  | ✗ none | 23 |  |  |  |
+| c | `GET /api/plans/:planUid/items` |  | ✗ none | 24 |  |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid` |  | 1 | 14 |  |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 2 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
@@ -153,7 +153,7 @@ is proof of a gap.
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
 | c | `POST /api/plans` |  | ✗ none | 48 |  |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 |  |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 23 |  |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 24 |  |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 6 |  |  |  |
@@ -167,7 +167,7 @@ is proof of a gap.
 | c | `POST /api/plans/import` |  | 1 | 2 |  |  |  |
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
-| c | `PUT /api/items/:uid` |  | ✗ none | 8 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
+| c | `PUT /api/items/:uid` |  | ✗ none | 9 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/plans/:uid` |  | 1 | 14 |  |  |  |
@@ -223,7 +223,7 @@ is proof of a gap.
 | i | `POST /api/audio/stop` |  | ✗ none | 1 | ✓ 0.4i: stops, keeps the buffer, refuses more chunks (audio-rest) |  |  |
 | i | `POST /api/terminals` |  | 1 | 4 | ✓ 0.4i: shell and claude presets with cwd, pid, alive (terminals) |  |  |
 | i | `POST /api/terminals/:id/inject` |  | ✗ none | 3 | ✓ 0.4i: the text runs in the shell (output in history); 400 empty, 404 unknown or dead (terminal-surface) |  |  |
-| j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 7 | ✓ 0.4j: forgotten and disconnected; unknown 404 (phone-sync-and-tools) |  |  |
+| j | `DELETE /api/peers/devices/:fingerprint` |  | ✗ none | 8 | ✓ 0.4j: forgotten and disconnected; unknown 404 (phone-sync-and-tools) |  |  |
 | j | `DELETE /api/peers/push-tokens/:fingerprint` |  | ✗ none | 2 | ✓ 0.4j: token gone from the list; unknown 404 (phone-sync-and-tools) |  |  |
 | j | `GET /api/pairing/status` |  | ✗ none | 2 | ✓ 0.4j: codeReady once the phone answers, never the code itself (gate4-reconnect-identity, harness peer) |  |  |
 | j | `GET /api/peers/audit` |  | ✗ none | 4 | ✓ 0.4j: refusals, terminal access (RPC and relay, output never recorded), grants; survives restart (peer-device-access, phone-sync-and-tools, phone-terminals-sysdocs) |  |  |
@@ -239,9 +239,9 @@ is proof of a gap.
 | j | `GET /api/peers/status` |  | ✗ none | 3 | ✓ 0.4j: running, mobile API port actually bound, counts (gate4-reconnect-identity, pairing-enables-lan, cdev-phase11) |  |  |
 | j | `GET /api/sync/peek` |  | ✗ none | 2 | ✓ 0.4j: what an import would bring, before it does (cdev-phase5, surfaced-rest) |  |  |
 | j | `GET /api/sync/status` |  | ✗ none | 1 | ✓ 0.4j: personal sync state (cdev-phase5) |  |  |
-| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 7 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
+| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 8 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
 | j | `POST /api/pairing/cancel` |  | ✗ none | 2 | ✓ 0.4j: window closed (pairing-transport, peer-reconnect-auth) |  |  |
-| j | `POST /api/pairing/confirm` |  | ✗ none | 2 | ✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer) |  |  |
+| j | `POST /api/pairing/confirm` |  | ✗ none | 3 | ✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer) |  |  |
 | j | `POST /api/pairing/initiate` |  | ✗ none | 4 | ✓ 0.4j: v5 QR payload, scannable size; code only in the body (gate4-reconnect-identity, pairing-transport, harness peer) |  |  |
 | j | `POST /api/peers/push-tokens` |  | ✗ none | 2 | ✓ 0.4j: register and list (cdev-phase11) |  |  |
 | j | `POST /api/peers/remote-input-requests/:requestId/respond` |  | ✗ none | 1 | ✓ 0.4j: answer reaches the peer; answered twice 404, no response 400 (phone-channels-projects) |  |  |
@@ -251,21 +251,21 @@ is proof of a gap.
 | k | `GET /api/logs/path` |  | ✗ none | 2 | ✓ 0.4k: today's file under the data dir's logs (settings-surface) |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 2 | ✓ 0.4k: answers without a file logger; maxBytes must be a whole number (settings-surface) |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
-| k | `GET /api/settings` |  | ✗ none | 23 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
+| k | `GET /api/settings` |  | ✗ none | 24 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 2 | ✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates) |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | 1 | ✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates) |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 2 | ✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 | ✓ 0.4k: answers cleanly with nothing running (update-download) |  |  |
-| k | `PUT /api/settings` |  | ✗ none | 23 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
-| l | `DELETE /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
-| l | `GET /api/system-docs` |  | ✗ none | 3 |  |  |  |
-| l | `GET /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
-| l | `GET /api/system-docs/:uid/freshness` |  | ✗ none | 1 | ✓ 0.4j: the report; unknown 404 (phone-terminals-sysdocs) |  |  |
-| l | `POST /api/system-docs` |  | ✗ none | 3 |  |  |  |
-| l | `POST /api/system-docs/:uid/verify` |  | ✗ none | ✗ none |  |  |  |
-| l | `PUT /api/system-docs/:uid` |  | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown 404 (phone-terminals-sysdocs) |  |  |
+| k | `PUT /api/settings` |  | ✗ none | 24 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
+| l | `DELETE /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
+| l | `GET /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs) |  |  |
+| l | `GET /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
+| l | `GET /api/system-docs/:uid/freshness` |  | ✗ none | 2 | ✓ 0.4j: the report; unknown 404 (phone-terminals-sysdocs) |  |  |
+| l | `POST /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: file and row; unverified over plain HTTP whatever the body claims (sysdocs-intake); bug 47 |  |  |
+| l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 1 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
+| l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
 ## MCP tools (185)
 
@@ -394,7 +394,7 @@ is proof of a gap.
 | g | `setup_agent_permissions` | session · settings | 1 | 1 | ✓ 0.4g: refused without settings; merges the wildcard; inside an opened project only, never through a link (agent-ui-tools) |  |  |
 | g | `toggle_activity_drawer` | session · write | ✗ none | 1 | ✓ 0.4g: drawer toggles both ways (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `toggle_panel` | session · write | ✗ none | 1 | ✓ 0.4g: sends the panel (agent-ui-tools) |  |  |
-| g | `update_settings` | ui · settings | ✗ none | 1 | ✓ 0.4g: persists first-run and data fields (cdev-phase5) |  |  |
+| g | `update_settings` | ui · settings | ✗ none | 2 | ✓ 0.4g: persists first-run and data fields (cdev-phase5) |  |  |
 | h | `capture_checkpoint` | drift · write | ✗ none | 3 | ✓ 0.4h: becomes checkpoint:<id>, compares against live; unknown plan refused (drift-review-tools) |  |  |
 | h | `check_freeze` | governance · read | ✗ none | 2 | ✓ 0.4h: blocked during a freeze, allowed when exempt or lifted (review-governance-tools), cdev-phase6 |  |  |
 | h | `commit_manifest_changes` | git · write | ✗ none | 4 | ✓ 0.4h: HEAD is the returned sha, [cdev] subject, attribution lines, clean status (worktree-project, cdev-channels) |  |  |
@@ -445,17 +445,17 @@ is proof of a gap.
 | j | `respond_remote_input` | peer · write | ✗ none | 2 | ✓ 0.4j: answer reaches the peer once; again refused (phone-peer-tools) |  |  |
 | j | `unpair_device` | peer · settings | ✗ none | 2 | ✓ 0.4j: forgotten and disconnected; unknown refused (isError) (phone-peer-tools, cdev-phase9) |  |  |
 | j | `write_remote_terminal` | peer · terminal | 1 | 1 | ✓ 0.4j: input reaches the peer's terminal; unknown refused (phone-peer-tools) |  |  |
-| l | `check_doc_freshness` | system-docs · read | ✗ none | 1 |  |  |  |
-| l | `create_plan_from_external` | intake · write | 3 | 3 |  |  |  |
-| l | `delete_system_doc` | system-docs · write | ✗ none | 1 |  |  |  |
-| l | `get_external_sync_state` | intake · read | ✗ none | 2 |  |  |  |
-| l | `list_plan_external_refs` | intake · read | ✗ none | 1 |  |  |  |
-| l | `list_system_docs` | system-docs · read | ✗ none | 2 |  |  |  |
-| l | `mark_external_synced` | intake · write | ✗ none | 2 |  |  |  |
-| l | `read_system_doc` | system-docs · read | ✗ none | ✗ none |  |  |  |
-| l | `set_plan_external_ref` | intake · write | 1 | ✗ none |  |  |  |
-| l | `verify_system_doc` | system-docs · write | ✗ none | 2 |  |  |  |
-| l | `write_system_doc` | system-docs · write | ✗ none | 2 |  |  |  |
+| l | `check_doc_freshness` | system-docs · read | ✗ none | 2 | ✓ 0.4l: fresh after verify; names the referenced file after a commit changes it; same as REST (sysdocs-intake) |  |  |
+| l | `create_plan_from_external` | intake · write | 3 | 4 | ✓ 0.4l: nested items with ticket keys (derived from URLs), fourth level levelled into the third, criteria as a checklist; duplicate epic refused naming the plan; no project refused (sysdocs-intake) |  |  |
+| l | `delete_system_doc` | system-docs · write | ✗ none | 2 | ✓ 0.4l: row and file gone; unknown refused (sysdocs-intake) |  |  |
+| l | `get_external_sync_state` | intake · read | ✗ none | 3 | ✓ 0.4l: all ticketed items before the first sync, reading does not advance it, then only what moved with a suggested transition; unknown plan refused (sysdocs-intake) |  |  |
+| l | `list_plan_external_refs` | intake · read | ✗ none | 2 | ✓ 0.4l: the plan's own ticket; unknown plan refused (sysdocs-intake) |  |  |
+| l | `list_system_docs` | system-docs · read | ✗ none | 3 | ✓ 0.4l: the project's docs; search over title and body (sysdocs-intake) |  |  |
+| l | `mark_external_synced` | intake · write | ✗ none | 3 | ✓ 0.4l: advances the watermark; unknown plan refused (sysdocs-intake) |  |  |
+| l | `read_system_doc` | system-docs · read | ✗ none | 1 | ✓ 0.4l: by uid or by slug; unknown refused (sysdocs-intake) |  |  |
+| l | `set_plan_external_ref` | intake · write | 1 | 1 | ✓ 0.4l: idempotent on the key; unknown plan refused (sysdocs-intake) |  |  |
+| l | `verify_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: stamps HEAD (sysdocs-intake) |  |  |
+| l | `write_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: creates in the agent's name (was recorded as a person's); update renames the file with the title; unknown uid refused (sysdocs-intake); bug 47 |  |  |
 
 ## Mobile RPC methods (76)
 

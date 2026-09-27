@@ -81,6 +81,7 @@ import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } 
 import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
+import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
@@ -3867,8 +3868,16 @@ app.get('/api/settings', (_req, res) => {
   res.json(getSettings());
 });
 
+/** Granting is the person's: the app window, or a test backend (grant-guard.ts). */
+const mayGrant = (req: express.Request): boolean => cameFromAppWindow(req) || httpGrantsAllowed();
+
 app.put('/api/settings', (req, res) => {
   const before = getSettings();
+  const grant = grantChange(req.body, before);
+  if (grant && !mayGrant(req)) {
+    res.status(403).json({ error: grantRefusal(grant.field, grant.where) });
+    return;
+  }
   let next: ReturnType<typeof updateSettings>;
   try {
     next = updateSettings(req.body || {});
@@ -4316,6 +4325,11 @@ app.get('/api/pairing/status', (_req, res) => {
 
 // Step 2: User confirms the codes match — stores paired device.
 app.post('/api/pairing/confirm', (req, res) => {
+  // Confirming a pairing gives a device access: the person's (grant-guard.ts).
+  if (!mayGrant(req)) {
+    res.status(403).json({ error: grantRefusal('pairings', 'Settings → Devices → Pair Mobile Device') });
+    return;
+  }
   try {
     const { code, alias, deviceType } = req.body;
     if (!code || !alias) {
@@ -4367,6 +4381,11 @@ app.patch('/api/peers/devices/:fingerprint', (req, res) => {
 
     if (!alias && !Array.isArray(capabilities)) {
       res.status(400).json({ error: 'alias or capabilities required' });
+      return;
+    }
+    // What a paired device may do is the person's to decide (grant-guard.ts).
+    if (Array.isArray(capabilities) && !mayGrant(req)) {
+      res.status(403).json({ error: grantRefusal('a device\'s capabilities', 'Settings → Devices') });
       return;
     }
 
