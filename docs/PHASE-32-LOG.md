@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.5 UX audit |
-| **Status** | 0.5b merged (#132, harness 626/626). 0.5c on the branch: workspace minors m1–m3, m5, m16–m18 fixed; the rest listed, none above minor |
-| **Next action** | PR 0.5c, merge when green. Then close 0.5 (the phone screens need the owner) and start 0.6 known bugs |
+| **Stage / step** | 0.6 Known bugs |
+| **Status** | 0.5 desktop audit done (#131–#133; phone screens wait for the owner). 0.6 on the branch: bug 9 (baseline across a restart) and bug 48 (new plans ignored the default visibility) fixed with failing-first tests |
+| **Next action** | Full harness; PR 0.6, merge when green. Then 0.7 stage review (matrix complete, counts, direction review), then 0.8 release with the owner on macOS |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-0.5c-workspace` |
+| **Branch** | `feat/phase-32-0.6-bugs` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -48,7 +48,7 @@
 - [x] 0.4j Mobile surface (#128)
 - [x] 0.4k Settings, updates, privacy (#129)
 - [x] 0.4l System docs and intake (#130)
-- [ ] 0.5 UX audit
+- [ ] 0.5 UX audit — desktop done (#131, #132, #133); the 31 phone screens wait for the owner
 - [ ] 0.6 Known bugs 4–9
 - [ ] 0.7 Stage review
 - [ ] 0.8 Release (Stage 0 ships before Tracks A–C)
@@ -145,6 +145,27 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: 0.6 — known bugs: the baseline across a restart, and new plans' visibility
+
+0.5c merged as [#133](https://github.com/lionroseway/codetrellis/pull/133).
+Of bugs 4–9, only 9 was left for 0.6 (4 is B4/A4, 5–7 were fixed in
+0.6a, 8 is not a defect).
+
+- **Bug 9.** The baseline lived only in `diff-engine`'s memory. After a
+  restart the next scan captured the tree at launch, so "diff since
+  baseline" quietly became "diff since this launch" and a pinned commit was
+  forgotten. It is now stored per project (`project_baselines`) through a
+  store the diff engine is given (`setBaselineStore`), restored when the
+  project is scanned again, and removed when the baseline is cleared — so
+  `set_baseline null` still means "the next scan sets one". Test
+  `baseline-restart.test.ts` fails on the old code; `baseline-store.test.ts`
+  covers the stored form.
+- **Bug 48 (m20 from the audit).** Only `create_plan` honoured the default
+  visibility. The app window's "New plan" (REST) and the phone's
+  `plan.create` left a new plan Local under a Shared default. One helper,
+  `exportIfSharedByDefault`, now serves all three. Test
+  `plan-default-visibility.test.ts` fails on the old code.
 
 ### 2026-09-27: 0.5c — workspace minors
 

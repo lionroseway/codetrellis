@@ -502,6 +502,14 @@ export const SCHEMA_PLAN_ITEMS = `
   );
   CREATE INDEX IF NOT EXISTS idx_project_freeze_changes_project ON project_freeze_changes(project_path, created_at);
 
+  -- The graph diff's baseline, per project, so a restart restores it
+  -- instead of re-capturing the tree at launch (Phase 32 §0.6, bug 9).
+  CREATE TABLE IF NOT EXISTS project_baselines (
+    project_path  TEXT PRIMARY KEY,
+    data_json     TEXT NOT NULL,
+    updated_at    INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS plan_item_versions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     item_uid        TEXT NOT NULL REFERENCES plan_items(uid),

@@ -62,6 +62,7 @@ import type {
  * and need their own writes ignored by the same watcher.
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
+import { getEffectiveDefaultVisibility } from './project-config-service';
 
 // --- Public surface ---
 
@@ -92,6 +93,24 @@ export interface ImportPlanResult {
  * Plans with V2 items write the new tree layout (version: 2 + items/).
  * Legacy plans without V2 items fall back to V1 (phases/tasks/docs/).
  */
+/**
+ * A new plan goes where the default visibility says: written into
+ * `.codetrellis/plans/` when it is "shared", left in the database when
+ * "local". Only `create_plan` did this, so a plan made in the app window,
+ * on the phone, or over REST was Local under a Shared default
+ * (Phase 32 §0.6). Returns whether the plan was written.
+ */
+export function exportIfSharedByDefault(planUid: string, projectRoot: string): boolean {
+  try {
+    if (getEffectiveDefaultVisibility(projectRoot) !== 'shared') return false;
+    exportPlan(planUid, projectRoot);
+    return true;
+  } catch (err) {
+    console.warn(`[Plans] Could not write new plan ${planUid} to the project:`, err);
+    return false;
+  }
+}
+
 export function exportPlan(planUid: string, projectRoot: string): ExportPlanResult {
   const plan = planService.getPlan(planUid);
   if (!plan) throw new Error(`Plan ${planUid} not found`);
