@@ -50,7 +50,8 @@ import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStat
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
-import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked } from './services/section-workstreams';
+import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked, worktreeDirFor, usableBase } from './services/section-workstreams';
+import { suggestSectionBranch } from '../shared/lib/branch-name';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
 import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
 import { withTold, setNoticeListener } from './services/awareness-notices';
@@ -58,7 +59,7 @@ import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDi
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
-import { listWorktrees, listWorktreesWithPlans } from './services/worktree-service';
+import { listWorktrees, listWorktreesWithPlans, createWorktree, WorktreeError } from './services/worktree-service';
 import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
@@ -2316,6 +2317,47 @@ app.put('/api/items/:uid/workstream', (req, res) => {
   broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: { workstream: branch } });
   saveNow(() => exportDatabase());
   res.json({ own: updated.workstream ?? null, section: resolveSection(updated, planItemService.getItem) });
+});
+
+/**
+ * "Work this section in a new worktree" (Phase 32 C5.2): a new branch (the
+ * one given, or one named after the plan and the section) from the plan's
+ * base, in a new folder beside the project, and the section assigned to it.
+ * It makes a folder on the person's machine, so it is the person's: the app
+ * window, or a test backend. The folder and the root are never the
+ * request's; the branch is checked, and nothing that exists is reused.
+ */
+app.post('/api/items/:uid/worktree', (req, res) => {
+  if (!mayGrant(req)) {
+    res.status(403).json({ error: 'Making a worktree creates a folder on your machine, so it is done from the CodeTrellis window.' });
+    return;
+  }
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const root = getActiveProjectPath();
+  if (!root) { res.status(409).json({ error: 'Open the project first' }); return; }
+  const plan = planService.getPlan(item.planUid);
+  const branch = req.body?.branch === undefined || req.body?.branch === ''
+    ? cleanBranch(suggestSectionBranch(plan?.title ?? '', item.title))
+    : cleanBranch(req.body.branch);
+  if (!branch) { res.status(400).json({ error: 'branch must be a branch name: letters, digits, ".", "_", "-" and "/", not starting with "-"' }); return; }
+  const dir = worktreeDirFor(root, branch);
+  const base = usableBase(plan?.baseRef);
+  try {
+    createWorktree(root, { branch, dir, base });
+  } catch (err) {
+    if (err instanceof WorktreeError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+  const updated = planItemService.updateItem(item.uid, {
+    workstream: branch,
+    changeSummary: `Worked on ${branch}, in a new worktree`,
+    ...personFrom(req),
+  });
+  if (updated) broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: { workstream: branch } });
+  broadcast('workstreams-changed', { root: dir });
+  saveNow(() => exportDatabase());
+  res.status(201).json({ branch, root: dir, base: base ?? 'HEAD' });
 });
 
 /**

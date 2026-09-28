@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C5.1: sections of a plan assigned to worktrees |
-| **Status** | B4.3b merged (#185). C5.1 done on its branch: a section's branch, inherited; agents elsewhere (any client) not offered its tasks and refused a claim with where it is worked; `assign_workstream`; the brief says where; "Worked in" on the Routing panel. Unit, harness and browser pass |
-| **Next action** | Open C5.1's PR and merge it when green. Then C5.2 (start a worktree for a section; a start command for any agent) |
+| **Stage / step** | Track C — C5.2: a new worktree for a section |
+| **Status** | C5.1 merged (#186). C5.2 done on its branch: "New worktree for this section…" makes a worktree beside the project on a branch named for the section and keeps the section to it; "Start an agent" opens Claude Code, Codex, aider or a shell there. Also: the first tool call after connecting waits for the session's roots. Unit, harness and browser pass |
+| **Next action** | Open C5.2's PR and merge it when green. Then C5.3 (workstream chips, progress per worktree, sections named in collisions) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c5-1-sections-to-worktrees` |
+| **Branch** | `feat/phase-32-c5-2-worktree-for-section` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -139,8 +139,8 @@
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
 - [ ] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
-  - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (PR open)
-  - [ ] C5.2 Start a worktree for a section; a start command for any agent
+  - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it ([#186](https://github.com/lionroseway/codetrellis/pull/186))
+  - [x] C5.2 Start a worktree for a section; a start command for any agent (PR open)
   - [ ] C5.3 Workstream chips, progress per worktree, sections named in collisions
 
 ### Phase end
@@ -238,9 +238,39 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A breakpoint on one function holds only what touches it: the hook's edit when the text it replaces overlaps the function's lines in the workstream's copy, a breach when the function is among the workstream's changed functions. Anything that cannot be told is held as the whole file (B4.2c) | The owner asked for function-level detection in general. Warnings were already per function (A1.5, A2.1); breakpoints were per file because the hook saw only the path. Claude Code's edit carries the replaced text, which places it precisely. Guessing "not this function" when unsure would let a protected change through, so doubt holds |
 | 2026-09-28 | Order after B4.2c: B4.3b, C5 (one plan across worktrees), B3 (line changes first, then overlays), A8 (any agent), A2.7 (signatures for the other languages); B4.4 after A8. A feature ships with the path every MCP client has (tool calls, folder watching, git); a client's own hook or log may make it earlier or richer, never be the only way | The owner confirmed the order and called these key, adding that CodeTrellis is agent-agnostic while recent steps leaned on Claude Code's hook and watcher. Line changes come from git, so they are the same for every client; a section's workstream is an id among known workstreams, so no root comes from a request; hook adapters for other clients are added only once their formats are checked, never from memory |
 | 2026-09-28 | A section's worktree is stored as its **branch name**, resolved to the worktree that has it checked out (or a branch checked out nowhere), never as a folder. An agent whose worktree is unknown (no folder reported, or a detached checkout) is not in any section: it is offered only unassigned work and told why, and a claim in a section is refused with where it is worked. People claim from the window as before (C5.1) | Plan files are committed and shared across checkouts and machines (A1.7b), where a folder means nothing and would leak one person's paths. A branch is what a team means by "billing is done on checkout-v2-billing". Refusing the unknown is the safe side: a guess would hand one worktree's task to another. It is not a claim policy (`claimPolicy`), because a child's own policy replaces its parent's whole, and the section's worktree would silently fall away |
+| 2026-09-28 | "New worktree for this section" is the person's alone (the app window, or a test backend, like a grant): it makes a folder on their machine. The folder is always beside the project, named after it and the branch, and shown before anything is made; nothing that exists (a folder, a branch) is reused. Starting an agent there is a CodeTrellis terminal in that folder for Claude Code, Codex, aider, or a plain shell for any other agent, or the folder copied (C5.2) | An agent that could make worktrees could make folders anywhere it named; the person asking in the window is the one place that is theirs. Reusing an existing folder could put a section on top of someone's work. The shell preset keeps it agent-agnostic: whatever CLI the person runs, they run it there |
+| 2026-09-28 | A tool call waits, at most 2 s and only the first time, for the session's MCP roots when they are still being asked for (C5.2) | Found by C5.2's harness test: an agent that calls straight after connecting was "worktree unknown" and was offered nothing, while the same call a moment later worked (2 of 2 runs failed before, 12 of 12 passed after). Every worktree-aware tool shared the race (sections, notices, signal breakpoints); one wait at the single interception fixes them all |
 ---
 
 ## Entries
+
+### 2026-09-28: C5.2 — a new worktree for a section; an agent started there
+- **Journey.** In Billing's Routing panel, "New worktree for this
+  section…" opens a form with the branch named for the plan and the
+  section (`checkout-v2-billing`, editable) and the folder it makes, shown
+  before anything happens ("Makes /work/acme-checkout-v2-billing on a new
+  branch, and keeps this section to it"). "Make worktree": git makes it,
+  the section is kept to it, the dropdown lists it at once, and "Start an
+  agent in checkout-v2-billing" offers Claude Code, Codex, aider, a shell
+  for any other agent, and "Copy the folder".
+- **Backend.** `POST /api/items/:uid/worktree` (`{ branch? }`): the app
+  window or a test backend only (`mayGrant`), else 403 with where to do
+  it. The root is the opened project's; the folder is beside it
+  (`worktreeDirFor`, shared with the window); the base is the plan's
+  `baseRef` when usable, else the main checkout's HEAD. `createWorktree`
+  (`worktree-service.ts`) refuses an existing folder or branch (409) and
+  a base that is not a commit; git runs with no shell, and neither name may
+  start with `-`. The section is assigned (author from how the call
+  arrived) and `workstreams-changed` is broadcast.
+- **Race fixed on the way** (see Decisions): the first tool call after
+  connecting now waits for the session's roots.
+- **Tests:** unit (branch naming, folder, base; 6 in
+  `section-workstreams.test.ts`); harness `section-new-worktree.test.ts`
+  (4: made and assigned, an aider agent there claims straight after
+  connecting, a name given, nothing reused, bad names; refused over plain
+  HTTP with grants off; 12/12 on repeat); browser `plan/worked-in.spec.ts`
+  (the form, the folder, making it, starting Codex there). Unit 1,454
+  pass; typecheck clean; lint warnings unchanged; inventory re-run.
 
 ### 2026-09-28: C5.1 — sections of a plan assigned to worktrees
 - **Journey.** "Checkout v2" has Billing and Exports. In Billing's Routing

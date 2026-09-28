@@ -182,6 +182,25 @@ const pendingResponses: PendingResponses = new Map();
  */
 let electronScreenshotCapture: (() => Promise<string>) | undefined;
 
+
+/**
+ * A session's MCP roots, asked for once it has initialised, by session id
+ * (Phase 32 C5.2). Until the answer comes the session has no worktree, so a
+ * tool call waits for it (at most `maxMs`): otherwise an agent's first call
+ * after connecting is treated as "worktree unknown" and a later one is not.
+ */
+const pendingBindings = new Map<string, Promise<void>>();
+export function bindingSettled(sessionId: string, maxMs = 2000): Promise<void> {
+  const pending = pendingBindings.get(sessionId);
+  if (!pending) return Promise.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // A client that never answers costs its first call the wait, not every call.
+  const giveUp = new Promise<void>((resolve) => {
+    timer = setTimeout(() => { if (pendingBindings.get(sessionId) === pending) pendingBindings.delete(sessionId); resolve(); }, maxMs);
+  });
+  return Promise.race([pending, giveUp]).finally(() => clearTimeout(timer));
+}
+
 export function setElectronScreenshotCapture(captureFn: () => Promise<string>): void {
   electronScreenshotCapture = captureFn;
 }
@@ -465,6 +484,10 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   const instrument = (name: string, handler: any) => async (args: any, extra: any) => {
     const start = Date.now();
     if (extra?.requestId !== undefined) reached.add(extra.requestId);
+    // Which worktree this session is in may still be on its way (its MCP roots
+    // are asked for once it has initialised): wait for it, briefly, so a call
+    // made straight after connecting is placed like every later one (C5.2).
+    await bindingSettled(sessionId);
     // Heartbeat: any tool call counts as activity, push last_seen.
     try { sessionService.heartbeat(sessionId); } catch { /* best-effort */ }
     const agentInfo = inferAgentFromSession(sessionId);
@@ -806,7 +829,7 @@ export async function startMcpServer(): Promise<void> {
         // A client that sent no folder but exposes MCP roots (Claude Code
         // does) is asked for them: the second source, after the connector.
         if (!bound && mcpServer.server.getClientCapabilities()?.roots) {
-          void mcpServer.server.listRoots().then(({ roots }) => {
+          const lookup = mcpServer.server.listRoots().then(({ roots }) => {
             const folders = roots.flatMap((r) => {
               try { return r.uri.startsWith('file:') ? [fileURLToPath(r.uri)] : []; } catch { return []; }
             });
@@ -814,7 +837,9 @@ export async function startMcpServer(): Promise<void> {
             if (!root) return;
             sessionService.bindSession(sessionId, root);
             broadcast('mcp-session-changed', { reason: 'bound', sessionId });
-          }).catch(() => { /* a client that cannot answer stays unbound */ });
+          }).catch(() => { /* a client that cannot answer stays unbound */ })
+            .finally(() => { if (pendingBindings.get(sessionId) === lookup) pendingBindings.delete(sessionId); });
+          pendingBindings.set(sessionId, lookup);
         }
 
         const claimed = agentTypeFromClientInfo(mcpServer.server.getClientVersion()?.name);

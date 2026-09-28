@@ -15,6 +15,7 @@
  */
 
 import type { PlanItem, Workstream } from '@shared/types';
+export { worktreeDirFor } from '../../shared/lib/branch-name';
 
 /** A section's branch, and the item it is set on (the item itself, or an ancestor). */
 export interface SectionWorkstream {
@@ -102,4 +103,12 @@ export function elsewhereLine(branches: readonly string[]): string {
   const counts = new Map<string, number>();
   for (const b of branches) counts.set(b, (counts.get(b) ?? 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([b, n]) => `${n} in ${b}`).join(', ');
+}
+
+/** The plan's base for a new worktree, when it is a usable ref; null means the main checkout's HEAD. */
+export function usableBase(baseRef: string | null | undefined): string | null {
+  if (!baseRef) return null;
+  const b = baseRef.trim();
+  if (/^[0-9a-f]{7,40}$/i.test(b)) return b;
+  return cleanBranch(b);
 }
