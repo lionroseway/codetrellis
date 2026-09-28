@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B2.1: Timeline lanes |
-| **Status** | B2.1 done on its branch: a lane per workstream above the turn list, ● turns, ✎ spec edits, ⚠ signals, hover and click, live; unit, harness and browser tests pass. B1.2 (#170) awaiting CI; B2.1's PR opens when it merges |
-| **Next action** | Merge B1.2, then open and merge B2.1; then B2.2 (◆ commits and merges, ✓ / ✗ checks). Sequence after B2: C1, B4, B3, direction review, B5, A4 |
+| **Status** | B2.1 done on its branch: a lane per workstream above the turn list, ● turns, ✎ spec edits, ⚠ signals, hover and click, live; unit, harness and browser tests pass. PR open. B1.2 merged (#170): B1 done |
+| **Next action** | Merge B2.1 when green; then B2.2 (◆ commits and merges, ✓ / ✗ checks). Sequence after B2: C1, B4, B3, direction review, B5, A4 |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b2-1-timeline-lanes` |
 | **Last updated** | 2026-09-28 |
@@ -96,11 +96,11 @@
   run it in one, to reclaim ~3 min per PR.
 
 ### Track B: observability
-- [ ] B1 Agent event log, refined in EXECUTION §5:
+- [x] B1 Agent event log, refined in EXECUTION §5: done (#169, #170)
   - [x] B1.1 `agent_events`, `GET /api/agent-events`, the Timeline survives a reload (#169)
-  - [ ] B1.2 Body edits as events; agent time; SDK-refused calls (PR open)
+  - [x] B1.2 Body edits as events; agent time; SDK-refused calls (#170)
 - [ ] B2 Timeline lanes, refined in EXECUTION §5:
-  - [ ] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click (PR to open)
+  - [ ] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click (PR open)
   - [ ] B2.2 ◆ commits and merges, ✓ / ✗ checks
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints
