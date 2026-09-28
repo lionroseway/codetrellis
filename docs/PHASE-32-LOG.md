@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.7c: clones, with consent first |
-| **Status** | A1.7b merged (#153). A1.7c done on its branch (unit 5, harness 7, browser +2); PR open |
-| **Next action** | Merge A1.7c's PR when green; then A1.8 (Awareness tab in PlanPanel) |
+| **Stage / step** | Track A — A1.8: Awareness tab |
+| **Status** | A1.7 merged (#152, #153, #154). A1.8 done on its branch (unit +16, harness 6, browser 5); PR open |
+| **Next action** | Merge A1.8's PR when green; then refine Track A's next milestone (A2) into sub-steps per §4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-7c-clones` |
+| **Branch** | `feat/phase-32-a1-8-awareness-tab` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -65,8 +65,8 @@
 - [x] A1.4 Folder watching (#149)
 - [x] A1.5 Footprint symbols (#150)
 - [x] A1.6 Signals engine (collision, stale-base) and tools (#151)
-- [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones)
-- [ ] A1.8 Awareness tab
+- [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)
+- [x] A1.8 Awareness tab
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (digest, guide, skill and hook)
 - [ ] A4 Mobile
@@ -158,10 +158,67 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
 | 2026-09-28 | A doc or plan row belongs to the checkout that holds it while that folder exists; another checkout *of the same repository* (worktree: same git common dir; clone: same origin) does not import its copy over it. Any other folder still takes the row over (bug 46) | Rows are keyed by uid and every checkout carries the same files. A worktree's differing copy is its own change, which its footprint shows; a holder that is gone gives the row up, so a moved repo still works. Narrowed after CI: a teammate's export imported from a plain folder is a deliberate move, not a second checkout |
 | 2026-09-28 | Clones need consent before anything is read from them: the prompt names the folder the agent reported, and the clone check runs only after the person says yes in the app window (A1.7c) | Deciding "is this a clone?" means running git in a caller-named folder, and a repo's config can make git run commands; Phase 19 says nothing is read from a reported path |
+| 2026-09-28 | A person answers a signal (acknowledged, intended, dismissed, or back to open) from the Awareness tab. Recorded with who answered, as the call arrived: plain HTTP is `unverified` and the tab says so. Agents see the answer and have no tool to give one. An answer lasts while the overlap does; when it resolves and returns, it is open again (A1.8) | Tag, don't block, as for sign-off (0.4d) and freeze changes (0.4k). A collision is not an agent's to wave away. The spec's cooldown ("silent until its subject changes") and "intended until either footprint changes shape" are A3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A1.8 — the Awareness tab
+- **Journey (awareness spec §7.2).**
+  1. The PlanPanel's new **Awareness** tab, after Timeline, carries the
+     number of overlaps that need you (open, high or medium) before anyone
+     opens it.
+  2. A marked chip's details list its overlaps, each saying if it was
+     answered ("· seen"), and **Review in Awareness** opens the tab
+     (`openPlanPanelTab`; the panel's tab now lives in `ui-store`).
+  3. The tab: a digest line ("3 workstreams active · 2 need you · 1
+     low-priority note", counting what the strip shows, so the two never
+     disagree), then **Needs you**, **Low priority** (collapsed), **Seen**,
+     **Set aside** (collapsed). Each card shows its severity, what kind of
+     overlap it is ("Same function", "Same file", "Behind main"), the
+     summary, both sides by the strip's names with the file and symbol,
+     and how long it has held.
+  4. Answers: Acknowledge, Intended (collisions only: a stale base has no
+     second side), Dismiss, and Reopen. Answering moves a card down, never
+     away, with "Acknowledged by you · just now" on it. A card leaves only
+     when its cause does. A refused answer shows a toast and nothing moves.
+  5. An answered overlap stops marking the strip's chip (`chipSeverity`
+     counts open signals only), as §4.4 has it.
+  6. Calm states say what to expect: "nothing needs you … new overlaps
+     appear here", and with no parallel work, what would show here.
+  - Screenshots: `awareness-tab.png`, `awareness-acknowledged.png`,
+    `awareness-calm.png`, `awareness-empty.png`.
+- **Backend.** `POST /api/awareness/:id/state?project=` with
+  `{state}` in `open | acknowledged | intended | dismissed`; `resolved`
+  stays the engine's. The project comes from the query and must be open;
+  only a live signal of that project can be answered (404 otherwise). The
+  answer is stored with `state_by` (from `actorFrom`) and `state_at`, and
+  `awareness-changed` is broadcast. The engine's upsert keeps the answer
+  while the signal keeps firing and clears it when a resolved signal
+  returns.
+- **Deferred, on purpose.** "Open the relevant lines on each side" waits
+  for in-file markers (A2); "message the agent" (a `steer` event) and the
+  real digest ("since you were away"), cooldown and intended-until-shape-
+  changes are A3. The strip's "from its log" wording (A1.3's known minor)
+  is unchanged: the tab does not touch it, so it moves to A3's guide pass.
+- **Tests.**
+  - Unit: `awareness-view.test.ts` (14): grouping, the count, every digest
+    line, kind words, sides (branch, stale base), who answered (person vs
+    local API), the answers each state and kind offers.
+    `workstream-strip.test.ts` +1: an answered overlap no longer marks the
+    chip (fails on the old `chipSeverity`).
+  - Harness: `awareness-answers.test.ts` (6) against real worktrees:
+    acknowledge records who and broadcasts; the answer holds while the
+    overlap fires; an agent sees it and has only the two reading tools;
+    intended → dismissed → open; only settable states of a live signal in
+    an opened project (400/404/403); resolved and back is open again with
+    no answer (fails with the answer carried over).
+  - Browser: `awareness-tab.spec.ts` (5): chip → tab with digest and
+    sides; acknowledge moves to Seen and quiets the chip; intended then
+    reopen; a refused answer; the calm and empty states.
+  - Related harness and browser files pass; unit 1193 pass / 3 environment
+    skips; lint 0 errors / 295.
 
 ### 2026-09-28: A1.7c — clones, with consent first
 - **Flow (per the Decisions row).**

@@ -4,6 +4,7 @@ import { GitBranch, Users, AlertTriangle, FileText, FolderPlus } from 'lucide-re
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { useToastStore } from '../../stores/toast-store';
+import { useUiStore } from '../../stores/ui-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
 import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signalsFor, chipSeverity, signalWords, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { AwarenessSignal, Workstream } from '@shared/types';
@@ -104,6 +105,8 @@ export function WorkstreamStrip() {
     const rect = e.currentTarget.getBoundingClientRect();
     setOpen((cur) => (cur && cur.root === wsRoot ? null : { root: wsRoot, top: rect.bottom + 4, left: rect.left }));
   };
+  // From an overlap to where it is answered (A1.8).
+  const review = () => { setOpen(null); useUiStore.getState().openPlanPanelTab('awareness'); };
   const listed = open ? (open.root === null ? shown.slice(chips.length) : shown.filter((w) => w.root === open.root)) : [];
   const openRequest = open?.root?.startsWith('request:') ? requests.find((r) => `request:${r.id}` === open.root) ?? null : null;
   const answer = async (r: FolderRequestView, action: 'include' | 'dismiss') => {
@@ -228,7 +231,7 @@ export function WorkstreamStrip() {
           style={{ position: 'fixed', top: open.top, left: Math.min(open.left, window.innerWidth - 300), zIndex: 9999 }}
           className="w-72 bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] py-1 max-h-[360px] overflow-y-auto"
         >
-          {listed.map((w) => <WorkstreamDetail key={w.root} ws={w} signals={signalsFor(w.root, signals)} />)}
+          {listed.map((w) => <WorkstreamDetail key={w.root} ws={w} signals={signalsFor(w.root, signals)} onReview={review} />)}
         </div>,
         document.body,
       )}
@@ -236,7 +239,7 @@ export function WorkstreamStrip() {
   );
 }
 
-function WorkstreamDetail({ ws, signals }: { ws: Workstream; signals: AwarenessSignal[] }) {
+function WorkstreamDetail({ ws, signals, onReview }: { ws: Workstream; signals: AwarenessSignal[]; onReview: () => void }) {
   const note = sharedNote(ws);
   return (
     <div className="border-b border-white/[0.06] last:border-b-0">
@@ -258,7 +261,7 @@ function WorkstreamDetail({ ws, signals }: { ws: Workstream; signals: AwarenessS
           <span className="text-[10px] text-warning leading-snug">{note}</span>
         </div>
       )}
-      <Overlaps signals={signals} />
+      <Overlaps signals={signals} onReview={onReview} />
       <ChangedFiles ws={ws} />
       <div className="px-3 pb-2">
         <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">
@@ -331,19 +334,31 @@ const SEVERITY_PILL = {
   low: 'bg-surface-hover text-foreground-muted',
 } as const;
 
-/** What overlaps other work (A1.6): collisions first, then a stale base. */
-function Overlaps({ signals }: { signals: AwarenessSignal[] }) {
+const ANSWERED = { acknowledged: 'seen', intended: 'intended', dismissed: 'dismissed' } as const;
+
+/**
+ * What overlaps other work (A1.6): collisions first, then a stale base. An
+ * overlap a person has answered says so (A1.8); the answers themselves are
+ * given in the Awareness tab, which the link opens.
+ */
+function Overlaps({ signals, onReview }: { signals: AwarenessSignal[]; onReview: () => void }) {
   if (signals.length === 0) return null;
   return (
     <div className="px-3 pb-2" data-testid="workstream-signals">
       <div className="text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">Overlaps with other work</div>
       {signals.map((s) => (
-        <div key={s.id} data-testid="workstream-signal" className="flex items-start gap-1.5 py-0.5">
+        <div key={s.id} data-testid="workstream-signal" data-state={s.state} className={`flex items-start gap-1.5 py-0.5 ${s.state === 'open' ? '' : 'opacity-60'}`}>
           <span className={`text-[8px] uppercase font-semibold px-1 rounded shrink-0 mt-px ${SEVERITY_PILL[s.severity]}`}>{s.severity}</span>
           {/* Backticks mark names in the summary; shown as plain text. */}
-          <span className="text-[10px] text-foreground leading-snug">{s.summary.replace(/`/g, '')}</span>
+          <span className="text-[10px] text-foreground leading-snug">
+            {s.summary.replace(/`/g, '')}
+            {s.state in ANSWERED && <span className="text-foreground-subtle"> · {ANSWERED[s.state as keyof typeof ANSWERED]}</span>}
+          </span>
         </div>
       ))}
+      <button data-testid="workstream-review-awareness" onClick={onReview} className="mt-1 text-[10px] text-accent hover:underline">
+        Review in Awareness
+      </button>
     </div>
   );
 }

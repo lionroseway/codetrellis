@@ -110,16 +110,19 @@ export function signalsFor(root: string, signals: readonly AwarenessSignal[]): A
 /**
  * The severity a chip shows, or null. Low signals (a stale base) are listed
  * in the details but do not mark the chip: worth knowing, not worth a look.
+ * Nor does a signal a person has answered (A1.8): once seen, meant or
+ * dismissed it stays quiet (awareness spec §4.4).
  */
 export function chipSeverity(signals: readonly AwarenessSignal[]): Exclude<SignalSeverity, 'low'> | null {
-  if (signals.some((s) => s.severity === 'high')) return 'high';
-  if (signals.some((s) => s.severity === 'medium')) return 'medium';
+  const open = signals.filter((s) => s.state === 'open');
+  if (open.some((s) => s.severity === 'high')) return 'high';
+  if (open.some((s) => s.severity === 'medium')) return 'medium';
   return null;
 }
 
 /** The chip's words for its signals, for its title. */
 export function signalWords(signals: readonly AwarenessSignal[]): string | null {
-  const live = signals.filter((s) => s.severity !== 'low').length;
+  const live = signals.filter((s) => s.state === 'open' && s.severity !== 'low').length;
   if (live === 0) return null;
   return `overlaps other work (${live} signal${live === 1 ? '' : 's'})`;
 }

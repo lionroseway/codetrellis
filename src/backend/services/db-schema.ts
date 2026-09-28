@@ -188,7 +188,10 @@ export const SCHEMA_PLANS_CORE = `
     first_seen INTEGER NOT NULL,
     last_seen INTEGER NOT NULL,
     state TEXT NOT NULL DEFAULT 'open',
-    resolved_at INTEGER
+    resolved_at INTEGER,
+    -- A1.8: who set the state (JSON, from actorFrom) and when.
+    state_by TEXT,
+    state_at INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_awareness_project ON awareness_signals(project_root);
 

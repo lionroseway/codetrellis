@@ -358,7 +358,7 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
   registered in the matching `index.ts`.
 - Zustand stores in `src/frontend/stores/` — one per domain
   (graph, agent, project, plan, ui, toast, presence, channels,
-  terminal, system-docs).
+  terminal, system-docs, awareness).
 - Tree-sitter WASM grammars stored in `resources/tree-sitter/`.
 - Bridge abstraction in `src/frontend/bridge/` picks transport at
   runtime: HTTP for web/dev, Electron IPC for desktop, WebRTC data

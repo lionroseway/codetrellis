@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
-import { useUiStore } from '../../stores/ui-store';
+import { useUiStore, type PlanPanelTab } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { PlanList } from '../plan/PlanListView';
 import { CommentThread } from '../plan/CommentThread';
 import { ProposedChanges } from '../plan/ProposedChanges';
 import { AgentTurnList, useAgentTurns } from './AgentTurns';
+import { AwarenessTab, useAwarenessFeed } from './AwarenessTab';
 
-type Tab = 'plans' | 'timeline' | 'changes' | 'proposed' | 'comments';
+type Tab = PlanPanelTab;
 
 /*
  * Phase 29 §4.15 — the flat event renderer that used to live here
@@ -24,7 +25,10 @@ export function PlanPanel() {
   const visible = useUiStore((s) => s.agentPanelVisible);
   const expanded = useUiStore((s) => s.planPanelExpanded);
   const togglePlanPanelExpanded = useUiStore((s) => s.togglePlanPanelExpanded);
-  const [activeTab, setActiveTab] = useState<Tab>('plans');
+  const activeTab = useUiStore((s) => s.planPanelTab);
+  const setActiveTab = useUiStore((s) => s.setPlanPanelTab);
+  // Open overlaps nobody has answered (A1.8): the Awareness tab's number.
+  const needsYou = useAwarenessFeed();
 
   const events = useAgentStore((s) => s.events);
   const status = useAgentStore((s) => s.status);
@@ -49,7 +53,7 @@ export function PlanPanel() {
   // tab (which depends on it), bounce back to Plans.
   useEffect(() => {
     if (activeTab === 'proposed' && !activePlan) setActiveTab('plans');
-  }, [activeTab, activePlan]);
+  }, [activeTab, activePlan, setActiveTab]);
 
   if (!visible) return null;
 
@@ -58,6 +62,9 @@ export function PlanPanel() {
     // Counts turns, not events — the number on the tab has to be the
     // number of rows in the body.
     { key: 'timeline', label: 'Timeline', count: turns.length || undefined },
+    // What overlaps between parallel lines of work (A1.8). The number is what
+    // still needs you, not every signal: answered ones are listed below it.
+    { key: 'awareness', label: 'Awareness', count: needsYou || undefined },
     { key: 'changes', label: 'Changes', count: fileChanges.length || undefined },
     // Proposed Changes (Phase 12 §B) requires an active plan — task
     // fields are the source of truth.
@@ -127,6 +134,8 @@ export function PlanPanel() {
             <AgentTurnList turns={turns} status={status} detectedPlan={detectedPlan} />
           </div>
         )}
+
+        {activeTab === 'awareness' && <AwarenessTab />}
 
         {activeTab === 'changes' && (
           <div className="text-[11px]">
