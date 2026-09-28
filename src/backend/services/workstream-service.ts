@@ -13,9 +13,10 @@
  */
 
 import fs from 'node:fs';
-import type { AgentSessionInfo, Workstream, WorkstreamAgent } from '../../shared/types';
+import type { AgentSessionInfo, Workstream, WorkstreamAgent, WorkstreamChanges } from '../../shared/types';
 import { listWorktrees, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
+import { getChanges, syncWorkstreamWatchers } from './workstream-watch-service';
 
 /** A Claude Code session the watcher follows (see `claude-code-watcher.ts`). */
 export interface ClaudeLogSession {
@@ -27,8 +28,12 @@ export interface WorkstreamInputs {
   worktrees: readonly Worktree[];
   mcpSessions: readonly AgentSessionInfo[];
   claudeSessions: readonly ClaudeLogSession[];
+  /** Each working tree's changes (A1.4). Absent means none known. */
+  changes?: (folder: string) => WorkstreamChanges;
   realpath?: (p: string) => string;
 }
+
+const NO_CHANGES: WorkstreamChanges = { base: null, files: [], truncated: false };
 
 const isClaude = (agentType: string) => agentType.toLowerCase().includes('claude');
 
@@ -87,6 +92,7 @@ export function deriveWorkstreams(input: WorkstreamInputs): Workstream[] {
     for (const log of (logsIn.get(w.path) ?? []).slice(connectedClaude)) {
       agents.push({ sessionId: log.sessionId, agentType: 'claude-code', model: null, source: 'claude-log', lastSeen: null });
     }
+    const changes = input.changes?.(w.path) ?? NO_CHANGES;
     return {
       root: w.path,
       branch: w.branch,
@@ -94,7 +100,10 @@ export function deriveWorkstreams(input: WorkstreamInputs): Workstream[] {
       main: w.isMain,
       shape: agents.length >= 2 ? 'shared' : 'worktree',
       agents,
-      idle: agents.length === 0,
+      changes,
+      // Spec §4.1: idle is no agent AND no changes. A worktree an agent left
+      // with work in it is still a line of work.
+      idle: agents.length === 0 && changes.files.length === 0,
     };
   });
 }
@@ -128,10 +137,21 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
   const worktrees: Worktree[] = listed.length
     ? listed
     : [{ path: projectRoot, branch: null, head: null, isMain: true, isCurrent: true, bare: false, prunable: false }];
+  // Changes are measured from where each tree branched off the main
+  // checkout's branch (or its commit, when detached).
+  const main = worktrees.find((w) => w.isMain);
+  const mainRef = main?.branch ?? main?.head ?? null;
   const all = deriveWorkstreams({
     worktrees,
     mcpSessions: getActiveSessions(),
     claudeSessions,
+    changes: (folder) => getChanges(folder, mainRef),
   });
+  // This listing is the discovery pass: watch what is active, and stop
+  // watching what went idle.
+  syncWorkstreamWatchers(
+    all.filter((w) => !w.idle).map((w) => ({ folder: w.root, mainRef })),
+    all.map((w) => w.root),
+  ).catch(() => {});
   return opts.includeIdle ? all : all.filter((w) => !w.idle);
 }

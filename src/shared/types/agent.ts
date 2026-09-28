@@ -82,6 +82,31 @@ export interface Workstream {
   main: boolean;
   shape: WorkstreamShape;
   agents: WorkstreamAgent[];
-  /** No agent in it. Hidden unless asked for (it has no changes to show yet — A1.4). */
+  /** What it has changed since it branched from the main checkout (A1.4). */
+  changes: WorkstreamChanges;
+  /** No agent in it and nothing changed. Hidden unless asked for. */
   idle: boolean;
+}
+
+export type ChangedFileStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+
+export interface ChangedFile {
+  /** Relative to the workstream's folder, with `/` separators. */
+  path: string;
+  status: ChangedFileStatus;
+  /** The old path, for a rename. */
+  from?: string;
+}
+
+/**
+ * A workstream's changed files: committed since its merge base with the
+ * main checkout, plus uncommitted and untracked work in its folder. The
+ * first part of its footprint (awareness spec §4.2).
+ */
+export interface WorkstreamChanges {
+  /** The merge base compared against, or null when there is none (no commits). */
+  base: string | null;
+  files: ChangedFile[];
+  /** More files changed than are listed. */
+  truncated: boolean;
 }

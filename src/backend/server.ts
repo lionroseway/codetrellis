@@ -42,6 +42,7 @@ import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStat
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { listWorkstreams, setClaudeSessionSource } from './services/workstream-service';
+import { setWorkstreamChangesListener } from './services/workstream-watch-service';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
@@ -626,6 +627,10 @@ app.get('/api/git/worktrees', (req, res) => {
 // ones (no agent) only with ?idle=1. The root is confined like the route
 // above; the folders come from git.
 setClaudeSessionSource(() => getWatcherStatus().sessions);
+// A watched workstream's changed files moved (A1.4): the strip refetches.
+setWorkstreamChangesListener((folder, changes) => {
+  broadcast('workstreams-changed', { root: folder, changedFiles: changes.files.length });
+});
 app.get('/api/workstreams', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;

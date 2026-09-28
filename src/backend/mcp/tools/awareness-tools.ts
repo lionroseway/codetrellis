@@ -2,7 +2,7 @@
  * Awareness tools — Phase 32, Track A.
  *
  * What an agent should know about the other work going on in the same
- * repository. A1.3 adds `list_workstreams`; `get_awareness`,
+ * repository. A1.3 adds `list_workstreams` (A1.4 adds each one's changed files); `get_awareness`,
  * `check_footprint`, `declare_intent` and `acknowledge_signal` follow as the
  * footprints and signals they report on land (awareness spec §6.1).
  */
@@ -18,9 +18,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Every line of parallel work in the repository: each git worktree (the main checkout included) with the ' +
-        'agents working in it. A folder with two or more agents is a "shared" checkout, where their edits cannot be ' +
-        'told apart — prefer a worktree of your own. `yours` marks the workstream this connection is bound to. ' +
-        'Idle worktrees (no agent) are left out unless include_idle is true.',
+        'agents working in it and the files it has changed since it branched (committed, uncommitted and new). ' +
+        'A folder with two or more agents is a "shared" checkout, where their edits cannot be told apart — prefer a ' +
+        'worktree of your own. `yours` marks the workstream this connection is bound to. Check the others\' changed ' +
+        'files before editing the same ones. Idle worktrees (no agent, nothing changed) are left out unless ' +
+        'include_idle is true.',
       inputSchema: {
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
         include_idle: z.boolean().optional().describe('Also list worktrees with no agent in them.'),

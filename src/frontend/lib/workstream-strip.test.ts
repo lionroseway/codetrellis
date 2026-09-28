@@ -1,13 +1,15 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder } from './workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter } from './workstream-strip';
 import type { Workstream, WorkstreamAgent } from '../../shared/types';
 
 const agent = (sessionId: string): WorkstreamAgent => ({ sessionId, agentType: 'claude-code', model: null, source: 'mcp', lastSeen: 0 });
-function ws(root: string, main: boolean, agents: WorkstreamAgent[]): Workstream {
+function ws(root: string, main: boolean, agents: WorkstreamAgent[], changed = 0): Workstream {
+  const files = Array.from({ length: changed }, (_, i) => ({ path: `src/f${i}.ts`, status: 'modified' as const }));
   return {
     root, branch: main ? 'main' : root.split('-').pop()!, head: 'abcdef1234', main,
-    shape: agents.length >= 2 ? 'shared' : 'worktree', agents, idle: agents.length === 0,
+    shape: agents.length >= 2 ? 'shared' : 'worktree', agents, changes: { base: 'abc', files, truncated: false },
+    idle: agents.length === 0 && changed === 0,
   };
 }
 
@@ -57,5 +59,24 @@ describe('shortFolder', () => {
     const short = shortFolder(long, 30);
     assert.equal(short.length, 30);
     assert.ok(short.startsWith('…') && short.endsWith('payments-platform-auth-refresh'.slice(-29)));
+  });
+});
+
+describe('changes on the strip (A1.4)', () => {
+  test('a worktree left with changes and no agent gets a chip', () => {
+    assert.deepEqual(stripWorkstreams([ws('/r', true, [agent('a')]), ws('/r-old', false, [], 3)]).map((w) => w.root), ['/r', '/r-old']);
+  });
+
+  test("the main checkout's own uncommitted work, with no agent, gets none", () => {
+    assert.deepEqual(stripWorkstreams([ws('/r', true, [], 4)]), []);
+    assert.deepEqual(stripWorkstreams([ws('/r', true, [], 4), ws('/r-auth', false, [agent('a')])]).map((w) => w.root), ['/r-auth']);
+  });
+
+  test('how the count reads', () => {
+    assert.equal(changeWords(ws('/r-a', false, [agent('a')])), null);
+    assert.equal(changeWords(ws('/r-a', false, [agent('a')], 1)), '1 file changed');
+    assert.equal(changeWords(ws('/r-a', false, [agent('a')], 3)), '3 files changed');
+    assert.equal(changeWords({ changes: { base: 'x', files: [{ path: 'a', status: 'added' }], truncated: true } }), '1+ files changed');
+    assert.deepEqual((['added', 'modified', 'deleted', 'renamed'] as const).map(statusLetter), ['A', 'M', 'D', 'R']);
   });
 });

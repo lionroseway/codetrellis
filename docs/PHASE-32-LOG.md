@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.3: workstreams and the TopBar strip |
-| **Status** | A1.2 merged (#147). A1.3 done on its branch (unit 16, harness 6, browser 4, screenshots); PR open |
-| **Next action** | Merge A1.3's PR when green; then A1.4 (folder watching: debounced diff and status per workstream) |
+| **Stage / step** | Track A — A1.4: what each workstream has changed |
+| **Status** | A1.3 merged (#148). A1.4 done on its branch (unit 11 + 4, harness +4, browser +3, screenshots); PR open |
+| **Next action** | Merge A1.4's PR when green; then A1.5 (footprint symbols: parse changed files on disk vs the merge base) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-3-workstreams` |
+| **Branch** | `feat/phase-32-a1-4-workstream-changes` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -61,7 +61,7 @@
 - [x] A0 Parallel-work bugs 1–3 (#145)
 - [x] A1.1 Session binding (#146)
 - [x] A1.2 Multi-session Claude watcher (#147)
-- [ ] A1.3 Workstream discovery and strip
+- [x] A1.3 Workstream discovery and strip (#148)
 - [ ] A1.4 Folder watching
 - [ ] A1.5 Footprint symbols
 - [ ] A1.6 Signals engine (collision, stale-base) and tools
@@ -160,6 +160,72 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: A1.4 — what each workstream has changed, kept current
+- **Model.** Each workstream's changes are measured from its merge base
+  with the main checkout's branch:
+  - `git diff --name-status -z -M <base>`, which covers committed and
+    uncommitted tracked changes;
+  - plus `git ls-files --others --exclude-standard`, for untracked files.
+
+  Capped at 500 files and marked truncated past that. For the main
+  checkout the merge base is its own HEAD, so the same rule gives exactly
+  its uncommitted work. Work landing on main after a worktree branched is
+  not that worktree's change. Nothing is parsed or indexed; symbols are
+  A1.5.
+- **Watching (`workstream-watch-service.ts`).**
+  - One chokidar watcher per active linked worktree. It ignores
+    `node_modules`, `.git`, build output and `.codetrellis`.
+  - A debounced recompute (750 ms) runs after the last event. A change
+    that alters the list broadcasts `workstreams-changed`, and the strip
+    refetches.
+  - Listing workstreams is the discovery pass. It watches what is active
+    and unwatches what went idle, scoped to that repository's trees so
+    another repository's watchers are left alone.
+  - Unwatched folders reuse their answer for 20 s.
+- **Decision: no second watcher on the opened project.** `file-watcher`
+  already watches it. It now nudges the workstream service on every event,
+  including files it doesn't parse, since git counts a README as a change.
+  The folder is registered as externally watched, compared canonically.
+- **Idle** is now "no agent AND nothing changed" (spec §4.1). A worktree
+  an agent left with work in it stays a line of work.
+- **Safety.** Folders come only from `git worktree list`. git runs through
+  `execFile` with `-C` and fixed arguments. The one ref passed in is the
+  main checkout's branch, checked by `git-safety`; an unsafe one falls
+  back to HEAD, and a unit test proves it never reaches git.
+- **UX journey.**
+  - Each chip shows how many files its workstream has changed.
+  - The dot is green while an agent works there, grey for work left
+    behind.
+  - The details list the files with git's letter (A/M/D/R, coloured),
+    eight at most, then "and N more".
+  - The heading reads "N files changed since it branched" ("not yet
+    committed" on the main checkout).
+  - A worktree with changes and no agent gets a grey chip whose details
+    say "No agent working here".
+  - **Decision:** the main checkout's own uncommitted work, with no agent,
+    adds no chip. The canvas's "Working tree" summary already shows it.
+
+  Screenshots: `workstreams-changes.png`, `workstreams-left-behind.png`.
+- **Agents** get the same files in `list_workstreams`. The tool and guide
+  now say to look before editing a file another workstream has changed.
+- **Not yet.** Unwatching after 30 idle minutes (spec §5.3): today a
+  folder is unwatched when it goes idle, which covers the cost without the
+  timer. Branch and clone shapes are A1.7.
+- **Tests.**
+  - Unit: `workstream-watch-service.test.ts` (11), against a real repo
+    with a linked worktree. It covers parsing (renames, spaces), commits
+    plus edits plus deletes plus untracked with ignored files excluded,
+    the merge-base rule, an unsafe ref, an unreadable folder, a watched
+    folder reporting after the debounce, ignored folders staying quiet,
+    scoped unwatching, and the main checkout nudged rather than watched.
+    `deriveWorkstreams` +1 and the strip lib +3.
+  - Harness: `workstreams.test.ts` +4: a worktree left with changes, a
+    live edit announced, `list_workstreams` carrying files, and an edit
+    in the opened project arriving via `file-watcher`.
+  - Browser: +3.
+  - The `file-watcher` harness files (graph-rest, loop, jvm/apple, ruby)
+    pass. Unit 1122 pass / 3 environment skips. Lint 0 errors / 295.
 
 ### 2026-09-28: A1.3 — workstreams, `list_workstreams`, and the strip
 - **Model.** `services/workstream-service.ts`: a pure `deriveWorkstreams`

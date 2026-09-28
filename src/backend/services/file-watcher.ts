@@ -9,6 +9,7 @@ import { broadcast } from '../server';
 import { checkFileDeviation } from './deviation-service';
 import { checkDocFreshnessForFile } from './sensor-bridge-service';
 import { recordFileActivity } from './stuck-sensor-service';
+import { nudgeWorkstream, setExternallyWatchedFolder } from './workstream-watch-service';
 
 let watcher: FSWatcher | null = null;
 
@@ -73,6 +74,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
   if (watcher) {
     await watcher.close();
   }
+  // This watcher covers the opened project, so the workstream service does
+  // not put a second one on the same tree (A1.4).
+  setExternallyWatchedFolder(projectRoot);
 
   // Function-based ignore — globs in chokidar aren't reliable for
   // dotdir / node_modules in nested layouts. A function tested against
@@ -120,6 +124,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
   });
 
   watcher.on('change', (filePath) => {
+    // Every event, parseable or not: the main checkout's workstream changes
+    // are measured by git, which counts a README as much as a .ts (A1.4).
+    nudgeWorkstream(projectRoot);
     const ext = path.extname(filePath).toLowerCase();
     if (!PARSEABLE_EXTS.has(ext)) return;
 
@@ -163,6 +170,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
   });
 
   watcher.on('add', (filePath) => {
+    // Every event, parseable or not: the main checkout's workstream changes
+    // are measured by git, which counts a README as much as a .ts (A1.4).
+    nudgeWorkstream(projectRoot);
     const ext = path.extname(filePath).toLowerCase();
     if (!PARSEABLE_EXTS.has(ext)) return;
 
@@ -197,6 +207,9 @@ export async function startWatching(projectRoot: string): Promise<void> {
   });
 
   watcher.on('unlink', (filePath) => {
+    // Every event, parseable or not: the main checkout's workstream changes
+    // are measured by git, which counts a README as much as a .ts (A1.4).
+    nudgeWorkstream(projectRoot);
     console.log(`[Watcher] File removed: ${path.relative(projectRoot, filePath)}`);
     // Out of the graph too. This only broadcast, so a deleted file (and
     // its edges) stayed in the live graph and the diff until a rescan.
@@ -250,4 +263,5 @@ export async function stopWatching(): Promise<void> {
     await watcher.close();
     watcher = null;
   }
+  setExternallyWatchedFolder(null);
 }
