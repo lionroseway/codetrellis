@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.5: which symbols each workstream's changes touch |
-| **Status** | A1.4 merged (#149). A1.5 done on its branch (unit 13 + 3, harness +1, browser +1, screenshot); PR open |
-| **Next action** | Merge A1.5's PR when green; then A1.6 (signals: `awareness_signals`, pure `computeSignals` for collision and stale-base, `get_awareness`, `check_footprint`) |
+| **Stage / step** | Track A — A1.6: signals (collision, stale-base) and the tools that report them |
+| **Status** | A1.5 merged (#150). A1.6 done on its branch (unit 14 + 3, harness 8, browser +2, screenshot); PR open |
+| **Next action** | Merge A1.6's PR when green; then A1.7 (branch and clone workstreams: refs watcher, clone consent) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-5-footprint-symbols` |
+| **Branch** | `feat/phase-32-a1-6-signals` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -63,7 +63,7 @@
 - [x] A1.2 Multi-session Claude watcher (#147)
 - [x] A1.3 Workstream discovery and strip (#148)
 - [x] A1.4 Folder watching (#149)
-- [ ] A1.5 Footprint symbols
+- [x] A1.5 Footprint symbols (#150)
 - [ ] A1.6 Signals engine (collision, stale-base) and tools
 - [ ] A1.7 Branch and clone workstreams
 - [ ] A1.8 Awareness tab
