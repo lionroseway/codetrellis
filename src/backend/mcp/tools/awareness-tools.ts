@@ -22,6 +22,7 @@ import {
 } from '../../services/intent-service';
 import { getActiveSessions } from '../../services/session-service';
 import { importersOf, type Importer } from '../../services/importers';
+import { enforceEdit, editView } from '../../services/code-breakpoints';
 
 /** The workstream this connection is bound to (A1.1), or null. */
 function callerWorkstream(sessionId: string): string | null {
@@ -162,6 +163,29 @@ export function register(server: McpServer, deps: ToolDeps): void {
         };
       });
       return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, your_workstream: mine, paths: report }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'check_breakpoint',
+    {
+      description:
+        'Before you edit a file: has a person asked to be asked first? Returns { status: "pass" } when you may edit, ' +
+        '"paused" with a ref and a message when a breakpoint holds the file (the edit must wait: call await_decision with ' +
+        'the ref), "stop" when the person said not to change it, or "continue" (with any steer they left) once they have ' +
+        'said you may. The Claude Code hook calls this before every edit; any agent may call it.',
+      inputSchema: {
+        path: z.string().min(1).max(300).describe('The file you are about to change, relative to the repository root.'),
+      },
+    },
+    async ({ path: file }) => {
+      const root = deps.getActiveProjectPath();
+      if (!root) return noProject;
+      const session = getActiveSessions().find((s) => s.sessionId === deps.sessionId);
+      const result = enforceEdit(root, file, {
+        agent: session?.agentType ?? 'mcp-agent', sessionId: deps.sessionId, workstreamRoot: session?.workstreamRoot ?? null,
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(editView(result), null, 2) }] };
     },
   );
 

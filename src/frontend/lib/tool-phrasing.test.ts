@@ -52,3 +52,15 @@ test('await_decision is a wait for a person', () => {
   assert.equal(phraseEvent(ev).text, 'Waiting for a decision at a breakpoint');
   assert.equal(phraseEvent(ev).intent, 'ask');
 });
+
+test('a code breakpoint: a paused edit and a breach read differently, and a breach is never called a pause (B4.2)', () => {
+  const hit: AgentEvent = { id: 'e', timestamp: 1, source: 'app', type: 'breakpoint_hit', payload: { action: 'edit_code', path: 'payments/refund.ts' } };
+  assert.equal(phraseEvent(hit).text, 'Paused at a breakpoint before changing “payments/refund.ts”');
+  const breach = phraseEvent({ ...hit, payload: { action: 'breach', path: 'payments/refund.ts', breach: true } });
+  assert.deepEqual(breach, { text: 'Changed “payments/refund.ts” past a breakpoint: a breach, it could not be paused', intent: 'error', tool: null, mutating: true });
+  assert.ok(!/paused/i.test(breach.text.replace('could not be paused', '')));
+  const answer = phraseEvent({ ...hit, type: 'breakpoint_answered', payload: { action: 'breach', path: 'payments/refund.ts', breach: true, decision: 'stop', byType: 'human' } });
+  assert.equal(answer.text, 'You said stop to changing “payments/refund.ts”');
+  const check: AgentEvent = { id: 'e', timestamp: 1, source: 'mcp', type: 'tool_call', payload: { tool: 'check_breakpoint', args: { path: 'payments/refund.ts' } } };
+  assert.equal(phraseEvent(check).text, 'Checked for a breakpoint on `payments/refund.ts`');
+});

@@ -198,7 +198,7 @@ test.describe('Add parallel work to Claude Code', () => {
     await expect(skill.getByText('.claude/skills/codetrellis-parallel/SKILL.md', { exact: false })).toBeVisible();
     await expect(panel.getByTestId('claude-code-skill-diff')).toContainText('+ name: codetrellis-parallel');
     await expect(panel.getByTestId('claude-code-hook-diff')).toContainText('--hook pre-tool-use');
-    await expect(hook.getByText(/never blocks or approves an edit/)).toBeVisible();
+    await expect(hook.getByText(/never approves an edit, and holds one only where you have set a breakpoint/)).toBeVisible();
     // The skill is offered ticked; the hook runs before every edit, so it is opt-in.
     await expect(skill.getByRole('checkbox')).toBeChecked();
     await expect(hook.getByRole('checkbox')).not.toBeChecked();

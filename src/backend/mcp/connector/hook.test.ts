@@ -78,8 +78,8 @@ describe('running it', () => {
     return root;
   };
 
-  /** A fake app: answers initialize, and check_footprint with `answer`. */
-  function fakeApp(answer: (paths: string[]) => string | null, sent: JsonRpcMessage[]) {
+  /** A fake app: answers initialize, check_footprint with `answer`, and check_breakpoint with `breakpoint` (pass by default). */
+  function fakeApp(answer: (paths: string[]) => string | null, sent: JsonRpcMessage[], breakpoint: (file: string) => string | null = () => '{"status":"pass"}') {
     return async (): Promise<Upstream> => {
       const up: Upstream = {
         async send(m) {
@@ -87,7 +87,8 @@ describe('running it', () => {
           const reply = (msg: Omit<JsonRpcMessage, 'jsonrpc'>) => setImmediate(() => up.onmessage?.({ jsonrpc: '2.0', ...msg }));
           if (m.method === 'initialize') reply({ id: m.id, result: { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'ct', version: '1' } } });
           if (m.method === 'tools/call') {
-            const text = answer((m.params as { arguments: { paths: string[] } }).arguments.paths);
+            const { name, arguments: args } = m.params as { name: string; arguments: { paths: string[]; path: string } };
+            const text = name === 'check_breakpoint' ? breakpoint(args.path) : answer(args.paths);
             reply({ id: m.id, result: text === null ? { isError: true, content: [{ type: 'text', text: 'no project' }] } : { content: [{ type: 'text', text }, { type: 'text', text: 'an inline notice' }] } });
           }
         },
@@ -105,9 +106,10 @@ describe('running it', () => {
       version: 't',
       connect: fakeApp((paths) => JSON.stringify({ your_workstream: root, paths: paths.map((p) => ({ path: p, changed_in: [{ workstream: '/b', branch: 'billing-v2', symbols: [] }], imported_by: [] })) }), sent),
     });
-    assert.deepEqual(sent.map((m) => m.method), ['initialize', 'notifications/initialized', 'tools/call']);
+    assert.deepEqual(sent.map((m) => m.method), ['initialize', 'notifications/initialized', 'tools/call', 'tools/call']);
     assert.deepEqual((sent[0].params as { clientInfo: { name: string } }).clientInfo.name, 'claude-code-hook');
-    assert.deepEqual(sent[2].params, { name: 'check_footprint', arguments: { paths: ['src/session.ts'] } });
+    assert.deepEqual(sent[2].params, { name: 'check_breakpoint', arguments: { path: 'src/session.ts' } });
+    assert.deepEqual(sent[3].params, { name: 'check_footprint', arguments: { paths: ['src/session.ts'] } });
     assert.match(JSON.parse(out!).hookSpecificOutput.additionalContext, /also changed src\/session\.ts: `billing-v2`\./);
   });
 
@@ -130,5 +132,42 @@ describe('running it', () => {
     const loose = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-hook-loose-'));
     assert.equal(await runPreToolUseHook({ stdin: input({ cwd: loose, tool_input: { file_path: path.join(loose, 'x.ts') } }), version: 't', connect: fakeApp(() => '{}', sent) }), null);
     assert.deepEqual(sent, []);
+  });
+
+  test('a breakpoint holds the edit: denied with the reason, and nothing else is asked (B4.2)', async () => {
+    const root = worktree();
+    for (const status of ['paused', 'stop']) {
+      const sent: JsonRpcMessage[] = [];
+      const out = await runPreToolUseHook({
+        stdin: input({ cwd: root, tool_input: { file_path: path.join(root, 'payments/refund.ts') } }),
+        version: 't',
+        connect: fakeApp(() => '{}', sent, (file) => JSON.stringify({ status, ref: 'bp-1', message: `held ${file}` })),
+      });
+      const o = JSON.parse(out!).hookSpecificOutput;
+      assert.equal(o.permissionDecision, 'deny', status);
+      assert.equal(o.permissionDecisionReason, 'held payments/refund.ts');
+      assert.equal(sent.filter((m) => m.method === 'tools/call').length, 1, 'check_footprint is not asked');
+    }
+  });
+
+  test('continue lets the edit through with the steer beside the footprint notice; an app without the tool is not a hold', async () => {
+    const root = worktree();
+    const footprint = (paths: string[]) => JSON.stringify({ your_workstream: root, paths: paths.map((p) => ({ path: p, changed_in: [{ workstream: '/b', branch: 'billing-v2', symbols: [] }], imported_by: [] })) });
+    const out = await runPreToolUseHook({
+      stdin: input({ cwd: root, tool_input: { file_path: path.join(root, 'src/session.ts') } }),
+      version: 't',
+      connect: fakeApp(footprint, [], () => JSON.stringify({ status: 'continue', ref: 'bp-1', steer: 'keep the old signature' })),
+    });
+    const o = JSON.parse(out!).hookSpecificOutput;
+    assert.ok(!('permissionDecision' in o), 'continue never approves');
+    assert.match(o.additionalContext, /── CodeTrellis breakpoint ──\nA person answered the breakpoint on this file: continue, with this steer: keep the old signature/);
+    assert.match(o.additionalContext, /also changed src\/session\.ts/);
+
+    const older = await runPreToolUseHook({
+      stdin: input({ cwd: root, tool_input: { file_path: path.join(root, 'src/session.ts') } }),
+      version: 't',
+      connect: fakeApp(footprint, [], () => null),
+    });
+    assert.ok(!('permissionDecision' in JSON.parse(older!).hookSpecificOutput));
   });
 });

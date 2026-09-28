@@ -228,13 +228,17 @@ export const SCHEMA_PLANS_CORE = `
 
   -- Phase 32 B4: a place a person has said "stop and ask me". A task
   -- breakpoint fires when an agent claims or finishes the task (or anything
-  -- under it); a spec breakpoint when an agent changes its description. Kept
-  -- after it is cleared, because the hits it caused cite it.
+  -- under it); a spec breakpoint when an agent changes its description; a
+  -- code breakpoint (B4.2) when a workstream changes a file under it, its
+  -- target a repository-relative path (a folder ends in /, a function is
+  -- path#name) in project_root. Kept after it is cleared, because the hits
+  -- it caused cite it.
   CREATE TABLE IF NOT EXISTS breakpoints (
     id TEXT PRIMARY KEY,
     kind TEXT NOT NULL,
     target TEXT NOT NULL,
     plan_uid TEXT,
+    project_root TEXT,
     note TEXT,
     created_at INTEGER NOT NULL,
     created_by TEXT NOT NULL,
@@ -248,13 +252,17 @@ export const SCHEMA_PLANS_CORE = `
   -- Phase 32 B4: one agent call held at a breakpoint, and the person's
   -- answer. The agent waits on it by ref (await_decision), from the database,
   -- so the wait survives timeouts and restarts. \`consumed_at\` is set when
-  -- the agent's next matching call spends the answer.
+  -- the agent's next matching call spends the answer. A code hit (B4.2) names
+  -- the file in \`path\` (item_uid is empty); \`breach\` is 1 when the change was
+  -- only seen after it was made, never paused.
   CREATE TABLE IF NOT EXISTS breakpoint_hits (
     ref TEXT PRIMARY KEY,
     breakpoint_id TEXT NOT NULL,
     tool TEXT NOT NULL,
     action TEXT NOT NULL,
     item_uid TEXT NOT NULL,
+    path TEXT,
+    breach INTEGER NOT NULL DEFAULT 0,
     plan_uid TEXT,
     agent TEXT,
     session_id TEXT,

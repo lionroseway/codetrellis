@@ -225,8 +225,14 @@ waiting — an answer can take hours, and the wait survives restarts.
 - **steer**: the same, and follow the person's note.
 - **stop**: do not make the call; tell the person what you will do instead.
 
-Never work around a breakpoint (another tool, a different item): it is
-the person's explicit ask.`;
+A breakpoint can also be on code: a file or folder. Claude Code's hook
+asks \`check_breakpoint\` before each edit and holds it; any agent can ask
+it too before editing. If you change such a file with your own editor, your
+next tool call says so: that is a **breach**. Stop changing it and wait with
+\`await_decision\` the same way.
+
+Never work around a breakpoint (another tool, a different item or file):
+it is the person's explicit ask.`;
 
 // ── Philosophy — what CodeTrellis is and how to think about it ──────
 
