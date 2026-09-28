@@ -22,7 +22,8 @@ const project = '/w/app';
 const billing = '/w/app-billing';
 const checkout = '/w/app-checkout';
 const sam = { by: 'Sam', byType: 'human' };
-const codex = { agent: 'codex', sessionId: 's-codex', workstreamRoot: checkout };
+type Caller = { agent: string; sessionId: string | null; workstreamRoot: string | null };
+const codex: Caller = { agent: 'codex', sessionId: 's-codex', workstreamRoot: checkout };
 const claim = { tool: 'claim_item', action: 'claim' as const, itemUid: 'i1' };
 
 const signal = (over: Partial<AwarenessSignal> = {}): AwarenessSignal => ({
