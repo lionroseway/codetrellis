@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter } from './workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary } from './workstream-strip';
 import type { Workstream, WorkstreamAgent } from '../../shared/types';
 
 const agent = (sessionId: string): WorkstreamAgent => ({ sessionId, agentType: 'claude-code', model: null, source: 'mcp', lastSeen: 0 });
@@ -78,5 +78,26 @@ describe('changes on the strip (A1.4)', () => {
     assert.equal(changeWords(ws('/r-a', false, [agent('a')], 3)), '3 files changed');
     assert.equal(changeWords({ changes: { base: 'x', files: [{ path: 'a', status: 'added' }], truncated: true } }), '1+ files changed');
     assert.deepEqual((['added', 'modified', 'deleted', 'renamed'] as const).map(statusLetter), ['A', 'M', 'D', 'R']);
+  });
+});
+
+describe('symbolSummary (A1.5)', () => {
+  const sym = (name: string, change: 'added' | 'removed' | 'modified', line: number) => ({ name, kind: 'function' as const, change, line });
+
+  test('modified first, where collisions are; then added, then removed', () => {
+    assert.equal(
+      symbolSummary([sym('gone', 'removed', 1), sym('refresh', 'added', 9), sym('Session.renew', 'modified', 4)]),
+      '~Session.renew  +refresh  −gone',
+    );
+  });
+
+  test('capped, with the rest counted', () => {
+    const many = ['a', 'b', 'c', 'd', 'e'].map((n, i) => sym(n, 'modified', i));
+    assert.equal(symbolSummary(many), '~a  ~b  ~c  +2 more');
+  });
+
+  test('nothing to say when unparsed or no symbol moved', () => {
+    assert.equal(symbolSummary(undefined), null);
+    assert.equal(symbolSummary([]), null);
   });
 });
