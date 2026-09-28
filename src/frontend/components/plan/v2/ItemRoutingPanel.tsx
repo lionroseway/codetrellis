@@ -16,13 +16,13 @@ import {
   ChevronRight,
   Shield,
   Cpu,
-  Plug,
   RotateCcw,
   Pencil,
   ShieldAlert,
   X,
   Plus, Lock } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
+import { SkillsEditor } from './SkillsEditor';
 import type { PlanItem, Skill, ClaimPolicy, ExecutionConfig, ItemConstraints } from '@shared/types';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
@@ -202,13 +202,6 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
     });
   }, [item.uid, updateItem]);
 
-  const resetSkills = useCallback(() => {
-    updateItem(item.uid, {
-      skills: [],
-      skillsMode: 'inherit',
-    });
-  }, [item.uid, updateItem]);
-
   const resetExecConfig = useCallback(() => {
     updateItem(item.uid, {
       executionConfig: null,
@@ -222,24 +215,6 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
       constraintsMode: 'inherit',
     });
   }, [item.uid, updateItem]);
-
-  // Add a skill
-  const [newSkillName, setNewSkillName] = useState('');
-  const addSkill = useCallback(() => {
-    if (!newSkillName.trim()) return;
-    const existing = item.skills ?? [];
-    const skill: Skill = { name: newSkillName.trim(), source: 'mcp', required: true };
-    updateItem(item.uid, {
-      skills: [...existing, skill],
-      skillsMode: item.skillsMode === 'inherit' && existing.length === 0 ? 'replace' : item.skillsMode,
-    });
-    setNewSkillName('');
-  }, [item, newSkillName, updateItem]);
-
-  const removeSkill = useCallback((name: string) => {
-    const existing = item.skills ?? [];
-    updateItem(item.uid, { skills: existing.filter((s) => s.name !== name) });
-  }, [item, updateItem]);
 
   const Chevron = expanded ? ChevronDown : ChevronRight;
 
@@ -292,57 +267,11 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
             </select>
           </div>
 
-          {/* ── Skills ───────────────────────────────────── */}
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <Plug size={11} className="text-zinc-500" />
-              <span className="text-[11px] font-medium text-foreground-muted">Required skills</span>
-              {isInherited(resolved.skills.source) && (
-                <span className="text-[10px] text-foreground-subtle italic">
-                  (inherited from {resolved.skills.source})
-                </span>
-              )}
-              {(item.skills ?? []).length > 0 && (
-                <button onClick={resetSkills} className="text-[10px] text-accent hover:text-accent-hover ml-auto" title="Reset to inherit">
-                  <RotateCcw size={10} />
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {resolved.skills.skills.map((s) => (
-                <span
-                  key={s.name}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border border-purple-500/20 bg-purple-500/[0.06] text-purple-300"
-                >
-                  {s.name}
-                  <span className="text-[9px] opacity-50">{s.source}</span>
-                  {(item.skills ?? []).some((ls) => ls.name === s.name) && (
-                    <button onClick={() => removeSkill(s.name)} className="ml-0.5 opacity-50 hover:opacity-100">&times;</button>
-                  )}
-                </span>
-              ))}
-              {resolved.skills.skills.length === 0 && (
-                <span className="text-[11px] text-foreground-subtle">None required</span>
-              )}
-            </div>
-            <div className="flex gap-1.5">
-              <input
-                type="text"
-                value={newSkillName}
-                onChange={(e) => setNewSkillName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') addSkill(); }}
-                placeholder="Add skill (e.g. playwright, typescript)"
-                className="flex-1 text-[11.5px] px-2 py-1 rounded-md border border-white/[0.06] bg-white/[0.02] text-foreground placeholder:text-foreground-subtle/40 focus:border-accent/30 focus:outline-none"
-              />
-              <button
-                onClick={addSkill}
-                disabled={!newSkillName.trim()}
-                className="px-2 py-1 text-[11px] rounded-md border border-white/[0.08] bg-white/[0.03] text-foreground-muted hover:text-foreground hover:bg-white/[0.06] disabled:opacity-30 transition-colors"
-              >
-                Add
-              </button>
-            </div>
-          </div>
+          {/* ── Skills (Phase 32 C1.2) ───────────────────── */}
+          <SkillsEditor
+            item={item}
+            resolved={resolved.skills.skills}
+          />
 
           {/* ── Execution Config ─────────────────────────── */}
           <div>

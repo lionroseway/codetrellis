@@ -92,6 +92,8 @@ interface PlanItemsState {
     scopePath?: string | null;
   }) => Promise<PlanItem | null>;
   updateItem: (uid: string, updates: Partial<PlanItem> & { changeSummary?: string }) => Promise<PlanItem | null>;
+  /** The same, with the server's reason when it refuses (a bad skill, say). */
+  updateItemOrError: (uid: string, updates: Partial<PlanItem>) => Promise<{ item: PlanItem } | { error: string }>;
   moveItem: (uid: string, input: { newParentUid?: string | null; newSortOrder?: number }) => Promise<void>;
   deleteItem: (uid: string, cascade?: boolean) => Promise<void>;
   fetchItemFull: (uid: string) => Promise<PlanItemFullBundle | null>;
@@ -269,6 +271,25 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       set((s) => ({ itemsByUid: { ...s.itemsByUid, [uid]: item } }));
       return item;
     } catch { return null; }
+  },
+
+  updateItemOrError: async (uid, updates) => {
+    try {
+      const res = await fetch(`/api/items/${uid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        return { error: body.error ?? `Not saved (${res.status})` };
+      }
+      const item: PlanItem = await res.json();
+      set((s) => ({ itemsByUid: { ...s.itemsByUid, [uid]: item } }));
+      return { item };
+    } catch {
+      return { error: 'Not saved: the app could not be reached' };
+    }
   },
 
   moveItem: async (uid, input) => {

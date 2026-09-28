@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C1.1: skills reach the agent |
-| **Status** | C1.1 done on its branch (stacked on B2.2): skill fields `use` / `why` / `where`, normalised on every write, the project's skills index, and the skills line in `get_brief`, `claim_item` and `get_next_item`; a link never reaches an agent. Unit and harness pass. B2.2 (#172) in CI |
-| **Next action** | Merge B2.2 when green; rebase C1.1 onto `feat/phase-32`, open its PR; then C1.2 (the picker) |
+| **Stage / step** | Track C — C1.2: the skills picker |
+| **Status** | C1.2 done on its branch (stacked on C1.1 and B2.2): the routing panel's Skills section is a picker, with the project's own skills searchable, recommended / required / listed, why and where per skill, inherited skills from the server, and a link marked people only. B2.2 (#172) re-running with two spec fixes; #173 fixes layout-controls on its own |
+| **Next action** | Merge #173 and #172 when green; open C1.1's PR, then C1.2's; then C1.3 (proof of use) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c1-1-skills` |
+| **Branch** | `feat/phase-32-c1-2-skill-picker` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -114,7 +114,7 @@
 ### Track C: shared ways of working
 - [ ] C1 Skills on tasks
   - [ ] C1.1 Fields, index, brief/claim/next delivery, link never to agents (branch ready)
-  - [ ] C1.2 The picker in the routing panel
+  - [ ] C1.2 The picker in the routing panel (branch ready)
   - [ ] C1.3 Proof of use; the skills line in a terminal preset's prompt
   - [ ] C1.4 A skill arriving in a pulled plan file is flagged once
 - [ ] C2 Team status through git
@@ -197,6 +197,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Track A ran ahead of the sequence: A2 and A3 were built before B1, B2, C1, B4 and B3, which §2 puts between A1 and A3. Nothing recorded that reorder. From here the sequence is followed again: B1, B2, C1, B4, B3, then the direction review, then B5 and A4 | Found when A3 closed and A4 looked next. Awareness was the owner's stated priority and each A-step stood alone, so no work is wasted; but the Timeline and breakpoints (B1, B2, B4) are what A4's "Needs you" and A5's review lean on, and the direction review is due at A3's end, after those steps |
 | 2026-09-28 | Agent events are kept by a passive tap on `broadcast()`, stamped at the tap, not by changing each producer (B1.1) | Every producer is covered, including ones added later. The tap reads the session row directly, so an MCP call (which names no workstream) and a `session_end` (after the session goes inactive) still get their workstream |
 | 2026-09-28 | The PreToolUse hook only informs: `additionalContext`, never a `permissionDecision`; it fails open and silent (no app, unknown folder, no overlap, over 5 s); it asks over MCP as its own short session named `claude-code-hook` (A3.4) | A hook that blocks or approves would change Claude Code's permission model behind the person's back, and one that gets in the way gets uninstalled. Going through MCP keeps one surface with one capability matrix, and the check is visible in the Timeline; the cost is a connect per edit, which is cheap on loopback |
+| 2026-09-28 | Adding a skill on a task no longer switches it to `replace`: own skills add to inherited ones. The panel used to switch on the first own skill, which silently dropped every inherited one. A skill typed by name is now recommended, not required (C1.2) | Found in C1.2's browser test: the parent's required skill vanished from the child the moment a recommended one was added. `inherit` already merges by name, with the child's entry winning, which is what a person expects. A name typed into a picker whose job is recommending should recommend; "Required (gates the claim)" is one click away |
+| 2026-09-28 | The routing panel reads the skills in effect from the server (`GET /api/items/:uid/skills`, each with the item it comes from), not from the plan tree (C1.2) | The tree holds summaries without skills, so an ancestor's skills never showed as inherited unless the ancestor had been opened. Claim policy, execution settings and guardrails have the same flaw; that is queued separately rather than widened into C1.2 |
 | 2026-09-28 | A skill's `link` location never reaches an agent: the skills an agent is told about drop it, and MCP tools read items through an agent view of the item service that removes it from every item they return. People still see and edit it (C1.1) | The shared-work doc's safety rule: a link is shown to people, never to agents. `claim_item`, `get_next_item` and `get_item` all return the raw item, so hiding it only from the skills line would have left it one field away. The item service is where every MCP tool gets items from, so the view is applied once there rather than per tool |
 | 2026-09-28 | Until C1.4, a recommended skill arriving in a pulled plan file is told to agents at once, like the item body beside it. A `repo` location must be a file in the opened project, re-checked through confined-fs before every telling (C1.1) | A pulled file could already put any text in front of an agent through the item body, and a repo skill is repository content from the same git history. C1.4 adds the "flag once before any agent is told" gate the doc asks for |
 | 2026-09-28 | A lane's commits are that workstream's own: `base..HEAD` for a worktree or branch, main's log for main. A decision or check run goes on the lane of the workstream whose session is assigned the item, and a check run counts trouble as the check-run panel does (B2.2) | Otherwise every lane repeats main's history and the one commit that matters is lost among them. The assignee's workstream is the only link from an item to a lane that no one has to declare. Counting a sent-back criterion as a failed check would show it twice, once as ✗ decided and again as ✗ checked |
@@ -205,6 +207,66 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: C1.2 — the skills picker
+- **The Skills section** of the routing panel is now `SkillsEditor.tsx`,
+  with its logic pure in `lib/skill-picker.ts`.
+  - Each skill shows how it is used, where it lives, and why:
+    - uses: Recommended, "Required (gates the claim)", or Listed only;
+    - where: a repo path, plugin, MCP server or playbook, or a link marked
+      "people only".
+    - Why and where are edited in place. An inherited skill says which
+      item it comes from and is changed there.
+  - "Add a skill" searches the project's own skills (`.claude/skills`) by
+    name and description. Picking one adds it as recommended, pointing at
+    its SKILL.md. A name typed and entered adds a recommended skill with
+    no location.
+  - A skill the server refuses (a link that is not http(s), a path out of
+    the project) shows the server's reason, and nothing is stored. The
+    store gains `updateItemOrError` for this, because `updateItem`
+    swallows the reason.
+- **Found while testing:**
+  - Inherited skills never showed. The panel resolved inheritance from
+    the plan tree, which holds summaries without skills. It now reads
+    `GET /api/items/:uid/skills` (resolved, each with the item it comes
+    from). The same flaw in claim policy, execution and guardrails is
+    queued separately.
+  - The first own skill switched the item to `replace` and dropped every
+    inherited skill. The mode is now left as it is.
+- **CI on B2.2 (#172)**, two browser specs that raced. Both fixes are in
+  #172, and the second also stands alone as #173:
+  - `workstream-strip` checked a request flag before the request could
+    arrive; it now waits for it.
+  - `layout-controls` counted graph nodes once after a sleep, and a rescan
+    on the other worker empties every open graph. It now waits for the
+    button to be pressed and for nodes to appear.
+- **Tests.**
+  - Unit: `skill-picker.test.ts` (6): uses, why, each location kind, the
+    people-only mark, matching, what a pick adds.
+  - Harness: `skills-delivery.test.ts` +1. The skills in effect on a child
+    are its parent's plus its own, and its own entry wins. An unknown item
+    gets 404.
+  - Browser: `skill-picker.spec.ts`, on this repository's real skills:
+    - the parent's required skill shows as inherited;
+    - searching "pull request" finds codetrellis-pr-review, and picking it
+      adds it as recommended with its path;
+    - why is saved and shown;
+    - a typed skill pointed at a link shows "people only";
+    - inherited skills stay after own ones are added;
+    - the stored skills are exactly as picked;
+    - a `javascript:` link is refused with the reason and changes nothing;
+    - switching to Required stores it.
+
+    Screenshot: `skills-picker`.
+- **UX journey.** A person opens "Currency support" under "Payments":
+  - Routing & Execution shows typescript, required and inherited from
+    Payments.
+  - They type "pull request", pick codetrellis-pr-review, and add "this
+    task ends in a PR".
+  - They add house-style pointed at the wiki, and it says "people only".
+  - The next agent to claim the task is told "use
+    **codetrellis-pr-review** (`.claude/skills/codetrellis-pr-review/SKILL.md`),
+    because this task ends in a PR" (C1.1), and never sees the wiki link.
 
 ### 2026-09-28: C1.1 — skills reach the agent
 - **C1 refined** into four sub-steps in EXECUTION §6: delivery (C1.1), the
