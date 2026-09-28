@@ -18,7 +18,9 @@ export function criterionOrigin(c: { author: string; authorType: string; source?
     case 'system':
       return null;
     case 'unverified':
-      return 'added through the local API';
+      // The name as given; the UnverifiedTag beside it says it could not be
+      // checked (carried item 2b).
+      return `added by ${c.author}`;
     case 'template':
       return 'from a template';
     case 'file-import':

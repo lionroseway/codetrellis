@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { UNVERIFIED_EXPLAINER } from '../lib/author-words';
+import { UNVERIFIED_EXPLAINER, authorKind } from '../lib/author-words';
 
 /**
  * The mark on anything changed over the local API (owner's decision, Phase 32
@@ -64,4 +64,12 @@ export function UnverifiedTag({ detail }: { detail?: string }) {
       )}
     </>
   );
+}
+
+/**
+ * The tag when `type` is `unverified`, nothing otherwise: the one-line call
+ * every author display uses (`{name}<UnverifiedIf type={authorType} />`).
+ */
+export function UnverifiedIf({ type, detail }: { type: string | null | undefined; detail?: string }) {
+  return authorKind(type) === 'unverified' ? <>{' '}<UnverifiedTag detail={detail} /></> : null;
 }

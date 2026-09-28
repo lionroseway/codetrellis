@@ -5,6 +5,7 @@ import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { describeLocator, openArtefactAt } from '../../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../../lib/brief-vocabulary';
 import { criterionOrigin } from '../../../lib/criterion-origin';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 /**
  * Phase 31 §4.1–4.3 — what this item is judged on, and where each
@@ -169,7 +170,7 @@ function CriterionRow({
     ? c.latestSignoff.actorType === 'human'
       ? c.latestSignoff.actor
       : c.latestSignoff.actorType === 'unverified'
-        ? `${c.latestSignoff.actor} (local API, unverified)`
+        ? c.latestSignoff.actor // tagged beside it (carried item 2b)
         : `${c.latestSignoff.actor} (agent)`
     : null;
   const origin = criterionOrigin(c);
@@ -200,14 +201,15 @@ function CriterionRow({
             {vocabulary === 'brief' && c.state === 'met' ? (
               <span className={state.tone}>
                 {briefState(c.state, c.latestSignoff ? { actor: c.latestSignoff.actor, actorType: c.latestSignoff.actorType, at: c.latestSignoff.createdAt } : null, you).words}
+                <UnverifiedIf type={c.latestSignoff?.actorType} />
               </span>
             ) : (
               <>
                 <span className={state.tone}>{state.label}</span>
-                {decidedBy && c.state !== 'submitted' && <> — {decidedBy}</>}
+                {decidedBy && c.state !== 'submitted' && <> — {decidedBy}<UnverifiedIf type={c.latestSignoff?.actorType} /></>}
               </>
             )}
-            {origin && <>{' · '}<span data-testid="criterion-origin" className="text-cyan-300/80">{origin}</span></>}
+            {origin && <>{' · '}<span data-testid="criterion-origin" className="text-cyan-300/80">{origin}</span><UnverifiedIf type={c.authorType} /></>}
             {' · '}{KIND_LABEL[c.kind]}{' · '}
             {c.kind === 'manual' ? (
               <span title="A judgement — only a person can meet it">{POLICY_LABEL.human}</span>

@@ -7,6 +7,7 @@ import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { ExecutionDashboard } from './ExecutionDashboard';
 import { TeamActivityPanel } from './TeamActivityPanel';
 import type { PlanEvent, PlanEventType } from '@shared/types';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 const EVENT_META: Record<PlanEventType, { Icon: typeof Activity; tint: string; label: string }> = {
   item_created:        { Icon: Plus,           tint: 'text-green-300',     label: 'Created' },
@@ -155,7 +156,7 @@ function EventRow({ event, affectedTitle, onClick }: { event: PlanEvent; affecte
           <div className="flex items-center gap-2 text-[11.5px]">
             <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
             <span className="text-foreground-subtle">·</span>
-            <span className="text-foreground-muted">{event.author}</span>
+            <span className="text-foreground-muted">{event.author}<UnverifiedIf type={event.authorType} /></span>
             <span className="ml-auto text-foreground-subtle opacity-60">
               {new Date(event.createdAt).toLocaleTimeString()}
             </span>

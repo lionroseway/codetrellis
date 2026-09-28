@@ -4,6 +4,7 @@ import { History, X, RotateCcw } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
 import type { PlanItemVersion, PlanEvent } from '@shared/types';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 /**
  * Phase 15 §15.D — per-item history drawer.
@@ -102,7 +103,7 @@ export function PlanItemHistoryDrawer() {
                       </button>
                     </div>
                     <div className="flex items-center gap-2 text-[9.5px] text-foreground-subtle mt-1">
-                      <span>{v.author}</span>
+                      <span>{v.author}<UnverifiedIf type={v.authorType} /></span>
                       <span>·</span>
                       <span>{new Date(v.createdAt).toLocaleString()}</span>
                     </div>
@@ -126,7 +127,7 @@ export function PlanItemHistoryDrawer() {
                     <div className="flex items-center gap-2 text-[9.5px] text-foreground-subtle">
                       <span className="font-mono">{e.eventType}</span>
                       <span>·</span>
-                      <span>{e.author}</span>
+                      <span>{e.author}<UnverifiedIf type={e.authorType} /></span>
                       <span className="ml-auto opacity-60">{new Date(e.createdAt).toLocaleTimeString()}</span>
                     </div>
                     <div className="text-[10.5px] text-foreground mt-0.5">{e.summary}</div>

@@ -91,8 +91,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         status: z.enum(['draft', 'review', 'approved', 'in_progress', 'completed', 'archived']).optional(),
       },
     },
-    async ({ plan_uid, title, description, status }) => {
-      deps.planService.updatePlan(plan_uid, { title, description, status }, 'agent');
+    async ({ plan_uid, title, description, status }, extra: unknown) => {
+      const by = authorFromExtra(deps, extra);
+      deps.planService.updatePlan(plan_uid, { title, description, status }, by.author, by.authorType);
       const n = deps.broadcast('plan-updated', { planUid: plan_uid });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta({ ok: true, planUid: plan_uid }, n);

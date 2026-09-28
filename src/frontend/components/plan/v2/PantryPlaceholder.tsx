@@ -8,6 +8,7 @@
  */
 
 import { EyeOff, Lock, FileQuestion } from 'lucide-react';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 interface PantryPlaceholderProps {
   /** The original reference that couldn't be resolved */
@@ -16,6 +17,8 @@ interface PantryPlaceholderProps {
   reason?: string;
   /** Author of the item (for "request access from..." text) */
   author?: string;
+  /** How the attachment was recorded; `unverified` is tagged (carried item 2b). */
+  authorType?: string;
   /** Visual size: compact for inline, normal for card view */
   size?: 'compact' | 'normal';
 }
@@ -24,6 +27,7 @@ export function PantryPlaceholder({
   reference,
   reason,
   author,
+  authorType,
   size = 'normal',
 }: PantryPlaceholderProps) {
   const isUserData = reference.startsWith('userdata://');
@@ -54,7 +58,7 @@ export function PantryPlaceholder({
         )}
         {author && (
           <p className="mt-1 text-[10px] text-zinc-500">
-            Request access from <span className="text-zinc-400">{author}</span>
+            Request access from <span className="text-zinc-400">{author}</span><UnverifiedIf type={authorType} />
           </p>
         )}
         <p className="mt-1 text-[9px] text-zinc-600 font-mono truncate">

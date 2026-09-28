@@ -15,7 +15,7 @@ test('a person\'s and the system\'s are not; the rest say where they came from',
   assert.equal(criterionOrigin({ author: 'saif@example.com', authorType: 'human' }), null);
   assert.equal(criterionOrigin({ author: 'migration', authorType: 'system' }), null);
   assert.equal(criterionOrigin({ author: 'gate', authorType: 'system', source: 'gate' }), null);
-  assert.equal(criterionOrigin({ author: 'saif@example.com', authorType: 'unverified' }), 'added through the local API');
+  assert.equal(criterionOrigin({ author: 'saif@example.com', authorType: 'unverified' }), 'added by saif@example.com');
   assert.equal(criterionOrigin({ author: 'template:board-pack', authorType: 'template' }), 'from a template');
   assert.equal(criterionOrigin({ author: 'x', authorType: 'file-import' }), 'from the plan file');
 });

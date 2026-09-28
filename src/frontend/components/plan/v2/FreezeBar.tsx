@@ -10,11 +10,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { ShieldAlert, Clock, X, Flag } from 'lucide-react';
 import { useProjectStore } from '../../../stores/project-store';
 import { describeFreezeChange, type FreezeSettings } from '../../../../shared/lib/freeze-words';
+import { authorKind } from '../../../lib/author-words';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
-/** An agent's change to the freeze that no person has acknowledged (§0.4k). */
+/**
+ * A change to the freeze no person has acknowledged: an agent's (§0.4k) or
+ * one over the local API, tagged unverified (carried 2b).
+ */
 interface FlaggedFreezeChange {
   id: number;
   actor: string;
+  actorType: string;
   before: FreezeSettings | null;
   after: FreezeSettings;
   at: number;
@@ -126,7 +132,7 @@ export function FreezeBar({ planUid }: { planUid?: string }) {
       >
         <Flag size={12} className="shrink-0 text-amber-300" />
         <span className="flex-1">
-          <span className="font-medium">{c.actor}</span> (agent) {describeFreezeChange(c.before, c.after)}
+          <span className="font-medium">{c.actor}</span>{authorKind(c.actorType) === 'agent' ? ' (agent)' : <UnverifiedIf type={c.actorType} />} {describeFreezeChange(c.before, c.after)}
           <span className="text-foreground-subtle"> · {new Date(c.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
         </span>
         <button

@@ -46,7 +46,9 @@ export function briefState(
       const when = new Date(met.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
       // An agent approves in its own name (an agent-policy criterion). This
       // said "approved by Claude" for every agent, whichever it was.
-      if (met.actorType === 'unverified') return { glyph: '✓', words: `met — local API (unverified), ${when}` };
+      // Unverified: the name as given, never "you" (it is not claimed as the
+      // person); the UnverifiedTag beside it says so (carried item 2b).
+      if (met.actorType === 'unverified') return { glyph: '✓', words: `met — ${met.actor}, ${when}` };
       if (met.actorType !== 'human') return { glyph: '✓', words: `met — approved by ${met.actor} (agent)` };
       const who = you && met.actor === you ? 'you' : met.actor;
       return { glyph: '✓', words: `met — ${who}, ${when}` };

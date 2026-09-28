@@ -94,7 +94,7 @@ describe('a signal in words', () => {
     assert.equal(stateWords(sig({ state: 'intended', stateAt: at, stateBy: { actor: 'saif', actorType: 'human', channel: 'desktop' } }), NOW),
       'Marked intended by you · 2 min ago');
     assert.equal(stateWords(sig({ state: 'dismissed', stateAt: at, stateBy: { actor: 'saif', actorType: 'unverified', channel: 'local-api' } }), NOW),
-      'Dismissed over the local API, not verified as you · 2 min ago');
+      'Dismissed by saif · 2 min ago', 'the name as given; the tag beside it says unverified');
     assert.equal(stateWords(sig(), NOW), null, 'open: nobody has answered');
   });
 

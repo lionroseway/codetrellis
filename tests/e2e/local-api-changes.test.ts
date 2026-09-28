@@ -38,6 +38,16 @@ test.describe.serial('Changes over the local API', () => {
     expect(((await res.json()) as { authorType: string }).authorType).toBe('unverified');
   });
 
+  test('claiming an Action over plain HTTP with no agent named assigns it to the caller as unverified, not as you', async () => {
+    const item = await h.client.raw('POST', `/api/plans/${planUid}/items`, { kind: 'action', title: 'Take it myself' });
+    const itemUid = ((await item.json()) as { uid: string }).uid;
+    const claim = await h.client.raw('POST', `/api/items/${itemUid}/claim`, {});
+    expect(((await claim.json()) as { ok: boolean }).ok).toBe(true);
+    const got = (await (await h.client.raw('GET', `/api/items/${itemUid}`)).json()) as { assignee: string; assigneeType: string };
+    expect(got.assigneeType).toBe('unverified');
+    expect(got.assignee).toBeTruthy();
+  });
+
   test('turned off: every change over plain HTTP is refused, with where to turn it back on', async () => {
     expect((await setAccept(false)).status).toBe(200);
     for (const [method, path, body] of [

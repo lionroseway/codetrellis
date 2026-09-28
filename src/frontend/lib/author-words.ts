@@ -27,6 +27,15 @@ export const UNVERIFIED_EXPLAINER =
   'not from the CodeTrellis window. The name on it could not be checked. ' +
   'To refuse these changes, turn off Settings → MCP Server → Local API.';
 
+/**
+ * The author type of a plan or doc version. Versions saved before the type
+ * was kept (carried 2b) have none: those an agent saved say "agent", which is
+ * all the MCP tool used to write, and the rest were a person's edit.
+ */
+export function versionAuthorType(v: { author: string; authorType?: string | null }): string {
+  return v.authorType ?? (v.author === 'agent' ? 'mcp' : 'human');
+}
+
 /** "dana@example.com (local API, unverified)" for an unverified write; the name otherwise. */
 export function authorWithSource(author: string, authorType: string | null | undefined): string {
   return authorKind(authorType) === 'unverified' ? `${author} (${UNVERIFIED_WORDS})` : author;

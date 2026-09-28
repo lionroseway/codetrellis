@@ -498,7 +498,7 @@ async function routeMethod(
       if (params.title !== undefined) updates.title = params.title;
       if (params.status !== undefined) updates.status = params.status;
       if (params.description !== undefined) updates.description = params.description;
-      updatePlanAsPerson(uid, updates as any, phonePerson().author);
+      updatePlanAsPerson(uid, updates as any, phonePerson());
       return { ok: true };
     }
 

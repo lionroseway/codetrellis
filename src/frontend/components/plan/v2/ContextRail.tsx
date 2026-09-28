@@ -848,6 +848,7 @@ function AttachmentRow({ itemUid, attachment }: { itemUid: string; attachment: T
               reference={attachment.value}
               reason={reason}
               author={attachment.author ?? undefined}
+              authorType={attachment.authorType ?? undefined}
             />
           </div>
         )}

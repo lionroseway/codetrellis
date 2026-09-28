@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ChevronRight, ListChecks, Loader2, Play, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import type { CheckRun } from '@shared/types';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 /**
  * "Run checks" — Phase 31 §8.3.
@@ -133,7 +134,7 @@ export function PlanCheckRunPanel({ planUid }: { planUid: string }) {
           )}
 
           <p className="text-[10.5px] text-foreground-subtle">
-            {last.outcomes.length} criteria checked ({last.trigger === 'material_changed' ? 'a material changed' : last.trigger}, by {last.by}).
+            {last.outcomes.length} criteria checked ({last.trigger === 'material_changed' ? 'a material changed' : last.trigger}, by {last.by}<UnverifiedIf type={last.byType} />).
             A check run approves nothing — only a person marks a criterion met.
           </p>
         </div>
