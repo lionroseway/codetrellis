@@ -79,7 +79,7 @@
 - [ ] A3 Distilled (M3), refined in EXECUTION §4:
   - [x] A3.1 The digest (#164)
   - [x] A3.2 Intended and cooldown (#165)
-  - [ ] A3.3 `parallel` guide flavour (PR open)
+  - [x] A3.3 `parallel` guide flavour (#166)
   - [ ] A3.4 User skill and optional hook, offered from Settings (PR open)
   - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when"
 - [ ] A4 Mobile
