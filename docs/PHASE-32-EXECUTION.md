@@ -129,10 +129,16 @@ so each step is usable by itself, and so the clearest value lands early.
 
 ```
 0.1 → 0.2 → 0.3 → 0.4 (domains) → 0.5 → 0.6 → 0.7 review → 0.8 release
-  → A0 → A1 → B1 → B2 → C1 → A2 → B4 → B3 → A3 → review
+  → A0 → A1 → A2 → A3 → B1 → B2 → C1 → B4 → C5 → B3 → A8 → A2.7 → review
   → B5 → A4 → A5 → B6 → B7 → A6 → C2 → C3 → B8 → B9 → C4 → A7 → B10 → review
   → phase-end: main merged in, full suite, packaged build, merge to main
 ```
+
+A2 and A3 ran ahead of B1 (see the log's decisions). C5, B3's line
+changes and A8 come from the owner's asks of 2026-09-28: one plan worked
+in several worktrees, line-level changes per workstream, and CodeTrellis
+staying agent-agnostic rather than tuned to Claude Code.
+Within B4, B4.3b comes first and B4.4 (the phone) moves after A8.
 
 Steps near the front are specified in detail. Later steps are specified
 at the level of the design docs, and refined into sub-steps when they
@@ -379,6 +385,8 @@ tool call, without anyone asking; changing only the body does not.
 | A2.5 | `drift` signal (medium): a workstream edits outside the scope its claimed item's `fileSpecs` and its declared intent give it | unit; harness |
 | A2.6 | Inline notices (§6.2): an unseen high or medium signal for the caller's workstream is appended once to its next tool result, off with `sensors.awareness.inlineNotices`; `acknowledge_signal(id, note?)` records the **agent's** note, per session, beside the person's answer and separate from it (A1.8); the tab shows who was told and what they said. Closes with the M2 "done when" as a harness test | unit; harness end to end; capability coverage |
 
+| A2.7 | Signatures for the other languages with a parser: Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP, to the same contract as A2.1 (parameters, return type, type parameters; comment- and whitespace-insensitive), so `contract` signals and "signature changed" reach them. A language that cannot be done says "signature: unknown", never "unchanged" | unit per language (body edit keeps it, parameter change does not); harness: a Go and a Kotlin worktree raise `contract` |
+
 The spec lists the collision overlay under M2. It needs the overlay list
 in `graph-builder`, which is B3's, so it lands there rather than hard-wiring
 a second overlay now.
@@ -406,13 +414,30 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | A6 | M6, §10 | Brief: task binding via `get_brief`, `material_read` session and hash, grouped material signals, version-split |
 | A7 | M7 | Rules format, `rule` signals, `check_conformity` made true |
 
+### A8: Any agent
+
+CodeTrellis is agent-agnostic (CLAUDE.md), but several things now work
+best, or only, with Claude Code: the session watcher, the `PreToolUse`
+hook that pauses an edit before it is made (B4.2, B4.2c), proof of skill
+use (C1.3), and the Settings installer. A8 closes that gap, and keeps it
+closed. The rule it leaves behind: a feature ships with the path every
+MCP client has (tool calls, folder watching, git), and a client's own
+hook or log may only make it earlier or richer, never be the only way.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A8.1 | The parity table in `docs/claude/awareness.md`: every awareness, breakpoint and skill feature, what any MCP client gets, and what a client-specific hook adds. The guide tells every agent to call `check_breakpoint(path, old_text)` before an edit, the same check the hook makes. A plain MCP client with no hook and no watcher runs the journeys end to end (sees workstreams and signals, is held by a task breakpoint, gets a function breakpoint's answer, is told of a breach, sees line changes) | harness, one journey per row, as `codex` with no hook |
+| A8.2 | A client-neutral pre-edit check in the connector: `--check-edit <path> [--old-text-file f]` exits 0 (go ahead), 2 (held, the reason on stderr) or 0 silently on any failure, so any client whose hooks can run a command, and any wrapper script, gets the pause without CodeTrellis knowing its format | unit; harness (held, released, app not running) |
+| A8.3 | Hook adapters for the other clients that have pre-edit hooks, each added only once its hook format is checked against that client's current docs, each with a fixture test of its real input and output, offered from Settings with the same diff-first, window-only installer as Claude Code's (A3.4) | unit per adapter; harness (install writes only what was ticked) |
+| A8.4 | Proof of use and session signals for others: what the Claude Code watcher gives, derived for any client from its MCP calls (a `get_skill` read, the tools it used) and labelled by source, so "unknown" is left only where nothing at all was seen | unit; harness |
+
 ## 5. Track B: observability surface
 
 | Step | Scope (observability doc §13) |
 |---|---|
 | B1 | `agent_events` log (tool calls, watcher events, spec body edits), with session, workstream and time |
 | B2 | Timeline lanes per workstream: ● ◆ ⚠ ✓ marks, live, hover and click |
-| B3 | Overlay list in `graph-builder`; plan intent, workstreams and collision zones as overlays. Also: a signal chip focuses the graph on its files, and the code view marks lines another workstream changes (owner's question, 2026-09-28) |
+| B3 | Line changes per workstream in the code view, from git, for any agent (owner's ask, 2026-09-28); overlay list in `graph-builder` with plan intent, workstreams, collision zones and breakpoints as overlays; a signal chip focuses the graph on its files |
 | B4 | Breakpoints: table, enforcement at interception, `await_decision`, inbox, phone, timeline span, breach wording |
 | B5 | Replay: automatic snapshots (turn end, status change, commit) with SHA and session; one clock; catch-up |
 | B6 | Stack view: multi-plan aggregate, overlap bands, drawn and cross-plan dependencies (bug 11) |
@@ -435,6 +460,28 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | B2.1 | Lanes above the turn list, one per workstream (main first; a "No workstream" lane only when used): ● a turn, placed by the workstream its events name or its session's; ✎ a turn that edited a spec; ⚠ each signal on every lane it names. The window runs from the earliest mark (15 min to 2 h). Hover says what a mark is in words; click opens the turn below, or goes to Awareness. Live. Tool events carry their workstream as they are broadcast | unit; harness; browser |
 | B2.2 | ◆ commits and merges per workstream (and main), ✓ / ✗ check runs and criterion decisions; the lanes follow refs changes | unit; harness; browser |
 
+### B3: Line changes and overlays
+
+Line changes come from git and the parser, never from an agent's report,
+so they are the same for every client. A workstream's change to a file is
+its copy against its merge base with main, committed and uncommitted
+(`git diff <merge-base> -- <file>` run in that worktree). An agent may see
+another workstream's changed lines: they are git's output about the
+repository, not another agent's words (awareness rules, principle 5).
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B3.1 | Line changes: `GET /api/workstreams/:id/changes?path=` returns that workstream's hunks for one file (line ranges old and new, added / changed / removed, the functions they fall in, committed or not); the workstream is chosen by id among known ones, never a root from the request, and the read goes through the confined helper. MCP `get_line_changes(path, workstream?)` (capability `read`) gives any agent the same: by default ranges and function names for every other workstream changing that file, the diff text when asked. Binary and very large files say so instead | unit (hunk parsing, function placement); harness across two worktrees, as a client with no hook |
+| B3.2 | The code view shows them. A gutter marks each line this workstream changed (＋ added, ～ changed, − removed below) and, separately, lines other workstreams change, with their name in words on hover ("billing-v2 changed 40–52, in validateCreateOrder, not committed"). "Compare with…" opens the existing diff view (`CodeDiffView`) between main, this copy, and any other workstream's copy, both sides named. A file no one else changes says so | unit; browser (journey below, screenshots) |
+| B3.3 | The overlay list: `graph-builder` takes overlays as a list rather than hard-wired plan intent; plan intent, workstreams, collision zones and breakpoints are overlays a person turns on and off; a file node shows each workstream's line count (＋12 −3, in words on hover); a signal chip focuses the graph on its files; "Show changes" on a file node opens B3.2 | unit; browser |
+
+**Journey (B3.2).** Sam opens `validators.ts` from a collision signal. The
+gutter shows two runs of marks: billing-v2's in `validateCreateOrder`, and
+exports' in `validateCreateUser`. Hovering one says who, which lines,
+which function and whether it is committed. "Compare with… billing-v2"
+opens both copies side by side, named. From the graph, the same file node
+reads "2 workstreams: ＋12 −3, ＋4".
+
 ### B4: Breakpoints
 
 | Sub-step | Delivers | Tests |
@@ -455,6 +502,7 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | C2 | Team status: STATUS.md per plan and index, ticket refs exported, signed approvals |
 | C3 | Linked planning repo |
 | C4 | Recurring playbooks |
+| C5 | One plan across worktrees: sections of a plan assigned to workstreams (owner's ask, 2026-09-28) |
 
 ### C1: Skills on plans and tasks
 
@@ -464,6 +512,31 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | C1.2 | The picker in the routing panel: required or recommended, why, where; the project's skills searchable, inherited ones shown as such, a link marked "people only" | unit; browser |
 | C1.3 | Proof of use: the Claude Code watcher records each `Skill` call as `skill_used` against the session's task; the task, the Timeline and the sign-off pack say "✓ used", "○ recommended, not used", or unknown for other clients; a task launched from a CodeTrellis terminal preset gets the skills line in its opening prompt | unit; harness; browser |
 | C1.4 | A new skill arriving in a pulled plan file is flagged once in the inbox, with who added it and in which commit, before any agent is told to use it | unit; harness; browser |
+
+### C5: One plan, several worktrees
+
+Today a plan has one `targetWorktree`. The owner's ask: one plan whose
+sections are worked in different worktrees by different agents, of any
+client. A section is any item with children (a phase, a feature); its
+workstream is inherited by everything under it, the way breakpoints and
+skills are, and the plan's `targetWorktree` becomes the default for a
+section with none.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| C5.1 | `workstream` on an item (a workstream id, validated against the known workstreams, never a path from the request), inherited down the tree, set over REST (author from how the call arrived) and by MCP `assign_workstream(item_uid, workstream)` (capability `write`, refused for an unknown one). `get_next_item` offers an agent only items in its own workstream or unassigned; `claim_item` of an item assigned elsewhere is refused with where it is worked ("this section is worked in ../app-billing (billing-v2); start a session there"); `get_brief` says which workstream the task belongs to | unit; harness: two agents in two worktrees on one plan, each offered only its section, a cross-claim refused, as `codex` and a Claude Code session |
+| C5.2 | Start a worktree for a section: "Work this section in a new worktree" creates it with `git worktree add` from the plan's `baseRef`, on a branch named from the section, beside the project; from the app window only; the section is assigned to it. The hand-off menu copies the start command for whichever agent the person uses (`cd <path>`, then the task prompt), not only `claude` | unit (branch naming, refusals); harness (created, assigned, refused from plain HTTP) |
+| C5.3 | Seeing it: each section in the plan tree carries its workstream chip; the plan's progress reads per worktree ("billing-v2: 3 of 5 · exports: 1 of 4"); a Timeline lane names the sections worked in it; a collision between two sections of one plan says both section names; readiness to merge per section (ahead / behind main, open signals) | unit; browser (journey below, screenshots) |
+
+**Journey (C5).** Sam splits "Checkout v2" into Billing and Exports.
+Billing gets "Work this section in a new worktree", making
+`../app-billing` on `checkout-v2-billing`; Exports is assigned to the
+existing `../app-exports`. Sam copies the start command for each, one for
+Codex and one for Claude Code. In the plan tree, Billing and Exports
+each show their worktree; progress reads per worktree. Codex, in
+exports, asks for the next task and gets only Exports' tasks; when it
+tries to claim a Billing task it is told where that section is worked.
+When both touch `validators.ts`, the collision names the two sections.
 
 ## 7. Phase end
 

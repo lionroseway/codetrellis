@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.2c: function-level breakpoints |
-| **Status** | B4.3a merged (#182). B4.2c done on its branch: a breakpoint on one function holds only the hook's edits that touch it, and a breach counts only when that function changed. Unit and harness pass |
-| **Next action** | Open B4.2c's PR and merge it when green. Then, subject to the owner's answer on order: B4.3b (graph action, ⏸ on nodes, lane spans), plan sections assigned to worktrees, B3; signatures for more languages as its own step |
+| **Stage / step** | Track B — B4.2c merging; the next steps refined from the owner's asks |
+| **Status** | B4.2c is PR #183 (CI re-running after a fix to an unrelated test that was sharing the backend). The owner confirmed the order and asked for three things to be key: one plan worked in several worktrees, line changes per workstream, and staying agent-agnostic. Written into EXECUTION as C5, B3.1–B3.3, A8 and A2.7 |
+| **Next action** | Merge #183 when green. Then B4.3b (graph action, ⏸ on nodes, lane spans), then C5.1 (sections assigned to workstreams), C5.2, C5.3, B3.1–B3.3, A8.1–A8.4, A2.7; B4.4 after A8 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b4-2c-function-breakpoints` |
+| **Branch** | `feat/phase-32-plan-refine-worktrees-lines` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -82,6 +82,12 @@
   - [x] A3.3 `parallel` guide flavour (#166)
   - [x] A3.4 User skill and optional hook, offered from Settings (#167)
   - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
+- [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
+- [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
+  - [ ] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
+  - [ ] A8.2 Client-neutral pre-edit check in the connector
+  - [ ] A8.3 Hook adapters for other clients, each checked against its docs
+  - [ ] A8.4 Proof of use and session signals from MCP calls
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -102,12 +108,15 @@
 - [x] B2 Timeline lanes, refined in EXECUTION §5:
   - [x] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click ([#171](https://github.com/lionroseway/codetrellis/pull/171))
   - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
-- [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
+- [ ] B3 Line changes and overlays, refined in EXECUTION §5:
+  - [ ] B3.1 Line changes per workstream from git: REST and `get_line_changes`
+  - [ ] B3.2 The code view: gutter marks, who changed what, Compare with…
+  - [ ] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
   - [x] B4.2b Signal breakpoints ([#181](https://github.com/lionroseway/codetrellis/pull/181))
-  - [x] B4.2c Function-level breakpoints and breaches (PR open)
+  - [x] B4.2c Function-level breakpoints and breaches ([#183](https://github.com/lionroseway/codetrellis/pull/183))
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
   - [ ] B4.3b Graph node action, ⏸ on nodes, lane spans
   - [ ] B4.4 The phone and push
@@ -127,6 +136,10 @@
 - [ ] C2 Team status through git
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
+- [ ] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
+  - [ ] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it
+  - [ ] C5.2 Start a worktree for a section; a start command for any agent
+  - [ ] C5.3 Workstream chips, progress per worktree, sections named in collisions
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -221,9 +234,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A signal breakpoint is a rule row in the database (`kind: signal`, target a signal kind: collision, contract or drift), not a setting in `.codetrellis/config.json`. It holds every workstream a **high, open** signal of that kind names, at its next guarded call (claim, done, spec edit, delete, hooked edit); one hit per signal and workstream. Continue releases that workstream from that signal; stop refuses while it stays open. The person answering the signal in Awareness lets any waiting call through, recorded as CodeTrellis (`system`), never as a person (B4.2b) | The config file is committed and editable by agents, with a tool or an editor, so a rule there could be switched off by the agent it holds. Holding both sides matches the collision and contract signals, which name both. "Open" is the person not having answered the signal yet; once they have, the reason to ask is gone |
 | 2026-09-28 | Breakpoints waiting on the person sit at the top of the Awareness tab, and its count includes them; there is no separate inbox tab yet. The breakpoint types move to `src/shared/types/breakpoint.ts`, shared with the window (B4.3a) | Awareness is already where a person answers what needs them, and the observability doc puts breakpoints first in that list. One count avoids a second badge meaning nearly the same thing. A shared type keeps the window and the backend from drifting |
 | 2026-09-28 | A breakpoint on one function holds only what touches it: the hook's edit when the text it replaces overlaps the function's lines in the workstream's copy, a breach when the function is among the workstream's changed functions. Anything that cannot be told is held as the whole file (B4.2c) | The owner asked for function-level detection in general. Warnings were already per function (A1.5, A2.1); breakpoints were per file because the hook saw only the path. Claude Code's edit carries the replaced text, which places it precisely. Guessing "not this function" when unsure would let a protected change through, so doubt holds |
+| 2026-09-28 | Order after B4.2c: B4.3b, C5 (one plan across worktrees), B3 (line changes first, then overlays), A8 (any agent), A2.7 (signatures for the other languages); B4.4 after A8. A feature ships with the path every MCP client has (tool calls, folder watching, git); a client's own hook or log may make it earlier or richer, never be the only way | The owner confirmed the order and called these key, adding that CodeTrellis is agent-agnostic while recent steps leaned on Claude Code's hook and watcher. Line changes come from git, so they are the same for every client; a section's workstream is an id among known workstreams, so no root comes from a request; hook adapters for other clients are added only once their formats are checked, never from memory |
 ---
 
 ## Entries
+
+### 2026-09-28: Next steps refined — worktrees, line changes, any agent
+- **Asked for** by the owner: "add these steps and functionality … they
+  are key. We are optimising a lot for Claude Code but we are to be AI
+  agent agnostic. So we will have parts of a plan in different worktrees
+  … be able to see line changes etc (we can use git diff on current file
+  etc)."
+- **What exists:** a plan has one `targetWorktree`; items have no
+  workstream. The inspector's `CodeDiffView` compares a file at a point in
+  time with the live copy (`/api/file/at`), which B3.2's "Compare with…"
+  reuses. Footprints already know each workstream's changed files and
+  functions (A1.4, A1.5), but not lines.
+- **Written into EXECUTION:** C5.1–C5.3 (sections assigned to
+  workstreams, a worktree started for a section, seeing it), B3.1–B3.3
+  (line changes from git through REST and MCP, the gutter and Compare
+  with…, the overlay list), A8.1–A8.4 (parity table, a client-neutral
+  pre-edit check, adapters for other clients' hooks, proof of use from MCP
+  calls), A2.7 (signatures for the other eight languages). C5 and B3.2
+  carry their journeys.
+- **Claude Code-only today**, which A8 addresses: the pause before an
+  edit (the hook), function-level holds (the hook sends the replaced
+  text), proof of skill use (the session watcher), and the Settings
+  installer. Everything else already goes through MCP, folder watching
+  or git.
 
 ### 2026-09-28: B4.2c — breakpoints on one function
 - **Asked for** by the owner ("do we detect inside functions … would need
