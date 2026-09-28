@@ -65,7 +65,7 @@
 - [x] A1.4 Folder watching (#149)
 - [x] A1.5 Footprint symbols (#150)
 - [x] A1.6 Signals engine (collision, stale-base) and tools (#151)
-- [ ] A1.7 Branch and clone workstreams (A1.7a branches; A1.7b clones and bug 46)
+- [ ] A1.7 Branch and clone workstreams (A1.7a branches; A1.7b bug 46; A1.7c clones)
 - [ ] A1.8 Awareness tab
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (digest, guide, skill and hook)
@@ -156,10 +156,47 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-27 | Reversed: 0.1.17 includes the companion after all (Android APK on the release, iOS to TestFlight) — it carries the deviations fix (bug 34), the budget and freeze cards and the splash fix | Owner: "we can do the mobile release"; the phone screen review still waits |
 | 2026-09-27 | `feat/phase-32` merges into `main` for the release, with a merge commit so each step's commit and PR stay visible | Owner's go-ahead ("getting release done and we merge"); `main` history is one commit per PR |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
+| 2026-09-28 | A doc or plan row belongs to the checkout that holds it while that folder exists; another checkout's copy with the same uid is not imported over it (bug 46) | Rows are keyed by uid and every checkout carries the same files. A worktree's differing copy is its own change, which its footprint shows; a holder that is gone gives the row up, so a moved repo still works |
+| 2026-09-28 | Clones need consent before anything is read from them: the prompt names the folder the agent reported, and the clone check runs only after the person says yes in the app window (A1.7c) | Deciding "is this a clone?" means running git in a caller-named folder, and a repo's config can make git run commands; Phase 19 says nothing is read from a reported path |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A1.7b — identity across checkouts (bug 46)
+- **What was wrong.** Rows for system docs and plans are keyed by uid, and
+  every checkout of a repository carries the same files. Scanning a linked
+  worktree:
+  - **docs:** rewrote each doc's `project_path` and text, so the main
+    checkout then listed none of its docs;
+  - **plans:** kept the plan's root (`importedPlanRoot`'s rule 1) but
+    overwrote its title, status and items with the worktree's draft.
+- **Decision (in Decisions).** A row belongs to the checkout that holds it
+  while that folder exists. `checkout-identity.ts` has the one rule,
+  `heldByAnotherCheckout`, which compares real paths and treats a vanished
+  holder as giving the row up. `importDocFile` and `importPlan` both call
+  it before touching the row.
+  - A skipped doc import returns false, as a skipped malformed file
+    already did.
+  - A skipped plan import returns the held plan untouched, with a warning
+    naming the holder, so an explicit import says why nothing changed.
+- **UX.** The main checkout keeps its docs and plans as they are on main.
+  A worktree's differing copies show as that workstream's changed files
+  (A1.4), and the plan list's "other worktrees of this repo" section
+  already reads other checkouts' plans from disk.
+- **A1.7 split again.** Clones (consent, then a clone check) are A1.7c;
+  the Decisions table says why consent comes before any read.
+- **Tests.**
+  - Unit: `checkout-identity.test.ts` (4): another checkout holds it; the
+    same checkout re-imports, via a symlink too; a gone holder gives up;
+    no holder.
+  - Harness: `checkout-identity.test.ts` (4): main keeps its doc and its
+    text; the plan keeps main's title, not the worktree's draft; a doc
+    only in the worktree still imports there; the worktree's copies are
+    its workstream changes. The first two fail on the old code (checked
+    one at a time, since the spec is serial).
+  - The existing worktree-project, plan-export, contributor-branch,
+    auto-detect and system-docs harness files pass (43).
 
 ### 2026-09-28: A1.7a — branch workstreams (A1.7 split in two)
 - **Decision: A1.7 is two PRs.**

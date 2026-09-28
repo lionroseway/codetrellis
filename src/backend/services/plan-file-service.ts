@@ -64,6 +64,7 @@ import type {
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
 import { getEffectiveDefaultVisibility } from './project-config-service';
+import { heldByAnotherCheckout } from './checkout-identity';
 
 // --- Public surface ---
 
@@ -437,6 +438,20 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   }
 
   const planUid = planRaw.uid as string;
+
+  // Another checkout of this repository holds this plan (bug 46): nothing
+  // from this copy is imported over it — not its title, status or items. If
+  // this copy differs, it is this workstream's change.
+  const held = planService.getPlan(planUid);
+  const sitsIn = checkoutOfPlanDir(planDir);
+  if (held && sitsIn && heldByAnotherCheckout(held.projectPath, sitsIn)) {
+    return {
+      plan: held, phases: [], tasks: [], docs: [], items: [],
+      version: planRaw.version === 2 || fs.existsSync(path.join(planDir, 'items')) ? 2 : 1,
+      warnings: [`Not imported: this plan is held by ${held.projectPath}, another checkout of this repository. This copy's differences are that checkout's workstream changes.`],
+    };
+  }
+
   const projectPath = importedPlanRoot(planUid, planDir, planRaw.projectPath);
 
   // 1. Plan upsert (same for V1 and V2).
@@ -1496,6 +1511,14 @@ function serializeDoc(doc: PlanDocument): string {
  *   3. only for a directory outside that layout, the file's absolute
  *      `projectPath`, and `'.'` as the last resort (the old behaviour).
  */
+/** The checkout a plan directory sits in (`<checkout>/.codetrellis/plans/<slug>`), or null outside that layout. */
+function checkoutOfPlanDir(planDir: string): string | null {
+  const slugDir = path.resolve(planDir);
+  const plansDir = path.dirname(slugDir);
+  const dotDir = path.dirname(plansDir);
+  return path.basename(plansDir) === 'plans' && path.basename(dotDir) === '.codetrellis' ? path.dirname(dotDir) : null;
+}
+
 export function importedPlanRoot(planUid: string, planDir: string, declared: unknown): string {
   const existing = planService.getPlan(planUid)?.projectPath;
   if (existing && path.isAbsolute(existing) && fs.existsSync(existing)) return existing;
