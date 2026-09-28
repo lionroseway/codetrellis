@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.8: Awareness tab |
-| **Status** | A1.7 merged (#152, #153, #154). A1.8 done on its branch (unit +16, harness 6, browser 5); PR open |
-| **Next action** | Merge A1.8's PR when green; then refine Track A's next milestone (A2) into sub-steps per §4 |
+| **Stage / step** | Track A — A2.1: signatures (TS/JS, Python) |
+| **Status** | A1 done (A1.8 merged, #155). A2 refined into A2.1–A2.6 (EXECUTION §4). A2.1 done on its branch (unit +20, harness +1, browser +1); PR open |
+| **Next action** | Merge A2.1's PR when green; then A2.2 (import accuracy: Python original names, `export … from`, `resolved_path` index) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-8-awareness-tab` |
+| **Branch** | `feat/phase-32-a2-1-signatures` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -66,7 +66,13 @@
 - [x] A1.5 Footprint symbols (#150)
 - [x] A1.6 Signals engine (collision, stale-base) and tools (#151)
 - [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)
-- [x] A1.8 Awareness tab
+- [x] A1.8 Awareness tab (#155)
+- [x] A2.1 Signatures (TS/JS, Python)
+- [ ] A2.2 Import accuracy
+- [ ] A2.3 `contract` signal
+- [ ] A2.4 `declare_intent`
+- [ ] A2.5 `drift` signal
+- [ ] A2.6 Inline notices and the agent's acknowledgement
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (digest, guide, skill and hook)
 - [ ] A4 Mobile
@@ -159,10 +165,57 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A doc or plan row belongs to the checkout that holds it while that folder exists; another checkout *of the same repository* (worktree: same git common dir; clone: same origin) does not import its copy over it. Any other folder still takes the row over (bug 46) | Rows are keyed by uid and every checkout carries the same files. A worktree's differing copy is its own change, which its footprint shows; a holder that is gone gives the row up, so a moved repo still works. Narrowed after CI: a teammate's export imported from a plain folder is a deliberate move, not a second checkout |
 | 2026-09-28 | Clones need consent before anything is read from them: the prompt names the folder the agent reported, and the clone check runs only after the person says yes in the app window (A1.7c) | Deciding "is this a clone?" means running git in a caller-named folder, and a repo's config can make git run commands; Phase 19 says nothing is read from a reported path |
 | 2026-09-28 | A person answers a signal (acknowledged, intended, dismissed, or back to open) from the Awareness tab. Recorded with who answered, as the call arrived: plain HTTP is `unverified` and the tab says so. Agents see the answer and have no tool to give one. An answer lasts while the overlap does; when it resolves and returns, it is open again (A1.8) | Tag, don't block, as for sign-off (0.4d) and freeze changes (0.4k). A collision is not an agent's to wave away. The spec's cooldown ("silent until its subject changes") and "intended until either footprint changes shape" are A3 |
+| 2026-09-28 | An agent's `acknowledge_signal(id, note?)` (spec §6.1) is the agent's own note, per session, shown beside the person's answer; it never sets the person's state (A2.6) | Reconciles the spec with A1.8's decision that a collision is not an agent's to wave away. The agent saying "seen, will rebase after billing merges" is useful to the person; the agent closing it is not |
+| 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A2 refined; A2.1 — signatures
+- **A2 refined** into A2.1–A2.6 in EXECUTION §4, with the M2 "done when"
+  as A2.6's closing harness test. Two Decisions rows: the agent's
+  `acknowledge_signal` is its own note, never the person's answer; the
+  collision overlay goes with B3's overlay list. Python's "exported" rule
+  moved to A2.3, where it is used.
+- **Signatures.** `ParsedSymbol.signature`, optional, from `shapeOf` in
+  `parsers/base.ts`: a node's tokens in order with comments and `;`
+  dropped, trailing commas removed and whitespace normalised, so a
+  reformat, a comment or a separator change keeps it.
+  - TS/JS: functions and arrow functions (type parameters, parameters —
+    including the bare `x => …` form — return type, and a declared
+    `const f: Handler` type); methods; a field's type; an interface's
+    `extends` and members; a type alias's value; an enum's members. A
+    class has none: its members carry theirs.
+  - Python: parameters, return annotation, 3.12 type parameters.
+    Decorators are not part of it: adding a cache does not change how a
+    function is called.
+  - Every other language gives none, so it can raise no contract signal
+    (spec §4.2: no body-hash fallback, which would flag every edit).
+- **Footprints.** `diffSymbols` puts `signature: {before, after}` on a
+  modified symbol whose shape changed, only when both versions have one.
+  A body-only edit stays a plain `modified`.
+- **UX.** In a chip's details, a symbol whose signature changed reads
+  `~createInvoice()`, and a line under the file says so in words
+  ("createInvoice's signature changed", amber), with before → after on
+  hover. Screenshot: `workstreams-signature.png`. The Awareness tab shows
+  signatures once a signal carries one (A2.3).
+- **Tests.**
+  - Unit: `parsers/signatures.test.ts` (12): per language, a body edit,
+    comment, reformat or decorator keeps the signature; a parameter
+    added, renamed or retyped, or a return type, changes it; arrows,
+    methods, fields, interfaces, types; Go gives none.
+    `workstream-symbols.test.ts` +5: before/after on a parameter change,
+    none on a body edit or from a parser without signatures, a real
+    worktree's method, and none on the A1.5 fixtures' body edits.
+    `workstream-strip.test.ts` +3.
+  - Harness: `workstreams.test.ts` +1: a body edit keeps the signature;
+    a new parameter is reported before and after, over REST and
+    `list_workstreams`. Fails on the old code, which had no signature.
+  - Browser: `workstream-strip.spec.ts` +1, the marker, the words and the
+    tooltip.
+  - Related harness files pass (72); unit 1213 pass / 3 environment
+    skips; lint 0 errors / 295.
 
 ### 2026-09-28: A1.8 — the Awareness tab
 - **Journey (awareness spec §7.2).**

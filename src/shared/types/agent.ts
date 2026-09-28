@@ -116,10 +116,16 @@ export interface SymbolChange {
   /** Unique in its file: members carry their parent (`Session.renew`, `(Ledger).Post`). */
   name: string;
   kind: SymbolKind;
-  /** `modified` means its own source text changed; signatures are A2's. */
+  /** `modified` means its own source text changed. */
   change: 'added' | 'removed' | 'modified';
   /** 1-based line in the current version, or in the base when removed. */
   line: number;
+  /**
+   * Set on a `modified` symbol whose shape changed too — parameters, return
+   * type, a type's members (A2.1). Absent for a body-only edit, and for a
+   * language whose parser gives no signatures.
+   */
+  signature?: { before: string; after: string };
 }
 
 /**

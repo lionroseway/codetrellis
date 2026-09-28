@@ -91,9 +91,31 @@ export function symbolSummary(symbols: SymbolChange[] | undefined, max = 3): str
   if (!symbols || symbols.length === 0) return null;
   const order = { modified: 0, added: 1, removed: 2 } as const;
   const sorted = [...symbols].sort((a, b) => order[a.change] - order[b.change] || a.line - b.line);
-  const shown = sorted.slice(0, max).map((s) => `${MARK[s.change]}${s.name}`);
+  // A changed signature (A2.1) is what callers feel, so it says so: `~name()`.
+  const shown = sorted.slice(0, max).map((s) => `${MARK[s.change]}${s.name}${s.signature ? '()' : ''}`);
   const more = sorted.length - shown.length;
   return more > 0 ? `${shown.join('  ')}  +${more} more` : shown.join('  ');
+}
+
+/**
+ * A file's signature changes in words, for a line of their own under its
+ * symbols: "createInvoice's signature changed", or "3 signatures changed".
+ * Null when there are none (A2.1).
+ */
+export function signatureWords(symbols: SymbolChange[] | undefined): string | null {
+  const changed = (symbols ?? []).filter((s) => s.signature);
+  if (changed.length === 0) return null;
+  return changed.length === 1 ? `${changed[0].name}'s signature changed` : `${changed.length} signatures changed`;
+}
+
+/**
+ * The signature changes in a file's symbols, one line each ("name: before →
+ * after"), for the file row's tooltip; null when there are none (A2.1).
+ */
+export function signatureLines(symbols: SymbolChange[] | undefined): string | null {
+  const changed = (symbols ?? []).filter((s) => s.signature);
+  if (changed.length === 0) return null;
+  return changed.map((s) => `${s.name}: ${s.signature!.before} → ${s.signature!.after}`).join('\n');
 }
 
 /**

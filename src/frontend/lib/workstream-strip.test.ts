@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signalsFor, chipSeverity, signalWords } from './workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords } from './workstream-strip';
 import type { AwarenessSignal, Workstream, WorkstreamAgent } from '../../shared/types';
 
 const agent = (sessionId: string): WorkstreamAgent => ({ sessionId, agentType: 'claude-code', model: null, source: 'mcp', lastSeen: 0 });
@@ -149,5 +149,26 @@ describe('branch workstreams on the strip (A1.7a)', () => {
 
   test('it says where it is', () => {
     assert.equal(shapeWords(branch('x')), 'Branch, no checkout on this machine');
+  });
+});
+
+describe('signature changes on the strip (A2.1)', () => {
+  const changed = { name: 'createInvoice', kind: 'function' as const, change: 'modified' as const, line: 3, signature: { before: '(opts)', after: '(opts, currency)' } };
+  const body = { name: 'total', kind: 'function' as const, change: 'modified' as const, line: 9 };
+
+  test('a changed signature is marked with (), a body edit is not', () => {
+    assert.equal(symbolSummary([body, changed]), '~createInvoice()  ~total');
+  });
+
+  test('the tooltip gives each signature before and after, or nothing', () => {
+    assert.equal(signatureLines([changed, body]), 'createInvoice: (opts) → (opts, currency)');
+    assert.equal(signatureLines([body]), null);
+    assert.equal(signatureLines(undefined), null);
+  });
+
+  test('said in words: which one, or how many', () => {
+    assert.equal(signatureWords([changed, body]), "createInvoice's signature changed");
+    assert.equal(signatureWords([changed, { ...changed, name: 'refund' }]), '2 signatures changed');
+    assert.equal(signatureWords([body]), null);
   });
 });

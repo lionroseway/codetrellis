@@ -40,6 +40,8 @@ interface FlatSymbol {
   line: number;
   /** Hash of the symbol's own source lines (its members' excluded), trailing whitespace ignored. */
   body: string;
+  /** Its shape, where the parser gives one (A2.1). */
+  signature?: string;
 }
 
 /** Already qualified by the language (`(Ledger).Post`, `Invoice#post`, `A.b`). */
@@ -52,11 +54,11 @@ const QUALIFIED = /[.#)]/;
  */
 export function flatSymbols(symbols: ParsedSymbol[], source: string): FlatSymbol[] {
   const lines = source.split('\n');
-  const all: Array<{ name: string; kind: ParsedSymbol['kind']; start: number; end: number }> = [];
+  const all: Array<{ name: string; kind: ParsedSymbol['kind']; start: number; end: number; signature?: string }> = [];
   const visit = (list: ParsedSymbol[], parent: string | null) => {
     for (const s of list) {
       const name = parent && !QUALIFIED.test(s.name) ? `${parent}.${s.name}` : s.name;
-      all.push({ name, kind: s.kind, start: s.startLine, end: s.endLine });
+      all.push({ name, kind: s.kind, start: s.startLine, end: s.endLine, signature: s.signature });
       if (s.children.length) visit(s.children, name);
     }
   };
@@ -74,7 +76,10 @@ export function flatSymbols(symbols: ParsedSymbol[], source: string): FlatSymbol
       if (inner.some((o) => n >= o.start && n <= o.end)) continue;
       own.push((lines[n - 1] ?? '').trimEnd());
     }
-    return { name: s.name, kind: s.kind, line: s.start, body: createHash('sha1').update(own.join('\n')).digest('hex') };
+    return {
+      name: s.name, kind: s.kind, line: s.start, body: createHash('sha1').update(own.join('\n')).digest('hex'),
+      ...(s.signature ? { signature: s.signature } : {}),
+    };
   });
 }
 
@@ -91,7 +96,13 @@ export function diffSymbols(before: FlatSymbol[] | null, after: FlatSymbol[] | n
   for (const [k, s] of now) {
     const was = old.get(k);
     if (!was) changes.push({ name: s.name, kind: s.kind, change: 'added', line: s.line });
-    else if (was.body !== s.body) changes.push({ name: s.name, kind: s.kind, change: 'modified', line: s.line });
+    else if (was.body !== s.body) {
+      // Its shape changed as well as its text (A2.1): what callers see. Only
+      // when both versions have one — a parser that gives none says nothing.
+      const signature = was.signature && s.signature && was.signature !== s.signature
+        ? { signature: { before: was.signature, after: s.signature } } : {};
+      changes.push({ name: s.name, kind: s.kind, change: 'modified', line: s.line, ...signature });
+    }
   }
   for (const [k, s] of old) {
     if (!now.has(k)) changes.push({ name: s.name, kind: s.kind, change: 'removed', line: s.line });
