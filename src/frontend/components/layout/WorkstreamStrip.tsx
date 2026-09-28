@@ -4,8 +4,8 @@ import { GitBranch, Users, AlertTriangle, FileText } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
-import type { Workstream } from '@shared/types';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signalsFor, chipSeverity, signalWords, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
+import type { AwarenessSignal, Workstream } from '@shared/types';
 
 /**
  * The workstreams strip (Phase 32 A1.3): one chip per line of parallel work
@@ -27,14 +27,20 @@ export function WorkstreamStrip() {
   const root = useProjectStore((s) => s.root);
   const sessions = usePlanStore((s) => s.sessions);
   const [all, setAll] = useState<Workstream[]>([]);
+  const [signals, setSignals] = useState<AwarenessSignal[]>([]);
   const [open, setOpen] = useState<{ root: string | null; top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
-    if (!root) { setAll([]); return; }
+    if (!root) { setAll([]); setSignals([]); return; }
     fetch(`/api/workstreams?project=${encodeURIComponent(root)}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((ws: Workstream[]) => setAll(Array.isArray(ws) ? ws : []))
+      .catch(() => {});
+    // What overlaps (A1.6). A failure leaves the chips as they are, unmarked.
+    fetch(`/api/awareness?project=${encodeURIComponent(root)}`)
+      .then((r) => (r.ok ? r.json() : { signals: [] }))
+      .then((body: { signals?: AwarenessSignal[] }) => setSignals(Array.isArray(body.signals) ? body.signals : []))
       .catch(() => {});
   }, [root]);
 
@@ -42,7 +48,11 @@ export function WorkstreamStrip() {
   // A watched folder's changed files moved (A1.4).
   useEffect(() => {
     window.addEventListener('workstreams-changed', refresh);
-    return () => window.removeEventListener('workstreams-changed', refresh);
+    window.addEventListener('awareness-changed', refresh);
+    return () => {
+      window.removeEventListener('workstreams-changed', refresh);
+      window.removeEventListener('awareness-changed', refresh);
+    };
   }, [refresh]);
   useEffect(() => {
     const id = setInterval(refresh, REFRESH_MS);
@@ -87,9 +97,13 @@ export function WorkstreamStrip() {
             data-testid="workstream-chip"
             onClick={(e) => toggle(e, w.root)}
             aria-expanded={open?.root === w.root}
-            title={[chipLabel(w), shapeWords(w), changeWords(w), w.agents.length === 0 ? 'no agent working' : null].filter(Boolean).join(' — ')}
+            title={[chipLabel(w), shapeWords(w), changeWords(w), w.agents.length === 0 ? 'no agent working' : null, signalWords(signalsFor(w.root, signals))].filter(Boolean).join(' — ')}
+            data-severity={chipSeverity(signalsFor(w.root, signals)) ?? undefined}
             className={`flex items-center gap-1.5 max-w-[160px] text-[11px] px-2 py-1 rounded-lg border bg-surface transition-all ${
-              shared ? 'border-warning/50 text-foreground' : 'border-border text-foreground hover:border-border-glow'
+              // What overlaps other work is the thing worth a look (A1.6).
+              chipSeverity(signalsFor(w.root, signals)) === 'high' ? 'border-danger/70 text-foreground shadow-[0_0_8px_rgba(239,68,68,0.25)]'
+              : chipSeverity(signalsFor(w.root, signals)) === 'medium' || shared ? 'border-warning/50 text-foreground'
+              : 'border-border text-foreground hover:border-border-glow'
             } ${open?.root === w.root ? 'border-border-glow' : ''}`}
           >
             {/* Green while an agent works there; grey for work left behind. */}
@@ -128,7 +142,7 @@ export function WorkstreamStrip() {
           style={{ position: 'fixed', top: open.top, left: Math.min(open.left, window.innerWidth - 300), zIndex: 9999 }}
           className="w-72 bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] py-1 max-h-[360px] overflow-y-auto"
         >
-          {listed.map((w) => <WorkstreamDetail key={w.root} ws={w} />)}
+          {listed.map((w) => <WorkstreamDetail key={w.root} ws={w} signals={signalsFor(w.root, signals)} />)}
         </div>,
         document.body,
       )}
@@ -136,7 +150,7 @@ export function WorkstreamStrip() {
   );
 }
 
-function WorkstreamDetail({ ws }: { ws: Workstream }) {
+function WorkstreamDetail({ ws, signals }: { ws: Workstream; signals: AwarenessSignal[] }) {
   const note = sharedNote(ws);
   return (
     <div className="border-b border-white/[0.06] last:border-b-0">
@@ -157,6 +171,7 @@ function WorkstreamDetail({ ws }: { ws: Workstream }) {
           <span className="text-[10px] text-warning leading-snug">{note}</span>
         </div>
       )}
+      <Overlaps signals={signals} />
       <ChangedFiles ws={ws} />
       <div className="px-3 pb-2">
         <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">
@@ -219,6 +234,29 @@ function ChangedFiles({ ws }: { ws: Workstream }) {
           and {more}{truncated ? '+' : ''} more
         </div>
       )}
+    </div>
+  );
+}
+
+const SEVERITY_PILL = {
+  high: 'bg-danger/15 text-danger',
+  medium: 'bg-warning-muted/40 text-warning',
+  low: 'bg-surface-hover text-foreground-muted',
+} as const;
+
+/** What overlaps other work (A1.6): collisions first, then a stale base. */
+function Overlaps({ signals }: { signals: AwarenessSignal[] }) {
+  if (signals.length === 0) return null;
+  return (
+    <div className="px-3 pb-2" data-testid="workstream-signals">
+      <div className="text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">Overlaps with other work</div>
+      {signals.map((s) => (
+        <div key={s.id} data-testid="workstream-signal" className="flex items-start gap-1.5 py-0.5">
+          <span className={`text-[8px] uppercase font-semibold px-1 rounded shrink-0 mt-px ${SEVERITY_PILL[s.severity]}`}>{s.severity}</span>
+          {/* Backticks mark names in the summary; shown as plain text. */}
+          <span className="text-[10px] text-foreground leading-snug">{s.summary.replace(/`/g, '')}</span>
+        </div>
+      ))}
     </div>
   );
 }

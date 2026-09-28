@@ -671,6 +671,11 @@ export function useWebSocket() {
             window.dispatchEvent(new CustomEvent('workstreams-changed', { detail: payload }));
             return;
           }
+          // Signals about parallel work changed (A1.6).
+          if (type === 'awareness-changed') {
+            window.dispatchEvent(new CustomEvent('awareness-changed', { detail: payload }));
+            return;
+          }
           if (type === 'graph-data-changed') {
             window.dispatchEvent(new CustomEvent('graph-data-changed', { detail: payload }));
             return;

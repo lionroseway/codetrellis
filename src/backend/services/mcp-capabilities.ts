@@ -341,6 +341,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   // ── awareness-tools ─────────────────────────────────────────────────
   // Phase 32 A1.3. Reads only: who else is working, and where.
   list_workstreams: 'read',
+  get_awareness: 'read',
+  check_footprint: 'read',
 });
 
 export class McpAuthorizationError extends Error {

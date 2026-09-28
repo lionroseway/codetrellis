@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { gotoWithProject } from '../helpers/setup';
-import type { ChangedFile, Workstream, WorkstreamAgent } from '../../src/shared/types';
+import type { AwarenessSignal, ChangedFile, Workstream, WorkstreamAgent } from '../../src/shared/types';
 
 const OUT = path.join('test-results', 'ux-audit');
 
@@ -40,9 +40,11 @@ const changed = (...specs: string[]): ChangedFile[] => specs.map((s) => {
  * Answer the strip, and the agents list beside it with the same connected
  * agents, so a photograph shows one consistent room.
  */
-async function serve(page: Page, answer: Workstream[]) {
+async function serve(page: Page, answer: Workstream[], signals: AwarenessSignal[] = []) {
   await page.route('**/api/workstreams?*', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(answer) }));
+  await page.route('**/api/awareness?*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signals }) }));
   const sessions = answer.flatMap((w) => w.agents.filter((a) => a.source === 'mcp').map((a) => ({
     sessionId: a.sessionId, agentType: a.agentType, model: a.model, activePlanUid: null,
     connectedAt: now - 600_000, lastSeen: a.lastSeen ?? now, status: 'active', capabilities: [],
@@ -187,5 +189,48 @@ test.describe('Workstreams strip', () => {
     ]);
     await gotoWithProject(page);
     await expect(chips(page)).toHaveText(['auth-refresh']);
+  });
+
+  // ── A1.6: what overlaps other work ─────────────────────────────────
+
+  test('a collision marks both chips, and each lists what overlaps', async ({ page }) => {
+    const signal = (id: string, kind: AwarenessSignal['kind'], severity: AwarenessSignal['severity'], workstreams: string[], summary: string, subject: AwarenessSignal['subject']): AwarenessSignal =>
+      ({ id, kind, severity, workstreams, summary, subject, firstSeen: now, lastSeen: now, state: 'open' });
+    await serve(page, [
+      ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),
+      ws('/work/acme-auth', 'auth-refresh', false, [agent('s2', 'codex')], changed('M src/auth/session.ts')),
+      ws('/work/acme-billing', 'billing-v2', false, [agent('s3', 'claude-code')], changed('M src/auth/session.ts', 'M src/billing/invoice.ts')),
+      ws('/work/acme-docs', 'docs', false, [agent('s4', 'aider')], changed('M docs/guide.md')),
+    ], [
+      signal('c1', 'collision', 'high', ['/work/acme-auth', '/work/acme-billing'], '`auth-refresh` and `billing-v2` both change src/auth/session.ts → refreshToken', { file: 'src/auth/session.ts', symbol: 'refreshToken' }),
+      signal('s1', 'stale-base', 'low', ['/work/acme-billing'], 'main changed src/billing/invoice.ts since `billing-v2` branched, and `billing-v2` changes it too', { files: ['src/billing/invoice.ts'] }),
+    ]);
+    await gotoWithProject(page);
+    const byName = (n: string) => chips(page).filter({ hasText: n });
+    await expect(byName('auth-refresh')).toHaveAttribute('data-severity', 'high');
+    await expect(byName('billing-v2')).toHaveAttribute('data-severity', 'high');
+    await expect(byName('docs')).not.toHaveAttribute('data-severity', /.+/);
+    await expect(byName('auth-refresh')).toHaveAttribute('title', /overlaps other work \(1 signal\)/);
+
+    await byName('billing-v2').click();
+    const list = page.getByTestId('workstream-signal');
+    await expect(list).toHaveCount(2);
+    await expect(list.nth(0)).toContainText('high');
+    await expect(list.nth(0)).toContainText('auth-refresh and billing-v2 both change src/auth/session.ts → refreshToken');
+    await expect(list.nth(1)).toContainText('low');
+    await shot(page, 'workstreams-collision');
+  });
+
+  test('a stale base alone lists in the details but leaves the chip unmarked', async ({ page }) => {
+    await serve(page, [
+      ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),
+      ws('/work/acme-auth', 'auth-refresh', false, [agent('s2', 'codex')], changed('M src/auth/session.ts')),
+    ], [{ id: 's', kind: 'stale-base', severity: 'low', workstreams: ['/work/acme-auth'], subject: { files: ['src/auth/session.ts'] },
+      summary: 'main changed src/auth/session.ts since `auth-refresh` branched, and `auth-refresh` changes it too', firstSeen: now, lastSeen: now, state: 'open' }]);
+    await gotoWithProject(page);
+    const chip = chips(page).filter({ hasText: 'auth-refresh' });
+    await expect(chip).not.toHaveAttribute('data-severity', /.+/);
+    await chip.click();
+    await expect(page.getByTestId('workstream-signal')).toContainText('since auth-refresh branched');
   });
 });

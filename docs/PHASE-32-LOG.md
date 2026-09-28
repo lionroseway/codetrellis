@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.5: which symbols each workstream's changes touch |
-| **Status** | A1.4 merged (#149). A1.5 done on its branch (unit 13 + 3, harness +1, browser +1, screenshot); PR open |
-| **Next action** | Merge A1.5's PR when green; then A1.6 (signals: `awareness_signals`, pure `computeSignals` for collision and stale-base, `get_awareness`, `check_footprint`) |
+| **Stage / step** | Track A — A1.6: signals (collision, stale-base) and the tools that report them |
+| **Status** | A1.5 merged (#150). A1.6 done on its branch (unit 14 + 3, harness 8, browser +2, screenshot); PR open |
+| **Next action** | Merge A1.6's PR when green; then A1.7 (branch and clone workstreams: refs watcher, clone consent) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-5-footprint-symbols` |
+| **Branch** | `feat/phase-32-a1-6-signals` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -63,7 +63,7 @@
 - [x] A1.2 Multi-session Claude watcher (#147)
 - [x] A1.3 Workstream discovery and strip (#148)
 - [x] A1.4 Folder watching (#149)
-- [ ] A1.5 Footprint symbols
+- [x] A1.5 Footprint symbols (#150)
 - [ ] A1.6 Signals engine (collision, stale-base) and tools
 - [ ] A1.7 Branch and clone workstreams
 - [ ] A1.8 Awareness tab
@@ -160,6 +160,75 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: A1.6 — signals: collision and stale-base, `get_awareness`, `check_footprint`
+- **Pure core (`awareness-signals.ts`).** `computeSignals` turns footprints
+  into signals, and `reconcileSignals` folds them into what was known.
+  - **collision:** two workstreams change the same file. On the same
+    symbol it's **high**, one signal per symbol. On the same file with
+    different symbols, or in a file we don't parse, it's **medium**. A
+    file with symbol collisions doesn't also get a file-level one.
+  - **stale-base:** main changed files this workstream also changes since
+    it branched. **Low**, one per workstream, with the files in the
+    subject. Never raised for the main checkout.
+  - **Deduplication:** the id is a hash of (kind, subject, workstreams),
+    so the same cause gives the same id whatever order the workstreams
+    come in. A signal firing again unchanged writes nothing.
+  - **Resolution:** a signal whose cause went away is resolved. If the
+    cause comes back, the signal reopens with its first-seen time kept.
+  - **A person's state wins:** acknowledged or intended is not overruled
+    by the signal firing again. Setting those states is A1.8/A3.
+- **Plumbing (`awareness-service.ts`).**
+  - The `awareness_signals` table, indexed by project.
+  - Main's changes since each merge base come from
+    `git diff --name-only -z <base> <mainRef>`, with both refs checked.
+  - Signals are recomputed 500 ms after a workstream's files move, and on
+    every read. `awareness-changed` is broadcast only when they change.
+    They are not channel events (spec §5.4).
+- **Surfaces.**
+  - `GET /api/awareness?project=`.
+  - `get_awareness` gives the signals naming the caller's bound workstream,
+    plus a count of the others; unbound callers get all open signals.
+  - `check_footprint(paths)` gives, per path, the other workstreams that
+    changed it, which symbols, and what imports it (from the graph). The
+    caller's own workstream is left out.
+  - Both tools are `read` in the capability matrix, and both are in the
+    guide and in `docs/claude/mcp-tools.md`.
+- **Found and fixed on the way.**
+  1. Reads that promise a current answer reused a 20 s cached answer for
+     unwatched folders. Two idle worktrees edited within that window
+     raised nothing. `listWorkstreams({ fresh })` now recomputes
+     unwatched folders, and awareness uses it.
+  2. A change made while a new chokidar watcher was still starting raised
+     no event. That watcher's answer then stood until the next edit, so a
+     revert right after an edit left a phantom collision. The fix
+     recomputes on the watcher's `ready` event. A unit test fails without
+     it.
+- **UX journey (JOURNEYS B1).**
+  - Two agents edit `refreshToken` in two worktrees. Both chips get a red
+    border (amber for a medium collision), and their titles say "overlaps
+    other work (1 signal)".
+  - A chip's details open with an "Overlaps with other work" section: a
+    severity pill plus the one-line summary ("auth-refresh and billing-v2
+    both change src/auth/session.ts → refreshToken").
+  - A stale base is listed there too, but doesn't mark the chip.
+  - When one side reverts, the signal resolves and the marks go.
+  - Screenshot: `workstreams-collision.png`. The inbox and Awareness tab
+    are A1.8.
+- **Not yet:** agents told on their next tool call (§6.2), the digest,
+  acknowledge / intended / cooldown (A3), and contract signals (A2).
+- **Tests.**
+  - Unit: `awareness-signals.test.ts` (14): every kind, precision,
+    three-way pairs, the main checkout, many-file summaries, id
+    stability, no-op refire, resolve, reopen and a person's state.
+  - Unit: watch service +1 (the startup race); strip lib +2.
+  - Harness: `awareness.test.ts` (8): a same-function collision; no
+    duplicate on re-read; `get_awareness` and `check_footprint` from a
+    bound agent; resolve on revert with the window told; a medium
+    file-level collision; stale-base after main commits; confinement over
+    REST and MCP.
+  - Browser: +2.
+  - Unit 1155 pass / 3 environment skips. Lint 0 errors / 295.
 
 ### 2026-09-28: A1.5 — which symbols each workstream's changes touch
 - **Model (`workstream-symbols.ts`).** Each changed file is compared with

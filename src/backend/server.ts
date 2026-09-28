@@ -43,6 +43,7 @@ import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
 import { setWorkstreamChangesListener } from './services/workstream-watch-service';
+import { refreshSignals, listSignals, setAwarenessListener } from './services/awareness-service';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
@@ -632,6 +633,32 @@ setSymbolParser((filePath, content) => parseVirtualFile(filePath, content)?.symb
 // A watched workstream's changed files moved (A1.4): the strip refetches.
 setWorkstreamChangesListener((folder, changes) => {
   broadcast('workstreams-changed', { root: folder, changedFiles: changes.files.length });
+  scheduleSignalRefresh();
+});
+
+// Signals follow the footprints (A1.6): recomputed shortly after a
+// workstream's files move, and announced only when they change.
+setAwarenessListener((projectRoot) => broadcast('awareness-changed', { projectRoot }));
+let signalTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSignalRefresh(): void {
+  if (signalTimer) clearTimeout(signalTimer);
+  signalTimer = setTimeout(() => {
+    signalTimer = null;
+    const root = getActiveProjectPath();
+    if (root) {
+      try { refreshSignals(root); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
+    }
+  }, 500);
+}
+
+// What a person should know about the parallel work in this project: open
+// collisions and stale bases, most severe first (A1.6). Recomputed on read,
+// so it is current even when no watcher has fired.
+app.get('/api/awareness', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  refreshSignals(projectRoot);
+  res.json({ signals: listSignals(projectRoot) });
 });
 app.get('/api/workstreams', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
