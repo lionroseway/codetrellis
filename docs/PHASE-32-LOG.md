@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B4.2b: signal breakpoints |
-| **Status** | B4.2b done on its branch, stacked on B4.2 (#180, in CI): a person's rule on a kind of serious signal holds the named workstreams' next guarded call while the signal is open. Unit and harness pass |
-| **Next action** | Merge #180 when green; rebase B4.2b onto `feat/phase-32`, open its PR, merge when green. Then B4.3 (the person's side), B4.4 (phone) |
+| **Status** | B4.2 merged (#180). B4.2b done on its branch: a person's rule on a kind of serious signal holds the named workstreams' next guarded call while the signal is open. Unit and harness pass |
+| **Next action** | Merge B4.2b's PR when green. Then B4.3 (the person's side), B4.4 (phone) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b4-2b-signal-breakpoints` |
 | **Last updated** | 2026-09-28 |
@@ -105,8 +105,8 @@
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
-  - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients (PR open)
-  - [x] B4.2b Signal breakpoints (PR after #180)
+  - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
+  - [x] B4.2b Signal breakpoints (PR open)
   - [ ] B4.3 The person's side: set, the waiting list, ⏸ spans
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
