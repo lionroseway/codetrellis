@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 234 | 232 | 0 | 0 | 217 | 0 |
 | MCP tools | 192 | 192 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 76 | 71 | 0 | 0 | 76 | 0 |
-| Frontend components | 105 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 106 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 11 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 23 | 31 | 2 | 24 | 0 | 0 |
+| 0.4g Agents and MCP | 23 | 31 | 2 | 25 | 0 | 0 |
 | 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
@@ -565,7 +565,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (105)
+## Frontend components (106)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -649,6 +649,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/AgentPulse.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/AgentTurns.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/AwarenessTab.tsx` |  | n/a | n/a |  |  |  |
+| g | `layout/Breakpoints.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/CodeWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state says what to do |  |
 | g | `layout/ConnectedAgents.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/CoverageChip.tsx` |  | n/a | n/a |  | ✓ 0.5 — "imports linked" (0.5c) |  |

@@ -8,6 +8,7 @@ import { CommentThread } from '../plan/CommentThread';
 import { ProposedChanges } from '../plan/ProposedChanges';
 import { AgentTurnList, useAgentTurns } from './AgentTurns';
 import { AwarenessTab, useAwarenessFeed } from './AwarenessTab';
+import { useBreakpointsFeed } from './Breakpoints';
 import { TimelineLanes } from './TimelineLanes';
 
 type Tab = PlanPanelTab;
@@ -29,7 +30,8 @@ export function PlanPanel() {
   const activeTab = useUiStore((s) => s.planPanelTab);
   const setActiveTab = useUiStore((s) => s.setPlanPanelTab);
   // Open overlaps nobody has answered (A1.8): the Awareness tab's number.
-  const needsYou = useAwarenessFeed();
+  // The inbox count: signals that need you, and calls waiting at a breakpoint (B4.3).
+  const needsYou = useAwarenessFeed() + useBreakpointsFeed();
 
   const events = useAgentStore((s) => s.events);
   const status = useAgentStore((s) => s.status);

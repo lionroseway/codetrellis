@@ -10,7 +10,7 @@
  * Renders between TargetsStrip and ContextRail on the item canvas.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -24,6 +24,7 @@ import {
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { SkillsEditor } from './SkillsEditor';
 import type { PlanItem, Skill, ClaimPolicy, ExecutionConfig, ItemConstraints } from '@shared/types';
+import { useBreakpointsStore, itemBreakpoint } from '../../../stores/breakpoints-store';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
 
@@ -266,6 +267,9 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
               <option value="match-skills">Match by skills</option>
             </select>
           </div>
+
+          {/* ── Ask me first: breakpoints (Phase 32 B4.3) ── */}
+          <AskMeFirst item={item} />
 
           {/* ── Skills (Phase 32 C1.2) ───────────────────── */}
           <SkillsEditor
@@ -668,3 +672,66 @@ function ExecConfigEditor({
     </div>
   );
 }
+
+/**
+ * Breakpoints on this item (Phase 32 B4.3): "ask me before an agent claims
+ * or finishes this", and "before an agent changes its description". A
+ * breakpoint on a parent covers this item too, and says so here.
+ */
+function AskMeFirst({ item }: { item: PlanItem }) {
+  const breakpoints = useBreakpointsStore((s) => s.breakpoints);
+  const setBp = useBreakpointsStore((s) => s.set);
+  const clear = useBreakpointsStore((s) => s.clear);
+  const refresh = useBreakpointsStore((s) => s.refresh);
+  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const inheritedFrom = (kind: 'task' | 'spec'): string | null => {
+    const seen = new Set<string>();
+    let at = item.parentUid ?? null;
+    while (at && !seen.has(at)) {
+      seen.add(at);
+      if (itemBreakpoint(breakpoints, kind, at)) return itemsByUid[at]?.title ?? 'a parent';
+      at = itemsByUid[at]?.parentUid ?? null;
+    }
+    return null;
+  };
+
+  const toggle = async (kind: 'task' | 'spec') => {
+    const own = itemBreakpoint(breakpoints, kind, item.uid);
+    setBusy(true);
+    const err = own ? await clear(own.id) : await setBp({ kind, itemUid: item.uid });
+    setBusy(false);
+    setError(err);
+  };
+
+  const rows: Array<{ kind: 'task' | 'spec'; label: string }> = [
+    { kind: 'task', label: 'Before an agent claims or finishes this' },
+    { kind: 'spec', label: 'Before an agent changes its description' },
+  ];
+  return (
+    <div data-testid="ask-me-first">
+      <div className="text-[11px] font-medium text-foreground-muted mb-1.5">Ask me first</div>
+      <div className="space-y-1">
+        {rows.map(({ kind, label }) => {
+          const own = !!itemBreakpoint(breakpoints, kind, item.uid);
+          const parent = own ? null : inheritedFrom(kind);
+          return (
+            <label key={kind} className="flex items-center gap-2 text-[11px] text-foreground-muted cursor-pointer">
+              <input type="checkbox" checked={own} disabled={busy} onChange={() => toggle(kind)} data-testid={`ask-me-${kind}`} />
+              {label}
+              {parent && <span className="text-[10px] text-foreground-subtle italic">(already asked, from the breakpoint on “{parent}”)</span>}
+            </label>
+          );
+        })}
+      </div>
+      <div className="mt-1 text-[10px] text-foreground-subtle">
+        The agent&apos;s call waits until you answer, in Awareness: continue, continue with a note, or stop.
+      </div>
+      {error && <div role="alert" className="mt-1 text-[10px] text-danger">{error}</div>}
+    </div>
+  );
+}
+

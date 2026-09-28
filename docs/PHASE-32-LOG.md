@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.2b: signal breakpoints |
-| **Status** | B4.2 merged (#180). B4.2b done on its branch: a person's rule on a kind of serious signal holds the named workstreams' next guarded call while the signal is open. Unit and harness pass |
-| **Next action** | Merge B4.2b's PR when green. Then B4.3 (the person's side), B4.4 (phone) |
+| **Stage / step** | Track B — B4.3a: breakpoints in the inbox |
+| **Status** | B4.3a done on its branch (B4.2b merged, #181): the waiting list at the top of Awareness with continue / steer / stop; "Ask me first" on a task; the breakpoints set, with Clear and signal rules. Unit and browser pass |
+| **Next action** | Merge B4.3a's PR when green. Then B4.3b (graph node action, ⏸ on nodes, lane spans), B4.4 (phone) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b4-2b-signal-breakpoints` |
+| **Branch** | `feat/phase-32-b4-3a-waiting-list` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -106,8 +106,9 @@
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
-  - [x] B4.2b Signal breakpoints (PR open)
-  - [ ] B4.3 The person's side: set, the waiting list, ⏸ spans
+  - [x] B4.2b Signal breakpoints ([#181](https://github.com/lionroseway/codetrellis/pull/181))
+  - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set (PR open)
+  - [ ] B4.3b Graph node action, ⏸ on nodes, lane spans
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
 - [ ] B6 Stack view
@@ -217,9 +218,38 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A code breakpoint's answer is per workstream and file, and lasts while the breakpoint stands: continue opens the file to that workstream for every later edit (a steer told once), stop keeps refusing it. A function breakpoint holds edits of its file. The project is the opened one, never the request's (B4.2) | An agent edits one file in several steps; asking for each would teach people to clear breakpoints. The hook asks as its own session, so the workstream is what the edit and the answer share. The hook sees the file, not which function an edit lands in, so a function breakpoint cannot honestly be narrower yet |
 | 2026-09-28 | A breach is a change in a workstream's changed files to a file under a code breakpoint, made after the breakpoint was set (file modification time), that the hook did not let through. It is told once per session on its next tool call and recorded as a breach, never a pause. A deletion is not detected (B4.2) | The honest limit in the observability doc §10.3. Without the time check every file already changed in a worktree would be a breach the moment a breakpoint is set. A deleted file leaves no time to compare |
 | 2026-09-28 | A signal breakpoint is a rule row in the database (`kind: signal`, target a signal kind: collision, contract or drift), not a setting in `.codetrellis/config.json`. It holds every workstream a **high, open** signal of that kind names, at its next guarded call (claim, done, spec edit, delete, hooked edit); one hit per signal and workstream. Continue releases that workstream from that signal; stop refuses while it stays open. The person answering the signal in Awareness lets any waiting call through, recorded as CodeTrellis (`system`), never as a person (B4.2b) | The config file is committed and editable by agents, with a tool or an editor, so a rule there could be switched off by the agent it holds. Holding both sides matches the collision and contract signals, which name both. "Open" is the person not having answered the signal yet; once they have, the reason to ask is gone |
+| 2026-09-28 | Breakpoints waiting on the person sit at the top of the Awareness tab, and its count includes them; there is no separate inbox tab yet. The breakpoint types move to `src/shared/types/breakpoint.ts`, shared with the window (B4.3a) | Awareness is already where a person answers what needs them, and the observability doc puts breakpoints first in that list. One count avoids a second badge meaning nearly the same thing. A shared type keeps the window and the backend from drifting |
 ---
 
 ## Entries
+
+### 2026-09-28: B4.3a — breakpoints in the inbox
+- **Waiting on you**, first in the Awareness tab (`components/layout/Breakpoints.tsx`, `stores/breakpoints-store.ts`, wording in `lib/breakpoint-view.ts`).
+  - Each held call has a card:
+    - a pause says who wants to do what, in which workstream, and why it waits ("You asked to be asked before an agent claims or finishes this task.");
+    - a breach says what happened and that it could not be paused, with **Breach** instead of **Paused**;
+    - the person's note on the breakpoint is quoted.
+  - The answers are a note field, then **Continue**, **Continue with steer** (needs the note), and **Stop**. For a breach they read **Carry on** / **Carry on with this note** / **Stop**.
+  - An error shows on the card. An answer that someone else already gave refreshes the list.
+  - The Awareness count includes waiting calls.
+  - The list stays current from the broadcast events (`breakpoints-changed`, `breakpoint-answered`, and agent events for hits and answers) and a 30 s poll.
+- **Ask me first** in a task's Routing panel: "Before an agent claims or finishes this" (task) and "Before an agent changes its description" (spec). A breakpoint set on a parent is shown as "already asked, from the breakpoint on “…”".
+- **Breakpoints**, a collapsible list at the foot of Awareness: each one set, in words, with Clear, and "Ask me when there is a serious [collision] [contract] [drift] signal" ticks for the rules.
+- **Shared types.** `Breakpoint` and `BreakpointHit` now live in `src/shared/types/breakpoint.ts`.
+- **Test hygiene.** The Awareness browser spec stubs `/api/breakpoint-hits`, so a call left waiting by another spec on the shared backend cannot change its count.
+- **Tests.**
+  - Unit: `breakpoint-view.test.ts` (4).
+  - Browser: `breakpoints-inbox.spec.ts` (2).
+    - The journey below, with a real agent over MCP.
+    - A breach card worded as what happened.
+
+    Screenshots: `breakpoints-ask-me-first`, `breakpoints-waiting`, `breakpoints-breach`, `breakpoints-set`.
+- **UX journey.**
+  1. On the task, Sam ticks "Ask me first: before an agent claims or finishes this".
+  2. An agent claims it and is paused. The Awareness count goes up.
+  3. Under "Waiting on you" the card reads "… wants to claim “Partial refunds”. You asked to be asked before an agent claims or finishes this task."
+  4. Sam writes "Go ahead, but don't change the refund path" and presses Continue with steer. The card goes, and the agent's claim goes through with the note.
+  5. Under Breakpoints, Sam sees what is set, ticks "contract" to be asked on serious contract signals, and clears the task's breakpoint.
 
 ### 2026-09-28: B4.2b — signal breakpoints
 - **The rule.** `POST /api/breakpoints {kind: "signal", signal: "contract"}`

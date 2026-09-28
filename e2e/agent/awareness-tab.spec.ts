@@ -64,6 +64,8 @@ const SIGNALS = (): AwarenessSignal[] => [
  */
 async function serve(page: Page, room: Workstream[], signals: AwarenessSignal[], opts: { failAnswers?: boolean } = {}) {
   const sent: Array<{ id: string; state: string; project: string | null }> = [];
+  // The tab's count also counts calls waiting at a breakpoint (B4.3); none here, whatever other specs left on the shared backend.
+  await page.route('**/api/breakpoint-hits', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ hits: [] }) }));
   await page.route('**/api/workstreams?*', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(room) }));
   await page.route('**/api/awareness?*', (route) =>

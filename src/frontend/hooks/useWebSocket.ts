@@ -69,6 +69,10 @@ export function useWebSocket() {
           if (type === 'agent-event') {
             const agentEvent = payload as AgentEvent;
             useAgentStore.getState().pushEvent(agentEvent);
+            // A call held at a breakpoint, or an answer (B4.3): the waiting list refetches.
+            if (agentEvent.type === 'breakpoint_hit' || agentEvent.type === 'breakpoint_answered') {
+              window.dispatchEvent(new CustomEvent('breakpoints-changed'));
+            }
 
             // Update agent status + refresh the connected-agents list
             // when sessions come and go (the per-row last-seen is also
@@ -687,6 +691,11 @@ export function useWebSocket() {
           // Signals about parallel work changed (A1.6).
           if (type === 'awareness-changed') {
             window.dispatchEvent(new CustomEvent('awareness-changed', { detail: payload }));
+            return;
+          }
+          // A breakpoint set, cleared or answered (B4.3).
+          if (type === 'breakpoints-changed' || type === 'breakpoint-answered') {
+            window.dispatchEvent(new CustomEvent('breakpoints-changed', { detail: payload }));
             return;
           }
           if (type === 'graph-data-changed') {

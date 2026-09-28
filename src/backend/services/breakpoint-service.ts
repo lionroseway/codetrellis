@@ -39,62 +39,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDb } from './database';
 import { recordBreakpointEvent } from './agent-event-log';
+import type { Breakpoint, BreakpointHit, BreakpointKind, BreakpointAction, BreakpointDecision as Decision } from '../../shared/types';
+import { BREAKPOINT_KINDS, SIGNAL_BREAK_KINDS, BREAKPOINT_DECISIONS as DECISIONS } from '../../shared/types';
+export { BREAKPOINT_KINDS, SIGNAL_BREAK_KINDS, DECISIONS };
+export type { Breakpoint, BreakpointHit, BreakpointKind, BreakpointAction, Decision };
 
-export const BREAKPOINT_KINDS = ['task', 'spec', 'code', 'signal'] as const;
-/** The signal kinds a signal breakpoint can be on: the ones that can be serious. */
-export const SIGNAL_BREAK_KINDS = ['collision', 'contract', 'drift'] as const;
-export type BreakpointKind = typeof BREAKPOINT_KINDS[number];
-export const DECISIONS = ['continue', 'steer', 'stop'] as const;
-export type Decision = typeof DECISIONS[number];
-/** What the held call would have done. */
-export type BreakpointAction = 'claim' | 'done' | 'edit' | 'delete' | 'edit_code' | 'breach';
+
 
 export const MAX_NOTE = 1000;
 /** How deep a parent chain is walked; plans are never this deep. */
 const MAX_DEPTH = 50;
-
-export interface Breakpoint {
-  id: string;
-  kind: BreakpointKind;
-  /** The item it is on; for a code breakpoint, the repository-relative path (a folder ends in `/`, a function is `path#name`). */
-  target: string;
-  targetTitle: string | null;
-  planUid: string | null;
-  /** A code breakpoint's project. */
-  projectRoot: string | null;
-  note: string | null;
-  createdAt: number;
-  createdBy: string;
-  createdByType: string;
-}
-
-export interface BreakpointHit {
-  ref: string;
-  breakpointId: string;
-  kind: BreakpointKind | null;
-  /** The note the person left on the breakpoint. */
-  breakpointNote: string | null;
-  tool: string;
-  action: BreakpointAction;
-  itemUid: string;
-  itemTitle: string | null;
-  /** A code hit's file, repository-relative. */
-  path: string | null;
-  /** A change seen only after it was made: recorded, never paused. */
-  breach: boolean;
-  /** The serious signal that held the call, for a signal breakpoint. */
-  signalId: string | null;
-  planUid: string | null;
-  agent: string | null;
-  sessionId: string | null;
-  workstreamRoot: string | null;
-  hitAt: number;
-  decision: Decision | null;
-  note: string | null;
-  answeredAt: number | null;
-  answeredBy: string | null;
-  answeredByType: string | null;
-}
 
 export function rowsOf<T>(sql: string, params: Array<string | number | null> = []): T[] {
   const res = getDb().exec(sql, params as Array<string | number>);
