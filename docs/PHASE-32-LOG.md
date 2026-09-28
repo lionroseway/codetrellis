@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B1.2: body edits, agent time, refused calls |
-| **Status** | B1.1 merged (#169). B1.2 done on its branch: SDK-refused calls recorded, watcher events at agent time, spec and item body edits as `spec_edited` events; unit, harness and browser tests pass; PR open |
-| **Next action** | Merge B1.2 when green (B1 then done); then B2 (Timeline lanes per workstream), refined into sub-steps first. Sequence after: C1, B4, B3, direction review, B5, A4 |
+| **Stage / step** | Track B — B2.1: Timeline lanes |
+| **Status** | B2.1 done on its branch: a lane per workstream above the turn list, ● turns, ✎ spec edits, ⚠ signals, hover and click, live; unit, harness and browser tests pass. B1.2 (#170) awaiting CI; B2.1's PR opens when it merges |
+| **Next action** | Merge B1.2, then open and merge B2.1; then B2.2 (◆ commits and merges, ✓ / ✗ checks). Sequence after B2: C1, B4, B3, direction review, B5, A4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b1-2-edits-and-refusals` |
+| **Branch** | `feat/phase-32-b2-1-timeline-lanes` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -99,7 +99,9 @@
 - [ ] B1 Agent event log, refined in EXECUTION §5:
   - [x] B1.1 `agent_events`, `GET /api/agent-events`, the Timeline survives a reload (#169)
   - [ ] B1.2 Body edits as events; agent time; SDK-refused calls (PR open)
-- [ ] B2 Timeline lanes
+- [ ] B2 Timeline lanes, refined in EXECUTION §5:
+  - [ ] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click (PR to open)
+  - [ ] B2.2 ◆ commits and merges, ✓ / ✗ checks
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints
 - [ ] B5 Replay
@@ -196,6 +198,61 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: B2.1 — Timeline lanes
+- **B2 refined** into two sub-steps in EXECUTION §5: turns, edits and
+  signals first (B2.1); commits, merges and checks next (B2.2).
+- **The lanes.** `TimelineLanes.tsx` sits above the turn list in the
+  Timeline tab, built by the pure `lib/timeline-lanes.ts`.
+  - One lane per workstream, labelled with its branch, main first. Every
+    workstream keeps its lane when quiet, so the shape of parallel work
+    shows. A "No workstream" lane appears only when something is on it
+    (a spec edited from the app, say).
+  - Marks:
+    - ● a turn, grouped exactly as the list below groups it;
+    - ✎ a turn that edited a spec or an item (B1.2);
+    - ⚠ a signal, on every lane it names, coloured by severity (text-form
+      glyph, so the colour shows);
+    - a failed turn is red.
+    A long turn is also drawn as a faint span.
+  - A turn goes on the workstream its events name: in the payload, which
+    MCP tool events now carry as they are broadcast, or on the stored
+    row. Failing that, the workstream whose agents include its session.
+  - The window runs from the earliest mark, at least 15 minutes and at
+    most 2 hours, up to now. Now moves every 30 s and with each event.
+  - Hover says what a mark is in words ("turn (failed) · claude-code: Get
+    app guide failed…"). Clicking a turn opens it in the list and scrolls
+    it into view (`focus`); clicking a signal goes to the Awareness tab.
+- **Found while testing:** a browser selector clicked the first "Timeline"
+  button, and this repository's own graph now has a cluster by that name
+  (the app scans itself in the browser suite). `timeline-history`,
+  `timeline-lanes` and `screenshots/capture` now click the tab by its
+  exact name. `timeline-history` counts turn cards rather than every
+  button with the text, since the lane mark carries it too.
+- **Tests.**
+  - Unit: `timeline-lanes.test.ts` (7):
+    - which lane (payload, stored row, session, none);
+    - lane order and the "No workstream" lane;
+    - labels;
+    - marks and severities;
+    - the window and its clamps;
+    - position.
+  - Harness: `agent-event-kinds.test.ts` +1. A bound session's tool call
+    names its workstream as it happens.
+  - Browser: `timeline-lanes.spec.ts`:
+    - four lanes in order;
+    - each turn on its lane, in time order with the overlap;
+    - titles in words;
+    - a click opens the turn, and the overlap goes to Awareness.
+    Screenshots `timeline-lanes` and `timeline-lanes-panel`.
+- **UX journey.**
+  - Three worktrees, two agents. The developer opens the Timeline and
+    sees three lanes: auth-refresh's agent searched, billing-v2's agent
+    listed plans and then failed a call, and a red ⚠ sits on both at the
+    moment they started overlapping.
+  - A person's spec edit is on its own lane.
+  - Clicking a mark opens what happened, and clicking the ⚠ goes to the
+    overlap.
 
 ### 2026-09-28: B1.2 — body edits, agent time, refused calls
 - **Refused calls are recorded.** The SDK resolves the tool and validates

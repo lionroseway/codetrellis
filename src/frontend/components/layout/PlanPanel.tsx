@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { useUiStore, type PlanPanelTab } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
@@ -8,6 +8,7 @@ import { CommentThread } from '../plan/CommentThread';
 import { ProposedChanges } from '../plan/ProposedChanges';
 import { AgentTurnList, useAgentTurns } from './AgentTurns';
 import { AwarenessTab, useAwarenessFeed } from './AwarenessTab';
+import { TimelineLanes } from './TimelineLanes';
 
 type Tab = PlanPanelTab;
 
@@ -44,6 +45,8 @@ export function PlanPanel() {
   // already replaced in this slot, so nothing ever rendered it. See
   // `AgentTurns.tsx`.
   const turns = useAgentTurns(events);
+  // A turn clicked on the lanes (B2.1): opened and brought into view below.
+  const [focusTurn, setFocusTurn] = useState<{ turnId: string; seq: number } | null>(null);
 
   const fileChanges = events.filter(
     (e) => e.type === 'file_changed' && (e.payload.action === 'write' || e.payload.action === 'edit')
@@ -131,7 +134,12 @@ export function PlanPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
-            <AgentTurnList turns={turns} status={status} detectedPlan={detectedPlan} />
+            <TimelineLanes
+              turns={turns}
+              onSelectTurn={(turnId) => setFocusTurn((f) => ({ turnId, seq: (f?.seq ?? 0) + 1 }))}
+              onSelectSignal={() => setActiveTab('awareness')}
+            />
+            <AgentTurnList turns={turns} status={status} detectedPlan={detectedPlan} focus={focusTurn} />
           </div>
         )}
 
