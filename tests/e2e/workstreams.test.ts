@@ -10,10 +10,13 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { setupHarness, createMcpClient, type Harness, type ScriptedMcp } from '../harness';
+import { setupHarness, createMcpClient, openEventStream, type Harness, type ScriptedMcp, type EventStream } from '../harness';
 
 interface Agent { sessionId: string; agentType: string; source: 'mcp' | 'claude-log' }
-interface Workstream { root: string; branch: string | null; main: boolean; shape: 'worktree' | 'shared'; idle: boolean; agents: Agent[]; yours?: boolean }
+interface Workstream {
+  root: string; branch: string | null; main: boolean; shape: 'worktree' | 'shared'; idle: boolean; agents: Agent[]; yours?: boolean;
+  changes: { base: string | null; files: Array<{ path: string; status: string }>; truncated: boolean };
+}
 
 test.describe.serial('Workstreams', () => {
   test.setTimeout(120_000);
@@ -22,6 +25,7 @@ test.describe.serial('Workstreams', () => {
   let root: string;
   let worktree: string;
   let claudeHome: string;
+  let events: EventStream;
   const agents: ScriptedMcp[] = [];
 
   const workstreams = async (query = '') => {
@@ -50,7 +54,7 @@ test.describe.serial('Workstreams', () => {
   };
 
   test.beforeAll(async () => {
-    h = await setupHarness('workstreams', { env: { CODETRELLIS_WATCHER_POLL_MS: '100' } });
+    h = await setupHarness('workstreams', { env: { CODETRELLIS_WATCHER_POLL_MS: '100', CODETRELLIS_WORKSTREAM_DEBOUNCE_MS: '150' } });
     root = h.fixture.projectPath;
     claudeHome = path.join(h.fixture.dataDir, 'claude-home');
     worktree = `${root}-auth`;
@@ -58,11 +62,15 @@ test.describe.serial('Workstreams', () => {
       env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' },
     });
     await h.client.scanProject(root);
+    events = await openEventStream(h.backend);
   });
 
   test.afterAll(async () => {
+    await events?.close();
     for (const a of agents) await a.disconnect().catch(() => {});
-    try { execFileSync('git', ['-C', root, 'worktree', 'remove', '--force', worktree]); } catch { /* */ }
+    for (const w of [worktree, `${root}-billing`]) {
+      try { execFileSync('git', ['-C', root, 'worktree', 'remove', '--force', w]); } catch { /* */ }
+    }
     await h?.teardown();
   });
 
@@ -113,5 +121,48 @@ test.describe.serial('Workstreams', () => {
     const refused = await agents[0].callTool('list_workstreams', { project_path: path.dirname(root) });
     expect(refused.isError).toBe(true);
     expect(refused.text).toContain('not open');
+  });
+
+  // ── A1.4: what each workstream has changed ─────────────────────────
+
+  test('a worktree left with changes and no agent is listed, with its files', async () => {
+    const billing = `${root}-billing`;
+    execFileSync('git', ['-C', root, 'worktree', 'add', '-q', billing, '-b', 'billing-v2']);
+    fs.writeFileSync(path.join(billing, 'invoice.ts'), 'export const invoice = 1;\n');
+    const ws = find(await workstreams(), billing);
+    expect(ws).toBeDefined();
+    expect(ws!.agents).toEqual([]);
+    expect(ws!.idle).toBe(false);
+    expect(ws!.changes.files).toEqual([{ path: 'invoice.ts', status: 'added' }]);
+    expect(ws!.changes.base).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  test("an agent's edit in its worktree arrives on its own, announced to the window", async () => {
+    await workstreams(); // the listing is the discovery pass that starts the watcher
+    const before = events.ofType('workstreams-changed').length;
+    fs.writeFileSync(path.join(worktree, 'refresh.ts'), 'export const refresh = true;\n');
+
+    await events.waitFor('workstreams-changed', (p) => same(p.root, worktree), 10_000);
+    expect(events.ofType('workstreams-changed').length).toBeGreaterThan(before);
+    const ws = find(await workstreams(), worktree)!;
+    expect(ws.changes.files.map((f) => f.path)).toContain('refresh.ts');
+  });
+
+  test('list_workstreams gives an agent the same files', async () => {
+    const res = await agents[0].callTool('list_workstreams', {});
+    const body = JSON.parse(res.text) as { workstreams: Workstream[] };
+    const mine = body.workstreams.find((w) => w.yours)!;
+    expect(mine.changes.files.map((f) => f.path)).toContain('refresh.ts');
+  });
+
+  test("an edit in the opened project itself arrives through the app's own file watcher", async () => {
+    await workstreams();
+    fs.writeFileSync(path.join(root, 'NOTES.md'), 'not parsed, still a change\n');
+    try {
+      await events.waitFor('workstreams-changed', (p) => same(p.root, root), 10_000);
+      expect(find(await workstreams(), root)!.changes.files.map((f) => f.path)).toContain('NOTES.md');
+    } finally {
+      fs.rmSync(path.join(root, 'NOTES.md'), { force: true });
+    }
   });
 });

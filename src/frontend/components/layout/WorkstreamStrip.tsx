@@ -4,7 +4,7 @@ import { GitBranch, Users, AlertTriangle, FileText } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, MAX_CHIPS } from '../../lib/workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { Workstream } from '@shared/types';
 
 /**
@@ -39,6 +39,11 @@ export function WorkstreamStrip() {
   }, [root]);
 
   useEffect(() => { refresh(); }, [refresh, sessions]);
+  // A watched folder's changed files moved (A1.4).
+  useEffect(() => {
+    window.addEventListener('workstreams-changed', refresh);
+    return () => window.removeEventListener('workstreams-changed', refresh);
+  }, [refresh]);
   useEffect(() => {
     const id = setInterval(refresh, REFRESH_MS);
     return () => clearInterval(id);
@@ -82,13 +87,19 @@ export function WorkstreamStrip() {
             data-testid="workstream-chip"
             onClick={(e) => toggle(e, w.root)}
             aria-expanded={open?.root === w.root}
-            title={`${chipLabel(w)} — ${shapeWords(w)}`}
+            title={[chipLabel(w), shapeWords(w), changeWords(w), w.agents.length === 0 ? 'no agent working' : null].filter(Boolean).join(' — ')}
             className={`flex items-center gap-1.5 max-w-[160px] text-[11px] px-2 py-1 rounded-lg border bg-surface transition-all ${
               shared ? 'border-warning/50 text-foreground' : 'border-border text-foreground hover:border-border-glow'
             } ${open?.root === w.root ? 'border-border-glow' : ''}`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" aria-hidden />
+            {/* Green while an agent works there; grey for work left behind. */}
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${w.agents.length > 0 ? 'bg-success' : 'bg-foreground-subtle'}`} aria-hidden />
             <span className="truncate">{chipLabel(w)}</span>
+            {w.changes.files.length > 0 && (
+              <span data-testid="workstream-change-count" className="text-[10px] text-foreground-muted tabular-nums shrink-0" aria-label={changeWords(w) ?? undefined}>
+                {w.changes.files.length}{w.changes.truncated ? '+' : ''}
+              </span>
+            )}
             <span className="flex items-center -space-x-0.5 shrink-0" aria-hidden>
               {w.agents.slice(0, 3).map((a) => {
                 const { Icon, tint } = agentBadge(a.agentType);
@@ -146,9 +157,10 @@ function WorkstreamDetail({ ws }: { ws: Workstream }) {
           <span className="text-[10px] text-warning leading-snug">{note}</span>
         </div>
       )}
+      <ChangedFiles ws={ws} />
       <div className="px-3 pb-2">
         <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">
-          <Users size={10} /> {ws.agents.length === 1 ? '1 agent' : `${ws.agents.length} agents`}
+          <Users size={10} /> {ws.agents.length === 0 ? 'No agent working here' : ws.agents.length === 1 ? '1 agent' : `${ws.agents.length} agents`}
         </div>
         {ws.agents.map((a) => {
           const { Icon, tint, label } = agentBadge(a.agentType);
@@ -167,6 +179,37 @@ function WorkstreamDetail({ ws }: { ws: Workstream }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const LETTER_TINT = { A: 'text-success', M: 'text-warning', D: 'text-danger', R: 'text-accent' } as const;
+
+/** What the workstream has changed since it branched, most of it at a glance. */
+function ChangedFiles({ ws }: { ws: Workstream }) {
+  const { files, truncated } = ws.changes;
+  if (files.length === 0) return null;
+  const shown = files.slice(0, MAX_LISTED_FILES);
+  const more = files.length - shown.length;
+  return (
+    <div className="px-3 pb-2" data-testid="workstream-changes">
+      <div className="text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">
+        {changeWords(ws)}{ws.main ? ', not yet committed' : ' since it branched'}
+      </div>
+      {shown.map((f) => {
+        const letter = statusLetter(f.status);
+        return (
+          <div key={f.path} className="flex items-center gap-1.5 py-px" title={f.from ? `${f.from} → ${f.path}` : f.path}>
+            <span className={`w-3 text-[9px] font-mono font-semibold shrink-0 ${LETTER_TINT[letter]}`}>{letter}</span>
+            <span className="text-[10px] font-mono text-foreground-muted truncate">{shortFolder(f.path, 44)}</span>
+          </div>
+        );
+      })}
+      {(more > 0 || truncated) && (
+        <div className="text-[9px] text-foreground-subtle mt-0.5">
+          and {more}{truncated ? '+' : ''} more
+        </div>
+      )}
     </div>
   );
 }

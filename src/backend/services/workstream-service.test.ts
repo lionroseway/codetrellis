@@ -8,7 +8,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveWorkstreams, type ClaudeLogSession } from './workstream-service';
 import { parseWorktreePorcelain } from './worktree-service';
-import type { AgentSessionInfo } from '../../shared/types';
+import type { AgentSessionInfo, WorkstreamChanges } from '../../shared/types';
 
 const PORCELAIN = `worktree /repo/app
 HEAD 1111111111111111111111111111111111111111
@@ -38,8 +38,8 @@ function mcp(agentType: string, workstreamRoot: string | null, extra: Partial<Ag
   };
 }
 const log = (sessionId: string, workstreamRoot: string): ClaudeLogSession => ({ sessionId, workstreamRoot });
-const derive = (mcpSessions: AgentSessionInfo[] = [], claudeSessions: ClaudeLogSession[] = [], realpath = identity) =>
-  deriveWorkstreams({ worktrees, mcpSessions, claudeSessions, realpath });
+const derive = (mcpSessions: AgentSessionInfo[] = [], claudeSessions: ClaudeLogSession[] = [], realpath = identity, changes?: (f: string) => WorkstreamChanges) =>
+  deriveWorkstreams({ worktrees, mcpSessions, claudeSessions, realpath, changes });
 const summary = (ws: ReturnType<typeof derive>) =>
   ws.map((w) => ({ root: w.root, shape: w.shape, idle: w.idle, agents: w.agents.map((a) => `${a.agentType}/${a.source}`) }));
 
@@ -98,5 +98,15 @@ describe('deriveWorkstreams', () => {
     const realpath = (p: string) => p.replace('/links/auth', '/repo/app-auth');
     const ws = derive([mcp('codex', '/links/auth')], [], realpath);
     assert.deepEqual(summary(ws)[1].agents, ['codex/mcp']);
+  });
+
+  test('a worktree left with changes and no agent is still a line of work; a clean one is idle', () => {
+    const changes = (f: string): WorkstreamChanges => (f === '/repo/app-billing'
+      ? { base: 'abc', files: [{ path: 'src/billing.ts', status: 'modified' }], truncated: false }
+      : { base: 'abc', files: [], truncated: false });
+    const ws = derive([], [], identity, changes);
+    assert.deepEqual(ws.map((w) => [w.root, w.idle, w.changes.files.length]), [
+      ['/repo/app', true, 0], ['/repo/app-auth', true, 0], ['/repo/app-billing', false, 1],
+    ]);
   });
 });

@@ -666,6 +666,11 @@ export function useWebSocket() {
           // scan truncates and repopulates `files` and `imports`, so a
           // canvas that fetched its edges mid-scan holds an empty list
           // that nothing would ever correct.
+          // A workstream's changed files moved (Phase 32 A1.4); the strip refetches.
+          if (type === 'workstreams-changed') {
+            window.dispatchEvent(new CustomEvent('workstreams-changed', { detail: payload }));
+            return;
+          }
           if (type === 'graph-data-changed') {
             window.dispatchEvent(new CustomEvent('graph-data-changed', { detail: payload }));
             return;

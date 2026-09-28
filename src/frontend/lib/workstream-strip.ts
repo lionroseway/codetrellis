@@ -3,13 +3,16 @@
  * rules are tested without rendering.
  */
 
-import type { Workstream } from '@shared/types';
+import type { ChangedFile, Workstream } from '@shared/types';
 
 /** Chips beyond this collapse into "+N", which opens the same list. */
 export const MAX_CHIPS = 5;
 
 /**
  * The workstreams worth a chip, or none.
+ *
+ * A worktree with changes but no agent gets one (A1.4): it is a line of work
+ * even when nobody is on it right now.
  *
  * The strip is for PARALLEL work. One agent in the main checkout is the
  * everyday case, and `ConnectedAgents` right beside it already says so; a
@@ -18,7 +21,10 @@ export const MAX_CHIPS = 5;
  * more than one line of work, or when agents share a folder.
  */
 export function stripWorkstreams(all: readonly Workstream[]): Workstream[] {
-  const active = all.filter((w) => !w.idle);
+  // The main checkout with no agent in it is the person's own work, which
+  // the canvas's "Working tree" summary already shows. A worktree an agent
+  // left with changes in it is not: that is work nobody is looking at.
+  const active = all.filter((w) => !w.idle && (w.agents.length > 0 || !w.main));
   if (active.length === 0) return [];
   if (active.length === 1 && active[0].main && active[0].shape !== 'shared') return [];
   return active;
@@ -51,3 +57,19 @@ export function sharedNote(w: Pick<Workstream, 'shape'>): string | null {
 export function shortFolder(folder: string, max = 40): string {
   return folder.length <= max ? folder : `…${folder.slice(folder.length - (max - 1))}`;
 }
+
+/** "3 files changed", or null when nothing has. */
+export function changeWords(w: Pick<Workstream, 'changes'>): string | null {
+  const n = w.changes.files.length;
+  if (n === 0) return null;
+  const count = w.changes.truncated ? `${n}+` : String(n);
+  return `${count} file${n === 1 && !w.changes.truncated ? '' : 's'} changed`;
+}
+
+/** The one-letter mark a changed file carries, as git prints it. */
+export function statusLetter(status: ChangedFile['status']): 'A' | 'M' | 'D' | 'R' {
+  return status === 'added' ? 'A' : status === 'deleted' ? 'D' : status === 'renamed' ? 'R' : 'M';
+}
+
+/** How many changed files the details list before "and N more". */
+export const MAX_LISTED_FILES = 8;
