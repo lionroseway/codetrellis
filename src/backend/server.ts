@@ -37,7 +37,8 @@ const MAX_BROWSE_ENTRIES = 1000;
 import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, setActiveProjectRoot, projectRelative } from './services/trusted-roots';
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
-import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
+import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './services/capability-token';
+import { startAgentEventLog, listAgentEvents, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -731,6 +732,23 @@ app.post('/api/workstreams/folder-requests/:id/dismiss', (req, res) => {
 // What a person should know about the parallel work in this project: open
 // collisions and stale bases, most severe first (A1.6). Recomputed on read,
 // so it is current even when no watcher has fired.
+// Phase 32 B1: agent activity as it was recorded, oldest first — the
+// Timeline's history after a reload, and the record replay will read.
+// Read-only; filters by time, session or workstream.
+app.get('/api/agent-events', (req, res) => {
+  const num = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  res.json({
+    events: listAgentEvents({
+      since: num(req.query.since),
+      before: num(req.query.before),
+      sessionId: text(req.query.session),
+      workstreamRoot: text(req.query.workstream),
+      limit: num(req.query.limit) ?? AGENT_EVENTS_DEFAULT_LIMIT,
+    }),
+  });
+});
+
 app.get('/api/awareness', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
@@ -5027,6 +5045,10 @@ export async function initializeBackend(): Promise<void> {
 
   await initDatabase();
   await initParser();
+
+  // Phase 32 B1: keep every agent event that is broadcast, from here on.
+  // This launch's token is masked if a tool argument ever carries it.
+  startAgentEventLog(addBroadcastTarget, () => [getCapabilityToken()]);
 
   // Start persistent auto-save for plan data
   startAutoSave(() => exportDatabase(), 30000);

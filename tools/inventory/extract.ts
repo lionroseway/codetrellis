@@ -116,7 +116,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   criteria: 'd',
   artefacts: 'e',
   channels: 'f', presence: 'f', 'screenshot-response': 'f',
-  agent: 'g', mcp: 'g', sessions: 'g', sensors: 'g', workstreams: 'g', awareness: 'g',
+  agent: 'g', 'agent-events': 'g', mcp: 'g', sessions: 'g', sensors: 'g', workstreams: 'g', awareness: 'g',
   baseline: 'h', comparands: 'h', compare: 'h', conflicts: 'h', freeze: 'h',
   terminals: 'i', audio: 'i',
   pairing: 'j', peers: 'j', sync: 'j',

@@ -1,0 +1,12 @@
+# One finding each, by fingerprint (commit:file:rule:line), for a value that
+# is not a credential but is already in a pushed commit. gitleaks scans
+# commits, so fixing the file later does not clear the earlier commit; a
+# fingerprint clears exactly that one finding and nothing else, unlike a
+# .gitleaks.toml allowlist (which is for published constants only).
+#
+# Only add a line here for a made-up test value, with the commit that fixed
+# it named, and never for anything that was a real secret: rotate that.
+
+# A made-up AWS-shaped key in the redaction test (Phase 32 B1.1, #169).
+# The test now assembles its fakes at run time, so no later commit has it.
+099b5805b1b8f98e56ca8112800954ae7d78231c:src/backend/services/agent-event-log.test.ts:aws-access-token:101

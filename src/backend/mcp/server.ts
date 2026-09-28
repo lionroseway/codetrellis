@@ -88,6 +88,7 @@ import {
 } from '../services/recent-projects-service';
 import { buildSkillGuide } from './skill-guide';
 import { agentTypeFromClientInfo } from './client-identity';
+import { eventId } from '../services/agent-event-log';
 import { writeEndpointFile, removeEndpointFile } from './connector/files';
 import {
   resolveConnectorCommand,
@@ -137,7 +138,6 @@ let httpServer: http.Server | null = null;
 let boundPort: number = DEFAULT_MCP_PORT;
 const connectedTransports = new Map<string, SSEServerTransport>();
 
-let toolEventCounter = 0;
 
 /**
  * Shared pending-response map. Used by screenshot, clipboard_read,
@@ -203,7 +203,7 @@ interface ToolEventPayload {
 
 function broadcastToolEvent(payload: ToolEventPayload): void {
   broadcast('agent-event', {
-    id: `mcp-tool-${++toolEventCounter}`,
+    id: eventId('mcp-tool'),
     timestamp: Date.now(),
     source: 'mcp',
     type: payload.phase === 'error' ? 'tool_error' : 'tool_call',
@@ -764,7 +764,7 @@ export async function startMcpServer(): Promise<void> {
         sessionService.disconnectSession(sessionId);
         console.log(`[MCP] Client disconnected: ${sessionId}`);
         broadcast('agent-event', {
-          id: `mcp-disconnect-${Date.now()}`,
+          id: eventId('mcp-disconnect'),
           timestamp: Date.now(),
           source: 'mcp',
           type: 'session_end',
@@ -775,7 +775,7 @@ export async function startMcpServer(): Promise<void> {
 
       console.log(`[MCP] Client connected: ${sessionId} (${inferredAgentType})`);
       broadcast('agent-event', {
-        id: `mcp-connect-${Date.now()}`,
+        id: eventId('mcp-connect'),
         timestamp: Date.now(),
         source: 'mcp',
         type: 'session_start',

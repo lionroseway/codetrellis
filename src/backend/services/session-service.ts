@@ -2,6 +2,7 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { AgentSessionInfo, AgentCapability } from '../../shared/types';
 import { clearIntent } from './intent-service';
+import { adoptSessionEvents } from './agent-event-log';
 
 /**
  * Register a session, or update it in place.
@@ -100,6 +101,9 @@ export function bindSession(sessionId: string, workstreamRoot: string | null, ho
     `UPDATE agent_sessions SET workstream_root = ?, host_terminal_id = COALESCE(?, host_terminal_id) WHERE session_id = ?`,
     [workstreamRoot, hostTerminalId ?? null, sessionId],
   );
+  // Its first calls may have been logged before this binding landed (MCP
+  // roots are asked for after connect): they belong here too (B1.1).
+  if (workstreamRoot) adoptSessionEvents(sessionId, workstreamRoot);
   markDirty();
 }
 

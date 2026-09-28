@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A3.5: `docs/claude/awareness.md` and the M3 "done when" |
-| **Status** | A3.5 done on its branch: the reference doc, and `awareness-m3.test.ts` passes (five worktrees, a 97-word five-line digest, intended quiet until a side changes shape); PR open. M3 is done when it merges |
-| **Next action** | Merge A3.5 when green; then A4 (mobile: "Needs you", workstreams and signal-detail routes, push for high) — refine it into sub-steps in EXECUTION §4 first |
+| **Stage / step** | Track B — B1.1: the agent event log |
+| **Status** | B1.1 done on its branch: `agent_events` kept by a passive tap, stamped with session, agent and workstream, secrets masked, 14 days; `GET /api/agent-events`; the Timeline survives a reload; unit, harness (with a restart) and browser tests pass; PR open. A3.5 merged (#168): M3 done |
+| **Next action** | Merge A3.5 and B1.1 when green; then B1.2 (body edits as events, agent-time for watcher events, SDK-refused calls). Then, per the sequence: B2, C1, B4, B3, then the direction review, then B5 and A4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a3-5-awareness-doc` |
+| **Branch** | `feat/phase-32-b1-1-agent-event-log` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -76,12 +76,12 @@
 - [x] A2.5 `drift` signal (#162)
 - [x] A2.6 Inline notices, `acknowledge_signal`, the M2 "done when" (#163) — **M2 done**
 - [x] A2 Meaning (signatures, contract, drift, notices, intent): M2 done (#163)
-- [ ] A3 Distilled (M3), refined in EXECUTION §4:
+- [x] A3 Distilled (M3), refined in EXECUTION §4: M3 done (#168)
   - [x] A3.1 The digest (#164)
   - [x] A3.2 Intended and cooldown (#165)
   - [x] A3.3 `parallel` guide flavour (#166)
   - [x] A3.4 User skill and optional hook, offered from Settings (#167)
-  - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when" (PR open)
+  - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -96,7 +96,9 @@
   run it in one, to reclaim ~3 min per PR.
 
 ### Track B: observability
-- [ ] B1 Agent event log
+- [ ] B1 Agent event log, refined in EXECUTION §5:
+  - [ ] B1.1 `agent_events`, `GET /api/agent-events`, the Timeline survives a reload (PR open)
+  - [ ] B1.2 Body edits as events; agent time; SDK-refused calls
 - [ ] B2 Timeline lanes
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints
@@ -186,12 +188,90 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | The digest lists only open high and medium signals, one line per kind and pair of workstreams (and changing side, for a contract), at most five lines then "and N more"; answered signals are "seen" and low ones are counted. Each line ends with the choice waiting on the person, fixed per kind. "New since you last looked" is kept per browser (A3.1) | A person reads groups, not streams: two worktrees overlapping in four places is one thing to decide. The question per kind is CodeTrellis's wording, never an agent's. Last-looked is a convenience, so browser storage is enough, and a blocked store just means no "new" count |
 | 2026-09-28 | A signal's shape is what it is about, not every edit: for a collision, each side's names in the file (the one symbol, for a symbol collision) with any new signature; for contract, drift and stale-base, their subject. An acknowledged or intended signal reopens when the shape changes, says from what, and agents are told again; dismissed stays dismissed while it lasts (A3.2) | Spec §4.4: cooldown "until its subject changes again", intended "until either side's footprint changes shape". Body edits are the ordinary case and must stay quiet. A declared intent landing as an edit keeps the shape, so A2.4's promise holds. Dismissed means "not worth attention", which a new symbol doesn't change |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
+| 2026-09-28 | Track A ran ahead of the sequence: A2 and A3 were built before B1, B2, C1, B4 and B3, which §2 puts between A1 and A3. Nothing recorded that reorder. From here the sequence is followed again: B1, B2, C1, B4, B3, then the direction review, then B5 and A4 | Found when A3 closed and A4 looked next. Awareness was the owner's stated priority and each A-step stood alone, so no work is wasted; but the Timeline and breakpoints (B1, B2, B4) are what A4's "Needs you" and A5's review lean on, and the direction review is due at A3's end, after those steps |
+| 2026-09-28 | Agent events are kept by a passive tap on `broadcast()`, stamped at the tap, not by changing each producer (B1.1) | Every producer is covered, including ones added later. The tap reads the session row directly, so an MCP call (which names no workstream) and a `session_end` (after the session goes inactive) still get their workstream |
 | 2026-09-28 | The PreToolUse hook only informs: `additionalContext`, never a `permissionDecision`; it fails open and silent (no app, unknown folder, no overlap, over 5 s); it asks over MCP as its own short session named `claude-code-hook` (A3.4) | A hook that blocks or approves would change Claude Code's permission model behind the person's back, and one that gets in the way gets uninstalled. Going through MCP keeps one surface with one capability matrix, and the check is visible in the Timeline; the cost is a connect per edit, which is cheap on loopback |
 | 2026-09-28 | Settings offers the skill ticked and the hook unticked, both written to Claude Code's user folder (`~/.claude` or `$CLAUDE_CONFIG_DIR`), from the app window only (A3.4) | The skill only loads when relevant; the hook runs before every edit, so it is opted into. User scope because parallel work is per developer, not per repository, and the hook is silent outside known workstreams. Window-only because an agent must not install a hook into its own client |
 
 ---
 
 ## Entries
+
+### 2026-09-28: B1.1 — the agent event log
+- **Sequence.** A3 closed with A4 looking next, but §2 puts B1, B2, C1, B4
+  and B3 before A3's direction review. That reorder was never recorded.
+  It is now (Decisions), and the sequence resumes at B1. B1 is refined
+  into two sub-steps in EXECUTION §5.
+- **`agent_events`** is a new table with id, time, source, type, session,
+  agent, workstream and payload, plus indexes on time, session and
+  workstream (`agent-event-log.ts`).
+  - A passive tap on `broadcast()`, like `power-signals`, catches every
+    producer: MCP tool calls and errors, sessions starting and ending, and
+    the Claude Code watcher.
+  - Stamped at the tap from `agent_sessions`, read directly so an inactive
+    session still answers. The MCP `tool_call` payload never named its
+    workstream, and `session_end` fires after the session goes inactive.
+  - Event ids were numbered from 1 each launch; they now carry a launch
+    tag (`eventId`), so a stored event never collides with a live one.
+  - Secrets are masked value by value, before stringifying (a tool's
+    arguments are themselves a JSON string):
+    - values under secret-sounding keys;
+    - OpenAI/Anthropic, GitHub, Slack, AWS, JWT and private-key formats;
+    - this launch's capability token.
+
+    Over-masking is the safe side (`"tokens": 12` is masked).
+  - Payloads over 4,000 characters are cut. Rows are kept 14 days, like
+    the log files, and at most 100,000; pruned at start and hourly.
+- **`GET /api/agent-events`**: oldest first, the latest `limit` (default
+  400, at most 2,000), filtered by `since`, `before`, `session` or
+  `workstream`.
+- **The window** loads the last 400 when it connects, merged by id in time
+  order, so a reload or a reconnect keeps the Timeline. The store is capped
+  at 2,000 (it had no cap).
+- **CI caught a race.** An MCP client's roots are asked for after connect,
+  so an agent's first calls can be logged before its session is bound, and
+  they kept no workstream. That happened on CI, not locally. Binding a
+  session now gives its earlier unplaced events the workstream
+  (`adoptSessionEvents`, from `bindSession`). A new unit test fails on the
+  old code.
+- **CI's secret scan caught a fake.** The redaction test had a made-up
+  AWS-shaped key as a literal, and gitleaks flagged it on #169. The test
+  now assembles its fakes at run time. `.gitleaksignore` (new) clears that
+  one finding by fingerprint in the one pushed commit, with the rule for
+  using it. `.gitleaks.toml`'s allowlist is for published constants and
+  stays so, and nothing was force-pushed.
+- **Noted, for B1.2:** a call the MCP SDK refuses on its arguments (schema
+  validation) never reaches the interception, so it has never been
+  broadcast and is not recorded. Found by the first draft of the harness
+  test.
+- **Tests.**
+  - Unit: `agent-event-log.test.ts` (14):
+    - stamping, including an ended session and a watcher's own workstream;
+    - one row per id, and no throw;
+    - launch-unique ids, and truncation;
+    - masking: keys, formats, the token, stored payloads, and ordinary
+      arguments untouched;
+    - filters and the cap;
+    - retention and the row cap;
+    - the tap.
+  - Unit: `agent-store.test.ts` (2): history merged once in time order,
+    and the cap.
+  - Harness: `agent-events.test.ts` (6), a real agent and a restart:
+    - a call stamped with session, agent and the workstream as opened;
+    - a secret masked before it is written;
+    - a refused call kept as an error;
+    - filters;
+    - `session_end` naming its workstream;
+    - everything still there after a restart, and new ids not colliding.
+  - Browser: `timeline-history.spec.ts`. An agent searches before the
+    window exists; the Timeline shows it, and still shows it once after a
+    reload. Screenshot `timeline-history`.
+- **UX journey.**
+  - A developer leaves an agent working and closes the window, or it
+    reloads.
+  - When it opens, the Timeline shows what the agent did meanwhile: the
+    same turns, in order, attributed to that agent.
+  - Nothing a tool was given as a secret is in that record.
 
 ### 2026-09-28: A3.5 — the awareness doc; M3 done
 - **`docs/claude/awareness.md`** is the map of what exists, for people

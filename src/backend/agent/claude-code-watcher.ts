@@ -4,6 +4,7 @@ import os from 'node:os';
 import type { AgentEvent } from '../../shared/types';
 import { broadcast } from '../server';
 import { recordTokens } from '../services/budget-service';
+import { eventId } from '../services/agent-event-log';
 import { matchWorkstreamRoot, candidateWorkstreamRoots } from '../services/workstream-binding';
 
 /**
@@ -24,7 +25,6 @@ const pollIntervalMs = (): number =>
   Number(process.env.CODETRELLIS_WATCHER_POLL_MS) || 2000;
 
 let watchInterval: ReturnType<typeof setInterval> | null = null;
-let eventCounter = 0;
 
 /**
  * Every Claude Code session being followed, by its session id (Phase 32 A1.2).
@@ -202,7 +202,7 @@ function isPlanLike(text: string): boolean {
 
 function makeEvent(type: AgentEvent['type'], payload: Record<string, unknown>): AgentEvent {
   return {
-    id: `cc-${++eventCounter}`,
+    id: eventId('cc'),
     timestamp: Date.now(),
     source: 'claude-code-watcher',
     type,
