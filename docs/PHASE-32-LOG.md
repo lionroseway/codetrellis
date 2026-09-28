@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.7b: identity across checkouts (bug 46) |
-| **Status** | A1.7a merged (#152). A1.7b done on its branch (unit 4, harness 4); PR open |
-| **Next action** | Merge A1.7b's PR when green; then A1.7c (clones: consent first, then the clone check) |
+| **Stage / step** | Track A — A1.7c: clones, with consent first |
+| **Status** | A1.7b merged (#153). A1.7c done on its branch (unit 5, harness 7, browser +2); PR open |
+| **Next action** | Merge A1.7c's PR when green; then A1.8 (Awareness tab in PlanPanel) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-7b-checkout-identity` |
+| **Branch** | `feat/phase-32-a1-7c-clones` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -65,7 +65,7 @@
 - [x] A1.4 Folder watching (#149)
 - [x] A1.5 Footprint symbols (#150)
 - [x] A1.6 Signals engine (collision, stale-base) and tools (#151)
-- [ ] A1.7 Branch and clone workstreams (A1.7a branches; A1.7b bug 46; A1.7c clones)
+- [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones)
 - [ ] A1.8 Awareness tab
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (digest, guide, skill and hook)
@@ -156,12 +156,64 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-27 | Reversed: 0.1.17 includes the companion after all (Android APK on the release, iOS to TestFlight) — it carries the deviations fix (bug 34), the budget and freeze cards and the splash fix | Owner: "we can do the mobile release"; the phone screen review still waits |
 | 2026-09-27 | `feat/phase-32` merges into `main` for the release, with a merge commit so each step's commit and PR stay visible | Owner's go-ahead ("getting release done and we merge"); `main` history is one commit per PR |
 | 2026-09-26 | Security findings go to `docs/private/`, never these docs | CLAUDE.md Phase 19 rule; one finding raised to the owner in chat |
-| 2026-09-28 | A doc or plan row belongs to the checkout that holds it while that folder exists; another checkout's copy with the same uid is not imported over it (bug 46) | Rows are keyed by uid and every checkout carries the same files. A worktree's differing copy is its own change, which its footprint shows; a holder that is gone gives the row up, so a moved repo still works |
+| 2026-09-28 | A doc or plan row belongs to the checkout that holds it while that folder exists; another checkout *of the same repository* (worktree: same git common dir; clone: same origin) does not import its copy over it. Any other folder still takes the row over (bug 46) | Rows are keyed by uid and every checkout carries the same files. A worktree's differing copy is its own change, which its footprint shows; a holder that is gone gives the row up, so a moved repo still works. Narrowed after CI: a teammate's export imported from a plain folder is a deliberate move, not a second checkout |
 | 2026-09-28 | Clones need consent before anything is read from them: the prompt names the folder the agent reported, and the clone check runs only after the person says yes in the app window (A1.7c) | Deciding "is this a clone?" means running git in a caller-named folder, and a repo's config can make git run commands; Phase 19 says nothing is read from a reported path |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A1.7c — clones, with consent first
+- **Flow (per the Decisions row).**
+  1. An agent connected through the connector reports a folder no trusted
+     root covers. While a project is open, that folder becomes a pending
+     request (`folder-requests.ts`). The path is only tidied lexically;
+     nothing is read from it. One request per folder, and later sessions
+     in the same folder join it.
+  2. The person answers in the app. `POST /api/workstreams/folder-requests/:id/include`
+     is a grant, so it uses the same `mayGrant` as settings grants (app
+     window, or a test backend). The request is chosen by the id the server
+     gave it, never by a path in the body.
+  3. Only then is the folder read. Its normalised origin must equal the
+     opened project's. If it does, the folder is trusted (added as a
+     recent project, the trusted-roots store), and the sessions that
+     reported it are bound to it. If not, a 409 gives the reason, and the
+     folder isn't asked about again.
+  4. "Not now" (`…/dismiss`) is remembered in `folder_request_dismissals`,
+     so the question is asked once per folder, not once per connection.
+- **Clones as workstreams.** A trusted root with the same normalised
+  origin URL as the opened project, as recorded in `recent_projects` when
+  each was opened, is a clone. Deciding that runs no git in a folder. A
+  clone flows through the same agent, change, symbol and watcher path as
+  a worktree, with `shape: 'clone'`; branch exclusion still uses only this
+  repository's own checkouts.
+- **UX journey (JOURNEYS A1, "one in a separate clone").**
+  - A dashed "Agent in acme-2" chip appears in the strip.
+  - Its details name the folder and the agent, explain the question, and
+    say "Nothing has been read from it, and nothing will be unless you
+    include it", with **Not now** and **Include**.
+  - Include shows a toast, "Clone included", and the clone becomes a
+    workstream with its agent on it. A folder that isn't a clone shows the
+    reason in a toast.
+  - Asking is a quiet chip, never a modal, so an agent in an unrelated
+    folder costs one chip until dismissed.
+  - Screenshot: `workstreams-folder-request.png`.
+- **Also.** The harness MCP client gains a `cwd` option, sending
+  `x-codetrellis-cwd` as the connector does. A clone the person includes
+  appears in their recent projects, since that is the trusted-roots store.
+- **Tests.**
+  - Unit: `folder-requests.test.ts` (5): lexical normalising and what
+    isn't a folder; one request per folder with sessions joining;
+    taking by id only.
+  - Harness: `clone-consent.test.ts` (7): a request once per folder, not
+    trusted yet; include checks it's a clone, trusts it and binds both
+    agents; the clone's work shows; a non-clone is refused with the reason
+    and not asked again; "not now" is remembered; ids not paths; and a
+    backend that refuses HTTP grants returns 403, with the request staying
+    for the person.
+  - Browser: +2 (include with toast; refusal reason; not now).
+  - The related harness files pass (61). Unit 1175 pass / 3 environment
+    skips. Lint 0 errors / 295.
 
 ### 2026-09-28: A1.7b — identity across checkouts (bug 46)
 - **What was wrong.** Rows for system docs and plans are keyed by uid, and
@@ -184,6 +236,14 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   A worktree's differing copies show as that workstream's changed files
   (A1.4), and the plan list's "other worktrees of this repo" section
   already reads other checkouts' plans from disk.
+- **Narrowed after CI (`f587efb`).** The first cut held a row against any
+  other existing folder, which broke `cdev-phase3-demo`'s teammate import
+  (a copied export in a plain folder, 0 items). Bug 46 is the same
+  repository carrying the same uids, so `heldByAnotherCheckout` now also
+  requires `sameRepository`: same git common dir, or same normalised
+  origin. The unit test uses real repositories (worktree, clone, plain
+  folder, unrelated repo; 7 tests); the plain-folder case fails on the
+  first cut.
 - **A1.7 split again.** Clones (consent, then a clone check) are A1.7c;
   the Decisions table says why consent comes before any read.
 - **Tests.**

@@ -44,6 +44,7 @@ import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-wa
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
 import { refreshSignals, listSignals, setAwarenessListener } from './services/awareness-service';
+import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDismissal, setFolderRequestsListener } from './services/folder-requests';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
@@ -73,6 +74,7 @@ import {
   listRecentProjects,
   removeRecentProject,
   setRecentProjectPinned,
+  getRecentProject,
 } from './services/recent-projects-service';
 import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // Top-of-file imports for everything that used to be lazy-required.
@@ -656,6 +658,59 @@ function scheduleSignalRefresh(): void {
     }
   }, 500);
 }
+
+// Folders an agent reported that CodeTrellis has not opened (A1.7c). Shown
+// to the person, who includes one only if it is a clone of this repository.
+setFolderRequestsListener(() => broadcast('folder-requests-changed', {}));
+app.get('/api/workstreams/folder-requests', (_req, res) => {
+  res.json(listFolderRequests().map(({ id, folder, agentType, reportedAt }) => ({ id, folder, agentType, reportedAt })));
+});
+
+// Including a folder trusts it — a grant, so the person's alone, from the
+// app window. The request is chosen by the id the server gave it, never by a
+// path in the body. Only now, with consent, is anything read from the folder.
+app.post('/api/workstreams/folder-requests/:id/include', (req, res) => {
+  if (!mayGrant(req)) {
+    res.status(403).json({ error: 'Only you can include a folder as a workstream — in the CodeTrellis app, from the workstreams strip.' });
+    return;
+  }
+  const projectRoot = getActiveProjectPath();
+  if (!projectRoot) { res.status(409).json({ error: 'No project is open to include it in.' }); return; }
+  const request = takeFolderRequest(req.params.id);
+  if (!request) { res.status(404).json({ error: 'No such request. It may already have been answered.' }); return; }
+  let isDir = false;
+  try { isDir = fs.statSync(request.folder).isDirectory(); } catch { /* gone */ }
+  if (!isDir) {
+    res.status(409).json({ included: false, reason: `${request.folder} is not a folder on this machine any more.` });
+    return;
+  }
+  const { getNormalisedOriginUrl } = _lazy___services_git_identity;
+  const ours = getRecentProject(projectRoot)?.originUrl ?? getNormalisedOriginUrl(projectRoot) ?? null;
+  const theirs = getNormalisedOriginUrl(request.folder) ?? null;
+  if (!ours || ours !== theirs) {
+    rememberDismissal(request.folder);
+    res.status(409).json({
+      included: false,
+      reason: ours
+        ? `${path.basename(request.folder)} is not a clone of this repository (its origin is ${theirs ?? 'not set'}). Nothing was included, and it will not be asked about again.`
+        : 'This project has no origin, so a clone of it cannot be recognised. Nothing was included.',
+    });
+    return;
+  }
+  recordProjectOpen(request.folder, currentBranch(request.folder));
+  const active = new Set(sessionService.getActiveSessions().map((s) => s.sessionId));
+  for (const sid of request.sessionIds) {
+    if (active.has(sid)) sessionService.bindSession(sid, request.folder);
+  }
+  broadcast('mcp-session-changed', { reason: 'bound' });
+  broadcast('workstreams-changed', { root: request.folder });
+  res.json({ included: true, folder: request.folder });
+});
+
+app.post('/api/workstreams/folder-requests/:id/dismiss', (req, res) => {
+  if (!dismissFolderRequest(req.params.id)) { res.status(404).json({ error: 'No such request.' }); return; }
+  res.json({ dismissed: true });
+});
 
 // What a person should know about the parallel work in this project: open
 // collisions and stale bases, most severe first (A1.6). Recomputed on read,

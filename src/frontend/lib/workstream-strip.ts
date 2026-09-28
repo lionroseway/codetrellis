@@ -43,14 +43,15 @@ export function chipLabel(w: Pick<Workstream, 'branch' | 'head'>): string {
 /** One line saying what kind of workstream it is. */
 export function shapeWords(w: Pick<Workstream, 'main' | 'shape' | 'agents'>): string {
   if (w.shape === 'branch') return 'Branch, no checkout on this machine';
+  if (w.shape === 'clone') return w.agents.length >= 2 ? `Clone, shared by ${w.agents.length} agents` : 'Clone of this repository';
   const where = w.main ? 'Main checkout' : 'Worktree';
   if (w.shape === 'shared') return `${where}, shared by ${w.agents.length} agents`;
   return where;
 }
 
 /** The warning a shared checkout carries, or null. */
-export function sharedNote(w: Pick<Workstream, 'shape'>): string | null {
-  return w.shape === 'shared'
+export function sharedNote(w: Pick<Workstream, 'shape'> & Partial<Pick<Workstream, 'agents'>>): string | null {
+  return w.shape === 'shared' || (w.shape === 'clone' && (w.agents?.length ?? 0) >= 2)
     ? "Their edits in this folder can't be told apart. Give one of them a worktree of its own."
     : null;
 }

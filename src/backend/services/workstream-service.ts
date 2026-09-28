@@ -20,6 +20,8 @@ import { getChanges, syncWorkstreamWatchers, watchRefs } from './workstream-watc
 import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
 import { branchWorkstreamsOf, showAt } from './branch-workstreams';
 import { getEffectiveSensorConfig } from './project-config-service';
+import { listTrustedRoots } from './trusted-roots';
+import { getRecentProject } from './recent-projects-service';
 
 /** A Claude Code session the watcher follows (see `claude-code-watcher.ts`). */
 export interface ClaudeLogSession {
@@ -157,8 +159,12 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
   // checkout's branch (or its commit, when detached).
   const main = worktrees.find((w) => w.isMain);
   const mainRef = main?.branch ?? main?.head ?? null;
-  const all = deriveWorkstreams({
-    worktrees,
+  // Clones the person included (A1.7c), or opened: same repository, another
+  // folder. Treated like a worktree from here on.
+  const clones = listed.length ? cloneTrees(projectRoot, worktrees) : [];
+  const cloneRoots = new Set(clones.map((c) => c.path));
+  const derived = deriveWorkstreams({
+    worktrees: [...worktrees, ...clones],
     mcpSessions: getActiveSessions(),
     claudeSessions,
     changes: (folder) => {
@@ -166,6 +172,7 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
       return symbolParser ? withSymbolChanges(folder, changes, symbolParser) : changes;
     },
   });
+  const all = derived.map((w) => (cloneRoots.has(w.root) ? { ...w, shape: 'clone' as const } : w));
   // This listing is the discovery pass: watch what is active, and stop
   // watching what went idle.
   syncWorkstreamWatchers(
@@ -202,4 +209,34 @@ function branchWorkstreams(repo: string, mainBranch: string | null, mainRef: str
       : b.changes,
     idle: b.changes.files.length === 0,
   }));
+}
+
+const canonicalPath = (p: string): string => {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return p;
+  }
+};
+
+/**
+ * Other checkouts of the same repository that the person trusts: a folder
+ * they included when an agent reported it (A1.7c), or opened themselves.
+ * "Same repository" is the normalised origin URL recorded when each was
+ * opened — no git runs in a folder to decide it. A project with no origin has
+ * no clones by this rule.
+ */
+function cloneTrees(projectRoot: string, worktrees: readonly Worktree[]): Worktree[] {
+  const origin = getRecentProject(projectRoot)?.originUrl ?? null;
+  if (!origin) return [];
+  const own = new Set(worktrees.map((w) => canonicalPath(w.path)));
+  own.add(canonicalPath(projectRoot));
+  const out: Worktree[] = [];
+  for (const root of listTrustedRoots()) {
+    if (own.has(canonicalPath(root))) continue;
+    if (getRecentProject(root)?.originUrl !== origin) continue;
+    const self = listWorktrees(root).find((w) => w.isMain);
+    out.push({ path: root, branch: self?.branch ?? null, head: self?.head ?? null, isMain: false, isCurrent: false, bare: false, prunable: false });
+  }
+  return out;
 }

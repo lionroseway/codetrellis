@@ -192,6 +192,13 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_awareness_project ON awareness_signals(project_root);
 
+  -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
+  -- to. Asked once per folder, not once per connection.
+  CREATE TABLE IF NOT EXISTS folder_request_dismissals (
+    folder TEXT PRIMARY KEY,
+    dismissed_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS deviations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     plan_uid TEXT NOT NULL REFERENCES plans(uid),

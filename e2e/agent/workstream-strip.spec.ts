@@ -263,4 +263,54 @@ test.describe('Workstreams strip', () => {
     await expect(pop).toContainText('auth-refresh and origin/cloud-fix both change src/auth/session.ts → refreshToken');
     await shot(page, 'workstreams-branch');
   });
+
+  // ── A1.7c: a folder an agent reported, asked about, not assumed ─────
+
+  test('an agent in an unopened folder asks to be included; nothing is read until you say yes', async ({ page }) => {
+    await serve(page, [ws('/work/acme', 'main', true, [agent('s1', 'claude-code')])]);
+    let pending = [{ id: 'req1', folder: '/Users/sam/src/acme-2', agentType: 'claude-code', reportedAt: now }];
+    await page.route('**/api/workstreams/folder-requests', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pending) }));
+    let included = false;
+    await page.route('**/api/workstreams/folder-requests/req1/include', (route) => {
+      included = true;
+      pending = [];
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ included: true, folder: '/Users/sam/src/acme-2' }) });
+    });
+    await gotoWithProject(page);
+
+    const chip = page.getByTestId('folder-request-chip');
+    await expect(chip).toHaveText('Agent in acme-2');
+    await chip.click();
+    const pop = page.getByTestId('folder-request-popover');
+    await expect(pop).toContainText('/Users/sam/src/acme-2');
+    await expect(pop).toContainText('Claude Code reported this folder');
+    await expect(pop).toContainText('Nothing has been read from it');
+    await shot(page, 'workstreams-folder-request');
+
+    await page.getByTestId('folder-request-include').click();
+    expect(included).toBe(true);
+    await expect(page.getByText('Clone included')).toBeVisible();
+    await expect(chip).toHaveCount(0);
+  });
+
+  test('"not now" dismisses it, and a refusal says why', async ({ page }) => {
+    await serve(page, [ws('/work/acme', 'main', true, [agent('s1', 'claude-code')])]);
+    await page.route('**/api/workstreams/folder-requests', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'req2', folder: '/tmp/other', agentType: 'codex', reportedAt: now }]) }));
+    await page.route('**/api/workstreams/folder-requests/req2/include', (route) =>
+      route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ included: false, reason: 'other is not a clone of this repository.' }) }));
+    let dismissed = false;
+    await page.route('**/api/workstreams/folder-requests/req2/dismiss', (route) => {
+      dismissed = true;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"dismissed":true}' });
+    });
+    await gotoWithProject(page);
+    await page.getByTestId('folder-request-chip').click();
+    await page.getByTestId('folder-request-include').click();
+    await expect(page.getByText('other is not a clone of this repository.')).toBeVisible();
+    await page.getByTestId('folder-request-chip').click();
+    await page.getByTestId('folder-request-dismiss').click();
+    expect(dismissed).toBe(true);
+  });
 });
