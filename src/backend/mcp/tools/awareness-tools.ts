@@ -14,6 +14,8 @@ import fs from 'node:fs';
 import { listWorkstreams } from '../../services/workstream-service';
 import { refreshSignals, listSignals, filesDefining } from '../../services/awareness-service';
 import { markTold, recordNote, toldFor, MAX_NOTE } from '../../services/awareness-notices';
+import { buildDigest, digestText } from '../../../shared/lib/awareness-digest';
+import path from 'node:path';
 import {
   declareIntent, clearIntent, normaliseIntentPath, parseIntentSymbol,
   MAX_INTENT_PATHS, MAX_INTENT_SYMBOLS, MAX_INTENT_SUMMARY,
@@ -68,8 +70,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'get_awareness',
     {
       description:
-        'What you should know right now about other work in this repository: open signals affecting your workstream, ' +
-        'most severe first. `collision` means another workstream changes the same file (medium) or the same function ' +
+        'What you should know right now about other work in this repository: a short `digest` (a line per pair of ' +
+        'workstreams: what changed, who is affected, what the person is asked), then the open signals affecting your ' +
+        'workstream, most severe first. `collision` means another workstream changes the same file (medium) or the same function ' +
         '(high); `contract` means one workstream changed the signature of an exported function or type, or removed it, ' +
         'and files the other is changing import it (high; medium when they only import the module as a whole) — the ' +
         'subject gives the signature before and after and the importing files; `drift` means a workstream changes files ' +
@@ -95,12 +98,19 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // Its own note only: another agent's words are never passed on.
       const told = toldFor(signals.map((s) => s.id));
       const yourNote = (id: string) => told.get(id)?.find((t) => t.sessionId === deps.sessionId)?.note;
+      // The digest (A3.1): the same few lines the person reads, over these signals.
+      const names = new Map(listWorkstreams(root, { includeIdle: true }).map((w) => [w.root, w.branch ?? path.basename(w.root)]));
+      const digest = digestText(buildDigest(
+        signals.map((s) => ({ ...s, told: told.get(s.id) })),
+        (r) => names.get(r) ?? (r.startsWith('branch:') ? r.slice(7) : path.basename(r)),
+      ));
       return {
         content: [{
           type: 'text' as const,
           text: JSON.stringify({
             project_path: root,
             your_workstream: workstream,
+            digest,
             signals: signals.map(({ id, kind, severity, summary, subject, workstreams, firstSeen, state }) => ({
               id, kind, severity, summary, subject, workstreams, first_seen: firstSeen, state,
               ...(yourNote(id) ? { your_note: yourNote(id) } : {}),

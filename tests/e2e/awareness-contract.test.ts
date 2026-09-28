@@ -95,8 +95,11 @@ test.describe.serial('Contract signals', () => {
     expect(c.workstreams.some((w) => same(w, checkout))).toBe(true);
 
     // The agent in the importing worktree is told by get_awareness.
-    const told = JSON.parse((await agent.callTool('get_awareness', {})).text) as { signals: Signal[] };
+    const told = JSON.parse((await agent.callTool('get_awareness', {})).answer) as { signals: Signal[]; digest: string };
     expect(told.signals.map((s) => `${s.severity} ${s.kind} ${s.subject.symbol}`)).toContain('high contract validateCreateUser');
+    // The digest (A3.1): the same few lines the person reads, for the agent.
+    expect(told.digest).toContain("`billing-v2` changed validateCreateUser's signature; `checkout-fix` imports it.");
+    expect(told.digest).toContain('Waiting on the person: keep the old signature, or update the callers?');
   });
 
   test('changing only the body raises nothing, though the same importer is edited', async () => {
