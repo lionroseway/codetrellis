@@ -233,4 +233,34 @@ test.describe('Workstreams strip', () => {
     await chip.click();
     await expect(page.getByTestId('workstream-signal')).toContainText('since auth-refresh branched');
   });
+
+  // ── A1.7a: branches with no checkout here ──────────────────────────
+
+  test('a branch with no checkout appears only when it overlaps, and says where it is', async ({ page }) => {
+    const cloud: Workstream = {
+      root: 'branch:origin/cloud-fix', ref: 'refs/remotes/origin/cloud-fix', branch: 'origin/cloud-fix', head: '7c1d2e3f4a', main: false,
+      shape: 'branch', agents: [], idle: false,
+      changes: { base: '9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b', truncated: false,
+        files: [{ path: 'src/auth/session.ts', status: 'modified', symbols: [{ name: 'refreshToken', kind: 'function', change: 'modified', line: 40 }] }] },
+    };
+    const quiet: Workstream = { ...cloud, root: 'branch:docs-tweak', ref: 'refs/heads/docs-tweak', branch: 'docs-tweak',
+      changes: { ...cloud.changes, files: [{ path: 'docs/intro.md', status: 'modified' }] } };
+    await serve(page, [
+      ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),
+      ws('/work/acme-auth', 'auth-refresh', false, [agent('s2', 'codex')], [{ path: 'src/auth/session.ts', status: 'modified', symbols: [{ name: 'refreshToken', kind: 'function', change: 'modified', line: 40 }] }]),
+      cloud, quiet,
+    ], [{
+      id: 'c', kind: 'collision', severity: 'high', workstreams: ['/work/acme-auth', 'branch:origin/cloud-fix'], subject: { file: 'src/auth/session.ts', symbol: 'refreshToken' },
+      summary: '`auth-refresh` and `origin/cloud-fix` both change src/auth/session.ts → refreshToken', firstSeen: now, lastSeen: now, state: 'open',
+    }]);
+    await gotoWithProject(page);
+    await expect(chips(page)).toHaveText([/^main/, /^auth-refresh/, /^origin\/cloud-fix/]); // the quiet branch has no chip
+    await chips(page).filter({ hasText: 'origin/cloud-fix' }).click();
+    const pop = page.getByTestId('workstream-popover');
+    await expect(pop).toContainText('Branch, no checkout on this machine');
+    await expect(pop).toContainText('refs/remotes/origin/cloud-fix');
+    await expect(pop).toContainText('No agent on this machine');
+    await expect(pop).toContainText('auth-refresh and origin/cloud-fix both change src/auth/session.ts → refreshToken');
+    await shot(page, 'workstreams-branch');
+  });
 });

@@ -16,8 +16,10 @@ import fs from 'node:fs';
 import type { AgentSessionInfo, Workstream, WorkstreamAgent, WorkstreamChanges } from '../../shared/types';
 import { listWorktrees, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
-import { getChanges, syncWorkstreamWatchers } from './workstream-watch-service';
+import { getChanges, syncWorkstreamWatchers, watchRefs } from './workstream-watch-service';
 import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
+import { branchWorkstreamsOf, showAt } from './branch-workstreams';
+import { getEffectiveSensorConfig } from './project-config-service';
 
 /** A Claude Code session the watcher follows (see `claude-code-watcher.ts`). */
 export interface ClaudeLogSession {
@@ -170,5 +172,34 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
     all.filter((w) => !w.idle).map((w) => ({ folder: w.root, mainRef })),
     all.map((w) => w.root),
   ).catch(() => {});
-  return opts.includeIdle ? all : all.filter((w) => !w.idle);
+
+  // Branches with no checkout here (A1.7a): committed work, no folder, no
+  // agent on this machine. Read from local refs only, never fetched.
+  const branches = main && listed.length ? branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot) : [];
+  if (main && listed.length) watchRefs(main.path);
+  const withBranches = [...all, ...branches];
+  return opts.includeIdle ? withBranches : withBranches.filter((w) => !w.idle);
+}
+
+function branchWorkstreams(repo: string, mainBranch: string | null, mainRef: string | null, worktrees: readonly Worktree[], projectRoot: string): Workstream[] {
+  let windowDays: number;
+  try {
+    windowDays = getEffectiveSensorConfig(projectRoot).awareness.branchWindowDays;
+  } catch {
+    windowDays = 7;
+  }
+  const checkedOut = new Set(worktrees.map((w) => w.branch).filter((b): b is string => !!b));
+  return branchWorkstreamsOf(repo, { mainBranch, mainRef, checkedOut, windowDays }).map((b) => ({
+    root: `branch:${b.short}`,
+    ref: b.ref,
+    branch: b.short,
+    head: b.head,
+    main: false,
+    shape: 'branch' as const,
+    agents: [],
+    changes: symbolParser
+      ? withSymbolChanges(repo, b.changes, symbolParser, { head: b.head, read: (rel) => showAt(repo, b.head, rel) })
+      : b.changes,
+    idle: b.changes.files.length === 0,
+  }));
 }

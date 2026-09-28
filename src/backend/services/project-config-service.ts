@@ -16,6 +16,7 @@ import {
   type DriftSensorConfig,
   type DocSensorConfig,
   type StuckSensorConfig,
+  type AwarenessSensorConfig,
   type FreezeConfig,
 } from '../../shared/types';
 import { getSettings } from './settings-service';
@@ -258,6 +259,7 @@ export interface EffectiveSensorConfig {
   drift: EffectiveDriftSensor;
   docs: EffectiveDocSensor;
   stuck: EffectiveStuckSensor;
+  awareness: Required<AwarenessSensorConfig>;
 }
 
 /**
@@ -282,7 +284,15 @@ export function getEffectiveSensorConfig(projectRoot: string): EffectiveSensorCo
       errorLoopThreshold: cfg?.stuck?.errorLoopThreshold ?? SENSOR_DEFAULTS.stuck.errorLoopThreshold,
       idleMinutes: cfg?.stuck?.idleMinutes ?? SENSOR_DEFAULTS.stuck.idleMinutes,
     },
+    awareness: {
+      branchWindowDays: validDays(cfg?.awareness?.branchWindowDays) ?? SENSOR_DEFAULTS.awareness.branchWindowDays,
+    },
   };
+}
+
+/** A hand-edited config can say anything: only a positive number of days counts. */
+function validDays(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
 }
 
 // --- File watcher -----------------------------------------------------------

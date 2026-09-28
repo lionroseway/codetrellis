@@ -42,7 +42,7 @@ import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStat
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
-import { setWorkstreamChangesListener } from './services/workstream-watch-service';
+import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
 import { refreshSignals, listSignals, setAwarenessListener } from './services/awareness-service';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
@@ -633,6 +633,12 @@ setSymbolParser((filePath, content) => parseVirtualFile(filePath, content)?.symb
 // A watched workstream's changed files moved (A1.4): the strip refetches.
 setWorkstreamChangesListener((folder, changes) => {
   broadcast('workstreams-changed', { root: folder, changedFiles: changes.files.length });
+  scheduleSignalRefresh();
+});
+
+// A branch moved (A1.7a): a branch workstream's footprint follows its ref.
+setRefsChangedListener((repo) => {
+  broadcast('workstreams-changed', { root: repo, refs: true });
   scheduleSignalRefresh();
 });
 

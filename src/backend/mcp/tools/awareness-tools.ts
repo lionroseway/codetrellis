@@ -28,7 +28,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
     'list_workstreams',
     {
       description:
-        'Every line of parallel work in the repository: each git worktree (the main checkout included) with the ' +
+        'Every line of parallel work in the repository: each git worktree (the main checkout included), and each recent ' +
+        'branch with commits but no checkout on this machine (shape "branch", e.g. a cloud agent\'s pushed work), with the ' +
         'agents working in it and the files it has changed since it branched (committed, uncommitted and new), each ' +
         'with the symbols the change touches (added, removed, modified) where the language is parsed. ' +
         'A folder with two or more agents is a "shared" checkout, where their edits cannot be told apart — prefer a ' +

@@ -72,7 +72,8 @@ export function footprintsOf(all: readonly Workstream[]): FootprintInput[] {
     branch: w.branch,
     main: w.main,
     files: w.changes.files,
-    mainSinceBase: w.main ? [] : mainChangesSince(w.root, w.changes.base, mainRef),
+    // A branch workstream has no folder of its own: git runs in the main checkout.
+    mainSinceBase: w.main ? [] : mainChangesSince(w.shape === 'branch' && main ? main.root : w.root, w.changes.base, mainRef),
   }));
 }
 

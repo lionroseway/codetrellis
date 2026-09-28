@@ -20,11 +20,15 @@ export const MAX_CHIPS = 5;
  * appears when work is somewhere other than the main checkout, when there is
  * more than one line of work, or when agents share a folder.
  */
-export function stripWorkstreams(all: readonly Workstream[]): Workstream[] {
+export function stripWorkstreams(all: readonly Workstream[], signals: readonly AwarenessSignal[] = []): Workstream[] {
   // The main checkout with no agent in it is the person's own work, which
   // the canvas's "Working tree" summary already shows. A worktree an agent
   // left with changes in it is not: that is work nobody is looking at.
-  const active = all.filter((w) => !w.idle && (w.agents.length > 0 || !w.main));
+  // A branch with no checkout (A1.7a) gets a chip only when it overlaps other
+  // work: a repository has many recent branches, and a chip for each would
+  // bury the ones that matter.
+  const active = all.filter((w) => !w.idle
+    && (w.shape === 'branch' ? chipSeverity(signalsFor(w.root, signals)) !== null : w.agents.length > 0 || !w.main));
   if (active.length === 0) return [];
   if (active.length === 1 && active[0].main && active[0].shape !== 'shared') return [];
   return active;
@@ -38,6 +42,7 @@ export function chipLabel(w: Pick<Workstream, 'branch' | 'head'>): string {
 
 /** One line saying what kind of workstream it is. */
 export function shapeWords(w: Pick<Workstream, 'main' | 'shape' | 'agents'>): string {
+  if (w.shape === 'branch') return 'Branch, no checkout on this machine';
   const where = w.main ? 'Main checkout' : 'Worktree';
   if (w.shape === 'shared') return `${where}, shared by ${w.agents.length} agents`;
   return where;

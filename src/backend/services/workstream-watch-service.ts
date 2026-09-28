@@ -275,6 +275,45 @@ export async function syncWorkstreamWatchers(
   }
 }
 
+// ── Refs (A1.7a) ──────────────────────────────────────────────────────────
+
+/** One refs watcher per repository, keyed by its common git dir. */
+const refWatchers = new Map<string, { watcher: FSWatcher; timer: ReturnType<typeof setTimeout> | null }>();
+
+let onRefsChanged: (repo: string) => void = () => {};
+
+/** Told when a repository's branches move: a commit, a fetch, a new or deleted branch. */
+export function setRefsChangedListener(listener: (repo: string) => void): void {
+  onRefsChanged = listener;
+}
+
+/**
+ * Watch a repository's refs, so a branch workstream's footprint follows its
+ * branch (spec §5.3). Idempotent. `repo` is any working tree of it; the
+ * watch is on the shared git dir, so every worktree's commits are seen.
+ */
+export function watchRefs(repo: string): void {
+  let common: string;
+  try {
+    common = canonical(path.resolve(repo, git(repo, ['rev-parse', '--git-common-dir']).trim()));
+  } catch {
+    return;
+  }
+  if (refWatchers.has(common)) return;
+  const targets = ['refs/heads', 'refs/remotes', 'packed-refs'].map((p) => path.join(common, p)).filter((p) => fs.existsSync(p));
+  const watcher = chokidar.watch(targets, { ignoreInitial: true, persistent: true });
+  const state = { watcher, timer: null as ReturnType<typeof setTimeout> | null };
+  watcher.on('all', () => {
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = setTimeout(() => {
+      state.timer = null;
+      onRefsChanged(repo);
+    }, debounceMs());
+  });
+  watcher.on('error', () => {});
+  refWatchers.set(common, state);
+}
+
 /** The folders being watched, for status and tests. */
 export function watchedWorkstreamFolders(): string[] {
   return [...entries].filter(([, e]) => e.watcher).map(([f]) => f).sort();
@@ -284,5 +323,10 @@ export function watchedWorkstreamFolders(): string[] {
 export async function stopWorkstreamWatchers(): Promise<void> {
   for (const [folder, entry] of entries) await unwatch(folder, entry);
   entries.clear();
+  for (const { watcher, timer } of refWatchers.values()) {
+    if (timer) clearTimeout(timer);
+    await watcher.close().catch(() => {});
+  }
+  refWatchers.clear();
   externallyWatched = null;
 }

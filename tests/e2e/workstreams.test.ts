@@ -159,9 +159,13 @@ test.describe.serial('Workstreams', () => {
 
   test("an edit in the opened project itself arrives through the app's own file watcher", async () => {
     await workstreams();
+    // Only a files event counts: the refs watcher (A1.7a) also names this
+    // folder when a branch is created, and waitFor sees earlier events too.
+    const filesEvents = () => events.ofType('workstreams-changed').filter((e) => same(e.payload.root, root) && !e.payload.refs).length;
+    const before = filesEvents();
     fs.writeFileSync(path.join(root, 'NOTES.md'), 'not parsed, still a change\n');
     try {
-      await events.waitFor('workstreams-changed', (p) => same(p.root, root), 10_000);
+      await expect.poll(filesEvents, { timeout: 10_000 }).toBeGreaterThan(before);
       expect(find(await workstreams(), root)!.changes.files.map((f) => f.path)).toContain('NOTES.md');
     } finally {
       fs.rmSync(path.join(root, 'NOTES.md'), { force: true });
