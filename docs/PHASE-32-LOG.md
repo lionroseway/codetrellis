@@ -99,6 +99,7 @@
   workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [ ] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait.
+- [ ] Follow-up: `graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits.
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
 
