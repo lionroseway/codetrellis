@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupSignals, needsYouCount, digestLine, kindWords, sideLabel, sidesOf, stateWords, actionsFor, ago } from './awareness-view';
+import { groupSignals, needsYouCount, digestLine, kindWords, sideLabel, sidesOf, stateWords, actionsFor, ago, toldWords } from './awareness-view';
 import type { AwarenessSignal, Workstream, WorkstreamAgent } from '../../shared/types';
 
 const NOW = 1_800_000_000_000;
@@ -106,6 +106,15 @@ describe('a signal in words', () => {
     assert.equal(stateWords(sig({ state: 'dismissed', stateAt: at, stateBy: { actor: 'saif', actorType: 'unverified', channel: 'local-api' } }), NOW),
       'Dismissed by saif · 2 min ago', 'the name as given; the tag beside it says unverified');
     assert.equal(stateWords(sig(), NOW), null, 'open: nobody has answered');
+  });
+
+  test('which agents were told (A2.6): by name, when last; none, nothing to say', () => {
+    const t = (agentType: string, toldAt: number | null) => ({ sessionId: agentType, agentType, toldAt });
+    assert.equal(toldWords(sig(), NOW), null);
+    assert.equal(toldWords(sig({ told: [t('codex', NOW - 120_000)] }), NOW), 'Told codex · 2 min ago');
+    assert.equal(toldWords(sig({ told: [t('codex', NOW - 600_000), t('claude-code', NOW - 60_000)] }), NOW), 'Told codex and claude-code · 1 min ago');
+    assert.equal(toldWords(sig({ told: [t('a', NOW), t('b', NOW), t('c', NOW), t('a', NOW)] }), NOW), 'Told a, b and 1 more · just now');
+    assert.equal(toldWords(sig({ told: [t('codex', null)] }), NOW), null, 'a note alone is not being told');
   });
 
   test('ago', () => {

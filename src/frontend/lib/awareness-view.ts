@@ -132,6 +132,20 @@ export function stateWords(s: Pick<AwarenessSignal, 'state' | 'stateBy' | 'state
   return `${STATE_VERB[s.state]} ${who} · ${ago(s.stateAt, now)}`;
 }
 
+/**
+ * Which agents were told about a signal (A2.6): "Told codex 2 min ago", or
+ * "Told codex and claude-code", or null when none was. Their notes are shown
+ * separately, as their own words.
+ */
+export function toldWords(s: Pick<AwarenessSignal, 'told'>, now: number): string | null {
+  const told = (s.told ?? []).filter((t) => t.toldAt !== null);
+  if (told.length === 0) return null;
+  const names = [...new Set(told.map((t) => t.agentType))];
+  const who = names.length <= 2 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+  const last = Math.max(...told.map((t) => t.toldAt as number));
+  return `Told ${who} · ${ago(last, now)}`;
+}
+
 export interface SignalAction { state: SettableSignalState; label: string; hint: string }
 
 const ACK: SignalAction = { state: 'acknowledged', label: 'Acknowledge', hint: 'You have seen it. It stops marking the strip but stays listed while it is true.' };

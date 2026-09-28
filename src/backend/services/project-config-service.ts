@@ -286,6 +286,8 @@ export function getEffectiveSensorConfig(projectRoot: string): EffectiveSensorCo
     },
     awareness: {
       branchWindowDays: validDays(cfg?.awareness?.branchWindowDays) ?? SENSOR_DEFAULTS.awareness.branchWindowDays,
+      // Only an explicit false turns them off: a hand-edited value that is not a boolean keeps the default.
+      inlineNotices: cfg?.awareness?.inlineNotices === false ? false : SENSOR_DEFAULTS.awareness.inlineNotices,
     },
   };
 }
@@ -559,6 +561,19 @@ function parseSensorConfig(raw: Record<string, unknown>): SensorConfig | undefin
       stuck.idleMinutes = s.idleMinutes;
     }
     if (Object.keys(stuck).length > 0) result.stuck = stuck;
+  }
+
+  // Phase 32. Until A2.6 this block was dropped here, so a project's
+  // `branchWindowDays` never took effect: the defaults always applied.
+  const awarenessRaw = raw.awareness;
+  if (awarenessRaw && typeof awarenessRaw === 'object') {
+    const a = awarenessRaw as Record<string, unknown>;
+    const awareness: AwarenessSensorConfig = {};
+    if (typeof a.branchWindowDays === 'number' && Number.isFinite(a.branchWindowDays) && a.branchWindowDays > 0) {
+      awareness.branchWindowDays = a.branchWindowDays;
+    }
+    if (typeof a.inlineNotices === 'boolean') awareness.inlineNotices = a.inlineNotices;
+    if (Object.keys(awareness).length > 0) result.awareness = awareness;
   }
 
   return Object.keys(result).length > 0 ? result : undefined;

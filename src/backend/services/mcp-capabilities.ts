@@ -346,6 +346,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   // A2.4: an agent says what it is about to change. It writes only its own
   // session's intent, which ends with the session.
   declare_intent: 'write',
+  // A2.6: the agent's own note beside a signal; it never sets the person's answer.
+  acknowledge_signal: 'write',
 });
 
 export class McpAuthorizationError extends Error {

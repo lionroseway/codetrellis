@@ -133,6 +133,8 @@ interface Entry {
   computedAt: number;
   watcher: FSWatcher | null;
   timer: ReturnType<typeof setTimeout> | null;
+  /** A file event is waiting in the debounce (see `schedule`). */
+  pendingEvent?: boolean;
 }
 
 const entries = new Map<string, Entry>();
@@ -170,15 +172,29 @@ export function nudgeWorkstream(folder: string): void {
   }
 }
 
-function schedule(folder: string, entry: Entry): void {
+/**
+ * A debounced recompute. `event`: a file really changed, so the listener is
+ * told even when the list of changed files is the same, because an edit to a
+ * file already changed moves its symbols and signature, and with them
+ * collisions and contracts (A2.6, bug 54). `check`: only asking git again
+ * (the watcher just became ready), so it is told only when the list differs.
+ */
+function schedule(folder: string, entry: Entry, why: 'event' | 'check' = 'event'): void {
   if (entry.timer) clearTimeout(entry.timer);
+  // A pending event is not downgraded by a check that arrives after it.
+  if (why === 'event') entry.pendingEvent = true;
   entry.timer = setTimeout(() => {
     entry.timer = null;
-    recompute(folder, entry);
+    const event = entry.pendingEvent === true;
+    entry.pendingEvent = false;
+    recompute(folder, entry, event);
   }, debounceMs());
 }
 
-/** Told when a watched folder's changes differ from what was last reported. */
+/**
+ * Told when a watched folder's changes move: a file in it changed, or the
+ * list of changed files differs from what was last reported.
+ */
 let onChanged: (folder: string, changes: WorkstreamChanges) => void = () => {};
 
 export function setWorkstreamChangesListener(listener: (folder: string, changes: WorkstreamChanges) => void): void {
@@ -189,9 +205,9 @@ const sameChanges = (a: WorkstreamChanges, b: WorkstreamChanges) =>
   a.base === b.base && a.truncated === b.truncated && a.files.length === b.files.length &&
   a.files.every((f, i) => f.path === b.files[i].path && f.status === b.files[i].status && f.from === b.files[i].from);
 
-function recompute(folder: string, entry: Entry): void {
+function recompute(folder: string, entry: Entry, fileEvent = false): void {
   const next = computeChanges(folder, entry.mainRef);
-  const changed = !sameChanges(entry.changes, next);
+  const changed = fileEvent || !sameChanges(entry.changes, next);
   entry.changes = next;
   entry.computedAt = Date.now();
   if (changed) onChanged(folder, next);
@@ -231,7 +247,7 @@ function watch(folder: string, entry: Entry): void {
   // A change made while chokidar was still scanning raises no event, and
   // the answer computed before it started would then stand until the next
   // edit. Ask git once more when the watcher is actually listening.
-  watcher.on('ready', () => schedule(folder, entry));
+  watcher.on('ready', () => schedule(folder, entry, 'check'));
   watcher.on('error', () => { /* a folder that vanished is dropped on the next sync */ });
   entry.watcher = watcher;
 }

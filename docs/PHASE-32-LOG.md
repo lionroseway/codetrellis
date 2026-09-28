@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.5: the `drift` signal |
-| **Status** | A2.4 merged (#161). A2.5 done on its branch: scope from claimed items and declared intent, `drift` signal, tab wording; unit, harness and browser tests pass; PR open |
-| **Next action** | Merge A2.5 when green; then A2.6 (inline notices, `acknowledge_signal`, the M2 "done when" test) |
+| **Stage / step** | Track A — A2.6: inline notices, `acknowledge_signal`, M2 "done when" |
+| **Status** | A2.5 merged (#162). A2.6 done on its branch: notices from the one interception, agent notes, who was told in the tab; the M2 "done when" passes as a harness test; bug 54 (watcher) and the dropped awareness config fixed; PR open |
+| **Next action** | Merge A2.6 when green (closes A2 / M2); then refine A3 into sub-steps per EXECUTION §4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a2-5-drift` |
+| **Branch** | `feat/phase-32-a2-6-inline-notices` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -73,8 +73,8 @@
 - [x] A2.2 Import accuracy (#157)
 - [x] A2.3 `contract` signal (#160)
 - [x] A2.4 `declare_intent` (#161)
-- [ ] A2.5 `drift` signal (PR open)
-- [ ] A2.6 Inline notices and the agent's acknowledgement
+- [x] A2.5 `drift` signal (#162)
+- [ ] A2.6 Inline notices, `acknowledge_signal`, the M2 "done when" (PR open)
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (digest, guide, skill and hook)
 - [ ] A4 Mobile
@@ -176,11 +176,83 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A declared intent is held in memory per MCP session and ends with it (re-declare replaces, `clear` withdraws, disconnect ends); only a session placed in a workstream contributes. A collision on declared intent uses the same id as the edit it foretells, marked `intended` until then (A2.4) | A restart ends every MCP session, so persisting intents would keep claims nobody is making. Sharing the id means a person's answer to the declared overlap still stands when the edit lands, instead of a second signal appearing |
 | 2026-09-28 | Another agent sees what a declared intent claims (paths, symbols), never its summary; the person sees the summary, quoted as the agent's own words (A2.4) | Awareness principle 5: agents are never handed text another agent wrote. The claim itself is constrained to repository paths and identifiers, and refused otherwise |
 | 2026-09-28 | Drift scope is the `fileSpecs` (paths, move destinations, folders) and `scope_path` of items claimed by sessions in the workstream and not done or skipped, plus declared intent. No scope, no drift. CodeTrellis's own `.codetrellis/` plan files never count. One signal per workstream, its file list updated in place (A2.5) | Without a scope there is nothing to drift from, and guessing one would flag every exploratory agent. Plan files change as part of doing any item. Declaring the extra files (A2.4) is the agent's way back into scope, and "Intended" is the person's |
+| 2026-09-28 | Inline notices go to high and medium signals that name the session's workstream and that the person has not set aside (open or acknowledged), once per signal per session; reading them with `get_awareness`, or answering with `acknowledge_signal`, counts as told. An unplaced session gets none (A2.6) | "Unseen" is per session, as the spec says. A signal the person dismissed or marked intended no longer concerns the agent. Telling on the tools that already show the signal would say it twice |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A2.6 — told without asking; M2 done
+- **Inline notices** (`awareness-notices.ts`, hooked in the one interception
+  in `mcp/server.ts`).
+  - After a successful tool result, the session's workstream (A1.1 binding)
+    is checked for high or medium signals that are open or acknowledged and
+    that this session has not been told about.
+  - They are appended as a separate "── CodeTrellis awareness ──" text
+    block: the signal summaries (written by CodeTrellis, never an agent),
+    then a closing line saying to call `get_awareness`, to answer with
+    `acknowledge_signal`, and that this is information, not an instruction.
+  - Once per signal per session (`awareness_signal_notes.told_at`).
+  - Never on `get_awareness` or `acknowledge_signal`; `get_awareness` marks
+    what it shows as told.
+  - Off with `sensors.awareness.inlineNotices: false`.
+  - A failure logs a warning and never breaks the call it rides on.
+- **`acknowledge_signal(id, note?)`** (capability `write`).
+  - It takes a live signal naming the caller's workstream (any live one, if
+    unbound).
+  - The note is stored per session, shown to the person, and returned to
+    that agent as `your_note`. It is never shown to another agent and never
+    sets the person's answer.
+- **The tab.** Each card says "Told codex and claude-code · 2 min ago" and
+  quotes each agent's note with its name, beside the person's answer.
+  `/api/awareness` carries `told`, and `awareness-changed` fires when a
+  notice or note lands.
+- **Bug 54, found by the "done when" test (A1.4).**
+  - The workstream watcher told its listener only when the list of changed
+    files moved.
+  - Editing a file that was already changed (the usual second edit: a
+    signature after a body change) was never announced. So signals and the
+    strip's symbol details went stale until something else forced a
+    refresh.
+  - Now a real file event always notifies; the watcher's own "ready" check
+    still compares.
+  - Unit test in `workstream-watch-service.test.ts`, which fails on the old
+    code.
+- **The awareness config was dropped.** `parseSensorConfig` had no
+  `awareness` branch, so a project's `branchWindowDays` never applied
+  (A1.7a). It parses both keys now, with a unit test.
+- **Harness `answer`.** `callTool` results gain `answer`, the tool's own first
+  text block. A notice rides after it as a separate block, as real MCP
+  clients see it, so a test parsing JSON from an agent that may have been
+  told something parses `answer`, not the joined `text`. `declare-intent`
+  uses it.
+- **`awareness-answers` updated, not loosened.** Agents now have
+  `acknowledge_signal`, and the test proves it leaves the person's
+  `acknowledged` state as it was.
+- **A race in `drift-review-tools` (`search_plan_history`)**, seen once in
+  the full 4-worker run. It committed as soon as any plan file changed; the
+  write-through can touch `plan.yaml` before the item that carries the text.
+  It now waits for the text itself.
+- **Full harness on this branch:** 725 passed; the one failure was that race.
+- **M2 "done when" is a harness test** (`awareness-notices.test.ts`, 6):
+  - changing only the body of `validateCreateUser` in `billing-v2` tells the
+    `checkout-fix` agent nothing over several ordinary calls;
+  - changing its parameters puts a high contract notice on that agent's
+    next ordinary call (`list_plans`), unasked, and only once;
+  - the person sees who was told;
+  - `acknowledge_signal` keeps the agent's note beside an answer that stays
+    open;
+  - the other agent never sees the note.
+- **Tests.** Unit: `awareness-notices.test.ts` (9), the watcher +1 and
+  `awareness-view` +1. Browser: `awareness-tab.spec.ts` +1, with screenshot
+  `awareness-told`.
+- **UX journey:**
+  - `billing-v2` changes a shared function's parameters → the agent in
+    `checkout-fix` gets a marked notice on its next tool call → it answers
+    "Seen. I will pass strict: false until billing-v2 merges."
+  - The person's card says who was told and quotes that reply beside
+    Acknowledge / Intended / Dismiss, which remain theirs.
 
 ### 2026-09-28: A2.5 — the drift signal
 - **Scope.** `scopeOf(workstream)` (awareness-service) collects:

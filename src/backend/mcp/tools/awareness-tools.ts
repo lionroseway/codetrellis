@@ -3,8 +3,8 @@
  *
  * What an agent should know about the other work going on in the same
  * repository. A1.3 adds `list_workstreams` (A1.4 adds each one's changed files); A1.6
- * `get_awareness` and `check_footprint`; A2.4 `declare_intent`. `acknowledge_signal`
- * follows (awareness spec §6.1).
+ * `get_awareness` and `check_footprint`; A2.4 `declare_intent`; A2.6
+ * `acknowledge_signal` (awareness spec §6.1).
  */
 
 import { z } from 'zod';
@@ -13,6 +13,7 @@ import type { ToolDeps } from '../types';
 import fs from 'node:fs';
 import { listWorkstreams } from '../../services/workstream-service';
 import { refreshSignals, listSignals, filesDefining } from '../../services/awareness-service';
+import { markTold, recordNote, toldFor, MAX_NOTE } from '../../services/awareness-notices';
 import {
   declareIntent, clearIntent, normaliseIntentPath, parseIntentSymbol,
   MAX_INTENT_PATHS, MAX_INTENT_SYMBOLS, MAX_INTENT_SUMMARY,
@@ -88,14 +89,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const workstream = callerWorkstream(deps.sessionId);
       const signals = listSignals(root, { workstream });
       const all = workstream ? listSignals(root).length : signals.length;
+      // Reading them is being told (A2.6): no notice repeats these later.
+      const agentType = getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.agentType ?? 'agent';
+      if (workstream) markTold(root, signals.map((s) => s.id), deps.sessionId, agentType);
+      // Its own note only: another agent's words are never passed on.
+      const told = toldFor(signals.map((s) => s.id));
+      const yourNote = (id: string) => told.get(id)?.find((t) => t.sessionId === deps.sessionId)?.note;
       return {
         content: [{
           type: 'text' as const,
           text: JSON.stringify({
             project_path: root,
             your_workstream: workstream,
-            signals: signals.map(({ id, kind, severity, summary, subject, workstreams, firstSeen, state }) =>
-              ({ id, kind, severity, summary, subject, workstreams, first_seen: firstSeen, state })),
+            signals: signals.map(({ id, kind, severity, summary, subject, workstreams, firstSeen, state }) => ({
+              id, kind, severity, summary, subject, workstreams, first_seen: firstSeen, state,
+              ...(yourNote(id) ? { your_note: yourNote(id) } : {}),
+            })),
             other_open_signals: all - signals.length,
           }, null, 2),
         }],
@@ -209,6 +218,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       refreshSignals(root);
       const placed = listWorkstreams(root, { includeIdle: true }).find((w) => w.agents.some((a) => a.sessionId === deps.sessionId));
       const overlaps = placed ? listSignals(root, { workstream: placed.root }) : [];
+      // Shown here, so no notice repeats them (A2.6).
+      if (placed) markTold(root, overlaps.map((s) => s.id), deps.sessionId, session?.agentType ?? 'agent');
       return {
         content: [{
           type: 'text' as const,
@@ -222,6 +233,51 @@ export function register(server: McpServer, deps: ToolDeps): void {
                 'footprint. Connect through the CodeTrellis connector from the worktree you are working in.',
             }),
             signals: overlaps.map(({ id, kind, severity, summary: s, subject, workstreams }) => ({ id, kind, severity, summary: s, subject, workstreams })),
+          }, null, 2),
+        }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'acknowledge_signal',
+    {
+      description:
+        'Say you have seen a signal and what you will do about it, e.g. "seen, will rebase after billing-v2 merges". ' +
+        'Your note is shown to the person beside their own answer; it does not answer the signal for them, and other ' +
+        'agents never see it. Stops the signal being repeated to you. Only a live signal that names your workstream ' +
+        '(any live signal, when this connection is bound to none).',
+      inputSchema: {
+        id: z.string().min(1).describe('The signal id, from get_awareness or a notice.'),
+        note: z.string().max(MAX_NOTE).optional().describe('What you will do about it. Shown to the person.'),
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ id, note, project_path }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return noProject;
+      const session = getActiveSessions().find((s) => s.sessionId === deps.sessionId);
+      const mine = session?.workstreamRoot ?? null;
+      const signal = listSignals(root, { workstream: mine }).find((s) => s.id === id);
+      if (!signal) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: mine
+            ? 'No live signal with that id names your workstream.'
+            : 'No live signal with that id in this project.' }],
+        };
+      }
+      const agentType = session?.agentType ?? 'agent';
+      if (note?.trim()) recordNote(root, id, deps.sessionId, agentType, note.trim());
+      else markTold(root, [id], deps.sessionId, agentType);
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            project_path: root,
+            acknowledged: { id, kind: signal.kind, summary: signal.summary, ...(note?.trim() ? { your_note: note.trim() } : {}) },
+            // The person's answer stands apart from yours.
+            state: signal.state,
           }, null, 2),
         }],
       };

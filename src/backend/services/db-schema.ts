@@ -200,6 +200,19 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_awareness_project ON awareness_signals(project_root);
 
+  -- Phase 32 A2.6: which agent session was told about a signal (once), and
+  -- the note it left with acknowledge_signal. The agent's own words: shown
+  -- to the person, never to another agent.
+  CREATE TABLE IF NOT EXISTS awareness_signal_notes (
+    signal_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    agent_type TEXT NOT NULL,
+    told_at INTEGER,
+    note TEXT,
+    noted_at INTEGER,
+    PRIMARY KEY (signal_id, session_id)
+  );
+
   -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
   -- to. Asked once per folder, not once per connection.
   CREATE TABLE IF NOT EXISTS folder_request_dismissals (
