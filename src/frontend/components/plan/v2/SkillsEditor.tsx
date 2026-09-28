@@ -52,7 +52,8 @@ export function SkillsEditor({
 
   // What is in effect comes from the server: the plan's tree holds summaries
   // without skills, so an ancestor's skills cannot be resolved here.
-  const [effective, setEffective] = useState<Array<{ skill: Skill; fromUid: string; fromTitle: string; proof?: SkillProof | null }> | null>(null);
+  const [effective, setEffective] = useState<Array<{ skill: Skill; fromUid: string; fromTitle: string; proof?: SkillProof | null; pending?: { addedBy: string | null; commit: string | null } | null }> | null>(null);
+  const [refresh, setRefresh] = useState(0);
   const ownKey = JSON.stringify([item.skills ?? [], item.skillsMode, item.parentUid]);
   useEffect(() => {
     let live = true;
@@ -61,7 +62,7 @@ export function SkillsEditor({
       .catch(() => null)
       .then((rows) => { if (live) setEffective(rows); });
     return () => { live = false; };
-  }, [item.uid, ownKey]);
+  }, [item.uid, ownKey, refresh]);
   const rows = effective ?? resolved.map((skill) => ({ skill, fromUid: item.uid, fromTitle: item.title }));
   const inherited = rows.filter((r) => r.fromUid !== item.uid);
   const shown = rows.map((r) => r.skill);
@@ -70,6 +71,15 @@ export function SkillsEditor({
   const isOwn = (name: string) => own.some((s) => s.name === name);
   const fromOf = (name: string) => rows.find((r) => r.skill.name === name)?.fromTitle ?? null;
   const proofOf = (name: string) => effective?.find((r) => r.skill.name === name)?.proof ?? null;
+  const pendingOf = (name: string) => effective?.find((r) => r.skill.name === name)?.pending ?? null;
+  const accept = async (name: string) => {
+    const r = await fetch(`/api/items/${item.uid}/skill-arrivals/accept`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skill: name }),
+    }).catch(() => null);
+    if (!r?.ok) { setError(((await r?.json().catch(() => ({})))?.error as string | undefined) ?? 'Not accepted'); return; }
+    setError(null);
+    setRefresh((n) => n + 1);
+  };
   const matches = useMemo(() => matchProjectSkills(index, query, shown.map((s) => s.name)), [index, query, shown]);
 
   const save = async (skills: Skill[]) => {
@@ -155,6 +165,22 @@ export function SkillsEditor({
                   </span>
                 )}
               </div>
+              {pendingOf(s.name) && (
+                <div className="mt-1 ml-4 flex items-center gap-2 text-[10.5px] text-warning" data-testid="skill-pending">
+                  <span>
+                    From the plan file, added by {pendingOf(s.name)!.commit ? `${pendingOf(s.name)!.addedBy ?? 'someone'} in ${pendingOf(s.name)!.commit}` : 'an edit not committed yet'}.
+                    {' '}Agents are not told it until you accept it.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void accept(s.name)}
+                    className="px-1.5 py-0.5 rounded border border-white/[0.1] text-foreground hover:bg-white/[0.06]"
+                    data-testid="skill-accept"
+                  >
+                    Accept
+                  </button>
+                </div>
+              )}
               {s.why && editing !== s.name && (
                 <div className="text-[10.5px] text-foreground-subtle mt-0.5 ml-4" data-testid="skill-why-text">why: {s.why}</div>
               )}

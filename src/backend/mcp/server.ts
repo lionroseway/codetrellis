@@ -39,6 +39,7 @@ import * as budgetService from '../services/budget-service';
 import * as taskAttachmentsService from '../services/task-attachments-service';
 import * as planItemService from '../services/plan-item-service';
 import { agentView } from '../services/skill-model';
+import { pendingArrivals } from '../services/skill-arrival-service';
 import * as planEventService from '../services/plan-event-service';
 import * as planChangesService from '../services/plan-changes-service';
 import * as planFileService from '../services/plan-file-service';
@@ -286,7 +287,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
     // Service modules
     planService,
     // Items as an agent reads them: a skill's `link` location is for people only (Phase 32 C1).
-    planItemService: agentView(planItemService),
+    // …and a skill that arrived in a plan file stays out until a person accepts it (C1.4).
+    planItemService: agentView(planItemService, (itemUid, skill) => pendingArrivals(itemUid).has(skill)),
     commentService,
     sessionService,
     taskAttachmentsService,

@@ -17,7 +17,8 @@
  */
 
 import path from 'node:path';
-import { getItem, listAllItems, resolveSkills } from './plan-item-service';
+import { getItem, listAllItems, resolveSkillsWithSource } from './plan-item-service';
+import { pendingArrivals } from './skill-arrival-service';
 import { agentSkills, skillsNote } from './skills-service';
 import { getPlan } from './plan-service';
 import { listArtefacts, refreshArtefactHashes, type Artefact } from './artefact-service';
@@ -211,7 +212,15 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
  * claim_item and get_next_item so all three say the same thing.
  */
 export function skillsBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
-  const skills = agentSkills(resolveSkills(item), { projectRoot, workstreamRoot });
+  // C1.4: a skill that arrived in a plan file and is waiting for a person is
+  // not told to an agent, wherever in the tree it was set.
+  const pending = new Map<string, Set<string>>();
+  const waiting = (uid: string) => {
+    if (!pending.has(uid)) pending.set(uid, new Set(pendingArrivals(uid).keys()));
+    return pending.get(uid)!;
+  };
+  const inEffect = resolveSkillsWithSource(item).filter((r) => !waiting(r.fromUid).has(r.skill.name)).map((r) => r.skill);
+  const skills = agentSkills(inEffect, { projectRoot, workstreamRoot });
   return { skills, skills_note: skillsNote(skills) };
 }
 

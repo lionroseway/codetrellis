@@ -141,6 +141,9 @@ export function normaliseSkills(raw: unknown): { skills: Skill[]; problems: stri
   return { skills: out, problems };
 }
 
+/** True when an item's skill is to be left out of what an agent reads (C1.4: waiting for a person). */
+export type HideSkill = (itemUid: string, skill: string) => boolean;
+
 /**
  * A value with every skill's `link` location removed, wherever a `skills`
  * list appears in it (an item, a list of items, a claim result). Agents are
@@ -148,12 +151,12 @@ export function normaliseSkills(raw: unknown): { skills: Skill[]; problems: stri
  * the skill without it. Returns the value itself when there was nothing to
  * remove.
  */
-export function withoutLinks<T>(value: T, depth = 0): T {
+export function withoutLinks<T>(value: T, depth = 0, hide?: HideSkill): T {
   if (depth > 6 || value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) {
     let changed = false;
     const out = value.map((v) => {
-      const w = withoutLinks(v, depth + 1);
+      const w = withoutLinks(v, depth + 1, hide);
       if (w !== v) changed = true;
       return w;
     });
@@ -161,18 +164,22 @@ export function withoutLinks<T>(value: T, depth = 0): T {
   }
   if (Object.getPrototypeOf(value) !== Object.prototype) return value;
   let copy: Record<string, unknown> | null = null;
+  const rawUid = (value as Record<string, unknown>).uid;
+  const ownerUid = typeof rawUid === 'string' ? rawUid : null;
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
     let w: unknown = v;
     if (k === 'skills' && Array.isArray(v)) {
-      w = v.some((s) => (s as Skill)?.where?.kind === 'link')
-        ? v.map((s) => {
+      // C1.4: a skill waiting for a person is not in what an agent reads at all.
+      const shown = hide && ownerUid ? v.filter((s) => !hide(ownerUid, (s as Skill)?.name)) : v;
+      w = shown.some((s) => (s as Skill)?.where?.kind === 'link')
+        ? shown.map((s) => {
           if ((s as Skill)?.where?.kind !== 'link') return s;
           const { where: _link, ...rest } = s as Skill;
           return rest;
         })
-        : v;
+        : shown.length === v.length ? v : shown;
     } else {
-      w = withoutLinks(v, depth + 1);
+      w = withoutLinks(v, depth + 1, hide);
     }
     if (w !== v) {
       copy ??= { ...(value as Record<string, unknown>) };
@@ -187,13 +194,13 @@ export function withoutLinks<T>(value: T, depth = 0): T {
  * through `withoutLinks`. Classes (error types used with instanceof) and
  * other exports are passed through unchanged.
  */
-export function agentView<M extends object>(mod: M): M {
+export function agentView<M extends object>(mod: M, hide?: HideSkill): M {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(mod)) {
     if (typeof v === 'function' && !/^class[\s{]/.test(Function.prototype.toString.call(v))) {
       out[k] = (...args: unknown[]) => {
         const r = (v as (...a: unknown[]) => unknown)(...args);
-        return r instanceof Promise ? r.then((x) => withoutLinks(x)) : withoutLinks(r);
+        return r instanceof Promise ? r.then((x) => withoutLinks(x, 0, hide)) : withoutLinks(r, 0, hide);
       };
     } else {
       out[k] = v;

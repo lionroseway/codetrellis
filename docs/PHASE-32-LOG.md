@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C1.3: proof of skill use |
-| **Status** | C1.3 done on its branch (stacked on C1.2, C1.1, B2.2): Claude Code's `Skill` calls become `skill_used`, stored against the tasks its sessions in that workstream work; each wanted skill reads used / not used / unknown in the picker and the sign-off pack; a copied task prompt carries the same skills line an agent gets. Unit, harness and browser pass |
-| **Next action** | Merge #173 and #172 when green, then open C1.1, C1.2 and C1.3 PRs in turn; then C1.4 (pulled skills flagged once) |
+| **Stage / step** | Track C — C1.4: skills arriving in plan files |
+| **Status** | C1.4 done on its branch (stacked on C1.3): a recommended or required skill a plan-file import brings is recorded with who added it and in which commit, held back from every agent read until a person accepts it, and listed in the readiness checklist and on the task. Unit, harness and browser pass. C1.3 (#177) in CI |
+| **Next action** | Merge #177; open C1.4's PR and merge it: C1 done. Then B4 (breakpoints), B3, the direction review |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c1-3-skill-use` |
+| **Branch** | `feat/phase-32-c1-4-pulled-skills` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -116,7 +116,7 @@
   - [x] C1.1 Fields, index, brief/claim/next delivery, link never to agents ([#174](https://github.com/lionroseway/codetrellis/pull/174))
   - [x] C1.2 The picker in the routing panel ([#176](https://github.com/lionroseway/codetrellis/pull/176))
   - [ ] C1.3 Proof of use; the skills line in a copied task prompt (PR open)
-  - [ ] C1.4 A skill arriving in a pulled plan file is flagged once
+  - [ ] C1.4 A skill arriving in a pulled plan file is flagged once (branch ready)
 - [ ] C2 Team status through git
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
@@ -197,6 +197,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Track A ran ahead of the sequence: A2 and A3 were built before B1, B2, C1, B4 and B3, which §2 puts between A1 and A3. Nothing recorded that reorder. From here the sequence is followed again: B1, B2, C1, B4, B3, then the direction review, then B5 and A4 | Found when A3 closed and A4 looked next. Awareness was the owner's stated priority and each A-step stood alone, so no work is wasted; but the Timeline and breakpoints (B1, B2, B4) are what A4's "Needs you" and A5's review lean on, and the direction review is due at A3's end, after those steps |
 | 2026-09-28 | Agent events are kept by a passive tap on `broadcast()`, stamped at the tap, not by changing each producer (B1.1) | Every producer is covered, including ones added later. The tap reads the session row directly, so an MCP call (which names no workstream) and a `session_end` (after the session goes inactive) still get their workstream |
 | 2026-09-28 | The PreToolUse hook only informs: `additionalContext`, never a `permissionDecision`; it fails open and silent (no app, unknown folder, no overlap, over 5 s); it asks over MCP as its own short session named `claude-code-hook` (A3.4) | A hook that blocks or approves would change Claude Code's permission model behind the person's back, and one that gets in the way gets uninstalled. Going through MCP keeps one surface with one capability matrix, and the check is visible in the Timeline; the cost is a connect per edit, which is cheap on loopback |
+| 2026-09-28 | A recommended or required skill a plan-file import brings that the item did not have is an arrival, including on a first import of a cloned repo; it is held back from every agent read (brief, claim, next, item, copied prompt) until a person accepts it. Skills added in the app are never arrivals. The "inbox" is the plan's readiness checklist and the task's skills row, since there is no inbox yet (C1.4) | Plan files come through git from anyone who can push, and a skill is followed with full trust; the first import is exactly when a stranger's plan arrives. Re-importing CodeTrellis's own write finds the same skills, so records nothing. The readiness checklist already lists what stands between a plan and hand-off, which is what an unaccepted skill is; A4's "Needs you" can gather these when it lands |
 | 2026-09-28 | A skill Claude Code loads is stored against every task a Claude Code session in the same workstream is working (assigned or in progress), in its own table, not only the 14-day event log. Read back: `used`; `not_used` only while a Claude Code agent works the task; `unknown` for any other client; nothing before anyone starts (C1.3) | The watcher's session (JSONL) and the MCP session that claimed the task are two views of one agent with no shared id; the folder they share is the join that exists. The sign-off pack cites the proof, so it must outlive the event log. "Not used" for a client that cannot report use would be an accusation made on no evidence |
 | 2026-09-28 | "A task launched from a CodeTrellis terminal preset" has no such feature to extend (presets only type `claude`), so the skills line goes where a person hands a task to an agent: the hand-off menu's "Copy this task" / "Copy plan as prompt", with the same shared wording and no link (C1.3) | The doc's intent is that an agent started for a task hears the same line as one that claims it. The copied prompt is how that happens today; a task-launching preset can reuse `skillsNote` when it exists |
 | 2026-09-28 | Adding a skill on a task no longer switches it to `replace`: own skills add to inherited ones. The panel used to switch on the first own skill, which silently dropped every inherited one. A skill typed by name is now recommended, not required (C1.2) | Found in C1.2's browser test: the parent's required skill vanished from the child the moment a recommended one was added. `inherit` already merges by name, with the child's entry winning, which is what a person expects. A name typed into a picker whose job is recommending should recommend; "Required (gates the claim)" is one click away |
@@ -209,6 +210,62 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: C1.4 — skills arriving in plan files
+- **Recorded on import** (`services/skill-arrival-service.ts`). After a
+  plan-file import writes an item, each recommended or required skill the
+  item did not have before is recorded in `skill_arrivals`. The record
+  says who added it and in which commit, from `git log -1` on that file.
+  An uncommitted edit or an untracked file says "an edit not committed
+  yet".
+  - Each skill is flagged once: importing again records nothing new.
+  - A skill removed before anyone accepts it drops off the list.
+- **Held back from agents.** Until a person accepts it, the skill is not in:
+  - `get_brief`, `claim_item` or `get_next_item`'s skills;
+  - the item itself as MCP tools return it (the agent view gains a hide
+    rule);
+  - a copied task prompt.
+- **Where a person meets it:**
+  - the readiness checklist gets a required step, "Skills from plan files
+    accepted", naming each skill, its task, who added it and the commit;
+  - the task's skills row says "From the plan file, added by Priya in
+    3f9c2e1. Agents are not told it until you accept it." with an Accept
+    button.
+
+  Accept is `POST /api/items/:uid/skill-arrivals/accept`. Who accepted
+  comes from how the call arrived; `GET /api/plans/:uid/skill-arrivals`
+  lists what is waiting.
+- **Tests.**
+  - Unit:
+    - `skill-arrival-service.test.ts` (5), on a real git repository:
+      who and which commit (committed, edited, untracked, no repo); what
+      counts as an arrival; flagged once; accepted once; the plan's list
+      without removed skills;
+    - `skill-model.test.ts` +1 for the hide rule.
+  - Harness: `skill-arrivals.test.ts` (5). The plan is exported and
+    committed by Sam, then Priya's commit adds pr-review to the task's
+    file.
+    - Skills added in the app, and our own re-read, are not arrivals.
+    - The pulled skill is listed with Priya and her commit, and marked
+      pending on the task.
+    - It is in none of the brief, `get_item` or `claim_item`.
+    - A second import does not flag it twice.
+    - After Accept the agent is told it, and a second accept is a 404.
+  - Browser: `skill-arrivals.spec.ts`.
+    - The readiness step names the skill, its task and who added it.
+    - The task row says agents are not told it yet.
+    - Accept sends the skill and clears the row.
+
+    Screenshots: `skill-arrivals-readiness`, `skill-arrivals-task`.
+- **UX journey.**
+  1. Priya's commit recommends pr-review for "Currency support", and the
+     plan file is pulled.
+  2. The plan's chip reads "2 to do before hand-off". One step is the new
+     skill: "added by Priya in 3f9c2e1. Agents are not told a skill from a
+     plan file until you accept it on the task".
+  3. On the task, the person reads what the skill is and why, then clicks
+     Accept.
+  4. The next agent's brief says to use pr-review.
 
 ### 2026-09-28: C1.3 — proof of skill use
 - **The watcher.** A `Skill` tool call in a Claude Code session log

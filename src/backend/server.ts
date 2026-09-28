@@ -42,6 +42,7 @@ import { commitsByWorkstream } from './services/workstream-commits';
 import { normaliseSkills } from './services/skill-model';
 import { listProjectSkills } from './services/skills-service';
 import { skillProof } from './services/skill-use-service';
+import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from './services/skill-arrival-service';
 import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -2258,7 +2259,36 @@ app.get('/api/items/:uid/skills', (req, res) => {
   const rows = planItemService.resolveSkillsWithSource(item);
   // C1.3: whether each was used, once an agent has worked the task.
   const proof = skillProof(item, rows.map((r) => r.skill));
-  res.json({ skills: rows.map((r) => ({ ...r, proof: proof?.get(r.skill.name) ?? null })) });
+  // C1.4: a skill that arrived in a plan file and waits for a person, with who added it.
+  const waiting = new Map<string, Map<string, SkillArrival>>();
+  const pendingOf = (uid: string) => { if (!waiting.has(uid)) waiting.set(uid, pendingArrivals(uid)); return waiting.get(uid)!; };
+  res.json({ skills: rows.map((r) => ({ ...r, proof: proof?.get(r.skill.name) ?? null, pending: pendingOf(r.fromUid).get(r.skill.name) ?? null })) });
+});
+
+/**
+ * Skills that arrived in a plan file and wait for a person before any agent
+ * is told them (Phase 32 C1.4), for the plan's readiness list.
+ */
+app.get('/api/plans/:uid/skill-arrivals', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json({ arrivals: planArrivals(req.params.uid) });
+});
+
+/**
+ * A person accepts a skill that arrived in a plan file: agents are told it
+ * from now on. Who accepted comes from how the call arrived, never the body.
+ */
+app.post('/api/items/:uid/skill-arrivals/accept', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const skill = typeof req.body?.skill === 'string' ? req.body.skill : '';
+  const who = personFrom(req);
+  if (!acceptArrival({ itemUid: item.uid, skill, by: who.author, byType: who.authorType })) {
+    res.status(404).json({ error: `No skill "${skill}" is waiting on this item` });
+    return;
+  }
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { skillAccepted: skill } });
+  res.json({ accepted: skill });
 });
 
 /** Plan timeline (plan_events feed). */
