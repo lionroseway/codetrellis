@@ -85,6 +85,15 @@ test.describe.serial('What the event log records', () => {
     expect((await events()).filter((e) => e.type === 'spec_edited' && e.payload.uid === item.uid)).toHaveLength(1);
   });
 
+  test('a tool call from a bound session names its workstream as it happens, for its Timeline lane (B2.1)', async () => {
+    // The session binds from MCP roots shortly after connect; once it has, its calls carry the root.
+    await poll(async () => {
+      await agent.callTool('list_plans', {});
+      const calls = (await events()).filter((e) => e.type === 'tool_call' && e.payload.tool === 'list_plans');
+      return calls.at(-1)?.payload.workstreamRoot ?? null;
+    }).toBe(root);
+  });
+
   test('a spec edited over the local API: said to be unverified, in no agent\'s session', async () => {
     const doc = (await (await h.client.raw('POST', `/api/plans/${planUid}/docs`, { docType: 'spec', title: 'Token rotation', body: 'v1' })).json()) as { uid: string };
     expect((await h.client.raw('PUT', `/api/plan-docs/${doc.uid}`, { body: 'v2: rotate on use', changeSummary: 'Rotation rule' })).ok).toBe(true);

@@ -199,15 +199,26 @@ interface ToolEventPayload {
    * sheet Regional"); the Timeline would otherwise show the uid.
    */
   summary?: string;
+  /** The workstream the session works in, when it is bound (B2.1: its Timeline lane). */
+  workstreamRoot?: string;
 }
 
 function broadcastToolEvent(payload: ToolEventPayload): void {
+  // Placed on its workstream's lane (Phase 32 B2.1). A session bound later
+  // (MCP roots arrive after connect) is placed by the window from the
+  // workstream's agents, and the log adopts it (B1.1).
+  let workstreamRoot: string | undefined;
+  try {
+    if (payload.sessionId) {
+      workstreamRoot = sessionService.getActiveSessions().find((s) => s.sessionId === payload.sessionId)?.workstreamRoot ?? undefined;
+    }
+  } catch { /* placing it is best-effort */ }
   broadcast('agent-event', {
     id: eventId('mcp-tool'),
     timestamp: Date.now(),
     source: 'mcp',
     type: payload.phase === 'error' ? 'tool_error' : 'tool_call',
-    payload,
+    payload: workstreamRoot ? { ...payload, workstreamRoot } : payload,
   });
 
   // Phase 4.4 — feed the stuck sensor. Fire-and-forget; the sensor

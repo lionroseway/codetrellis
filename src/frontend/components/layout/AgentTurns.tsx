@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Circle, ChevronRight, ChevronDown,
   AlertTriangle, HelpCircle, Pencil, Eye, Plug, FileEdit, ListChecks,
@@ -80,12 +80,27 @@ function EventRow({ event, vocabulary }: { event: AgentEvent; vocabulary: Phrase
 }
 
 /** One turn card. Collapsed by default — the summary is the point. */
-function TurnCard({ turn, vocabulary, initiallyExpanded = false }: { turn: AgentTurn; vocabulary: PhraseVocabulary; initiallyExpanded?: boolean }) {
+function TurnCard({ turn, vocabulary, initiallyExpanded = false, focus = 0 }: {
+  turn: AgentTurn; vocabulary: PhraseVocabulary; initiallyExpanded?: boolean;
+  /** Bumped when its mark on the lanes is clicked (B2.1): open, and come into view. */
+  focus?: number;
+}) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
+  const ref = useRef<HTMLDivElement>(null);
   const Chevron = expanded ? ChevronDown : ChevronRight;
+  useEffect(() => {
+    if (!focus) return;
+    setExpanded(true);
+    ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [focus]);
 
   return (
-    <div className="rounded-md hover:bg-surface-hover transition-colors">
+    <div
+      ref={ref}
+      data-testid="turn-card"
+      data-turn-id={turn.id}
+      className={`rounded-md hover:bg-surface-hover transition-colors ${focus ? 'ring-1 ring-accent/40' : ''}`}
+    >
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-start gap-2 py-1 px-2 text-left"
@@ -202,6 +217,7 @@ export function AgentTurnList({
   vocabulary = 'code',
   emptyText = 'No agent events yet',
   expandLatest = false,
+  focus = null,
 }: {
   turns: AgentTurn[];
   status: string;
@@ -211,6 +227,8 @@ export function AgentTurnList({
   emptyText?: string;
   /** Open the newest turn: in the Brief, what Claude is doing now is the point. */
   expandLatest?: boolean;
+  /** A turn to open and bring into view, with a counter so a second click does it again (B2.1). */
+  focus?: { turnId: string; seq: number } | null;
 }) {
   const lastTurn = turns[0] ?? null;
 
@@ -233,7 +251,13 @@ export function AgentTurnList({
       )}
       <div className="space-y-px">
         {turns.map((turn) => (
-          <TurnCard key={turn.id} turn={turn} vocabulary={vocabulary} initiallyExpanded={expandLatest && turn === turns[0]} />
+          <TurnCard
+            key={turn.id}
+            turn={turn}
+            vocabulary={vocabulary}
+            initiallyExpanded={expandLatest && turn === turns[0]}
+            focus={focus?.turnId === turn.id ? focus.seq : 0}
+          />
         ))}
       </div>
     </>

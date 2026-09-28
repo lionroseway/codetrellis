@@ -428,6 +428,13 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | B1.1 | `agent_events`: every broadcast agent event kept by a passive tap, stamped with session, agent and workstream (from `agent_sessions`, whatever the session's state), with launch-unique ids, secrets masked, 14 days and 100,000 rows kept; `GET /api/agent-events` (time, session, workstream); the window loads the last 400 when it connects, so the Timeline survives a reload | unit; harness including a restart; browser (reload) |
 | B1.2 | Spec and plan-item body edits as events (who, which document, which version); watcher events at the time the agent acted, not when they were read; calls the SDK refuses on their arguments recorded too | unit; harness |
 
+### B2: Timeline lanes
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B2.1 | Lanes above the turn list, one per workstream (main first; a "No workstream" lane only when used): ● a turn, placed by the workstream its events name or its session's; ✎ a turn that edited a spec; ⚠ each signal on every lane it names. The window runs from the earliest mark (15 min to 2 h). Hover says what a mark is in words; click opens the turn below, or goes to Awareness. Live. Tool events carry their workstream as they are broadcast | unit; harness; browser |
+| B2.2 | ◆ commits and merges per workstream (and main), ✓ / ✗ check runs and criterion decisions; the lanes follow refs changes | unit; harness; browser |
+
 ## 6. Track C: shared ways of working
 
 | Step | Scope (shared-work doc) |
