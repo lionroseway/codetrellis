@@ -75,7 +75,7 @@ export function WorkstreamStrip() {
     };
   }, [open]);
 
-  const shown = stripWorkstreams(all);
+  const shown = stripWorkstreams(all, signals);
   if (shown.length === 0) return null;
 
   const chips = shown.length > MAX_CHIPS ? shown.slice(0, MAX_CHIPS - 1) : shown;
@@ -160,9 +160,10 @@ function WorkstreamDetail({ ws, signals }: { ws: Workstream; signals: AwarenessS
           <span className="text-[12px] font-medium text-foreground truncate">{chipLabel(ws)}</span>
         </div>
         <div className="mt-0.5 text-[10px] text-foreground-muted">{shapeWords(ws)}</div>
-        <div className="mt-1 flex items-center gap-1 text-[10px] font-mono text-foreground-subtle" title={ws.root}>
-          <FileText size={10} className="shrink-0" />
-          <span className="truncate">{shortFolder(ws.root)}</span>
+        {/* A branch has no folder here: say which ref it is instead. */}
+        <div className="mt-1 flex items-center gap-1 text-[10px] font-mono text-foreground-subtle" title={ws.ref ?? ws.root}>
+          {ws.shape === 'branch' ? <GitBranch size={10} className="shrink-0" /> : <FileText size={10} className="shrink-0" />}
+          <span className="truncate">{shortFolder(ws.ref ?? ws.root)}</span>
         </div>
       </div>
       {note && (
@@ -175,7 +176,7 @@ function WorkstreamDetail({ ws, signals }: { ws: Workstream; signals: AwarenessS
       <ChangedFiles ws={ws} />
       <div className="px-3 pb-2">
         <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">
-          <Users size={10} /> {ws.agents.length === 0 ? 'No agent working here' : ws.agents.length === 1 ? '1 agent' : `${ws.agents.length} agents`}
+          <Users size={10} /> {ws.agents.length === 0 ? (ws.shape === 'branch' ? 'No agent on this machine' : 'No agent working here') : ws.agents.length === 1 ? '1 agent' : `${ws.agents.length} agents`}
         </div>
         {ws.agents.map((a) => {
           const { Icon, tint, label } = agentBadge(a.agentType);

@@ -160,10 +160,20 @@ export interface StuckSensorConfig {
   idleMinutes?: number;
 }
 
+/** Phase 32 — awareness of parallel work. */
+export interface AwarenessSensorConfig {
+  /**
+   * A branch with no checkout on this machine counts as a workstream when
+   * its last commit is this recent. Default: 7.
+   */
+  branchWindowDays?: number;
+}
+
 export interface SensorConfig {
   drift?: DriftSensorConfig;
   docs?: DocSensorConfig;
   stuck?: StuckSensorConfig;
+  awareness?: AwarenessSensorConfig;
 }
 
 // --- Sensor defaults (used by getEffectiveSensorConfig) ----------------------
@@ -172,6 +182,7 @@ export const SENSOR_DEFAULTS = {
   drift: { enabled: true, channelEvents: true, debounceMs: 2000 },
   docs: { enabled: true, channelEvents: true },
   stuck: { enabled: false, repetitionThreshold: 8, errorLoopThreshold: 5, idleMinutes: 15 },
+  awareness: { branchWindowDays: 7 },
 } as const;
 
 /** Phase 6.5 — freeze-period governance. */

@@ -121,3 +121,23 @@ describe('signals on the strip (A1.6)', () => {
     assert.equal(signalWords([sig('high', ['/a']), sig('low', ['/a'])]), 'overlaps other work (1 signal)');
   });
 });
+
+describe('branch workstreams on the strip (A1.7a)', () => {
+  const branch = (name: string): Workstream => ({
+    root: `branch:${name}`, ref: `refs/heads/${name}`, branch: name, head: 'abc', main: false, shape: 'branch', agents: [],
+    changes: { base: 'b', files: [{ path: 'src/x.ts', status: 'modified' }], truncated: false }, idle: false,
+  });
+  const collision = (roots: string[]): AwarenessSignal => ({
+    id: 'c', kind: 'collision', severity: 'medium', subject: { file: 'src/x.ts' }, workstreams: roots, summary: 's', firstSeen: 0, lastSeen: 0, state: 'open',
+  });
+
+  test('a branch gets a chip only when it overlaps other work', () => {
+    const all = [ws('/r', true, [agent('a')]), ws('/r-auth', false, [agent('b')], 1), branch('cloud-fix'), branch('quiet')];
+    assert.deepEqual(stripWorkstreams(all).map((w) => w.root), ['/r', '/r-auth']);
+    assert.deepEqual(stripWorkstreams(all, [collision(['/r-auth', 'branch:cloud-fix'])]).map((w) => w.root), ['/r', '/r-auth', 'branch:cloud-fix']);
+  });
+
+  test('it says where it is', () => {
+    assert.equal(shapeWords(branch('x')), 'Branch, no checkout on this machine');
+  });
+});

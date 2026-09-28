@@ -65,7 +65,7 @@
 - [x] A1.4 Folder watching (#149)
 - [x] A1.5 Footprint symbols (#150)
 - [ ] A1.6 Signals engine (collision, stale-base) and tools
-- [ ] A1.7 Branch and clone workstreams
+- [ ] A1.7 Branch and clone workstreams (A1.7a branches; A1.7b clones and bug 46)
 - [ ] A1.8 Awareness tab
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (digest, guide, skill and hook)
@@ -160,6 +160,68 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: A1.7a — branch workstreams (A1.7 split in two)
+- **Decision: A1.7 is two PRs.**
+  - **A1.7a** covers branch workstreams and the refs watcher.
+  - **A1.7b** covers clones, which need a consent prompt, and bug 46. Bug
+    46 is the identity-across-checkouts design (which checkout owns a doc
+    or plan with the same uid), which deserves its own step rather than a
+    patch folded into branch discovery.
+- **Which branches (`branch-workstreams.ts`).** A branch counts when it's
+  a local branch, or a remote-tracking one with no local branch of the
+  same name, and it is:
+  - ahead of its merge base with the main checkout's branch;
+  - not checked out in any worktree;
+  - committed within `sensors.awareness.branchWindowDays`, a new project
+    setting, default 7, where only a positive number counts.
+
+  `origin/HEAD` is skipped, and only local refs are read: the app never
+  fetches on its own.
+- **Its changes** are `git diff <merge-base> <branch>`: committed work
+  only. Symbols come from `git show <head>:<path>`, so nothing is checked
+  out. The symbol cache is keyed by commit rather than file times, with
+  the head in the key so a branch never shares an entry with the main
+  checkout at the same path. Answers are cached per (branch head, main
+  head), so an unmoved branch costs nothing to list again.
+- **Its id is `branch:<name>`,** with `ref` carrying the full ref. It has
+  no folder and no agent on this machine. Stale-base for a branch runs git
+  in the main checkout.
+- **Refs watcher.** One per repository, on the common git dir's
+  `refs/heads`, `refs/remotes` and `packed-refs`, so every worktree's
+  commits and every fetch are seen. It broadcasts `workstreams-changed`
+  with `refs: true` and schedules a signal refresh.
+- **Signals just work.** A branch is one more footprint, so a worktree and
+  a pushed branch editing the same function is a high collision naming
+  the branch.
+- **UX journey.**
+  - A branch appears on the strip only when it overlaps other work. A
+    repository can have many recent branches, and a chip each would bury
+    the one that matters.
+  - Its details say "Branch, no checkout on this machine", show the full
+    ref instead of a folder, and say "No agent on this machine".
+  - Everything else (overlaps, changed files and their symbols) reads as
+    for a worktree.
+  - `list_workstreams` lists every branch workstream for agents.
+  - Screenshot: `workstreams-branch.png`.
+- **Test fix.** One `workstreams.test.ts` test waited for any
+  `workstreams-changed` event naming the main checkout. The refs watcher
+  now names it when a branch is created, and `waitFor` sees earlier
+  events too, so the test waits for a new files event instead.
+- **Tests.**
+  - Unit: `branch-workstreams.test.ts` (9), against a real repo with local
+    branches, remote-tracking refs, a symbolic `origin/HEAD`, a worktree
+    and a 30-day-old branch. It covers inclusion and every exclusion, the
+    window setting, unsafe and missing main refs, changes read from git,
+    parsing, pure selection, and a commit onto an unchecked-out branch
+    waking the refs watcher (one watcher for two worktrees).
+  - Strip lib +2.
+  - Harness: `branch-workstreams.test.ts` (4): a branch not ahead isn't
+    work; a pushed branch with its changes and symbols; a high collision
+    with a worktree naming the branch; the branch moving on, with the
+    window told, the branch going idle and the collision resolving.
+  - Browser +1.
+  - Unit 1166 pass / 3 environment skips. Lint 0 errors / 295.
 
 ### 2026-09-28: A1.6 — signals: collision and stale-base, `get_awareness`, `check_footprint`
 - **Pure core (`awareness-signals.ts`).** `computeSignals` turns footprints

@@ -53,11 +53,12 @@ export type AgentStatus = 'idle' | 'active' | 'paused';
 
 /**
  * How a line of parallel work is isolated. A1.3 finds the two shapes that
- * need no consent and no refs watcher: a git worktree (the main checkout is
- * one too), and a shared checkout — two or more agents in one folder. Clones
- * and branch-only work are A1.7.
+ * need no consent: a git worktree (the main checkout is one too), and a
+ * shared checkout — two or more agents in one folder. A1.7a adds `branch`:
+ * committed work on a branch with no checkout on this machine. Clones are
+ * A1.7b.
  */
-export type WorkstreamShape = 'worktree' | 'shared';
+export type WorkstreamShape = 'worktree' | 'shared' | 'branch';
 
 export interface WorkstreamAgent {
   sessionId: string;
@@ -73,8 +74,13 @@ export interface WorkstreamAgent {
 }
 
 export interface Workstream {
-  /** The working tree's folder, as git lists it. Also its id. */
+  /**
+   * The working tree's folder, as git lists it. Also its id. A branch
+   * workstream has no folder: its id is `branch:<name>`.
+   */
   root: string;
+  /** For a branch workstream, its full ref (`refs/heads/x`, `refs/remotes/origin/x`). */
+  ref?: string;
   /** Short branch name, or null when detached. */
   branch: string | null;
   /** The commit checked out, when git reports one. */

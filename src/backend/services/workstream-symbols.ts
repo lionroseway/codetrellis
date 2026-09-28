@@ -133,9 +133,15 @@ function currentContent(folder: string, relPath: string): string | null {
  * not parsed (a README, a lockfile) — "no symbols" and "not a language we
  * read" are different answers.
  */
-export function fileSymbolChanges(folder: string, base: string | null, file: ChangedFile, parse: SymbolParser): SymbolChange[] | undefined {
+export function fileSymbolChanges(
+  folder: string,
+  base: string | null,
+  file: ChangedFile,
+  parse: SymbolParser,
+  readCurrent: (relPath: string) => string | null = (rel) => currentContent(folder, rel),
+): SymbolChange[] | undefined {
   const abs = path.join(folder, file.path);
-  const after = file.status === 'deleted' ? null : currentContent(folder, file.path);
+  const after = file.status === 'deleted' ? null : readCurrent(file.path);
   const beforePath = file.status === 'renamed' && file.from ? file.from : file.path;
   const before = file.status === 'added' || !base ? null : baseContent(folder, base, beforePath);
   if (after === null && before === null) return undefined;
@@ -169,16 +175,25 @@ function stampOf(folder: string, base: string | null, file: ChangedFile): string
  * The changes with each parseable file's symbol changes attached. Cached per
  * file, so a listing that repeats every few seconds parses only what moved.
  */
-export function withSymbolChanges(folder: string, changes: WorkstreamChanges, parse: SymbolParser): WorkstreamChanges {
+export function withSymbolChanges(
+  folder: string,
+  changes: WorkstreamChanges,
+  parse: SymbolParser,
+  /**
+   * For a branch with no working tree (A1.7a): read the current version at
+   * this commit instead of from disk, and key the cache by it.
+   */
+  atCommit?: { head: string; read: (relPath: string) => string | null },
+): WorkstreamChanges {
   const files = changes.files.map((f, i) => {
     if (i >= MAX_PARSED_FILES) return f;
-    const k = `${folder}\0${f.path}`;
-    const stamp = stampOf(folder, changes.base, f);
+    const k = `${folder}\0${atCommit ? `@${atCommit.head}` : ''}\0${f.path}`;
+    const stamp = atCommit ? `${changes.base}|${atCommit.head}|${f.status}|${f.from ?? ''}` : stampOf(folder, changes.base, f);
     let hit = cache.get(k);
     if (!hit || hit.stamp !== stamp) {
       let symbols: SymbolChange[] | undefined;
       try {
-        symbols = fileSymbolChanges(folder, changes.base, f, parse);
+        symbols = fileSymbolChanges(folder, changes.base, f, parse, atCommit?.read);
       } catch {
         symbols = undefined;
       }
