@@ -22,6 +22,7 @@ import {
 } from '../backend/server';
 import { setElectronScreenshotCapture, getMcpSetup } from '../backend/mcp/server';
 import { applyClaudeDesktop, previewClaudeDesktop, thisMachine } from '../backend/services/claude-desktop-config';
+import { applyClaudeCode, previewClaudeCode, thisMachine as claudeCodeMachine } from '../backend/services/claude-code-parallel';
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
@@ -660,6 +661,27 @@ ipcMain.handle('claude-desktop:apply', (e, shownHash: unknown) => {
   if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
   if (typeof shownHash !== 'string' || !/^[0-9a-f]{64}$/.test(shownHash)) return { ok: false, reason: 'Preview the change first.' };
   return applyClaudeDesktop(thisMachine(), claudeDesktopEntry(), shownHash);
+});
+
+/**
+ * Phase 32 A3.4 — the parallel skill and the optional PreToolUse hook, for
+ * Claude Code. The same rules as Claude Desktop above: this window only, the
+ * content decided in the main process (the skill from the guide, the hook
+ * from the connector this app resolved), and only the files the person chose,
+ * each still the one they were shown. See claude-code-parallel.ts.
+ */
+const HASH = /^[0-9a-f]{64}$/;
+ipcMain.handle('claude-code:preview', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return previewClaudeCode(claudeCodeMachine(), getMcpSetup().connector ?? null);
+});
+ipcMain.handle('claude-code:apply', (e, choice: unknown) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  const c = (choice && typeof choice === 'object' ? choice : {}) as { skill?: unknown; hook?: unknown };
+  const skill = typeof c.skill === 'string' && HASH.test(c.skill) ? c.skill : undefined;
+  const hook = typeof c.hook === 'string' && HASH.test(c.hook) ? c.hook : undefined;
+  if (!skill && !hook) return { ok: false, reason: 'Preview the change first.' };
+  return applyClaudeCode(claudeCodeMachine(), getMcpSetup().connector ?? null, { skill, hook });
 });
 
 ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {

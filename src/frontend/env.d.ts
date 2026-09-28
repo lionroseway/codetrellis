@@ -34,6 +34,14 @@ interface ElectronAPI {
     preview: () => Promise<ClaudeDesktopPreview>;
     apply: (shownHash: string) => Promise<ClaudeDesktopApplied>;
   };
+  /**
+   * Phase 32 A3.4 — the `codetrellis-parallel` skill and the optional
+   * PreToolUse hook, written to Claude Code's user folder (desktop only).
+   */
+  claudeCode?: {
+    preview: () => Promise<ClaudeCodePreview>;
+    apply: (choice: { skill?: string; hook?: string }) => Promise<ClaudeCodeApplied>;
+  };
   /** Phase 31 §7.3 — an HTML report in its own sandboxed view (desktop only). */
   htmlReport?: {
     show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean) => Promise<{ ok: boolean; reason?: string }>;
@@ -63,4 +71,12 @@ type ClaudeDesktopPreview =
   | { ok: false; reason: string };
 type ClaudeDesktopApplied =
   | { ok: true; path: string; backupPath: string | null; status: 'add' | 'update' | 'unchanged' }
+  | { ok: false; reason: string; changed?: boolean };
+type ClaudeCodeItem = { path: string; status: 'add' | 'update' | 'unchanged'; diff: ClaudeDesktopDiffLine[]; beforeHash: string; exists: boolean; caveat?: string };
+type ClaudeCodePreview =
+  | { ok: true; dir: string; skill: ClaudeCodeItem; hook: ClaudeCodeItem | { unavailable: string } }
+  | { ok: false; reason: string };
+type ClaudeCodeWritten = { path: string; backupPath: string | null; status: 'add' | 'update' | 'unchanged' };
+type ClaudeCodeApplied =
+  | { ok: true; skill?: ClaudeCodeWritten; hook?: ClaudeCodeWritten }
   | { ok: false; reason: string; changed?: boolean };

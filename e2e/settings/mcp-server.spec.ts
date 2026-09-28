@@ -4,8 +4,12 @@
  * Covers: port input, autodetect checkbox, config snippet with Copy button.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { gotoWithProject, API } from '../helpers/setup';
+
+const OUT = path.join('test-results', 'ux-audit');
 
 test.describe('Settings MCP server', () => {
   test('MCP Server section shows port input', async ({ page }) => {
@@ -140,5 +144,81 @@ test.describe('Add to Claude Desktop', () => {
     await expect(panel.getByText(/Added\. Quit and reopen Claude Desktop/)).toBeVisible();
     await expect(panel.getByText(/before-codetrellis-1\.json/)).toBeVisible();
     expect(await page.evaluate(() => (window as unknown as { __cdCalls: string[] }).__cdCalls)).toEqual(['preview', 'apply:a', 'preview', 'apply:b']);
+  });
+});
+
+/**
+ * Phase 32 A3.4 — the parallel skill and the optional hook for Claude Code.
+ * Main-process file work is unit-tested (claude-code-parallel.test.ts); here
+ * the page runs against a stand-in for that IPC, to prove the person sees
+ * both changes, the skill is ticked and the hook is not, and only what is
+ * ticked is sent — each with the hash of the file that was shown.
+ */
+test.describe('Add parallel work to Claude Code', () => {
+  const openMcp = async (page: import('@playwright/test').Page) => {
+    await gotoWithProject(page);
+    await page.locator('button[title*="Settings"]').click();
+    await page.getByRole('button', { name: 'MCP Server' }).click();
+  };
+
+  test('is not offered outside the desktop app', async ({ page }) => {
+    await openMcp(page);
+    await expect(page.getByTestId('mcp-config-snippet')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /parallel work to Claude Code/ })).toHaveCount(0);
+  });
+
+  test('shows both changes, writes only what is ticked, and says when either is already there', async ({ page }) => {
+    await page.addInitScript(() => {
+      const calls: string[] = [];
+      let installed = false;
+      (window as unknown as { __ccCalls: string[] }).__ccCalls = calls;
+      const item = (p: string, text: string) => ({ path: p, status: 'add', exists: false, beforeHash: p.endsWith('SKILL.md') ? 's'.repeat(64) : 'h'.repeat(64), diff: [{ op: '+', text }] });
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        claudeCode: {
+          preview: async () => {
+            calls.push('preview');
+            const skill = item('/Users/me/.claude/skills/codetrellis-parallel/SKILL.md', 'name: codetrellis-parallel');
+            const hook = { ...item('/Users/me/.claude/settings.json', '"command": "… mcp-connector.cjs --hook pre-tool-use"'), status: 'update', exists: true };
+            return { ok: true, dir: '/Users/me/.claude', skill: installed ? { ...skill, status: 'unchanged', diff: [] } : skill, hook };
+          },
+          apply: async (choice: Record<string, string>) => {
+            calls.push(`apply:${Object.entries(choice).map(([k, v]) => `${k}=${v[0]}`).join(',')}`);
+            installed = true;
+            return { ok: true, skill: { path: '/Users/me/.claude/skills/codetrellis-parallel/SKILL.md', backupPath: null, status: 'add' } };
+          },
+        },
+      };
+    });
+    await openMcp(page);
+    const panel = page.getByTestId('add-to-claude-code');
+    await panel.getByRole('button', { name: 'Add parallel work to Claude Code…' }).click();
+
+    const skill = panel.getByTestId('claude-code-skill');
+    const hook = panel.getByTestId('claude-code-hook');
+    await expect(skill.getByText('.claude/skills/codetrellis-parallel/SKILL.md', { exact: false })).toBeVisible();
+    await expect(panel.getByTestId('claude-code-skill-diff')).toContainText('+ name: codetrellis-parallel');
+    await expect(panel.getByTestId('claude-code-hook-diff')).toContainText('--hook pre-tool-use');
+    await expect(hook.getByText(/never blocks or approves an edit/)).toBeVisible();
+    // The skill is offered ticked; the hook runs before every edit, so it is opt-in.
+    await expect(skill.getByRole('checkbox')).toBeChecked();
+    await expect(hook.getByRole('checkbox')).not.toBeChecked();
+    fs.mkdirSync(OUT, { recursive: true });
+    await panel.screenshot({ path: path.join(OUT, 'claude-code-parallel.png') });
+
+    // Nothing ticked, nothing to write.
+    await skill.getByRole('checkbox').uncheck();
+    await expect(panel.getByRole('button', { name: 'Add to Claude Code' })).toBeDisabled();
+    await skill.getByRole('checkbox').check();
+    await panel.getByRole('button', { name: 'Add to Claude Code' }).click();
+    await expect(panel.getByText(/Added the skill\. Claude Code picks them up in its next session\./)).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __ccCalls: string[] }).__ccCalls)).toEqual(['preview', 'apply:skill=s']);
+
+    // Shown again, the skill is there; only the hook is still on offer.
+    await panel.getByRole('button', { name: 'Add parallel work to Claude Code…' }).click();
+    await expect(skill.getByText('Already added, and up to date.')).toBeVisible();
+    await expect(skill.getByRole('checkbox')).toBeDisabled();
+    await hook.getByRole('checkbox').check();
+    await panel.getByRole('button', { name: 'Add to Claude Code' }).click();
+    expect(await page.evaluate(() => (window as unknown as { __ccCalls: string[] }).__ccCalls)).toEqual(['preview', 'apply:skill=s', 'preview', 'apply:hook=h']);
   });
 });
