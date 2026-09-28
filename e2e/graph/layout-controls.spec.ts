@@ -16,32 +16,36 @@ test.describe('Layout controls', () => {
     await expect(page.locator('button[title="Tree view (hierarchical)"]')).toBeVisible();
   });
 
+  // Each check waits for the switch and then for the graph. It used to count
+  // nodes once after a fixed sleep, and the suite shares one project: a spec
+  // on the other worker that rescans it empties every open graph until the
+  // scan lands, so a single sample could read 0 (red in CI twice on
+  // 2026-09-28, on PRs that touched no graph code).
+  const tree = 'button[title="Tree view (hierarchical)"]';
+  const map = 'button[title="Map view (force-directed)"]';
+  const hasNodes = (page: import('@playwright/test').Page) =>
+    expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 20_000 }).toBeGreaterThan(0);
+
   test('clicking Tree switches to hierarchical layout', async ({ page }) => {
     await gotoWithProject(page);
 
-    await page.locator('button[title="Tree view (hierarchical)"]').click();
-    await page.waitForTimeout(2000);
-
+    await page.locator(tree).click();
+    await expect(page.locator(tree)).toHaveAttribute('aria-pressed', 'true');
     // Graph should still have nodes
-    const nodes = page.locator('.react-flow__node');
-    const count = await nodes.count();
-    expect(count).toBeGreaterThan(0);
+    await hasNodes(page);
   });
 
   test('clicking Map switches to force-directed layout', async ({ page }) => {
     await gotoWithProject(page);
 
-    // Switch to Tree first
-    await page.locator('button[title="Tree view (hierarchical)"]').click();
-    await page.waitForTimeout(1500);
+    // Switch to Tree first, then back to Map
+    await page.locator(tree).click();
+    await expect(page.locator(tree)).toHaveAttribute('aria-pressed', 'true');
+    await page.locator(map).click();
+    await expect(page.locator(map)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator(tree)).toHaveAttribute('aria-pressed', 'false');
 
-    // Switch back to Map
-    await page.locator('button[title="Map view (force-directed)"]').click();
-    await page.waitForTimeout(1500);
-
-    const nodes = page.locator('.react-flow__node');
-    const count = await nodes.count();
-    expect(count).toBeGreaterThan(0);
+    await hasNodes(page);
   });
 
   test('scope filter dropdown is visible', async ({ page }) => {
