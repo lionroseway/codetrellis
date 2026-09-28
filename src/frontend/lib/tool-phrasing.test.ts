@@ -36,3 +36,19 @@ test('a skill loaded (C1.3)', () => {
   assert.deepEqual(phraseEvent(ev), { text: 'Used the pr-review skill', intent: 'read', tool: null, mutating: false });
   assert.equal(phraseEvent({ ...ev, payload: {} }).text, 'Used a skill');
 });
+
+test('a breakpoint hit and its answer, in words (B4.1)', () => {
+  const hit: AgentEvent = { id: 'e', timestamp: 1, source: 'app', type: 'breakpoint_hit', payload: { action: 'claim', itemTitle: 'Partial refunds' } };
+  assert.deepEqual(phraseEvent(hit), { text: 'Paused at a breakpoint before claiming “Partial refunds”', intent: 'ask', tool: null, mutating: false });
+  const answer = (payload: Record<string, unknown>) => phraseEvent({ ...hit, type: 'breakpoint_answered', payload: { action: 'edit', itemTitle: 'Refunds', ...payload } });
+  assert.equal(answer({ decision: 'continue', byType: 'human' }).text, 'You said continue changing “Refunds”');
+  assert.equal(answer({ decision: 'steer', byType: 'human', note: 'keep the API' }).text, 'You said continue changing “Refunds”, with a steer: “keep the API”');
+  assert.deepEqual(answer({ decision: 'stop', byType: 'unverified', note: 'wait for legal' }), { text: 'Someone said stop to changing “Refunds”: “wait for legal”', intent: 'error', tool: null, mutating: false });
+  assert.equal(phraseEvent({ ...hit, payload: { action: 'done' } }).text, 'Paused at a breakpoint before marking done “an item”');
+});
+
+test('await_decision is a wait for a person', () => {
+  const ev: AgentEvent = { id: 'e', timestamp: 1, source: 'mcp', type: 'tool_call', payload: { tool: 'await_decision', args: { ref: 'bp-1' } } };
+  assert.equal(phraseEvent(ev).text, 'Waiting for a decision at a breakpoint');
+  assert.equal(phraseEvent(ev).intent, 'ask');
+});

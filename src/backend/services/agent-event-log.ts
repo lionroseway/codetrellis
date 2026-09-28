@@ -77,7 +77,7 @@ export interface BodyEdit {
 }
 
 /** Publish an event the app records itself. Inside an MCP tool it joins that session's turn. Never throws. */
-function publishApp(type: 'spec_edited' | 'criterion_decided' | 'check_run', payload: Record<string, unknown>, label: string | null): void {
+function publishApp(type: 'spec_edited' | 'criterion_decided' | 'check_run' | 'breakpoint_hit' | 'breakpoint_answered', payload: Record<string, unknown>, label: string | null): void {
   if (!publisher) return;
   try {
     const acting = context.getStore();
@@ -172,6 +172,15 @@ export function recordCheckRun(input: {
       }, input.byType === 'agent' ? input.by : input.byType);
     }
   } catch { /* never breaks a run */ }
+}
+
+/**
+ * An agent's call held at a breakpoint, or a person's answer to one (B4).
+ * The hit is published inside the MCP tool, so it joins that agent's turn;
+ * the answer comes from a person and stands alone, on the same workstream.
+ */
+export function recordBreakpointEvent(type: 'breakpoint_hit' | 'breakpoint_answered', payload: Record<string, unknown>, label: string | null): void {
+  publishApp(type, payload, label);
 }
 
 /** Key names whose values are secrets, in JSON (`"apiKey": "…"`) or `key=value` form. */

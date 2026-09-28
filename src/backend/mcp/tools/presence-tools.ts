@@ -3,12 +3,14 @@
  *
  * v1: present, await_ack, dismiss_presence
  * v2: await_user_input
+ * Phase 32 B4: await_decision
  */
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta, authorFromExtra } from '../helpers';
+import { getHit, decisionView } from '../../services/breakpoint-service';
 
 export function register(server: McpServer, deps: ToolDeps): void {
 
@@ -183,6 +185,36 @@ export function register(server: McpServer, deps: ToolDeps): void {
 
       const resultStr = await p;
       return { content: [{ type: 'text' as const, text: resultStr }] };
+    },
+  );
+
+  // --- Phase 32 B4: await_decision ---
+
+  server.registerTool(
+    'await_decision',
+    {
+      description:
+        'Wait for a person to answer a breakpoint. When a call returns "paused: waiting for a decision" with a ref, ' +
+        'call this with that ref. Returns { status: "answered", decision: "continue" | "steer" | "stop", note } once they ' +
+        'answer, or { status: "waiting" } after wait_seconds; then call it again with the same ref. The wait is kept by ' +
+        'CodeTrellis, not by this call, so it survives timeouts, reconnects and restarts: an answer can take hours. ' +
+        'On continue or steer, make the paused call again (a steer is a note to follow); on stop, do not.',
+      inputSchema: {
+        ref: z.string().describe('The ref from the paused result'),
+        wait_seconds: z.number().min(0).max(55).optional().describe('How long to wait in this call (default 25, max 55)'),
+      },
+    },
+    async ({ ref, wait_seconds }, extra: any) => {
+      let hit = getHit(ref);
+      if (!hit) {
+        return { content: [{ type: 'text' as const, text: `No breakpoint is waiting with ref ${ref}.` }], isError: true };
+      }
+      const deadline = Date.now() + Math.min(wait_seconds ?? 25, 55) * 1000;
+      while (hit.answeredAt === null && Date.now() < deadline && !extra?.signal?.aborted) {
+        await new Promise((r) => setTimeout(r, 250));
+        hit = getHit(ref) ?? hit;
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(decisionView(hit), null, 2) }] };
     },
   );
 }

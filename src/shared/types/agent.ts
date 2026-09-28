@@ -22,7 +22,11 @@ export type AgentEventType =
   /** A person approved or sent back a criterion (Phase 32 B2.2). */
   | 'criterion_decided'
   /** A plan's criteria were checked (Phase 32 B2.2), per workstream of the items checked. */
-  | 'check_run';
+  | 'check_run'
+  /** An agent's call held at a breakpoint (Phase 32 B4): it waits for a person. */
+  | 'breakpoint_hit'
+  /** A person answered a breakpoint: continue, continue with a steer, or stop (Phase 32 B4). */
+  | 'breakpoint_answered';
 
 export interface AgentEvent {
   id: string;
