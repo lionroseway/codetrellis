@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C5.3a: one plan across worktrees, seen |
-| **Status** | C5.2 merged (#187). C5.3a done on its branch: ⎇ worktree on each section in the plan tree, progress per worktree under the header, and the lanes name their sections. Unit and browser pass |
-| **Next action** | Open C5.3a's PR and merge it when green. Then C5.3b (a collision between two sections of one plan names both; readiness to merge per section) |
+| **Stage / step** | Track C — C5.3b: sections named in overlaps; ready to merge |
+| **Status** | C5.3a merged (#188, with two flaky-wait fixes for plan-by-hand and the graph canvas). C5.3b rebased onto it: readiness per worktree (ahead/behind/uncommitted/serious signals) in the tree and the Worked-in panel, and overlaps between two sections name both. With it C5 is done. B3.1 and B3.2 are built on their branches, waiting behind it |
+| **Next action** | Open C5.3b's PR and merge it when green. Then rebase B3.1 (`feat/phase-32-b3-1-line-changes`) onto it, log it, open its PR; then B3.2 (`feat/phase-32-b3-2-code-gutter`) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c5-3a-worktree-chips` |
+| **Branch** | `feat/phase-32-c5-3b-sections-readiness` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -138,12 +138,12 @@
 - [ ] C2 Team status through git
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
-- [ ] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
+- [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it ([#186](https://github.com/lionroseway/codetrellis/pull/186))
   - [x] C5.2 Start a worktree for a section; a start command for any agent ([#187](https://github.com/lionroseway/codetrellis/pull/187))
   - [ ] C5.3 Workstream chips, progress per worktree, sections named in collisions, split in two:
-    - [x] C5.3a ⎇ worktree on each section in the plan tree; progress per worktree; lanes name their sections (PR open)
-    - [ ] C5.3b A collision between two sections of one plan names both; readiness to merge per section
+    - [x] C5.3a ⎇ worktree on each section in the plan tree; progress per worktree; lanes name their sections ([#188](https://github.com/lionroseway/codetrellis/pull/188))
+    - [x] C5.3b A collision between two sections of one plan names both; readiness to merge per section (PR open)
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -242,9 +242,38 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A section's worktree is stored as its **branch name**, resolved to the worktree that has it checked out (or a branch checked out nowhere), never as a folder. An agent whose worktree is unknown (no folder reported, or a detached checkout) is not in any section: it is offered only unassigned work and told why, and a claim in a section is refused with where it is worked. People claim from the window as before (C5.1) | Plan files are committed and shared across checkouts and machines (A1.7b), where a folder means nothing and would leak one person's paths. A branch is what a team means by "billing is done on checkout-v2-billing". Refusing the unknown is the safe side: a guess would hand one worktree's task to another. It is not a claim policy (`claimPolicy`), because a child's own policy replaces its parent's whole, and the section's worktree would silently fall away |
 | 2026-09-28 | "New worktree for this section" is the person's alone (the app window, or a test backend, like a grant): it makes a folder on their machine. The folder is always beside the project, named after it and the branch, and shown before anything is made; nothing that exists (a folder, a branch) is reused. Starting an agent there is a CodeTrellis terminal in that folder for Claude Code, Codex, aider, or a plain shell for any other agent, or the folder copied (C5.2) | An agent that could make worktrees could make folders anywhere it named; the person asking in the window is the one place that is theirs. Reusing an existing folder could put a section on top of someone's work. The shell preset keeps it agent-agnostic: whatever CLI the person runs, they run it there |
 | 2026-09-28 | A tool call waits, at most 2 s and only the first time, for the session's MCP roots when they are still being asked for (C5.2) | Found by C5.2's harness test: an agent that calls straight after connecting was "worktree unknown" and was offered nothing, while the same call a moment later worked (2 of 2 runs failed before, 12 of 12 passed after). Every worktree-aware tool shared the race (sections, notices, signal breakpoints); one wait at the single interception fixes them all |
+| 2026-09-28 | A section's worktree is "ready to merge" only when it is up to date with main, has nothing uncommitted, no serious (high or medium) signal open, and at least one commit of its own; when git cannot say how far it is from main, it is not ready, and says so (C5.3b) | The person reads it as permission to merge, so every doubt must count against it. Low signals are notes, and an overlap marked intended is a decision already taken; both are left out. "Unknown" read as "fine" would be the confident wrong answer the observability doc warns about |
 ---
 
 ## Entries
+
+### 2026-09-28: C5.3b — sections named in overlaps; ready to merge per worktree
+- **Journey.** "Checkout v2" is split: Billing on `checkout-v2-billing`
+  (2 commits ahead, all committed), Exports on `exports` (1 behind main, 2
+  files uncommitted), and an open overlap on `src/billing/refund.ts`
+  between them. Under the plan tree's header: "checkout-v2-billing: 1 of 1
+  · 1 serious signal open" and "exports: 0 of 1 · 1 commit behind main"
+  (hover lists everything in the way). In Awareness, the overlap's sides
+  read `checkout-v2-billing (Billing) ⇄ exports (Exports)` with "Two
+  sections of “Checkout v2”: Billing and Exports." Marked intended, the
+  overlap stops holding Billing back: "✓ ready to merge". The section's
+  Routing panel shows the same, in full, under "Worked in".
+- **Backend.** `computeChanges` also records `ahead`, `behind` (`git
+  rev-list --left-right --count main...HEAD`) and `uncommitted` (`git
+  status --porcelain -z`, a rename counted once); each is left out when
+  git cannot say. They ride on every workstream's `changes`.
+- **Rules** (`lib/section-worktrees.ts`, `worktreeReadiness`): see
+  Decisions. `awareness-view` gains `sideRootsOf`, so a card can pair each
+  side with its sections in the same order it names them.
+- **Tests:** unit `workstream-watch-service.test.ts` (a real worktree 1
+  ahead, 1 behind, 3 uncommitted; the main checkout 0/0/0; unknown left
+  out; a rename counted once) and `section-worktrees.test.ts` (readiness);
+  browser `plan-across-worktrees.spec.ts` (C5.3b: readiness, both sections
+  named, ready once intended). Workstream, awareness and section harness
+  specs re-run (59 pass). Unit 1,461 pass; typecheck clean; lint warnings
+  unchanged; inventory re-run.
+- **C5 is done**: one plan across worktrees, assigned (C5.1), started
+  (C5.2), seen (C5.3a) and checked before merging (C5.3b), for any agent.
 
 ### 2026-09-28: C5.3a — one plan across worktrees, seen
 - **Split** C5.3 in two: what the person sees of the split (this), and the

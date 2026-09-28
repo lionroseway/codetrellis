@@ -5,7 +5,7 @@
  * the same thing.
  */
 
-import type { PlanItem } from '@shared/types';
+import type { AwarenessSignal, PlanItem, Workstream } from '@shared/types';
 
 type ItemLike = Pick<PlanItem, 'uid' | 'parentUid' | 'kind' | 'status' | 'title'> & { workstream?: string | null };
 
@@ -61,4 +61,38 @@ export function sectionsByBranch(itemsByUid: Readonly<Record<string, ItemLike>>)
   }
   for (const titles of out.values()) titles.sort((a, b) => a.localeCompare(b));
   return out;
+}
+
+export interface Readiness {
+  ready: boolean;
+  /** One phrase for a crowded line: "ready to merge", or what stands in the way first. */
+  short: string;
+  /** Everything that stands in the way, or why it is ready, in words. */
+  lines: string[];
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Is a section's worktree ready to merge (Phase 32 C5.3b)? Not while it is
+ * behind main, has a serious open signal, has uncommitted files, or has
+ * nothing committed; and never when git could not say how far it is from
+ * main: unknown is not ready.
+ */
+export function worktreeReadiness(
+  w: Pick<Workstream, 'root' | 'changes'> | undefined,
+  signals: readonly Pick<AwarenessSignal, 'workstreams' | 'severity' | 'state'>[],
+): Readiness {
+  if (!w) return { ready: false, short: 'no worktree here', lines: ['No worktree has this branch checked out here.'] };
+  const { ahead, behind, uncommitted } = w.changes;
+  const serious = signals.filter((s) => s.state === 'open' && s.severity !== 'low' && s.workstreams.includes(w.root)).length;
+  // Each thing in the way, as a short phrase for a crowded line and a full one.
+  const blocking: Array<[short: string, line: string]> = [];
+  if (ahead === undefined || behind === undefined) blocking.push(['not known how far from main', 'How far it is from main is unknown']);
+  if (behind) blocking.push([`${plural(behind, 'commit')} behind main`, `${plural(behind, 'commit')} behind main: bring main in first`]);
+  if (serious) blocking.push([`${plural(serious, 'serious signal')} open`, `${plural(serious, 'serious signal')} open`]);
+  if (uncommitted) blocking.push([`${plural(uncommitted, 'file')} not committed`, `${plural(uncommitted, 'file')} not committed`]);
+  if (ahead === 0) blocking.push(['nothing committed yet', 'nothing committed yet']);
+  if (blocking.length) return { ready: false, short: blocking[0][0], lines: blocking.map((b) => b[1]) };
+  return { ready: true, short: 'ready to merge', lines: [`Ready to merge: ${plural(ahead!, 'commit')} ahead of main, up to date with it, nothing uncommitted, no serious signal open.`] };
 }

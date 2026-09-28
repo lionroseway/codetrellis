@@ -122,7 +122,43 @@ export function computeChanges(folder: string, mainRef: string | null): Workstre
     untracked = git(folder, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0');
   } catch { /* leave empty */ }
 
-  return { base, ...combineChanges(tracked, untracked) };
+  return { base, ...combineChanges(tracked, untracked), ...distanceFromMain(folder, mainRef) };
+}
+
+/**
+ * Files in `git status --porcelain -z` output. A rename or copy is one file
+ * written as two entries (the new path, then the old one with no status), so
+ * the old path is skipped rather than counted.
+ */
+export function countStatusEntries(out: string): number {
+  const parts = out.split('\0');
+  let n = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i];
+    if (entry.length < 4 || entry[2] !== ' ') continue;
+    n += 1;
+    if (entry[0] === 'R' || entry[0] === 'C') i += 1;
+  }
+  return n;
+}
+
+/**
+ * Phase 32 C5.3b — commits ahead of and behind main, and files not yet
+ * committed, for "is this section ready to merge". Each is left out when git
+ * cannot say, so unknown never reads as nothing.
+ */
+function distanceFromMain(folder: string, mainRef: string | null): { ahead?: number; behind?: number; uncommitted?: number } {
+  const out: { ahead?: number; behind?: number; uncommitted?: number } = {};
+  if (mainRef && isSafeGitRef(mainRef)) {
+    try {
+      const [behind, ahead] = git(folder, ['rev-list', '--left-right', '--count', `${mainRef}...HEAD`]).trim().split(/\s+/).map(Number);
+      if (Number.isFinite(ahead) && Number.isFinite(behind)) { out.ahead = ahead; out.behind = behind; }
+    } catch { /* no main here, or no commits: unknown */ }
+  }
+  try {
+    out.uncommitted = countStatusEntries(git(folder, ['status', '--porcelain', '-z']));
+  } catch { /* unknown */ }
+  return out;
 }
 
 // ── Watching ──────────────────────────────────────────────────────────────

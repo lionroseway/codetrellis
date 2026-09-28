@@ -45,3 +45,27 @@ test('a plan in one place is not split', () => {
 test('the sections kept to each branch, for the lanes', () => {
   assert.deepEqual([...sectionsByBranch(PLAN)], [['checkout-v2-billing', ['Billing']], ['exports', ['Exports']]]);
 });
+
+test('ready to merge only when ahead, up to date, all committed and no serious signal (C5.3b)', async () => {
+  const { worktreeReadiness } = await import('./section-worktrees');
+  const w = (changes: Record<string, unknown>) => ({ root: '/w/billing', changes: { base: 'b', files: [], truncated: false, ...changes } });
+  const sig = (severity: 'high' | 'medium' | 'low', state: 'open' | 'acknowledged' = 'open') => ({ workstreams: ['/w/billing', '/w/exports'], severity, state });
+
+  const ready = worktreeReadiness(w({ ahead: 3, behind: 0, uncommitted: 0 }), [sig('low'), sig('high', 'acknowledged')]);
+  assert.equal(ready.ready, true);
+  assert.equal(ready.short, 'ready to merge');
+  assert.deepEqual(ready.lines, ['Ready to merge: 3 commits ahead of main, up to date with it, nothing uncommitted, no serious signal open.']);
+
+  const not = worktreeReadiness(w({ ahead: 1, behind: 2, uncommitted: 1 }), [sig('high')]);
+  assert.equal(not.ready, false);
+  assert.equal(not.short, '2 commits behind main');
+  assert.deepEqual(not.lines, ['2 commits behind main: bring main in first', '1 serious signal open', '1 file not committed']);
+
+  assert.deepEqual(worktreeReadiness(w({ ahead: 0, behind: 0, uncommitted: 0 }), []).lines, ['nothing committed yet']);
+  // Unknown is never ready.
+  const unknown = worktreeReadiness(w({}), []);
+  assert.equal(unknown.ready, false);
+  assert.equal(unknown.short, 'not known how far from main');
+  assert.deepEqual(unknown.lines, ['How far it is from main is unknown']);
+  assert.equal(worktreeReadiness(undefined, []).short, 'no worktree here');
+});

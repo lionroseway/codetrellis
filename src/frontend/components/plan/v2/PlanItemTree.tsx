@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { usePlanItemsStore, buildItemTree } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
-import { progressByWorktree } from '../../../lib/section-worktrees';
+import { progressByWorktree, worktreeReadiness } from '../../../lib/section-worktrees';
+import { useAwarenessStore } from '../../../stores/awareness-store';
 import type { PlanItem, PlanItemKind, TaskStatus } from '@shared/types';
 
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
@@ -57,6 +58,9 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   // Phase 5.2 — count local items for the bulk-toggle affordance.
   // Phase 32 C5.3 — how far each worktree this plan is split across has got.
   const worktreeProgress = useMemo(() => progressByWorktree(itemsByUid), [itemsByUid]);
+  // C5.3b — and whether each is ready to merge.
+  const workstreams = useAwarenessStore((s) => s.workstreams);
+  const signals = useAwarenessStore((s) => s.signals);
   const localCount = useMemo(
     () => Object.values(itemsByUid).filter((i) => i.visibility === 'local').length,
     [itemsByUid],
@@ -193,13 +197,28 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
           className="flex flex-wrap gap-x-3 gap-y-0.5 px-3.5 py-1.5 border-b border-white/[0.06] text-[10.5px] text-foreground-subtle"
           title="Tasks done, of those to do, in each worktree this plan is split across"
         >
-          {worktreeProgress.map((g) => (
-            <span key={g.branch ?? '(any)'} data-testid="worktree-progress-entry" className="whitespace-nowrap">
-              <span className={g.branch ? 'font-mono text-sky-300/90' : 'italic'}>{g.branch ?? 'any worktree'}</span>
-              {': '}
-              <span className="text-foreground-muted">{g.done} of {g.total}</span>
-            </span>
-          ))}
+          {worktreeProgress.map((g) => {
+            const readiness = g.branch
+              ? worktreeReadiness(workstreams.find((w) => w.branch === g.branch && !w.root.startsWith('branch:')), signals)
+              : null;
+            return (
+              <span key={g.branch ?? '(any)'} data-testid="worktree-progress-entry" className="whitespace-nowrap">
+                <span className={g.branch ? 'font-mono text-sky-300/90' : 'italic'}>{g.branch ?? 'any worktree'}</span>
+                {': '}
+                <span className="text-foreground-muted">{g.done} of {g.total}</span>
+                {readiness && (
+                  <span
+                    data-testid="worktree-readiness"
+                    data-ready={readiness.ready ? 'true' : 'false'}
+                    title={readiness.lines.join('\n')}
+                    className={readiness.ready ? 'text-success' : 'text-warning/90'}
+                  >
+                    {' · '}{readiness.ready ? '✓ ' : ''}{readiness.short}
+                  </span>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
 
