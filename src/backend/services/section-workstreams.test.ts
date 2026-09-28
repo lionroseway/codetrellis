@@ -76,3 +76,24 @@ test('get_next_item offers unassigned sections and the caller\'s own; the rest a
   assert.equal(elsewhereLine(['a', 'b', 'a', 'a', 'c', 'b']), '3 in a, 2 in b, 1 in c');
   assert.equal(elsewhereLine([]), '');
 });
+
+test('a new worktree for a section: a branch named after the plan and section, a folder beside the project (C5.2)', async () => {
+  const { suggestSectionBranch, slugPart } = await import('../../shared/lib/branch-name');
+  const { worktreeDirFor, usableBase } = await import('./section-workstreams');
+  assert.equal(suggestSectionBranch('Checkout v2', 'Billing'), 'checkout-v2-billing');
+  assert.equal(suggestSectionBranch('Payments — Q3!', 'Refunds & chargebacks'), 'payments-q3-refunds-chargebacks');
+  assert.equal(suggestSectionBranch('Café', 'Crème'), 'cafe-creme');
+  assert.equal(suggestSectionBranch('', '***'), 'section');
+  assert.equal(slugPart('a'.repeat(60) + ' b', 40), 'a'.repeat(40));
+  assert.ok(cleanBranch(suggestSectionBranch('Checkout v2', 'Billing')));
+
+  assert.equal(worktreeDirFor('/work/acme', 'checkout-v2-billing'), '/work/acme-checkout-v2-billing');
+  assert.equal(worktreeDirFor('/work/acme/', 'feat/billing'), '/work/acme-feat-billing');
+  assert.equal(worktreeDirFor('C:\\work\\acme', 'billing'), 'C:\\work\\acme-billing');
+
+  assert.equal(usableBase('main'), 'main');
+  assert.equal(usableBase('3f9c2e1a'), '3f9c2e1a');
+  assert.equal(usableBase(null), null);
+  assert.equal(usableBase('--upload-pack=x'), null);
+  assert.equal(usableBase('../x'), null);
+});

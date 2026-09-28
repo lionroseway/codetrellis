@@ -205,3 +205,36 @@ export function listWorktreesWithPlans(projectRoot: string): WorktreeWithPlans[]
     .filter((w) => !w.bare && !w.prunable && fs.existsSync(w.path))
     .map((w) => ({ ...w, plans: readWorktreePlans(w.path) }));
 }
+
+/** A worktree that could not be made, with the HTTP status that says why. */
+export class WorktreeError extends Error {
+  constructor(message: string, public status = 400) { super(message); }
+}
+
+/**
+ * Phase 32 C5.2 — make a linked worktree for a section of a plan: a new
+ * branch from `base` (the main checkout's HEAD when null), in a new folder.
+ * Refuses a folder or branch that exists already rather than reuse it: the
+ * person asked for a new one, and an existing folder may be someone's work.
+ * The caller confines `dir` (beside the project) and validates both names.
+ */
+export function createWorktree(projectRoot: string, opts: { branch: string; dir: string; base: string | null }): void {
+  if (fs.existsSync(opts.dir)) throw new WorktreeError(`${opts.dir} already exists; choose another branch name`, 409);
+  let branchExists = true;
+  try { git(projectRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${opts.branch}`]); } catch { branchExists = false; }
+  if (branchExists) throw new WorktreeError(`A branch named ${opts.branch} already exists; choose another name`, 409);
+  if (opts.base) {
+    try { git(projectRoot, ['rev-parse', '--verify', '--quiet', `${opts.base}^{commit}`]); } catch {
+      throw new WorktreeError(`The plan's base, ${opts.base}, is not a branch or commit in this repository`, 400);
+    }
+  }
+  const args = ['-C', projectRoot, 'worktree', 'add', '-b', opts.branch, opts.dir, ...(opts.base ? [opts.base] : [])];
+  try {
+    // execFile, no shell; names validated by the caller, and `--` is not
+    // needed because neither may start with '-'.
+    execFileSync('git', args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 });
+  } catch (err) {
+    const stderr = String((err as { stderr?: unknown }).stderr ?? '').split('\n').find((l) => l.trim()) ?? 'unknown error';
+    throw new WorktreeError(`git could not make the worktree: ${stderr.replace(/^fatal:\s*/, '')}`, 400);
+  }
+}

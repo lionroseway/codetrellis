@@ -26,6 +26,10 @@ import { SkillsEditor } from './SkillsEditor';
 import type { PlanItem, Skill, ClaimPolicy, ExecutionConfig, ItemConstraints } from '@shared/types';
 import { useBreakpointsStore, itemBreakpoint } from '../../../stores/breakpoints-store';
 import { useAwarenessStore } from '../../../stores/awareness-store';
+import { usePlanStore } from '../../../stores/plan-store';
+import { useProjectStore } from '../../../stores/project-store';
+import { useTerminalStore, type AgentPreset } from '../../../stores/terminal-store';
+import { suggestSectionBranch, worktreeDirFor } from '@shared/lib/branch-name';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
 
@@ -744,6 +748,8 @@ interface SectionView {
   own: string | null;
   section: { branch: string; fromUid: string; fromTitle: string } | null;
   where: string | null;
+  /** The worktree's folder, when one has the section's branch checked out. */
+  root: string | null;
 }
 
 /**
@@ -819,6 +825,132 @@ function WorkedIn({ item }: { item: PlanItem }) {
           : 'Any agent, in any worktree, can pick these tasks up. Choose a worktree to keep this section to one.'}
       </div>
       {error && <div role="alert" className="mt-1 text-[10px] text-danger">{error}</div>}
+      {view && !own && <NewWorktree item={item} onMade={load} />}
+      {view?.root && view.section && <StartAgentHere root={view.root} branch={view.section.branch} />}
+    </div>
+  );
+}
+
+/**
+ * "New worktree for this section" (Phase 32 C5.2): a branch named after the
+ * plan and the section (editable), made beside the project from the plan's
+ * base, and the section kept to it. Shows the folder before anything is made.
+ */
+function NewWorktree({ item, onMade }: { item: PlanItem; onMade: () => Promise<void> }) {
+  const planTitle = usePlanStore((s) => s.plans.find((p) => p.uid === item.planUid)?.title ?? '');
+  const root = useProjectStore((s) => s.root);
+  const [open, setOpen] = useState(false);
+  const [branch, setBranch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setBranch(suggestSectionBranch(planTitle, item.title)); }, [planTitle, item.title]);
+  const folder = root && branch.trim() ? worktreeDirFor(root, branch.trim()) : null;
+
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.uid)}/worktree`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branch: branch.trim() }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) setError(body.error ?? `Not made (${res.status})`);
+      else {
+        setOpen(false);
+        // The new worktree is a workstream now: list it without waiting for the broadcast.
+        await useAwarenessStore.getState().refresh(root);
+      }
+    } catch {
+      setError('Could not reach CodeTrellis.');
+    }
+    await onMade();
+    setBusy(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        data-testid="new-worktree"
+        className="mt-1.5 text-[11px] text-accent hover:underline"
+      >
+        New worktree for this section…
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] p-2 space-y-1.5" data-testid="new-worktree-form">
+      <label className="block text-[10px] text-foreground-muted">
+        Branch
+        <input
+          value={branch}
+          onChange={(e) => setBranch(e.target.value)}
+          disabled={busy}
+          aria-label="Branch for the new worktree"
+          className="mt-0.5 w-full text-[12px] font-mono px-2 py-1 rounded border border-white/[0.08] bg-black/20 text-foreground focus:outline-none focus:border-accent/30"
+        />
+      </label>
+      <div className="text-[10px] text-foreground-subtle" data-testid="new-worktree-folder">
+        {folder ? <>Makes <span className="font-mono text-foreground-muted">{folder}</span> on a new branch, and keeps this section to it.</> : 'Give the branch a name.'}
+      </div>
+      {error && <div role="alert" className="text-[10px] text-danger">{error}</div>}
+      <div className="flex gap-2">
+        <button
+          onClick={() => void create()}
+          disabled={busy || !folder}
+          className="px-2 py-0.5 text-[11px] rounded bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-50"
+        >
+          {busy ? 'Making…' : 'Make worktree'}
+        </button>
+        <button onClick={() => { setOpen(false); setError(null); }} disabled={busy} className="px-2 py-0.5 text-[11px] rounded text-foreground-muted hover:text-foreground">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const START_PRESETS: Array<{ preset: AgentPreset; label: string }> = [
+  { preset: 'claude', label: 'Claude Code' },
+  { preset: 'codex', label: 'Codex' },
+  { preset: 'aider', label: 'aider' },
+  { preset: 'shell', label: 'A shell (any other agent)' },
+];
+
+/**
+ * Start an agent where the section is worked (Phase 32 C5.2): a CodeTrellis
+ * terminal in that folder, for whichever agent the person uses, or the
+ * folder copied for a terminal of their own.
+ */
+function StartAgentHere({ root, branch }: { root: string; branch: string }) {
+  const createSession = useTerminalStore((s) => s.createSession);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(`cd "${root}"`); setCopied(true); } catch { setCopied(false); }
+  };
+  return (
+    <div className="mt-2" data-testid="start-agent-here">
+      <div className="text-[10px] text-foreground-muted mb-1">Start an agent in {branch}:</div>
+      <div className="flex flex-wrap gap-1.5">
+        {START_PRESETS.map(({ preset, label }) => (
+          <button
+            key={preset}
+            onClick={() => void createSession(preset, { cwd: root, title: `${label} · ${branch}` })}
+            className="px-2 py-0.5 text-[11px] rounded border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          onClick={() => void copy()}
+          title={`cd "${root}"`}
+          className="px-2 py-0.5 text-[11px] rounded border border-white/[0.08] text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
+        >
+          {copied ? 'Copied' : 'Copy the folder'}
+        </button>
+      </div>
     </div>
   );
 }
