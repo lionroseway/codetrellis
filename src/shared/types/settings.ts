@@ -64,6 +64,17 @@ export interface McpSettings {
    * is that nothing reaches a path the user did not see opened.
    */
   projectScope?: McpProjectScope;
+  /**
+   * Phase 32, carried item 2b — may anything outside the app window change
+   * things over the local API (plain HTTP with this launch's token: the web
+   * build, a script, another tool)?
+   *
+   * Absent or true: yes, and each change is recorded and shown as
+   * `unverified`. False: only the app window changes anything; every other
+   * change is refused with where to turn this back on. Reads, MCP and the
+   * phone are unaffected. Changed only from the app window (grant-guard).
+   */
+  acceptLocalApiChanges?: boolean;
 }
 
 /** See `McpSettings.projectScope`. */

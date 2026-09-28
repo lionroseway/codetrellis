@@ -88,6 +88,7 @@ import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkP
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
+import { refusesLocalApiChange, LOCAL_API_CHANGES_REFUSAL } from './services/local-api-changes';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
@@ -161,6 +162,18 @@ app.use(express.json());
  * See src/backend/middleware/local-auth.ts for the three layers.
  */
 app.use(localAuthMiddleware);
+
+// Changes over the local API can be turned off (carried item 2b): then only
+// the app window changes anything. Reads, MCP and the phone are unaffected.
+app.use((req, res, next) => {
+  const refused = refusesLocalApiChange(
+    { method: req.method, path: req.path, fromAppWindow: cameFromAppWindow(req) },
+    getSettings().mcp.acceptLocalApiChanges,
+    httpGrantsAllowed(),
+  );
+  if (refused) { res.status(403).json({ error: LOCAL_API_CHANGES_REFUSAL }); return; }
+  next();
+});
 
 /**
  * CONFINED TO OPENED PROJECTS (Phase 19).

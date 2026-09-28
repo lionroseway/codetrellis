@@ -84,6 +84,7 @@ export function settingsPatchProblem(patch: unknown): string | null {
     ['mcp.capabilities', (v) => Array.isArray(v) && v.every((c: unknown) => typeof c === 'string' && (ALL_CAPABILITIES as readonly string[]).includes(c)),
       `a list of: ${ALL_CAPABILITIES.join(', ')}`],
     ['mcp.projectScope', (v) => v === 'opened' || v === 'anywhere', 'opened or anywhere'],
+    ['mcp.acceptLocalApiChanges', (v) => typeof v === 'boolean', 'true or false'],
     ['plans.defaultVisibility', (v) => v === 'shared' || v === 'local', 'shared or local'],
     ['plans.attachmentLocation', (v) => v === 'project' || v === 'user', 'project or user'],
     ['data.dataDirOverride', (v) => typeof v === 'string', 'text'],
@@ -314,6 +315,9 @@ export function mergeWithDefaults(raw: any): AppSettings {
       // CONFINES path-taking tools rather than leaving them open because
       // nobody had an opinion yet.
       projectScope: raw?.mcp?.projectScope === 'anywhere' ? 'anywhere' : 'opened',
+      // Carried item 2b. Only an explicit false turns local API changes off;
+      // anything else (absent, malformed) leaves them on, as before.
+      ...(raw?.mcp?.acceptLocalApiChanges === false ? { acceptLocalApiChanges: false } : {}),
     },
     plans: {
       defaultVisibility: raw?.plans?.defaultVisibility === 'local' ? 'local' : DEFAULT_SETTINGS.plans.defaultVisibility,

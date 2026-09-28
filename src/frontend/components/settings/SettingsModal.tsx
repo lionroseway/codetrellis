@@ -583,6 +583,29 @@ function McpSection({
         </p>
       </Field>
 
+      {/* Carried item 2b: changes that arrive over plain HTTP are tagged
+          "unverified"; a person who wants none of them turns them off. */}
+      <Field label="Local API">
+        <label className="flex items-start gap-2 cursor-pointer" data-testid="local-api-changes">
+          <input
+            id="settings-local-api-changes"
+            type="checkbox"
+            checked={settings.mcp.acceptLocalApiChanges !== false}
+            onChange={(e) => onChange({ mcp: { ...settings.mcp, acceptLocalApiChanges: e.target.checked } })}
+            className="mt-0.5 accent-accent"
+          />
+          <span className="min-w-0">
+            <span className="text-[11px] text-foreground">Accept changes over the local API</span>
+            <span className="block text-[10px] text-foreground-subtle leading-relaxed">
+              Scripts, browser tabs and other tools on this machine can use CodeTrellis&apos;s local API with this
+              launch&apos;s token. Anything they change is marked <strong>unverified</strong>, because the app
+              cannot tell who sent it. Turn this off to refuse their changes; they can still read, and agents
+              connected over MCP and your paired phone are not affected.
+            </span>
+          </span>
+        </label>
+      </Field>
+
       <Field label="Connect an agent">
         {setup?.connector ? (
           <>

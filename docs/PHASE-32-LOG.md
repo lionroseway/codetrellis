@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.2: import accuracy; then bug 53 |
-| **Status** | A2.1 merged (#156). A2.2 done on its branch (unit +13, harness 4, browser 1; tsconfig alias fix added); PR open (#157). Bug 53 found while testing it; its fix is #158 |
-| **Next action** | Merge A2.2 when green; then fix bug 53 (squash-merged branches count as live work) as its own step, `feat/phase-32-a1-7d-merged-branches` |
-| **Blockers** | Bug 53 makes the local browser suite's first tests time out on this repository (not in CI's shallow checkout) |
-| **Branch** | `feat/phase-32-a2-2-imports` |
+| **Stage / step** | Carried 2b (owner's decision): unverified is visible; local API changes can be turned off |
+| **Status** | A2.2 merged (#157); bug 53 PR open (#158). Carried 2b in progress: setting, refusal and tests done; the shared tag is being applied to every place an author shows |
+| **Next action** | Apply `UnverifiedTag` everywhere an author or actor is rendered (survey running), browser test + screenshots, PR; then A2.3 |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-carried-2b-unverified` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -166,6 +166,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A doc or plan row belongs to the checkout that holds it while that folder exists; another checkout *of the same repository* (worktree: same git common dir; clone: same origin) does not import its copy over it. Any other folder still takes the row over (bug 46) | Rows are keyed by uid and every checkout carries the same files. A worktree's differing copy is its own change, which its footprint shows; a holder that is gone gives the row up, so a moved repo still works. Narrowed after CI: a teammate's export imported from a plain folder is a deliberate move, not a second checkout |
 | 2026-09-28 | Clones need consent before anything is read from them: the prompt names the folder the agent reported, and the clone check runs only after the person says yes in the app window (A1.7c) | Deciding "is this a clone?" means running git in a caller-named folder, and a repo's config can make git run commands; Phase 19 says nothing is read from a reported path |
 | 2026-09-28 | A person answers a signal (acknowledged, intended, dismissed, or back to open) from the Awareness tab. Recorded with who answered, as the call arrived: plain HTTP is `unverified` and the tab says so. Agents see the answer and have no tool to give one. An answer lasts while the overlap does; when it resolves and returns, it is open again (A1.8) | Tag, don't block, as for sign-off (0.4d) and freeze changes (0.4k). A collision is not an agent's to wave away. The spec's cooldown ("silent until its subject changes") and "intended until either footprint changes shape" are A3 |
+| 2026-09-28 | Plain HTTP is recorded as "unverified" and shown with one tag whose tooltip says how the request arrived (plain HTTP with this launch's token, from a browser tab, script or tool, not the app window) and where to refuse such changes. A setting, "Accept changes over the local API" (Settings → MCP Server → Local API, on by default, app window only), refuses every plain-HTTP change when off; reads, MCP and the phone are unaffected (carried 2b) | Owner's decision: "use a tag to mention unverified … a tooltip explaining how the request was made, at least it surfaces the data which allows for someone to audit", and "a setting they can turn off in the app to close it out". On by default so the web dev build and the harnesses keep working |
 | 2026-09-28 | An agent's `acknowledge_signal(id, note?)` (spec §6.1) is the agent's own note, per session, shown beside the person's answer; it never sets the person's state (A2.6) | Reconciles the spec with A1.8's decision that a collision is not an agent's to wave away. The agent saying "seen, will rebase after billing merges" is useful to the person; the agent closing it is not |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
