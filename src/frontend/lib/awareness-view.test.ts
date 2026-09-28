@@ -77,6 +77,8 @@ describe('a signal in words', () => {
     assert.equal(kindWords(sig({ subject: { file: 'a.ts' } })), 'Same file');
     assert.equal(kindWords(sig({ kind: 'stale-base', subject: { files: ['a.ts'] } })), 'Behind main');
     assert.equal(kindWords(sig({ kind: 'contract', subject: { file: 'a.ts', symbol: 'f', change: 'signature' } })), 'Changed signature');
+    assert.equal(kindWords(sig({ subject: { file: 'a.ts', symbol: 'f', intended: ['/r-auth'] } })), 'Same function · declared', 'A2.4');
+    assert.equal(kindWords(sig({ subject: { file: 'a.ts', intended: ['/r-auth', '/r-billing'] } })), 'Same file · declared');
     assert.equal(kindWords(sig({ kind: 'contract', subject: { file: 'a.ts', symbol: 'f', change: 'removed' } })), 'Removed export');
   });
 

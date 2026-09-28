@@ -2,9 +2,9 @@
  * Awareness tools — Phase 32, Track A.
  *
  * What an agent should know about the other work going on in the same
- * repository. A1.3 adds `list_workstreams` (A1.4 adds each one's changed files); `get_awareness`,
- * `check_footprint`, `declare_intent` and `acknowledge_signal` follow as the
- * footprints and signals they report on land (awareness spec §6.1).
+ * repository. A1.3 adds `list_workstreams` (A1.4 adds each one's changed files); A1.6
+ * `get_awareness` and `check_footprint`; A2.4 `declare_intent`. `acknowledge_signal`
+ * follows (awareness spec §6.1).
  */
 
 import { z } from 'zod';
@@ -12,7 +12,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import fs from 'node:fs';
 import { listWorkstreams } from '../../services/workstream-service';
-import { refreshSignals, listSignals } from '../../services/awareness-service';
+import { refreshSignals, listSignals, filesDefining } from '../../services/awareness-service';
+import {
+  declareIntent, clearIntent, normaliseIntentPath, parseIntentSymbol,
+  MAX_INTENT_PATHS, MAX_INTENT_SYMBOLS, MAX_INTENT_SUMMARY,
+} from '../../services/intent-service';
 import { getActiveSessions } from '../../services/session-service';
 import { importersOf, type Importer } from '../../services/importers';
 
@@ -48,6 +52,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
       }
       const workstreams = listWorkstreams(root, { includeIdle: include_idle === true }).map((w) => ({
         ...w,
+        // Another agent's words are never passed on (awareness principle 5):
+        // what it claims, yes; what it wrote about it, only to itself.
+        ...(w.intents ? {
+          intents: w.intents.map((i) => (i.sessionId === deps.sessionId ? i : { ...i, summary: undefined })),
+        } : {}),
         yours: w.agents.some((a) => a.sessionId === deps.sessionId),
       }));
       return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, workstreams }, null, 2) }] };
@@ -132,6 +141,88 @@ export function register(server: McpServer, deps: ToolDeps): void {
         };
       });
       return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, your_workstream: mine, paths: report }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'declare_intent',
+    {
+      description:
+        'Say what you are about to change, after planning and before editing. Your paths and symbols join your ' +
+        'workstream\'s footprint, so an overlap with another workstream is flagged now rather than after both of you ' +
+        'have edited the same code. Declaring again replaces your intent; `clear` withdraws it; it ends with your ' +
+        'session. Returns the signals that now name your workstream. Other agents see which files and symbols you ' +
+        'claimed, never your summary.',
+      inputSchema: {
+        summary: z.string().min(1).max(MAX_INTENT_SUMMARY).describe('One line: what you are about to do. Shown to the person, not to other agents.'),
+        paths: z.array(z.string()).max(MAX_INTENT_PATHS).optional().describe('Files you are about to change, relative to the repository root.'),
+        symbols: z.array(z.string()).max(MAX_INTENT_SYMBOLS).optional().describe(
+          'Functions or types you are about to change: `path#name`, or a bare name that applies to every path given. A bare name with no paths is looked up where it is defined.'),
+        clear: z.boolean().optional().describe('Withdraw your declared intent instead.'),
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ summary, paths, symbols, clear, project_path }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return noProject;
+      const session = getActiveSessions().find((s) => s.sessionId === deps.sessionId);
+      const mine = session?.workstreamRoot ?? null;
+
+      if (clear) {
+        const had = clearIntent(deps.sessionId);
+        refreshSignals(root);
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, cleared: had }, null, 2) }] };
+      }
+
+      // Names, never read: a path must stay inside the repository.
+      const roots = [mine, root].filter((r): r is string => !!r);
+      const refused: string[] = [];
+      const declaredPaths = [...new Set((paths ?? []).flatMap((p) => {
+        const n = normaliseIntentPath(p, roots);
+        if (!n) refused.push(p);
+        return n ? [n] : [];
+      }))];
+      const resolved: Array<{ name: string; files: string[] }> = [];
+      const declaredSymbols = [...new Set((symbols ?? []).flatMap((raw) => {
+        const s = parseIntentSymbol(raw, roots);
+        if (!s) { refused.push(raw); return []; }
+        if (s.path) return [`${s.path}#${s.name}`];
+        if (declaredPaths.length) return [s.name];
+        // No file given: where it is defined, so the claim can be placed.
+        const files = filesDefining(root, s.name);
+        resolved.push({ name: s.name, files });
+        return files.map((f) => `${f}#${s.name}`);
+      }))];
+      if (refused.length) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Not declared. These are not paths inside the repository or symbol names: ${refused.join(', ')}` }],
+        };
+      }
+
+      declareIntent({
+        sessionId: deps.sessionId, agentType: session?.agentType ?? 'agent', summary,
+        paths: declaredPaths, symbols: declaredSymbols, declaredAt: Date.now(),
+      });
+      refreshSignals(root);
+      const placed = listWorkstreams(root, { includeIdle: true }).find((w) => w.agents.some((a) => a.sessionId === deps.sessionId));
+      const overlaps = placed ? listSignals(root, { workstream: placed.root }) : [];
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            project_path: root,
+            your_workstream: placed?.root ?? null,
+            declared: { summary, paths: declaredPaths, symbols: declaredSymbols },
+            ...(resolved.length ? { resolved } : {}),
+            ...(placed ? {} : {
+              note: 'This connection is not placed in a workstream of this project, so the intent is kept but is part of no ' +
+                'footprint. Connect through the CodeTrellis connector from the worktree you are working in.',
+            }),
+            signals: overlaps.map(({ id, kind, severity, summary: s, subject, workstreams }) => ({ id, kind, severity, summary: s, subject, workstreams })),
+          }, null, 2),
+        }],
+      };
     },
   );
 }

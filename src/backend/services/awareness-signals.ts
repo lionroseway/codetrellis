@@ -41,6 +41,8 @@ export interface FootprintInput {
    * the caller, since that needs the database; empty when there are none.
    */
   contracts?: ContractChange[];
+  /** Files its agents declared they are about to change, each with the symbols named (A2.4). */
+  intended?: Array<{ path: string; symbols: string[] }>;
 }
 
 /** An exported symbol whose shape changed, or which went, and who imports it. */
@@ -89,31 +91,64 @@ function draft(kind: SignalKind, severity: SignalSeverity, subjectKey: string, s
   return { id: signalId(kind, subjectKey, workstreams), kind, severity, subject, workstreams, summary };
 }
 
+/** What one workstream touches in a file: what it changed, and what it declared. */
+interface Touch {
+  /** It changed the file (not only declared it). */
+  file: boolean;
+  changed: Set<string>;
+  declared: Set<string>;
+}
+
+function touches(w: FootprintInput): Map<string, Touch> {
+  const out = new Map<string, Touch>();
+  for (const f of w.files) out.set(f.path, { file: true, changed: new Set((f.symbols ?? []).map((s) => s.name)), declared: new Set() });
+  for (const d of w.intended ?? []) {
+    const t = out.get(d.path) ?? { file: false, changed: new Set<string>(), declared: new Set<string>() };
+    for (const s of d.symbols) t.declared.add(s);
+    out.set(d.path, t);
+  }
+  return out;
+}
+
 /** Every signal that holds for these footprints, sorted by severity then id. */
 export function computeSignals(footprints: readonly FootprintInput[]): SignalDraft[] {
   const out: SignalDraft[] = [];
   const ordered = [...footprints].sort((a, b) => a.root.localeCompare(b.root));
 
   // ── collision ─────────────────────────────────────────────────────────
+  // What each side changed, and what it declared it is about to change
+  // (A2.4). A declared overlap has the same id as the edit it foretells, so
+  // when the edit lands the signal is updated, not raised again, and a
+  // person's answer to it stands.
   for (let i = 0; i < ordered.length; i++) {
     for (let j = i + 1; j < ordered.length; j++) {
       const a = ordered[i];
       const b = ordered[j];
-      const bFiles = new Map(b.files.map((f) => [f.path, f]));
-      for (const fa of a.files) {
-        const fb = bFiles.get(fa.path);
-        if (!fb) continue;
-        const pair = `\`${workstreamLabel(a)}\` and \`${workstreamLabel(b)}\``;
-        const bSymbols = new Set((fb.symbols ?? []).map((s) => s.name));
-        const shared = [...new Set((fa.symbols ?? []).map((s) => s.name))].filter((n) => bSymbols.has(n)).sort();
+      const sa = touches(a);
+      const sb = touches(b);
+      for (const [file, ta] of sa) {
+        const tb = sb.get(file);
+        if (!tb) continue;
+        const shared = [...new Set([...ta.changed, ...ta.declared])].filter((n) => tb.changed.has(n) || tb.declared.has(n)).sort();
+        const onlyDeclared = (t: Touch, symbol?: string) => (symbol ? !t.changed.has(symbol) : !t.file);
+        const said = (symbol?: string) => [onlyDeclared(ta, symbol) ? a.root : null, onlyDeclared(tb, symbol) ? b.root : null]
+          .filter((r): r is string => r !== null);
+        const words = (subject: string, symbol?: string) => {
+          const [da, db] = [onlyDeclared(ta, symbol), onlyDeclared(tb, symbol)];
+          const [la, lb] = [`\`${workstreamLabel(a)}\``, `\`${workstreamLabel(b)}\``];
+          if (!da && !db) return `${la} and ${lb} both change ${subject}`;
+          if (da && db) return `${la} and ${lb} both mean to change ${subject} (declared; nothing changed yet)`;
+          return da ? `${la} means to change ${subject} (declared), and ${lb} changes it` : `${lb} means to change ${subject} (declared), and ${la} changes it`;
+        };
         if (shared.length > 0) {
           for (const symbol of shared) {
-            out.push(draft('collision', 'high', `${fa.path}#${symbol}`, { file: fa.path, symbol }, [a.root, b.root],
-              `${pair} both change ${fa.path} → ${symbol}`));
+            const intended = said(symbol);
+            out.push(draft('collision', 'high', `${file}#${symbol}`, { file, symbol, ...(intended.length ? { intended } : {}) }, [a.root, b.root],
+              words(`${file} → ${symbol}`, symbol)));
           }
         } else {
-          out.push(draft('collision', 'medium', fa.path, { file: fa.path }, [a.root, b.root],
-            `${pair} both change ${fa.path}`));
+          const intended = said();
+          out.push(draft('collision', 'medium', file, { file, ...(intended.length ? { intended } : {}) }, [a.root, b.root], words(file)));
         }
       }
     }

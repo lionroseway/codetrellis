@@ -204,3 +204,42 @@ describe('contract (A2.3)', () => {
     assert.equal(importableName('Invoice#post'), 'Invoice');
   });
 });
+
+describe('declared intent in a collision (A2.4)', () => {
+  test('an intent on a function the other side changes is a high collision, before anything is edited', () => {
+    const d = computeSignals([
+      ws('/r/auth', 'auth-refresh', [], { intended: [{ path: 'src/session.ts', symbols: ['refreshToken'] }] }),
+      ws('/r/billing', 'billing-v2', [file('src/session.ts', [sym('refreshToken')])]),
+    ]);
+    assert.deepEqual(brief(d), ['high collision src/session.ts#refreshToken']);
+    assert.equal(d[0].summary, '`auth-refresh` means to change src/session.ts → refreshToken (declared), and `billing-v2` changes it');
+    assert.deepEqual(d[0].subject.intended, ['/r/auth']);
+  });
+
+  test('two intents on one file are a medium collision, and say nothing has changed yet', () => {
+    const d = computeSignals([
+      ws('/r/a', 'a', [], { intended: [{ path: 'src/x.ts', symbols: [] }] }),
+      ws('/r/b', 'b', [], { intended: [{ path: 'src/x.ts', symbols: [] }] }),
+    ]);
+    assert.deepEqual(brief(d), ['medium collision src/x.ts']);
+    assert.equal(d[0].summary, '`a` and `b` both mean to change src/x.ts (declared; nothing changed yet)');
+    assert.deepEqual(d[0].subject.intended, ['/r/a', '/r/b']);
+  });
+
+  test('the declared overlap and the edit it foretells are one signal: same id, no longer marked declared', () => {
+    const other = ws('/r/billing', 'billing-v2', [file('src/session.ts', [sym('refreshToken')])]);
+    const [declared] = computeSignals([ws('/r/auth', 'auth-refresh', [], { intended: [{ path: 'src/session.ts', symbols: ['refreshToken'] }] }), other]);
+    const [edited] = computeSignals([ws('/r/auth', 'auth-refresh', [file('src/session.ts', [sym('refreshToken')])]), other]);
+    assert.equal(declared.id, edited.id);
+    assert.equal(edited.subject.intended, undefined);
+    assert.equal(edited.summary, '`auth-refresh` and `billing-v2` both change src/session.ts → refreshToken');
+  });
+
+  test('an intent elsewhere raises nothing', () => {
+    const d = computeSignals([
+      ws('/r/a', 'a', [], { intended: [{ path: 'src/y.ts', symbols: ['f'] }] }),
+      ws('/r/b', 'b', [file('src/x.ts', [sym('f')])]),
+    ]);
+    assert.deepEqual(brief(d), []);
+  });
+});

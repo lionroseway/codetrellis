@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords } from './workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines } from './workstream-strip';
 import type { AwarenessSignal, Workstream, WorkstreamAgent } from '../../shared/types';
 
 const agent = (sessionId: string): WorkstreamAgent => ({ sessionId, agentType: 'claude-code', model: null, source: 'mcp', lastSeen: 0 });
@@ -170,5 +170,17 @@ describe('signature changes on the strip (A2.1)', () => {
     assert.equal(signatureWords([changed, body]), "createInvoice's signature changed");
     assert.equal(signatureWords([changed, { ...changed, name: 'refund' }]), '2 signatures changed');
     assert.equal(signatureWords([body]), null);
+  });
+});
+
+describe('declared intent on the strip (A2.4)', () => {
+  test('one line per file: the symbols it names, or just the file', () => {
+    assert.deepEqual(intentLines({ paths: ['src/b.ts', 'src/a.ts'], symbols: ['total', 'src/c.ts#render', 'src/a.ts#Session.renew'] }), [
+      'src/a.ts → Session.renew, total',
+      'src/b.ts → total',
+      'src/c.ts → render',
+    ]);
+    assert.deepEqual(intentLines({ paths: ['src/a.ts'], symbols: [] }), ['src/a.ts']);
+    assert.deepEqual(intentLines({ paths: [], symbols: [] }), []);
   });
 });

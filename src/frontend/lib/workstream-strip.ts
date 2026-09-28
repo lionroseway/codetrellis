@@ -3,7 +3,7 @@
  * rules are tested without rendering.
  */
 
-import type { AwarenessSignal, ChangedFile, SignalSeverity, SymbolChange, Workstream } from '@shared/types';
+import type { AwarenessSignal, ChangedFile, SignalSeverity, SymbolChange, Workstream, WorkstreamIntent } from '@shared/types';
 
 /** Chips beyond this collapse into "+N", which opens the same list. */
 export const MAX_CHIPS = 5;
@@ -70,6 +70,24 @@ export function changeWords(w: Pick<Workstream, 'changes'>): string | null {
   if (n === 0) return null;
   const count = w.changes.truncated ? `${n}+` : String(n);
   return `${count} file${n === 1 && !w.changes.truncated ? '' : 's'} changed`;
+}
+
+/**
+ * What a declared intent claims, one line per file (A2.4):
+ * `src/x.ts → total, render`, or just the file when it names no symbol.
+ * Bare names apply to every path; `path#name` to its own file.
+ */
+export function intentLines(i: Pick<WorkstreamIntent, 'paths' | 'symbols'>): string[] {
+  const bare = i.symbols.filter((s) => !s.includes('#'));
+  const files = new Map<string, Set<string>>(i.paths.map((p) => [p, new Set(bare)]));
+  for (const s of i.symbols) {
+    const at = s.lastIndexOf('#');
+    if (at < 0) continue;
+    const p = s.slice(0, at);
+    files.set(p, (files.get(p) ?? new Set<string>()).add(s.slice(at + 1)));
+  }
+  return [...files].sort(([a], [b]) => a.localeCompare(b))
+    .map(([p, names]) => (names.size ? `${p} → ${[...names].sort().join(', ')}` : p));
 }
 
 /** The one-letter mark a changed file carries, as git prints it. */

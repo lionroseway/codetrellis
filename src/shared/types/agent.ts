@@ -94,6 +94,26 @@ export interface Workstream {
   changes: WorkstreamChanges;
   /** No agent in it and nothing changed. Hidden unless asked for. */
   idle: boolean;
+  /**
+   * What agents in it have said they are about to change (A2.4), one per
+   * session. Part of its footprint, so overlaps show before files change.
+   */
+  intents?: WorkstreamIntent[];
+}
+
+/**
+ * An agent's declared intent (A2.4). `summary` is the agent's own words: shown
+ * to the person and to that agent, never to another agent.
+ */
+export interface WorkstreamIntent {
+  sessionId: string;
+  agentType: string;
+  summary: string;
+  /** Relative to the repository root. */
+  paths: string[];
+  /** Bare names (apply to every path) or `path#name`. */
+  symbols: string[];
+  declaredAt: number;
 }
 
 export type ChangedFileStatus = 'added' | 'modified' | 'deleted' | 'renamed';
@@ -199,6 +219,8 @@ export interface AwarenessSignal {
     signature?: { before: string; after: string };
     importers?: string[];
     possibly?: boolean;
+    /** A collision whose side (by root) has only declared it, not changed anything yet (A2.4). */
+    intended?: string[];
   };
   /** The workstreams it names, by folder, sorted. */
   workstreams: string[];

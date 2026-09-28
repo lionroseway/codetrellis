@@ -73,7 +73,9 @@ export function digestLine(workstreams: readonly Workstream[], signals: readonly
 export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string {
   if (s.kind === 'stale-base') return 'Behind main';
   if (s.kind === 'contract') return s.subject.change === 'removed' ? 'Removed export' : 'Changed signature';
-  return s.subject.symbol ? 'Same function' : 'Same file';
+  // Declared, not yet edited, on at least one side (A2.4).
+  const declared = s.subject.intended?.length ? ' · declared' : '';
+  return (s.subject.symbol ? 'Same function' : 'Same file') + declared;
 }
 
 /**
