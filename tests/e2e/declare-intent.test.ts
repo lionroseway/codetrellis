@@ -90,7 +90,8 @@ test.describe.serial('Declared intent', () => {
     const mine = people.find((w) => same(w.root, billing))!;
     expect(mine.intents).toEqual([expect.objectContaining({ agentType: 'claude-code', summary: 'Tighten email validation for billing contacts', paths: [REL] })]);
 
-    const seen = JSON.parse((await other.callTool('list_workstreams', {})).text) as { workstreams: Ws[] };
+    // `answer`: the other agent is told about the overlap in a notice after it.
+    const seen = JSON.parse((await other.callTool('list_workstreams', {})).answer) as { workstreams: Ws[] };
     const theirs = seen.workstreams.find((w) => same(w.root, billing))!;
     expect(theirs.intents).toHaveLength(1);
     expect(theirs.intents![0].paths).toEqual([REL]);

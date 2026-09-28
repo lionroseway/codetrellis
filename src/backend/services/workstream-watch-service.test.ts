@@ -138,6 +138,24 @@ describe('watching', () => {
     assert.ok(getChanges(tree, 'main').files.some((f) => f.path === 'src/new-feature.ts'));
   });
 
+  test('editing a file that is already changed tells the listener again, though the list is the same (bug 54)', async () => {
+    const heard: string[][] = [];
+    setWorkstreamChangesListener((_f, c) => heard.push(c.files.map((f) => f.path)));
+    await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
+    await settle(300);
+    write(tree, 'src/already.ts');
+    await settle();
+    const before = heard.length;
+    assert.ok(before >= 1);
+    // Same file, edited again: the list of changed files does not move, but
+    // its symbols and signature can, and signals follow them.
+    fs.writeFileSync(path.join(tree, 'src/already.ts'), 'export function f(a: number, b: number) { return a + b; }\n');
+    await settle();
+    assert.ok(heard.length > before, 'told again');
+    assert.deepEqual(heard.at(-1), heard[before - 1]);
+    fs.rmSync(path.join(tree, 'src/already.ts'));
+  });
+
   test('a change made while the watcher is still starting is not lost', async () => {
     const f = path.join(tree, 'src/during-startup.ts');
     await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);

@@ -4,7 +4,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { useToastStore } from '../../stores/toast-store';
 import {
-  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, stateWords, actionsFor, ago,
+  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, stateWords, actionsFor, ago, toldWords,
 } from '../../lib/awareness-view';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
 import { UnverifiedIf } from '../UnverifiedTag';
@@ -188,6 +188,28 @@ function DriftDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
   );
 }
 
+/**
+ * The agents told about a signal, and what each said with acknowledge_signal
+ * (A2.6). Their words, quoted and attributed: they sit beside the person's
+ * answer and never set it.
+ */
+function AgentsTold({ signal: s, now }: { signal: AwarenessSignal; now: number }) {
+  const told = toldWords(s, now);
+  const notes = (s.told ?? []).filter((t) => t.note);
+  if (!told && notes.length === 0) return null;
+  return (
+    <div data-testid="awareness-told" className="mt-1.5 space-y-0.5 text-[10px] text-foreground-subtle">
+      {told && <div>{told}</div>}
+      {notes.map((t) => (
+        <div key={t.sessionId} data-testid="awareness-agent-note" className="pl-2 border-l border-accent/30" title="The agent's own words">
+          <span className="italic text-foreground-muted">&ldquo;{t.note}&rdquo;</span> &mdash; {t.agentType}
+          {t.notedAt ? ` · ${ago(t.notedAt, now)}` : ''}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; workstreams: Workstream[]; now: number }) {
   const answer = useAwarenessStore((st) => st.answer);
   const [busy, setBusy] = useState(false);
@@ -239,6 +261,8 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
 
       {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
       {s.kind === 'drift' && <DriftDetail subject={s.subject} />}
+
+      <AgentsTold signal={s} now={now} />
 
       {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}<UnverifiedIf type={s.stateBy?.actorType} /></div>}
 

@@ -167,6 +167,12 @@ export interface AwarenessSensorConfig {
    * its last commit is this recent. Default: 7.
    */
   branchWindowDays?: number;
+  /**
+   * Tell an agent about an unseen high or medium signal for its workstream by
+   * appending a short notice to its next tool result, once per signal
+   * (A2.6, awareness spec §6.2). Default: true.
+   */
+  inlineNotices?: boolean;
 }
 
 export interface SensorConfig {
@@ -182,7 +188,7 @@ export const SENSOR_DEFAULTS = {
   drift: { enabled: true, channelEvents: true, debounceMs: 2000 },
   docs: { enabled: true, channelEvents: true },
   stuck: { enabled: false, repetitionThreshold: 8, errorLoopThreshold: 5, idleMinutes: 15 },
-  awareness: { branchWindowDays: 7 },
+  awareness: { branchWindowDays: 7, inlineNotices: true },
 } as const;
 
 /** Phase 6.5 — freeze-period governance. */

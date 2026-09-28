@@ -32,6 +32,7 @@ import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
 import { readBindingHeaders } from './binding-headers';
 import { recordFolderRequest } from '../services/folder-requests';
+import { noticeFor } from '../services/awareness-notices';
 import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
 import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
@@ -480,6 +481,13 @@ function setupMcpServerInstance(sessionId: string): McpServer {
 
     try {
       const result = await handler(args, extra);
+      // Being told without asking (A2.6): an unseen high or medium signal for
+      // this session's workstream rides on the result it was getting anyway,
+      // once, as its own clearly marked block.
+      if (result && !result.isError && Array.isArray(result.content)) {
+        const notice = noticeFor(sessionId, name, getActiveProjectPath());
+        if (notice) result.content.push({ type: 'text', text: notice });
+      }
       const summary = result?._meta?.summary;
       broadcastToolEvent({
         tool: name,

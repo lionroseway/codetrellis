@@ -269,6 +269,36 @@ test.describe('Awareness tab', () => {
     expect(sent).toEqual([{ id: 'd1', state: 'intended', project: expect.any(String) }]);
   });
 
+  test('who was told, and what each agent said, sit beside the person\'s answer (A2.6)', async ({ page }) => {
+    const told = signal('t1', {
+      kind: 'contract', severity: 'high', workstreams: ['/work/acme-auth', '/work/acme-billing'],
+      subject: {
+        file: 'src/billing/invoice.ts', symbol: 'createInvoice', by: '/work/acme-billing', change: 'signature',
+        signature: { before: '(opts: InvoiceOpts): Invoice', after: '(opts: InvoiceOpts, currency: string): Invoice' },
+        importers: ['src/auth/checkout.ts'],
+      },
+      summary: '`billing-v2` changed createInvoice in src/billing/invoice.ts: (opts: InvoiceOpts): Invoice → (opts: InvoiceOpts, currency: string): Invoice. `auth-refresh` imports it in 1 file',
+      told: [
+        { sessionId: 's2', agentType: 'codex', toldAt: Date.now() - 180_000, note: 'Seen. I will pass currency: "GBP" until billing-v2 merges.', notedAt: Date.now() - 120_000 },
+        { sessionId: 's3', agentType: 'claude-code', toldAt: Date.now() - 170_000 },
+      ],
+    });
+    await serve(page, ROOM, [told]);
+    await gotoWithProject(page);
+    await tabButton(page).click();
+
+    const c = card(page, 'createInvoice');
+    const box = c.getByTestId('awareness-told');
+    await expect(box).toContainText('Told codex and claude-code · 2 min ago');
+    await expect(c.getByTestId('awareness-agent-note')).toHaveText('“Seen. I will pass currency: "GBP" until billing-v2 merges.” — codex · 2 min ago');
+    // The agent's note is not the person's answer: it is still open, and theirs to give.
+    await expect(c).toHaveAttribute('data-state', 'open');
+    await expect(c.getByTestId('awareness-answered')).toHaveCount(0);
+    await expect(c.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expandPanel(page);
+    await shot(page, 'awareness-told');
+  });
+
   test('calm states: parallel work with nothing to answer, and no parallel work at all', async ({ page }) => {
     await serve(page, ROOM, []);
     await gotoWithProject(page);

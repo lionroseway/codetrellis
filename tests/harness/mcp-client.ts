@@ -52,6 +52,12 @@ export interface McpToolResult {
   /** Best-effort decoded text — concatenation of every text-typed
    *  content entry. Empty string if there's no text. */
   text: string;
+  /**
+   * The tool's own answer: its first text entry. An awareness notice (Phase
+   * 32 A2.6) rides after it as a separate entry, so parse this, not `text`,
+   * when the answer is JSON and the agent may have been told something.
+   */
+  answer: string;
 }
 
 export interface ScriptedMcp {
@@ -122,10 +128,12 @@ export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
         .filter((c) => c.type === 'text' && typeof c.text === 'string')
         .map((c) => c.text as string)
         .join('\n');
+      const answer = (result.content ?? []).find((c) => c.type === 'text' && typeof c.text === 'string')?.text ?? '';
       return {
         content: result.content ?? [],
         isError: result.isError,
         text,
+        answer: answer as string,
       };
     },
 

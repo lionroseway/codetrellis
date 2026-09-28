@@ -198,6 +198,17 @@ export interface SignalStateBy {
   channel: 'desktop' | 'local-api';
 }
 
+/** An agent session that was told about a signal, and what it said (A2.6). */
+export interface SignalTold {
+  sessionId: string;
+  agentType: string;
+  /** When its tool result carried the notice, or it read the signal; null if it only left a note. */
+  toldAt: number | null;
+  /** The agent's own words, from acknowledge_signal. */
+  note?: string;
+  notedAt?: number;
+}
+
 export interface AwarenessSignal {
   /** Stable for the same (kind, subject, workstreams): a signal that keeps firing is updated, not re-sent. */
   id: string;
@@ -231,6 +242,11 @@ export interface AwarenessSignal {
   firstSeen: number;
   lastSeen: number;
   state: SignalState;
+  /**
+   * The agent sessions told about it, and the note each left (A2.6). Shown
+   * to the person; an agent sees only its own.
+   */
+  told?: SignalTold[];
   /** Who last set the state, and when; absent while nobody has (A1.8). */
   stateBy?: SignalStateBy;
   stateAt?: number;

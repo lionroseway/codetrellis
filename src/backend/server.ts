@@ -44,6 +44,7 @@ import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-wa
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
 import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
+import { withTold, setNoticeListener } from './services/awareness-notices';
 import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDismissal, setFolderRequestsListener } from './services/folder-requests';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
@@ -661,6 +662,7 @@ setRefsChangedListener((repo) => {
 // Signals follow the footprints (A1.6): recomputed shortly after a
 // workstream's files move, and announced only when they change.
 setAwarenessListener((projectRoot) => broadcast('awareness-changed', { projectRoot }));
+setNoticeListener((projectRoot) => broadcast('awareness-changed', { projectRoot, told: true }));
 let signalTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSignalRefresh(): void {
   if (signalTimer) clearTimeout(signalTimer);
@@ -733,7 +735,8 @@ app.get('/api/awareness', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   refreshSignals(projectRoot);
-  res.json({ signals: listSignals(projectRoot) });
+  // With the agents told about each and what they said (A2.6).
+  res.json({ signals: withTold(listSignals(projectRoot)) });
 });
 
 // A person's answer to a signal (A1.8): acknowledged, intended, dismissed,

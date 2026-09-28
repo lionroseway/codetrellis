@@ -97,8 +97,13 @@ test.describe.serial('Answering awareness signals', () => {
     const body = JSON.parse((await agent.callTool('get_awareness', {})).text) as { signals: Signal[] };
     expect(body.signals.map((s) => [s.id, s.state])).toEqual([[id, 'acknowledged']]);
     const names = (await agent.listTools()).map((t) => t.name);
-    // The awareness tools are the two that read.
-    expect(names.filter((n) => /awareness|signal|footprint/.test(n)).sort()).toEqual(['check_footprint', 'get_awareness']);
+    // Two that read, and acknowledge_signal (A2.6), which records the agent's
+    // own note and never the person's answer.
+    expect(names.filter((n) => /awareness|signal|footprint/.test(n)).sort()).toEqual(['acknowledge_signal', 'check_footprint', 'get_awareness']);
+    const ack = await agent.callTool('acknowledge_signal', { id, note: 'Seen; nothing to do on my side.' });
+    expect(ack.isError, ack.text).toBeFalsy();
+    const [after] = await signals();
+    expect(after).toMatchObject({ id, state: 'acknowledged', stateBy: { actorType: 'unverified' } });
   });
 
   test('marked intended, dismissed, then taken back to open', async () => {

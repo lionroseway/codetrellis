@@ -183,7 +183,12 @@ test.describe.serial('Drift and review tools', () => {
     // A second commit that touches the decision.
     const why = ((await (await h.client.raw('GET', `/api/plans/${made.uid}/items`)).json()) as Array<{ uid: string; title: string }>).find((i) => i.title === 'Why')!;
     await json('update_item', { uid: why.uid, body: 'We chose SQLite for the cache; revisit SQLite if we shard.' });
-    await expect.poll(() => git('status', '--porcelain', '.codetrellis').length, { timeout: 5000 }).toBeGreaterThan(0);
+    // Wait for the new text itself, not for any change: the write-through can
+    // touch plan.yaml before it rewrites the item, and a commit taken in
+    // between records no change to the decision (seen under a full parallel run).
+    const revised = () => (fs.readdirSync(planDir, { recursive: true }) as string[])
+      .some((f) => { try { return fs.readFileSync(path.join(planDir, f), 'utf-8').includes('revisit SQLite'); } catch { return false; } });
+    await expect.poll(revised, { timeout: 5000 }).toBe(true);
     git('add', '.codetrellis'); git('commit', '-qm', 'Note when to revisit');
 
     const found = await json('search_plan_history', { project_path: root, plan_slug: slug, query: 'sqlite' });
