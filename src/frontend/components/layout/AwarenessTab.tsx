@@ -173,6 +173,21 @@ function ContractDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
   );
 }
 
+/** The files a drift signal found outside the workstream's scope (A2.5), and where the scope came from. */
+function DriftDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
+  const items = subject.items?.length ?? 0;
+  return (
+    <div data-testid="awareness-drift" className="mt-1.5 text-[10px] text-foreground-subtle">
+      <div>
+        Outside the scope{items ? ` of ${items === 1 ? 'its claimed item' : `its ${items} claimed items`}` : ''}:
+      </div>
+      <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+        {(subject.files ?? []).map((f) => <code key={f} className="font-mono text-foreground-muted" title={f}>{f}</code>)}
+      </div>
+    </div>
+  );
+}
+
 function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; workstreams: Workstream[]; now: number }) {
   const answer = useAwarenessStore((st) => st.answer);
   const [busy, setBusy] = useState(false);
@@ -223,6 +238,7 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
       </div>
 
       {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
+      {s.kind === 'drift' && <DriftDetail subject={s.subject} />}
 
       {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}<UnverifiedIf type={s.stateBy?.actorType} /></div>}
 

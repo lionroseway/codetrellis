@@ -244,6 +244,31 @@ test.describe('Awareness tab', () => {
     await expect(page.getByTestId('awareness-set-aside')).toContainText('Set aside 1');
   });
 
+  test('drift: a workstream editing outside its claimed item, the files named, and it can be intended (A2.5)', async ({ page }) => {
+    const drift = signal('d1', {
+      kind: 'drift', severity: 'medium', workstreams: ['/work/acme-billing'],
+      subject: { files: ['config/shared.ts', 'src/auth/session.ts'], items: ['item-1'] },
+      summary: '`billing-v2` changes 2 files outside the scope its claimed item gives it: config/shared.ts, src/auth/session.ts',
+    });
+    const sent = await serve(page, ROOM, [drift]);
+    await gotoWithProject(page);
+    await tabButton(page).click();
+
+    const d = card(page, 'outside the scope');
+    await expect(d).toHaveAttribute('data-severity', 'medium');
+    await expect(d).toContainText('Outside its scope');
+    await expect(d.getByTestId('awareness-sides')).toHaveText('billing-v2');
+    await expect(d.getByTestId('awareness-drift')).toContainText('Outside the scope of its claimed item:');
+    await expect(d.getByTestId('awareness-drift')).toContainText('config/shared.ts');
+    await expect(d.getByTestId('awareness-drift')).toContainText('src/auth/session.ts');
+    await expect(d.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expandPanel(page);
+    await shot(page, 'awareness-drift');
+
+    await d.getByRole('button', { name: 'Intended' }).click();
+    expect(sent).toEqual([{ id: 'd1', state: 'intended', project: expect.any(String) }]);
+  });
+
   test('calm states: parallel work with nothing to answer, and no parallel work at all', async ({ page }) => {
     await serve(page, ROOM, []);
     await gotoWithProject(page);

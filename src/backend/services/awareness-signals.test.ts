@@ -6,7 +6,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSignals, contractCandidates, importableName, reconcileSignals, type ContractChange, type FootprintInput } from './awareness-signals';
+import { computeSignals, contractCandidates, importableName, outsideScope, reconcileSignals, type ContractChange, type FootprintInput, type WorkstreamScope } from './awareness-signals';
 import type { ChangedFile, SymbolChange } from '../../shared/types';
 
 const sym = (name: string, change: SymbolChange['change'] = 'modified'): SymbolChange => ({ name, kind: 'function', change, line: 1 });
@@ -241,5 +241,42 @@ describe('declared intent in a collision (A2.4)', () => {
       ws('/r/b', 'b', [file('src/x.ts', [sym('f')])]),
     ]);
     assert.deepEqual(brief(d), []);
+  });
+});
+
+describe('drift (A2.5)', () => {
+  const scope = (over: Partial<WorkstreamScope> = {}): WorkstreamScope => ({ paths: ['src/billing/invoice.ts'], dirs: [], items: ['item-1'], declared: false, ...over });
+
+  test('a file outside the claimed item\'s files is medium drift, naming the file and the item', () => {
+    const d = computeSignals([ws('/r/billing', 'billing-v2', [file('src/billing/invoice.ts'), file('config/shared.ts')], { scope: scope() })]);
+    assert.deepEqual(brief(d), ['medium drift config/shared.ts']);
+    assert.equal(d[0].summary, '`billing-v2` changes 1 file outside the scope its claimed item gives it: config/shared.ts');
+    assert.deepEqual(d[0].subject, { files: ['config/shared.ts'], items: ['item-1'] });
+    assert.deepEqual(d[0].workstreams, ['/r/billing']);
+  });
+
+  test('inside the scope, nothing: files named, anything under a folder, both ends of a move, and plan files', () => {
+    const s = scope({ dirs: ['src/billing/'], paths: ['src/old.ts', 'src/new.ts'] });
+    assert.deepEqual(outsideScope([
+      file('src/billing/tax/vat.ts'),
+      { path: 'src/new.ts', from: 'src/old.ts', status: 'renamed' },
+      file('.codetrellis/plans/abc/plan.md'),
+    ], s), []);
+    // A move out of scope is outside it.
+    assert.deepEqual(outsideScope([{ path: 'lib/new.ts', from: 'src/old.ts', status: 'renamed' }], s), ['lib/new.ts']);
+  });
+
+  test('where the scope came from is said: items, declared intent, or both', () => {
+    const one = (sc: WorkstreamScope) => computeSignals([ws('/r/w', 'w', [file('x.ts')], { scope: sc })])[0].summary;
+    assert.match(one(scope({ items: [], declared: true })), /outside the scope its declared intent gives it: x\.ts$/);
+    assert.match(one(scope({ items: ['a', 'b'] })), /outside the scope its claimed items give it/);
+    assert.match(one(scope({ declared: true })), /outside the scope its claimed item and its declared intent give it/);
+  });
+
+  test('no scope at all is nothing to drift from; many files are summarised, all kept in the subject', () => {
+    assert.deepEqual(brief(computeSignals([ws('/r/w', 'w', [file('a.ts')])])), []);
+    const many = computeSignals([ws('/r/w', 'w', ['a', 'b', 'c', 'd', 'e'].map((n) => file(`${n}.ts`)), { scope: scope() })]);
+    assert.match(many[0].summary, /5 files outside .*: a\.ts, b\.ts, c\.ts and 2 more$/);
+    assert.equal(many[0].subject.files!.length, 5);
   });
 });

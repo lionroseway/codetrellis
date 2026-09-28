@@ -171,11 +171,11 @@ export interface WorkstreamChanges {
 // ── Awareness signals (Phase 32 A1.6) ────────────────────────────────
 
 /**
- * The kinds built so far. `collision`, `contract` (A2.3) and `stale-base`
- * come from the footprints; `drift`, `rule`, `duplicate` and `decision`
+ * The kinds built so far. `collision`, `contract` (A2.3), `drift` (A2.5) and
+ * `stale-base` come from the footprints; `rule`, `duplicate` and `decision`
  * follow (awareness spec §4.3).
  */
-export type SignalKind = 'collision' | 'contract' | 'stale-base';
+export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base';
 export type SignalSeverity = 'high' | 'medium' | 'low';
 /**
  * Where a signal stands (A1.6, set by a person from A1.8):
@@ -221,6 +221,8 @@ export interface AwarenessSignal {
     possibly?: boolean;
     /** A collision whose side (by root) has only declared it, not changed anything yet (A2.4). */
     intended?: string[];
+    /** Drift: the claimed items whose scope the files fall outside (A2.5). */
+    items?: string[];
   };
   /** The workstreams it names, by folder, sorted. */
   workstreams: string[];

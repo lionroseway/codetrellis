@@ -15,6 +15,10 @@
  *    that name. `high`: it will break a build. When they only import the
  *    module as a namespace it is `medium`: they possibly use it. A body-only
  *    edit has no signature change, so it raises nothing.
+ *  - **drift** (A2.5) — a workstream changes files outside the scope it was
+ *    given: its agents' claimed items' files and folders, and their declared
+ *    intent. `medium`: someone should look. A workstream with no scope at all
+ *    has nothing to drift from, and raises nothing.
  *  - **stale-base** — main has changed files this workstream also changes
  *    since it branched. `low`: worth knowing, nothing is broken yet.
  *
@@ -43,6 +47,39 @@ export interface FootprintInput {
   contracts?: ContractChange[];
   /** Files its agents declared they are about to change, each with the symbols named (A2.4). */
   intended?: Array<{ path: string; symbols: string[] }>;
+  /** What it was given to change (A2.5); absent when nothing was, so nothing can drift. */
+  scope?: WorkstreamScope;
+}
+
+/** The files and folders a workstream may change, and where that came from (A2.5). */
+export interface WorkstreamScope {
+  /** Files, relative to the repository root. */
+  paths: string[];
+  /** Folders: everything under them is in scope. */
+  dirs: string[];
+  /** Claimed items that gave it scope. */
+  items: string[];
+  /** Its agents declared an intent that gave it scope. */
+  declared: boolean;
+}
+
+/**
+ * Files never counted as drift: CodeTrellis's own plan files, which an agent
+ * updates as part of doing any item.
+ */
+const NEVER_DRIFT = /^\.codetrellis\//;
+
+/** The changed files that fall outside a scope, sorted. Pure. */
+export function outsideScope(files: readonly ChangedFile[], scope: WorkstreamScope): string[] {
+  const paths = new Set(scope.paths);
+  const dirs = scope.dirs.map((d) => d.replace(/\/+$/, '') + '/');
+  const inside = (p: string) => paths.has(p) || dirs.some((d) => p.startsWith(d));
+  return [...new Set(files.flatMap((f) => {
+    if (NEVER_DRIFT.test(f.path)) return [];
+    // A move is in scope when both ends are.
+    const ends = f.status === 'renamed' && f.from ? [f.from, f.path] : [f.path];
+    return ends.every(inside) ? [] : [f.path];
+  }))].sort();
 }
 
 /** An exported symbol whose shape changed, or which went, and who imports it. */
@@ -177,6 +214,20 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
         }, [a.root, b.root], `\`${workstreamLabel(a)}\` ${what}. \`${workstreamLabel(b)}\` ${uses}`));
       }
     }
+  }
+
+  // ── drift ─────────────────────────────────────────────────────────────
+  for (const w of ordered) {
+    if (!w.scope || (w.scope.paths.length === 0 && w.scope.dirs.length === 0)) continue;
+    const files = outsideScope(w.files, w.scope);
+    if (files.length === 0) continue;
+    const from = [
+      w.scope.items.length ? (w.scope.items.length === 1 ? 'its claimed item' : 'its claimed items') : null,
+      w.scope.declared ? 'its declared intent' : null,
+    ].filter(Boolean).join(' and ');
+    const shown = files.length <= 3 ? files.join(', ') : `${files.slice(0, 3).join(', ')} and ${files.length - 3} more`;
+    out.push(draft('drift', 'medium', w.root, { files, ...(w.scope.items.length ? { items: [...w.scope.items].sort() } : {}) }, [w.root],
+      `\`${workstreamLabel(w)}\` changes ${plural(files.length, 'file')} outside the scope ${from} give${from.includes(' and ') || w.scope.items.length > 1 ? '' : 's'} it: ${shown}`));
   }
 
   // ── stale-base ────────────────────────────────────────────────────────
