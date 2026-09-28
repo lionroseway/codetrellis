@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.3b: breakpoints on the graph and the lanes |
-| **Status** | B4.2c merged (#183); the next steps are refined (#184). B4.3b done on its branch: right-click a file, folder or function to be asked before it changes, ⏸ on the nodes it holds, and ⏸ spans / ⊘ breaches on the Timeline lanes. Unit and browser pass |
-| **Next action** | Open B4.3b's PR and merge it when green. Then C5.1 (sections assigned to workstreams), C5.2, C5.3, B3.1–B3.3, A8.1–A8.4, A2.7; B4.4 after A8 |
+| **Stage / step** | Track C — C5.1: sections of a plan assigned to worktrees |
+| **Status** | B4.3b merged (#185). C5.1 done on its branch: a section's branch, inherited; agents elsewhere (any client) not offered its tasks and refused a claim with where it is worked; `assign_workstream`; the brief says where; "Worked in" on the Routing panel. Unit, harness and browser pass |
+| **Next action** | Open C5.1's PR and merge it when green. Then C5.2 (start a worktree for a section; a start command for any agent) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b4-3b-graph-breakpoints` |
+| **Branch** | `feat/phase-32-c5-1-sections-to-worktrees` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -119,7 +119,7 @@
   - [x] B4.2b Signal breakpoints ([#181](https://github.com/lionroseway/codetrellis/pull/181))
   - [x] B4.2c Function-level breakpoints and breaches ([#183](https://github.com/lionroseway/codetrellis/pull/183))
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
-  - [x] B4.3b Graph node action, ⏸ on nodes, lane spans (PR open)
+  - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
 - [ ] B6 Stack view
@@ -138,7 +138,7 @@
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
 - [ ] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
-  - [ ] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it
+  - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (PR open)
   - [ ] C5.2 Start a worktree for a section; a start command for any agent
   - [ ] C5.3 Workstream chips, progress per worktree, sections named in collisions
 
@@ -236,9 +236,43 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Breakpoints waiting on the person sit at the top of the Awareness tab, and its count includes them; there is no separate inbox tab yet. The breakpoint types move to `src/shared/types/breakpoint.ts`, shared with the window (B4.3a) | Awareness is already where a person answers what needs them, and the observability doc puts breakpoints first in that list. One count avoids a second badge meaning nearly the same thing. A shared type keeps the window and the backend from drifting |
 | 2026-09-28 | A breakpoint on one function holds only what touches it: the hook's edit when the text it replaces overlaps the function's lines in the workstream's copy, a breach when the function is among the workstream's changed functions. Anything that cannot be told is held as the whole file (B4.2c) | The owner asked for function-level detection in general. Warnings were already per function (A1.5, A2.1); breakpoints were per file because the hook saw only the path. Claude Code's edit carries the replaced text, which places it precisely. Guessing "not this function" when unsure would let a protected change through, so doubt holds |
 | 2026-09-28 | Order after B4.2c: B4.3b, C5 (one plan across worktrees), B3 (line changes first, then overlays), A8 (any agent), A2.7 (signatures for the other languages); B4.4 after A8. A feature ships with the path every MCP client has (tool calls, folder watching, git); a client's own hook or log may make it earlier or richer, never be the only way | The owner confirmed the order and called these key, adding that CodeTrellis is agent-agnostic while recent steps leaned on Claude Code's hook and watcher. Line changes come from git, so they are the same for every client; a section's workstream is an id among known workstreams, so no root comes from a request; hook adapters for other clients are added only once their formats are checked, never from memory |
+| 2026-09-28 | A section's worktree is stored as its **branch name**, resolved to the worktree that has it checked out (or a branch checked out nowhere), never as a folder. An agent whose worktree is unknown (no folder reported, or a detached checkout) is not in any section: it is offered only unassigned work and told why, and a claim in a section is refused with where it is worked. People claim from the window as before (C5.1) | Plan files are committed and shared across checkouts and machines (A1.7b), where a folder means nothing and would leak one person's paths. A branch is what a team means by "billing is done on checkout-v2-billing". Refusing the unknown is the safe side: a guess would hand one worktree's task to another. It is not a claim policy (`claimPolicy`), because a child's own policy replaces its parent's whole, and the section's worktree would silently fall away |
 ---
 
 ## Entries
+
+### 2026-09-28: C5.1 — sections of a plan assigned to worktrees
+- **Journey.** "Checkout v2" has Billing and Exports. In Billing's Routing
+  panel, "Worked in" says any agent in any worktree can pick its tasks up;
+  Sam chooses `checkout-v2-billing — acme-billing`, and it now says only
+  agents working on `checkout-v2-billing in /work/acme-billing` are offered
+  or can claim them, whichever agent they are. "Partial refunds", under it,
+  shows "As its section: checkout-v2-billing (inherited from “Billing”)".
+- **Agents, any client (harness, codex and cursor, no hook).** Codex, in
+  exports, asks for the next task: it gets Exports' or unassigned work,
+  with "Tasks in sections worked in other worktrees are not offered to you:
+  1 in checkout-v2-billing". It tries to claim "Partial refunds": refused,
+  `worked_elsewhere`, "…is in “Billing”, which is worked on
+  checkout-v2-billing in <folder>. You are working on exports. Start a
+  session there…". Cursor, in billing, claims it. `get_brief` carries a
+  `worktree` block (branch, section, where, yours, a note). An agent can
+  set a section too: `assign_workstream(item_uid, workstream)` (`write`),
+  refused for a branch no workstream is on.
+- **Stored** as the branch (see Decisions), on `plan_items.workstream`,
+  inherited down the tree by `resolveSection`; exported to plan files and
+  read back only when it is a plausible branch name (`cleanBranch`), since
+  a plan file is anyone's text. REST: `GET/PUT /api/items/:uid/workstream`,
+  the author from how the call arrived; a path, `..` or an unknown branch
+  is 400.
+- **Where the rules live:** `services/section-workstreams.ts` (pure:
+  resolve, where, claim refusal, offered-to, the left-out line); the tools
+  in `plan-item-tools.ts`; the brief's block in `brief-service.ts`.
+- **Tests:** unit `section-workstreams.test.ts` (5); harness
+  `section-worktrees.test.ts` (6, two real worktrees); browser
+  `plan/worked-in.spec.ts` (the room given, the section endpoint stubbed
+  statefully). Related harness specs re-run (claims, next item, brief, plan
+  export, multi-agent, skills). Unit 1,452 pass; typecheck clean; lint
+  warnings unchanged; inventory re-run.
 
 ### 2026-09-28: B4.3b — breakpoints on the graph and the lanes
 - **Journey.** Sam right-clicks `refund.ts` in the graph: "Ask me before

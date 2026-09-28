@@ -15,6 +15,8 @@ import { parseReference, formatReference } from '../../../shared/lib/references'
 import { resultWithMeta, authorFromExtra } from '../helpers';
 import { ABOUT_MATERIALS } from '../../services/brief-service';
 import { quoteMaterial } from '../../services/material-reader/quote';
+import { listWorkstreams } from '../../services/workstream-service';
+import { resolveSection, branchOfRoot, claimRefusal, offeredTo, elsewhereLine, cleanBranch, workstreamOfBranch, whereWorked } from '../../services/section-workstreams';
 
 /**
  * The task's skills for the agent on this connection (Phase 32 C1): the
@@ -409,6 +411,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
+      // Phase 32 C5.1 — a section worked in another worktree is not this agent's to claim.
+      const target = deps.planItemService.getItem(args.uid);
+      if (target) {
+        const { workstreams, callerBranch } = sectionContext(deps);
+        const refusal = claimRefusal(target, resolveSection(target, deps.planItemService.getItem), callerBranch, workstreams);
+        if (refusal) {
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: false, reason: 'worked_elsewhere', message: refusal }, null, 2) }] };
+        }
+      }
       const capabilities = deps.sessionService.getSessionCapabilities(deps.sessionId);
       const result = deps.planItemService.claimItem(
         args.uid,
@@ -473,7 +484,20 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const parentFilter = args.parent_uid === undefined
         ? undefined
         : (args.parent_uid === '' ? null : args.parent_uid);
-      const result = deps.planItemService.getNextItem(args.plan_uid, parentFilter);
+      // Phase 32 C5.1 — only sections worked in this agent's worktree, or in none.
+      const { callerBranch } = sectionContext(deps);
+      const sectionOf = (i: Parameters<typeof resolveSection>[0]) => resolveSection(i, deps.planItemService.getItem);
+      const result = deps.planItemService.getNextItem(args.plan_uid, parentFilter, (i) => offeredTo(sectionOf(i), callerBranch));
+      const elsewhere = elsewhereLine(
+        deps.planItemService.listAllItems(args.plan_uid)
+          .filter((i) => i.kind === 'action' && i.status === 'pending' && !i.assignee && (parentFilter === undefined || i.parentUid === parentFilter))
+          .map((i) => sectionOf(i))
+          .filter((sec): sec is NonNullable<typeof sec> => !offeredTo(sec, callerBranch))
+          .map((sec) => sec.branch),
+      );
+      const elsewhereNote = elsewhere
+        ? `Tasks in sections worked in other worktrees are not offered to you: ${elsewhere}.${callerBranch ? '' : ' CodeTrellis cannot tell which worktree you are in, so it offers you only tasks no section is assigned for.'}`
+        : null;
       if (result.gated) {
         return {
           content: [{
@@ -483,6 +507,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
               reason: result.gated.reason,
               gated_item_uid: result.gated.itemUid,
               gated_item_title: result.gated.itemTitle,
+              ...(elsewhereNote ? { elsewhere: elsewhereNote } : {}),
             }, null, 2),
           }],
         };
@@ -491,11 +516,54 @@ export function register(server: McpServer, deps: ToolDeps): void {
         return {
           content: [{
             type: 'text' as const,
-            text: 'No items available — all claimed, completed, or blocked by dependencies.',
+            text: `No items available — all claimed, completed, or blocked by dependencies.${elsewhereNote ? ` ${elsewhereNote}` : ''}`,
           }],
         };
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ ...result.item, ...skillsFor(deps, result.item) }, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ ...result.item, ...skillsFor(deps, result.item), ...(elsewhereNote ? { elsewhere: elsewhereNote } : {}) }, null, 2) }] };
+    },
+  );
+
+  // --- assign_workstream (Phase 32 C5.1) ---
+
+  server.registerTool(
+    'assign_workstream',
+    {
+      description:
+        'Say which worktree a section of a plan is worked in: its branch, inherited by everything under the item. ' +
+        'Agents in another worktree are then not offered its tasks by get_next_item and cannot claim them. ' +
+        'The branch must be one CodeTrellis knows (see list_workstreams). Pass null to clear, so any worktree may work it.',
+      inputSchema: {
+        item_uid: z.string(),
+        workstream: z.string().nullable().describe('A branch name from list_workstreams, or null to clear.'),
+      },
+    },
+    async ({ item_uid, workstream }, extra) => {
+      const item = deps.planItemService.getItem(item_uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
+      const { workstreams } = sectionContext(deps);
+      let branch: string | null = null;
+      if (workstream !== null) {
+        branch = cleanBranch(workstream);
+        if (!branch || !workstreamOfBranch(branch, workstreams)) {
+          const known = [...new Set(workstreams.map((w) => w.branch).filter((b): b is string => Boolean(b)))];
+          return { content: [{ type: 'text' as const, text: `No workstream on a branch named ${JSON.stringify(workstream)}. Known: ${known.join(', ') || 'none'}.` }], isError: true };
+        }
+      }
+      const id = authorFromExtra(deps, extra);
+      const updated = deps.planItemService.updateItem(item_uid, {
+        workstream: branch,
+        changeSummary: branch ? `Worked on ${branch}` : 'Worked in any worktree',
+        author: id.author,
+        authorType: id.authorType,
+      });
+      if (!updated) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
+      const n = deps.broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: { workstream: branch } });
+      deps.saveNow(() => deps.exportDatabase());
+      const text = branch
+        ? `“${updated.title}” and everything under it are worked on ${whereWorked(branch, workstreams)}.`
+        : `“${updated.title}” can be worked in any worktree${resolveSection(updated, deps.planItemService.getItem) ? ', unless a section above it says otherwise' : ''}.`;
+      return resultWithMeta({ ok: true, message: text, item_uid, workstream: branch }, n);
     },
   );
 
@@ -1546,4 +1614,13 @@ function criterionError(deps: ToolDeps, err: unknown) {
     return { content: [{ type: 'text' as const, text: err.message }], isError: true };
   }
   throw err;
+}
+
+/** Phase 32 C5.1 — the project's workstreams, and the branch this agent works on. */
+function sectionContext(deps: ToolDeps) {
+  const root = deps.getActiveProjectPath();
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git: no workstreams */ }
+  const callerRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
+  return { workstreams, callerBranch: branchOfRoot(callerRoot, workstreams) };
 }

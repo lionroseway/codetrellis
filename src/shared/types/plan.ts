@@ -668,6 +668,13 @@ export interface PlanItem {
    * two sessions of one agent share (Phase 32 bug 1). Not in plan files.
    */
   assigneeSession?: string | null;
+  /**
+   * Phase 32 C5.1 — the branch this section is worked on, inherited by
+   * everything under it: agents in another worktree are not offered its
+   * tasks and cannot claim them. Null: any worktree. A branch rather than a
+   * folder, so it means the same in every checkout.
+   */
+  workstream?: string | null;
   progressPercent?: number | null;
   blockedReason?: string | null;
   /** Folder this Action is rooted at; relative paths in fileSpecs resolve here. */
@@ -872,6 +879,8 @@ export interface CreatePlanItemInput {
   skillsMode?: CascadeMode;
   claimPolicy?: ClaimPolicy | null;
   claimPolicyMode?: 'inherit' | 'replace';
+  /** Phase 32 C5.1 — the branch this section is worked on. */
+  workstream?: string | null;
   executionConfig?: ExecutionConfig | null;
   executionConfigMode?: 'inherit' | 'replace';
   // Phase 17.F — constraints
@@ -907,6 +916,8 @@ export interface UpdatePlanItemInput {
   assigneeType?: string | null;
   assigneeModel?: string | null;
   assigneeSession?: string | null;
+  /** Phase 32 C5.1 — validated against the known workstreams by the caller. */
+  workstream?: string | null;
   progressPercent?: number | null;
   blockedReason?: string | null;
   scopePath?: string | null;

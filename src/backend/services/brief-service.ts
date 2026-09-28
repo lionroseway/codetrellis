@@ -26,6 +26,8 @@ import { listCriteria } from './criteria-service';
 import { formatReference } from '../../shared/lib/references';
 import { TEXT_EXTS } from '../../shared/lib/locator';
 import type { PlanItem } from '../../shared/types';
+import { listWorkstreams } from './workstream-service';
+import { resolveSection, branchOfRoot, whereWorked } from './section-workstreams';
 import type { ItemCriterion } from '../../shared/types/criteria';
 
 const MAX_BODY_CHARS = 20_000;
@@ -201,8 +203,33 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
     criteria,
     sent_back: criteria.filter((c) => c.state === 'sent_back').length,
     ...skillsBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
+    ...worktreeBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
     how_to_work: HOW_TO_WORK,
     about_materials: ABOUT_MATERIALS,
+  };
+}
+
+/**
+ * Where the task is worked (Phase 32 C5.1): its section's branch and
+ * worktree, and whether that is the asking agent's own. Nothing when no
+ * section above it names one.
+ */
+export function worktreeBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
+  const section = resolveSection(item, getItem);
+  if (!section) return {};
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = projectRoot ? listWorkstreams(projectRoot, { includeIdle: true }) : []; } catch { /* no git */ }
+  const yours = branchOfRoot(workstreamRoot, workstreams) === section.branch;
+  return {
+    worktree: {
+      branch: section.branch,
+      section: section.fromTitle,
+      where: whereWorked(section.branch, workstreams),
+      yours,
+      note: yours
+        ? `This task is in “${section.fromTitle}”, worked on ${section.branch}: your worktree.`
+        : `This task is in “${section.fromTitle}”, worked on ${whereWorked(section.branch, workstreams)}, not in your worktree. Only an agent there can claim it.`,
+    },
   };
 }
 
