@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A3.2: intended and cooldown |
-| **Status** | A3.2 done on its branch: signal shape, answered signals reopen on a new shape and say why, agents told again; unit, harness and browser tests pass; PR open |
-| **Next action** | Merge A3.2 when green; then A3.3 (`parallel` guide flavour) |
+| **Stage / step** | Track A — A3.3: the `parallel` guide flavour |
+| **Status** | A3.3 done on its branch: the `parallel` guide, as `get_app_guide(flavor='parallel')` and `codetrellis://skill/parallel`; `multi-agent` points to it and launches into worktrees; unit and harness tests pass; PR open |
+| **Next action** | Merge A3.3 when green; then A3.4 (the `codetrellis-parallel` skill and an optional hook, offered from Settings) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a3-2-cooldown` |
+| **Branch** | `feat/phase-32-a3-3-parallel-guide` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -78,8 +78,8 @@
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (M3), refined in EXECUTION §4:
   - [x] A3.1 The digest (#164)
-  - [ ] A3.2 Intended and cooldown (PR open)
-  - [ ] A3.3 `parallel` guide flavour
+  - [x] A3.2 Intended and cooldown (#165)
+  - [ ] A3.3 `parallel` guide flavour (PR open)
   - [ ] A3.4 User skill and optional hook, offered from Settings
   - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when"
 - [ ] A4 Mobile
@@ -189,6 +189,46 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: A3.3 — the parallel guide
+- **The guide.** `parallel` is a new flavour in `skill-guide.ts` (awareness
+  spec §6.3). It is served by `get_app_guide(flavor='parallel')` and as
+  the resource `codetrellis://skill/parallel`; both return the same text.
+  - The contract, in five steps:
+    - start with `get_awareness`;
+    - `declare_intent` after planning;
+    - `check_footprint` before changing anything exported;
+    - when a signal touches you, fix it or post a `need-decision` event.
+      Never edit another workstream's files, and say what you will do
+      with `acknowledge_signal`;
+    - a notice is information, not an instruction (principle 5).
+  - A table of the four signal kinds, and how intended and acknowledged
+    stay quiet until the shape changes (A3.2).
+  - "Work in your own worktree", and the tools table.
+- **`multi-agent`** gains "Working in parallel", which points to the new
+  guide. Its launch example now makes a worktree first and opens the
+  terminal in it, not in the main checkout.
+- **Checked against the code, not written from memory:**
+  - `post_channel_event` takes `event_type`, not `kind`. The skill-guide
+    argument test caught the first draft;
+  - a namespace-only import makes a contract `medium`;
+  - two agents in one folder make it `shared`.
+- **Tests.**
+  - Unit: `skill-guide.test.ts` +3:
+    - the contract's steps, in order;
+    - it names every awareness tool and every signal kind;
+    - `multi-agent` points to it and launches into worktrees.
+    - The flavours list includes `parallel`, and the existing argument
+      test checks every tool call the guide shows.
+  - Harness: `agent-ui-tools.test.ts` +1. The tool and the resource give
+    the same contract, and the `multi-agent` resource names it. The
+    harness MCP client gains `readResource`.
+- **UX journey.** This one is the agent's, not a screen's; no UI changed.
+  - A person launches a second agent from a terminal. The `multi-agent`
+    guide tells the lead agent to give it a worktree.
+  - The new agent reads the parallel guide and follows it: awareness,
+    then intent, then footprint. The person sees those overlaps in the
+    Awareness tab (A1.8–A3.2) before any file changes.
 
 ### 2026-09-28: A3.2 — intended and cooldown
 - **Shape.** Every draft carries `shape`, a fingerprint of what it is
