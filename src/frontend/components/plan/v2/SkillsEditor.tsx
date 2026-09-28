@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plug, RotateCcw, Pencil, X, Link2, CheckCircle2, Circle } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { useProjectStore } from '../../../stores/project-store';
-import type { PlanItem, ProjectSkill, Skill } from '@shared/types';
+import type { PlanItem, ProjectSkill, Skill, SkillProof } from '@shared/types';
 import {
   USE_LABEL, WHERE_LABEL, skillUse, withUse, withWhy, withWhere, whereText, whereValue,
   matchProjectSkills, fromProjectSkill, fromName, type SkillUse, type WhereKind,
@@ -52,7 +52,7 @@ export function SkillsEditor({
 
   // What is in effect comes from the server: the plan's tree holds summaries
   // without skills, so an ancestor's skills cannot be resolved here.
-  const [effective, setEffective] = useState<Array<{ skill: Skill; fromUid: string; fromTitle: string }> | null>(null);
+  const [effective, setEffective] = useState<Array<{ skill: Skill; fromUid: string; fromTitle: string; proof?: SkillProof | null }> | null>(null);
   const ownKey = JSON.stringify([item.skills ?? [], item.skillsMode, item.parentUid]);
   useEffect(() => {
     let live = true;
@@ -69,6 +69,7 @@ export function SkillsEditor({
   const own = useMemo(() => item.skills ?? [], [item.skills]);
   const isOwn = (name: string) => own.some((s) => s.name === name);
   const fromOf = (name: string) => rows.find((r) => r.skill.name === name)?.fromTitle ?? null;
+  const proofOf = (name: string) => effective?.find((r) => r.skill.name === name)?.proof ?? null;
   const matches = useMemo(() => matchProjectSkills(index, query, shown.map((s) => s.name)), [index, query, shown]);
 
   const save = async (skills: Skill[]) => {
@@ -134,12 +135,14 @@ export function SkillsEditor({
                   <span className="text-[10.5px] text-foreground-subtle">{USE_LABEL[use]}</span>
                 )}
                 {where && (
-                  <span className={`inline-flex items-center gap-1 text-[10.5px] font-mono truncate ${where.peopleOnly ? 'text-foreground-subtle' : 'text-foreground-muted'}`} title={where.text}>
-                    {where.peopleOnly && <Link2 size={10} aria-hidden />}
-                    {where.text}
-                    {where.peopleOnly && <span className="font-sans italic" data-testid="skill-people-only">· people only</span>}
+                  <span className={`inline-flex items-center gap-1 min-w-0 text-[10.5px] font-mono ${where.peopleOnly ? 'text-foreground-subtle' : 'text-foreground-muted'}`} title={where.text}>
+                    {where.peopleOnly && <Link2 size={10} aria-hidden className="shrink-0" />}
+                    <span className="truncate">{where.text}</span>
                   </span>
                 )}
+                {/* Outside the location, so a long URL never truncates it away. */}
+                {where?.peopleOnly && <span className="text-[10.5px] italic text-foreground-subtle whitespace-nowrap" data-testid="skill-people-only">people only</span>}
+                <ProofBadge proof={proofOf(s.name)} use={use} />
                 {!mine && <span className="text-[10px] text-foreground-subtle italic ml-auto" data-testid="skill-inherited">inherited from {fromOf(s.name)}</span>}
                 {mine && (
                   <span className="ml-auto flex items-center gap-1">
@@ -258,4 +261,20 @@ function SkillDetails({ skill, onSave }: { skill: Skill; onSave: (s: Skill) => v
       )}
     </div>
   );
+}
+
+/**
+ * Whether the skill was used (C1.3), once an agent has worked the task.
+ * "Unknown" for agents that record no such thing, never "not used" on a guess.
+ */
+function ProofBadge({ proof, use }: { proof: SkillProof | null; use: SkillUse }) {
+  if (!proof) return null;
+  const text = proof === 'used' ? '✓ used' : proof === 'not_used' ? `○ ${use === 'required' ? 'required' : 'recommended'}, not used` : 'use unknown';
+  const tone = proof === 'used' ? 'text-success' : proof === 'not_used' ? 'text-warning' : 'text-foreground-subtle';
+  const title = proof === 'used'
+    ? 'The agent working this task loaded this skill'
+    : proof === 'not_used'
+      ? 'A Claude Code agent is working this task and has not loaded this skill'
+      : 'This agent does not report which skills it loads';
+  return <span className={`text-[10.5px] whitespace-nowrap ${tone}`} title={title} data-testid="skill-proof" data-proof={proof}>{text}</span>;
 }

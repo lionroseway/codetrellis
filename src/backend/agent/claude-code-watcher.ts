@@ -5,6 +5,7 @@ import type { AgentEvent } from '../../shared/types';
 import { broadcast } from '../server';
 import { recordTokens } from '../services/budget-service';
 import { eventId } from '../services/agent-event-log';
+import { recordSkillUse } from '../services/skill-use-service';
 import { matchWorkstreamRoot, candidateWorkstreamRoots } from '../services/workstream-binding';
 
 /**
@@ -199,6 +200,10 @@ function toolUseEvent(toolName: string, input: Record<string, unknown>): AgentEv
   if (toolName === 'Bash') {
     return makeEvent('file_changed', { action: 'bash', command: String(input.command ?? '').substring(0, 200), tool: toolName });
   }
+  // Phase 32 C1.3: a skill loaded is proof of use, so its name is kept.
+  if (toolName === 'Skill') {
+    return makeEvent('skill_used', { skill: String(input.skill ?? input.name ?? '').slice(0, 80), tool: toolName });
+  }
   if (toolName === 'Glob' || toolName === 'Grep') {
     return makeEvent('architecture_query', { tool: toolName, pattern: input.pattern || input.query });
   }
@@ -256,6 +261,10 @@ function tailSession(sessionId: string, w: Watched): void {
       if (!line.trim()) continue;
       for (const event of parseJsonlEntries(line)) {
         event.payload = { ...event.payload, sessionId, workstreamRoot: w.workstreamRoot };
+        if (event.type === 'skill_used' && typeof event.payload.skill === 'string') {
+          const itemUids = recordSkillUse({ skill: event.payload.skill, sessionId, workstreamRoot: w.workstreamRoot, at: event.timestamp });
+          event.payload = { ...event.payload, itemUids };
+        }
         broadcast('agent-event', event);
       }
     }

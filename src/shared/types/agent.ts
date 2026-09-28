@@ -17,6 +17,8 @@ export type AgentEventType =
   | 'tool_error'
   /** A spec document's or a plan item's body changed (Phase 32 B1.2). */
   | 'spec_edited'
+  /** Claude Code loaded a skill (Phase 32 C1.3): proof of use for the tasks it is working. */
+  | 'skill_used'
   /** A person approved or sent back a criterion (Phase 32 B2.2). */
   | 'criterion_decided'
   /** A plan's criteria were checked (Phase 32 B2.2), per workstream of the items checked. */

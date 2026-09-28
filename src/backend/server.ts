@@ -41,6 +41,7 @@ import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './ser
 import { commitsByWorkstream } from './services/workstream-commits';
 import { normaliseSkills } from './services/skill-model';
 import { listProjectSkills } from './services/skills-service';
+import { skillProof } from './services/skill-use-service';
 import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -2248,12 +2249,16 @@ app.get('/api/plans/:planUid/items', (req, res) => {
 
 /**
  * The skills in effect on an item, own and inherited, each with the item it
- * comes from (Phase 32 C1.2). For people: a link location is included.
+ * comes from (Phase 32 C1.2) and whether it was used (C1.3). For people: a
+ * link location is included.
  */
 app.get('/api/items/:uid/skills', (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
-  res.json({ skills: planItemService.resolveSkillsWithSource(item) });
+  const rows = planItemService.resolveSkillsWithSource(item);
+  // C1.3: whether each was used, once an agent has worked the task.
+  const proof = skillProof(item, rows.map((r) => r.skill));
+  res.json({ skills: rows.map((r) => ({ ...r, proof: proof?.get(r.skill.name) ?? null })) });
 });
 
 /** Plan timeline (plan_events feed). */

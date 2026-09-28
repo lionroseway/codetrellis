@@ -27,6 +27,9 @@ import { getPlan } from './plan-service';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 import { sha256FileWithin } from '../lib/sha256-file';
 import { signoffRows } from './signoff-rows';
+import { listAllItems, resolveSkills } from './plan-item-service';
+import { skillProof } from './skill-use-service';
+import type { SkillProof } from '../../shared/types';
 import { decisionWords, stateWords, type SignoffRow } from '../../shared/lib/signoff';
 
 export const PACK_FORMAT = 'codetrellis-signoff-pack';
@@ -40,6 +43,19 @@ export interface PackFile {
   takenAt: 'approval' | 'submission';
 }
 
+/**
+ * Phase 32 C1.3 — a task's required or recommended skill, and whether it
+ * was used. Null proof: no agent worked the task. Optional in the pack, so a
+ * pack made before it still reads.
+ */
+export interface PackSkill {
+  itemUid: string;
+  itemTitle: string;
+  name: string;
+  use: 'required' | 'recommended';
+  proof: SkillProof | null;
+}
+
 export interface SignoffPack {
   format: typeof PACK_FORMAT;
   version: typeof PACK_VERSION;
@@ -47,6 +63,22 @@ export interface SignoffPack {
   generatedAt: string;
   rows: SignoffRow[];
   files: PackFile[];
+  skills?: PackSkill[];
+}
+
+/** Every task's required and recommended skills, with whether each was used. */
+export function packSkills(planUid: string): PackSkill[] {
+  const out: PackSkill[] = [];
+  for (const item of listAllItems(planUid)) {
+    if (item.kind !== 'action') continue;
+    const wanted = resolveSkills(item).filter((s) => s.required || s.use === 'recommended');
+    if (wanted.length === 0) continue;
+    const proof = skillProof(item, wanted);
+    for (const s of wanted) {
+      out.push({ itemUid: item.uid, itemTitle: item.title, name: s.name, use: s.required ? 'required' : 'recommended', proof: proof?.get(s.name) ?? null });
+    }
+  }
+  return out;
 }
 
 export function buildSignoffPack(planUid: string, now: Date = new Date()): SignoffPack {
@@ -76,6 +108,7 @@ export function buildSignoffPack(planUid: string, now: Date = new Date()): Signo
     generatedAt: now.toISOString(),
     rows,
     files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
+    skills: packSkills(planUid),
   };
 }
 
@@ -255,6 +288,7 @@ ${groupByItem(unverified).map((g) => `<h3 class="item">${esc(g.title)} <span cla
 ${sections || (pack.rows.length ? '' : '<p class="muted">This plan has no acceptance criteria.</p>')}
 ${unverifiedSection}
 ${self}
+${skillsSection(pack.skills ?? [])}
 <h2>Files and hashes</h2>
 <p class="muted">Every file this pack vouches for, with the sha256 it had when it was judged. "Verify a pack" in CodeTrellis re-hashes each one and says which still match.</p>
 <table><thead><tr><th>File</th><th>sha256</th><th>Taken</th></tr></thead><tbody>${fileRows || '<tr><td colspan="3" class="muted">No files.</td></tr>'}</tbody></table>
@@ -262,6 +296,16 @@ ${self}
 </body>
 </html>
 `;
+}
+
+function skillsSection(skills: PackSkill[]): string {
+  if (skills.length === 0) return '';
+  const words = (p: SkillProof | null) => p === 'used' ? '✓ used' : p === 'not_used' ? '○ not used' : p === 'unknown' ? 'unknown (the agent does not report it)' : 'not started';
+  const rows = skills.map((s) => `<tr><td>${esc(s.itemTitle)}</td><td>${esc(s.name)}</td><td>${s.use}</td><td>${esc(words(s.proof))}</td></tr>`).join('');
+  return `
+<h2>Skills</h2>
+<p class="muted">The skills each task asked the agent to use, and whether the agent loaded them. Claude Code reports each skill it loads; other agents do not, so theirs read unknown.</p>
+<table><thead><tr><th>Task</th><th>Skill</th><th>Asked as</th><th>Used</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /** The pack's data back out of a saved page (or the JSON itself). */
