@@ -146,7 +146,7 @@ export function AddToClaudeCode() {
                     <strong>Check before every edit</strong> <span className="text-foreground-subtle">(optional)</span>
                     <span className="block text-[10.5px] text-foreground-muted leading-relaxed">
                       {hookPending
-                        ? <>Before Claude Code edits a file, it asks CodeTrellis whether another workstream has changed it, and tells the agent if so. It never blocks or approves an edit, and does nothing when CodeTrellis is not running. {where(hook)}</>
+                        ? <>Before Claude Code edits a file, it asks CodeTrellis whether another workstream has changed it, and tells the agent if so. It never approves an edit, and holds one only where you have set a breakpoint on that file, until you answer. It does nothing when CodeTrellis is not running. {where(hook)}</>
                         : 'Already added, and up to date.'}
                     </span>
                   </span>

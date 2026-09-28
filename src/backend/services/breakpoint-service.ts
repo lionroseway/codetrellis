@@ -26,19 +26,25 @@
  * waiting: a breakpoint never turns into a yes by itself.
  *
  * Plan documents are not covered: no agent tool edits one, so a breakpoint
- * there would guard nothing. Code and signal breakpoints are B4.2.
+ * there would guard nothing.
+ *
+ * **code** breakpoints (B4.2) are on a file, a folder or a function's file in
+ * the opened project, and are enforced outside the item tools: see
+ * `code-breakpoints.ts`. Signal breakpoints are B4.2b.
  */
 
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { getDb } from './database';
 import { recordBreakpointEvent } from './agent-event-log';
 
-export const BREAKPOINT_KINDS = ['task', 'spec'] as const;
+export const BREAKPOINT_KINDS = ['task', 'spec', 'code'] as const;
 export type BreakpointKind = typeof BREAKPOINT_KINDS[number];
 export const DECISIONS = ['continue', 'steer', 'stop'] as const;
 export type Decision = typeof DECISIONS[number];
 /** What the held call would have done. */
-export type BreakpointAction = 'claim' | 'done' | 'edit' | 'delete';
+export type BreakpointAction = 'claim' | 'done' | 'edit' | 'delete' | 'edit_code' | 'breach';
 
 export const MAX_NOTE = 1000;
 /** How deep a parent chain is walked; plans are never this deep. */
@@ -47,10 +53,12 @@ const MAX_DEPTH = 50;
 export interface Breakpoint {
   id: string;
   kind: BreakpointKind;
-  /** The item it is on. */
+  /** The item it is on; for a code breakpoint, the repository-relative path (a folder ends in `/`, a function is `path#name`). */
   target: string;
   targetTitle: string | null;
   planUid: string | null;
+  /** A code breakpoint's project. */
+  projectRoot: string | null;
   note: string | null;
   createdAt: number;
   createdBy: string;
@@ -67,6 +75,10 @@ export interface BreakpointHit {
   action: BreakpointAction;
   itemUid: string;
   itemTitle: string | null;
+  /** A code hit's file, repository-relative. */
+  path: string | null;
+  /** A change seen only after it was made: recorded, never paused. */
+  breach: boolean;
   planUid: string | null;
   agent: string | null;
   sessionId: string | null;
@@ -79,7 +91,7 @@ export interface BreakpointHit {
   answeredByType: string | null;
 }
 
-function rowsOf<T>(sql: string, params: Array<string | number | null> = []): T[] {
+export function rowsOf<T>(sql: string, params: Array<string | number | null> = []): T[] {
   const res = getDb().exec(sql, params as Array<string | number>);
   if (!res.length) return [];
   const { columns, values } = res[0];
@@ -157,19 +169,21 @@ function lineage(uid: string): ItemRow[] {
 }
 
 interface BreakpointRow {
-  id: string; kind: string; target: string; plan_uid: string | null; note: string | null;
+  id: string; kind: string; target: string; plan_uid: string | null; project_root: string | null; note: string | null;
   created_at: number; created_by: string; created_by_type: string; title?: string | null;
 }
 
 function toBreakpoint(r: BreakpointRow): Breakpoint {
   return {
-    id: r.id, kind: r.kind as BreakpointKind, target: r.target, targetTitle: r.title ?? null, planUid: r.plan_uid,
+    id: r.id, kind: r.kind as BreakpointKind, target: r.target, targetTitle: r.title ?? null, planUid: r.plan_uid, projectRoot: r.project_root ?? null,
     note: r.note, createdAt: Number(r.created_at), createdBy: r.created_by, createdByType: r.created_by_type,
   };
 }
 
-const ACTIVE_SELECT = `SELECT b.id, b.kind, b.target, b.plan_uid, b.note, b.created_at, b.created_by, b.created_by_type, i.title
+export const ACTIVE_SELECT = `SELECT b.id, b.kind, b.target, b.plan_uid, b.project_root, b.note, b.created_at, b.created_by, b.created_by_type, i.title
   FROM breakpoints b LEFT JOIN plan_items i ON i.uid = b.target WHERE b.cleared_at IS NULL`;
+
+export function toBreakpointRow(r: unknown): Breakpoint { return toBreakpoint(r as BreakpointRow); }
 
 /** Breakpoints still set, oldest first; on one plan's items when `planUid` is given. */
 export function listBreakpoints(planUid?: string): Breakpoint[] {
@@ -192,8 +206,14 @@ export class BreakpointError extends Error {
  * A person sets a breakpoint on an item. The plan comes from the item,
  * never the request. Setting one that is already set returns it.
  */
-export function setBreakpoint(input: { kind: unknown; itemUid: unknown; note?: unknown; by: string; byType: string; now?: number }): { breakpoint: Breakpoint; created: boolean } {
+export function setBreakpoint(input: {
+  kind: unknown; itemUid?: unknown; path?: unknown; symbol?: unknown; note?: unknown;
+  /** The opened project, for a code breakpoint: from the app, never the request. */
+  projectRoot?: string | null;
+  by: string; byType: string; now?: number;
+}): { breakpoint: Breakpoint; created: boolean } {
   if (!BREAKPOINT_KINDS.includes(input.kind as BreakpointKind)) throw new BreakpointError(`kind must be one of ${BREAKPOINT_KINDS.join(', ')}`, 400);
+  if (input.kind === 'code') return setCodeBreakpoint(input);
   const item = typeof input.itemUid === 'string' ? itemRow(input.itemUid) : null;
   if (!item) throw new BreakpointError('Item not found', 404);
   const kind = input.kind as BreakpointKind;
@@ -203,6 +223,60 @@ export function setBreakpoint(input: { kind: unknown; itemUid: unknown; note?: u
   getDb().run(
     'INSERT INTO breakpoints (id, kind, target, plan_uid, note, created_at, created_by, created_by_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [id, kind, item.uid, item.plan_uid, cleanNote(input.note), input.now ?? Date.now(), input.by, input.byType],
+  );
+  return { breakpoint: getBreakpoint(id)!, created: true };
+}
+
+const SYMBOL_RE = /^[A-Za-z_$][\w$.#()]{0,99}$/;
+
+/**
+ * A code breakpoint's target as stored: a repository-relative POSIX path
+ * inside the project that exists now (a folder gets a trailing `/`), or a
+ * file's `path#symbol`. Throws a 400 for anything else. Lexical checks first,
+ * so nothing outside the project is ever looked at.
+ */
+export function codeTarget(projectRoot: string, rawPath: unknown, rawSymbol?: unknown): string {
+  if (typeof rawPath !== 'string') throw new BreakpointError('A code breakpoint needs a path in the project', 400);
+  let p = rawPath.trim().replace(/^\.\/+/, '');
+  const folderHint = p.endsWith('/');
+  p = p.replace(/\/+$/, '').replace(/\/{2,}/g, '/');
+  if (!p || p.length > 300 || p.includes('\0') || p.includes('\\') || p.startsWith('/') || /^[A-Za-z]:/.test(p) || p.startsWith('~')
+    || p.split('/').some((x) => x === '..' || x === '.' || x === '')) {
+    throw new BreakpointError('A code breakpoint\'s path must be relative to the project, with no ..', 400);
+  }
+  let stat: fs.Stats;
+  try { stat = fs.statSync(path.join(projectRoot, p)); } catch { throw new BreakpointError(`No ${p} in the opened project`, 404); }
+  const folder = stat.isDirectory();
+  if (folderHint && !folder) throw new BreakpointError(`${p} is a file, not a folder`, 400);
+  if (rawSymbol !== undefined && rawSymbol !== null && rawSymbol !== '') {
+    if (folder) throw new BreakpointError('A function breakpoint is on a file, not a folder', 400);
+    if (typeof rawSymbol !== 'string' || !SYMBOL_RE.test(rawSymbol)) throw new BreakpointError('symbol must be a name from the file', 400);
+    return `${p}#${rawSymbol}`;
+  }
+  return folder ? `${p}/` : p;
+}
+
+/** The file a code breakpoint's target covers, or the folder prefix (ending in `/`). */
+export function codeScope(target: string): string {
+  const i = target.indexOf('#');
+  return i === -1 ? target : target.slice(0, i);
+}
+
+/** True when a code breakpoint's target covers this repository-relative file. */
+export function codeCovers(target: string, file: string): boolean {
+  const scope = codeScope(target);
+  return scope.endsWith('/') ? file.startsWith(scope) : file === scope;
+}
+
+function setCodeBreakpoint(input: { path?: unknown; symbol?: unknown; note?: unknown; projectRoot?: string | null; by: string; byType: string; now?: number }): { breakpoint: Breakpoint; created: boolean } {
+  if (!input.projectRoot) throw new BreakpointError('No project is open', 409);
+  const target = codeTarget(input.projectRoot, input.path, input.symbol);
+  const existing = rowsOf<BreakpointRow>(`${ACTIVE_SELECT} AND b.kind = 'code' AND b.target = ? AND b.project_root = ?`, [target, input.projectRoot])[0];
+  if (existing) return { breakpoint: toBreakpoint(existing), created: false };
+  const id = `bp_${randomBytes(6).toString('hex')}`;
+  getDb().run(
+    'INSERT INTO breakpoints (id, kind, target, project_root, note, created_at, created_by, created_by_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, 'code', target, input.projectRoot, cleanNote(input.note), input.now ?? Date.now(), input.by, input.byType],
   );
   return { breakpoint: getBreakpoint(id)!, created: true };
 }
@@ -243,19 +317,22 @@ function breakpointFor(kind: BreakpointKind, action: BreakpointAction, chain: It
 // ── Hits ───────────────────────────────────────────────────────────
 
 interface HitRow {
-  ref: string; breakpoint_id: string; tool: string; action: string; item_uid: string; plan_uid: string | null;
+  ref: string; breakpoint_id: string; tool: string; action: string; item_uid: string; path: string | null; breach: number | null; plan_uid: string | null;
   agent: string | null; session_id: string | null; workstream_root: string | null; hit_at: number;
   decision: string | null; note: string | null; answered_at: number | null; answered_by: string | null;
   answered_by_type: string | null; kind: string | null; bp_note: string | null; title: string | null;
 }
 
-const HIT_SELECT = `SELECT h.*, b.kind, b.note AS bp_note, i.title
+export const HIT_SELECT = `SELECT h.*, b.kind, b.note AS bp_note, i.title
   FROM breakpoint_hits h LEFT JOIN breakpoints b ON b.id = h.breakpoint_id LEFT JOIN plan_items i ON i.uid = h.item_uid`;
+
+export function toHitRow(r: unknown): BreakpointHit { return toHit(r as HitRow); }
 
 function toHit(r: HitRow): BreakpointHit {
   return {
     ref: r.ref, breakpointId: r.breakpoint_id, kind: (r.kind as BreakpointKind) ?? null, breakpointNote: r.bp_note ?? null,
-    tool: r.tool, action: r.action as BreakpointAction, itemUid: r.item_uid, itemTitle: r.title ?? null, planUid: r.plan_uid,
+    tool: r.tool, action: r.action as BreakpointAction, itemUid: r.item_uid, itemTitle: r.title ?? null,
+    path: r.path ?? null, breach: Number(r.breach) === 1, planUid: r.plan_uid,
     agent: r.agent, sessionId: r.session_id, workstreamRoot: r.workstream_root, hitAt: Number(r.hit_at),
     decision: (r.decision as Decision) ?? null, note: r.note, answeredAt: r.answered_at === null ? null : Number(r.answered_at),
     answeredBy: r.answered_by, answeredByType: r.answered_by_type,
@@ -277,9 +354,10 @@ export function listHits(q: { state?: 'waiting' | 'all'; planUid?: string } = {}
   return rowsOf<HitRow>(sql, params).map(toHit).reverse();
 }
 
-function hitPayload(hit: BreakpointHit): Record<string, unknown> {
+export function hitPayload(hit: BreakpointHit): Record<string, unknown> {
   return {
     ref: hit.ref, kind: hit.kind, action: hit.action, tool: hit.tool, itemUid: hit.itemUid, itemTitle: hit.itemTitle,
+    ...(hit.path ? { path: hit.path } : {}), ...(hit.breach ? { breach: true } : {}),
     planUid: hit.planUid, agent: hit.agent, ...(hit.workstreamRoot ? { workstreamRoot: hit.workstreamRoot } : {}),
   };
 }
@@ -385,7 +463,13 @@ export function enforce(tool: string, args: unknown, caller: Caller, now = Date.
 
 const DOING: Record<BreakpointAction, string> = {
   claim: 'claiming', done: 'marking done', edit: 'changing the description of', delete: 'deleting',
+  edit_code: 'changing', breach: 'changing',
 };
+
+/** What the hit is about, in words: the file, or the item's title. */
+export function subjectOf(hit: BreakpointHit): string {
+  return hit.path ?? hit.itemTitle ?? hit.itemUid;
+}
 
 function said(hit: BreakpointHit): string {
   return hit.answeredByType === 'human' ? 'A person' : `Someone (${hit.answeredByType ?? 'unknown'})`;
@@ -393,7 +477,7 @@ function said(hit: BreakpointHit): string {
 
 /** The result a held call returns instead of acting. */
 export function pausedResult(hit: BreakpointHit): { content: Array<{ type: 'text'; text: string }>; _meta: { summary: string } } {
-  const what = `${DOING[hit.action]} “${hit.itemTitle ?? hit.itemUid}”`;
+  const what = `${DOING[hit.action]} “${subjectOf(hit)}”`;
   const body = {
     paused: true,
     status: 'paused: waiting for a decision',
@@ -432,9 +516,17 @@ export function decisionView(hit: BreakpointHit): Record<string, unknown> {
       message: 'Still waiting for a person. Call await_decision again with the same ref. Do not make the paused call again until they answer.',
     };
   }
-  const next = hit.decision === 'stop'
-    ? 'Do not make the paused call. Stop that work, and tell the person what you will do instead.'
-    : 'Make the paused call again; it will go through once.';
+  const next = hit.breach
+    ? (hit.decision === 'stop'
+      ? `Stop changing ${hit.path}. Tell the person what you changed there, so they can review or revert it.`
+      : 'Carry on; the person has seen the change.')
+    : hit.action === 'edit_code'
+      ? (hit.decision === 'stop'
+        ? `Do not change ${hit.path}. Tell the person what you will do instead.`
+        : `Make the edit again; ${hit.path} is open to you now.`)
+      : hit.decision === 'stop'
+        ? 'Do not make the paused call. Stop that work, and tell the person what you will do instead.'
+        : 'Make the paused call again; it will go through once.';
   return {
     status: 'answered', ref: hit.ref, decision: hit.decision, note: hit.note,
     by: hit.answeredByType, at: new Date(hit.answeredAt).toISOString(), message: next,

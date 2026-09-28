@@ -154,7 +154,7 @@ test('await_decision\'s view: waiting says call again; answered says what to do'
 });
 
 test('setting: a known kind on an item that exists; the plan from the item; the same one twice is one', () => {
-  assert.throws(() => svc.setBreakpoint({ kind: 'code', itemUid: 'refunds', ...sam }), /kind must be/);
+  assert.throws(() => svc.setBreakpoint({ kind: 'everything', itemUid: 'refunds', ...sam }), /kind must be/);
   assert.throws(() => svc.setBreakpoint({ kind: 'task', itemUid: 'nope', ...sam }), /Item not found/);
   item('elsewhere', null, 'p2');
   const a = svc.setBreakpoint({ kind: 'task', itemUid: 'elsewhere', ...sam });

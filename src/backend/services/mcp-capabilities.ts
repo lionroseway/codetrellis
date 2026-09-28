@@ -225,6 +225,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   await_user_input: 'write',
   // Waiting on a person's answer changes nothing; the answer is spent by the next call.
   await_decision: 'read',
+  // Asks whether a file is held by a breakpoint; records the hit so the person can answer it (B4.2).
+  check_breakpoint: 'read',
 
   // ── project-config-tools ────────────────────────────────────────────
   get_project_config: 'read',

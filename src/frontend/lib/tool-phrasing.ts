@@ -154,6 +154,7 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   await_user_input: { intent: 'ask', mutating: false, phrase: () => 'Waiting for your answer' },
   await_ack: { intent: 'ask', mutating: false, phrase: () => 'Waiting for acknowledgement' },
   await_decision: { intent: 'ask', mutating: false, phrase: () => 'Waiting for a decision at a breakpoint' },
+  check_breakpoint: { intent: 'read', mutating: false, phrase: (a) => (typeof a.path === 'string' ? `Checked for a breakpoint on \`${a.path}\`` : 'Checked for a breakpoint') },
   approve_gate: { intent: 'error', mutating: false, phrase: (a) => `Tried to clear the approval gate on ${subject(a, 'uid')} — refused, sign-off is yours` },
   record_artefact: { intent: 'write', mutating: true, phrase: (a) => `Recorded ${({ material: 'a material', output: 'an output', evidence: 'evidence' } as Record<string, string>)[String(a.role)] ?? 'a file'}: ${subject(a, 'path')}` },
   list_criteria: { intent: 'read', mutating: false, phrase: (a) => `Read the criteria for ${subject(a, 'item_uid')}` },
@@ -310,10 +311,13 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
 
   // ── Breakpoints (B4) ──────────────────────────────────────────────
   if (event.type === 'breakpoint_hit' || event.type === 'breakpoint_answered') {
-    const title = typeof payload.itemTitle === 'string' && payload.itemTitle.trim() ? payload.itemTitle.slice(0, 80) : 'an item';
-    const doing: Record<string, string> = { claim: 'claiming', done: 'marking done', edit: 'changing', delete: 'deleting' };
+    const title = typeof payload.path === 'string' && payload.path ? payload.path.slice(0, 120)
+      : typeof payload.itemTitle === 'string' && payload.itemTitle.trim() ? payload.itemTitle.slice(0, 80) : 'an item';
+    const doing: Record<string, string> = { claim: 'claiming', done: 'marking done', edit: 'changing', delete: 'deleting', edit_code: 'changing', breach: 'changing' };
     const what = `${doing[String(payload.action)] ?? 'acting on'} “${title}”`;
     if (event.type === 'breakpoint_hit') {
+      // B4.2: a change seen only after it was made is a breach, never called a pause.
+      if (payload.breach === true) return { text: `Changed “${title}” past a breakpoint: a breach, it could not be paused`, intent: 'error', tool: null, mutating: true };
       return { text: `Paused at a breakpoint before ${what}`, intent: 'ask', tool: null, mutating: false };
     }
     const who = payload.byType === 'human' ? 'You' : payload.byType === 'phone' ? 'You, from the phone,' : 'Someone';

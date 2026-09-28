@@ -10,12 +10,18 @@
  * token and endpoint files read fresh), calls `check_footprint` for that one
  * file, and disconnects.
  *
- * It only ever informs. The answer goes back as `additionalContext` with no
- * `permissionDecision`, so the edit is neither blocked nor approved: Claude
- * Code's own permission flow runs exactly as it would without the hook. And
- * it fails open, silently: no app, no project, a file outside every known
+ * It informs, with one exception. Other workstreams' changes go back as
+ * `additionalContext` with no `permissionDecision`, so the edit is neither
+ * blocked nor approved: Claude Code's own permission flow runs exactly as it
+ * would without the hook. The exception is a breakpoint (Phase 32 B4.2): when
+ * a person has said "ask me before this file changes", `check_breakpoint`
+ * holds it and the edit is denied with the reason ("paused: waiting for a
+ * decision", and the ref to wait on). That is the person's explicit ask, and
+ * the only case the hook ever says no; it never says yes.
+ *
+ * It fails open, silently: no app, no project, a file outside every known
  * workstream, a slow answer, anything unexpected, and it prints nothing.
- * A hook that got in the way would be uninstalled, and rightly.
+ * A hook that got in the way unasked would be uninstalled, and rightly.
  *
  * What it says describes what changed (branch, file, the functions git and
  * the parser saw), never another agent's words (awareness principle 5).
@@ -35,6 +41,9 @@ export const HOOK_MATCHER = 'Edit|Write|MultiEdit|NotebookEdit';
 
 /** What the agent is shown before a notice, the same marker inline notices use (A2.6). */
 export const HOOK_MARKER = '── CodeTrellis awareness ──';
+
+/** The marker before anything about a breakpoint: the person's request, not information about other work. */
+export const HOOK_BREAKPOINT_MARKER = '── CodeTrellis breakpoint ──';
 
 export interface HookCall {
   /** Where Claude Code is running: the session binds to this folder's workstream. */
@@ -122,6 +131,23 @@ export function hookOutput(notice: string): string {
   return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: notice } });
 }
 
+/** Claude Code's hook output for an edit a breakpoint holds: denied, with the reason the model reads. */
+export function hookDeny(reason: string): string {
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
+}
+
+/** What check_breakpoint answered, as the hook acts on it; null when it says nothing usable. */
+export function breakpointAnswer(text: string | null): { hold: string | null; steer: string | null } | null {
+  if (!text) return null;
+  let v: { status?: unknown; message?: unknown; steer?: unknown; ref?: unknown };
+  try { v = JSON.parse(text); } catch { return null; }
+  if ((v.status === 'paused' || v.status === 'stop') && typeof v.message === 'string') return { hold: v.message, steer: null };
+  if (v.status === 'continue' && typeof v.steer === 'string' && v.steer) {
+    return { hold: null, steer: `${HOOK_BREAKPOINT_MARKER}\nA person answered the breakpoint on this file: continue, with this steer: ${v.steer}` };
+  }
+  return { hold: null, steer: null };
+}
+
 export interface RunHookOptions {
   stdin: string;
   /** Opens a connection bound to this folder: the connector's own connect, with the hook's cwd. */
@@ -163,12 +189,18 @@ export async function runPreToolUseHook(opts: RunHookOptions): Promise<string | 
     });
     if (init.error) return null;
     await upstream.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
-    const res = await request(2, 'tools/call', { name: 'check_footprint', arguments: { paths: [repo.rel] } });
-    const result = res.result as { isError?: boolean; content?: Array<{ type: string; text?: string }> } | undefined;
-    // The first block is the answer; an inline notice (A2.6) may follow it.
-    const text = !result || result.isError ? null : result.content?.[0]?.text ?? null;
+    // The first block is each answer; a notice (A2.6) may follow it.
+    const first = (res: JsonRpcMessage) => {
+      const result = res.result as { isError?: boolean; content?: Array<{ type: string; text?: string }> } | undefined;
+      return !result || result.isError ? null : result.content?.[0]?.text ?? null;
+    };
+    // A breakpoint first (B4.2): a held edit goes no further.
+    const held = breakpointAnswer(first(await request(2, 'tools/call', { name: 'check_breakpoint', arguments: { path: repo.rel } })));
+    if (held?.hold) return hookDeny(held.hold);
+    const text = first(await request(3, 'tools/call', { name: 'check_footprint', arguments: { paths: [repo.rel] } }));
     const notice = text ? hookNotice(text, repo) : null;
-    return notice ? hookOutput(notice) : null;
+    const context = [held?.steer, notice].filter((x): x is string => !!x).join('\n\n');
+    return context ? hookOutput(context) : null;
   })().catch(() => null);
 
   try {

@@ -2305,11 +2305,19 @@ app.get('/api/breakpoints', (req, res) => {
   res.json({ breakpoints: listBreakpoints(plan) });
 });
 
-/** Set a breakpoint: `{ kind: "task" | "spec", itemUid, note? }`. Setting one already set returns it. */
+/**
+ * Set a breakpoint: `{ kind: "task" | "spec", itemUid, note? }`, or
+ * `{ kind: "code", path, symbol?, note? }` on a file or folder of the opened
+ * project (never a project named in the body). Setting one already set
+ * returns it.
+ */
 app.post('/api/breakpoints', (req, res) => {
   const who = personFrom(req);
   try {
-    const { breakpoint, created } = setBreakpoint({ kind: req.body?.kind, itemUid: req.body?.itemUid, note: req.body?.note, by: who.author, byType: who.authorType });
+    const { breakpoint, created } = setBreakpoint({
+      kind: req.body?.kind, itemUid: req.body?.itemUid, path: req.body?.path, symbol: req.body?.symbol, note: req.body?.note,
+      projectRoot: getActiveProjectPath(), by: who.author, byType: who.authorType,
+    });
     if (created) broadcast('breakpoints-changed', { planUid: breakpoint.planUid });
     res.status(created ? 201 : 200).json({ breakpoint });
   } catch (err) {

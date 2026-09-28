@@ -134,8 +134,10 @@ event, for the active project.
   - the `codetrellis-parallel` skill, generated from the guide;
   - an optional `PreToolUse` hook: the connector's `--hook pre-tool-use`
     mode (`mcp/connector/hook.ts`). Before an edit, it runs `check_footprint`
-    for the file and returns `additionalContext`. It never blocks or approves
-    an edit, and it fails open and silent.
+    for the file and returns `additionalContext`. It never approves an edit
+    and fails open and silent. Since B4.2 it asks `check_breakpoint` first
+    and denies an edit only where a person set a breakpoint on the file,
+    as "paused: waiting for a decision" (see `services/code-breakpoints.ts`).
 
 ## Rules to keep
 

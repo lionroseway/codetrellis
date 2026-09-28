@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.1: breakpoints, enforced |
-| **Status** | B4.1 done on its branch: task and spec breakpoints held at the MCP interception; the paused call does nothing and returns a ref; `await_decision` waits from the database, across a restart; continue / steer / stop over REST; hits and answers on the Timeline. Unit, harness (incl. restart) and browser pass |
-| **Next action** | Open B4.1's PR and merge it when green. Then B4.2 (code and signal breakpoints, the hook, breach), B4.3 (the person's side in the window), B4.4 (phone) |
+| **Stage / step** | Track B — B4.2: code breakpoints |
+| **Status** | B4.2 done on its branch: code breakpoints on a file, folder or function's file; the Claude Code hook denies a held edit as paused; other clients' changes surface as a breach on the next tool call. Unit, harness and browser pass |
+| **Next action** | Open B4.2's PR and merge it when green. Then B4.2b (signal breakpoints), B4.3 (the person's side), B4.4 (phone) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b4-1-breakpoints` |
+| **Branch** | `feat/phase-32-b4-2-code-breakpoints` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -104,8 +104,9 @@
   - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
-  - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events (PR open)
-  - [ ] B4.2 Code and signal breakpoints; the hook pauses; breach for other clients
+  - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
+  - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients (PR open)
+  - [ ] B4.2b Signal breakpoints
   - [ ] B4.3 The person's side: set, the waiting list, ⏸ spans
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
@@ -212,10 +213,69 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Settings offers the skill ticked and the hook unticked, both written to Claude Code's user folder (`~/.claude` or `$CLAUDE_CONFIG_DIR`), from the app window only (A3.4) | The skill only loads when relevant; the hook runs before every edit, so it is opted into. User scope because parallel work is per developer, not per repository, and the hook is silent outside known workstreams. Window-only because an agent must not install a hook into its own client |
 | 2026-09-28 | A breakpoint nobody answers keeps waiting; it never becomes a yes. A continue or stop answer is spent by the held agent's next matching call, once, and is the agent's (by agent name, so it survives a reconnect or restart); another agent is held on its own. A task or spec breakpoint covers the item and everything under it, and a deletion is held by one underneath. Plan documents get no spec breakpoint yet (B4.1) | Journey K1's open question: an unanswered breakpoint defaulting to "go" would make it advisory, which is the gap §10.3 names. Keying the answer to the session would lose it at every restart, the case `await_decision` exists for. A parent-level breakpoint ("ask me before touching payments") is the common case in the journeys. No agent tool edits a plan document, so a breakpoint there would guard nothing; it comes with B7's proposals |
 | 2026-09-28 | `await_decision` is a `read` capability and waits at most 55 s per call, returning "still waiting, call again" (B4.1) | Waiting changes nothing, so an agent without write should still be able to wait. MCP clients time a call out at about 60 s; a long wait is many short calls against a row, not one long call |
-
+| 2026-09-28 | The hook now says no in exactly one case: an edit of a file under a code breakpoint is denied (`permissionDecision: deny`) as "paused: waiting for a decision" with the ref. It still never approves, and still fails open and silent. Settings and the awareness doc say so (B4.2; revises A3.4's "only informs") | A breakpoint is the person's explicit ask, and the hook is the only point before an edit that CodeTrellis can reach. Denying with the reason keeps Claude Code's permission flow untouched otherwise, and the agent reads why and what to wait on |
+| 2026-09-28 | A code breakpoint's answer is per workstream and file, and lasts while the breakpoint stands: continue opens the file to that workstream for every later edit (a steer told once), stop keeps refusing it. A function breakpoint holds edits of its file. The project is the opened one, never the request's (B4.2) | An agent edits one file in several steps; asking for each would teach people to clear breakpoints. The hook asks as its own session, so the workstream is what the edit and the answer share. The hook sees the file, not which function an edit lands in, so a function breakpoint cannot honestly be narrower yet |
+| 2026-09-28 | A breach is a change in a workstream's changed files to a file under a code breakpoint, made after the breakpoint was set (file modification time), that the hook did not let through. It is told once per session on its next tool call and recorded as a breach, never a pause. A deletion is not detected (B4.2) | The honest limit in the observability doc §10.3. Without the time check every file already changed in a worktree would be a breach the moment a breakpoint is set. A deleted file leaves no time to compare |
 ---
 
 ## Entries
+
+### 2026-09-28: B4.2 — breakpoints on code
+- **Setting one.** `POST /api/breakpoints {kind: "code", path, symbol?}`
+  puts it on a file, a folder (stored with a trailing `/`) or a function's
+  file (`path#name`) in the **opened** project. A project in the body is
+  ignored. The path must be relative with no `..`, and must exist: a
+  missing path is a 404, anything else a 400.
+- **Claude Code with the hook.** The hook asks the new `check_breakpoint`
+  tool (capability `read`) before `check_footprint`.
+  - A covered file's edit is denied: "paused: waiting for a decision", the
+    person's note, and the ref for `await_decision`.
+  - Continue opens the file to that workstream; a steer rides on the next
+    edit's context once. Stop keeps refusing it.
+  - An app without the tool is not a hold.
+  - `services/code-breakpoints.ts` holds the rules; hits are keyed by
+    workstream.
+- **Everyone else.** At the interception, after the inline notice, the
+  session's workstream changes are checked against the project's code
+  breakpoints. This only runs when the project has any.
+  - A change since the breakpoint was set, not let through by the hook, is
+    recorded as a breach (`breach = 1`).
+  - It is told once per session: "You changed …, which has a breakpoint …
+    recorded as a breach. Stop changing it and call await_decision". It is
+    marked as the person's request.
+  - Answers: continue means carry on; stop means "Stop changing it. Tell
+    the person what you changed there."
+- **Timeline.** "Paused at a breakpoint before changing “packages/shared/…”"
+  for a hold. "Changed “…” past a breakpoint: a breach, it could not be
+  paused" (red) for a breach. A breach is never called a pause.
+- **Words that were no longer true.** Settings said the hook "never blocks
+  or approves an edit". It now says it never approves and holds only where
+  you set a breakpoint. `docs/claude/awareness.md` is updated to match,
+  and the agent guide covers code breakpoints and breaches.
+- **Tests.**
+  - Unit:
+    - `code-breakpoints.test.ts` (8): targets, what they cover, the held
+      edit, continue / steer / stop, a breach, what is not a breach
+      (earlier, deleted, allowed, the hook itself, a link out of the
+      worktree), told once;
+    - `hook.test.ts` +2 (deny; continue with steer; an older app);
+    - `tool-phrasing.test.ts` +1.
+  - Harness: `code-breakpoints.test.ts` (7), with two real worktrees, the
+    real connector as the hook, and Codex without it.
+  - Browser: `breakpoint-timeline.spec.ts` +1, the pause and the breach in
+    words; `mcp-server.spec.ts` checks the new Settings wording.
+    Screenshot `breakpoint-code-timeline`.
+- **UX journey** (K1 on code, K2).
+  1. Sam sets "ask me before touching packages/shared/".
+  2. Claude Code in `billing-v2` goes to edit `validators.ts`. The edit is
+     not made; it is told it is paused and what to wait on.
+  3. Sam answers "Only the email rule". Claude Code's wait returns it, and
+     its next edit goes through with the note.
+  4. Codex in `exports` has no hook and edits the same file anyway. Its
+     next tool call tells it to stop and wait. The Timeline shows a red
+     breach on the exports lane; Sam answers stop, "Revert it".
+
+  Setting from the graph and the waiting list are B4.3.
 
 ### 2026-09-28: B4.1 — breakpoints, enforced
 - **Held before the tool acts** (`services/breakpoint-service.ts`, called from

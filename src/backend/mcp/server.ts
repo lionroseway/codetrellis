@@ -92,6 +92,7 @@ import { buildSkillGuide } from './skill-guide';
 import { agentTypeFromClientInfo } from './client-identity';
 import { eventId, withEventContext } from '../services/agent-event-log';
 import { enforce as enforceBreakpoints, pausedResult, stoppedResult, steerText } from '../services/breakpoint-service';
+import { breachNoticeFor } from '../services/code-breakpoints';
 import { writeEndpointFile, removeEndpointFile } from './connector/files';
 import {
   resolveConnectorCommand,
@@ -522,6 +523,10 @@ function setupMcpServerInstance(sessionId: string): McpServer {
       if (result && !result.isError && Array.isArray(result.content)) {
         const notice = noticeFor(sessionId, name, getActiveProjectPath());
         if (notice) result.content.push({ type: 'text', text: notice });
+        // A breakpoint breach (B4.2): a file with a breakpoint that this
+        // workstream changed with its own editor, which nothing could pause.
+        const breach = breachNoticeFor(sessionId, getActiveProjectPath());
+        if (breach) result.content.push({ type: 'text', text: breach });
       }
       const summary = result?._meta?.summary;
       broadcastToolEvent({
