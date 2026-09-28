@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Carried 2b (owner's decision): unverified is visible; local API changes can be turned off |
-| **Status** | A2.2 (#157) and bug 53 (#158) merged. Carried 2b done on its branch: tag + tooltip everywhere an author shows, the setting, unverified budget/freeze changes flagged, version author types; PR open |
-| **Next action** | Merge carried 2b when green; then A2.3 (`contract` signal) |
+| **Stage / step** | Track A — A2.3: the `contract` signal |
+| **Status** | A2.3 done on its branch: exported flag (Python `__all__`), importers per contract change, `contract` signal, tab and tool wording; unit, harness and browser tests pass; PR open |
+| **Next action** | Merge A2.3 when green; then A2.4 (`declare_intent`) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-carried-2b-unverified` |
+| **Branch** | `feat/phase-32-a2-3-contract` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -68,10 +68,10 @@
 - [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)
 - [x] A1.8 Awareness tab (#155)
 - [x] Bug 53: a squash-merged branch is not live work (A1.7a, #158)
-- [ ] Carried 2b: unverified is tagged and explained everywhere; local API changes can be turned off (owner's decision)
+- [x] Carried 2b: unverified is tagged and explained everywhere; local API changes can be turned off (owner's decision) (#159)
 - [x] A2.1 Signatures (TS/JS, Python)
 - [x] A2.2 Import accuracy (#157)
-- [ ] A2.3 `contract` signal
+- [ ] A2.3 `contract` signal (PR open)
 - [ ] A2.4 `declare_intent`
 - [ ] A2.5 `drift` signal
 - [ ] A2.6 Inline notices and the agent's acknowledgement
@@ -171,11 +171,67 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | An agent's `acknowledge_signal(id, note?)` (spec §6.1) is the agent's own note, per session, shown beside the person's answer; it never sets the person's state (A2.6) | Reconciles the spec with A1.8's decision that a collision is not an agent's to wave away. The agent saying "seen, will rebase after billing merges" is useful to the person; the agent closing it is not |
 | 2026-09-28 | A budget or freeze change over plain HTTP is flagged until a person marks it seen, like an agent's, and shows the unverified tag rather than "(agent)" (carried 2b) | These changes appear to a person only while flagged, so an unflagged unverified change was recorded and then never shown: the opposite of "surfaces the data which allows for someone to audit". Only the person in the app window is unflagged |
 | 2026-09-28 | Multi-session and multi-branch views of graph and code are Track B, not a new track: chip-to-graph focus and in-file markers go with B3's overlay list | Owner asked whether a view of graph and code changes across sessions/branches is coming. It is B2 (lanes), B3 (overlays), B5 (replay) and B6 (stack view); the two concrete asks attach to B3 |
+| 2026-09-28 | A `contract` signal also fires when an exported symbol is **removed** (or a renamed file's export goes), not only when its signature changes; a namespace-only import makes it `medium` ("may use it"), otherwise it is `high` (A2.3) | A removed export breaks its importers at least as surely as a changed one, and the spec's "will break a build" is the test. A namespace import may not touch the name at all, so it is flagged as possible rather than certain |
+| 2026-09-28 | Importers come from the opened project's import graph, intersected with the other workstream's changed files. A file that *newly* imports the symbol in the other workstream is not seen yet (A2.3) | The base graph is where barrels and aliases are resolved (A2.2); parsing and resolving imports per workstream file is a larger change, logged as a follow-up. The common case, both sides editing code that already uses the function, is covered |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A2.3 — the contract signal
+- **Footprint symbols say whether another file can import them.**
+  `SymbolChange.exported` is set in `flatSymbols` by the language's rule.
+  TS/JS: marked `export`. Python: no leading underscore, or listed in
+  `__all__` (`pythonAll` reads it as assigned, annotated, tupled or
+  extended). A member is importable when its top-level type is. A symbol
+  exported in either version keeps the flag, so un-exporting it counts.
+  Languages that mark nothing get no flag and raise no contract signal.
+- **`contractCandidates`** picks the exported symbols whose signature changed
+  (A2.1), or that were removed. A body-only edit has no signature change, so
+  it is never a candidate.
+- **`contractsOf`** looks up each candidate's importers with `importersOf`
+  (A2.2: through barrels, by name, namespace = possibly). It looks under the
+  opened project's path, since every workstream is a checkout of the same
+  repository.
+- **`computeSignals`** raises `contract` when another workstream's changed
+  (not deleted) files include an importer.
+  - It is `high`, or `medium` when every such importer is a namespace import.
+  - The subject carries `by`, `change`, the signature before and after, and
+    the importing files.
+  - Each direction is its own signal. A workstream is never told about its
+    own change.
+  - The summary follows the spec's example.
+- **The Awareness tab.**
+  - "Changed signature" / "Removed export".
+  - The sides read in direction, changer → importer, with a one-way arrow.
+  - The card shows the signature struck through and new, then "Imported by
+    …".
+  - "Intended" is offered: the change is meant, and the importing side will
+    follow.
+  - `get_awareness`'s description and `docs/claude/mcp-tools.md` explain the
+    new kind.
+- **Tests.**
+  - Unit: `awareness-signals` +7 (`contract`, candidates, `importableName`),
+    `workstream-symbols` +5 (the export rule per language, `__all__`,
+    removed/un-exported), `awareness-view` +3.
+  - Harness: `awareness-contract.test.ts` (6) on two real worktrees:
+    - a parameter change imported through the shared barrel by a file the
+      other side edits is high, and the agent there is told;
+    - a body-only edit raises nothing, nor does a change whose importers the
+      other side leaves alone;
+    - a removed export is high;
+    - the Python route importing a changed `add_order` is high;
+    - reverting the importing side resolves it.
+  - Browser: `awareness-tab.spec.ts` +1 with screenshot `awareness-contract`.
+  - None of these pass on the old code, which had no `contract` kind.
+- **UX journey:** a chip turns red → the tab's card says "Changed
+  signature", `billing-v2 → auth-refresh`, the old and new signature, and the
+  importing files → the person acknowledges it, or marks it intended because
+  the other side will adapt. When the importing side stops touching those
+  files (or reverts), the signal resolves on its own.
+- **Follow-up:** a file that newly imports the symbol in the other workstream
+  (see Decisions).
 
 ### 2026-09-28: Carried 2b — unverified is visible, and can be turned off
 Owner's decision, quoted in Decisions. What changed:

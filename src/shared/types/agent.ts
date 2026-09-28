@@ -126,6 +126,13 @@ export interface SymbolChange {
    * language whose parser gives no signatures.
    */
   signature?: { before: string; after: string };
+  /**
+   * Another file can import it (A2.3): it, or for a member the type it
+   * belongs to, is exported. TS/JS: marked `export`. Python: no leading
+   * underscore, or listed in `__all__`. Absent where the language marks
+   * nothing, so no contract signal can come from it.
+   */
+  exported?: true;
 }
 
 /**
@@ -144,11 +151,11 @@ export interface WorkstreamChanges {
 // ── Awareness signals (Phase 32 A1.6) ────────────────────────────────
 
 /**
- * The kinds built so far. `collision` and `stale-base` come from the
- * footprints; `contract`, `drift`, `rule`, `duplicate` and `decision` follow
- * (awareness spec §4.3).
+ * The kinds built so far. `collision`, `contract` (A2.3) and `stale-base`
+ * come from the footprints; `drift`, `rule`, `duplicate` and `decision`
+ * follow (awareness spec §4.3).
  */
-export type SignalKind = 'collision' | 'stale-base';
+export type SignalKind = 'collision' | 'contract' | 'stale-base';
 export type SignalSeverity = 'high' | 'medium' | 'low';
 /**
  * Where a signal stands (A1.6, set by a person from A1.8):
@@ -176,8 +183,23 @@ export interface AwarenessSignal {
   id: string;
   kind: SignalKind;
   severity: SignalSeverity;
-  /** What it is about: a file, and for a symbol collision the symbol. Stale-base lists its files. */
-  subject: { file?: string; symbol?: string; files?: string[] };
+  /**
+   * What it is about: a file, and for a symbol collision the symbol.
+   * Stale-base lists its files. A contract names the file and symbol that
+   * changed, which workstream changed it (`by`), how (`change`, with the
+   * signature before and after), and the other side's files that import it
+   * (`importers`; `possibly` when they only import the module as a namespace).
+   */
+  subject: {
+    file?: string;
+    symbol?: string;
+    files?: string[];
+    by?: string;
+    change?: 'signature' | 'removed';
+    signature?: { before: string; after: string };
+    importers?: string[];
+    possibly?: boolean;
+  };
   /** The workstreams it names, by folder, sorted. */
   workstreams: string[];
   /** One line a person can read. Describes the change; never quotes an agent. */

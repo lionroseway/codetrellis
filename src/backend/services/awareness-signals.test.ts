@@ -6,7 +6,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSignals, reconcileSignals, type FootprintInput } from './awareness-signals';
+import { computeSignals, contractCandidates, importableName, reconcileSignals, type ContractChange, type FootprintInput } from './awareness-signals';
 import type { ChangedFile, SymbolChange } from '../../shared/types';
 
 const sym = (name: string, change: SymbolChange['change'] = 'modified'): SymbolChange => ({ name, kind: 'function', change, line: 1 });
@@ -121,5 +121,86 @@ describe('deduplication and resolution', () => {
     // Same cause, now spelled differently (a symbol added): updated, still acknowledged.
     const next = reconcileSignals([acked], computeSignals(two([sym('refreshToken'), sym('x')])), 2000);
     for (const u of next.upserts.filter((u) => u.id === row.id)) assert.equal(u.state, 'acknowledged');
+  });
+});
+
+describe('contract (A2.3)', () => {
+  const sig = { before: '(opts: Opts): Invoice', after: '(opts: Opts, currency: string): Invoice' };
+  const contract = (over: Partial<ContractChange> = {}): ContractChange => ({
+    file: 'src/billing.ts', symbol: 'createInvoice', change: 'signature', signature: sig,
+    importers: [{ path: 'src/checkout.ts', possibly: false }, { path: 'src/cart.ts', possibly: false }], ...over,
+  });
+  const changer = (c: ContractChange[]) => ws('/r/billing', 'billing-v2', [file('src/billing.ts', [sym('createInvoice')])], { contracts: c });
+
+  test('a signature change imported by files the other workstream changes is high, and says who, what and where', () => {
+    const d = computeSignals([
+      changer([contract()]),
+      ws('/r/checkout', 'checkout-fix', [file('src/checkout.ts'), file('src/cart.ts'), file('README.md')]),
+    ]);
+    assert.deepEqual(brief(d), ['high contract src/billing.ts#createInvoice']);
+    assert.equal(d[0].summary,
+      '`billing-v2` changed createInvoice in src/billing.ts: (opts: Opts): Invoice → (opts: Opts, currency: string): Invoice. `checkout-fix` imports it in 2 files');
+    assert.deepEqual(d[0].subject, {
+      file: 'src/billing.ts', symbol: 'createInvoice', by: '/r/billing', change: 'signature', signature: sig,
+      importers: ['src/cart.ts', 'src/checkout.ts'],
+    });
+    assert.deepEqual(d[0].workstreams, ['/r/billing', '/r/checkout']);
+  });
+
+  test('an importer the other workstream does not change raises nothing: its code still matches main', () => {
+    const d = computeSignals([changer([contract()]), ws('/r/other', 'other', [file('src/unrelated.ts')])]);
+    assert.deepEqual(brief(d), []);
+  });
+
+  test('an importer the other workstream deletes raises nothing', () => {
+    const d = computeSignals([changer([contract()]), ws('/r/c', 'c', [{ path: 'src/checkout.ts', status: 'deleted' }])]);
+    assert.deepEqual(brief(d), []);
+  });
+
+  test('only a namespace import is medium, and says "may use it"', () => {
+    const d = computeSignals([
+      changer([contract({ importers: [{ path: 'src/checkout.ts', possibly: true }] })]),
+      ws('/r/checkout', 'checkout-fix', [file('src/checkout.ts')]),
+    ]);
+    assert.deepEqual(brief(d), ['medium contract src/billing.ts#createInvoice']);
+    assert.match(d[0].summary, /`checkout-fix` may use it in 1 file \(it imports the module as a whole\)$/);
+    assert.equal(d[0].subject.possibly, true);
+  });
+
+  test('a removed export imported elsewhere is high too', () => {
+    const d = computeSignals([
+      changer([contract({ change: 'removed', signature: undefined })]),
+      ws('/r/checkout', 'checkout-fix', [file('src/checkout.ts')]),
+    ]);
+    assert.equal(d[0].severity, 'high');
+    assert.equal(d[0].summary, '`billing-v2` removed createInvoice from src/billing.ts. `checkout-fix` imports it in 1 file');
+  });
+
+  test('each direction is its own signal; a workstream importing its own change is not told about it', () => {
+    const a = ws('/r/a', 'a', [file('src/x.ts'), file('src/y.ts')], {
+      contracts: [contract({ file: 'src/x.ts', symbol: 'one', importers: [{ path: 'src/y.ts', possibly: false }] })],
+    });
+    const b = ws('/r/b', 'b', [file('src/y.ts'), file('src/x.ts')], {
+      contracts: [contract({ file: 'src/y.ts', symbol: 'two', importers: [{ path: 'src/x.ts', possibly: false }] })],
+    });
+    const d = computeSignals([a, b]).filter((s) => s.kind === 'contract');
+    assert.deepEqual(d.map((s) => `${s.subject.by} ${s.subject.symbol}`).sort(), ['/r/a one', '/r/b two']);
+    assert.notEqual(d[0].id, d[1].id);
+  });
+
+  test('which changes are contract changes: exported, and a signature change or a removal; never a body-only edit', () => {
+    const f: ChangedFile = { path: 'src/billing.ts', status: 'modified', symbols: [
+      { name: 'createInvoice', kind: 'function', change: 'modified', line: 1, exported: true, signature: sig },
+      { name: 'formatTotal', kind: 'function', change: 'modified', line: 5, exported: true },
+      { name: 'helper', kind: 'function', change: 'modified', line: 9, signature: sig },
+      { name: 'Session.renew', kind: 'method', change: 'removed', line: 12, exported: true },
+      { name: 'addLine', kind: 'function', change: 'added', line: 20, exported: true },
+    ] };
+    assert.deepEqual(contractCandidates([f]).map((c) => `${c.change} ${c.symbol}`), ['signature createInvoice', 'removed Session.renew']);
+    // A removal from a renamed file is looked up where its importers point: the old path.
+    const moved: ChangedFile = { path: 'src/new.ts', from: 'src/old.ts', status: 'renamed', symbols: [{ name: 'gone', kind: 'function', change: 'removed', line: 1, exported: true }] };
+    assert.equal(contractCandidates([moved])[0].file, 'src/old.ts');
+    assert.equal(importableName('Session.renew'), 'Session');
+    assert.equal(importableName('Invoice#post'), 'Invoice');
   });
 });

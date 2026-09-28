@@ -72,6 +72,7 @@ export function digestLine(workstreams: readonly Workstream[], signals: readonly
 /** What a signal is, in two or three words. */
 export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string {
   if (s.kind === 'stale-base') return 'Behind main';
+  if (s.kind === 'contract') return s.subject.change === 'removed' ? 'Removed export' : 'Changed signature';
   return s.subject.symbol ? 'Same function' : 'Same file';
 }
 
@@ -86,9 +87,16 @@ export function sideLabel(root: string, workstreams: readonly Workstream[]): str
   return root.split(/[\\/]/).filter(Boolean).pop() ?? root;
 }
 
-/** The sides a signal shows. A stale base is one workstream against main. */
-export function sidesOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams'>, workstreams: readonly Workstream[]): string[] {
-  const names = s.workstreams.map((r) => sideLabel(r, workstreams));
+/**
+ * The sides a signal shows. A stale base is one workstream against main. A
+ * contract has a direction: the side that changed it first, then the side
+ * whose work imports it.
+ */
+export function sidesOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>, workstreams: readonly Workstream[]): string[] {
+  const roots = s.kind === 'contract' && s.subject.by
+    ? [s.subject.by, ...s.workstreams.filter((r) => r !== s.subject.by)]
+    : s.workstreams;
+  const names = roots.map((r) => sideLabel(r, workstreams));
   if (s.kind !== 'stale-base') return names;
   const main = workstreams.find((w) => w.main);
   return [...names, main ? chipLabel(main) : 'main'];
@@ -125,16 +133,18 @@ export interface SignalAction { state: SettableSignalState; label: string; hint:
 
 const ACK: SignalAction = { state: 'acknowledged', label: 'Acknowledge', hint: 'You have seen it. It stops marking the strip but stays listed while it is true.' };
 const INTENDED: SignalAction = { state: 'intended', label: 'Intended', hint: 'Both sides are meant to change this. Set aside while the overlap lasts.' };
+const INTENDED_CONTRACT: SignalAction = { state: 'intended', label: 'Intended', hint: 'The change is meant, and the side that imports it will follow. Set aside while it lasts.' };
 const DISMISS: SignalAction = { state: 'dismissed', label: 'Dismiss', hint: 'Not worth your attention. Set aside while the overlap lasts.' };
 const REOPEN: SignalAction = { state: 'open', label: 'Reopen', hint: 'Take your answer back: it needs you again.' };
 
 /**
- * The answers a signal offers in its state. "Intended" means both sides are
- * meant to change the same thing, so only a collision offers it: a stale
- * base is one workstream behind main, with no second side to intend.
+ * The answers a signal offers in its state. "Intended" needs two sides: for
+ * a collision both are meant to change the same thing; for a contract the
+ * change is meant and the importing side will follow. A stale base is one
+ * workstream behind main, with no second side to intend.
  */
 export function actionsFor(state: AwarenessSignal['state'], kind: AwarenessSignal['kind'] = 'collision'): SignalAction[] {
-  const intended = kind === 'collision' ? [INTENDED] : [];
+  const intended = kind === 'collision' ? [INTENDED] : kind === 'contract' ? [INTENDED_CONTRACT] : [];
   switch (state) {
     case 'open': return [ACK, ...intended, DISMISS];
     case 'acknowledged': return [...intended, DISMISS, REOPEN];

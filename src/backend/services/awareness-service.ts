@@ -10,12 +10,14 @@
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import type { AwarenessSignal, SettableSignalState, SignalState, SignalStateBy, Workstream } from '../../shared/types';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { isSafeGitRef } from './git-safety';
 import { listWorkstreams } from './workstream-service';
-import { computeSignals, reconcileSignals, type FootprintInput } from './awareness-signals';
+import { importersOf } from './importers';
+import { computeSignals, contractCandidates, importableName, reconcileSignals, type ContractChange, type FootprintInput } from './awareness-signals';
 
 const SHA = /^[0-9a-f]{40}$/;
 
@@ -66,8 +68,25 @@ export function setAwarenessListener(listener: (projectRoot: string) => void): v
   onChanged = listener;
 }
 
-/** The footprints of a repository's active workstreams, with what main did since each branched. */
-export function footprintsOf(all: readonly Workstream[]): FootprintInput[] {
+/**
+ * A workstream's contract changes with who imports each (A2.3). Importers
+ * come from the opened project's graph, under the path the project was
+ * opened at: every workstream is a checkout of the same repository, so a
+ * relative path names the same file in each.
+ */
+export function contractsOf(projectRoot: string, w: Pick<Workstream, 'changes'>): ContractChange[] {
+  return contractCandidates(w.changes.files).map((c) => ({
+    ...c,
+    importers: importersOf(path.join(projectRoot, c.file), [importableName(c.symbol)])
+      .map((i) => ({ path: i.relativePath, possibly: i.possibly })),
+  }));
+}
+
+/**
+ * The footprints of a repository's active workstreams, with what main did
+ * since each branched and, given the project, who imports what each changed.
+ */
+export function footprintsOf(all: readonly Workstream[], projectRoot?: string): FootprintInput[] {
   const main = all.find((w) => w.main);
   const mainRef = main?.branch ?? main?.head ?? null;
   return all.filter((w) => !w.idle).map((w) => ({
@@ -77,6 +96,7 @@ export function footprintsOf(all: readonly Workstream[]): FootprintInput[] {
     files: w.changes.files,
     // A branch workstream has no folder of its own: git runs in the main checkout.
     mainSinceBase: w.main ? [] : mainChangesSince(w.shape === 'branch' && main ? main.root : w.root, w.changes.base, mainRef),
+    ...(projectRoot ? { contracts: contractsOf(projectRoot, w) } : {}),
   }));
 }
 
@@ -86,7 +106,7 @@ export function footprintsOf(all: readonly Workstream[]): FootprintInput[] {
  * confined by the caller.
  */
 export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
-  const drafts = computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true })));
+  const drafts = computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot));
   const { upserts, resolved } = reconcileSignals(loadSignals(projectRoot), drafts, now);
   if (upserts.length === 0 && resolved.length === 0) return false;
 
