@@ -80,7 +80,7 @@
   - [x] A3.1 The digest (#164)
   - [x] A3.2 Intended and cooldown (#165)
   - [x] A3.3 `parallel` guide flavour (#166)
-  - [ ] A3.4 User skill and optional hook, offered from Settings (PR open)
+  - [x] A3.4 User skill and optional hook, offered from Settings (#167)
   - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when" (PR open)
 - [ ] A4 Mobile
 - [ ] A5 Review
@@ -91,6 +91,7 @@
   deleted plans on the other worker (#147). It doesn't reproduce as a pair
   (5/5 on base and on the branch). Find which broadcast leaves the
   workspace, so a person's open plan survives someone else's plan changes.
+- [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
 
