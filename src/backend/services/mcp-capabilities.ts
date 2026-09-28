@@ -223,6 +223,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   await_ack: 'write',
   dismiss_presence: 'write',
   await_user_input: 'write',
+  // Waiting on a person's answer changes nothing; the answer is spent by the next call.
+  await_decision: 'read',
 
   // ── project-config-tools ────────────────────────────────────────────
   get_project_config: 'read',

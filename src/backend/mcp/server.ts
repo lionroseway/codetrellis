@@ -91,6 +91,7 @@ import {
 import { buildSkillGuide } from './skill-guide';
 import { agentTypeFromClientInfo } from './client-identity';
 import { eventId, withEventContext } from '../services/agent-event-log';
+import { enforce as enforceBreakpoints, pausedResult, stoppedResult, steerText } from '../services/breakpoint-service';
 import { writeEndpointFile, removeEndpointFile } from './connector/files';
 import {
   resolveConnectorCommand,
@@ -502,7 +503,19 @@ function setupMcpServerInstance(sessionId: string): McpServer {
 
     try {
       // What the handler records (a spec body edited, B1.2) is this session's.
-      const result = await withEventContext({ sessionId, agentType: agentInfo.type }, () => handler(args, extra));
+      const result = await withEventContext({ sessionId, agentType: agentInfo.type }, async () => {
+        // BREAKPOINTS (B4) — here, after the capability and scope checks and
+        // before the handler, so a held call does nothing, for every tool that
+        // claims, finishes or edits an item. The pause is an ordinary result,
+        // broadcast and logged below like any other.
+        const held = enforceBreakpoints(name, args, { agent: agentInfo.type ?? 'mcp-agent', sessionId });
+        if (held.kind === 'paused') return pausedResult(held.hit);
+        if (held.kind === 'stop') return stoppedResult(held.hit);
+        const out = await handler(args, extra);
+        const steer = held.kind === 'continue' ? steerText(held.hit) : null;
+        if (steer && out && !out.isError && Array.isArray(out.content)) out.content.push({ type: 'text', text: steer });
+        return out;
+      });
       // Being told without asking (A2.6): an unseen high or medium signal for
       // this session's workstream rides on the result it was getting anyway,
       // once, as its own clearly marked block.

@@ -226,6 +226,49 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_skill_arrivals_item ON skill_arrivals(item_uid, skill);
 
+  -- Phase 32 B4: a place a person has said "stop and ask me". A task
+  -- breakpoint fires when an agent claims or finishes the task (or anything
+  -- under it); a spec breakpoint when an agent changes its description. Kept
+  -- after it is cleared, because the hits it caused cite it.
+  CREATE TABLE IF NOT EXISTS breakpoints (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    target TEXT NOT NULL,
+    plan_uid TEXT,
+    note TEXT,
+    created_at INTEGER NOT NULL,
+    created_by TEXT NOT NULL,
+    created_by_type TEXT NOT NULL,
+    cleared_at INTEGER,
+    cleared_by TEXT,
+    cleared_by_type TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_breakpoints_target ON breakpoints(target);
+
+  -- Phase 32 B4: one agent call held at a breakpoint, and the person's
+  -- answer. The agent waits on it by ref (await_decision), from the database,
+  -- so the wait survives timeouts and restarts. \`consumed_at\` is set when
+  -- the agent's next matching call spends the answer.
+  CREATE TABLE IF NOT EXISTS breakpoint_hits (
+    ref TEXT PRIMARY KEY,
+    breakpoint_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    action TEXT NOT NULL,
+    item_uid TEXT NOT NULL,
+    plan_uid TEXT,
+    agent TEXT,
+    session_id TEXT,
+    workstream_root TEXT,
+    hit_at INTEGER NOT NULL,
+    decision TEXT,
+    note TEXT,
+    answered_at INTEGER,
+    answered_by TEXT,
+    answered_by_type TEXT,
+    consumed_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_breakpoint_hits_waiting ON breakpoint_hits(answered_at, hit_at);
+
   -- Phase 32 A1.6: one thing worth knowing about parallel work. Deduplicated
   -- by id (kind, subject, workstreams); resolved when its cause goes away.
   CREATE TABLE IF NOT EXISTS awareness_signals (

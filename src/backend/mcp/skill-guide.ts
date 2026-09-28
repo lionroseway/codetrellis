@@ -211,7 +211,22 @@ user is one checkbox in Settings → MCP Server from unblocking you.
 
 Tools that take a \`project_path\` are also confined to projects the app
 has opened. If you get "is not open", ask the user to open it, or use
-\`open_project\` — which is visible to them, as it should be.`;
+\`open_project\` — which is visible to them, as it should be.
+
+## When a call is paused at a breakpoint
+
+A person can mark a task or a spec "stop and ask me". Claiming or
+finishing that task, or changing that spec, then returns **"paused:
+waiting for a decision"** with a \`ref\`, and nothing was done. Call
+\`await_decision(ref)\` and keep calling it while it says it is still
+waiting — an answer can take hours, and the wait survives restarts.
+
+- **continue**: make the same call again; it goes through once.
+- **steer**: the same, and follow the person's note.
+- **stop**: do not make the call; tell the person what you will do instead.
+
+Never work around a breakpoint (another tool, a different item): it is
+the person's explicit ask.`;
 
 // ── Philosophy — what CodeTrellis is and how to think about it ──────
 
@@ -579,6 +594,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`present(text, speak?, require_ack?, tone?, link_to?)\` | Post a narration card to the floating Presence Pane. Supports **bold**, \`code\`, [links]. Set speak=true for TTS, require_ack=true for pacing |
 | \`await_ack(card_id, timeout_ms?)\` | Block until the user acks a card ("Got it" click or speech end). Returns { acked, via } |
 | \`await_user_input(prompt?, timeout_ms?)\` | Block until the user types a reply in the pane. Returns { text, at } |
+| \`await_decision(ref, wait_seconds?)\` | Wait for a person's answer to a breakpoint that paused your call. Returns { status: answered, decision, note } or { status: waiting } — call again |
 | \`dismiss_presence()\` | Clear all cards and close the pane |
 
 ### Screenshot & clipboard

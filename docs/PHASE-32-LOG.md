@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C1.4: skills arriving in plan files |
-| **Status** | C1.4 done on its branch (stacked on C1.3): a recommended or required skill a plan-file import brings is recorded with who added it and in which commit, held back from every agent read until a person accepts it, and listed in the readiness checklist and on the task. Unit, harness and browser pass. C1.3 (#177) in CI |
-| **Next action** | Merge #177; open C1.4's PR and merge it: C1 done. Then B4 (breakpoints), B3, the direction review |
+| **Stage / step** | Track B — B4.1: breakpoints, enforced |
+| **Status** | B4.1 done on its branch: task and spec breakpoints held at the MCP interception; the paused call does nothing and returns a ref; `await_decision` waits from the database, across a restart; continue / steer / stop over REST; hits and answers on the Timeline. Unit, harness (incl. restart) and browser pass |
+| **Next action** | Open B4.1's PR and merge it when green. Then B4.2 (code and signal breakpoints, the hook, breach), B4.3 (the person's side in the window), B4.4 (phone) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c1-4-pulled-skills` |
+| **Branch** | `feat/phase-32-b4-1-breakpoints` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -103,7 +103,11 @@
   - [x] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click ([#171](https://github.com/lionroseway/codetrellis/pull/171))
   - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
-- [ ] B4 Breakpoints
+- [ ] B4 Breakpoints, refined in EXECUTION §5:
+  - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events (PR open)
+  - [ ] B4.2 Code and signal breakpoints; the hook pauses; breach for other clients
+  - [ ] B4.3 The person's side: set, the waiting list, ⏸ spans
+  - [ ] B4.4 The phone and push
 - [ ] B5 Replay
 - [ ] B6 Stack view
 - [ ] B7 Conferring
@@ -112,11 +116,11 @@
 - [ ] B10 The record
 
 ### Track C: shared ways of working
-- [ ] C1 Skills on tasks
+- [x] C1 Skills on tasks
   - [x] C1.1 Fields, index, brief/claim/next delivery, link never to agents ([#174](https://github.com/lionroseway/codetrellis/pull/174))
   - [x] C1.2 The picker in the routing panel ([#176](https://github.com/lionroseway/codetrellis/pull/176))
   - [x] C1.3 Proof of use; the skills line in a copied task prompt ([#177](https://github.com/lionroseway/codetrellis/pull/177))
-  - [ ] C1.4 A skill arriving in a pulled plan file is flagged once (PR open)
+  - [x] C1.4 A skill arriving in a pulled plan file is flagged once ([#178](https://github.com/lionroseway/codetrellis/pull/178))
 - [ ] C2 Team status through git
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
@@ -206,10 +210,77 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Until C1.4, a recommended skill arriving in a pulled plan file is told to agents at once, like the item body beside it. A `repo` location must be a file in the opened project, re-checked through confined-fs before every telling (C1.1) | A pulled file could already put any text in front of an agent through the item body, and a repo skill is repository content from the same git history. C1.4 adds the "flag once before any agent is told" gate the doc asks for |
 | 2026-09-28 | A lane's commits are that workstream's own: `base..HEAD` for a worktree or branch, main's log for main. A decision or check run goes on the lane of the workstream whose session is assigned the item, and a check run counts trouble as the check-run panel does (B2.2) | Otherwise every lane repeats main's history and the one commit that matters is lost among them. The assignee's workstream is the only link from an item to a lane that no one has to declare. Counting a sent-back criterion as a failed check would show it twice, once as ✗ decided and again as ✗ checked |
 | 2026-09-28 | Settings offers the skill ticked and the hook unticked, both written to Claude Code's user folder (`~/.claude` or `$CLAUDE_CONFIG_DIR`), from the app window only (A3.4) | The skill only loads when relevant; the hook runs before every edit, so it is opted into. User scope because parallel work is per developer, not per repository, and the hook is silent outside known workstreams. Window-only because an agent must not install a hook into its own client |
+| 2026-09-28 | A breakpoint nobody answers keeps waiting; it never becomes a yes. A continue or stop answer is spent by the held agent's next matching call, once, and is the agent's (by agent name, so it survives a reconnect or restart); another agent is held on its own. A task or spec breakpoint covers the item and everything under it, and a deletion is held by one underneath. Plan documents get no spec breakpoint yet (B4.1) | Journey K1's open question: an unanswered breakpoint defaulting to "go" would make it advisory, which is the gap §10.3 names. Keying the answer to the session would lose it at every restart, the case `await_decision` exists for. A parent-level breakpoint ("ask me before touching payments") is the common case in the journeys. No agent tool edits a plan document, so a breakpoint there would guard nothing; it comes with B7's proposals |
+| 2026-09-28 | `await_decision` is a `read` capability and waits at most 55 s per call, returning "still waiting, call again" (B4.1) | Waiting changes nothing, so an agent without write should still be able to wait. MCP clients time a call out at about 60 s; a long wait is many short calls against a row, not one long call |
 
 ---
 
 ## Entries
+
+### 2026-09-28: B4.1 — breakpoints, enforced
+- **Held before the tool acts** (`services/breakpoint-service.ts`, called from
+  `instrument` in `mcp/server.ts`). The check runs after the capability and
+  scope checks, before the handler, so every tool that does the thing is
+  covered:
+  - **task**: `claim_item`, `update_item` to in_progress or done,
+    `delete_item`;
+  - **spec**: `update_item` with a title, body or template,
+    `restore_item_version`, `delete_item`.
+
+  A breakpoint covers the item and everything under it. Deleting a parent
+  is held by one underneath.
+- **The paused call** does nothing. It returns "paused: waiting for a
+  decision", a ref, the breakpoint's note, and what to do next. The same
+  call again while waiting gets the same ref, not a second hit, including
+  after a restart.
+- **`await_decision(ref)`** (a new tool, capability `read`) reads the
+  `breakpoint_hits` row. It returns the answer or, after up to 55 s,
+  "still waiting, call again".
+- **The answer**: continue, steer (a note, required) or stop, over
+  `POST /api/breakpoint-hits/:ref/answer`. Who answered comes from
+  `personFrom`, and the first answer stands.
+  - Continue lets the held agent's next matching call through once, with
+    the steer added to its result.
+  - Stop refuses it once, with the note. The attempt after that is a new
+    pause.
+- **Setting and clearing**: `POST /api/breakpoints` (the plan comes from
+  the item, never the body), `GET /api/breakpoints`,
+  `DELETE /api/breakpoints/:id`. Clearing lets anything waiting through.
+  `GET /api/breakpoint-hits` lists what is waiting.
+- **Timeline**: `breakpoint_hit` joins the agent's turn;
+  `breakpoint_answered` stands alone on the same workstream, with the
+  decision, the note and how long it waited. The held tool call's summary
+  says it was paused. Phrasing: "Paused at a breakpoint before claiming
+  “Partial refunds”", "You said continue claiming …, with a steer: “…”".
+- **The agent guide** gains "When a call is paused at a breakpoint".
+- **Tests.**
+  - Unit:
+    - `breakpoint-service.test.ts` (13): which calls are held and what
+      each would do; task vs spec; parents and deletions; one hit per
+      wait; continue once with the steer; stop once; the first answer
+      stands; clearing; notes; the workstream;
+    - `tool-phrasing.test.ts` +2.
+  - Harness: `breakpoints.test.ts` (8), a real agent (codex) over MCP.
+    - Set, and set twice; a claim under it paused with nothing claimed.
+    - A steer reaches the waiting `await_decision`, and the next claim
+      carries it; marking done is its own pause.
+    - A spec breakpoint holds a body edit across a **restart**; stop
+      refuses once with the note.
+    - Clearing releases the waiting call.
+    - Four hits and four answers on the event log.
+  - Browser: `breakpoint-timeline.spec.ts`: the pause and the steer in
+    words on the Timeline. Screenshot `breakpoint-timeline`.
+- **UX journey** (K1, as far as B4.1 goes).
+  1. Sam sets a breakpoint on "Payments": "Ask me before touching payments".
+  2. Codex claims "Partial refunds" under it and is told it is paused.
+     Nothing is claimed, and its Timeline turn reads "Paused at a
+     breakpoint before claiming “Partial refunds”".
+  3. Sam answers "Go ahead, but don't change the refund path".
+  4. Codex's wait returns that. Its next claim goes through with the note
+     attached, and the Timeline shows the answer.
+
+  Setting and answering from the window and the phone come in B4.3 and
+  B4.4; here they are the REST calls those will make.
 
 ### 2026-09-28: C1.4 — skills arriving in plan files
 - **Recorded on import** (`services/skill-arrival-service.ts`). After a

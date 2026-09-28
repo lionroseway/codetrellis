@@ -43,6 +43,7 @@ import { normaliseSkills } from './services/skill-model';
 import { listProjectSkills } from './services/skills-service';
 import { skillProof } from './services/skill-use-service';
 import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from './services/skill-arrival-service';
+import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
 import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -2289,6 +2290,68 @@ app.post('/api/items/:uid/skill-arrivals/accept', (req, res) => {
   }
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { skillAccepted: skill } });
   res.json({ accepted: skill });
+});
+
+// ── Breakpoints (Phase 32 B4) ──────────────────────────────────────
+//
+// A person says where agents must stop and ask; agents' calls there are held
+// at the MCP interception until a person answers. Who set, cleared or
+// answered comes from how the call arrived, never the body; the plan comes
+// from the item.
+
+/** Breakpoints still set; `?plan=` narrows to one plan's items. */
+app.get('/api/breakpoints', (req, res) => {
+  const plan = typeof req.query.plan === 'string' ? req.query.plan : undefined;
+  res.json({ breakpoints: listBreakpoints(plan) });
+});
+
+/** Set a breakpoint: `{ kind: "task" | "spec", itemUid, note? }`. Setting one already set returns it. */
+app.post('/api/breakpoints', (req, res) => {
+  const who = personFrom(req);
+  try {
+    const { breakpoint, created } = setBreakpoint({ kind: req.body?.kind, itemUid: req.body?.itemUid, note: req.body?.note, by: who.author, byType: who.authorType });
+    if (created) broadcast('breakpoints-changed', { planUid: breakpoint.planUid });
+    res.status(created ? 201 : 200).json({ breakpoint });
+  } catch (err) {
+    if (err instanceof BreakpointError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+/** Clear a breakpoint. Calls still waiting on it are let through. */
+app.delete('/api/breakpoints/:id', (req, res) => {
+  const who = personFrom(req);
+  const bp = getBreakpoint(req.params.id);
+  const { cleared, released } = clearBreakpoint({ id: req.params.id, by: who.author, byType: who.authorType });
+  if (!cleared) { res.status(404).json({ error: 'No such breakpoint is set' }); return; }
+  broadcast('breakpoints-changed', { planUid: bp?.planUid ?? null });
+  res.json({ cleared: req.params.id, released: released.map((h) => h.ref) });
+});
+
+/** Held calls: `?state=waiting` (the default) or `all`; `?plan=` narrows to one plan. */
+app.get('/api/breakpoint-hits', (req, res) => {
+  const state = req.query.state === 'all' ? 'all' : 'waiting';
+  const plan = typeof req.query.plan === 'string' ? req.query.plan : undefined;
+  res.json({ hits: listHits({ state, planUid: plan }) });
+});
+
+/**
+ * Answer a held call: `{ decision: "continue" | "steer" | "stop", note? }`.
+ * A steer needs a note, which the agent reads. The first answer stands.
+ */
+app.post('/api/breakpoint-hits/:ref/answer', (req, res) => {
+  const decision = req.body?.decision;
+  if (!DECISIONS.includes(decision)) { res.status(400).json({ error: `decision must be one of ${DECISIONS.join(', ')}` }); return; }
+  if (decision === 'steer' && !cleanNote(req.body?.note)) { res.status(400).json({ error: 'A steer needs a note for the agent' }); return; }
+  const hit = getHit(req.params.ref);
+  if (!hit) { res.status(404).json({ error: 'No such breakpoint hit' }); return; }
+  const who = personFrom(req);
+  const answered = hit.answeredAt === null
+    ? answerHit({ ref: hit.ref, decision, note: req.body?.note, by: who.author, byType: who.authorType })
+    : null;
+  if (!answered) { res.status(409).json({ error: 'Already answered', hit: getHit(hit.ref) }); return; }
+  broadcast('breakpoint-answered', { ref: answered.ref, planUid: answered.planUid, decision: answered.decision });
+  res.json({ hit: answered });
 });
 
 /** Plan timeline (plan_events feed). */

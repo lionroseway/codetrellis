@@ -153,6 +153,7 @@ const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
   },
   await_user_input: { intent: 'ask', mutating: false, phrase: () => 'Waiting for your answer' },
   await_ack: { intent: 'ask', mutating: false, phrase: () => 'Waiting for acknowledgement' },
+  await_decision: { intent: 'ask', mutating: false, phrase: () => 'Waiting for a decision at a breakpoint' },
   approve_gate: { intent: 'error', mutating: false, phrase: (a) => `Tried to clear the approval gate on ${subject(a, 'uid')} — refused, sign-off is yours` },
   record_artefact: { intent: 'write', mutating: true, phrase: (a) => `Recorded ${({ material: 'a material', output: 'an output', evidence: 'evidence' } as Record<string, string>)[String(a.role)] ?? 'a file'}: ${subject(a, 'path')}` },
   list_criteria: { intent: 'read', mutating: false, phrase: (a) => `Read the criteria for ${subject(a, 'item_uid')}` },
@@ -305,6 +306,22 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
   if (event.type === 'skill_used') {
     const skill = typeof payload.skill === 'string' && payload.skill ? payload.skill.slice(0, 80) : null;
     return { text: skill ? `Used the ${skill} skill` : 'Used a skill', intent: 'read', tool: null, mutating: false };
+  }
+
+  // ── Breakpoints (B4) ──────────────────────────────────────────────
+  if (event.type === 'breakpoint_hit' || event.type === 'breakpoint_answered') {
+    const title = typeof payload.itemTitle === 'string' && payload.itemTitle.trim() ? payload.itemTitle.slice(0, 80) : 'an item';
+    const doing: Record<string, string> = { claim: 'claiming', done: 'marking done', edit: 'changing', delete: 'deleting' };
+    const what = `${doing[String(payload.action)] ?? 'acting on'} “${title}”`;
+    if (event.type === 'breakpoint_hit') {
+      return { text: `Paused at a breakpoint before ${what}`, intent: 'ask', tool: null, mutating: false };
+    }
+    const who = payload.byType === 'human' ? 'You' : payload.byType === 'phone' ? 'You, from the phone,' : 'Someone';
+    const note = typeof payload.note === 'string' && payload.note ? `: “${payload.note.slice(0, 120)}”` : '';
+    const words = payload.decision === 'stop' ? `said stop to ${what}${note}`
+      : payload.decision === 'steer' ? `said continue ${what}, with a steer${note}`
+        : `said continue ${what}`;
+    return { text: `${who} ${words}`, intent: payload.decision === 'stop' ? 'error' : 'write', tool: null, mutating: false };
   }
 
   // ── Criteria decided and checked (B2.2) ───────────────────────────

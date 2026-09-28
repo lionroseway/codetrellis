@@ -435,6 +435,15 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | B2.1 | Lanes above the turn list, one per workstream (main first; a "No workstream" lane only when used): ● a turn, placed by the workstream its events name or its session's; ✎ a turn that edited a spec; ⚠ each signal on every lane it names. The window runs from the earliest mark (15 min to 2 h). Hover says what a mark is in words; click opens the turn below, or goes to Awareness. Live. Tool events carry their workstream as they are broadcast | unit; harness; browser |
 | B2.2 | ◆ commits and merges per workstream (and main), ✓ / ✗ check runs and criterion decisions; the lanes follow refs changes | unit; harness; browser |
 
+### B4: Breakpoints
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B4.1 | `breakpoints` and `breakpoint_hits` tables; task breakpoints (claim, mark done) and spec breakpoints (an agent's edit of a spec or item body) enforced at the MCP interception: the call returns "paused: waiting for a decision" with a reference instead of acting; `await_decision(ref)` returns the answer or "still waiting", from the database, so it survives timeouts and restarts; a person answers continue, continue with a steer, or stop over REST (author from how the call arrived); set and clear over REST; hits and answers are Timeline events | unit; harness incl. restart |
+| B4.2 | Code breakpoints on a file, folder or symbol: the Claude Code hook pauses before the edit; for other clients the next tool call after a change to one reports a breach ("you changed a file with a breakpoint; stop and wait"), recorded and shown as a breach, never as a pause. Signal breakpoints: a project rule that makes a serious signal a breakpoint | unit; harness |
+| B4.3 | The person's side: set a breakpoint on a task, a spec or a graph node; the waiting list with continue / steer / stop; ⏸ spans on the Timeline lanes from hit to answer; breach wording | unit; browser |
+| B4.4 | The phone: waiting breakpoints first in its list, answered from the phone (author the phone), push for a breakpoint | unit; harness |
+
 ## 6. Track C: shared ways of working
 
 | Step | Scope (shared-work doc) |
