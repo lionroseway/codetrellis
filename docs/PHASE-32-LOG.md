@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.4: what each workstream has changed |
-| **Status** | A1.3 merged (#148). A1.4 done on its branch (unit 11 + 4, harness +4, browser +3, screenshots); PR open |
-| **Next action** | Merge A1.4's PR when green; then A1.5 (footprint symbols: parse changed files on disk vs the merge base) |
+| **Stage / step** | Track A — A1.5: which symbols each workstream's changes touch |
+| **Status** | A1.4 merged (#149). A1.5 done on its branch (unit 13 + 3, harness +1, browser +1, screenshot); PR open |
+| **Next action** | Merge A1.5's PR when green; then A1.6 (signals: `awareness_signals`, pure `computeSignals` for collision and stale-base, `get_awareness`, `check_footprint`) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-4-workstream-changes` |
+| **Branch** | `feat/phase-32-a1-5-footprint-symbols` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -62,7 +62,7 @@
 - [x] A1.1 Session binding (#146)
 - [x] A1.2 Multi-session Claude watcher (#147)
 - [x] A1.3 Workstream discovery and strip (#148)
-- [ ] A1.4 Folder watching
+- [x] A1.4 Folder watching (#149)
 - [ ] A1.5 Footprint symbols
 - [ ] A1.6 Signals engine (collision, stale-base) and tools
 - [ ] A1.7 Branch and clone workstreams
