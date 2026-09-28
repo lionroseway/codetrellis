@@ -402,7 +402,7 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 |---|---|
 | B1 | `agent_events` log (tool calls, watcher events, spec body edits), with session, workstream and time |
 | B2 | Timeline lanes per workstream: ● ◆ ⚠ ✓ marks, live, hover and click |
-| B3 | Overlay list in `graph-builder`; plan intent, workstreams and collision zones as overlays |
+| B3 | Overlay list in `graph-builder`; plan intent, workstreams and collision zones as overlays. Also: a signal chip focuses the graph on its files, and the code view marks lines another workstream changes (owner's question, 2026-09-28) |
 | B4 | Breakpoints: table, enforcement at interception, `await_decision`, inbox, phone, timeline span, breach wording |
 | B5 | Replay: automatic snapshots (turn end, status change, commit) with SHA and session; one clock; catch-up |
 | B6 | Stack view: multi-plan aggregate, overlap bands, drawn and cross-plan dependencies (bug 11) |

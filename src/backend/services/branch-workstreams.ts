@@ -9,7 +9,9 @@
  *    stays the only request it makes on its own);
  *  - ahead of its merge base with the main checkout's branch;
  *  - not checked out in any worktree (then it is that worktree's workstream);
- *  - changed within `sensors.awareness.branchWindowDays` (default 7).
+ *  - changed within `sensors.awareness.branchWindowDays` (default 7);
+ *  - not already merged, by content (bug 53): a squash merge leaves the
+ *    branch "ahead" forever, so ancestry cannot say it (see `isMergedInto`).
  *
  * Its changes are `git diff <merge-base> <branch>`: committed work only, as
  * there is no working tree to have uncommitted work in. Symbols come from
@@ -73,6 +75,65 @@ export function selectBranchWorkstreams(
   });
 }
 
+const ZERO = /^0{40}$/;
+
+/**
+ * Parse `git diff --raw -z --no-renames` / `git log --raw -z --no-renames
+ * --format=`: each change as `path → blob it leaves`, `null` for a deletion.
+ * Pure. Later entries win, so for a log (newest first) keep all of them.
+ */
+export function parseRawZ(out: string): Array<{ path: string; blob: string | null }> {
+  const parts = out.split('\0');
+  const changes: Array<{ path: string; blob: string | null }> = [];
+  for (let i = 0; i < parts.length; i++) {
+    const meta = parts[i].replace(/^\n+/, '');
+    if (!meta.startsWith(':')) continue;
+    const fields = meta.slice(1).split(' '); // srcMode dstMode srcBlob dstBlob status
+    const path = parts[++i];
+    if (!path || fields.length < 5) continue;
+    changes.push({ path, blob: ZERO.test(fields[3]) || fields[4].startsWith('D') ? null : fields[3] });
+  }
+  return changes;
+}
+
+/**
+ * Is a branch already merged into main, by content? Pure. True when every
+ * file the branch changes is left, by some commit on main since the window
+ * opened, at exactly the version the branch has (deleted where it deletes).
+ * That is how a squash, rebase, merge or cherry-pick all look from main's
+ * side — and it needs no ancestry, which a squash merge never gives.
+ *
+ * A branch that changes nothing is not "merged": it is idle, and says so.
+ * A branch partly merged, or merged with a different resolution of one
+ * file, is still work.
+ */
+export function isMergedInto(branch: ReadonlyArray<{ path: string; blob: string | null }>, mainLeft: ReadonlySet<string>): boolean {
+  return branch.length > 0 && branch.every((c) => mainLeft.has(`${c.path}\0${c.blob ?? 'deleted'}`));
+}
+
+/** Every `path → blob` main's commits since `sinceSec` left. Never throws. */
+export function mainVersionsSince(repo: string, mainHead: string, sinceSec: number): Set<string> {
+  const out = new Set<string>();
+  if (!/^[0-9a-f]{40}$/.test(mainHead)) return out;
+  try {
+    const log = git(repo, ['log', mainHead, `--since=@${Math.max(0, Math.floor(sinceSec))}`, '--max-count=5000',
+      '--format=', '--raw', '-z', '--no-renames', '--no-abbrev']);
+    for (const c of parseRawZ(log)) out.add(`${c.path}\0${c.blob ?? 'deleted'}`);
+  } catch { /* none */ }
+  return out;
+}
+
+/** The versions a branch leaves its changed files at, relative to its merge base with main. Never throws. */
+export function branchVersions(repo: string, mainHead: string, head: string): Array<{ path: string; blob: string | null }> {
+  if (!/^[0-9a-f]{40}$/.test(mainHead) || !/^[0-9a-f]{40}$/.test(head)) return [];
+  try {
+    const base = git(repo, ['merge-base', mainHead, head]).trim();
+    return parseRawZ(git(repo, ['diff', '--raw', '-z', '--no-renames', '--no-abbrev', base, head, '--']));
+  } catch {
+    return [];
+  }
+}
+
 /** Every local and remote-tracking branch in the repository. Never throws. */
 export function listBranchRefs(repo: string): BranchRef[] {
   try {
@@ -128,7 +189,9 @@ export interface BranchWorkstream extends BranchRef {
 }
 
 /** Answers per (branch head, main head): a branch that has not moved costs nothing to list again. */
-const cache = new Map<string, { ahead: boolean; changes: WorkstreamChanges | null }>();
+const cache = new Map<string, { ahead: boolean; merged: boolean | null; changes: WorkstreamChanges | null }>();
+/** What main left since the window opened, per (main head, window start in days). */
+const mainCache = new Map<string, Set<string>>();
 
 /**
  * The branch workstreams of a repository, each with its changes. `repo` is a
@@ -146,11 +209,23 @@ export function branchWorkstreamsOf(
     return [];
   }
   if (cache.size > 2_000) cache.clear();
+  if (mainCache.size > 50) mainCache.clear();
+  const nowSec = opts.nowSec ?? Math.floor(Date.now() / 1000);
+  // A squash merge lands after the branch's last commit, and the branch was
+  // committed inside the window, so main's commits since the window opened
+  // hold every merge that matters. A day's slack for clock skew.
+  const since = nowSec - (opts.windowDays + 1) * 86_400;
+  const mainKey = `${repo}\0${mainHead}\0${Math.floor(since / 86_400)}`;
+  const mainLeft = () => {
+    let v = mainCache.get(mainKey);
+    if (!v) { v = mainVersionsSince(repo, mainHead, since); mainCache.set(mainKey, v); }
+    return v;
+  };
   const entry = (r: BranchRef) => {
     const k = `${repo}\0${r.head}\0${mainHead}`;
     let hit = cache.get(k);
     if (!hit) {
-      hit = { ahead: isAhead(repo, mainHead, r.head), changes: null };
+      hit = { ahead: isAhead(repo, mainHead, r.head), merged: null, changes: null };
       cache.set(k, hit);
     }
     return hit;
@@ -159,8 +234,14 @@ export function branchWorkstreamsOf(
     mainBranch: opts.mainBranch,
     checkedOut: opts.checkedOut,
     windowDays: opts.windowDays,
-    nowSec: opts.nowSec ?? Math.floor(Date.now() / 1000),
-    aheadOf: (r) => entry(r).ahead,
+    nowSec,
+    aheadOf: (r) => {
+      const hit = entry(r);
+      if (!hit.ahead) return false;
+      // Ahead by ancestry, but maybe merged by content (bug 53).
+      if (hit.merged === null) hit.merged = isMergedInto(branchVersions(repo, mainHead, r.head), mainLeft());
+      return !hit.merged;
+    },
   });
   return selected.map((r) => {
     const hit = entry(r);

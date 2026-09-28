@@ -87,17 +87,22 @@ test.describe('UI tools against the window', () => {
     await client.callTool('open_plan', { plan_uid: seeded.uid });
     await expect(page.getByTestId('plan-item-tree').getByText('Budgeted work')).toBeVisible({ timeout: 15_000 });
 
-    // The person's ceiling, then the agent raises it — while the plan is open.
+    // A ceiling set over plain HTTP, then the agent raises it — while the plan
+    // is open. Both are flagged: the first tagged unverified (carried 2b).
     const res = await request.put(`${API}/plans/${seeded.uid}/budget`, { headers: authHeaders(), data: { minutes: 120 } });
     expect(res.ok()).toBe(true);
     await client.callTool('set_budget', { plan_uid: seeded.uid, minutes: 240 });
 
     const chip = page.getByTestId('plan-budget-chip');
-    await expect(chip.getByLabel(/1 budget change by an agent to review/)).toBeVisible({ timeout: 10_000 });
+    await expect(chip.getByLabel(/2 budget changes to review/)).toBeVisible({ timeout: 10_000 });
     await chip.click();
-    const change = page.getByTestId('budget-flagged-change');
-    await expect(change).toContainText('(agent) raised the time ceiling 2h → 4h');
-    await change.getByRole('button', { name: 'Seen' }).click();
+    const changes = page.getByTestId('budget-flagged-change');
+    await expect(changes).toHaveCount(2);
+    await expect(changes.nth(0).getByTestId('unverified-tag')).toBeVisible();
+    await expect(changes.nth(0)).not.toContainText('(agent)');
+    await expect(changes.nth(1)).toContainText('(agent) raised the time ceiling 2h → 4h');
+    await changes.nth(1).getByRole('button', { name: 'Seen' }).click();
+    await changes.nth(0).getByRole('button', { name: 'Seen' }).click();
     await expect(page.getByTestId('budget-flagged-changes')).toHaveCount(0);
     await expect(chip.getByLabel(/budget change/)).toHaveCount(0);
   });

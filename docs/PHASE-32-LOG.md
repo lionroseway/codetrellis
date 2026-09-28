@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Carried 2b (owner's decision): unverified is visible; local API changes can be turned off |
-| **Status** | A2.2 merged (#157); bug 53 PR open (#158). Carried 2b in progress: setting, refusal and tests done; the shared tag is being applied to every place an author shows |
-| **Next action** | Apply `UnverifiedTag` everywhere an author or actor is rendered (survey running), browser test + screenshots, PR; then A2.3 |
+| **Status** | A2.2 (#157) and bug 53 (#158) merged. Carried 2b done on its branch: tag + tooltip everywhere an author shows, the setting, unverified budget/freeze changes flagged, version author types; PR open |
+| **Next action** | Merge carried 2b when green; then A2.3 (`contract` signal) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-carried-2b-unverified` |
 | **Last updated** | 2026-09-28 |
@@ -67,9 +67,10 @@
 - [x] A1.6 Signals engine (collision, stale-base) and tools (#151)
 - [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)
 - [x] A1.8 Awareness tab (#155)
+- [x] Bug 53: a squash-merged branch is not live work (A1.7a, #158)
+- [ ] Carried 2b: unverified is tagged and explained everywhere; local API changes can be turned off (owner's decision)
 - [x] A2.1 Signatures (TS/JS, Python)
-- [x] A2.2 Import accuracy
-- [ ] Bug 53: a squash-merged branch is not live work (A1.7a)
+- [x] A2.2 Import accuracy (#157)
 - [ ] A2.3 `contract` signal
 - [ ] A2.4 `declare_intent`
 - [ ] A2.5 `drift` signal
@@ -91,7 +92,7 @@
 ### Track B: observability
 - [ ] B1 Agent event log
 - [ ] B2 Timeline lanes
-- [ ] B3 Overlay list
+- [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints
 - [ ] B5 Replay
 - [ ] B6 Stack view
@@ -168,11 +169,107 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A person answers a signal (acknowledged, intended, dismissed, or back to open) from the Awareness tab. Recorded with who answered, as the call arrived: plain HTTP is `unverified` and the tab says so. Agents see the answer and have no tool to give one. An answer lasts while the overlap does; when it resolves and returns, it is open again (A1.8) | Tag, don't block, as for sign-off (0.4d) and freeze changes (0.4k). A collision is not an agent's to wave away. The spec's cooldown ("silent until its subject changes") and "intended until either footprint changes shape" are A3 |
 | 2026-09-28 | Plain HTTP is recorded as "unverified" and shown with one tag whose tooltip says how the request arrived (plain HTTP with this launch's token, from a browser tab, script or tool, not the app window) and where to refuse such changes. A setting, "Accept changes over the local API" (Settings → MCP Server → Local API, on by default, app window only), refuses every plain-HTTP change when off; reads, MCP and the phone are unaffected (carried 2b) | Owner's decision: "use a tag to mention unverified … a tooltip explaining how the request was made, at least it surfaces the data which allows for someone to audit", and "a setting they can turn off in the app to close it out". On by default so the web dev build and the harnesses keep working |
 | 2026-09-28 | An agent's `acknowledge_signal(id, note?)` (spec §6.1) is the agent's own note, per session, shown beside the person's answer; it never sets the person's state (A2.6) | Reconciles the spec with A1.8's decision that a collision is not an agent's to wave away. The agent saying "seen, will rebase after billing merges" is useful to the person; the agent closing it is not |
+| 2026-09-28 | A budget or freeze change over plain HTTP is flagged until a person marks it seen, like an agent's, and shows the unverified tag rather than "(agent)" (carried 2b) | These changes appear to a person only while flagged, so an unflagged unverified change was recorded and then never shown: the opposite of "surfaces the data which allows for someone to audit". Only the person in the app window is unflagged |
+| 2026-09-28 | Multi-session and multi-branch views of graph and code are Track B, not a new track: chip-to-graph focus and in-file markers go with B3's overlay list | Owner asked whether a view of graph and code changes across sessions/branches is coming. It is B2 (lanes), B3 (overlays), B5 (replay) and B6 (stack view); the two concrete asks attach to B3 |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: Carried 2b — unverified is visible, and can be turned off
+Owner's decision, quoted in Decisions. What changed:
+- **One tag, everywhere an author or actor shows.** `UnverifiedTag` is an
+  amber "unverified" pill. Its tooltip is portalled so no scroll box clips
+  it, and it opens on hover and on keyboard focus. It says how the change
+  arrived (plain HTTP with this launch's token, from a browser tab, a script
+  or another tool, not the app window), that the name could not be checked,
+  and where to refuse such changes. `UnverifiedIf type=…` is the one-line
+  call. It is applied to comments (thread and item canvas), channel events,
+  brief attachments, criteria (origin, decision, brief state), item history
+  and activity, check runs, execution assignees, review decisions, pantry
+  attachments, Awareness answers and the artefact viewer. The artefact
+  viewer's `'mcp'` comparison never matched and now goes by `authorKind`.
+  The text-only helpers stop calling an unverified actor "you".
+- **The setting.** Settings → MCP Server → Local API, "Accept changes over
+  the local API", is on by default. It is a grant (`GRANT_FIELDS`), so only
+  the app window may change it. Off, every non-read `/api/*` request not
+  from the app window is refused 403 with where to turn it back on. Reads,
+  MCP and the phone are unaffected. The test build keeps `/api/settings`
+  writable so a suite can put it back.
+- **Budget and freeze.** A change over plain HTTP is now flagged until seen.
+  Before, it was recorded and never shown anywhere: those notices only list
+  flagged changes. The notices say "(agent)" only for an agent, and show the
+  tag otherwise, on the phone too ("(local API, unverified)", since a phone
+  has no tooltip).
+- **Claims.** `POST /api/items/:uid/claim` with no agent named assigned the
+  caller as `human`. It now takes the caller's own type, so plain HTTP
+  records `unverified`.
+- **Versions.** `plan_versions` and `plan_document_versions` gain
+  `author_type` (nullable; the reconciler adds it). Plan history compared the
+  author's *name* to `"human"`, so every person's edit showed a robot; it now
+  goes by the type, and older rows infer it (`versionAuthorType`). MCP
+  `update_plan` wrote the literal author `"agent"`; it now records the
+  calling agent (`authorFromExtra`).
+- **Not done here** (follow-up): plan, item, doc, external-ref and
+  system-doc *creators*, deviation `resolvedBy` and input answers are stored
+  but rendered nowhere, so there is nothing to tag yet.
+- **Tests.**
+  - Unit: `local-api-changes.test.ts` (8), `isFlaggedActor`, and
+    `versionAuthorType`. The helper wording tests are updated.
+  - Harness: `local-api-changes.test.ts` (6, including a real backend
+    refusing the grant over HTTP and the unverified claim). Assertions added
+    to `authorship`, `plan-tools`, `agent-ui-tools` and `freeze-flags`.
+    88 related harness tests pass.
+  - Browser: `e2e/plan/unverified-tag.spec.ts` walks the tag, its tooltip
+    (mouse and keyboard), a flagged budget change and the switch. It sends
+    screenshots `carried-2b-01…05`. `criteria` and `mcp-ui-tools` now expect
+    the tag.
+  - Locally, the first two tests of a cold browser run still time out on
+    `.react-flow` and pass on retry.
+- **UX journey:** a script posts a comment → the person sees it tagged →
+  hovers or tabs to it and reads how it arrived and where to stop it → a
+  budget change from the same source waits under the chip's flag, tagged, and
+  "Seen" clears it → Settings → MCP Server → Local API → unticked, the next
+  script change is refused with the way back.
+
+### 2026-09-28: bug 53 — a squash-merged branch is not live work
+- **Found** while testing A2.2 (its entry has the detail). On this
+  repository: 151 refs, git counts 2 as merged, and the strip showed about
+  98 branch chips and the Awareness tab 7,602 signals. Every squash-merged
+  PR branch stays "ahead" of main forever, since a squash commit has no
+  link to the branch; A1.7a's ancestry test (`rev-list main..branch`)
+  therefore called each one live work, and because every PR touches this
+  log, every pair collided. The backend was busy enough that the first two
+  tests of any local browser run timed out, on the base branch as well.
+- **Fix (`branch-workstreams.ts`).** An ahead branch is merged, and not
+  work, when every file it changes is left by some commit on main since
+  the window opened at exactly the version the branch has (deleted where
+  it deletes): `isMergedInto(branchVersions, mainVersionsSince)`. That is
+  how a squash, rebase, merge or cherry-pick all look from main's side,
+  and it needs no ancestry. One `git log --raw` of main per (main head,
+  window day) and one `git diff --raw` per ahead branch head, both cached;
+  nothing is written to the repository. A branch only partly merged, or
+  merged with one file resolved differently, stays work; a branch that
+  changes nothing is idle, not "merged".
+- **Result on this repository:** 11 branch chips and 57 signals, and the
+  first local browser tests pass (`inspector/file-view.spec.ts` 7/7, where
+  the first two timed out on every run). Screenshot: `bug53-after.png`.
+- **Follow-up (A3, quiet by default).** What remains is real divergence by
+  the model's rule but still noisy: dependabot branches opened against
+  `main` (while this checkout is on `feat/phase-32`) all touch the
+  lockfile, so they collide in pairs. Collisions on generated files, and
+  branches built on another base line, want a quieter treatment.
+- **Tests.**
+  - Unit `branch-workstreams.test.ts` +5 on a real repository: a
+    squash-merged branch is out even after main edits the same file again;
+    so are a cherry-picked one and a matching deletion; a partly merged
+    one, one merged with a different resolution, and an unmerged one stay;
+    raw parsing; `isMergedInto`. The first three fail on the old selection.
+  - Harness `branch-workstreams.test.ts` +1: a real `git merge --squash`
+    into the opened checkout removes the branch workstream and its signal.
+  - Related harness files pass (37); unit 1218 / 3 environment skips; lint
+    0 errors / 295.
 
 ### 2026-09-28: A2.2 — import accuracy; bug 53 found
 - **Re-exports are recorded.** The TS/JS parser reads `export { a, b as c }
