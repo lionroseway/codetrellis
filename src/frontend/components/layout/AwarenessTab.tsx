@@ -4,7 +4,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { useToastStore } from '../../stores/toast-store';
 import {
-  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, sideLabel, stateWords, actionsFor, ago, toldWords,
+  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, sideLabel, stateWords, actionsFor, ago, toldWords, reopenedWords,
 } from '../../lib/awareness-view';
 import { buildDigest } from '@shared/lib/awareness-digest';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
@@ -302,6 +302,10 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
 
       {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
       {s.kind === 'drift' && <DriftDetail subject={s.subject} />}
+
+      {reopenedWords(s, now) && (
+        <div data-testid="awareness-reopened" className="mt-1 text-[10px] text-warning">{reopenedWords(s, now)}</div>
+      )}
 
       <AgentsTold signal={s} now={now} />
 

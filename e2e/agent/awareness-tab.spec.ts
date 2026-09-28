@@ -333,6 +333,24 @@ test.describe('Awareness tab', () => {
     await shot(page, 'awareness-digest');
   });
 
+  test('an answered overlap that changed shape is back, and says why (A3.2)', async ({ page }) => {
+    const back = signal('b1', {
+      severity: 'medium', subject: { file: 'src/auth/session.ts' },
+      summary: '`auth-refresh` and `billing-v2` both change src/auth/session.ts',
+      reopened: { from: 'intended', at: Date.now() - 60_000 },
+    });
+    await serve(page, ROOM, [back]);
+    await gotoWithProject(page);
+    await tabButton(page).click();
+    const c = card(page, 'both change src/auth/session.ts');
+    // Back where it needs the person, not under "Set aside".
+    await expect(page.getByTestId('awareness-needs-you').getByTestId('awareness-signal')).toHaveCount(1);
+    await expect(c.getByTestId('awareness-reopened')).toHaveText('Back: it changed since you marked it intended · 1 min ago');
+    await expect(c.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expandPanel(page);
+    await shot(page, 'awareness-reopened');
+  });
+
   test('calm states: parallel work with nothing to answer, and no parallel work at all', async ({ page }) => {
     await serve(page, ROOM, []);
     await gotoWithProject(page);

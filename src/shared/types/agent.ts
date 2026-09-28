@@ -247,6 +247,10 @@ export interface AwarenessSignal {
    * to the person; an agent sees only its own.
    */
   told?: SignalTold[];
+  /** Fingerprint of what it is about (A3.2): an answer holds while this does. */
+  shape?: string;
+  /** It had been acknowledged or marked intended, and opened again when its shape changed (A3.2). */
+  reopened?: { from: 'acknowledged' | 'intended'; at: number };
   /** Who last set the state, and when; absent while nobody has (A1.8). */
   stateBy?: SignalStateBy;
   stateAt?: number;

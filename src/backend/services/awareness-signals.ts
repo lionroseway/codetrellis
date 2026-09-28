@@ -112,8 +112,12 @@ export function contractCandidates(files: readonly ChangedFile[]): Array<Omit<Co
   return out;
 }
 
-/** A signal as computed, before it has a history. */
-export type SignalDraft = Pick<AwarenessSignal, 'id' | 'kind' | 'severity' | 'subject' | 'workstreams' | 'summary'>;
+/**
+ * A signal as computed, before it has a history. `shape` fingerprints what it
+ * is about (A3.2): an answered signal stays quiet while its shape holds, and
+ * opens again when it changes.
+ */
+export type SignalDraft = Pick<AwarenessSignal, 'id' | 'kind' | 'severity' | 'subject' | 'workstreams' | 'summary'> & { shape: string };
 
 const signalId = (kind: SignalKind, subject: string, workstreams: string[]) =>
   createHash('sha1').update(`${kind}\0${subject}\0${workstreams.join('\0')}`).digest('hex').slice(0, 16);
@@ -123,9 +127,31 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 /** The name a person knows a workstream by: its branch, else its folder. */
 export const workstreamLabel = (w: Pick<FootprintInput, 'root' | 'branch'>) => w.branch ?? path.basename(w.root);
 
-function draft(kind: SignalKind, severity: SignalSeverity, subjectKey: string, subject: SignalDraft['subject'], roots: string[], summary: string): SignalDraft {
+/**
+ * `shape` defaults to the subject itself: a contract's signature and
+ * importers, drift's and a stale base's files. A collision passes its own
+ * (see `collisionShape`), because its subject names the file, not what each
+ * side is doing in it.
+ */
+function draft(kind: SignalKind, severity: SignalSeverity, subjectKey: string, subject: SignalDraft['subject'], roots: string[], summary: string, shapeOf: unknown = subject): SignalDraft {
   const workstreams = [...roots].sort();
-  return { id: signalId(kind, subjectKey, workstreams), kind, severity, subject, workstreams, summary };
+  const shape = createHash('sha1').update(JSON.stringify(shapeOf)).digest('hex').slice(0, 16);
+  return { id: signalId(kind, subjectKey, workstreams), kind, severity, subject, workstreams, summary, shape };
+}
+
+/**
+ * What one side of a collision is doing in a file (A3.2): the names it
+ * touches there, with the new signature where one changed. A body edit keeps
+ * it; so does a declared intent landing as an edit (A2.4). A new symbol, or
+ * a changed signature, changes it. Narrowed to one symbol for a symbol collision.
+ */
+function collisionShape(w: FootprintInput, file: string, symbol?: string): string[] {
+  const changed = (w.files.find((f) => f.path === file)?.symbols ?? [])
+    .filter((s) => !symbol || s.name === symbol)
+    .map((s) => (s.signature ? `${s.name}:${s.signature.after}` : s.name));
+  const declared = (w.intended ?? []).filter((d) => d.path === file).flatMap((d) => d.symbols)
+    .filter((n) => !symbol || n === symbol);
+  return [...new Set([...changed, ...declared.filter((n) => !changed.some((c) => c === n || c.startsWith(`${n}:`)))])].sort();
 }
 
 /** What one workstream touches in a file: what it changed, and what it declared. */
@@ -181,11 +207,12 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
           for (const symbol of shared) {
             const intended = said(symbol);
             out.push(draft('collision', 'high', `${file}#${symbol}`, { file, symbol, ...(intended.length ? { intended } : {}) }, [a.root, b.root],
-              words(`${file} → ${symbol}`, symbol)));
+              words(`${file} → ${symbol}`, symbol), [collisionShape(a, file, symbol), collisionShape(b, file, symbol)]));
           }
         } else {
           const intended = said();
-          out.push(draft('collision', 'medium', file, { file, ...(intended.length ? { intended } : {}) }, [a.root, b.root], words(file)));
+          out.push(draft('collision', 'medium', file, { file, ...(intended.length ? { intended } : {}) }, [a.root, b.root], words(file),
+            [collisionShape(a, file), collisionShape(b, file)]));
         }
       }
     }
@@ -252,30 +279,46 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
  *    who acknowledged it or marked it intended is not overruled by it firing
  *    again), with its summary and severity refreshed. One that had resolved
  *    and came back is open again.
+ *  - Cooldown and "intended" (A3.2): an acknowledged or intended signal
+ *    holds its answer only while its shape does. When what it is about
+ *    changes shape (a new symbol in the file, a new signature, another file
+ *    outside the scope), it is open again, with `reopened` saying from what.
+ *    A dismissed one stays dismissed while it lasts. A row from before shapes
+ *    were kept takes the new shape without reopening.
  *  - A draft not seen before is open.
  *  - A known signal that no longer holds is resolved.
  *
  * Returns only what changed, so the caller writes and announces nothing
- * when nothing moved.
+ * when nothing moved; `reopened` lists the ids that opened again.
  */
 export function reconcileSignals(previous: readonly AwarenessSignal[], drafts: readonly SignalDraft[], now: number): {
   upserts: AwarenessSignal[];
   resolved: string[];
+  reopened: string[];
 } {
   const known = new Map(previous.map((s) => [s.id, s]));
   const upserts: AwarenessSignal[] = [];
+  const reopened: string[] = [];
   for (const d of drafts) {
     const was = known.get(d.id);
     if (!was) {
       upserts.push({ ...d, firstSeen: now, lastSeen: now, state: 'open' });
       continue;
     }
+    const reshaped = !!was.shape && was.shape !== d.shape;
+    if (reshaped && (was.state === 'acknowledged' || was.state === 'intended')) {
+      // Its subject changed since the person answered: it needs them again.
+      const { stateBy: _by, stateAt: _at, ...rest } = was;
+      upserts.push({ ...rest, ...d, state: 'open', lastSeen: now, reopened: { from: was.state, at: now } });
+      reopened.push(d.id);
+      continue;
+    }
     const state = was.state === 'resolved' ? 'open' : was.state;
     const moved = state !== was.state || was.summary !== d.summary || was.severity !== d.severity
-      || JSON.stringify(was.subject) !== JSON.stringify(d.subject);
+      || was.shape !== d.shape || JSON.stringify(was.subject) !== JSON.stringify(d.subject);
     if (moved) upserts.push({ ...was, ...d, state, lastSeen: now });
   }
   const live = new Set(drafts.map((d) => d.id));
   const resolved = previous.filter((s) => s.state !== 'resolved' && !live.has(s.id)).map((s) => s.id);
-  return { upserts, resolved };
+  return { upserts, resolved, reopened };
 }

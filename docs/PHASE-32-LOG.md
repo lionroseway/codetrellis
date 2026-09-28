@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A3.1: the digest |
-| **Status** | A3.1 done on its branch: shared `buildDigest`, digest in the Awareness tab and in `get_awareness`, new since you last looked; unit, harness and browser tests pass; PR open |
-| **Next action** | Merge A3.1 when green; then A3.2 (intended and cooldown) |
+| **Stage / step** | Track A — A3.2: intended and cooldown |
+| **Status** | A3.2 done on its branch: signal shape, answered signals reopen on a new shape and say why, agents told again; unit, harness and browser tests pass; PR open |
+| **Next action** | Merge A3.2 when green; then A3.3 (`parallel` guide flavour) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a3-1-digest` |
+| **Branch** | `feat/phase-32-a3-2-cooldown` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -77,8 +77,8 @@
 - [x] A2.6 Inline notices, `acknowledge_signal`, the M2 "done when" (#163) — **M2 done**
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (M3), refined in EXECUTION §4:
-  - [ ] A3.1 The digest (PR open)
-  - [ ] A3.2 Intended and cooldown
+  - [x] A3.1 The digest (#164)
+  - [ ] A3.2 Intended and cooldown (PR open)
   - [ ] A3.3 `parallel` guide flavour
   - [ ] A3.4 User skill and optional hook, offered from Settings
   - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when"
@@ -183,11 +183,54 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Drift scope is the `fileSpecs` (paths, move destinations, folders) and `scope_path` of items claimed by sessions in the workstream and not done or skipped, plus declared intent. No scope, no drift. CodeTrellis's own `.codetrellis/` plan files never count. One signal per workstream, its file list updated in place (A2.5) | Without a scope there is nothing to drift from, and guessing one would flag every exploratory agent. Plan files change as part of doing any item. Declaring the extra files (A2.4) is the agent's way back into scope, and "Intended" is the person's |
 | 2026-09-28 | Inline notices go to high and medium signals that name the session's workstream and that the person has not set aside (open or acknowledged), once per signal per session; reading them with `get_awareness`, or answering with `acknowledge_signal`, counts as told. An unplaced session gets none (A2.6) | "Unseen" is per session, as the spec says. A signal the person dismissed or marked intended no longer concerns the agent. Telling on the tools that already show the signal would say it twice |
 | 2026-09-28 | The digest lists only open high and medium signals, one line per kind and pair of workstreams (and changing side, for a contract), at most five lines then "and N more"; answered signals are "seen" and low ones are counted. Each line ends with the choice waiting on the person, fixed per kind. "New since you last looked" is kept per browser (A3.1) | A person reads groups, not streams: two worktrees overlapping in four places is one thing to decide. The question per kind is CodeTrellis's wording, never an agent's. Last-looked is a convenience, so browser storage is enough, and a blocked store just means no "new" count |
+| 2026-09-28 | A signal's shape is what it is about, not every edit: for a collision, each side's names in the file (the one symbol, for a symbol collision) with any new signature; for contract, drift and stale-base, their subject. An acknowledged or intended signal reopens when the shape changes, says from what, and agents are told again; dismissed stays dismissed while it lasts (A3.2) | Spec §4.4: cooldown "until its subject changes again", intended "until either side's footprint changes shape". Body edits are the ordinary case and must stay quiet. A declared intent landing as an edit keeps the shape, so A2.4's promise holds. Dismissed means "not worth attention", which a new symbol doesn't change |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A3.2 — intended and cooldown
+- **Shape.** Every draft carries `shape`, a fingerprint of what it is
+  about.
+  - A collision uses `collisionShape`: per side, the names it touches in the
+    file (just the one symbol, for a symbol collision), with the new
+    signature where one changed, plus declared names not yet edited.
+  - Contract, drift and stale-base use their subject: signature and
+    importers, and files.
+  - Stored in `awareness_signals.shape`; the reconciler adds the column.
+- **`reconcileSignals`.**
+  - An acknowledged or intended signal whose shape changed opens again, with
+    `reopened: { from, at }`. The old answer is not carried, and it is
+    listed in `reopened`.
+  - Dismissed stays dismissed while it lasts.
+  - A row stored before shapes existed takes one quietly.
+  - `refreshSignals` stores the reason and clears the agents' `told_at`
+    (notes kept), so they are told again (A2.6).
+  - A new answer clears the reason.
+- **The tab.** A reopened card sits under "Needs you" and says "Back: it
+  changed since you marked it intended · 1 min ago" (`reopenedWords`).
+- **Tests.**
+  - Unit: `awareness-signals` +6:
+    - a body edit holds;
+    - a new symbol reopens acknowledged;
+    - a new signature reopens intended;
+    - declared → edited holds (the A2.4 promise);
+    - dismissed and shapeless rows do not reopen;
+    - drift reopens on a new outside file.
+  - Unit: `awareness-view` +1; one whole-object comparison gains `reopened:
+    []`.
+  - Harness: `awareness-cooldown.test.ts` (4), two real worktrees:
+    - a body edit on either side leaves it acknowledged and tells nobody;
+    - a new function brings it back, saying why, and the agent is told again;
+    - the same holds for intended.
+  - Browser: `awareness-tab.spec.ts` +1, screenshot `awareness-reopened`.
+- **UX journey:**
+  - The person marks an overlap intended ("both tickets change session.ts").
+  - The agents keep editing bodies, and it stays quiet.
+  - Then one adds a new function there, and the card is back under "Needs
+    you" with why; the agent working on it hears about it again on its next
+    call.
 
 ### 2026-09-28: A3 refined; A3.1 — the digest
 - **A3 refined** into five sub-steps in EXECUTION §4: the digest, intended
