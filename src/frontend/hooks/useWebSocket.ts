@@ -45,6 +45,14 @@ export function useWebSocket() {
             }
           })
           .catch(() => {});
+        // What agents did before this window connected (Phase 32 B1): the
+        // backend keeps it, so a reload or a reconnect keeps the Timeline.
+        fetch('/api/agent-events?limit=400')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((body: { events?: AgentEvent[] } | null) => {
+            if (body?.events) useAgentStore.getState().loadHistory(body.events);
+          })
+          .catch(() => {});
         // Pull the current MCP session list so the ConnectedAgents
         // widget shows agents that were already connected before the
         // UI loaded.

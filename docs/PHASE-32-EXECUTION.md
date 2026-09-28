@@ -421,6 +421,13 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | B9 | Play-forward: every active plan's projection, future zones |
 | B10 | The record: hash-chained log, signed packs, retention settings, evidence export |
 
+### B1: agent event log
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B1.1 | `agent_events`: every broadcast agent event kept by a passive tap, stamped with session, agent and workstream (from `agent_sessions`, whatever the session's state), with launch-unique ids, secrets masked, 14 days and 100,000 rows kept; `GET /api/agent-events` (time, session, workstream); the window loads the last 400 when it connects, so the Timeline survives a reload | unit; harness including a restart; browser (reload) |
+| B1.2 | Spec and plan-item body edits as events (who, which document, which version); watcher events at the time the agent acted, not when they were read; calls the SDK refuses on their arguments recorded too | unit; harness |
+
 ## 6. Track C: shared ways of working
 
 | Step | Scope (shared-work doc) |

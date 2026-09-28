@@ -43,7 +43,7 @@ The `src/backend/services/` directory holds ~50 services. Grouped by responsibil
 - **Plans & collaboration** — `plan-service`, `plan-import-service`, `plan-history-service`, `plan-conflict-service`, `plan-progress-service`, `plan-event-service`, `plan-documents-service`, `plan-templates`, `phase-service`, `spec-service`, `template-service`, `channel-event-service`, `channel-event-file-service`, `channel-dispatcher-service`, `comment-service`, `task-attachments-service`.
 - **Governance & drift** — `freeze-service`, `contribution-service`, `deviation-service`, `schema-reconciler`.
 - **Persistence & filesystem** — `file-watcher`, `claude-code-watcher`, `recent-projects-service`, `project-config-service`, `settings-service`, `system-docs-service`.
-- **Agent comms** — MCP server, `session-service`, `stuck-sensor-service`, `sensor-bridge-service`, `self-write-tracker`.
+- **Agent comms** — MCP server, `session-service`, `stuck-sensor-service`, `sensor-bridge-service`, `self-write-tracker`, `agent-event-log` (Phase 32 B1: every broadcast agent event kept 14 days, stamped with session, agent and workstream, secrets masked; `GET /api/agent-events`).
 - **Cross-system & external** — `cross-system-service`, `external-refs-service`, `external-pointer-service`, `pantry-resolution-service`, `personal-sync-service`.
 - **Utilities** — `update-service`, `push-notification-service`, `git-activity-service`, `git-commit-service`, `ipc-dispatcher`, `terminal-service`, `trellis-service`.
 

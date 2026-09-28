@@ -180,6 +180,24 @@ export const SCHEMA_PLANS_CORE = `
     workstream_root TEXT
   );
 
+  -- Phase 32 B1: every agent event that was broadcast (tool calls, watcher
+  -- events, sessions starting and ending), kept so the Timeline survives a
+  -- reload and replay has a record. Stamped at the tap with the session, the
+  -- agent and the workstream it works in. Kept 14 days (agent-event-log.ts).
+  CREATE TABLE IF NOT EXISTS agent_events (
+    id TEXT PRIMARY KEY,
+    at INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    type TEXT NOT NULL,
+    session_id TEXT,
+    agent_type TEXT,
+    workstream_root TEXT,
+    payload TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_events_at ON agent_events(at);
+  CREATE INDEX IF NOT EXISTS idx_agent_events_session ON agent_events(session_id, at);
+  CREATE INDEX IF NOT EXISTS idx_agent_events_workstream ON agent_events(workstream_root, at);
+
   -- Phase 32 A1.6: one thing worth knowing about parallel work. Deduplicated
   -- by id (kind, subject, workstreams); resolved when its cause goes away.
   CREATE TABLE IF NOT EXISTS awareness_signals (
