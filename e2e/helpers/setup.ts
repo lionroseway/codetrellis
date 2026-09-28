@@ -156,8 +156,10 @@ export async function gotoWithProject(
     );
   }, projectPath);
 
-  // Wait for graph canvas to render
-  await page.locator('.react-flow').waitFor({ timeout: 15_000 });
+  // Wait for graph canvas to render. Laying out the whole repository's graph
+  // on a CI runner shared with a second worker has taken past 15s with the
+  // page still on "Building dependency graph…" (PR #188, Browser suite 1/3).
+  await page.locator('.react-flow').waitFor({ timeout: 30_000 });
 }
 
 /**
