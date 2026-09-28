@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Stage / step** | Track A — A2.2: import accuracy; then bug 53 |
-| **Status** | A2.1 merged (#156). A2.2 done on its branch (unit +10, harness 4, browser 1); PR open. Bug 53 found while testing it |
+| **Status** | A2.1 merged (#156). A2.2 done on its branch (unit +13, harness 4, browser 1; tsconfig alias fix added); PR open (#157). Bug 53 found while testing it; its fix is #158 |
 | **Next action** | Merge A2.2 when green; then fix bug 53 (squash-merged branches count as live work) as its own step, `feat/phase-32-a1-7d-merged-branches` |
 | **Blockers** | Bug 53 makes the local browser suite's first tests time out on this repository (not in CI's shallow checkout) |
 | **Branch** | `feat/phase-32-a2-2-imports` |
@@ -193,6 +193,14 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   not a user of its validators. A namespace import is "possibly". Barrels
   are followed, not listed; cycles end; five levels at most. Python's
   exported names: no leading underscore (`__all__` is A2.3's).
+- **tsconfig aliases survive an include glob.** `readTsconfigPaths`
+  stripped comments with string-blind regexes: the slash-star in
+  `"@shared/*"` opened a "comment" that the glob `src/**/*` closed, deleting
+  `paths` itself. So every alias in a tsconfig with such a glob resolved
+  nothing — in this repository every frontend import of `@shared/types`,
+  and no edge ran from the frontend to shared types. `stripJsonc` removes
+  comments only outside strings. On this repository: 2,084 of 4,020
+  imports linked, up from 2,021.
 - **Surfaces.**
   - `check_footprint` finds importers through barrels, takes the spec's
     optional `symbols` to narrow them by name (§6.1), and returns each
@@ -214,9 +222,15 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
     (types only) not; `check_footprint` through the barrel and by name; an
     aliased Python import found by the name it imports. All fail on the
     old code (no re-exports, alias recorded).
+  - Unit: `tsconfig-paths.test.ts` (3): this repository's tsconfig shape
+    keeps its alias (fails on the old stripping); baseUrl; `stripJsonc`
+    leaves URLs, globs and escaped quotes in strings alone.
   - Browser: `inspector/reexports.spec.ts` (1), on this repository's own
-    barrel. Not verifiable locally until bug 53 is fixed (below); CI's
-    shallow checkout has no extra branches.
+    barrel: `agent.ts` shows `index.ts · re-exports` under Imported by and
+    25 files under Used through re-exports, `workstream-strip.ts` (an
+    `@shared/types` importer) among them. Passes locally with bug 53's fix
+    merged in (it could not before: see below). Screenshot:
+    `inspector-reexports.png`.
   - Harness files that read edges or imports pass (168 + 66); unit 1223 /
     3 environment skips; lint 0 errors / 294.
 - **Bug 53, found here (A1.7a).** On this repository the strip shows ~98
