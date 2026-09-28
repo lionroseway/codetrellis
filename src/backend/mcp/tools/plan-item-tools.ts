@@ -16,6 +16,17 @@ import { resultWithMeta, authorFromExtra } from '../helpers';
 import { ABOUT_MATERIALS } from '../../services/brief-service';
 import { quoteMaterial } from '../../services/material-reader/quote';
 
+/**
+ * The task's skills for the agent on this connection (Phase 32 C1): the
+ * project root from the plan's record, the agent's folder from its bound
+ * session, never from arguments.
+ */
+function skillsFor(deps: ToolDeps, item: import('../../../shared/types').PlanItem) {
+  const projectRoot = deps.planService.getPlan(item.planUid)?.projectPath ?? null;
+  const workstreamRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
+  return deps.briefService.skillsBlock(item, projectRoot, workstreamRoot);
+}
+
 // ── Reusable schemas ──────────────────────────────────────────────────
 
 const fileEditSchema = z.object({
@@ -440,7 +451,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ? `Item claimed. WARNING: ${result.conflicts.join('; ')}`
         : `Item ${args.uid} claimed.`;
       const criteria = item ? criteriaForAgent(deps, item.uid) : [];
-      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments, criteria }, n);
+      const skills = item ? skillsFor(deps, item) : { skills: [], skills_note: null };
+      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments, criteria, ...skills }, n);
     },
   );
 
@@ -483,7 +495,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           }],
         };
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result.item, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ ...result.item, ...skillsFor(deps, result.item) }, null, 2) }] };
     },
   );
 
@@ -523,7 +535,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       inputSchema: { item_uid: z.string() },
     },
     async ({ item_uid }) => {
-      const brief = await deps.briefService.getBrief(item_uid);
+      const workstreamRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
+      const brief = await deps.briefService.getBrief(item_uid, { workstreamRoot });
       if (!brief) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
       return { content: [{ type: 'text' as const, text: JSON.stringify(brief, null, 2) }] };
     },

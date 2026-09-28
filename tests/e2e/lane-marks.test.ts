@@ -92,7 +92,15 @@ test.describe.serial('Lane marks: commits, decisions and checks', () => {
   test('the window is at most a day, and a project that is not open is refused', async () => {
     const { since } = await commits('&since=0');
     expect(since).toBeGreaterThanOrEqual(Date.now() - 24 * 60 * 60 * 1000 - 5_000);
-    const { commits: none } = await commits(`&since=${Date.now() + 60_000}`);
+    // A since in the future is clamped to now, not honoured.
+    const future = await commits(`&since=${Date.now() + 60_000}`);
+    expect(future.since).toBeLessThanOrEqual(Date.now());
+    // Commits carry whole seconds and git's --since includes its own second,
+    // so "after the latest" is the next whole second, once it has passed.
+    const { commits: all } = await commits();
+    const after = Math.max(...laneOf(all, auth).map((c) => c.at)) + 1000;
+    await expect.poll(() => Date.now(), { timeout: 3_000 }).toBeGreaterThan(after);
+    const { commits: none } = await commits(`&since=${after}`);
     expect(laneOf(none, auth)).toEqual([]);
     expect((await h.client.raw('GET', `/api/workstreams/commits?project=${encodeURIComponent('/not/open')}`)).ok).toBe(false);
   });

@@ -33,6 +33,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { recordBodyEdit } from './agent-event-log';
+import { normaliseSkills } from './skill-model';
 import { appendPlanEvent } from './plan-event-service';
 import { unmetHumanCriteria } from './criteria-service';
 import * as _lazy___plan_file_service from './plan-file-service';
@@ -349,7 +350,8 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
       JSON.stringify(isAction ? (input.removedConnections ?? []) : []),
       JSON.stringify(isAction ? (input.dependencies ?? []) : []),
       // Phase 17.N-Q
-      JSON.stringify(input.skills ?? []),
+      // Phase 32 C1: whatever the source (panel, plan file, template), stored normalised.
+      JSON.stringify(normaliseSkills(input.skills).skills),
       input.skillsMode ?? 'inherit',
       input.claimPolicy ? JSON.stringify(input.claimPolicy) : null,
       input.claimPolicyMode ?? 'inherit',
@@ -563,7 +565,7 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
 
   // Phase 17.N-Q — routing / execution fields (apply to both kinds)
   if (updates.skills !== undefined) {
-    sets.push('skills = ?'); params.push(JSON.stringify(updates.skills));
+    sets.push('skills = ?'); params.push(JSON.stringify(normaliseSkills(updates.skills).skills));
     contentChanged = true;
   }
   if (updates.skillsMode !== undefined && updates.skillsMode !== before.skillsMode) {

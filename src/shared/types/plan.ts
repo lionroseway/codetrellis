@@ -304,13 +304,51 @@ export interface AgentCapability {
 }
 
 /**
- * 17.N — A required skill on a plan item. When `required` is true,
- * only agents with a matching capability can claim the item.
+ * Phase 32 C1 — where a skill lives. Agents are pointed only at `repo`,
+ * `plugin`, `mcp` and `playbook`; a `link` is shown to people, never in a
+ * brief or a prompt (shared-work doc C-1, Safety).
+ */
+export type SkillLocation =
+  | { kind: 'repo'; path: string }        // .claude/skills/<name>/SKILL.md in the opened project
+  | { kind: 'plugin'; name: string }      // an installed plugin
+  | { kind: 'mcp'; server: string }       // an MCP server's tools
+  | { kind: 'playbook'; uid: string }     // a CodeTrellis playbook
+  | { kind: 'link'; url: string };        // people only
+
+/**
+ * 17.N — A skill on a plan item. When `required` is true, only agents with
+ * a matching capability can claim the item. Phase 32 C1: `use:
+ * 'recommended'` tells the agent to use it for this task, `why` says why in
+ * one line, and `where` says where to find it. Old files without the new
+ * fields read exactly as before.
  */
 export interface Skill {
   name: string;
   source: 'mcp' | 'skill' | 'lang' | 'plugin';
   required: boolean;
+  use?: 'recommended';
+  why?: string;
+  where?: SkillLocation;
+}
+
+/** Phase 32 C1 — a skill found in the opened project's `.claude/skills`. */
+export interface ProjectSkill {
+  name: string;
+  description: string;
+  /** Relative to the project root: `.claude/skills/<dir>/SKILL.md`. */
+  path: string;
+}
+
+/** Phase 32 C1 — a skill as an agent is told about it (brief, claim, next). */
+export interface AgentSkill {
+  name: string;
+  /** `required` gates the claim; `recommended` is "use this for this task". */
+  use: 'required' | 'recommended';
+  why: string | null;
+  /** Never a `link`. */
+  where: Exclude<SkillLocation, { kind: 'link' }> | null;
+  /** Set when it can't be found where the agent works, with how to get it. */
+  missing: string | null;
 }
 
 /** Override mode for cascadeable properties (17.P). */

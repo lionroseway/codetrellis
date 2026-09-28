@@ -444,6 +444,15 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | C3 | Linked planning repo |
 | C4 | Recurring playbooks |
 
+### C1: Skills on plans and tasks
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| C1.1 | `Skill` gains `use: 'recommended'`, `why`, `where` (repo, plugin, mcp, playbook, link), normalised on every write (panel, plan file, template) and refused over REST when bad; the project's skills index (`GET /api/skills`, `.claude/skills/*/SKILL.md` front-matter, read through confined-fs); `get_brief`, `claim_item` and `get_next_item` say which skills to use and where in one line; a `link` never reaches an agent; a repo skill missing from the agent's checkout is said to be, with how to get it | unit; harness |
+| C1.2 | The picker in the routing panel: required or recommended, why, where; the project's skills searchable, inherited ones shown as such, a link marked "people only" | unit; browser |
+| C1.3 | Proof of use: the Claude Code watcher records each `Skill` call as `skill_used` against the session's task; the task, the Timeline and the sign-off pack say "✓ used", "○ recommended, not used", or unknown for other clients; a task launched from a CodeTrellis terminal preset gets the skills line in its opening prompt | unit; harness; browser |
+| C1.4 | A new skill arriving in a pulled plan file is flagged once in the inbox, with who added it and in which commit, before any agent is told to use it | unit; harness; browser |
+
 ## 7. Phase end
 
 1. Merge `main` into `feat/phase-32`, and resolve conflicts.
