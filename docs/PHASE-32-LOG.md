@@ -99,9 +99,9 @@
 - [x] B1 Agent event log, refined in EXECUTION §5: done (#169, #170)
   - [x] B1.1 `agent_events`, `GET /api/agent-events`, the Timeline survives a reload (#169)
   - [x] B1.2 Body edits as events; agent time; SDK-refused calls (#170)
-- [ ] B2 Timeline lanes, refined in EXECUTION §5:
+- [x] B2 Timeline lanes, refined in EXECUTION §5:
   - [x] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click ([#171](https://github.com/lionroseway/codetrellis/pull/171))
-  - [ ] B2.2 ◆ commits and merges, ✓ / ✗ checks (branch ready)
+  - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints
 - [ ] B5 Replay
