@@ -1,0 +1,144 @@
+/**
+ * What the Awareness tab shows (Phase 32 A1.8). Pure, so the rules are
+ * tested without rendering.
+ *
+ * The tab answers "does any of this parallel work need me?" A signal nobody
+ * has answered needs you when it is high or medium; a low one (a stale base)
+ * is worth knowing and listed collapsed. Once a person answers — seen,
+ * meant, not worth attention — it moves out of the way but stays listed, so
+ * the answer can be taken back (awareness spec §4.4, §7.2).
+ */
+
+import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
+import { chipLabel, stripWorkstreams } from './workstream-strip';
+
+const RANK = { high: 0, medium: 1, low: 2 } as const;
+const bySeverityThenNewest = (a: AwarenessSignal, b: AwarenessSignal) =>
+  RANK[a.severity] - RANK[b.severity] || b.lastSeen - a.lastSeen;
+
+export interface SignalGroups {
+  /** Open, high or medium: what the tab's number counts. */
+  needsYou: AwarenessSignal[];
+  /** Open, low. */
+  lowPriority: AwarenessSignal[];
+  /** Acknowledged: seen, still true. */
+  seen: AwarenessSignal[];
+  /** Marked intended or dismissed. */
+  setAside: AwarenessSignal[];
+}
+
+/** The tab's sections. Resolved signals are gone: their cause is. */
+export function groupSignals(signals: readonly AwarenessSignal[]): SignalGroups {
+  const live = signals.filter((s) => s.state !== 'resolved').sort(bySeverityThenNewest);
+  return {
+    needsYou: live.filter((s) => s.state === 'open' && s.severity !== 'low'),
+    lowPriority: live.filter((s) => s.state === 'open' && s.severity === 'low'),
+    seen: live.filter((s) => s.state === 'acknowledged'),
+    setAside: live.filter((s) => s.state === 'intended' || s.state === 'dismissed'),
+  };
+}
+
+/** The number on the tab. */
+export function needsYouCount(signals: readonly AwarenessSignal[]): number {
+  return groupSignals(signals).needsYou.length;
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The digest line at the top (the fuller digest, "since you were away", is
+ * A3). Counts the workstreams the strip shows, so the two never disagree.
+ */
+export function digestLine(workstreams: readonly Workstream[], signals: readonly AwarenessSignal[]): { headline: string; detail: string } {
+  const active = stripWorkstreams(workstreams, signals).length;
+  const g = groupSignals(signals);
+  if (active === 0 && g.needsYou.length + g.lowPriority.length + g.seen.length + g.setAside.length === 0) {
+    return {
+      headline: 'No parallel work right now',
+      detail: 'When agents work in other worktrees, clones or branches of this repository, anything they both change shows here.',
+    };
+  }
+  const parts = [plural(active, 'workstream') + ' active'];
+  parts.push(g.needsYou.length === 0 ? 'nothing needs you' : `${g.needsYou.length} need${g.needsYou.length === 1 ? 's' : ''} you`);
+  if (g.lowPriority.length > 0) parts.push(plural(g.lowPriority.length, 'low-priority note'));
+  return {
+    headline: parts.join(' · '),
+    detail: g.needsYou.length > 0
+      ? 'For each overlap: acknowledge it if you have seen it, mark it intended if both sides are meant to change it, or dismiss it.'
+      : 'Nothing overlaps that you have not answered. New overlaps appear here as they happen.',
+  };
+}
+
+/** What a signal is, in two or three words. */
+export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string {
+  if (s.kind === 'stale-base') return 'Behind main';
+  return s.subject.symbol ? 'Same function' : 'Same file';
+}
+
+/**
+ * The name of one side of a signal. Signals name workstreams by root: a
+ * folder, or `branch:<name>` for a branch with no checkout.
+ */
+export function sideLabel(root: string, workstreams: readonly Workstream[]): string {
+  const ws = workstreams.find((w) => w.root === root);
+  if (ws) return chipLabel(ws);
+  if (root.startsWith('branch:')) return root.slice('branch:'.length);
+  return root.split(/[\\/]/).filter(Boolean).pop() ?? root;
+}
+
+/** The sides a signal shows. A stale base is one workstream against main. */
+export function sidesOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams'>, workstreams: readonly Workstream[]): string[] {
+  const names = s.workstreams.map((r) => sideLabel(r, workstreams));
+  if (s.kind !== 'stale-base') return names;
+  const main = workstreams.find((w) => w.main);
+  return [...names, main ? chipLabel(main) : 'main'];
+}
+
+const STATE_VERB: Record<Exclude<SettableSignalState, 'open'>, string> = {
+  acknowledged: 'Acknowledged',
+  intended: 'Marked intended',
+  dismissed: 'Dismissed',
+};
+
+/** "3 min ago", "2 h ago", or the date. */
+export function ago(then: number, now: number): string {
+  const s = Math.max(0, Math.round((now - then) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(then).toLocaleDateString();
+}
+
+/**
+ * Who answered and when, or null while nobody has. An answer that came over
+ * plain HTTP is recorded as given but not claimed as the person's: anything
+ * holding the token can send one (tag, don't block — §0.4d).
+ */
+export function stateWords(s: Pick<AwarenessSignal, 'state' | 'stateBy' | 'stateAt'>, now: number): string | null {
+  if (s.state === 'open' || s.state === 'resolved' || !s.stateAt) return null;
+  const who = s.stateBy?.actorType === 'human' ? 'by you' : 'over the local API, not verified as you';
+  return `${STATE_VERB[s.state]} ${who} · ${ago(s.stateAt, now)}`;
+}
+
+export interface SignalAction { state: SettableSignalState; label: string; hint: string }
+
+const ACK: SignalAction = { state: 'acknowledged', label: 'Acknowledge', hint: 'You have seen it. It stops marking the strip but stays listed while it is true.' };
+const INTENDED: SignalAction = { state: 'intended', label: 'Intended', hint: 'Both sides are meant to change this. Set aside while the overlap lasts.' };
+const DISMISS: SignalAction = { state: 'dismissed', label: 'Dismiss', hint: 'Not worth your attention. Set aside while the overlap lasts.' };
+const REOPEN: SignalAction = { state: 'open', label: 'Reopen', hint: 'Take your answer back: it needs you again.' };
+
+/**
+ * The answers a signal offers in its state. "Intended" means both sides are
+ * meant to change the same thing, so only a collision offers it: a stale
+ * base is one workstream behind main, with no second side to intend.
+ */
+export function actionsFor(state: AwarenessSignal['state'], kind: AwarenessSignal['kind'] = 'collision'): SignalAction[] {
+  const intended = kind === 'collision' ? [INTENDED] : [];
+  switch (state) {
+    case 'open': return [ACK, ...intended, DISMISS];
+    case 'acknowledged': return [...intended, DISMISS, REOPEN];
+    case 'intended':
+    case 'dismissed': return [REOPEN];
+    default: return [];
+  }
+}

@@ -40,6 +40,9 @@ export interface SelectedNodeMeta {
  */
 export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code' | 'brief';
 
+/** The bottom panel's tabs (`PlanPanel`). */
+export type PlanPanelTab = 'plans' | 'timeline' | 'awareness' | 'changes' | 'proposed' | 'comments';
+
 interface UiState {
   sidebarVisible: boolean;
   inspectorVisible: boolean;
@@ -58,6 +61,11 @@ interface UiState {
 
   /** When true, the bottom plan panel grows to a much taller size, overriding Allotment's default sizing. */
   planPanelExpanded: boolean;
+  /** The bottom panel's tab. In the store so the workstreams strip can open Awareness (A1.8). */
+  planPanelTab: PlanPanelTab;
+  setPlanPanelTab: (tab: PlanPanelTab) => void;
+  /** Show the bottom panel on a tab, from anywhere in the app. */
+  openPlanPanelTab: (tab: PlanPanelTab) => void;
   /** When true, the right inspector panel grows wider for code/file inspection. */
   inspectorExpanded: boolean;
   /**
@@ -148,6 +156,9 @@ export const useUiStore = create<UiState>((set) => ({
   selectedNodeMeta: {},
 
   planPanelExpanded: false,
+  planPanelTab: 'plans',
+  setPlanPanelTab: (planPanelTab) => set({ planPanelTab }),
+  openPlanPanelTab: (planPanelTab) => set({ planPanelTab, agentPanelVisible: true }),
   inspectorExpanded: false,
   driftComparePlanUid: null,
   graphStyle: readGraphStyle(),

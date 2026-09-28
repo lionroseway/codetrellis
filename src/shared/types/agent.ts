@@ -144,7 +144,26 @@ export interface WorkstreamChanges {
  */
 export type SignalKind = 'collision' | 'stale-base';
 export type SignalSeverity = 'high' | 'medium' | 'low';
-export type SignalState = 'open' | 'acknowledged' | 'intended' | 'resolved';
+/**
+ * Where a signal stands (A1.6, set by a person from A1.8):
+ *  - `open`: nobody has looked at it;
+ *  - `acknowledged`: seen, still true, nothing to do yet;
+ *  - `intended`: the overlap is on purpose ("both tickets change this");
+ *  - `dismissed`: not worth attention;
+ *  - `resolved`: its cause is gone. Set by the engine, never by a person.
+ */
+export type SignalState = 'open' | 'acknowledged' | 'intended' | 'dismissed' | 'resolved';
+
+/** The states a person may set. `resolved` belongs to the engine. */
+export const SETTABLE_SIGNAL_STATES = ['open', 'acknowledged', 'intended', 'dismissed'] as const;
+export type SettableSignalState = typeof SETTABLE_SIGNAL_STATES[number];
+
+/** Who set a signal's state, as the call arrived (see `actorFrom` in server.ts). */
+export interface SignalStateBy {
+  actor: string;
+  actorType: 'human' | 'unverified';
+  channel: 'desktop' | 'local-api';
+}
 
 export interface AwarenessSignal {
   /** Stable for the same (kind, subject, workstreams): a signal that keeps firing is updated, not re-sent. */
@@ -160,4 +179,7 @@ export interface AwarenessSignal {
   firstSeen: number;
   lastSeen: number;
   state: SignalState;
+  /** Who last set the state, and when; absent while nobody has (A1.8). */
+  stateBy?: SignalStateBy;
+  stateAt?: number;
 }

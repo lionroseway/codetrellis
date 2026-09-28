@@ -120,6 +120,16 @@ describe('signals on the strip (A1.6)', () => {
     assert.equal(signalWords([sig('low', ['/a'])]), null);
     assert.equal(signalWords([sig('high', ['/a']), sig('low', ['/a'])]), 'overlaps other work (1 signal)');
   });
+
+  test('an overlap a person has answered no longer marks the chip (A1.8)', () => {
+    for (const state of ['acknowledged', 'intended', 'dismissed'] as const) {
+      assert.equal(chipSeverity([sig('high', ['/a'], state)]), null, state);
+      assert.equal(signalWords([sig('high', ['/a'], state)]), null, state);
+    }
+    assert.equal(chipSeverity([sig('high', ['/a'], 'intended'), sig('medium', ['/a'])]), 'medium', 'the unanswered one still does');
+    // Still listed in the chip's details, where it says it was answered.
+    assert.deepEqual(signalsFor('/a', [sig('high', ['/a'], 'dismissed')]).map((s) => s.state), ['dismissed']);
+  });
 });
 
 describe('branch workstreams on the strip (A1.7a)', () => {

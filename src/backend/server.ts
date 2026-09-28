@@ -43,7 +43,7 @@ import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
-import { refreshSignals, listSignals, setAwarenessListener } from './services/awareness-service';
+import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
 import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDismissal, setFolderRequestsListener } from './services/folder-requests';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
@@ -131,6 +131,7 @@ import {
   cancelUpdateDownload,
 } from './services/update-download-service';
 import { BUILD_INFO } from '../shared/build-info';
+import { SETTABLE_SIGNAL_STATES, type SettableSignalState } from '../shared/types';
 import * as peerService from './services/peer-connection-service';
 import { setDeviceCapabilities } from './services/paired-device-service';
 import { listPeerAudit } from './services/peer-audit-service';
@@ -720,6 +721,24 @@ app.get('/api/awareness', (req, res) => {
   if (!projectRoot) return;
   refreshSignals(projectRoot);
   res.json({ signals: listSignals(projectRoot) });
+});
+
+// A person's answer to a signal (A1.8): acknowledged, intended, dismissed,
+// or back to open. The project comes from the query and must be open; who
+// answered comes from how the call arrived. Tagged, not blocked: plain HTTP
+// may answer too, and the Awareness tab says it was not verified as you.
+// Agents have no tool for this — a collision is not theirs to wave away.
+app.post('/api/awareness/:id/state', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const state = (req.body ?? {}).state;
+  if (!(SETTABLE_SIGNAL_STATES as readonly unknown[]).includes(state)) {
+    res.status(400).json({ error: `state must be one of: ${SETTABLE_SIGNAL_STATES.join(', ')}` });
+    return;
+  }
+  const signal = setSignalState(projectRoot, req.params.id, state as SettableSignalState, actorFrom(req));
+  if (!signal) { res.status(404).json({ error: 'No such open signal in this project.' }); return; }
+  res.json(signal);
 });
 app.get('/api/workstreams', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
