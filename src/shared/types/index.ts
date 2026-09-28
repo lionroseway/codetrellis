@@ -12,3 +12,4 @@ export * from './system-doc';
 export * from './peer';
 export * from './power';
 export * from './criteria';
+export * from './breakpoint';

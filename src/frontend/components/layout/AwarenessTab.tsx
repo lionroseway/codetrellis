@@ -9,14 +9,16 @@ import {
 import { buildDigest } from '@shared/lib/awareness-digest';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
 import { UnverifiedIf } from '../UnverifiedTag';
+import { BreakpointsWaiting, BreakpointsSet } from './Breakpoints';
 
 /**
  * The Awareness tab (Phase 32 A1.8, awareness spec §7.2): what overlaps
  * between the parallel lines of work in this repository, and a person's
  * answer to each overlap.
  *
- * A digest line on top, then the signals: what needs you (open, high or
- * medium), low-priority notes, what you have seen, and what you set aside.
+ * Breakpoints waiting on you come first (B4.3), then a digest line and the
+ * signals: what needs you (open, high or medium), low-priority notes, what
+ * you have seen, and what you set aside; the breakpoints set come last.
  * Answering moves a signal down, never away, so it can be taken back; a
  * signal leaves only when its cause does.
  */
@@ -78,7 +80,12 @@ export function AwarenessTab() {
     return <div className="text-[11px] text-foreground-subtle py-6 text-center">Open a project to see its parallel work.</div>;
   }
   if (!loaded) {
-    return <div className="text-[11px] text-foreground-subtle py-6 text-center">Checking for overlaps…</div>;
+    return (
+      <div className="text-[11px] space-y-3 max-w-3xl">
+        <BreakpointsWaiting now={now} />
+        <div className="text-foreground-subtle py-6 text-center">Checking for overlaps…</div>
+      </div>
+    );
   }
 
   const groups = groupSignals(signals);
@@ -87,6 +94,7 @@ export function AwarenessTab() {
 
   return (
     <div data-testid="awareness-tab" className="text-[11px] space-y-3 max-w-3xl">
+      <BreakpointsWaiting now={now} />
       <div data-testid="awareness-digest" className="flex gap-2.5 rounded-lg border border-border-subtle bg-surface/60 px-3 py-2.5">
         <Radar size={14} className={`shrink-0 mt-0.5 ${groups.needsYou.length > 0 ? 'text-warning' : 'text-foreground-subtle'}`} />
         <div className="min-w-0">
@@ -128,6 +136,7 @@ export function AwarenessTab() {
       <Section title="Low priority" signals={groups.lowPriority} workstreams={workstreams} now={now} testId="awareness-low" collapsible />
       <Section title="Seen" signals={groups.seen} workstreams={workstreams} now={now} testId="awareness-seen" />
       <Section title="Set aside" signals={groups.setAside} workstreams={workstreams} now={now} testId="awareness-set-aside" collapsible />
+      <BreakpointsSet />
     </div>
   );
 }
