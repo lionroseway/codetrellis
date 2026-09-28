@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B1.1: the agent event log |
-| **Status** | B1.1 done on its branch: `agent_events` kept by a passive tap, stamped with session, agent and workstream, secrets masked, 14 days; `GET /api/agent-events`; the Timeline survives a reload; unit, harness (with a restart) and browser tests pass; PR open. A3.5 (#168) awaiting CI |
+| **Status** | B1.1 done on its branch: `agent_events` kept by a passive tap, stamped with session, agent and workstream, secrets masked, 14 days; `GET /api/agent-events`; the Timeline survives a reload; unit, harness (with a restart) and browser tests pass; PR open. A3.5 merged (#168): M3 done |
 | **Next action** | Merge A3.5 and B1.1 when green; then B1.2 (body edits as events, agent-time for watcher events, SDK-refused calls). Then, per the sequence: B2, C1, B4, B3, then the direction review, then B5 and A4 |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b1-1-agent-event-log` |
@@ -76,12 +76,12 @@
 - [x] A2.5 `drift` signal (#162)
 - [x] A2.6 Inline notices, `acknowledge_signal`, the M2 "done when" (#163) — **M2 done**
 - [x] A2 Meaning (signatures, contract, drift, notices, intent): M2 done (#163)
-- [ ] A3 Distilled (M3), refined in EXECUTION §4:
+- [x] A3 Distilled (M3), refined in EXECUTION §4: M3 done (#168)
   - [x] A3.1 The digest (#164)
   - [x] A3.2 Intended and cooldown (#165)
   - [x] A3.3 `parallel` guide flavour (#166)
   - [x] A3.4 User skill and optional hook, offered from Settings (#167)
-  - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when" (PR open)
+  - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
