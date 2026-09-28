@@ -161,6 +161,57 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-28: A1.5 — which symbols each workstream's changes touch
+- **Model (`workstream-symbols.ts`).** Each changed file is compared with
+  its version at the merge base, and symbols are reported as added,
+  removed or modified.
+  - Both sides are parsed with the app's own `parseVirtualFile`.
+  - The current version is read through `confined-fs` with the worktree
+    as root, so a symlink out of it is refused.
+  - The base version comes from `git show <sha>:<path>`; the sha is
+    checked and an option-like path refused.
+  - Nothing is written to the graph tables.
+  - Limits: files over 1 MB are skipped, and at most 200 files are parsed
+    per workstream.
+  - Answers are cached per file by base, size, mtime and ctime, so a
+    repeated listing parses only what moved.
+- **"Modified" means the symbol's own text changed**, trailing whitespace
+  aside. Signatures are A2's.
+- **Decision: a symbol's own text excludes its members' lines.** Otherwise
+  a class is "modified" whenever any method is, and two workstreams
+  editing different methods of one class would look like a collision. The
+  first pass excluded only nested `children`. That was right for TS and
+  Python but not for Java and Ruby, which list members flat with
+  qualified names; it now excludes any symbol nested inside the range.
+  The Java and Ruby fixtures caught it.
+- **Names are unique per file.** Members a parser nests are qualified
+  with their parent (`Session.renew`); names a language already qualifies
+  (`(Session).Renew`, `Session#renew`) are kept.
+- **Unparsed ≠ unchanged.** A file in a language we don't parse carries no
+  `symbols`. A parsed file that touched none carries `[]`.
+- **Found:** the Rust parser emits `impl Session` with no methods under
+  it, so a Rust method edit shows as the impl block. That's an existing
+  gap, recorded here and left out of the fixtures.
+- **UX journey.** In a chip's details, each changed file gets a second
+  line naming its symbols: `~Session.renew  +refreshToken  −legacyRefresh`.
+  Modified comes first, since that's where two workstreams collide, then
+  added, then removed; three at most, then "+N more". Files with no
+  symbol change get no line. Screenshot: `workstreams-symbols.png`.
+  `list_workstreams` carries the same for agents, and the guide says to
+  look before editing a function another workstream has changed.
+- **Tests.**
+  - Unit: `workstream-symbols.test.ts` (13). One fixture per language
+    (TS, Python, Go, Java, Ruby) parsed by the real parser, in a real repo
+    with a worktree, each with exactly one added, one modified and one
+    removed symbol. Plus: unparsed files, new and deleted files, moving a
+    function isn't a change, class versus member edits, trailing
+    whitespace, a symlink out of the worktree not read, and the cache.
+  - Strip lib +3.
+  - Harness: +1 (an edited and an added function named by the running
+    backend's parser), and two existing tests now assert symbols.
+  - Browser: +1.
+  - Unit 1138 pass / 3 environment skips. Lint 0 errors / 295.
+
 ### 2026-09-28: A1.4 — what each workstream has changed, kept current
 - **Model.** Each workstream's changes are measured from its merge base
   with the main checkout's branch:

@@ -41,7 +41,7 @@ import { initCapabilityToken, getTokenFilePath } from './services/capability-tok
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
-import { listWorkstreams, setClaudeSessionSource } from './services/workstream-service';
+import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
 import { setWorkstreamChangesListener } from './services/workstream-watch-service';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
@@ -627,6 +627,8 @@ app.get('/api/git/worktrees', (req, res) => {
 // ones (no agent) only with ?idle=1. The root is confined like the route
 // above; the folders come from git.
 setClaudeSessionSource(() => getWatcherStatus().sessions);
+// Each workstream's changed files are parsed for the symbols they touch (A1.5).
+setSymbolParser((filePath, content) => parseVirtualFile(filePath, content)?.symbols ?? null);
 // A watched workstream's changed files moved (A1.4): the strip refetches.
 setWorkstreamChangesListener((folder, changes) => {
   broadcast('workstreams-changed', { root: folder, changedFiles: changes.files.length });

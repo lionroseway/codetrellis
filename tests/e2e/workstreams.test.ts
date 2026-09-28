@@ -15,7 +15,7 @@ import { setupHarness, createMcpClient, openEventStream, type Harness, type Scri
 interface Agent { sessionId: string; agentType: string; source: 'mcp' | 'claude-log' }
 interface Workstream {
   root: string; branch: string | null; main: boolean; shape: 'worktree' | 'shared'; idle: boolean; agents: Agent[]; yours?: boolean;
-  changes: { base: string | null; files: Array<{ path: string; status: string }>; truncated: boolean };
+  changes: { base: string | null; files: Array<{ path: string; status: string; symbols?: Array<{ name: string; change: string }> }>; truncated: boolean };
 }
 
 test.describe.serial('Workstreams', () => {
@@ -128,12 +128,14 @@ test.describe.serial('Workstreams', () => {
   test('a worktree left with changes and no agent is listed, with its files', async () => {
     const billing = `${root}-billing`;
     execFileSync('git', ['-C', root, 'worktree', 'add', '-q', billing, '-b', 'billing-v2']);
-    fs.writeFileSync(path.join(billing, 'invoice.ts'), 'export const invoice = 1;\n');
+    fs.writeFileSync(path.join(billing, 'invoice.ts'), 'export function invoice() { return 1; }\n');
     const ws = find(await workstreams(), billing);
     expect(ws).toBeDefined();
     expect(ws!.agents).toEqual([]);
     expect(ws!.idle).toBe(false);
-    expect(ws!.changes.files).toEqual([{ path: 'invoice.ts', status: 'added' }]);
+    expect(ws!.changes.files.map(({ path: p, status }) => ({ path: p, status }))).toEqual([{ path: 'invoice.ts', status: 'added' }]);
+    // Parsed too (A1.5): a new file's symbols are all added.
+    expect(ws!.changes.files[0].symbols).toEqual([expect.objectContaining({ name: 'invoice', change: 'added' })]);
     expect(ws!.changes.base).toMatch(/^[0-9a-f]{40}$/);
   });
 
@@ -164,5 +166,24 @@ test.describe.serial('Workstreams', () => {
     } finally {
       fs.rmSync(path.join(root, 'NOTES.md'), { force: true });
     }
+  });
+
+  // ── A1.5: which symbols those changes touch ────────────────────────
+
+  test('an edited function in the worktree is named, parsed by the app itself', async () => {
+    const rel = 'packages/shared/src/validators.ts';
+    const file = path.join(worktree, rel);
+    const src = fs.readFileSync(file, 'utf-8');
+    fs.writeFileSync(file, src.replace(/export function isValidEmail\(email: string\): boolean \{/, '$&\n  if (!email) return false;')
+      + '\nexport function isValidPhone(phone: string): boolean {\n  return phone.length > 6;\n}\n');
+    await expect.poll(async () => {
+      const f = find(await workstreams(), worktree)?.changes.files.find((x) => x.path === rel);
+      return (f?.symbols ?? []).map((s) => `${s.change} ${s.name}`).sort();
+    }, { timeout: 10_000 }).toEqual(['added isValidPhone', 'modified isValidEmail']);
+
+    // A parsed file that declares no symbol says so with an empty list, which
+    // is a different answer from "not parsed" (no list at all).
+    const onlyConst = find(await workstreams(), worktree)!.changes.files.find((x) => x.path === 'refresh.ts');
+    expect(onlyConst?.symbols).toEqual([]);
   });
 });

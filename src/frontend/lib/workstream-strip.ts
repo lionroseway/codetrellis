@@ -3,7 +3,7 @@
  * rules are tested without rendering.
  */
 
-import type { ChangedFile, Workstream } from '@shared/types';
+import type { ChangedFile, SymbolChange, Workstream } from '@shared/types';
 
 /** Chips beyond this collapse into "+N", which opens the same list. */
 export const MAX_CHIPS = 5;
@@ -73,3 +73,19 @@ export function statusLetter(status: ChangedFile['status']): 'A' | 'M' | 'D' | '
 
 /** How many changed files the details list before "and N more". */
 export const MAX_LISTED_FILES = 8;
+
+const MARK: Record<SymbolChange['change'], string> = { modified: '~', added: '+', removed: '−' };
+
+/**
+ * One line saying which symbols a file's change touched (A1.5): modified
+ * first, since that is where two workstreams collide, then added, then
+ * removed. Null when the file was not parsed, or touched no symbol.
+ */
+export function symbolSummary(symbols: SymbolChange[] | undefined, max = 3): string | null {
+  if (!symbols || symbols.length === 0) return null;
+  const order = { modified: 0, added: 1, removed: 2 } as const;
+  const sorted = [...symbols].sort((a, b) => order[a.change] - order[b.change] || a.line - b.line);
+  const shown = sorted.slice(0, max).map((s) => `${MARK[s.change]}${s.name}`);
+  const more = sorted.length - shown.length;
+  return more > 0 ? `${shown.join('  ')}  +${more} more` : shown.join('  ');
+}

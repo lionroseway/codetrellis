@@ -146,6 +146,25 @@ test.describe('Workstreams strip', () => {
     await shot(page, 'workstreams-changes');
   });
 
+  test('each changed file says which symbols it touched (A1.5)', async ({ page }) => {
+    const sym = (name: string, change: 'added' | 'removed' | 'modified', line: number) => ({ name, kind: 'function' as const, change, line });
+    const files: ChangedFile[] = [
+      { path: 'src/auth/session.ts', status: 'modified', symbols: [sym('Session.renew', 'modified', 12), sym('refreshToken', 'added', 40), sym('legacyRefresh', 'removed', 30)] },
+      { path: 'src/auth/refresh.ts', status: 'added', symbols: [sym('scheduleRefresh', 'added', 3)] },
+      { path: 'README.md', status: 'modified' }, // not parsed: no symbol line
+      { path: 'src/auth/types.ts', status: 'modified', symbols: [] }, // parsed, no symbol moved: no line either
+    ];
+    await serve(page, [
+      ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),
+      ws('/work/acme-auth', 'auth-refresh', false, [agent('s2', 'codex', { model: 'gpt-5' })], files),
+    ]);
+    await gotoWithProject(page);
+    await chips(page).filter({ hasText: 'auth-refresh' }).click();
+    const lines = page.getByTestId('workstream-file-symbols');
+    await expect(lines).toHaveText(['~Session.renew  +refreshToken  −legacyRefresh', '+scheduleRefresh']);
+    await shot(page, 'workstreams-symbols');
+  });
+
   test('a worktree an agent left with changes gets a grey chip that says nobody is on it', async ({ page }) => {
     await serve(page, [
       ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),

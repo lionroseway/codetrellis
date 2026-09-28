@@ -4,7 +4,7 @@ import { GitBranch, Users, AlertTriangle, FileText } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { Workstream } from '@shared/types';
 
 /**
@@ -198,10 +198,19 @@ function ChangedFiles({ ws }: { ws: Workstream }) {
       </div>
       {shown.map((f) => {
         const letter = statusLetter(f.status);
+        const symbols = symbolSummary(f.symbols);
         return (
-          <div key={f.path} className="flex items-center gap-1.5 py-px" title={f.from ? `${f.from} → ${f.path}` : f.path}>
-            <span className={`w-3 text-[9px] font-mono font-semibold shrink-0 ${LETTER_TINT[letter]}`}>{letter}</span>
-            <span className="text-[10px] font-mono text-foreground-muted truncate">{shortFolder(f.path, 44)}</span>
+          <div key={f.path} className="py-px" title={f.from ? `${f.from} → ${f.path}` : f.path}>
+            <div className="flex items-center gap-1.5">
+              <span className={`w-3 text-[9px] font-mono font-semibold shrink-0 ${LETTER_TINT[letter]}`}>{letter}</span>
+              <span className="text-[10px] font-mono text-foreground-muted truncate">{shortFolder(f.path, 44)}</span>
+            </div>
+            {/* Which symbols it touched (A1.5): ~ modified, + added, − removed. */}
+            {symbols && (
+              <div data-testid="workstream-file-symbols" className="pl-[18px] text-[9px] font-mono text-foreground-subtle truncate">
+                {symbols}
+              </div>
+            )}
           </div>
         );
       })}

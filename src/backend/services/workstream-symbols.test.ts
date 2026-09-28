@@ -1,0 +1,181 @@
+/**
+ * Which symbols a workstream's changes touch (Phase 32 A1.5): one fixture
+ * per language, parsed by the app's real tree-sitter parser, in a real
+ * repository with a linked worktree.
+ *
+ * Each fixture starts from the same shape — a function kept as is, a member
+ * whose body the worktree edits, a function it deletes — and the worktree
+ * adds one new function. What must come back is exactly: one added, one
+ * modified, one removed, and nothing for the untouched symbols.
+ */
+
+import { test, describe, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { initParser, parseVirtualFile } from './ast-parser';
+import { computeChanges } from './workstream-watch-service';
+import { diffSymbols, flatSymbols, withSymbolChanges, clearSymbolCache, type SymbolParser } from './workstream-symbols';
+import type { ParsedSymbol } from '../../shared/types';
+
+const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
+const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { env: ENV, encoding: 'utf-8' });
+const parse: SymbolParser = (p, c) => parseVirtualFile(p, c)?.symbols ?? null;
+
+interface Fixture { file: string; base: string; changed: string; expect: string[] }
+
+/** base → changed, and the symbol changes that must be reported. */
+const FIXTURES: Record<string, Fixture> = {
+  typescript: {
+    file: 'src/session.ts',
+    base: 'export function keep() { return 1 }\nexport class Session {\n  renew() { return 1 }\n  stay() { return 1 }\n}\nexport function gone() { return 0 }\n',
+    changed: 'export function keep() { return 1 }\nexport class Session {\n  renew() { return 2 }\n  stay() { return 1 }\n}\nexport function refresh() { return 3 }\n',
+    expect: ['modified method Session.renew', 'added function refresh', 'removed function gone'],
+  },
+  python: {
+    file: 'app/session.py',
+    base: 'def keep():\n    return 1\n\nclass Session:\n    def renew(self):\n        return 1\n\n    def stay(self):\n        return 1\n\ndef gone():\n    return 0\n',
+    changed: 'def keep():\n    return 1\n\nclass Session:\n    def renew(self):\n        return 2\n\n    def stay(self):\n        return 1\n\ndef refresh():\n    return 3\n',
+    expect: ['modified method Session.renew', 'added function refresh', 'removed function gone'],
+  },
+  go: {
+    file: 'ledger/session.go',
+    base: 'package ledger\n\nfunc Keep() int { return 1 }\n\ntype Session struct{}\n\nfunc (s Session) Renew() int { return 1 }\n\nfunc Gone() int { return 0 }\n',
+    changed: 'package ledger\n\nfunc Keep() int { return 1 }\n\ntype Session struct{}\n\nfunc (s Session) Renew() int { return 2 }\n\nfunc Refresh() int { return 3 }\n',
+    expect: ['modified function (Session).Renew', 'added function Refresh', 'removed function Gone'],
+  },
+  java: {
+    file: 'src/Session.java',
+    base: 'class Session {\n  int renew() { return 1; }\n  int stay() { return 1; }\n  int gone() { return 0; }\n}\n',
+    changed: 'class Session {\n  int renew() { return 2; }\n  int stay() { return 1; }\n  int refresh() { return 3; }\n}\n',
+    expect: ['modified method Session.renew', 'added method Session.refresh', 'removed method Session.gone'],
+  },
+  ruby: {
+    file: 'lib/session.rb',
+    base: 'class Session\n  def renew\n    1\n  end\n\n  def stay\n    1\n  end\nend\n\ndef gone\n  0\nend\n',
+    changed: 'class Session\n  def renew\n    2\n  end\n\n  def stay\n    1\n  end\nend\n\ndef refresh\n  3\nend\n',
+    expect: ['modified function Session#renew', 'added function refresh', 'removed function gone'],
+  },
+};
+
+let tmp: string;
+let main: string;
+let tree: string;
+
+before(async () => {
+  await initParser();
+  tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-ws-symbols-')));
+  main = path.join(tmp, 'app');
+  tree = path.join(tmp, 'app-feature');
+  fs.mkdirSync(main);
+  git(main, 'init', '-q', '-b', 'main');
+  for (const f of Object.values(FIXTURES)) {
+    fs.mkdirSync(path.dirname(path.join(main, f.file)), { recursive: true });
+    fs.writeFileSync(path.join(main, f.file), f.base);
+  }
+  fs.writeFileSync(path.join(main, 'README.md'), '# app\n');
+  git(main, 'add', '-A');
+  git(main, 'commit', '-q', '-m', 'init');
+  git(main, 'worktree', 'add', '-q', tree, '-b', 'feature');
+  for (const f of Object.values(FIXTURES)) fs.writeFileSync(path.join(tree, f.file), f.changed);
+  fs.writeFileSync(path.join(tree, 'README.md'), '# app, changed\n');
+  fs.writeFileSync(path.join(tree, 'src/new.ts'), 'export function brandNew() { return 1 }\n');
+});
+
+beforeEach(() => clearSymbolCache());
+
+after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+const described = (symbols: { change: string; kind: string; name: string }[] | undefined) =>
+  (symbols ?? []).map((s) => `${s.change} ${s.kind} ${s.name}`);
+
+describe('symbol changes per language, against the merge base', () => {
+  for (const [lang, f] of Object.entries(FIXTURES)) {
+    test(lang, () => {
+      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+      const file = changes.files.find((x) => x.path === f.file);
+      assert.ok(file, `${f.file} is a changed file`);
+      assert.deepEqual(described(file!.symbols).sort(), [...f.expect].sort());
+    });
+  }
+});
+
+describe('what is not a symbol change', () => {
+  test('a file in a language we do not parse keeps its path and carries no symbols', () => {
+    const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+    const readme = changes.files.find((x) => x.path === 'README.md')!;
+    assert.equal(readme.status, 'modified');
+    assert.equal(readme.symbols, undefined, 'unparsed, which is not the same as "changed no symbols"');
+  });
+
+  test('a new file: every symbol in it is added', () => {
+    const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+    assert.deepEqual(described(changes.files.find((x) => x.path === 'src/new.ts')!.symbols), ['added function brandNew']);
+  });
+
+  test('a deleted file: every symbol in it is removed', () => {
+    fs.rmSync(path.join(tree, 'src/new.ts'));
+    const other = path.join(tree, 'ledger/session.go');
+    const saved = fs.readFileSync(other, 'utf-8');
+    fs.rmSync(other);
+    try {
+      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+      assert.deepEqual(described(changes.files.find((x) => x.path === 'ledger/session.go')!.symbols).sort(), [
+        'removed class Session', 'removed function (Session).Renew', 'removed function Gone', 'removed function Keep',
+      ]);
+    } finally {
+      fs.writeFileSync(other, saved);
+      fs.writeFileSync(path.join(tree, 'src/new.ts'), 'export function brandNew() { return 1 }\n');
+    }
+  });
+
+  test('moving a function down the file without changing it is not a change', () => {
+    const src = (order: string[]) => order.map((n) => `export function ${n}() { return 1 }\n`).join('\n');
+    const syms = (s: string) => flatSymbols(parse('/x/a.ts', s)!, s);
+    assert.deepEqual(diffSymbols(syms(src(['a', 'b'])), syms(src(['b', 'a']))), []);
+  });
+
+  test("a class is not modified when only its members are; it is when its own text changes", () => {
+    const base = 'export class Session {\n  a() { return 1 }\n  b() { return 1 }\n}\n';
+    const syms = (src: string) => flatSymbols(parse('/x/a.ts', src)!, src);
+    const onlyMember = base.replace('a() { return 1 }', 'a() { return 2 }');
+    assert.deepEqual(diffSymbols(syms(base), syms(onlyMember)).map((c) => c.name), ['Session.a']);
+    const ownText = base.replace('export class Session {', 'export class Session extends Base {');
+    assert.deepEqual(diffSymbols(syms(base), syms(ownText)).map((c) => `${c.change} ${c.name}`), ['modified Session']);
+  });
+
+  test('trailing whitespace is not a change; a real edit is', () => {
+    const s: ParsedSymbol[] = [{ name: 'f', kind: 'function', startLine: 1, endLine: 1, children: [], modifiers: [] }];
+    assert.deepEqual(diffSymbols(flatSymbols(s, 'f() {}'), flatSymbols(s, 'f() {}   ')), []);
+    assert.equal(diffSymbols(flatSymbols(s, 'f() {}'), flatSymbols(s, 'f() { x }'))[0].change, 'modified');
+  });
+});
+
+describe('safety and cost', () => {
+  test('a symlink out of the worktree is not read', () => {
+    const outside = path.join(tmp, 'secret.ts');
+    fs.writeFileSync(outside, 'export function secret() { return 42 }\n');
+    const link = path.join(tree, 'src/link.ts');
+    fs.symlinkSync(outside, link);
+    try {
+      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+      const f = changes.files.find((x) => x.path === 'src/link.ts');
+      assert.ok(f, 'the link itself is a changed file');
+      assert.ok(!described(f!.symbols).some((d) => d.includes('secret')), 'its target was not parsed');
+    } finally {
+      fs.rmSync(link);
+    }
+  });
+
+  test('an unchanged file is parsed once across repeated listings', () => {
+    let calls = 0;
+    const counting: SymbolParser = (p, c) => { calls++; return parse(p, c); };
+    withSymbolChanges(tree, computeChanges(tree, 'main'), counting);
+    const first = calls;
+    withSymbolChanges(tree, computeChanges(tree, 'main'), counting);
+    assert.ok(first > 0);
+    assert.equal(calls, first, 'the second listing hit the cache');
+  });
+});

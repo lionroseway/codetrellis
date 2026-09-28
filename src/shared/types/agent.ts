@@ -1,4 +1,5 @@
 import type { ArchitectureDiff } from './graph';
+import type { SymbolKind } from './ast';
 
 export type AgentEventSource = 'mcp' | 'claude-code-watcher' | 'file-watcher';
 
@@ -96,6 +97,22 @@ export interface ChangedFile {
   status: ChangedFileStatus;
   /** The old path, for a rename. */
   from?: string;
+  /**
+   * The symbols the change touches, against the merge base (A1.5). Absent
+   * when the file's language is not parsed, or past the parse limit — which
+   * is not the same as an empty list, "changed no symbols".
+   */
+  symbols?: SymbolChange[];
+}
+
+export interface SymbolChange {
+  /** Unique in its file: members carry their parent (`Session.renew`, `(Ledger).Post`). */
+  name: string;
+  kind: SymbolKind;
+  /** `modified` means its own source text changed; signatures are A2's. */
+  change: 'added' | 'removed' | 'modified';
+  /** 1-based line in the current version, or in the base when removed. */
+  line: number;
 }
 
 /**

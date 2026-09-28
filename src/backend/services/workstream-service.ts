@@ -17,6 +17,7 @@ import type { AgentSessionInfo, Workstream, WorkstreamAgent, WorkstreamChanges }
 import { listWorktrees, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
 import { getChanges, syncWorkstreamWatchers } from './workstream-watch-service';
+import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
 
 /** A Claude Code session the watcher follows (see `claude-code-watcher.ts`). */
 export interface ClaudeLogSession {
@@ -122,6 +123,18 @@ export function setClaudeSessionSource(source: () => readonly ClaudeLogSession[]
 }
 
 /**
+ * How a changed file becomes symbols (A1.5), published by the backend: the
+ * app's own tree-sitter parser, which this service does not import so that
+ * it stays testable without the grammars loaded. Unset, files keep their
+ * paths and carry no symbols.
+ */
+let symbolParser: SymbolParser | null = null;
+
+export function setSymbolParser(parse: SymbolParser | null): void {
+  symbolParser = parse;
+}
+
+/**
  * The workstreams of the repository `projectRoot` belongs to. The caller has
  * already confined `projectRoot` to an opened project. Idle ones are left
  * out unless asked for.
@@ -145,7 +158,10 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
     worktrees,
     mcpSessions: getActiveSessions(),
     claudeSessions,
-    changes: (folder) => getChanges(folder, mainRef),
+    changes: (folder) => {
+      const changes = getChanges(folder, mainRef);
+      return symbolParser ? withSymbolChanges(folder, changes, symbolParser) : changes;
+    },
   });
   // This listing is the discovery pass: watch what is active, and stop
   // watching what went idle.

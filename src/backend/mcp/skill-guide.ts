@@ -160,8 +160,8 @@ work rather than assuming it. \`post_channel_event\` raises a question,
 decision or blocker the human (or another agent) can answer, and
 \`get_channel_thread\` reads the replies.
 \`list_workstreams\` shows every worktree with agents in it, which one is
-yours, and what each has changed: look before you edit a file another
-workstream has changed. If you share a folder with another agent, say so,
+yours, and what each has changed, down to the functions: look before you
+edit a file or a function another workstream has changed. If you share a folder with another agent, say so,
 because your edits can't be told apart from theirs.
 
 ### 10. Steer from a phone

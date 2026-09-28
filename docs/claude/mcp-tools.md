@@ -72,7 +72,7 @@ Tools are organised into 18 files under `src/backend/mcp/tools/`. Each file grou
 | `git-tools.ts` | Git | Activity, commit metadata, change status, changes summary. |
 | `project-config-tools.ts` | Project & config | Open/close project, recent projects, project config, settings, repo identity, refresh origin, repo alias. |
 | `session-tools.ts` | Sessions | Register agent sessions; attribution for tool calls. |
-| `awareness-tools.ts` | Awareness (Phase 32) | `list_workstreams`: every worktree of the repo with the agents in it and the files it has changed since it branched (A1.4), `yours` for the caller's own, `shared` for two or more agents in one folder. `get_awareness`, `check_footprint`, `declare_intent` and `acknowledge_signal` join it as footprints and signals land (A1.4–A1.6). |
+| `awareness-tools.ts` | Awareness (Phase 32) | `list_workstreams`: every worktree of the repo with the agents in it and the files it has changed since it branched (A1.4), with the symbols each touches (A1.5), `yours` for the caller's own, `shared` for two or more agents in one folder. `get_awareness`, `check_footprint`, `declare_intent` and `acknowledge_signal` join it as footprints and signals land (A1.4–A1.6). |
 | `terminal-tools.ts` | Terminals | Create, write, read, resize, focus, kill, list local terminals; remote terminals proxied to mobile. |
 | `audio-tools.ts` | Audio | Start/stop capture, push audio chunks, get audio status, get audio context, get remote audio. |
 | `peer-tools.ts` | Peers | List paired devices, list peer connections, list discovered peers, unpair, refresh peers. |
