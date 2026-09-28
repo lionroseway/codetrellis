@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { usePlanItemsStore, buildItemTree } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
+import { progressByWorktree } from '../../../lib/section-worktrees';
 import type { PlanItem, PlanItemKind, TaskStatus } from '@shared/types';
 
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
@@ -54,6 +55,8 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   );
 
   // Phase 5.2 — count local items for the bulk-toggle affordance.
+  // Phase 32 C5.3 — how far each worktree this plan is split across has got.
+  const worktreeProgress = useMemo(() => progressByWorktree(itemsByUid), [itemsByUid]);
   const localCount = useMemo(
     () => Object.values(itemsByUid).filter((i) => i.visibility === 'local').length,
     [itemsByUid],
@@ -182,6 +185,23 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
 
         <NewButton planUid={planUid} parentUid={null} createItem={createItem} />
       </div>
+
+      {/* Phase 32 C5.3 — one plan across worktrees: done of to-do, per worktree. */}
+      {worktreeProgress.length > 0 && (
+        <div
+          data-testid="worktree-progress"
+          className="flex flex-wrap gap-x-3 gap-y-0.5 px-3.5 py-1.5 border-b border-white/[0.06] text-[10.5px] text-foreground-subtle"
+          title="Tasks done, of those to do, in each worktree this plan is split across"
+        >
+          {worktreeProgress.map((g) => (
+            <span key={g.branch ?? '(any)'} data-testid="worktree-progress-entry" className="whitespace-nowrap">
+              <span className={g.branch ? 'font-mono text-sky-300/90' : 'italic'}>{g.branch ?? 'any worktree'}</span>
+              {': '}
+              <span className="text-foreground-muted">{g.done} of {g.total}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div
         className="flex-1 overflow-y-auto py-1.5"
@@ -342,6 +362,16 @@ function ItemRow({
       <span className={`text-[13px] truncate flex-1 ${isSelected ? 'text-foreground font-medium' : 'text-foreground-muted'}`}>
         {item.title || <em className="text-foreground-subtle">untitled</em>}
       </span>
+      {/* Phase 32 C5.3 — the worktree this section is kept to (set here; its tasks inherit it). */}
+      {item.workstream && (
+        <span
+          data-testid="item-worktree"
+          title={`Worked in ${item.workstream}: its tasks are offered only to agents working there`}
+          className="shrink-0 max-w-[45%] truncate rounded border border-sky-400/25 bg-sky-500/10 px-1 font-mono text-[10px] text-sky-300"
+        >
+          ⎇ {item.workstream}
+        </span>
+      )}
       {item.kind === 'action' && typeof item.progressPercent === 'number' && item.progressPercent > 0 && (
         <span className="text-[10.5px] text-foreground-subtle shrink-0">{item.progressPercent}%</span>
       )}

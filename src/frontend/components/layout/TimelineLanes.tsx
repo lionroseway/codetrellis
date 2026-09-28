@@ -18,6 +18,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { useBreakpointsStore } from '../../stores/breakpoints-store';
+import { usePlanItemsStore } from '../../stores/plan-items-store';
+import { sectionsByBranch } from '../../lib/section-worktrees';
 import { buildLanes, position, type LaneMark } from '../../lib/timeline-lanes';
 import type { AgentTurn } from '../../lib/agent-turns';
 
@@ -75,6 +77,9 @@ export function TimelineLanes({
   const signals = useAwarenessStore((s) => s.signals);
   const commits = useAwarenessStore((s) => s.commits);
   const hits = useBreakpointsStore((s) => s.recent);
+  // Phase 32 C5.3 — the open plan's sections kept to each branch, named on its lane.
+  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  const sections = useMemo(() => sectionsByBranch(itemsByUid), [itemsByUid]);
   const tick = useNow();
   // A new event is "now" too, so its mark is never drawn past the end.
   const latest = turns.reduce((t, x) => Math.max(t, x.endedAt), 0);
@@ -90,10 +95,13 @@ export function TimelineLanes({
         {view.lanes.map((lane) => (
           <div key={lane.key} className="flex items-center gap-2" data-testid="timeline-lane" data-lane={lane.label}>
             <span
-              className={`w-28 shrink-0 truncate text-[10px] font-mono ${lane.root ? 'text-foreground-muted' : 'text-foreground-subtle italic'}`}
-              title={lane.root ?? 'Not in any workstream: a spec edited from the app, say'}
+              className={`w-28 shrink-0 flex flex-col leading-tight text-[10px] ${lane.root ? 'text-foreground-muted' : 'text-foreground-subtle italic'}`}
+              title={[lane.root ?? 'Not in any workstream: a spec edited from the app, say', sections.get(lane.label)?.length ? `Worked here: ${sections.get(lane.label)!.join(', ')}` : null].filter(Boolean).join('\n')}
             >
-              {lane.label}
+              <span className="truncate font-mono">{lane.label}</span>
+              {lane.root && sections.get(lane.label)?.length ? (
+                <span className="truncate text-[9px] text-sky-300/80 not-italic" data-testid="lane-sections">{sections.get(lane.label)!.join(', ')}</span>
+              ) : null}
             </span>
             <div className="relative flex-1 h-4 border-b border-white/[0.06]">
               {/* A long turn is also a faint span from start to end; a pause, a
