@@ -211,6 +211,21 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_skill_uses_item ON skill_uses(item_uid, skill);
 
+  -- Phase 32 C1.4: a skill that arrived in a plan file (pulled through git,
+  -- or edited by hand) is held back from agents until a person accepts it.
+  -- One row per arrival: who added it and in which commit, as git says.
+  CREATE TABLE IF NOT EXISTS skill_arrivals (
+    item_uid TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    added_by TEXT,
+    commit_sha TEXT,
+    arrived_at INTEGER NOT NULL,
+    accepted_at INTEGER,
+    accepted_by TEXT,
+    accepted_by_type TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_skill_arrivals_item ON skill_arrivals(item_uid, skill);
+
   -- Phase 32 A1.6: one thing worth knowing about parallel work. Deduplicated
   -- by id (kind, subject, workstreams); resolved when its cause goes away.
   CREATE TABLE IF NOT EXISTS awareness_signals (

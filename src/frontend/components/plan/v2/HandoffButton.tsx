@@ -182,7 +182,8 @@ export function HandoffButton() {
     if (!plan || !selectedItem) return;
     // The skills in effect, inherited ones included: the tree holds summaries.
     const inEffect = await fetch(`/api/items/${selectedItem.uid}/skills`)
-      .then(async (r) => (r.ok ? ((await r.json()) as { skills?: Array<{ skill: Skill }> }).skills?.map((x) => x.skill) : undefined))
+      // C1.4: a skill that arrived in a plan file and waits for a person is not handed on.
+      .then(async (r) => (r.ok ? ((await r.json()) as { skills?: Array<{ skill: Skill; pending?: unknown }> }).skills?.filter((x) => !x.pending).map((x) => x.skill) : undefined))
       .catch(() => undefined);
     const prompt = taskToPrompt(selectedItem, plan, inEffect);
     navigator.clipboard.writeText(prompt);

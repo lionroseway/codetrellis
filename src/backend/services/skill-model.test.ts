@@ -108,3 +108,11 @@ test('an absent source is a skill and an absent required is false; a present but
   assert.deepEqual(normaliseSkills([{ name: 'sql-review' }]), { skills: [{ name: 'sql-review', source: 'skill', required: false }], problems: [] });
   assert.equal(normaliseSkills([{ name: 'x', source: 'shell' }]).skills.length, 0);
 });
+
+test('withoutLinks with a hide rule: a waiting skill is left out of the item it is on, and only that item (C1.4)', () => {
+  const a = { uid: 'a', skills: [{ name: 'pr-review', source: 'skill', required: false, use: 'recommended' }, { name: 'ok', source: 'skill', required: false, use: 'recommended' }] };
+  const b = { uid: 'b', skills: [{ name: 'pr-review', source: 'skill', required: false, use: 'recommended' }] };
+  const out = withoutLinks({ item: a, children: [b] }, 0, (uid, skill) => uid === 'a' && skill === 'pr-review');
+  assert.deepEqual(out.item.skills.map((s) => s.name), ['ok']);
+  assert.deepEqual(out.children[0].skills.map((s) => s.name), ['pr-review']);
+});

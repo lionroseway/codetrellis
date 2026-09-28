@@ -40,6 +40,7 @@ import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
 import * as criteriaService from './criteria-service';
 import { getDb } from './database';
+import { noteArrivals } from './skill-arrival-service';
 import { readTextWithin, resolveWithin } from './confined-fs';
 import type {
   Plan,
@@ -600,7 +601,7 @@ function importItemsFromDir(
         // Leaf item
         const raw = parseYaml(readPlanFile(planDir, fullPath));
         if (!raw?.uid) { warnings.push(`Skipping ${fullPath} — missing uid`); continue; }
-        const item = upsertItem(planUid, parentUid, raw, warnings);
+        const item = upsertItem(planUid, parentUid, raw, warnings, fullPath);
         if (item) collected.push(item);
       } else if (stat.isDirectory()) {
         // Item with children — read _self.yaml first
@@ -611,7 +612,7 @@ function importItemsFromDir(
         }
         const raw = parseYaml(readPlanFile(planDir, selfPath));
         if (!raw?.uid) { warnings.push(`Skipping ${selfPath} — missing uid`); continue; }
-        const item = upsertItem(planUid, parentUid, raw, warnings);
+        const item = upsertItem(planUid, parentUid, raw, warnings, selfPath);
         if (item) {
           collected.push(item);
           // Recurse into children
@@ -633,9 +634,11 @@ function upsertItem(
   parentUid: string | null,
   raw: any,
   warnings: string[],
+  file: string,
 ): PlanItem | null {
   const uid = String(raw.uid);
   const existing = planItemService.getItem(uid);
+  const skillsBefore = existing?.skills ?? [];
 
   const kind = raw.kind === 'object' ? 'object' : 'action';
   const now = Date.now();
@@ -770,6 +773,14 @@ function upsertItem(
         createdAt: toEpoch(c.createdAt) ?? Date.now(),
       });
     }
+  }
+
+  // Phase 32 C1.4: a skill this file brought that the item did not have is
+  // held back from agents until a person accepts it.
+  if (item) {
+    try {
+      noteArrivals({ itemUid: item.uid, before: skillsBefore, after: item.skills ?? [], file });
+    } catch { /* never let the flag break an import */ }
   }
 
   return item;
