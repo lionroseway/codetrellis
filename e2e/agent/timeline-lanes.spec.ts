@@ -113,7 +113,9 @@ test.describe('Timeline lanes', () => {
     // Words, not only glyphs and colour: the hover says what each is.
     await expect(lane('billing-v2').locator('[data-kind="turn"]').nth(1)).toHaveAttribute('title', /turn \(failed\) · claude-code: Get app guide failed/);
     await expect(lane('auth-refresh').locator('[data-kind="signal"]')).toHaveAttribute('title', /high signal · `auth-refresh` and `billing-v2` both change/);
-    await expect(lane('No workstream').locator('[data-kind="edit"]')).toHaveAttribute('title', /edit · human: Edited the spec “Token rotation” \(v2\)/);
+    // "No workstream" collects other specs' live edits too, so pick this room's by its spec.
+    await expect(lane('No workstream').locator('[data-kind="edit"][title*="Token rotation"]'))
+      .toHaveAttribute('title', /edit · human: Edited the spec “Token rotation” \(v2\)/);
 
     fs.mkdirSync(OUT, { recursive: true });
     await page.getByTestId('timeline-lanes').screenshot({ path: path.join(OUT, 'timeline-lanes.png') });
