@@ -117,7 +117,11 @@ event, for the active project.
   back. Its store is `awareness-store.ts`.
 - **Agents, asked**: `get_awareness` (the digest plus the signals affecting
   the caller's workstream) and `check_footprint(paths, symbols?)` (who else
-  changed these files, and what imports them). The tools are in
+  changed these files, and what imports them), then `get_line_changes(path,
+  workstream?, diff?)` (B3.1: which of their lines, from git, against each
+  workstream's merge base with main, the functions they fall in and whether
+  each run is committed; `services/line-changes.ts`, also
+  `GET /api/workstreams/changes`). The tools are in
   `mcp/tools/awareness-tools.ts`.
 - **Agents, not asked** (`awareness-notices.ts`, A2.6): an unseen high or
   medium signal for the caller's workstream is appended once to its next

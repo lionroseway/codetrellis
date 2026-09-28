@@ -229,6 +229,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   await_decision: 'read',
   // Asks whether a file is held by a breakpoint; records the hit so the person can answer it (B4.2).
   check_breakpoint: 'read',
+  // Another workstream's changed lines, from git (B3.1): the repository, not an agent's words.
+  get_line_changes: 'read',
 
   // ── project-config-tools ────────────────────────────────────────────
   get_project_config: 'read',

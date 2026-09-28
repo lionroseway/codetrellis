@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C5.3b: sections named in overlaps; ready to merge |
-| **Status** | C5.3a merged (#188, with two flaky-wait fixes for plan-by-hand and the graph canvas). C5.3b rebased onto it: readiness per worktree (ahead/behind/uncommitted/serious signals) in the tree and the Worked-in panel, and overlaps between two sections name both. With it C5 is done. B3.1 and B3.2 are built on their branches, waiting behind it |
-| **Next action** | Open C5.3b's PR and merge it when green. Then rebase B3.1 (`feat/phase-32-b3-1-line-changes`) onto it, log it, open its PR; then B3.2 (`feat/phase-32-b3-2-code-gutter`) |
+| **Stage / step** | Track B — B3.1: line changes per workstream, from git |
+| **Status** | C5.3a merged (#188); C5.3b merged (#190), C5 done. B3.1 done on its branch, stacked on C5.3b: each workstream's changed lines in a file, from git, over REST and MCP `get_line_changes` for any agent. B3.2 (the code view) is built on its branch, stacked on B3.1. Unit and harness pass |
+| **Next action** | Open B3.1's PR and merge when green; then rebase B3.2 (`feat/phase-32-b3-2-code-gutter`), log it, open its PR. Then B3.3 (overlay list in `graph-builder`) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c5-3b-sections-readiness` |
+| **Branch** | `feat/phase-32-b3-1-line-changes` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -111,7 +111,7 @@
   - [x] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click ([#171](https://github.com/lionroseway/codetrellis/pull/171))
   - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
 - [ ] B3 Line changes and overlays, refined in EXECUTION §5:
-  - [ ] B3.1 Line changes per workstream from git: REST and `get_line_changes`
+  - [x] B3.1 Line changes per workstream from git: REST and `get_line_changes` (PR open)
   - [ ] B3.2 The code view: gutter marks, who changed what, Compare with…
   - [ ] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
@@ -143,7 +143,7 @@
   - [x] C5.2 Start a worktree for a section; a start command for any agent ([#187](https://github.com/lionroseway/codetrellis/pull/187))
   - [ ] C5.3 Workstream chips, progress per worktree, sections named in collisions, split in two:
     - [x] C5.3a ⎇ worktree on each section in the plan tree; progress per worktree; lanes name their sections ([#188](https://github.com/lionroseway/codetrellis/pull/188))
-    - [x] C5.3b A collision between two sections of one plan names both; readiness to merge per section (PR open)
+    - [x] C5.3b A collision between two sections of one plan names both; readiness to merge per section ([#190](https://github.com/lionroseway/codetrellis/pull/190))
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -243,9 +243,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | "New worktree for this section" is the person's alone (the app window, or a test backend, like a grant): it makes a folder on their machine. The folder is always beside the project, named after it and the branch, and shown before anything is made; nothing that exists (a folder, a branch) is reused. Starting an agent there is a CodeTrellis terminal in that folder for Claude Code, Codex, aider, or a plain shell for any other agent, or the folder copied (C5.2) | An agent that could make worktrees could make folders anywhere it named; the person asking in the window is the one place that is theirs. Reusing an existing folder could put a section on top of someone's work. The shell preset keeps it agent-agnostic: whatever CLI the person runs, they run it there |
 | 2026-09-28 | A tool call waits, at most 2 s and only the first time, for the session's MCP roots when they are still being asked for (C5.2) | Found by C5.2's harness test: an agent that calls straight after connecting was "worktree unknown" and was offered nothing, while the same call a moment later worked (2 of 2 runs failed before, 12 of 12 passed after). Every worktree-aware tool shared the race (sections, notices, signal breakpoints); one wait at the single interception fixes them all |
 | 2026-09-28 | A section's worktree is "ready to merge" only when it is up to date with main, has nothing uncommitted, no serious (high or medium) signal open, and at least one commit of its own; when git cannot say how far it is from main, it is not ready, and says so (C5.3b) | The person reads it as permission to merge, so every doubt must count against it. Low signals are notes, and an overlap marked intended is a decision already taken; both are left out. "Unknown" read as "fine" would be the confident wrong answer the observability doc warns about |
+| 2026-09-28 | Line changes are asked for as `GET /api/workstreams/changes?path=&workstream=`, not `/api/workstreams/:id/changes` (B3.1) | A workstream's id is its folder, which has slashes in it; the sibling route `/api/workstreams/commits` already takes query parameters. `workstream` names one by id or branch among those `listWorkstreams` found, never a folder to read |
+| 2026-09-28 | A hunk is "committed" only when none of its lines differ between HEAD and the working copy; a committed change edited again reads "not committed" (B3.1) | The question the person asks is "is this safe in a commit yet". Part of it not being so is the answer that matters, and splitting one run of lines in two would make the gutter harder to read than the difference is worth |
 ---
 
 ## Entries
+
+### 2026-09-28: B3.1 — line changes per workstream, from git, for any agent
+- **Journey.** billing-v2 adds a line to `validateCreateOrder` (not
+  committed); exports changes one line of `validateCreateUser` and commits
+  it. A person asks for `validators.ts` and gets both: exports "changed 12,
+  in validateCreateUser", billing-v2 "added 20, in validateCreateOrder, not
+  committed". An agent in billing-v2, a plain MCP client with no hook, calls
+  `get_line_changes(path)` and is told only the other side's lines, in the
+  same words; naming its own workstream shows its own.
+- **Built.** `services/line-changes.ts`: `git diff -U0 <merge-base>` in the
+  workstream's folder (or `<base> <head>` for a branch with no folder);
+  each hunk placed in its innermost functions by the parser (members
+  qualified as the footprints name them); committed or not from the working
+  copy against HEAD; a file git does not track is all added and not
+  committed. The copy is read through confined-fs before git runs, so a link
+  out of the folder is `unreadable`, never read; binary and files over 1 MB
+  say so. `GET /api/workstreams/changes`, MCP `get_line_changes(path,
+  workstream?, diff?)` (capability `read`, in the skill guide).
+  `shared/lib/line-changes.ts` holds the sentences, for the code view too.
+- **Tests.** Unit `line-changes.test.ts` (hunk headers, binary, placement,
+  paths, words, a real repo with a worktree, a branch with no folder).
+  Harness `tests/e2e/line-changes.test.ts` (two worktrees, REST and an agent
+  with no hook, refusals, a link out of the worktree).
 
 ### 2026-09-28: C5.3b — sections named in overlaps; ready to merge per worktree
 - **Journey.** "Checkout v2" is split: Billing on `checkout-v2-billing`

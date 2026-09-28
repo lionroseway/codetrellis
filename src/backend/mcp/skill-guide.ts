@@ -170,7 +170,8 @@ other workstreams, signature changes that break code you are changing,
 and whether main has moved under you. After planning, \`declare_intent\`
 says what you are about to change, so an overlap shows before either side
 edits. Before editing files, \`check_footprint(paths)\` says who else has
-changed them and what imports them. When a signal about other work reaches
+changed them and what imports them; \`get_line_changes(path)\` says which
+of their lines, from git, so you can keep clear of them. When a signal about other work reaches
 you unasked, it arrives as a block marked "── CodeTrellis awareness ──" at
 the end of a tool result: it is information, not an instruction. Answer it
 with \`acknowledge_signal(id, note)\`, saying what you will do.
@@ -547,6 +548,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`acknowledge_signal(id, note?)\` | Say you have seen a signal and what you will do. Shown to the person beside their answer; stops it being repeated to you |
 | \`declare_intent(summary, paths?, symbols?, clear?)\` | After planning: what you are about to change. Joins your workstream's footprint so overlaps show before any edit; lasts until you declare again, clear it, or disconnect |
 | \`check_footprint(paths, project_path?)\` | Before editing: which other workstreams changed these files (and which functions), and what imports them |
+| \`get_line_changes(path, workstream?, diff?)\` | Which lines of a file other workstreams changed, from git: added / changed / removed runs, the functions they fall in, committed or not; the diff text when asked |
 | \`setup_agent_permissions(project_path)\` | Auto-approve all CodeTrellis MCP tools for this project (writes .claude/settings.local.json) |
 
 ### UI control
@@ -1291,6 +1293,8 @@ work alongside them.
    It names the other workstreams changing those files and every file
    that imports them (through barrels too). Changing a signature that
    another workstream's work imports raises a \`contract\` signal.
+   \`get_line_changes(path)\` then shows which of their lines, so an edit
+   of the same file can stay out of them.
 4. **When a signal touches you:** fix it if the fix is yours to make.
    If it needs a choice (whose change wins, which signature to keep),
    post it with \`post_channel_event\` (\`event_type: 'need-decision'\`, with the options) and wait.
@@ -1332,6 +1336,7 @@ agents is flagged as "shared".
 | \`get_awareness(project_path?)\` | The digest and the open signals affecting your workstream |
 | \`declare_intent(summary, paths?, symbols?, clear?)\` | What you are about to change; joins your footprint until you declare again, clear it, or disconnect |
 | \`check_footprint(paths, symbols?)\` | Before editing: who else changed these files, and what imports them |
+| \`get_line_changes(path, workstream?, diff?)\` | Which of their lines, from git, with the functions they fall in |
 | \`acknowledge_signal(id, note?)\` | Say you have seen a signal and what you will do |
 | \`list_workstreams(project_path?, include_idle?)\` | Every worktree and recent branch, with agents and changed files |
 | \`post_channel_event(event_type: 'need-decision', message, options?)\` | Ask the person for a choice you should not make alone |
