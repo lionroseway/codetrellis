@@ -364,7 +364,26 @@ first because Track A leans on them.
 | A1.7 | Branch and clone workstreams (refs watcher, clone consent) | unit ref fixture; harness consent prompt |
 | A1.8 | Awareness tab in PlanPanel (digest placeholder, signals list, actions) | harness; reachable; UX screenshot |
 
-### A2–A7
+### A2: Meaning (spec M2)
+
+*Done when* (spec §11): changing a function's parameters in one workstream
+tells the agent in another workstream that imports it, on that agent's next
+tool call, without anyone asking; changing only the body does not.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A2.1 | `ParsedSymbol.signature` for TS/JS and Python (parameters, return type, type parameters; a type's or interface's shape), comment- and whitespace-insensitive; a footprint symbol says when its signature changed, before and after; the strip shows it (the tab, once a signal carries one: A2.3) | unit per language: a body edit keeps the signature, a parameter change does not; harness: a worktree's parameter change is reported as a signature change |
+| A2.2 | Import accuracy: Python records original names (not aliases), `export … from` is captured with its names, `imports.resolved_path` is indexed | unit per parser; harness: a re-export and an aliased Python import reach the importer lookup |
+| A2.3 | `contract` signal (high): a workstream changes an exported symbol's signature and another workstream's changed files import that name (a namespace import is "possibly"). Python's "exported": no leading `_`, or listed in `__all__` | unit `computeSignals`; harness across two worktrees, including a body-only edit that raises nothing |
+| A2.4 | `declare_intent(summary, paths?, symbols?)` (capability `write`), held per session until it ends or re-declares; intent joins the footprint, so an overlap is seen before any file changes | unit; harness; capability coverage |
+| A2.5 | `drift` signal (medium): a workstream edits outside the scope its claimed item's `fileSpecs` and its declared intent give it | unit; harness |
+| A2.6 | Inline notices (§6.2): an unseen high or medium signal for the caller's workstream is appended once to its next tool result, off with `sensors.awareness.inlineNotices`; `acknowledge_signal(id, note?)` records the **agent's** note, per session, beside the person's answer and separate from it (A1.8); the tab shows who was told and what they said. Closes with the M2 "done when" as a harness test | unit; harness end to end; capability coverage |
+
+The spec lists the collision overlay under M2. It needs the overlay list
+in `graph-builder`, which is B3's, so it lands there rather than hard-wiring
+a second overlay now.
+
+### A3–A7
 
 Refined into sub-steps when next. Scope is per the awareness spec:
 

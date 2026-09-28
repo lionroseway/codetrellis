@@ -153,6 +153,52 @@ describe('what is not a symbol change', () => {
   });
 });
 
+describe('signature changes (A2.1)', () => {
+  const syms = (file: string, src: string) => flatSymbols(parse(file, src)!, src);
+
+  test('a parameter change is a modification that carries the signature before and after', () => {
+    const before = 'export function createInvoice(opts: Opts): Invoice { return make(opts) }\n';
+    const after = 'export function createInvoice(opts: Opts, currency: string): Invoice { return make(opts) }\n';
+    assert.deepEqual(diffSymbols(syms('/x/a.ts', before), syms('/x/a.ts', after)), [{
+      name: 'createInvoice', kind: 'function', change: 'modified', line: 1,
+      signature: { before: '(opts: Opts): Invoice', after: '(opts: Opts, currency: string): Invoice' },
+    }]);
+  });
+
+  test('a body-only edit is a modification with no signature on it', () => {
+    const before = 'def total(items: list) -> int:\n    return sum(items)\n';
+    const after = 'def total(items: list) -> int:\n    return sum(i for i in items if i)\n';
+    const [change] = diffSymbols(syms('/x/a.py', before), syms('/x/a.py', after));
+    assert.equal(change.change, 'modified');
+    assert.equal('signature' in change, false);
+  });
+
+  test('a parser that gives no signature says nothing about one', () => {
+    const s: ParsedSymbol[] = [{ name: 'f', kind: 'function', startLine: 1, endLine: 1, children: [], modifiers: [] }];
+    const withSig: ParsedSymbol[] = [{ ...s[0], signature: '(a)' }];
+    assert.equal('signature' in diffSymbols(flatSymbols(s, 'f(a) {}'), flatSymbols(withSig, 'f(a, b) {}'))[0], false);
+  });
+
+  test('in a real worktree, a changed method signature is reported with it', () => {
+    const file = path.join(tree, 'src/session.ts');
+    const saved = fs.readFileSync(file, 'utf-8');
+    fs.writeFileSync(file, saved.replace('renew() { return 2 }', 'renew(force: boolean) { return 2 }'));
+    try {
+      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+      const renew = changes.files.find((x) => x.path === 'src/session.ts')!.symbols!.find((x) => x.name === 'Session.renew')!;
+      assert.deepEqual(renew.signature, { before: '()', after: '(force: boolean)' });
+    } finally {
+      fs.writeFileSync(file, saved);
+    }
+  });
+
+  test("the fixtures' body edits carry no signature", () => {
+    const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+    const withSignature = changes.files.flatMap((f) => (f.symbols ?? []).filter((x) => x.signature).map((x) => `${f.path} ${x.name}`));
+    assert.deepEqual(withSignature, []);
+  });
+});
+
 describe('safety and cost', () => {
   test('a symlink out of the worktree is not read', () => {
     const outside = path.join(tmp, 'secret.ts');

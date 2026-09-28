@@ -6,7 +6,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { useToastStore } from '../../stores/toast-store';
 import { useUiStore } from '../../stores/ui-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signalsFor, chipSeverity, signalWords, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { AwarenessSignal, Workstream } from '@shared/types';
 
 /**
@@ -310,10 +310,25 @@ function ChangedFiles({ ws }: { ws: Workstream }) {
               <span className={`w-3 text-[9px] font-mono font-semibold shrink-0 ${LETTER_TINT[letter]}`}>{letter}</span>
               <span className="text-[10px] font-mono text-foreground-muted truncate">{shortFolder(f.path, 44)}</span>
             </div>
-            {/* Which symbols it touched (A1.5): ~ modified, + added, − removed. */}
+            {/* Which symbols it touched (A1.5): ~ modified, + added, − removed;
+                `()` when the signature changed, before and after on hover (A2.1). */}
             {symbols && (
-              <div data-testid="workstream-file-symbols" className="pl-[18px] text-[9px] font-mono text-foreground-subtle truncate">
+              <div
+                data-testid="workstream-file-symbols"
+                className="pl-[18px] text-[9px] font-mono text-foreground-subtle truncate"
+                title={signatureLines(f.symbols) ?? undefined}
+              >
                 {symbols}
+              </div>
+            )}
+            {/* What callers feel, said in words, with the shapes on hover. */}
+            {signatureWords(f.symbols) && (
+              <div
+                data-testid="workstream-file-signature"
+                className="pl-[18px] text-[9px] text-warning truncate"
+                title={signatureLines(f.symbols) ?? undefined}
+              >
+                {signatureWords(f.symbols)}
               </div>
             )}
           </div>

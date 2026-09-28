@@ -15,7 +15,7 @@ import { setupHarness, createMcpClient, openEventStream, type Harness, type Scri
 interface Agent { sessionId: string; agentType: string; source: 'mcp' | 'claude-log' }
 interface Workstream {
   root: string; branch: string | null; main: boolean; shape: 'worktree' | 'shared'; idle: boolean; agents: Agent[]; yours?: boolean;
-  changes: { base: string | null; files: Array<{ path: string; status: string; symbols?: Array<{ name: string; change: string }> }>; truncated: boolean };
+  changes: { base: string | null; files: Array<{ path: string; status: string; symbols?: Array<{ name: string; change: string; signature?: { before: string; after: string } }> }>; truncated: boolean };
 }
 
 test.describe.serial('Workstreams', () => {
@@ -189,5 +189,26 @@ test.describe.serial('Workstreams', () => {
     // is a different answer from "not parsed" (no list at all).
     const onlyConst = find(await workstreams(), worktree)!.changes.files.find((x) => x.path === 'refresh.ts');
     expect(onlyConst?.symbols).toEqual([]);
+  });
+
+  // ── A2.1: when a change reaches a symbol's signature ───────────────
+
+  test("a body edit leaves the signature alone; a new parameter is reported as a signature change, before and after", async () => {
+    const rel = 'packages/shared/src/validators.ts';
+    const symbol = async () => find(await workstreams(), worktree)?.changes.files.find((x) => x.path === rel)?.symbols?.find((s) => s.name === 'isValidEmail');
+    // The edit above added a line to its body: modified, but callers are unaffected.
+    const edited = await symbol();
+    expect(edited?.change).toBe('modified');
+    expect(edited?.signature).toBeUndefined();
+
+    const file = path.join(worktree, rel);
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf-8').replace('isValidEmail(email: string): boolean', 'isValidEmail(email: string, strict = false): boolean'));
+    await expect.poll(async () => (await symbol())?.signature, { timeout: 10_000 })
+      .toEqual({ before: '(email: string): boolean', after: '(email: string, strict = false): boolean' });
+
+    // An agent listing workstreams is told the same.
+    const body = JSON.parse((await agents[0].callTool('list_workstreams', {})).text) as { workstreams: Workstream[] };
+    const mine = body.workstreams.find((w) => w.yours)!.changes.files.find((x) => x.path === rel)!;
+    expect(mine.symbols?.find((s) => s.name === 'isValidEmail')?.signature?.after).toBe('(email: string, strict = false): boolean');
   });
 });

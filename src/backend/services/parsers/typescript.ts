@@ -1,4 +1,4 @@
-import type { ParserPlugin, SyntaxNode } from './base';
+import { shapeOf, signatureOf, type ParserPlugin, type SyntaxNode } from './base';
 import type { ParsedSymbol, ImportDeclaration, ExportDeclaration } from '../../../shared/types';
 
 /**
@@ -18,6 +18,25 @@ function extractSymbols(node: SyntaxNode): ParsedSymbol[] {
   return symbols;
 }
 
+/**
+ * A function's signature (A2.1): type parameters, parameters, return type.
+ * An arrow function with one bare parameter (`x => …`) has it in the
+ * `parameter` field instead.
+ */
+function callSignature(fn: SyntaxNode, declaredType?: SyntaxNode | null): string | undefined {
+  const params = fn.childForFieldName('parameters') ?? fn.childForFieldName('parameter');
+  return signatureOf(
+    shapeOf(fn.childForFieldName('type_parameters')),
+    params && params.type !== 'formal_parameters' ? `(${shapeOf(params)})` : shapeOf(params),
+    shapeOf(fn.childForFieldName('return_type')),
+    // `const f: Handler = (req) => …`: the declared type is part of its shape.
+    declaredType ? shapeOf(declaredType) : null,
+  );
+}
+
+/** Only a symbol that has a signature carries the key. */
+const sig = (signature: string | undefined) => (signature ? { signature } : {});
+
 function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
   const modifiers = extractModifiers(node);
 
@@ -25,7 +44,7 @@ function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
     case 'function_declaration':
     case 'generator_function_declaration': {
       const name = node.childForFieldName('name')?.text || 'anonymous';
-      return { name, kind: 'function', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers };
+      return { name, kind: 'function', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers, ...sig(callSignature(node)) };
     }
     case 'class_declaration': {
       const name = node.childForFieldName('name')?.text || 'anonymous';
@@ -35,15 +54,21 @@ function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
     }
     case 'interface_declaration': {
       const name = node.childForFieldName('name')?.text || 'anonymous';
-      return { name, kind: 'interface', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers };
+      // Its shape is everything after the name: type parameters, what it
+      // extends, and its members.
+      const shape = signatureOf(shapeOf(node.childForFieldName('type_parameters')),
+        ...node.children.filter((c: SyntaxNode) => c.type === 'extends_type_clause').map((c: SyntaxNode) => ` ${shapeOf(c)} `),
+        shapeOf(node.childForFieldName('body')));
+      return { name, kind: 'interface', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers, ...sig(shape) };
     }
     case 'type_alias_declaration': {
       const name = node.childForFieldName('name')?.text || 'anonymous';
-      return { name, kind: 'type', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers };
+      const shape = signatureOf(shapeOf(node.childForFieldName('type_parameters')), shapeOf(node.childForFieldName('value')));
+      return { name, kind: 'type', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers, ...sig(shape) };
     }
     case 'enum_declaration': {
       const name = node.childForFieldName('name')?.text || 'anonymous';
-      return { name, kind: 'enum', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers };
+      return { name, kind: 'enum', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers, ...sig(signatureOf(shapeOf(node.childForFieldName('body')))) };
     }
     case 'lexical_declaration':
     case 'variable_declaration': {
@@ -53,7 +78,7 @@ function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
         const value = decl.childForFieldName('value');
         if (!name) continue;
         if (value && (value.type === 'arrow_function' || value.type === 'function_expression' || value.type === 'function')) {
-          return { name, kind: 'function', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers };
+          return { name, kind: 'function', startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1, children: [], modifiers, ...sig(callSignature(value, decl.childForFieldName('type'))) };
         }
       }
       return null;
@@ -83,6 +108,8 @@ function extractClassMembers(body: SyntaxNode): ParsedSymbol[] {
       const name = child.childForFieldName('name')?.text || 'anonymous';
       const kind = child.type === 'method_definition' ? 'method' : 'variable';
       const modifiers = extractModifiers(child);
+      // A method's call shape; a field's declared type.
+      const signature = kind === 'method' ? callSignature(child) : signatureOf(shapeOf(child.childForFieldName('type')));
       members.push({
         name,
         kind: kind as ParsedSymbol['kind'],
@@ -90,6 +117,7 @@ function extractClassMembers(body: SyntaxNode): ParsedSymbol[] {
         endLine: child.endPosition.row + 1,
         children: [],
         modifiers,
+        ...sig(signature),
       });
     }
   }

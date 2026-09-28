@@ -167,6 +167,28 @@ test.describe('Workstreams strip', () => {
     await shot(page, 'workstreams-symbols');
   });
 
+  test('a changed signature is marked (), and says before and after on hover (A2.1)', async ({ page }) => {
+    const files: ChangedFile[] = [{
+      path: 'src/billing/invoice.ts', status: 'modified', symbols: [
+        { name: 'createInvoice', kind: 'function', change: 'modified', line: 8, signature: { before: '(opts: InvoiceOpts): Invoice', after: '(opts: InvoiceOpts, currency: Currency): Invoice' } },
+        { name: 'totalOf', kind: 'function', change: 'modified', line: 30 }, // body only
+      ],
+    }];
+    await serve(page, [
+      ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),
+      ws('/work/acme-billing', 'billing-v2', false, [agent('s2', 'codex')], files),
+    ]);
+    await gotoWithProject(page);
+    await chips(page).filter({ hasText: 'billing-v2' }).click();
+    const line = page.getByTestId('workstream-file-symbols');
+    await expect(line).toHaveText('~createInvoice()  ~totalOf');
+    await expect(line).toHaveAttribute('title', 'createInvoice: (opts: InvoiceOpts): Invoice → (opts: InvoiceOpts, currency: Currency): Invoice');
+    const said = page.getByTestId('workstream-file-signature');
+    await expect(said).toHaveText("createInvoice's signature changed");
+    await expect(said).toHaveAttribute('title', 'createInvoice: (opts: InvoiceOpts): Invoice → (opts: InvoiceOpts, currency: Currency): Invoice');
+    await shot(page, 'workstreams-signature');
+  });
+
   test('a worktree an agent left with changes gets a grey chip that says nobody is on it', async ({ page }) => {
     await serve(page, [
       ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),

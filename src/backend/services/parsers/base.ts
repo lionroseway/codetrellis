@@ -93,3 +93,45 @@ export function flattenSymbols(symbols: ParsedSymbol[]): ParsedSymbol[] {
   visit(symbols);
   return out;
 }
+
+/** Nodes read as one token: a literal's inside is not shape. */
+const ATOMIC = new Set(['string', 'template_string', 'number', 'integer', 'float', 'regex', 'true', 'false', 'none', 'null', 'undefined']);
+
+/**
+ * A node's shape as text, for a signature (Phase 32 A2.1): its tokens in
+ * order, with comments dropped and whitespace normalised, so reformatting
+ * or commenting a parameter list does not change it and renaming or adding
+ * a parameter does. Null for a missing node.
+ */
+export function shapeOf(node: SyntaxNode | null | undefined): string | null {
+  if (!node) return null;
+  const tokens: string[] = [];
+  const walk = (n: SyntaxNode) => {
+    // Comments, and `;` — a member separator that a newline can replace.
+    if (n.type === 'comment' || n.type === ';') return;
+    if (n.childCount === 0 || ATOMIC.has(n.type)) {
+      if (n.text) tokens.push(n.text);
+      return;
+    }
+    for (const c of n.children) walk(c);
+  };
+  walk(node);
+  return tokens.join(' ')
+    .replace(/,(\s*[)\]}>])/g, '$1') // a trailing comma is layout
+    .replace(/\s+([,;:)\]>?])/g, '$1') // no space before closers and separators
+    .replace(/([([<])\s+/g, '$1') // nor after openers
+    .replace(/([\w>\])])\s+([<[])/g, '$1$2') // Promise<T>, string[]
+    .replace(/ \. /g, '.') // a.b
+    .replace(/\.\.\. /g, '...') // ...rest
+    .replace(/(^|[(,] ?)(\*{1,2}) /g, '$1$2'); // Python *args, **kw
+}
+
+/**
+ * A signature from its parts, skipping the missing ones: the parts a
+ * language has in the order it writes them (type parameters, parameters,
+ * return type). Null when there is nothing to compare.
+ */
+export function signatureOf(...parts: Array<string | null | undefined>): string | undefined {
+  const present = parts.filter((p): p is string => !!p);
+  return present.length ? present.join('').replace(/\s{2,}/g, ' ').trim() : undefined;
+}
