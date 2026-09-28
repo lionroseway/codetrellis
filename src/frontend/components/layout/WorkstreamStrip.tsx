@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { GitBranch, Users, AlertTriangle, FileText } from 'lucide-react';
+import { GitBranch, Users, AlertTriangle, FileText, FolderPlus } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
+import { useToastStore } from '../../stores/toast-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
 import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signalsFor, chipSeverity, signalWords, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { AwarenessSignal, Workstream } from '@shared/types';
@@ -23,11 +24,22 @@ import type { AwarenessSignal, Workstream } from '@shared/types';
 
 const REFRESH_MS = 15_000;
 
+/** A pending folder request as the server lists it (A1.7c). */
+interface FolderRequestView {
+  id: string;
+  folder: string;
+  agentType: string;
+  reportedAt: number;
+}
+
+const folderName = (folder: string) => folder.split(/[\\/]/).filter(Boolean).pop() ?? folder;
+
 export function WorkstreamStrip() {
   const root = useProjectStore((s) => s.root);
   const sessions = usePlanStore((s) => s.sessions);
   const [all, setAll] = useState<Workstream[]>([]);
   const [signals, setSignals] = useState<AwarenessSignal[]>([]);
+  const [requests, setRequests] = useState<FolderRequestView[]>([]);
   const [open, setOpen] = useState<{ root: string | null; top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -36,6 +48,11 @@ export function WorkstreamStrip() {
     fetch(`/api/workstreams?project=${encodeURIComponent(root)}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((ws: Workstream[]) => setAll(Array.isArray(ws) ? ws : []))
+      .catch(() => {});
+    // Folders an agent reported that are not opened (A1.7c).
+    fetch('/api/workstreams/folder-requests')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rs: FolderRequestView[]) => setRequests(Array.isArray(rs) ? rs : []))
       .catch(() => {});
     // What overlaps (A1.6). A failure leaves the chips as they are, unmarked.
     fetch(`/api/awareness?project=${encodeURIComponent(root)}`)
@@ -49,9 +66,11 @@ export function WorkstreamStrip() {
   useEffect(() => {
     window.addEventListener('workstreams-changed', refresh);
     window.addEventListener('awareness-changed', refresh);
+    window.addEventListener('folder-requests-changed', refresh);
     return () => {
       window.removeEventListener('workstreams-changed', refresh);
       window.removeEventListener('awareness-changed', refresh);
+      window.removeEventListener('folder-requests-changed', refresh);
     };
   }, [refresh]);
   useEffect(() => {
@@ -76,7 +95,7 @@ export function WorkstreamStrip() {
   }, [open]);
 
   const shown = stripWorkstreams(all, signals);
-  if (shown.length === 0) return null;
+  if (shown.length === 0 && requests.length === 0) return null;
 
   const chips = shown.length > MAX_CHIPS ? shown.slice(0, MAX_CHIPS - 1) : shown;
   const overflow = shown.length - chips.length;
@@ -86,6 +105,22 @@ export function WorkstreamStrip() {
     setOpen((cur) => (cur && cur.root === wsRoot ? null : { root: wsRoot, top: rect.bottom + 4, left: rect.left }));
   };
   const listed = open ? (open.root === null ? shown.slice(chips.length) : shown.filter((w) => w.root === open.root)) : [];
+  const openRequest = open?.root?.startsWith('request:') ? requests.find((r) => `request:${r.id}` === open.root) ?? null : null;
+  const answer = async (r: FolderRequestView, action: 'include' | 'dismiss') => {
+    setOpen(null);
+    const toast = useToastStore.getState().addToast;
+    try {
+      const res = await fetch(`/api/workstreams/folder-requests/${encodeURIComponent(r.id)}/${action}`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (action === 'include') {
+        if (res.ok) toast({ type: 'success', title: 'Clone included', message: `${folderName(r.folder)} is now a workstream of this project.` });
+        else toast({ type: res.status === 403 ? 'error' : 'info', title: 'Not included', message: body.reason ?? body.error ?? `Server returned ${res.status}` });
+      }
+    } catch {
+      toast({ type: 'error', title: 'Could not reach CodeTrellis', message: 'Try again in a moment.' });
+    }
+    refresh();
+  };
 
   return (
     <div ref={wrapperRef} data-testid="workstream-strip" className="flex items-center gap-1 shrink-0" aria-label="Workstreams">
@@ -124,6 +159,20 @@ export function WorkstreamStrip() {
           </button>
         );
       })}
+      {/* An agent in a folder that is not opened (A1.7c): asked, never assumed. */}
+      {requests.map((r) => (
+        <button
+          key={r.id}
+          data-testid="folder-request-chip"
+          onClick={(e) => toggle(e, `request:${r.id}`)}
+          aria-expanded={open?.root === `request:${r.id}`}
+          title={`An agent is working in ${r.folder}, which CodeTrellis has not opened`}
+          className="flex items-center gap-1.5 max-w-[180px] text-[11px] px-2 py-1 rounded-lg border border-dashed border-accent/60 bg-surface text-foreground-muted hover:text-foreground"
+        >
+          <FolderPlus size={11} className="text-accent shrink-0" />
+          <span className="truncate">Agent in {folderName(r.folder)}</span>
+        </button>
+      ))}
       {overflow > 0 && (
         <button
           data-testid="workstream-overflow"
@@ -133,6 +182,43 @@ export function WorkstreamStrip() {
         >
           +{overflow}
         </button>
+      )}
+
+      {openRequest && open && createPortal(
+        <div
+          data-workstream-popover
+          data-testid="folder-request-popover"
+          style={{ position: 'fixed', top: open.top, left: Math.min(open.left, window.innerWidth - 300), zIndex: 9999 }}
+          className="w-72 bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] p-3"
+        >
+          <div className="flex items-center gap-1.5">
+            <FolderPlus size={12} className="text-accent shrink-0" />
+            <span className="text-[12px] font-medium text-foreground">An agent is working elsewhere</span>
+          </div>
+          <div className="mt-1.5 text-[10px] font-mono text-foreground-subtle break-all">{openRequest.folder}</div>
+          <p className="mt-2 text-[11px] text-foreground-muted leading-snug">
+            {agentBadge(openRequest.agentType).label} reported this folder, which CodeTrellis has not opened. If it is a
+            clone of this repository, include it to see its work here. Nothing has been read from it, and nothing will be
+            unless you include it.
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              data-testid="folder-request-dismiss"
+              onClick={() => answer(openRequest, 'dismiss')}
+              className="text-[11px] px-2.5 py-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover"
+            >
+              Not now
+            </button>
+            <button
+              data-testid="folder-request-include"
+              onClick={() => answer(openRequest, 'include')}
+              className="text-[11px] px-2.5 py-1 rounded-md bg-accent text-white hover:bg-accent/90"
+            >
+              Include
+            </button>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {open && listed.length > 0 && createPortal(

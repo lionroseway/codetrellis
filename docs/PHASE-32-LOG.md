@@ -163,6 +163,58 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-28: A1.7c — clones, with consent first
+- **Flow (per the Decisions row).**
+  1. An agent connected through the connector reports a folder no trusted
+     root covers. While a project is open, that folder becomes a pending
+     request (`folder-requests.ts`). The path is only tidied lexically;
+     nothing is read from it. One request per folder, and later sessions
+     in the same folder join it.
+  2. The person answers in the app. `POST /api/workstreams/folder-requests/:id/include`
+     is a grant, so it uses the same `mayGrant` as settings grants (app
+     window, or a test backend). The request is chosen by the id the server
+     gave it, never by a path in the body.
+  3. Only then is the folder read. Its normalised origin must equal the
+     opened project's. If it does, the folder is trusted (added as a
+     recent project, the trusted-roots store), and the sessions that
+     reported it are bound to it. If not, a 409 gives the reason, and the
+     folder isn't asked about again.
+  4. "Not now" (`…/dismiss`) is remembered in `folder_request_dismissals`,
+     so the question is asked once per folder, not once per connection.
+- **Clones as workstreams.** A trusted root with the same normalised
+  origin URL as the opened project, as recorded in `recent_projects` when
+  each was opened, is a clone. Deciding that runs no git in a folder. A
+  clone flows through the same agent, change, symbol and watcher path as
+  a worktree, with `shape: 'clone'`; branch exclusion still uses only this
+  repository's own checkouts.
+- **UX journey (JOURNEYS A1, "one in a separate clone").**
+  - A dashed "Agent in acme-2" chip appears in the strip.
+  - Its details name the folder and the agent, explain the question, and
+    say "Nothing has been read from it, and nothing will be unless you
+    include it", with **Not now** and **Include**.
+  - Include shows a toast, "Clone included", and the clone becomes a
+    workstream with its agent on it. A folder that isn't a clone shows the
+    reason in a toast.
+  - Asking is a quiet chip, never a modal, so an agent in an unrelated
+    folder costs one chip until dismissed.
+  - Screenshot: `workstreams-folder-request.png`.
+- **Also.** The harness MCP client gains a `cwd` option, sending
+  `x-codetrellis-cwd` as the connector does. A clone the person includes
+  appears in their recent projects, since that is the trusted-roots store.
+- **Tests.**
+  - Unit: `folder-requests.test.ts` (5): lexical normalising and what
+    isn't a folder; one request per folder with sessions joining;
+    taking by id only.
+  - Harness: `clone-consent.test.ts` (7): a request once per folder, not
+    trusted yet; include checks it's a clone, trusts it and binds both
+    agents; the clone's work shows; a non-clone is refused with the reason
+    and not asked again; "not now" is remembered; ids not paths; and a
+    backend that refuses HTTP grants returns 403, with the request staying
+    for the person.
+  - Browser: +2 (include with toast; refusal reason; not now).
+  - The related harness files pass (61). Unit 1175 pass / 3 environment
+    skips. Lint 0 errors / 295.
+
 ### 2026-09-28: A1.7b — identity across checkouts (bug 46)
 - **What was wrong.** Rows for system docs and plans are keyed by uid, and
   every checkout of a repository carries the same files. Scanning a linked

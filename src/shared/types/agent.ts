@@ -55,10 +55,11 @@ export type AgentStatus = 'idle' | 'active' | 'paused';
  * How a line of parallel work is isolated. A1.3 finds the two shapes that
  * need no consent: a git worktree (the main checkout is one too), and a
  * shared checkout — two or more agents in one folder. A1.7a adds `branch`:
- * committed work on a branch with no checkout on this machine. Clones are
- * A1.7b.
+ * committed work on a branch with no checkout on this machine. A1.7c adds
+ * `clone`: another checkout of the same repository in its own folder, once
+ * the person has included it.
  */
-export type WorkstreamShape = 'worktree' | 'shared' | 'branch';
+export type WorkstreamShape = 'worktree' | 'shared' | 'branch' | 'clone';
 
 export interface WorkstreamAgent {
   sessionId: string;

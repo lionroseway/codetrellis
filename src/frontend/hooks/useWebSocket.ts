@@ -671,6 +671,11 @@ export function useWebSocket() {
             window.dispatchEvent(new CustomEvent('workstreams-changed', { detail: payload }));
             return;
           }
+          // An agent reported a folder that is not opened, or a request was answered (A1.7c).
+          if (type === 'folder-requests-changed') {
+            window.dispatchEvent(new CustomEvent('folder-requests-changed'));
+            return;
+          }
           // Signals about parallel work changed (A1.6).
           if (type === 'awareness-changed') {
             window.dispatchEvent(new CustomEvent('awareness-changed', { detail: payload }));

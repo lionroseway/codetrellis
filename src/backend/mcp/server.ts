@@ -31,6 +31,7 @@ import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
 import { readBindingHeaders } from './binding-headers';
+import { recordFolderRequest } from '../services/folder-requests';
 import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
 import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
@@ -695,6 +696,12 @@ export async function startMcpServer(): Promise<void> {
         const terminal = hint.hostTerminal && terminalService.getTerminal(hint.hostTerminal) ? hint.hostTerminal : null;
         if (root || terminal) sessionService.bindSession(sessionId, root, terminal);
         bound = root !== null;
+        // A folder no trusted root covers may be a clone of the opened repo
+        // (A1.7c). Nothing is read from it: it is shown to the person, who
+        // decides whether to include it.
+        if (!bound && hint.cwd && getActiveProjectPath()) {
+          recordFolderRequest({ folder: hint.cwd, sessionId, agentType: inferredAgentType });
+        }
       } catch { /* binding is best-effort; it must never break a connection */ }
 
       // Then name it from what it says it is. The user-agent above is a

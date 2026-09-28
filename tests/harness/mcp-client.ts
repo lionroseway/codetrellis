@@ -14,6 +14,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { pathToFileURL } from 'node:url';
+import { bindingHeaders } from '../../src/backend/mcp/binding-headers';
 
 export interface McpClientOptions {
   /**
@@ -36,6 +37,11 @@ export interface McpClientOptions {
    * Claude Code does (Phase 32 A1.1's second binding source).
    */
   roots?: string[];
+  /**
+   * The folder to report as the agent's own, the way the stdio connector
+   * does with `x-codetrellis-cwd` (Phase 32 A1.1 / A1.7c).
+   */
+  cwd?: string;
 }
 
 export interface McpToolResult {
@@ -75,7 +81,11 @@ export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
 
     async connect() {
       if (connected) return;
-      transport = new SSEClientTransport(url);
+      transport = new SSEClientTransport(url, opts.cwd ? {
+        eventSourceInit: {
+          fetch: (u, init) => fetch(u, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), ...bindingHeaders({ cwd: opts.cwd }) } }),
+        },
+      } : undefined);
       client = new Client(
         { name: opts.clientName ?? 'harness-client', version: opts.clientVersion ?? '1.0.0' },
         { capabilities: opts.roots ? { roots: {} } : {} },
