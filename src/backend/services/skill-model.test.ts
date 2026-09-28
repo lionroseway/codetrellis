@@ -103,3 +103,8 @@ test('agentView: every function\'s result without links, sync or async; classes 
   assert.ok(new view.Oops() instanceof Error);
   assert.equal(view.LIMIT, 3);
 });
+
+test('an absent source is a skill and an absent required is false; a present but unknown source is refused', () => {
+  assert.deepEqual(normaliseSkills([{ name: 'sql-review' }]), { skills: [{ name: 'sql-review', source: 'skill', required: false }], problems: [] });
+  assert.equal(normaliseSkills([{ name: 'x', source: 'shell' }]).skills.length, 0);
+});

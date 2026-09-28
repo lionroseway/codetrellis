@@ -95,10 +95,13 @@ export function normaliseSkill(raw: unknown): { skill: Skill | null; problems: s
   if (!name || name.length > MAX_SKILL_NAME || !NAME_RE.test(name)) {
     return { skill: null, problems: [`a skill needs a name of at most ${MAX_SKILL_NAME} characters, on one line, without backticks`] };
   }
-  if (!SKILL_SOURCES.includes(r.source as typeof SKILL_SOURCES[number])) {
+  // An absent source is a skill (the common case, and what an editor that
+  // sends only a name means); a source that is present must be a known one.
+  if (r.source !== undefined && r.source !== null && !SKILL_SOURCES.includes(r.source as typeof SKILL_SOURCES[number])) {
     return { skill: null, problems: [`skill "${name}": source must be one of ${SKILL_SOURCES.join(', ')}`] };
   }
-  const skill: Skill = { name, source: r.source as Skill['source'], required: r.required === true };
+  const source = (r.source ?? 'skill') as Skill['source'];
+  const skill: Skill = { name, source, required: r.required === true };
   if (r.use !== undefined && r.use !== null) {
     if (r.use === 'recommended') skill.use = 'recommended';
     else problems.push(`skill "${name}": use can only be "recommended"`);
