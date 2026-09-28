@@ -115,8 +115,8 @@
 - [ ] C1 Skills on tasks
   - [x] C1.1 Fields, index, brief/claim/next delivery, link never to agents ([#174](https://github.com/lionroseway/codetrellis/pull/174))
   - [x] C1.2 The picker in the routing panel ([#176](https://github.com/lionroseway/codetrellis/pull/176))
-  - [ ] C1.3 Proof of use; the skills line in a copied task prompt (PR open)
-  - [ ] C1.4 A skill arriving in a pulled plan file is flagged once (branch ready)
+  - [x] C1.3 Proof of use; the skills line in a copied task prompt ([#177](https://github.com/lionroseway/codetrellis/pull/177))
+  - [ ] C1.4 A skill arriving in a pulled plan file is flagged once (PR open)
 - [ ] C2 Team status through git
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
