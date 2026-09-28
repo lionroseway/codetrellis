@@ -36,26 +36,26 @@ test.describe('Depth selector', () => {
   test('Clusters / Files / Symbols buttons are visible', async ({ page }) => {
     await gotoWithProject(page);
 
-    await expect(page.getByRole('button', { name: 'Clusters' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Files' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Symbols' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clusters', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Files', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Symbols', exact: true })).toBeVisible();
   });
 
   test('Clusters is the default active depth', async ({ page }) => {
     await gotoWithProject(page);
 
-    const clustersBtn = page.getByRole('button', { name: 'Clusters' });
+    const clustersBtn = page.getByRole('button', { name: 'Clusters', exact: true });
     // Active button has accent styling
     await expect(clustersBtn).toBeVisible();
     // Files and Symbols should not have active styling
-    const filesBtn = page.getByRole('button', { name: 'Files' });
+    const filesBtn = page.getByRole('button', { name: 'Files', exact: true });
     await expect(filesBtn).toBeVisible();
   });
 
   test('clicking Files switches depth to file-level nodes', async ({ page }) => {
     await gotoWithProject(page);
 
-    await page.getByRole('button', { name: 'Files' }).click();
+    await page.getByRole('button', { name: 'Files', exact: true }).click();
     await page.waitForTimeout(2000);
 
     // After switching to Files, the graph should still have nodes
@@ -67,7 +67,7 @@ test.describe('Depth selector', () => {
   test('clicking Symbols switches depth', async ({ page }) => {
     await gotoWithProject(page);
 
-    await page.getByRole('button', { name: 'Symbols' }).click();
+    await page.getByRole('button', { name: 'Symbols', exact: true }).click();
     await page.waitForTimeout(2000);
 
     // Graph canvas should still be visible
@@ -79,7 +79,7 @@ test.describe('Depth selector', () => {
   // showed a symbol. This walks the actual journey.
   test('Symbols shows the symbols of the file you pick', async ({ page }) => {
     await gotoWithProject(page);
-    await page.getByRole('button', { name: 'Symbols' }).click();
+    await page.getByRole('button', { name: 'Symbols', exact: true }).click();
 
     // Nothing picked yet: files to choose from (not clusters), and it says so.
     const status = page.getByTestId('symbols-status');
@@ -94,10 +94,10 @@ test.describe('Depth selector', () => {
 
   test('a file focused in Files view survives the switch to Symbols', async ({ page }) => {
     await gotoWithProject(page);
-    await page.getByRole('button', { name: 'Files' }).click();
+    await page.getByRole('button', { name: 'Files', exact: true }).click();
     await pickInExplorer(page, 'src/frontend/stores/graph-store.ts'); // selects and focuses it
 
-    await page.getByRole('button', { name: 'Symbols' }).click();
+    await page.getByRole('button', { name: 'Symbols', exact: true }).click();
     await expect(page.locator('.react-flow__node-symbolNode').first()).toBeVisible({ timeout: 10_000 });
   });
 
@@ -105,11 +105,11 @@ test.describe('Depth selector', () => {
     await gotoWithProject(page);
 
     // Switch to Files first
-    await page.getByRole('button', { name: 'Files' }).click();
+    await page.getByRole('button', { name: 'Files', exact: true }).click();
     await page.waitForTimeout(1500);
 
     // Switch back to Clusters
-    await page.getByRole('button', { name: 'Clusters' }).click();
+    await page.getByRole('button', { name: 'Clusters', exact: true }).click();
     await page.waitForTimeout(1500);
 
     // Graph should still have nodes

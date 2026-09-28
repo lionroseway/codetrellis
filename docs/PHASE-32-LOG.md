@@ -184,6 +184,15 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   "adopt the selected file" branch they no longer reach is unit-tested in
   `symbols-view.test.ts`. No other spec clicks a named canvas card
   (`reachableNodes` picks whatever is on screen).
+  The next CI run showed that fix was incomplete. With the file focused, the
+  inspector lists its neighbours, including `symbols-view`, and
+  `getByRole('button', { name: 'Symbols' })` (a substring match) found
+  two buttons. Every depth-button locator in the spec is exact now.
+  The same run failed `plan-by-hand` once. Its plan workspace dropped back
+  to the list while `list.spec` created and deleted plans on the other
+  worker. The pair passes 5/5 on the base branch and 5/5 here, and nothing
+  in this diff touches plans. That is a cross-worker race; it's on the
+  follow-up list below and not fixed here.
 - **An agent that exits** is read one last time and dropped, with no event.
 - **`/api/agent/status`** keeps `sessionId` / `jsonlPath` (the one most
   recently followed) and adds `sessions`, all of them.
