@@ -5,8 +5,32 @@
  * node type changes after switching.
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { gotoWithProject } from '../helpers/setup';
+
+/**
+ * Pick a file the way a person does in a large repository: in the Explorer.
+ *
+ * These tests used to click the file's card on the canvas. The canvas mounts
+ * only the cards inside the viewport (`onlyRenderVisibleElements`), and this
+ * suite's project is the repository itself, which is too big for fit-view to
+ * show whole at its minimum zoom. Whether `graph-store.ts` was on screen came
+ * down to the layout, so adding any file could move it off and fail both
+ * tests (it did, on the Phase 32 A1.2 PR). The Explorer selects and focuses
+ * the same file wherever the layout puts it.
+ */
+async function pickInExplorer(page: Page, filePath: string) {
+  const parts = filePath.split('/');
+  const row = (name: string) => page.getByRole('button', { name, exact: true }).first();
+  for (const [i, name] of parts.entries()) {
+    const next = parts[i + 1];
+    // A folder already open (the top level starts open) would close on a click.
+    if (next && (await row(next).isVisible())) continue;
+    await row(name).scrollIntoViewIfNeeded();
+    await row(name).click();
+    if (next) await expect(row(next)).toBeVisible();
+  }
+}
 
 test.describe('Depth selector', () => {
   test('Clusters / Files / Symbols buttons are visible', async ({ page }) => {
@@ -62,9 +86,7 @@ test.describe('Depth selector', () => {
     await expect(status).toContainText('click a file');
     await expect(page.locator('.react-flow__node-packageNode')).toHaveCount(0);
 
-    const file = page.locator('.react-flow__node[data-id="src/frontend/stores/graph-store.ts"]');
-    await expect(file).toHaveCount(1);
-    await file.dispatchEvent('click');
+    await pickInExplorer(page, 'src/frontend/stores/graph-store.ts');
 
     await expect(page.locator('.react-flow__node-symbolNode').first()).toBeVisible({ timeout: 10_000 });
     await expect(status).toContainText(/\d+ symbols? in graph-store\.ts/);
@@ -73,9 +95,7 @@ test.describe('Depth selector', () => {
   test('a file focused in Files view survives the switch to Symbols', async ({ page }) => {
     await gotoWithProject(page);
     await page.getByRole('button', { name: 'Files' }).click();
-    const file = page.locator('.react-flow__node[data-id="src/frontend/stores/graph-store.ts"]');
-    await expect(file).toHaveCount(1);
-    await file.dispatchEvent('click'); // selects it in the inspector
+    await pickInExplorer(page, 'src/frontend/stores/graph-store.ts'); // selects and focuses it
 
     await page.getByRole('button', { name: 'Symbols' }).click();
     await expect(page.locator('.react-flow__node-symbolNode').first()).toBeVisible({ timeout: 10_000 });

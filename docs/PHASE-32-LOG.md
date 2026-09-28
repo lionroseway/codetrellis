@@ -174,6 +174,16 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   - The harness backend read the machine's real `~/.claude`. Each backend
     now gets its own empty Claude folder (same class as §0.4k's update
     check).
+- **CI caught a latent test fault.** Two `depth-selector` browser tests clicked
+  `graph-store.ts`'s card on the canvas. The canvas mounts only on-screen
+  cards, and this suite's project (the repository) is too big to fit whole
+  at the minimum zoom, so whether the card was mounted came down to the
+  layout. This PR's new files moved it off-screen. They pass locally,
+  where the layout differed. The tests now pick the file in the Explorer,
+  a real path to the same focus that doesn't depend on the viewport. The
+  "adopt the selected file" branch they no longer reach is unit-tested in
+  `symbols-view.test.ts`. No other spec clicks a named canvas card
+  (`reachableNodes` picks whatever is on screen).
 - **An agent that exits** is read one last time and dropped, with no event.
 - **`/api/agent/status`** keeps `sessionId` / `jsonlPath` (the one most
   recently followed) and adds `sessions`, all of them.
