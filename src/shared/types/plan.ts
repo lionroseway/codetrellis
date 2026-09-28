@@ -331,6 +331,14 @@ export interface Skill {
   where?: SkillLocation;
 }
 
+/**
+ * Phase 32 C1.3 — whether a task's skill was used: `used` when the agent
+ * loaded it, `not_used` when a Claude Code agent is working the task and has
+ * not, `unknown` for any other client (which records no such thing), never
+ * "not used" on a guess.
+ */
+export type SkillProof = 'used' | 'not_used' | 'unknown';
+
 /** Phase 32 C1 — a skill found in the opened project's `.claude/skills`. */
 export interface ProjectSkill {
   name: string;

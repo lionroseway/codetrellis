@@ -198,6 +198,19 @@ export const SCHEMA_PLANS_CORE = `
   CREATE INDEX IF NOT EXISTS idx_agent_events_session ON agent_events(session_id, at);
   CREATE INDEX IF NOT EXISTS idx_agent_events_workstream ON agent_events(workstream_root, at);
 
+  -- Phase 32 C1.3: proof a skill was used on a task. Claude Code records each
+  -- skill it loads as a Skill tool call; the watcher stores one row per task
+  -- that a Claude Code session in the same workstream is working. Kept with
+  -- the task, not the 14-day event log: the sign-off pack cites it.
+  CREATE TABLE IF NOT EXISTS skill_uses (
+    item_uid TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    session_id TEXT,
+    workstream_root TEXT,
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_skill_uses_item ON skill_uses(item_uid, skill);
+
   -- Phase 32 A1.6: one thing worth knowing about parallel work. Deduplicated
   -- by id (kind, subject, workstreams); resolved when its cause goes away.
   CREATE TABLE IF NOT EXISTS awareness_signals (

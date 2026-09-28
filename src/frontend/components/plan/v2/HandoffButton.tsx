@@ -14,7 +14,8 @@ import { Send, Copy, ChevronDown, Radio } from 'lucide-react';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
-import type { PlanItem, Plan, AgentSessionInfo, ExternalRef } from '@shared/types';
+import type { PlanItem, Plan, AgentSessionInfo, ExternalRef, Skill } from '@shared/types';
+import { agentSkillsOf, skillsNote } from '@shared/lib/skills-note';
 
 /**
  * Generate a markdown prompt from a plan suitable for an agent.
@@ -63,6 +64,10 @@ function planToPrompt(plan: Plan, items: PlanItem[], refs?: ExternalRef[]): stri
           lines.push(`- ${ss.action} \`${ss.name}\`${ss.filePath ? ` in \`${ss.filePath}\`` : ''}${ss.description ? ` — ${ss.description}` : ''}`);
         }
       }
+      // Phase 32 C1.3: the same skills line an agent gets from claim_item;
+      // a link is never in it.
+      const skills = skillsNote(agentSkillsOf(action.skills ?? []));
+      if (skills) lines.push('', skills);
       // Include constraints/guardrails
       if (action.constraints) {
         const c = action.constraints;
@@ -97,13 +102,17 @@ function planToPrompt(plan: Plan, items: PlanItem[], refs?: ExternalRef[]): stri
 /**
  * Generate a markdown prompt for a single task.
  */
-function taskToPrompt(item: PlanItem, plan: Plan): string {
+function taskToPrompt(item: PlanItem, plan: Plan, skillsInEffect?: Skill[]): string {
   const lines: string[] = [];
   lines.push(`# Task: ${item.title}`);
   if (item.body) lines.push('', item.body);
   lines.push('');
 
   if (item.scopePath) lines.push(`**Scope:** \`${item.scopePath}\``);
+
+  // Phase 32 C1.3: the skills line an agent gets from claim_item, never a link.
+  const skills = skillsNote(agentSkillsOf(skillsInEffect ?? item.skills ?? []));
+  if (skills) lines.push('', skills);
 
   if (item.fileSpecs && item.fileSpecs.length > 0) {
     lines.push('', '## Files to modify');
@@ -169,9 +178,13 @@ export function HandoffButton() {
   }, [plan, items, addToast]);
 
   // Copy current task as prompt
-  const handleCopyTask = useCallback(() => {
+  const handleCopyTask = useCallback(async () => {
     if (!plan || !selectedItem) return;
-    const prompt = taskToPrompt(selectedItem, plan);
+    // The skills in effect, inherited ones included: the tree holds summaries.
+    const inEffect = await fetch(`/api/items/${selectedItem.uid}/skills`)
+      .then(async (r) => (r.ok ? ((await r.json()) as { skills?: Array<{ skill: Skill }> }).skills?.map((x) => x.skill) : undefined))
+      .catch(() => undefined);
+    const prompt = taskToPrompt(selectedItem, plan, inEffect);
     navigator.clipboard.writeText(prompt);
     addToast({ type: 'success', title: 'Copied', message: `Task "${selectedItem.title}" copied to clipboard.` });
     setOpen(false);

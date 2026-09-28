@@ -132,27 +132,5 @@ export function agentSkills(skills: readonly Skill[], ctx: SkillContext): AgentS
   });
 }
 
-function whereText(w: NonNullable<AgentSkill['where']>): string {
-  switch (w.kind) {
-    case 'repo': return `\`${w.path}\``;
-    case 'plugin': return `the ${w.name} plugin`;
-    case 'mcp': return `the ${w.server} MCP server's tools`;
-    case 'playbook': return `CodeTrellis playbook ${w.uid}`;
-  }
-}
-
-/**
- * One line for the agent: "Skills for this task: use **pr-review**
- * (`.claude/skills/pr-review/SKILL.md`), because this task ends in a PR."
- */
-export function skillsNote(skills: readonly AgentSkill[]): string | null {
-  if (skills.length === 0) return null;
-  const parts = skills.map((s) => {
-    let t = `${s.use === 'required' ? 'required: ' : 'use '}**${s.name}**`;
-    if (s.where) t += ` (${whereText(s.where)})`;
-    if (s.why) t += `, because ${s.why.replace(/^because\s+/i, '').replace(/\.$/, '')}`;
-    if (s.missing) t += ` (missing: ${s.missing})`;
-    return t;
-  });
-  return `Skills for this task: ${parts.join('; ')}.`;
-}
+/** The one-line note, shared with the frontend's hand-off prompt. */
+export { skillsNote } from '../../shared/lib/skills-note';

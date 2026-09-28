@@ -30,3 +30,9 @@ test('a criterion approved or sent back, and a check run (B2.2)', () => {
   assert.equal(failing.text, 'Checked criteria: 2 failing, 1 passing');
   assert.equal(failing.intent, 'error');
 });
+
+test('a skill loaded (C1.3)', () => {
+  const ev: AgentEvent = { id: 'e', timestamp: 1, source: 'claude-code-watcher', type: 'skill_used', payload: { skill: 'pr-review' } };
+  assert.deepEqual(phraseEvent(ev), { text: 'Used the pr-review skill', intent: 'read', tool: null, mutating: false });
+  assert.equal(phraseEvent({ ...ev, payload: {} }).text, 'Used a skill');
+});

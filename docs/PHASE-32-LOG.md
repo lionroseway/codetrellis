@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C1.2: the skills picker |
-| **Status** | C1.2 done on its branch (stacked on C1.1 and B2.2): the routing panel's Skills section is a picker, with the project's own skills searchable, recommended / required / listed, why and where per skill, inherited skills from the server, and a link marked people only. B2.2 (#172) re-running with two spec fixes; #173 fixes layout-controls on its own |
-| **Next action** | Merge #173 and #172 when green; open C1.1's PR, then C1.2's; then C1.3 (proof of use) |
+| **Stage / step** | Track C — C1.3: proof of skill use |
+| **Status** | C1.3 done on its branch (stacked on C1.2, C1.1, B2.2): Claude Code's `Skill` calls become `skill_used`, stored against the tasks its sessions in that workstream work; each wanted skill reads used / not used / unknown in the picker and the sign-off pack; a copied task prompt carries the same skills line an agent gets. Unit, harness and browser pass |
+| **Next action** | Merge #173 and #172 when green, then open C1.1, C1.2 and C1.3 PRs in turn; then C1.4 (pulled skills flagged once) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c1-2-skill-picker` |
+| **Branch** | `feat/phase-32-c1-3-skill-use` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -114,8 +114,8 @@
 ### Track C: shared ways of working
 - [ ] C1 Skills on tasks
   - [x] C1.1 Fields, index, brief/claim/next delivery, link never to agents ([#174](https://github.com/lionroseway/codetrellis/pull/174))
-  - [ ] C1.2 The picker in the routing panel (PR open)
-  - [ ] C1.3 Proof of use; the skills line in a terminal preset's prompt
+  - [x] C1.2 The picker in the routing panel ([#176](https://github.com/lionroseway/codetrellis/pull/176))
+  - [ ] C1.3 Proof of use; the skills line in a copied task prompt (PR open)
   - [ ] C1.4 A skill arriving in a pulled plan file is flagged once
 - [ ] C2 Team status through git
 - [ ] C3 Linked planning repo
@@ -197,6 +197,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Track A ran ahead of the sequence: A2 and A3 were built before B1, B2, C1, B4 and B3, which §2 puts between A1 and A3. Nothing recorded that reorder. From here the sequence is followed again: B1, B2, C1, B4, B3, then the direction review, then B5 and A4 | Found when A3 closed and A4 looked next. Awareness was the owner's stated priority and each A-step stood alone, so no work is wasted; but the Timeline and breakpoints (B1, B2, B4) are what A4's "Needs you" and A5's review lean on, and the direction review is due at A3's end, after those steps |
 | 2026-09-28 | Agent events are kept by a passive tap on `broadcast()`, stamped at the tap, not by changing each producer (B1.1) | Every producer is covered, including ones added later. The tap reads the session row directly, so an MCP call (which names no workstream) and a `session_end` (after the session goes inactive) still get their workstream |
 | 2026-09-28 | The PreToolUse hook only informs: `additionalContext`, never a `permissionDecision`; it fails open and silent (no app, unknown folder, no overlap, over 5 s); it asks over MCP as its own short session named `claude-code-hook` (A3.4) | A hook that blocks or approves would change Claude Code's permission model behind the person's back, and one that gets in the way gets uninstalled. Going through MCP keeps one surface with one capability matrix, and the check is visible in the Timeline; the cost is a connect per edit, which is cheap on loopback |
+| 2026-09-28 | A skill Claude Code loads is stored against every task a Claude Code session in the same workstream is working (assigned or in progress), in its own table, not only the 14-day event log. Read back: `used`; `not_used` only while a Claude Code agent works the task; `unknown` for any other client; nothing before anyone starts (C1.3) | The watcher's session (JSONL) and the MCP session that claimed the task are two views of one agent with no shared id; the folder they share is the join that exists. The sign-off pack cites the proof, so it must outlive the event log. "Not used" for a client that cannot report use would be an accusation made on no evidence |
+| 2026-09-28 | "A task launched from a CodeTrellis terminal preset" has no such feature to extend (presets only type `claude`), so the skills line goes where a person hands a task to an agent: the hand-off menu's "Copy this task" / "Copy plan as prompt", with the same shared wording and no link (C1.3) | The doc's intent is that an agent started for a task hears the same line as one that claims it. The copied prompt is how that happens today; a task-launching preset can reuse `skillsNote` when it exists |
 | 2026-09-28 | Adding a skill on a task no longer switches it to `replace`: own skills add to inherited ones. The panel used to switch on the first own skill, which silently dropped every inherited one. A skill typed by name is now recommended, not required (C1.2) | Found in C1.2's browser test: the parent's required skill vanished from the child the moment a recommended one was added. `inherit` already merges by name, with the child's entry winning, which is what a person expects. A name typed into a picker whose job is recommending should recommend; "Required (gates the claim)" is one click away |
 | 2026-09-28 | The routing panel reads the skills in effect from the server (`GET /api/items/:uid/skills`, each with the item it comes from), not from the plan tree (C1.2) | The tree holds summaries without skills, so an ancestor's skills never showed as inherited unless the ancestor had been opened. Claim policy, execution settings and guardrails have the same flaw; that is queued separately rather than widened into C1.2 |
 | 2026-09-28 | A skill's `link` location never reaches an agent: the skills an agent is told about drop it, and MCP tools read items through an agent view of the item service that removes it from every item they return. People still see and edit it (C1.1) | The shared-work doc's safety rule: a link is shown to people, never to agents. `claim_item`, `get_next_item` and `get_item` all return the raw item, so hiding it only from the skills line would have left it one field away. The item service is where every MCP tool gets items from, so the view is applied once there rather than per tool |
@@ -207,6 +209,60 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: C1.3 — proof of skill use
+- **The watcher.** A `Skill` tool call in a Claude Code session log
+  becomes a `skill_used` event that names the skill; before, it was a
+  generic tool call with the name thrown away. The use is stored in
+  `skill_uses` against each task that a Claude Code session in the same
+  workstream is working, and the event carries those tasks' uids.
+- **Read back** (`services/skill-use-service.ts`). Each required or
+  recommended skill reads as one of:
+  - `used`;
+  - `not_used`, while a Claude Code agent works the task without loading
+    it;
+  - `unknown`, when another client works it;
+  - nothing, before anyone starts.
+
+  A plugin's skill loaded as `plugin:name` counts for `name`.
+- **Where a person sees it:**
+  - the picker row: "✓ used", "○ recommended, not used" or "use unknown",
+    each with a hover that explains it;
+  - the Timeline: "Used the pr-review skill";
+  - the sign-off pack: an optional `skills` field, so a version-1 pack
+    still reads, and a Skills table on its page.
+- **The copied prompt.** "Copy this task" and "Copy plan as prompt" carry
+  the skills line an agent gets from `claim_item`, never with the link.
+  The task copy fetches the skills in effect, so inherited ones are
+  included. The wording moved to `shared/lib/skills-note.ts`, one function
+  for both sides.
+- **Tests.**
+  - Unit:
+    - `skill-use-service.test.ts` (4): which agents count as Claude Code;
+      stored only against the tasks worked in that workstream by Claude
+      Code; used / not used / unknown / nothing; plugin names;
+    - `skills-note.test.ts` (2);
+    - `tool-phrasing.test.ts` +1.
+  - Harness: `skill-use.test.ts` (4) drives the real watcher. A Claude
+    Code session is planted in a worktree; its MCP twin claims a task
+    while a codex agent claims another.
+    - Before any use: nothing, then not used for Claude Code and unknown
+      for codex.
+    - The `Skill` line flips pr-review to used on its task only.
+    - A `skill_used` event names the task.
+    - The sign-off pack's data and page both say so.
+  - Browser: `skill-use.spec.ts` (2).
+    - The three proof states render, with the hovers. Screenshot:
+      `skill-use`.
+    - "Copy this task" puts the exact skills line on the clipboard, with
+      the inherited required skill and without the link.
+- **UX journey.**
+  - The person recommended pr-review on "Currency support". A Claude Code
+    agent claims the task, and the row reads "○ recommended, not used".
+  - The agent loads the skill. The row turns to "✓ used", and the Timeline
+    says "Used the pr-review skill".
+  - When the person exports the sign-off pack, it lists pr-review as used
+    and the codex task's skills as unknown.
 
 ### 2026-09-28: C1.2 — the skills picker
 - **The Skills section** of the routing panel is now `SkillsEditor.tsx`,

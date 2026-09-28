@@ -301,6 +301,12 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
     return { text: `Edited ${what}${version}${from}`, intent: 'write', tool: null, mutating: true };
   }
 
+  // ── A skill loaded (C1.3) ─────────────────────────────────────────
+  if (event.type === 'skill_used') {
+    const skill = typeof payload.skill === 'string' && payload.skill ? payload.skill.slice(0, 80) : null;
+    return { text: skill ? `Used the ${skill} skill` : 'Used a skill', intent: 'read', tool: null, mutating: false };
+  }
+
   // ── Criteria decided and checked (B2.2) ───────────────────────────
   if (event.type === 'criterion_decided') {
     const text = typeof payload.text === 'string' ? payload.text : 'a criterion';
