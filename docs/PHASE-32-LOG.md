@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.7a: branch workstreams |
-| **Status** | A1.6 merged (#151). A1.7a done on its branch (unit 9 + 2, harness 4, browser +1, screenshot); PR open |
-| **Next action** | Merge A1.7a's PR when green; then A1.7b (clones with consent, and bug 46: identity across checkouts) |
+| **Stage / step** | Track A — A1.7b: identity across checkouts (bug 46) |
+| **Status** | A1.7a merged (#152). A1.7b done on its branch (unit 4, harness 4); PR open |
+| **Next action** | Merge A1.7b's PR when green; then A1.7c (clones: consent first, then the clone check) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-7a-branch-workstreams` |
+| **Branch** | `feat/phase-32-a1-7b-checkout-identity` |
 | **Last updated** | 2026-09-28 |
 
 ---
