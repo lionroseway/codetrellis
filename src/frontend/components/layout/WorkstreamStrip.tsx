@@ -6,7 +6,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { useToastStore } from '../../stores/toast-store';
 import { useUiStore } from '../../stores/ui-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { AwarenessSignal, Workstream } from '@shared/types';
 
 /**
@@ -269,8 +269,10 @@ function WorkstreamDetail({ ws, signals, onReview }: { ws: Workstream; signals: 
         </div>
         {ws.agents.map((a) => {
           const { Icon, tint, label } = agentBadge(a.agentType);
+          const intent = ws.intents?.find((i) => i.sessionId === a.sessionId);
           return (
-            <div key={a.sessionId} data-testid="workstream-agent" className="flex items-center gap-2 py-0.5">
+            <div key={a.sessionId}>
+            <div data-testid="workstream-agent" className="flex items-center gap-2 py-0.5">
               <Icon size={11} className={tint} />
               <span className="text-[11px] text-foreground">{label}</span>
               {a.model && <span className="text-[9px] font-mono text-foreground-subtle truncate">{a.model}</span>}
@@ -280,6 +282,21 @@ function WorkstreamDetail({ ws, signals, onReview }: { ws: Workstream; signals: 
               >
                 {a.source === 'claude-log' ? 'from its log' : a.lastSeen ? formatLastSeen(a.lastSeen) : ''}
               </span>
+            </div>
+            {/* What it said it is about to change (A2.4), in its own words, then what that claims. */}
+            {intent && (
+              <div data-testid="workstream-intent" className="ml-[19px] mb-1 pl-2 border-l border-accent/30">
+                <div className="text-[9px] uppercase tracking-wider text-foreground-subtle">
+                  Declared {formatLastSeen(intent.declaredAt).replace(/^now$/, 'just now')}
+                </div>
+                <div className="text-[10.5px] text-foreground-muted italic leading-snug" title="The agent's own words">
+                  &ldquo;{intent.summary}&rdquo;
+                </div>
+                {intentLines(intent).map((line) => (
+                  <div key={line} className="text-[10px] font-mono text-foreground-subtle truncate" title={line}>{line}</div>
+                ))}
+              </div>
+            )}
             </div>
           );
         })}

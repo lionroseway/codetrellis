@@ -243,6 +243,39 @@ test.describe('Workstreams strip', () => {
     await shot(page, 'workstreams-collision');
   });
 
+  test('a declared intent shows under its agent, and overlaps before anything is edited (A2.4)', async ({ page }) => {
+    const billing = ws('/work/acme-billing', 'billing-v2', false, [agent('s3', 'claude-code')]);
+    billing.intents = [{
+      sessionId: 's3', agentType: 'claude-code', summary: 'Tighten email validation for billing contacts',
+      paths: ['src/auth/session.ts'], symbols: ['refreshToken', 'src/billing/invoice.ts#createInvoice'], declaredAt: Date.now() - 90_000,
+    }];
+    await serve(page, [
+      ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),
+      ws('/work/acme-auth', 'auth-refresh', false, [agent('s2', 'codex')], changed('M src/auth/session.ts')),
+      billing,
+    ], [{
+      id: 'c1', kind: 'collision', severity: 'high', workstreams: ['/work/acme-auth', '/work/acme-billing'],
+      subject: { file: 'src/auth/session.ts', symbol: 'refreshToken', intended: ['/work/acme-billing'] },
+      summary: '`billing-v2` means to change src/auth/session.ts → refreshToken (declared), and `auth-refresh` changes it',
+      firstSeen: now, lastSeen: now, state: 'open',
+    }]);
+    await gotoWithProject(page);
+    const chip = chips(page).filter({ hasText: 'billing-v2' });
+    // Nothing changed there yet, and still marked: the overlap is declared.
+    await expect(chip).toHaveAttribute('data-severity', 'high');
+    await chip.click();
+    const intent = page.getByTestId('workstream-intent');
+    // Stamped when the test runs: the spec's `now` is taken when the file loads.
+    await expect(intent).toContainText(/Declared [12]m ago/);
+    await expect(intent).toContainText('“Tighten email validation for billing contacts”');
+    await expect(intent).toContainText('src/auth/session.ts → refreshToken');
+    await expect(intent).toContainText('src/billing/invoice.ts → createInvoice');
+    await expect(page.getByTestId('workstream-signal')).toContainText('billing-v2 means to change src/auth/session.ts → refreshToken (declared)');
+    fs.mkdirSync(OUT, { recursive: true });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(OUT, 'workstreams-declared-intent.png'), clip: { x: 0, y: 0, width: 1440, height: 480 } });
+  });
+
   test('a stale base alone lists in the details but leaves the chip unmarked', async ({ page }) => {
     await serve(page, [
       ws('/work/acme', 'main', true, [agent('s1', 'claude-code')]),

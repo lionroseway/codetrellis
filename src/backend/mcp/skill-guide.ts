@@ -164,9 +164,11 @@ yours, and what each has changed, down to the functions: look before you
 edit a file or a function another workstream has changed. If you share a folder with another agent, say so,
 because your edits can't be told apart from theirs.
 Call \`get_awareness\` when you start a task: it lists collisions with
-other workstreams and whether main has moved under you. Before editing
-files, \`check_footprint(paths)\` says who else has changed them and what
-imports them.
+other workstreams, signature changes that break code you are changing,
+and whether main has moved under you. After planning, \`declare_intent\`
+says what you are about to change, so an overlap shows before either side
+edits. Before editing files, \`check_footprint(paths)\` says who else has
+changed them and what imports them.
 
 ### 10. Steer from a phone
 The desktop pairs with a mobile app over a peer mesh.
@@ -508,7 +510,8 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`register_session(agent_type, model?, capabilities?, host_terminal_id?)\` | Identify yourself; declare skills for task routing. Pass host_terminal_id from \`$CODETRELLIS_HOST_TERMINAL\` env var if running inside a CodeTrellis terminal |
 | \`set_active_plan(plan_uid)\` | Declare which plan you're working on |
 | \`list_workstreams(project_path?, include_idle?)\` | Every worktree of the repo, and recent branches with no checkout here, with the agents in it and the files it has changed; \`yours\` marks your own, \`shared\` means two or more agents in one folder |
-| \`get_awareness(project_path?)\` | Open signals affecting your workstream: \`collision\` (same file: medium, same function: high) and \`stale-base\` (main changed files you change: low) |
+| \`get_awareness(project_path?)\` | Open signals affecting your workstream: \`collision\` (same file: medium, same function: high), \`contract\` (an exported signature changed or removed that code you change imports: high) and \`stale-base\` (main changed files you change: low) |
+| \`declare_intent(summary, paths?, symbols?, clear?)\` | After planning: what you are about to change. Joins your workstream's footprint so overlaps show before any edit; lasts until you declare again, clear it, or disconnect |
 | \`check_footprint(paths, project_path?)\` | Before editing: which other workstreams changed these files (and which functions), and what imports them |
 | \`setup_agent_permissions(project_path)\` | Auto-approve all CodeTrellis MCP tools for this project (writes .claude/settings.local.json) |
 

@@ -17,6 +17,7 @@ import { markDirty } from './persistence';
 import { isSafeGitRef } from './git-safety';
 import { listWorkstreams } from './workstream-service';
 import { importersOf } from './importers';
+import { intentFiles } from './intent-service';
 import { computeSignals, contractCandidates, importableName, reconcileSignals, type ContractChange, type FootprintInput } from './awareness-signals';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -97,7 +98,35 @@ export function footprintsOf(all: readonly Workstream[], projectRoot?: string): 
     // A branch workstream has no folder of its own: git runs in the main checkout.
     mainSinceBase: w.main ? [] : mainChangesSince(w.shape === 'branch' && main ? main.root : w.root, w.changes.base, mainRef),
     ...(projectRoot ? { contracts: contractsOf(projectRoot, w) } : {}),
+    ...(w.intents?.length ? { intended: declaredFiles(w.intents) } : {}),
   }));
+}
+
+/**
+ * Where a bare symbol name is defined in a project, relative, for an intent
+ * that names a function without saying which file (A2.4). At most `limit`.
+ */
+export function filesDefining(projectRoot: string, name: string, limit = 5): string[] {
+  const root = projectRoot.endsWith(path.sep) ? projectRoot : projectRoot + path.sep;
+  const res = getDb().exec(
+    `SELECT DISTINCT f.relative_path FROM symbols s JOIN files f ON s.file_id = f.id
+      WHERE s.name = ? AND substr(f.path, 1, ?) = ? ORDER BY f.relative_path LIMIT ?`,
+    [name, root.length, root, limit],
+  );
+  return (res[0]?.values ?? []).map((r) => r[0] as string);
+}
+
+/** The files a workstream's agents declared, merged across its sessions (A2.4). */
+export function declaredFiles(intents: NonNullable<Workstream['intents']>): Array<{ path: string; symbols: string[] }> {
+  const merged = new Map<string, Set<string>>();
+  for (const i of intents) {
+    for (const f of intentFiles(i)) {
+      const set = merged.get(f.path) ?? new Set<string>();
+      f.symbols.forEach((s) => set.add(s));
+      merged.set(f.path, set);
+    }
+  }
+  return [...merged].map(([p, s]) => ({ path: p, symbols: [...s].sort() })).sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /**

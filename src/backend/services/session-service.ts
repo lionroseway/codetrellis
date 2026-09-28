@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { AgentSessionInfo, AgentCapability } from '../../shared/types';
+import { clearIntent } from './intent-service';
 
 /**
  * Register a session, or update it in place.
@@ -103,6 +104,8 @@ export function bindSession(sessionId: string, workstreamRoot: string | null, ho
 }
 
 export function disconnectSession(sessionId: string): void {
+  // A declared intent lasts as long as its session (A2.4).
+  clearIntent(sessionId);
   getDb().run(`UPDATE agent_sessions SET status = 'inactive', last_seen = ? WHERE session_id = ?`, [Date.now(), sessionId]);
   markDirty();
 }

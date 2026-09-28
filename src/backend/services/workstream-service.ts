@@ -13,9 +13,10 @@
  */
 
 import fs from 'node:fs';
-import type { AgentSessionInfo, Workstream, WorkstreamAgent, WorkstreamChanges } from '../../shared/types';
+import type { AgentSessionInfo, Workstream, WorkstreamAgent, WorkstreamChanges, WorkstreamIntent } from '../../shared/types';
 import { listWorktrees, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
+import { getIntent } from './intent-service';
 import { getChanges, syncWorkstreamWatchers, watchRefs } from './workstream-watch-service';
 import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
 import { branchWorkstreamsOf, showAt } from './branch-workstreams';
@@ -184,8 +185,20 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
   // agent on this machine. Read from local refs only, never fetched.
   const branches = main && listed.length ? branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot) : [];
   if (main && listed.length) watchRefs(main.path);
-  const withBranches = [...all, ...branches];
+  const withBranches = withIntents([...all, ...branches]);
   return opts.includeIdle ? withBranches : withBranches.filter((w) => !w.idle);
+}
+
+/**
+ * Each workstream with the intents its agents declared (A2.4). Only a
+ * session placed in a workstream, so still active, counts: an intent
+ * belongs to the work in progress, not to an agent that has gone.
+ */
+function withIntents(all: Workstream[]): Workstream[] {
+  return all.map((w) => {
+    const intents = w.agents.map((a) => getIntent(a.sessionId)).filter((i): i is WorkstreamIntent => i !== null);
+    return intents.length ? { ...w, intents } : w;
+  });
 }
 
 function branchWorkstreams(repo: string, mainBranch: string | null, mainRef: string | null, worktrees: readonly Worktree[], projectRoot: string): Workstream[] {

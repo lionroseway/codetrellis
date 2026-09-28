@@ -343,6 +343,9 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   list_workstreams: 'read',
   get_awareness: 'read',
   check_footprint: 'read',
+  // A2.4: an agent says what it is about to change. It writes only its own
+  // session's intent, which ends with the session.
+  declare_intent: 'write',
 });
 
 export class McpAuthorizationError extends Error {

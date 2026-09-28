@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.3: the `contract` signal |
-| **Status** | A2.3 done on its branch: exported flag (Python `__all__`), importers per contract change, `contract` signal, tab and tool wording; unit, harness and browser tests pass; PR open |
-| **Next action** | Merge A2.3 when green; then A2.4 (`declare_intent`) |
+| **Stage / step** | Track A — A2.4: `declare_intent` |
+| **Status** | A2.3 merged (#160). A2.4 done on its branch: intents per session, part of the footprint, declared collisions, strip and tab wording; unit, harness and browser tests pass; PR open |
+| **Next action** | Merge A2.4 when green; then A2.5 (`drift` signal) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a2-3-contract` |
+| **Branch** | `feat/phase-32-a2-4-declare-intent` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -71,8 +71,8 @@
 - [x] Carried 2b: unverified is tagged and explained everywhere; local API changes can be turned off (owner's decision) (#159)
 - [x] A2.1 Signatures (TS/JS, Python)
 - [x] A2.2 Import accuracy (#157)
-- [ ] A2.3 `contract` signal (PR open)
-- [ ] A2.4 `declare_intent`
+- [x] A2.3 `contract` signal (#160)
+- [ ] A2.4 `declare_intent` (PR open)
 - [ ] A2.5 `drift` signal
 - [ ] A2.6 Inline notices and the agent's acknowledgement
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
@@ -173,11 +173,68 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Multi-session and multi-branch views of graph and code are Track B, not a new track: chip-to-graph focus and in-file markers go with B3's overlay list | Owner asked whether a view of graph and code changes across sessions/branches is coming. It is B2 (lanes), B3 (overlays), B5 (replay) and B6 (stack view); the two concrete asks attach to B3 |
 | 2026-09-28 | A `contract` signal also fires when an exported symbol is **removed** (or a renamed file's export goes), not only when its signature changes; a namespace-only import makes it `medium` ("may use it"), otherwise it is `high` (A2.3) | A removed export breaks its importers at least as surely as a changed one, and the spec's "will break a build" is the test. A namespace import may not touch the name at all, so it is flagged as possible rather than certain |
 | 2026-09-28 | Importers come from the opened project's import graph, intersected with the other workstream's changed files. A file that *newly* imports the symbol in the other workstream is not seen yet (A2.3) | The base graph is where barrels and aliases are resolved (A2.2); parsing and resolving imports per workstream file is a larger change, logged as a follow-up. The common case, both sides editing code that already uses the function, is covered |
+| 2026-09-28 | A declared intent is held in memory per MCP session and ends with it (re-declare replaces, `clear` withdraws, disconnect ends); only a session placed in a workstream contributes. A collision on declared intent uses the same id as the edit it foretells, marked `intended` until then (A2.4) | A restart ends every MCP session, so persisting intents would keep claims nobody is making. Sharing the id means a person's answer to the declared overlap still stands when the edit lands, instead of a second signal appearing |
+| 2026-09-28 | Another agent sees what a declared intent claims (paths, symbols), never its summary; the person sees the summary, quoted as the agent's own words (A2.4) | Awareness principle 5: agents are never handed text another agent wrote. The claim itself is constrained to repository paths and identifiers, and refused otherwise |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A2.4 — declare_intent
+- **`declare_intent(summary, paths?, symbols?, clear?, project_path?)`**
+  (capability `write`), in `awareness-tools.ts`:
+  - It records what the calling session is about to change
+    (`intent-service.ts`, in memory, one per session).
+  - Declaring again replaces it and `clear` withdraws it.
+    `disconnectSession` ends it.
+  - Paths are names, never read. They are relative to the repository, or
+    absolute inside the caller's workstream or the project; anything that
+    climbs out is refused and nothing is declared.
+  - Symbols are identifiers: `path#name` pins a file, and a bare name
+    applies to every path. A bare name with no paths is placed where the
+    project defines it (`filesDefining`), and the answer says so
+    (`resolved`).
+  - The answer returns the signals that now name the caller's workstream,
+    so the overlap is in the reply.
+- **Part of the footprint.**
+  - `listWorkstreams` attaches each placed session's intent
+    (`Workstream.intents`); `footprintsOf` turns them into `intended` files.
+  - `computeSignals` counts a declared file or symbol as a touch.
+  - A collision on it has the same id as the edit it foretells, with
+    `subject.intended` naming the side(s) that have only declared. The
+    summary says so ("means to change … (declared)", "both mean to change …
+    (declared; nothing changed yet)").
+  - When the edit lands, the same signal loses the marker.
+- **Principle 5.** `list_workstreams` shows another agent's intent without
+  its summary; the declaring agent and the person see it.
+- **UX.**
+  - The strip lists "Declared 1m ago", the agent's own words in quotes, and
+    what it claims, one line per file, under the agent.
+  - The tab's kind reads "Same function · declared".
+  - The agent guide and `docs/claude/mcp-tools.md` describe the tool; its
+    capability row is `write`.
+- **Tests.**
+  - Unit: `intent-service.test.ts` (6: paths, symbols, claim to files, one
+    per session); `awareness-signals` +4 (a declared symbol vs an edit is
+    high; two intents are medium; declared → edited keeps the id; an intent
+    elsewhere is silent); `workstream-strip` +1 and `awareness-view` +2.
+  - Harness: `declare-intent.test.ts` (7), with two agents bound to two
+    worktrees:
+    - the overlap is in the answer before anything is edited;
+    - the person sees the summary, and the other agent sees the claim
+      without it;
+    - the same signal carries on when the edit lands;
+    - a bare name is placed;
+    - a path outside the repository is refused;
+    - `clear` resolves the overlap, and so does disconnecting.
+  - Browser: `workstream-strip.spec.ts` +1, with screenshot
+    `workstreams-declared-intent`.
+- **UX journey:** an agent plans, then declares → the other worktree's chip
+  and its own turn red at once → the person opens the chip, reads what the
+  agent said it will do and what it claims, and follows "Review in
+  Awareness" to acknowledge or mark it intended → when the agent edits, the
+  same signal simply stops saying "declared".
 
 ### 2026-09-28: A2.3 — the contract signal
 - **Footprint symbols say whether another file can import them.**
