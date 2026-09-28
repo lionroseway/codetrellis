@@ -1060,7 +1060,7 @@ export function MainCanvas() {
         onlyRenderVisibleElements
         className={`!bg-transparent ${graphStyle === 'performance' ? 'graph-perf' : ''}`}
       >
-        <AutoFitView nodes={nodes} />
+        <AutoFitView nodes={nodes} layout={layoutMode} />
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
@@ -1687,9 +1687,18 @@ function preserveNodePositions(previousNodes: Node[], nextNodes: Node[]): Node[]
   });
 }
 
-function AutoFitView({ nodes }: { nodes: Node[] }) {
+/**
+ * Fit the view when the number of nodes changes, and when the layout changes
+ * (`layout`). A Tree ↔ Map switch keeps the count and moves every node, so
+ * refitting on the count alone left the viewport where the previous layout
+ * had put them, and with `onlyRenderVisibleElements` on nothing was drawn:
+ * an empty canvas. The layout refit is its own effect so nothing else about
+ * when the view fits changes.
+ */
+function AutoFitView({ nodes, layout }: { nodes: Node[]; layout: string }) {
   const { fitView } = useReactFlow();
   const prevCountRef = useRef(0);
+  const prevLayoutRef = useRef(layout);
 
   useEffect(() => {
     if (nodes.length > 0 && nodes.length !== prevCountRef.current) {
@@ -1697,6 +1706,14 @@ function AutoFitView({ nodes }: { nodes: Node[] }) {
       setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
     }
   }, [nodes, fitView]);
+
+  useEffect(() => {
+    if (layout === prevLayoutRef.current) return;
+    prevLayoutRef.current = layout;
+    if (nodes.length > 0) setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+    // Only a layout change refits here; node changes are the effect above's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, fitView]);
 
   return null;
 }
