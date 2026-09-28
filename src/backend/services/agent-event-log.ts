@@ -76,13 +76,8 @@ export interface BodyEdit {
   changeSummary?: string | null;
 }
 
-/**
- * A spec document's or a plan item's body changed. Published as a
- * `spec_edited` agent event: inside an MCP tool it carries that tool's
- * session, so it joins the agent's turn; from the app window or a plan file
- * on disk it stands alone, saying who. Never throws.
- */
-export function recordBodyEdit(edit: BodyEdit): void {
+/** Publish an event the app records itself. Inside an MCP tool it joins that session's turn. Never throws. */
+function publishApp(type: 'spec_edited' | 'criterion_decided' | 'check_run', payload: Record<string, unknown>, label: string | null): void {
   if (!publisher) return;
   try {
     const acting = context.getStore();
@@ -90,18 +85,93 @@ export function recordBodyEdit(edit: BodyEdit): void {
       id: eventId('app'),
       timestamp: Date.now(),
       source: 'app',
-      type: 'spec_edited',
+      type,
       payload: {
-        kind: edit.kind, planUid: edit.planUid, uid: edit.uid, title: edit.title, version: edit.version,
-        author: edit.author, authorType: edit.authorType,
-        ...(edit.changeSummary ? { changeSummary: edit.changeSummary.slice(0, 200) } : {}),
-        // The turn's label: the acting agent, or who made the edit.
-        ...(acting
-          ? { sessionId: acting.sessionId, agentType: acting.agentType }
-          : { agentType: edit.authorType === 'agent' ? edit.author : edit.authorType }),
+        ...payload,
+        // The turn's label: the acting agent, or who did it.
+        ...(acting ? { sessionId: acting.sessionId, agentType: acting.agentType } : { agentType: label }),
       },
     });
-  } catch { /* recording an edit must never break it */ }
+  } catch { /* recording must never break what it records */ }
+}
+
+/**
+ * A spec document's or a plan item's body changed. Published as a
+ * `spec_edited` agent event: inside an MCP tool it carries that tool's
+ * session, so it joins the agent's turn; from the app window or a plan file
+ * on disk it stands alone, saying who.
+ */
+export function recordBodyEdit(edit: BodyEdit): void {
+  publishApp('spec_edited', {
+    kind: edit.kind, planUid: edit.planUid, uid: edit.uid, title: edit.title, version: edit.version,
+    author: edit.author, authorType: edit.authorType,
+    ...(edit.changeSummary ? { changeSummary: edit.changeSummary.slice(0, 200) } : {}),
+  }, edit.authorType === 'agent' ? edit.author : edit.authorType);
+}
+
+/**
+ * The workstream an item is being worked in, now: the one its claiming
+ * session is bound to. Read when the event happens, because the claim and
+ * the session end later. Null when nobody holds it, or the holder is unbound.
+ */
+export function workstreamOfItem(itemUid: string): string | null {
+  try {
+    return rowsOf<{ root: string | null }>(
+      `SELECT s.workstream_root AS root FROM plan_items i JOIN agent_sessions s ON s.session_id = i.assignee_session WHERE i.uid = ?`,
+      [itemUid],
+    )[0]?.root ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** A criterion approved or sent back (B2.2): ✓ or ✗ on its item's workstream lane. */
+export function recordCriterionDecision(input: {
+  criterionUid: string; decision: 'approved' | 'sent_back'; actor: string; actorType: string; channel: string;
+}): void {
+  try {
+    const row = rowsOf<{ item_uid: string; text: string; plan_uid: string; title: string }>(
+      `SELECT c.item_uid, c.text, i.plan_uid, i.title FROM item_criteria c JOIN plan_items i ON i.uid = c.item_uid WHERE c.uid = ?`,
+      [input.criterionUid],
+    )[0];
+    if (!row) return;
+    const workstreamRoot = workstreamOfItem(row.item_uid);
+    publishApp('criterion_decided', {
+      criterionUid: input.criterionUid, itemUid: row.item_uid, itemTitle: row.title, planUid: row.plan_uid,
+      text: row.text.slice(0, 200), decision: input.decision, actor: input.actor, actorType: input.actorType, channel: input.channel,
+      ...(workstreamRoot ? { workstreamRoot } : {}),
+    }, input.actorType === 'agent' ? input.actor : input.actorType);
+  } catch { /* never breaks a decision */ }
+}
+
+/**
+ * A check run (B2.2): one event per workstream its items are worked in, with
+ * how many criteria passed and failed there. Items nobody holds share one.
+ */
+export function recordCheckRun(input: {
+  runUid: string; planUid: string; trigger: string; by: string; byType: string;
+  outcomes: ReadonlyArray<{ itemUid: string; ok: boolean; state?: string; text: string }>;
+}): void {
+  try {
+    const byRoot = new Map<string | null, Array<{ ok: boolean; text: string }>>();
+    const rootOf = new Map<string, string | null>();
+    for (const o of input.outcomes) {
+      if (!rootOf.has(o.itemUid)) rootOf.set(o.itemUid, workstreamOfItem(o.itemUid));
+      const root = rootOf.get(o.itemUid) ?? null;
+      // Trouble as the check-run panel counts it: a failing check, or a
+      // criterion gone stale. A person's "sent back" is its own event.
+      byRoot.set(root, [...(byRoot.get(root) ?? []), { ok: o.ok && o.state !== 'stale', text: o.text }]);
+    }
+    for (const [root, list] of byRoot) {
+      const failed = list.filter((o) => !o.ok);
+      publishApp('check_run', {
+        runUid: input.runUid, planUid: input.planUid, trigger: input.trigger, by: input.by, byType: input.byType,
+        passed: list.length - failed.length, failed: failed.length,
+        ...(failed.length ? { failing: failed.slice(0, 3).map((f) => f.text.slice(0, 120)) } : {}),
+        ...(root ? { workstreamRoot: root } : {}),
+      }, input.byType === 'agent' ? input.by : input.byType);
+    }
+  } catch { /* never breaks a run */ }
 }
 
 /** Key names whose values are secrets, in JSON (`"apiKey": "…"`) or `key=value` form. */

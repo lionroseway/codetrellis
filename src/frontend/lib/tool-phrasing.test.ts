@@ -16,3 +16,17 @@ test('a spec document, an item\'s description, and one re-read from the plan fil
   assert.equal(phraseEvent(edit({ kind: 'document', title: 'Spec', version: 4, authorType: 'file' })).text, 'Edited the spec “Spec” (v4), from the plan file');
   assert.equal(phraseEvent(edit({ kind: 'document' })).text, 'Edited the spec “untitled”');
 });
+
+test('a criterion approved or sent back, and a check run (B2.2)', () => {
+  const ev = (type: AgentEvent['type'], payload: Record<string, unknown>): AgentEvent => ({ id: 'e', timestamp: 1, source: 'app', type, payload });
+  assert.deepEqual(phraseEvent(ev('criterion_decided', { text: 'Old tokens are refused', decision: 'approved' })), {
+    text: 'Approved “Old tokens are refused”', intent: 'write', tool: null, mutating: true,
+  });
+  const back = phraseEvent(ev('criterion_decided', { text: 'Rotation is logged', decision: 'sent_back' }));
+  assert.equal(back.text, 'Sent back “Rotation is logged”');
+  assert.equal(back.intent, 'error');
+  assert.equal(phraseEvent(ev('check_run', { passed: 3, failed: 0 })).text, 'Checked criteria: all 3 passing');
+  const failing = phraseEvent(ev('check_run', { passed: 1, failed: 2 }));
+  assert.equal(failing.text, 'Checked criteria: 2 failing, 1 passing');
+  assert.equal(failing.intent, 'error');
+});

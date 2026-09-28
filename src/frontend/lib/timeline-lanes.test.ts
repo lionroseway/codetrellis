@@ -103,3 +103,37 @@ describe('the window', () => {
     assert.equal(position(v, 500), 1);
   });
 });
+
+describe('commits and checks (B2.2)', () => {
+  const commit = (sha: string, at: number, over: Record<string, unknown> = {}) =>
+    ({ sha: sha.repeat(40).slice(0, 40), at, author: 'Sam', subject: `Commit ${sha}`, merge: false, agent: null, ...over });
+
+  test('◆ a commit and ⧫ a merge on their own lane, named by the agent when there is one; none for an unknown lane', () => {
+    const view = buildLanes({
+      turns: [], workstreams: [AUTH, BILLING], signals: [], now: NOW,
+      commits: {
+        '/w/auth': [commit('a', NOW - 8 * MIN, { agent: 'codex' }), commit('b', NOW - 4 * MIN, { merge: true, subject: 'Merge side' })],
+        '/w/elsewhere': [commit('c', NOW - 2 * MIN)],
+      },
+    });
+    assert.deepEqual(view.lanes.map((l) => l.key), ['/w/auth', '/w/billing'], 'commits never add a lane');
+    const auth = view.lanes[0];
+    assert.deepEqual(auth.marks.map((m) => m.kind), ['commit', 'merge']);
+    assert.equal(auth.marks[0].text, `codex: Commit a (${'a'.repeat(7)})`);
+    assert.equal(auth.marks[1].text, `Sam: Merge side (${'b'.repeat(7)})`);
+  });
+
+  test('a turn with a sent-back criterion or failed check is ✗, with only passes ✓', () => {
+    const decided = (decision: string) => ev({ decision, workstreamRoot: '/w/auth' }, 'criterion_decided');
+    const kinds = buildLanes({
+      turns: [
+        turn('pass', [decided('approved')], NOW - 9 * MIN, { sessionId: null }),
+        turn('back', [decided('approved'), decided('sent_back')], NOW - 7 * MIN, { sessionId: null }),
+        turn('run', [ev({ passed: 2, failed: 1, workstreamRoot: '/w/auth' }, 'check_run')], NOW - 5 * MIN, { sessionId: null }),
+        turn('ok', [ev({ passed: 2, failed: 0, workstreamRoot: '/w/auth' }, 'check_run')], NOW - 3 * MIN, { sessionId: null }),
+      ],
+      workstreams: [AUTH], signals: [], now: NOW,
+    }).lanes[0].marks.map((m) => [m.id, m.kind]);
+    assert.deepEqual(kinds, [['pass', 'check-pass'], ['back', 'check-fail'], ['run', 'check-fail'], ['ok', 'check-pass']]);
+  });
+});

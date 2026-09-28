@@ -38,6 +38,7 @@ import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, set
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './services/capability-token';
+import { commitsByWorkstream } from './services/workstream-commits';
 import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -778,6 +779,19 @@ app.get('/api/workstreams', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   res.json(listWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
+});
+
+// Each workstream's own commits since `since` (ms, at most a day back), by
+// root: ◆ marks on its Timeline lane (Phase 32 B2.2). The project must be
+// open; the folders and refs are the ones listWorkstreams found, never
+// anything from the request.
+app.get('/api/workstreams/commits', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const now = Date.now();
+  const asked = typeof req.query.since === 'string' && /^\d+$/.test(req.query.since) ? Number(req.query.since) : now - 2 * 60 * 60 * 1000;
+  const since = Math.min(now, Math.max(now - 24 * 60 * 60 * 1000, asked));
+  res.json({ since, commits: commitsByWorkstream(listWorkstreams(projectRoot, { includeIdle: true }), since) });
 });
 
 // Branches and the OTHER worktrees of a project's repository, for the

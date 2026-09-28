@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B2.1: Timeline lanes |
-| **Status** | B2.1 done on its branch: a lane per workstream above the turn list, ● turns, ✎ spec edits, ⚠ signals, hover and click, live; unit, harness and browser tests pass. PR open. B1.2 merged (#170): B1 done |
-| **Next action** | Merge B2.1 when green; then B2.2 (◆ commits and merges, ✓ / ✗ checks). Sequence after B2: C1, B4, B3, direction review, B5, A4 |
+| **Stage / step** | Track B — B2.2: commits, merges and checks on the lanes |
+| **Status** | B2.2 done on its branch: ◆ each workstream's own commits, ⧫ merges, ✓ / ✗ criteria decided and check runs on the lane of the work; unit and harness tests pass. B2.1 merged (#171) |
+| **Next action** | Validate (inventory, unit, lint, typecheck, browser spec), commit, open and merge B2.2: B2 done. Then C1, B4, B3, direction review, B5, A4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b2-1-timeline-lanes` |
+| **Branch** | `feat/phase-32-b2-2-commits-checks` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -100,8 +100,8 @@
   - [x] B1.1 `agent_events`, `GET /api/agent-events`, the Timeline survives a reload (#169)
   - [x] B1.2 Body edits as events; agent time; SDK-refused calls (#170)
 - [ ] B2 Timeline lanes, refined in EXECUTION §5:
-  - [ ] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click (PR open)
-  - [ ] B2.2 ◆ commits and merges, ✓ / ✗ checks
+  - [x] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click ([#171](https://github.com/lionroseway/codetrellis/pull/171))
+  - [ ] B2.2 ◆ commits and merges, ✓ / ✗ checks (branch ready)
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints
 - [ ] B5 Replay
@@ -193,11 +193,68 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Track A ran ahead of the sequence: A2 and A3 were built before B1, B2, C1, B4 and B3, which §2 puts between A1 and A3. Nothing recorded that reorder. From here the sequence is followed again: B1, B2, C1, B4, B3, then the direction review, then B5 and A4 | Found when A3 closed and A4 looked next. Awareness was the owner's stated priority and each A-step stood alone, so no work is wasted; but the Timeline and breakpoints (B1, B2, B4) are what A4's "Needs you" and A5's review lean on, and the direction review is due at A3's end, after those steps |
 | 2026-09-28 | Agent events are kept by a passive tap on `broadcast()`, stamped at the tap, not by changing each producer (B1.1) | Every producer is covered, including ones added later. The tap reads the session row directly, so an MCP call (which names no workstream) and a `session_end` (after the session goes inactive) still get their workstream |
 | 2026-09-28 | The PreToolUse hook only informs: `additionalContext`, never a `permissionDecision`; it fails open and silent (no app, unknown folder, no overlap, over 5 s); it asks over MCP as its own short session named `claude-code-hook` (A3.4) | A hook that blocks or approves would change Claude Code's permission model behind the person's back, and one that gets in the way gets uninstalled. Going through MCP keeps one surface with one capability matrix, and the check is visible in the Timeline; the cost is a connect per edit, which is cheap on loopback |
+| 2026-09-28 | A lane's commits are that workstream's own: `base..HEAD` for a worktree or branch, main's log for main. A decision or check run goes on the lane of the workstream whose session is assigned the item, and a check run counts trouble as the check-run panel does (B2.2) | Otherwise every lane repeats main's history and the one commit that matters is lost among them. The assignee's workstream is the only link from an item to a lane that no one has to declare. Counting a sent-back criterion as a failed check would show it twice, once as ✗ decided and again as ✗ checked |
 | 2026-09-28 | Settings offers the skill ticked and the hook unticked, both written to Claude Code's user folder (`~/.claude` or `$CLAUDE_CONFIG_DIR`), from the app window only (A3.4) | The skill only loads when relevant; the hook runs before every edit, so it is opted into. User scope because parallel work is per developer, not per repository, and the hook is silent outside known workstreams. Window-only because an agent must not install a hook into its own client |
 
 ---
 
 ## Entries
+
+### 2026-09-28: B2.2 — commits, merges and checks on the lanes
+- **◆ Commits.** `services/workstream-commits.ts` reads each workstream's
+  own commits for its lane, served by
+  `GET /api/workstreams/commits?project=&since=`.
+  - "Its own" means:
+    - on main, main's recent log;
+    - on a worktree, `base..HEAD`;
+    - on a branch, `base..head` read in the main checkout.
+    So a commit shows once, on the lane it was made on.
+  - A merge (more than one parent) is ⧫. An `agent:` trailer names the
+    agent in the hover, otherwise the author does.
+  - Rules the route keeps:
+    - Folders and refs come from `listWorkstreams`, never from the caller.
+      Git runs with `execFile` and fixed arguments, and a range is built
+      only from two full SHAs.
+    - The window is at most a day and defaults to 2 hours; at most 50
+      commits per lane.
+    - Commits never add a lane of their own.
+  - Read with the workstreams. A failure to read them costs nothing else.
+- **✓ / ✗ Checks.** Two new app events, on the lane of the workstream the
+  item is being worked in (its assignee's session):
+  - `criterion_decided`: "Approved “…”" is ✓. "Sent back “…”" is ✗ and red.
+  - `check_run`: one event per workstream, "Checked criteria: all N
+    passing" or "X failing, Y passing".
+    - Counted the way the check-run panel counts trouble: a failing
+      check, or a stale criterion.
+    - A sent-back criterion is its own ✗, not a failed check.
+  - A turn is ✗ if anything in it was sent back or failed, ✓ if it was
+    checked, then ✎, then ●.
+  - Events with no session are grouped per workstream, so a decision on
+    auth-refresh and a check on billing-v2 are separate turns on their
+    own lanes.
+- **Tests.**
+  - Unit:
+    - `workstream-commits.test.ts` (parsing, merges, trailers);
+    - `agent-event-log.test.ts` +3 (decision, check-run counts, the lane
+      of the item);
+    - `timeline-lanes.test.ts` +2, `agent-turns.test.ts` +1,
+      `tool-phrasing.test.ts` +1.
+  - Harness: `lane-marks.test.ts` (4). It uses a real repository with a
+    worktree, a merge on its branch and an `agent:` trailer.
+    - Each lane gets its own commits.
+    - The window clamp works, and a project that is not open is refused.
+    - A person's two decisions and a check run land on the worktree's lane.
+  - Browser: `timeline-lanes.spec.ts` +1. It checks ◆ ⧫ ✓ ✗ in time order
+    on the right lanes, the hovers in words, no lane for commits outside
+    any workstream, and that clicking a ✗ opens its turn. Screenshot:
+    `timeline-lanes-marks`.
+- **UX journey.** The developer opens the Timeline:
+  - auth-refresh shows codex's commit, the person approving one criterion,
+    the overlap, sending another back (red ✗), then the merge;
+  - billing-v2 shows a ✓ check run;
+  - main shows its own commit;
+  - hovering any mark says what it is in words, and clicking the ✗ opens
+    that decision below.
 
 ### 2026-09-28: B2.1 — Timeline lanes
 - **B2 refined** into two sub-steps in EXECUTION §5: turns, edits and

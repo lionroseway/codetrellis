@@ -18,17 +18,25 @@ import type { AgentTurn } from '../../lib/agent-turns';
 
 // U+FE0E asks for the text form of ⚠, so it takes the severity's colour
 // instead of rendering as a yellow emoji whatever the severity.
-const GLYPH: Record<LaneMark['kind'], string> = { turn: '●', edit: '✎', signal: '⚠\uFE0E' };
+const GLYPH: Record<LaneMark['kind'], string> = {
+  turn: '●', edit: '✎', signal: '⚠\uFE0E', commit: '◆', merge: '⧫', 'check-pass': '✓', 'check-fail': '✗',
+};
+
+const NAME: Record<LaneMark['kind'], string> = {
+  turn: 'turn', edit: 'edit', signal: 'signal', commit: 'commit', merge: 'merge', 'check-pass': 'checks passed', 'check-fail': 'checks failed',
+};
 
 function markClass(m: LaneMark): string {
   if (m.kind === 'signal') return m.severity === 'high' ? 'text-danger' : m.severity === 'medium' ? 'text-warning' : 'text-foreground-subtle';
-  if (m.error) return 'text-danger';
+  if (m.kind === 'check-fail' || m.error) return 'text-danger';
+  if (m.kind === 'check-pass') return 'text-success';
+  if (m.kind === 'commit' || m.kind === 'merge') return 'text-foreground';
   return m.kind === 'edit' ? 'text-accent' : 'text-foreground-muted';
 }
 
 function markTitle(m: LaneMark): string {
   const when = new Date(m.at).toLocaleTimeString();
-  const what = m.kind === 'signal' ? `${m.severity} signal` : m.error ? 'turn (failed)' : m.kind === 'edit' ? 'edit' : 'turn';
+  const what = m.kind === 'signal' ? `${m.severity} signal` : m.kind === 'turn' && m.error ? 'turn (failed)' : NAME[m.kind];
   return `${when} · ${what} · ${m.text}`;
 }
 
@@ -53,11 +61,12 @@ export function TimelineLanes({
 }) {
   const workstreams = useAwarenessStore((s) => s.workstreams);
   const signals = useAwarenessStore((s) => s.signals);
+  const commits = useAwarenessStore((s) => s.commits);
   const tick = useNow();
   // A new event is "now" too, so its mark is never drawn past the end.
   const latest = turns.reduce((t, x) => Math.max(t, x.endedAt), 0);
   const now = Math.max(tick, latest);
-  const view = useMemo(() => buildLanes({ turns, workstreams, signals, now }), [turns, workstreams, signals, now]);
+  const view = useMemo(() => buildLanes({ turns, workstreams, signals, commits, now }), [turns, workstreams, signals, commits, now]);
 
   // One lane and nothing on it says nothing the list below doesn't.
   if (view.lanes.length === 0 || (view.lanes.length === 1 && view.lanes[0].marks.length === 0)) return null;
@@ -75,7 +84,7 @@ export function TimelineLanes({
             </span>
             <div className="relative flex-1 h-4 border-b border-white/[0.06]">
               {/* A long turn is also a faint span from start to end. */}
-              {lane.marks.filter((m) => m.kind !== 'signal').map((m) => {
+              {lane.marks.filter((m) => m.endAt > m.at).map((m) => {
                 const left = position(view, m.at) * 100;
                 const width = position(view, m.endAt) * 100 - left;
                 return width > 1.5 ? (
@@ -90,7 +99,10 @@ export function TimelineLanes({
                 <button
                   key={`${m.kind}-${m.id}`}
                   type="button"
-                  onClick={() => (m.kind === 'signal' ? onSelectSignal(m.id) : onSelectTurn(m.id))}
+                  onClick={() => {
+                    if (m.kind === 'signal') onSelectSignal(m.id);
+                    else if (m.kind !== 'commit' && m.kind !== 'merge') onSelectTurn(m.id);
+                  }}
                   title={markTitle(m)}
                   aria-label={markTitle(m)}
                   data-testid="timeline-mark"

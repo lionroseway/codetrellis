@@ -87,7 +87,9 @@ export function groupIntoTurns(
 
   for (const event of sorted) {
     const sessionId = sessionOf(event);
-    const key = sessionId ?? '__no_session__';
+    // Events with no session (a person's edit, a check run) group by the
+    // workstream they name, so two lanes' work never merges into one turn (B2.2).
+    const key = sessionId ?? `__no_session__:${stringField(event, 'workstreamRoot') ?? ''}`;
     const open = openBySession.get(key);
 
     if (open && event.timestamp - open.endedAt <= gapMs) {
