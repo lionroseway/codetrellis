@@ -31,8 +31,10 @@ interface SymbolInfo {
 }
 
 interface FileDeps {
-  imports: Array<{ path: string; relativePath: string; specifiers: string[] }>;
-  importedBy: Array<{ path: string; relativePath: string; specifiers: string[] }>;
+  imports: Array<{ path: string; relativePath: string; specifiers: string[]; reexport?: boolean }>;
+  importedBy: Array<{ path: string; relativePath: string; specifiers: string[]; reexport?: boolean }>;
+  /** Files that reach this one through a barrel's `export … from` (Phase 32 A2.2). */
+  throughReexports?: Array<{ path: string; relativePath: string; specifiers: string[]; via: string[]; possibly?: boolean }>;
 }
 
 const KIND_ICON_MAP: Record<string, typeof Braces> = {
@@ -393,6 +395,7 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
               >
                 <ArrowRight size={10} className="text-accent shrink-0" />
                 <span className="text-[11px] text-foreground-muted font-mono truncate group-hover:text-foreground">{imp.relativePath}</span>
+                {imp.reexport && <ReexportTag />}
               </button>
             ))}
           </div>
@@ -410,12 +413,48 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
               >
                 <ArrowLeft size={10} className="text-warning shrink-0" />
                 <span className="text-[11px] text-foreground-muted font-mono truncate group-hover:text-foreground">{imp.relativePath}</span>
+                {imp.reexport && <ReexportTag />}
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* Who uses this file through a barrel (A2.2): a component importing
+          from a package's index.ts uses what the index re-exports, and was
+          invisible here until re-exports were recorded. */}
+      {deps && (deps.throughReexports?.length ?? 0) > 0 && (
+        <Section label="Used through re-exports" count={deps.throughReexports!.length} accentClass="text-warning">
+          <div className="mt-1.5 space-y-0.5" data-testid="inspector-through-reexports">
+            {deps.throughReexports!.map((imp) => (
+              <button
+                key={imp.relativePath}
+                onClick={() => onSelectFile(imp.relativePath)}
+                title={`${imp.possibly ? 'Imports everything (namespace), so may use any of it' : `Uses ${imp.specifiers.join(', ')}`} — via ${imp.via.join(' → ')}`}
+                className="w-full text-left py-1 px-2 rounded-md hover:bg-surface-hover transition-colors group"
+              >
+                <span className="flex items-center gap-1.5">
+                  <ArrowLeft size={10} className="text-warning shrink-0" />
+                  <span className="text-[11px] text-foreground-muted font-mono truncate group-hover:text-foreground">{imp.relativePath}</span>
+                </span>
+                <span className="block pl-[16px] text-[9px] text-foreground-subtle truncate">
+                  {imp.possibly ? 'may use any of it' : imp.specifiers.join(', ')} · via {imp.via.map((v) => v.split('/').pop()).join(' → ')}
+                </span>
               </button>
             ))}
           </div>
         </Section>
       )}
     </div>
+  );
+}
+
+/** A barrel's `export … from`: it passes names on rather than using them. */
+function ReexportTag() {
+  return (
+    <span className="ml-auto text-[9px] text-foreground-subtle shrink-0" title="export … from: passes these names on rather than using them">
+      re-exports
+    </span>
   );
 }
 

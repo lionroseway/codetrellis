@@ -145,7 +145,10 @@ function extractImports(node: SyntaxNode): ImportDeclaration[] {
         if (c.type === 'import') { sawImport = true; continue; }
         if (!sawImport) continue;
         const target = readImportTarget(c);
-        if (target) names.push(target.alias || target.module);
+        // The ORIGINAL name (A2.2): `from x import a as b` imports `a`. The
+        // alias is this file's local name, and "who imports a?" is asked of
+        // what x exports.
+        if (target) names.push(target.module);
         else if (c.type === 'wildcard_import' || (c.type === '*' || c.text === '*')) names.push('*');
       }
       imports.push({

@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import { listWorkstreams } from '../../services/workstream-service';
 import { refreshSignals, listSignals } from '../../services/awareness-service';
 import { getActiveSessions } from '../../services/session-service';
-import { getFileDependencies } from '../../services/database';
+import { importersOf, type Importer } from '../../services/importers';
 
 /** The workstream this connection is bound to (A1.1), or null. */
 function callerWorkstream(sessionId: string): string | null {
@@ -95,13 +95,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Before you edit: who else is working on these files? For each path (relative to the repository root), the other ' +
         'workstreams that have changed it, with the functions they touched, and the files in the project that import it. ' +
-        'Your own workstream is left out. Checking first avoids most collisions.',
+        'Your own workstream is left out. Checking first avoids most collisions. Importers are found through barrels ' +
+        '(`export … from`) too; pass `symbols` to narrow them to the files that import those names.',
       inputSchema: {
         paths: z.array(z.string()).min(1).max(50).describe('Files you are about to change, relative to the repository root.'),
+        symbols: z.array(z.string()).max(50).optional().describe('Names in those files you are about to change. Narrows imported_by to the files that import one of them.'),
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
       },
     },
-    async ({ paths, project_path }) => {
+    async ({ paths, symbols, project_path }) => {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
       const mine = callerWorkstream(deps.sessionId);
@@ -114,11 +116,17 @@ export function register(server: McpServer, deps: ToolDeps): void {
           const f = w.changes.files.find((x) => x.path === rel);
           return f ? [{ workstream: w.root, branch: w.branch, status: f.status, symbols: f.symbols ?? null }] : [];
         });
-        let importedBy: string[] = [];
+        let importers: Importer[] = [];
         try {
-          importedBy = getFileDependencies(rel).importedBy.map((d) => d.relativePath).slice(0, 25);
+          // Through barrels too (A2.2); a barrel itself only passes names on.
+          importers = importersOf(rel, symbols?.length ? symbols : undefined).slice(0, 25);
         } catch { /* no graph for it */ }
-        return { path: rel, changed_in: changedIn, imported_by: importedBy };
+        return {
+          path: rel, changed_in: changedIn,
+          imported_by: importers.map((d) => d.relativePath),
+          // How each imports it: the names, "possibly" for a namespace import, the barrels on the way.
+          importers: importers.map((d) => ({ path: d.relativePath, names: d.names, possibly: d.possibly, via: d.via })),
+        };
       });
       return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, your_workstream: mine, paths: report }, null, 2) }] };
     },
