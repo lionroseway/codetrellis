@@ -18,7 +18,8 @@ import { isSafeGitRef } from './git-safety';
 import { listWorkstreams } from './workstream-service';
 import { importersOf } from './importers';
 import { intentFiles } from './intent-service';
-import { computeSignals, contractCandidates, importableName, reconcileSignals, type ContractChange, type FootprintInput } from './awareness-signals';
+import { computeSignals, contractCandidates, importableName, reconcileSignals, type ContractChange, type FootprintInput, type WorkstreamScope } from './awareness-signals';
+import type { FileSpec } from '../../shared/types';
 
 const SHA = /^[0-9a-f]{40}$/;
 
@@ -99,7 +100,46 @@ export function footprintsOf(all: readonly Workstream[], projectRoot?: string): 
     mainSinceBase: w.main ? [] : mainChangesSince(w.shape === 'branch' && main ? main.root : w.root, w.changes.base, mainRef),
     ...(projectRoot ? { contracts: contractsOf(projectRoot, w) } : {}),
     ...(w.intents?.length ? { intended: declaredFiles(w.intents) } : {}),
+    ...scopeEntry(scopeOf(w)),
   }));
+}
+
+const scopeEntry = (scope: WorkstreamScope | null) => (scope ? { scope } : {});
+
+/**
+ * What a workstream was given to change (A2.5): the files and folders of the
+ * items its agents have claimed and not finished, and what they declared.
+ * Null when nothing was given, so there is nothing to drift from.
+ */
+export function scopeOf(w: Pick<Workstream, 'agents' | 'intents'>): WorkstreamScope | null {
+  const sessions = w.agents.map((a) => a.sessionId);
+  const paths = new Set<string>();
+  const dirs = new Set<string>();
+  const items: string[] = [];
+  if (sessions.length) {
+    const res = getDb().exec(
+      `SELECT uid, file_specs, scope_path FROM plan_items
+        WHERE assignee_session IN (${sessions.map(() => '?').join(',')})
+          AND COALESCE(status, '') NOT IN ('done', 'skipped')`,
+      sessions,
+    );
+    for (const [uid, specsJson, scopePath] of res[0]?.values ?? []) {
+      let specs: FileSpec[] = [];
+      try { specs = JSON.parse((specsJson as string) || '[]') as FileSpec[]; } catch { /* unreadable: no scope from it */ }
+      const before = paths.size + dirs.size;
+      for (const s of specs) {
+        const clean = (p: string) => p.replace(/^\.\//, '');
+        (s.isDir ? dirs : paths).add(clean(s.path));
+        if (s.moveTo) paths.add(clean(s.moveTo));
+      }
+      if (typeof scopePath === 'string' && scopePath.trim()) dirs.add(scopePath.trim().replace(/^\.\//, ''));
+      if (paths.size + dirs.size > before) items.push(uid as string);
+    }
+  }
+  const declared = declaredFiles(w.intents ?? []);
+  for (const f of declared) paths.add(f.path);
+  if (paths.size === 0 && dirs.size === 0) return null;
+  return { paths: [...paths].sort(), dirs: [...dirs].sort(), items, declared: declared.length > 0 };
 }
 
 /**

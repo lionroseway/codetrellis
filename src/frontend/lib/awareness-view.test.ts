@@ -76,6 +76,7 @@ describe('a signal in words', () => {
     assert.equal(kindWords(sig()), 'Same function');
     assert.equal(kindWords(sig({ subject: { file: 'a.ts' } })), 'Same file');
     assert.equal(kindWords(sig({ kind: 'stale-base', subject: { files: ['a.ts'] } })), 'Behind main');
+    assert.equal(kindWords(sig({ kind: 'drift', subject: { files: ['config/shared.ts'] } })), 'Outside its scope', 'A2.5');
     assert.equal(kindWords(sig({ kind: 'contract', subject: { file: 'a.ts', symbol: 'f', change: 'signature' } })), 'Changed signature');
     assert.equal(kindWords(sig({ subject: { file: 'a.ts', symbol: 'f', intended: ['/r-auth'] } })), 'Same function · declared', 'A2.4');
     assert.equal(kindWords(sig({ subject: { file: 'a.ts', intended: ['/r-auth', '/r-billing'] } })), 'Same file · declared');
@@ -128,6 +129,14 @@ describe('actionsFor', () => {
     const open = actionsFor('open', 'contract');
     assert.deepEqual(open.map((a) => a.state), ['acknowledged', 'intended', 'dismissed']);
     assert.match(open[1].hint, /side that imports it will follow/);
+  });
+  test('drift can be intended: the extra files are meant to be part of the work (A2.5)', () => {
+    const open = actionsFor('open', 'drift');
+    assert.deepEqual(open.map((a) => a.state), ['acknowledged', 'intended', 'dismissed']);
+    assert.match(open[1].hint, /extra files are meant/);
+  });
+  test('drift names only its own workstream', () => {
+    assert.deepEqual(sidesOf(sig({ kind: 'drift', workstreams: ['/r-billing'], subject: { files: ['x.ts'] } }), ROOM), ['billing-v2']);
   });
   test('a stale base has no second side, so it cannot be "intended"', () => {
     assert.deepEqual(actionsFor('open', 'stale-base').map((a) => a.state), ['acknowledged', 'dismissed']);

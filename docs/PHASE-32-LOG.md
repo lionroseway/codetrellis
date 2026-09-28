@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.4: `declare_intent` |
-| **Status** | A2.3 merged (#160). A2.4 done on its branch: intents per session, part of the footprint, declared collisions, strip and tab wording; unit, harness and browser tests pass; PR open |
-| **Next action** | Merge A2.4 when green; then A2.5 (`drift` signal) |
+| **Stage / step** | Track A — A2.5: the `drift` signal |
+| **Status** | A2.4 merged (#161). A2.5 done on its branch: scope from claimed items and declared intent, `drift` signal, tab wording; unit, harness and browser tests pass; PR open |
+| **Next action** | Merge A2.5 when green; then A2.6 (inline notices, `acknowledge_signal`, the M2 "done when" test) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a2-4-declare-intent` |
+| **Branch** | `feat/phase-32-a2-5-drift` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -72,8 +72,8 @@
 - [x] A2.1 Signatures (TS/JS, Python)
 - [x] A2.2 Import accuracy (#157)
 - [x] A2.3 `contract` signal (#160)
-- [ ] A2.4 `declare_intent` (PR open)
-- [ ] A2.5 `drift` signal
+- [x] A2.4 `declare_intent` (#161)
+- [ ] A2.5 `drift` signal (PR open)
 - [ ] A2.6 Inline notices and the agent's acknowledgement
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
 - [ ] A3 Distilled (digest, guide, skill and hook)
@@ -175,11 +175,53 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Importers come from the opened project's import graph, intersected with the other workstream's changed files. A file that *newly* imports the symbol in the other workstream is not seen yet (A2.3) | The base graph is where barrels and aliases are resolved (A2.2); parsing and resolving imports per workstream file is a larger change, logged as a follow-up. The common case, both sides editing code that already uses the function, is covered |
 | 2026-09-28 | A declared intent is held in memory per MCP session and ends with it (re-declare replaces, `clear` withdraws, disconnect ends); only a session placed in a workstream contributes. A collision on declared intent uses the same id as the edit it foretells, marked `intended` until then (A2.4) | A restart ends every MCP session, so persisting intents would keep claims nobody is making. Sharing the id means a person's answer to the declared overlap still stands when the edit lands, instead of a second signal appearing |
 | 2026-09-28 | Another agent sees what a declared intent claims (paths, symbols), never its summary; the person sees the summary, quoted as the agent's own words (A2.4) | Awareness principle 5: agents are never handed text another agent wrote. The claim itself is constrained to repository paths and identifiers, and refused otherwise |
+| 2026-09-28 | Drift scope is the `fileSpecs` (paths, move destinations, folders) and `scope_path` of items claimed by sessions in the workstream and not done or skipped, plus declared intent. No scope, no drift. CodeTrellis's own `.codetrellis/` plan files never count. One signal per workstream, its file list updated in place (A2.5) | Without a scope there is nothing to drift from, and guessing one would flag every exploratory agent. Plan files change as part of doing any item. Declaring the extra files (A2.4) is the agent's way back into scope, and "Intended" is the person's |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A2.5 — the drift signal
+- **Scope.** `scopeOf(workstream)` (awareness-service) collects:
+  - the `fileSpecs` of items claimed by sessions in the workstream
+    (`plan_items.assignee_session`) and not done or skipped: paths, move
+    destinations, and folders (`isDir`);
+  - their `scope_path` as a folder;
+  - the files its agents declared (A2.4).
+  - `null` when there are none.
+- **`outsideScope(files, scope)`** is pure. A file is inside when it is
+  named, or under a folder in scope; a move is inside only when both ends
+  are. `.codetrellis/` plan files never count.
+- **`computeSignals`** raises one `drift` per workstream, `medium`, with
+  `subject.files` (all of them) and `subject.items`. The summary says where
+  the scope came from: "outside the scope its claimed item gives it",
+  "… its claimed items give it", "… its declared intent gives it", or both.
+- **The Awareness tab.**
+  - The card reads "Outside its scope" and names only its workstream.
+  - It lists the files outside "the scope of its claimed item".
+  - "Intended" says the extra files are meant to be part of the work.
+  - `get_awareness`, the agent guide and `docs/claude/mcp-tools.md` describe
+    the kind, and tell the agent to declare the extra files if they are
+    meant.
+- **Tests.**
+  - Unit: `awareness-signals` +4 (medium with file and item; inside by name,
+    folder, both ends of a move and plan files; the source words; no scope,
+    no drift; many files summarised), `awareness-view` +3.
+  - Harness: `awareness-drift.test.ts` (4). An agent bound to a real
+    worktree claims an Action over MCP:
+    - editing its file says nothing;
+    - a file outside it is medium drift naming the file and item, and
+      `get_awareness` tells the agent;
+    - declaring an intent covering it resolves the signal;
+    - with the intent cleared and the item done there is no scope, and the
+      signal resolves again.
+  - Browser: `awareness-tab.spec.ts` +1, with screenshot `awareness-drift`.
+- **UX journey:** an agent claims "Tighten the validators" and starts
+  editing the web client too → its chip turns amber and the tab says it
+  changes a file outside its claimed item, naming it → the person asks the
+  agent, or marks it intended; or the agent declares the extra file and the
+  signal goes.
 
 ### 2026-09-28: A2.4 — declare_intent
 - **`declare_intent(summary, paths?, symbols?, clear?, project_path?)`**
