@@ -174,7 +174,7 @@ export function BreakpointsSet() {
           </div>
           {shown.length === 0 && (
             <div className="text-[10px] text-foreground-subtle">
-              None set. Set one on a task in its Routing panel, or tick a kind of signal above.
+              None set. Set one on a task in its Routing panel, on a file or function by right-clicking it in the graph, or tick a kind of signal above.
             </div>
           )}
           {shown.filter((b) => b.kind !== 'signal').map((b) => {

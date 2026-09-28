@@ -26,6 +26,8 @@ import { usePlanStore } from '../../stores/plan-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
+import { useBreakpointsStore } from '../../stores/breakpoints-store';
+import { nodeBreakpoints, nodeBreakpointTitle, symbolNodeTarget, BREAKABLE_SYMBOLS } from '../../lib/breakpoint-view';
 import { buildDependencyGraph, buildFromSnapshot, uniqueGraph, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
 import { PackageNode } from '../graph/nodes/PackageNode';
 import { DirectoryNode } from '../graph/nodes/DirectoryNode';
@@ -787,8 +789,11 @@ export function MainCanvas() {
     return paths;
   }, [planItemsByUid]);
 
+  const breakpoints = useBreakpointsStore((s) => s.breakpoints);
+
   const displayGraphData = useMemo(() => {
     const hasPlanHighlights = planHighlightPaths.size > 0;
+    const codeBreakpoints = breakpoints.filter((b) => b.kind === 'code');
     // Deduplicate nodes by id — the graph builder should produce
     // unique ids, but projection / ghost / cross-system passes can
     // occasionally produce a duplicate that crashes ReactFlow.
@@ -800,7 +805,24 @@ export function MainCanvas() {
     }
     const safeEdges = graphData?.edges ?? [];
 
-    if (!selectedNodeId && !hasPlanHighlights) return { nodes: safeNodes, edges: safeEdges };
+    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0) return { nodes: safeNodes, edges: safeEdges };
+
+    // ⏸ on a node a breakpoint holds (B4.3b): a file, a symbol, or a cluster
+    // with any file under one.
+    const breakpointTitle = (node: (typeof safeNodes)[number], data: Record<string, unknown>, nodePath: string): string | undefined => {
+      if (codeBreakpoints.length === 0) return undefined;
+      const nodeType = typeof data.nodeType === 'string' ? data.nodeType : undefined;
+      let held;
+      if (nodeType === 'package') {
+        const files = Array.isArray(data.files) ? (data.files as unknown[]).filter((f): f is string => typeof f === 'string') : [];
+        const byId = new Map<string, (typeof codeBreakpoints)[number]>();
+        for (const f of files) for (const b of nodeBreakpoints(codeBreakpoints, { nodeType: 'file', path: f })) byId.set(b.id, b);
+        held = [...byId.values()];
+      } else {
+        held = nodeBreakpoints(codeBreakpoints, { nodeType, path: nodeType === 'symbol' ? node.id : nodePath });
+      }
+      return held.length ? nodeBreakpointTitle(held) : undefined;
+    };
 
     return {
       nodes: safeNodes.map((node) => {
@@ -814,6 +836,7 @@ export function MainCanvas() {
               ? node.id === selectedNodeId || safeEdges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id))
               : false,
             planHighlighted: hasPlanHighlights && planHighlightPaths.has(nodePath),
+            breakpointTitle: breakpointTitle(node, data, nodePath),
           },
         };
       }),
@@ -826,7 +849,7 @@ export function MainCanvas() {
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths]);
+  }, [graphData, selectedNodeId, planHighlightPaths, breakpoints]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
@@ -1451,6 +1474,40 @@ function NodeContextMenu({
   const updateItem = usePlanItemsStore((s) => s.updateItem);
   const addToast = useToastStore((s) => s.addToast);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  const breakpoints = useBreakpointsStore((s) => s.breakpoints);
+  const setBreakpoint = useBreakpointsStore((s) => s.set);
+  const clearBreakpoint = useBreakpointsStore((s) => s.clear);
+
+  // Phase 32 B4.3b — "Ask me before this changes": a code breakpoint on this
+  // file, folder or function. Null for a node that cannot carry one.
+  const breakTarget = ((): { path: string; symbol?: string; target: string; name: string } | null => {
+    if (nodeType === 'symbol') {
+      const sym = symbolNodeTarget(nodePath);
+      if (!sym || !BREAKABLE_SYMBOLS.has(sym.kind)) return null;
+      return { path: sym.file, symbol: sym.name, target: `${sym.file}#${sym.name}`, name: sym.name };
+    }
+    if (nodeType === 'directory') {
+      const dir = nodePath.replace(/\/+$/, '');
+      return dir ? { path: `${dir}/`, target: `${dir}/`, name: nodeLabel } : null;
+    }
+    if (nodeType === 'file' && nodePath && !nodePath.startsWith('/')) return { path: nodePath, target: nodePath, name: nodeLabel };
+    return null;
+  })();
+  const existingBreakpoint = breakTarget ? breakpoints.find((b) => b.kind === 'code' && b.target === breakTarget.target) ?? null : null;
+
+  const handleToggleBreakpoint = async () => {
+    onClose();
+    if (!breakTarget) return;
+    if (existingBreakpoint) {
+      const err = await clearBreakpoint(existingBreakpoint.id);
+      if (err) addToast({ type: 'error', title: 'Breakpoint not cleared', message: err, duration: 4000 });
+      else addToast({ type: 'success', title: 'Breakpoint cleared', message: `Agents no longer wait for you before ${breakTarget.name} changes.`, duration: 3000 });
+      return;
+    }
+    const err = await setBreakpoint({ kind: 'code', path: breakTarget.path, ...(breakTarget.symbol ? { symbol: breakTarget.symbol } : {}) });
+    if (err) addToast({ type: 'error', title: 'Breakpoint not set', message: err, duration: 4000 });
+    else addToast({ type: 'success', title: 'Breakpoint set', message: `An agent about to change ${breakTarget.name} will wait for you. You answer in Awareness.`, duration: 4000 });
+  };
 
   const addFileSpecToItem = async (itemUid: string) => {
     const item = itemsByUid[itemUid];
@@ -1637,6 +1694,18 @@ function NodeContextMenu({
         >
           <Filter size={13} className="text-amber-400" />
           Scope plan to this
+        </button>
+      )}
+      {breakTarget && (
+        <button
+          onClick={handleToggleBreakpoint}
+          data-testid="node-menu-breakpoint"
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-warning/10 text-foreground-muted hover:text-foreground transition-colors"
+        >
+          {existingBreakpoint ? <Play size={13} className="text-warning" /> : <Pause size={13} className="text-warning" />}
+          {existingBreakpoint
+            ? `Stop asking before ${breakTarget.symbol ?? 'this'} changes`
+            : `Ask me before ${breakTarget.symbol ?? 'this'} changes`}
         </button>
       )}
       <div className="h-px bg-white/[0.06] mx-1.5 my-1" />

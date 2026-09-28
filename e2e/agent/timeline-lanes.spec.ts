@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { gotoWithProject } from '../helpers/setup';
-import type { AgentEvent, AwarenessSignal, Workstream, WorkstreamAgent, WorkstreamCommit } from '../../src/shared/types';
+import type { AgentEvent, AwarenessSignal, BreakpointHit, Workstream, WorkstreamAgent, WorkstreamCommit } from '../../src/shared/types';
 
 const OUT = path.join('test-results', 'ux-audit');
 const now = Date.now();
@@ -77,6 +77,22 @@ const CHECKS: AgentEvent[] = [
   event(now - 7 * MIN, 'check_run',
     { planUid: 'p-1', trigger: 'manual', passed: 3, failed: 0, failing: [], agentType: 'human', workstreamRoot: '/work/acme-billing' },
     { source: 'app' }),
+];
+
+// B4.3b: calls held at breakpoints. codex on auth-refresh was paused and
+// steered; Claude Code on billing-v2 waits now; a breach on billing-v2.
+const hit = (over: Partial<BreakpointHit>): BreakpointHit => ({
+  ref: 'bp-x', breakpointId: 'bp_1', kind: 'task', breakpointNote: null, breakpointTarget: 'i1', tool: 'claim_item', action: 'claim',
+  itemUid: 'i1', itemTitle: 'Rotate refresh tokens', path: null, breach: false, signalId: null, planUid: 'p-1',
+  agent: 'codex', sessionId: 's-auth', workstreamRoot: '/work/acme-auth', hitAt: now - 18 * MIN, decision: null, note: null,
+  answeredAt: null, answeredBy: null, answeredByType: null, ...over,
+});
+const HITS: BreakpointHit[] = [
+  hit({ ref: 'bp-steered', decision: 'steer', note: 'Keep the old cookie name', answeredAt: now - 13 * MIN, answeredBy: 'Sam', answeredByType: 'human' }),
+  hit({ ref: 'bp-waiting', kind: 'code', breakpointTarget: 'src/billing/charge.ts#settle', tool: 'check_breakpoint', action: 'edit_code', path: 'src/billing/charge.ts',
+    agent: 'claude-code-hook', sessionId: 's-bill', workstreamRoot: '/work/acme-billing', hitAt: now - 8 * MIN }),
+  hit({ ref: 'bp-breach', kind: 'code', breakpointTarget: 'src/billing/refund.ts', tool: 'list_plans', action: 'breach', breach: true, path: 'src/billing/refund.ts',
+    agent: 'codex', sessionId: 's-other', workstreamRoot: '/work/acme-billing', hitAt: now - 4 * MIN }),
 ];
 
 async function serve(page: Page, history: AgentEvent[] = HISTORY, commits: Record<string, WorkstreamCommit[]> = {}) {
@@ -168,5 +184,38 @@ test.describe('Timeline lanes', () => {
     // A decision opens as its turn below; a commit opens nothing.
     await lane('auth-refresh').locator('[data-kind="check-fail"]').click();
     await expect(page.locator('[data-testid="turn-card"]', { hasText: 'Sent back “Rotation is logged”' })).toBeVisible();
+  });
+
+  test('B4.3b: ⏸ a held call spans to its answer, dashed while it waits; ⊘ a breach is its own mark', async ({ page }) => {
+    await serve(page, CHECKS);
+    await page.route((url) => url.pathname === '/api/breakpoint-hits' && url.searchParams.get('state') === 'all',
+      (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ hits: HITS }) }));
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: /^Timeline( \d+)?$/ }).click();
+
+    const lanes = page.getByTestId('timeline-lanes');
+    await expect(lanes).toBeVisible({ timeout: 10_000 });
+    const lane = (label: string) => lanes.locator(`[data-testid="timeline-lane"][data-lane="${label}"]`);
+    const kinds = async (label: string) => lane(label).getByTestId('timeline-mark').evaluateAll((els) => els.map((e) => e.getAttribute('data-kind')));
+    await expect.poll(() => kinds('auth-refresh')).toEqual(['pause', 'check-pass', 'signal', 'check-fail']);
+    await expect.poll(() => kinds('billing-v2')).toEqual(['signal', 'pause', 'check-pass', 'breach']);
+
+    // Words, not only glyphs: who wanted what, and what became of it.
+    await expect(lane('auth-refresh').locator('[data-kind="pause"]')).toHaveAttribute('title', /paused at a breakpoint · codex wants to claim “Rotate refresh tokens”; continued with a steer by Sam/);
+    await expect(lane('billing-v2').locator('[data-kind="pause"]')).toHaveAttribute('title', /paused at a breakpoint · Claude Code wants to change “settle in src\/billing\/charge.ts”; waiting on you/);
+    await expect(lane('billing-v2').locator('[data-kind="breach"]')).toHaveAttribute('title', /breach · codex changed src\/billing\/refund.ts past a breakpoint; waiting on you/);
+    await expect(lane('billing-v2').locator('[data-kind="pause"]')).toHaveText('⏸\uFE0E');
+    await expect(lane('billing-v2').locator('[data-kind="breach"]')).toHaveText('⊘');
+
+    // The answered pause is a solid span; the waiting one is dashed and runs to now.
+    await expect(lane('auth-refresh').getByTestId('timeline-pause-span')).toHaveAttribute('data-waiting', 'false');
+    await expect(lane('billing-v2').getByTestId('timeline-pause-span')).toHaveAttribute('data-waiting', 'true');
+
+    fs.mkdirSync(OUT, { recursive: true });
+    await lanes.screenshot({ path: path.join(OUT, 'timeline-lanes-breakpoints.png') });
+
+    // A pause opens Awareness, where it is answered.
+    await lane('billing-v2').locator('[data-kind="pause"]').click();
+    await expect(page.getByTestId('awareness-needs-you')).toBeVisible();
   });
 });
