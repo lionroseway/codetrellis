@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.6: inline notices, `acknowledge_signal`, M2 "done when" |
-| **Status** | A2.5 merged (#162). A2.6 done on its branch: notices from the one interception, agent notes, who was told in the tab; the M2 "done when" passes as a harness test; bug 54 (watcher) and the dropped awareness config fixed; PR open |
-| **Next action** | Merge A2.6 when green (closes A2 / M2); then refine A3 into sub-steps per EXECUTION §4 |
+| **Stage / step** | Track A — A3.1: the digest |
+| **Status** | A3.1 done on its branch: shared `buildDigest`, digest in the Awareness tab and in `get_awareness`, new since you last looked; unit, harness and browser tests pass; PR open |
+| **Next action** | Merge A3.1 when green; then A3.2 (intended and cooldown) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a2-6-inline-notices` |
+| **Branch** | `feat/phase-32-a3-1-digest` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -74,9 +74,14 @@
 - [x] A2.3 `contract` signal (#160)
 - [x] A2.4 `declare_intent` (#161)
 - [x] A2.5 `drift` signal (#162)
-- [ ] A2.6 Inline notices, `acknowledge_signal`, the M2 "done when" (PR open)
+- [x] A2.6 Inline notices, `acknowledge_signal`, the M2 "done when" (#163) — **M2 done**
 - [ ] A2 Meaning (signatures, contract, drift, notices, intent)
-- [ ] A3 Distilled (digest, guide, skill and hook)
+- [ ] A3 Distilled (M3), refined in EXECUTION §4:
+  - [ ] A3.1 The digest (PR open)
+  - [ ] A3.2 Intended and cooldown
+  - [ ] A3.3 `parallel` guide flavour
+  - [ ] A3.4 User skill and optional hook, offered from Settings
+  - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when"
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -177,11 +182,52 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Another agent sees what a declared intent claims (paths, symbols), never its summary; the person sees the summary, quoted as the agent's own words (A2.4) | Awareness principle 5: agents are never handed text another agent wrote. The claim itself is constrained to repository paths and identifiers, and refused otherwise |
 | 2026-09-28 | Drift scope is the `fileSpecs` (paths, move destinations, folders) and `scope_path` of items claimed by sessions in the workstream and not done or skipped, plus declared intent. No scope, no drift. CodeTrellis's own `.codetrellis/` plan files never count. One signal per workstream, its file list updated in place (A2.5) | Without a scope there is nothing to drift from, and guessing one would flag every exploratory agent. Plan files change as part of doing any item. Declaring the extra files (A2.4) is the agent's way back into scope, and "Intended" is the person's |
 | 2026-09-28 | Inline notices go to high and medium signals that name the session's workstream and that the person has not set aside (open or acknowledged), once per signal per session; reading them with `get_awareness`, or answering with `acknowledge_signal`, counts as told. An unplaced session gets none (A2.6) | "Unseen" is per session, as the spec says. A signal the person dismissed or marked intended no longer concerns the agent. Telling on the tools that already show the signal would say it twice |
+| 2026-09-28 | The digest lists only open high and medium signals, one line per kind and pair of workstreams (and changing side, for a contract), at most five lines then "and N more"; answered signals are "seen" and low ones are counted. Each line ends with the choice waiting on the person, fixed per kind. "New since you last looked" is kept per browser (A3.1) | A person reads groups, not streams: two worktrees overlapping in four places is one thing to decide. The question per kind is CodeTrellis's wording, never an agent's. Last-looked is a convenience, so browser storage is enough, and a blocked store just means no "new" count |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A3 refined; A3.1 — the digest
+- **A3 refined** into five sub-steps in EXECUTION §4: the digest, intended
+  and cooldown, the `parallel` guide, the user skill and hook, and the docs
+  plus M3's "done when".
+- **`buildDigest(signals, label, { since })`** (`src/shared/lib/awareness-digest.ts`)
+  is pure and shared by the tab and the MCP tool.
+  - It takes open high and medium signals and groups them by kind and by
+    the workstreams they name (for a contract, also the changing side).
+  - Groups are ordered most severe, then newest; there are at most five
+    lines, then "and N more".
+  - Lines read, for example:
+    - "`billing-v2` changed createInvoice's signature; `checkout-fix` imports
+      it";
+    - "`auth-refresh` and `billing-v2` both change 3 things: …";
+    - "`w` changes 2 files outside its scope: …";
+    - a declared collision says "(declared, not yet edited)".
+  - Each line says whether every agent concerned was told (A2.6), and
+    carries the choice waiting on the person, fixed per kind.
+  - Low signals are counted, not listed. `newSince` counts those first seen
+    after `since`.
+  - `digestText` is the same as one paragraph for an agent.
+- **The tab.** The digest box keeps its headline and adds the lines ("·
+  Agents told.", "Waiting on you: …") and "N new since you last looked
+  (HH:MM)". Last-looked is kept in browser storage, written when the tab
+  goes.
+- **`get_awareness`** returns `digest`, built over the caller's own signals
+  with branch names. The description and `docs/claude/mcp-tools.md` say so.
+- **Tests.**
+  - Unit: `awareness-digest.test.ts` (9): only what needs someone; four
+    overlaps in one line; the cap and order; the contract, removal, drift and
+    declared words; new since; the agent paragraph; calm.
+  - Harness: `awareness-contract` asserts the agent's digest line and
+    question.
+  - Browser: `awareness-tab.spec.ts` +1 (five signals → three lines, told
+    marked, three new since), screenshot `awareness-digest`.
+- **UX journey:** the person comes back to the tab → "3 new since you last
+  looked" → three lines, each saying what changed, who is affected, whether
+  the agents know, and the one choice waiting on them → the cards below for
+  the detail and the answer.
 
 ### 2026-09-28: A2.6 — told without asking; M2 done
 - **Inline notices** (`awareness-notices.ts`, hooked in the one interception

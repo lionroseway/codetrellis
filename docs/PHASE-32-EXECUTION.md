@@ -383,6 +383,16 @@ The spec lists the collision overlay under M2. It needs the overlay list
 in `graph-builder`, which is B3's, so it lands there rather than hard-wiring
 a second overlay now.
 
+### A3: distilled (M3)
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A3.1 | The digest (§4.5): signals grouped by kind and pair into a few lines a person reads at a glance — what changed, who is affected, agents told, waiting on you — with "and N more" past a cap; the same text for agents in `get_awareness`; new since the person last looked | unit (grouping, cap, words); harness (`get_awareness` digest); browser (tab) |
+| A3.2 | Intended and cooldown (§4.4): an answered signal (acknowledged, intended) stays quiet until its subject changes shape, then opens again and agents are told again | unit `reconcileSignals`; harness |
+| A3.3 | `parallel` guide flavour (§6.3), served as `codetrellis://skill/parallel` and from `get_app_guide`; the `multi-agent` guide points to it | unit (guide content); harness (resource read) |
+| A3.4 | A `codetrellis-parallel` Claude Code skill and an optional `PreToolUse` hook that runs `check_footprint`, offered from Settings with the Add to Claude Desktop pattern, never installed silently | unit; harness (install writes only what was confirmed); browser |
+| A3.5 | `docs/claude/awareness.md`; M3 "done when" as a test: five workstreams' worth of signals produce a digest readable in under a minute (a line budget), and intended stays quiet until a side changes shape | harness end to end |
+
 ### A3–A7
 
 Refined into sub-steps when next. Scope is per the awareness spec:

@@ -4,8 +4,9 @@ import { useProjectStore } from '../../stores/project-store';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { useToastStore } from '../../stores/toast-store';
 import {
-  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, stateWords, actionsFor, ago, toldWords,
+  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, sideLabel, stateWords, actionsFor, ago, toldWords,
 } from '../../lib/awareness-view';
+import { buildDigest } from '@shared/lib/awareness-digest';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
 import { UnverifiedIf } from '../UnverifiedTag';
 
@@ -48,13 +49,29 @@ export function useAwarenessFeed(): number {
   return needsYouCount(signals);
 }
 
+/** When the person last had the tab open, per browser (A3.1). Unreadable storage just means "no last visit". */
+const LAST_VIEWED_KEY = 'codetrellis.awareness.lastViewed';
+function readLastViewed(): number | null {
+  try {
+    const v = Number(window.localStorage.getItem(LAST_VIEWED_KEY));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch { return null; }
+}
+function writeLastViewed(at: number): void {
+  try { window.localStorage.setItem(LAST_VIEWED_KEY, String(at)); } catch { /* private window, blocked storage */ }
+}
+
 export function AwarenessTab() {
   const root = useProjectStore((s) => s.root);
   const { workstreams, signals, loaded, error } = useAwarenessStore();
   const [now, setNow] = useState(() => Date.now());
+  // What was new is measured from the visit before this one; leaving marks this one.
+  const [lastViewed] = useState(readLastViewed);
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
+    const leave = () => writeLastViewed(Date.now());
+    window.addEventListener('beforeunload', leave);
+    return () => { clearInterval(id); window.removeEventListener('beforeunload', leave); leave(); };
   }, []);
 
   if (!root) {
@@ -66,6 +83,7 @@ export function AwarenessTab() {
 
   const groups = groupSignals(signals);
   const digest = digestLine(workstreams, signals);
+  const distilled = buildDigest(signals, (r) => sideLabel(r, workstreams), { since: lastViewed });
 
   return (
     <div data-testid="awareness-tab" className="text-[11px] space-y-3 max-w-3xl">
@@ -73,7 +91,30 @@ export function AwarenessTab() {
         <Radar size={14} className={`shrink-0 mt-0.5 ${groups.needsYou.length > 0 ? 'text-warning' : 'text-foreground-subtle'}`} />
         <div className="min-w-0">
           <div className="text-[12px] font-medium text-foreground">{digest.headline}</div>
-          <div className="mt-0.5 text-[10px] text-foreground-muted leading-snug">{digest.detail}</div>
+          {distilled.newSince != null && distilled.newSince > 0 && lastViewed && (
+            <div data-testid="awareness-new-since" className="mt-0.5 text-[10px] text-warning">
+              {distilled.newSince} new since you last looked ({new Date(lastViewed).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})
+            </div>
+          )}
+          {/* The digest (A3.1): what needs you, a line per pair of workstreams, not a stream. */}
+          {distilled.lines.length > 0 && (
+            <ul data-testid="awareness-digest-lines" className="mt-1.5 space-y-1">
+              {distilled.lines.map((l) => (
+                <li key={l.signalIds[0]} data-testid="awareness-digest-line" className="flex gap-1.5 leading-snug">
+                  <span className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 ${l.severity === 'high' ? 'bg-danger' : 'bg-warning'}`} aria-label={l.severity} />
+                  <span className="min-w-0">
+                    <Summary text={l.text} />
+                    {l.told && <span className="text-[10px] text-foreground-subtle"> · Agents told.</span>}
+                    <span className="block text-[10px] text-foreground-muted">Waiting on you: {l.question}</span>
+                  </span>
+                </li>
+              ))}
+              {distilled.moreLines > 0 && (
+                <li className="text-[10px] text-foreground-subtle pl-3">and {distilled.moreLines} more below</li>
+              )}
+            </ul>
+          )}
+          <div className="mt-1 text-[10px] text-foreground-muted leading-snug">{digest.detail}</div>
         </div>
       </div>
 

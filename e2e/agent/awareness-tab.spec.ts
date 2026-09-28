@@ -299,6 +299,40 @@ test.describe('Awareness tab', () => {
     await shot(page, 'awareness-told');
   });
 
+  test('the digest: a line per pair of workstreams, what is waiting on you, and what is new since you last looked (A3.1)', async ({ page }) => {
+    const earlier = Date.now() - 20 * 60_000;
+    await page.addInitScript((at) => window.localStorage.setItem('codetrellis.awareness.lastViewed', String(at)), earlier);
+    const many: AwarenessSignal[] = [
+      signal('g1', { subject: { file: 'src/auth/session.ts', symbol: 'refreshToken' }, firstSeen: Date.now() - 5 * 60_000 }),
+      signal('g2', { subject: { file: 'src/auth/session.ts', symbol: 'renew' }, firstSeen: Date.now() - 5 * 60_000 }),
+      signal('g3', { severity: 'medium', subject: { file: 'src/auth/types.ts' }, firstSeen: Date.now() - 60 * 60_000 }),
+      signal('k1', {
+        kind: 'contract', workstreams: ['/work/acme', '/work/acme-billing'],
+        subject: { file: 'src/billing/invoice.ts', symbol: 'createInvoice', by: '/work/acme-billing', change: 'signature', importers: ['src/app.ts'] },
+        told: [{ sessionId: 's1', agentType: 'claude-code', toldAt: Date.now() - 60_000 }],
+        // Newest of the two high groups, so it leads.
+        firstSeen: Date.now() - 2 * 60_000, lastSeen: Date.now() - 5_000,
+      }),
+      signal('d1', { kind: 'drift', severity: 'medium', workstreams: ['/work/acme-auth'], subject: { files: ['config/shared.ts'] }, firstSeen: Date.now() - 90 * 60_000 }),
+    ];
+    await serve(page, ROOM, many);
+    await gotoWithProject(page);
+    await tabButton(page).click();
+
+    const lines = page.getByTestId('awareness-digest-line');
+    await expect(lines).toHaveCount(3);
+    // Five signals, three lines: the two worktrees overlapping in three places are one.
+    await expect(lines.nth(0)).toContainText('billing-v2 changed createInvoice\'s signature; main imports it');
+    await expect(lines.nth(0)).toContainText('Agents told.');
+    await expect(lines.nth(0)).toContainText('Waiting on you: keep the old signature, or update the callers?');
+    await expect(lines.nth(1)).toContainText('auth-refresh and billing-v2 both change 3 things: src/auth/session.ts → refreshToken, src/auth/session.ts → renew and 1 more');
+    await expect(lines.nth(1)).not.toContainText('Agents told.');
+    await expect(lines.nth(2)).toContainText('auth-refresh changes 1 file outside its scope: config/shared.ts');
+    await expect(page.getByTestId('awareness-new-since')).toContainText('3 new since you last looked');
+    await expandPanel(page);
+    await shot(page, 'awareness-digest');
+  });
+
   test('calm states: parallel work with nothing to answer, and no parallel work at all', async ({ page }) => {
     await serve(page, ROOM, []);
     await gotoWithProject(page);
