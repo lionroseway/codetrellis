@@ -199,11 +199,15 @@ function recompute(folder: string, entry: Entry): void {
 
 /**
  * The changes in `folder`, from the watcher when it has one, otherwise
- * computed (and reused for a short while).
+ * computed (and reused for a short while, unless `fresh`).
  */
-export function getChanges(folder: string, mainRef: string | null): WorkstreamChanges {
+export function getChanges(folder: string, mainRef: string | null, opts: { fresh?: boolean } = {}): WorkstreamChanges {
   let entry = entries.get(folder);
-  if (entry && entry.mainRef === mainRef && (entry.watcher || isExternal(folder) || Date.now() - entry.computedAt < UNWATCHED_TTL_MS)) {
+  const live = entry?.watcher || isExternal(folder);
+  // `fresh` skips the reuse window for a folder nothing watches, for callers
+  // that promise a current answer (awareness). A watched folder's answer is
+  // already current.
+  if (entry && entry.mainRef === mainRef && (live || (!opts.fresh && Date.now() - entry.computedAt < UNWATCHED_TTL_MS))) {
     return entry.changes;
   }
   if (!entry) {
@@ -224,6 +228,10 @@ function watch(folder: string, entry: Entry): void {
     ignored: (p: string) => IGNORED.test(path.relative(folder, p)),
   });
   watcher.on('all', () => schedule(folder, entry));
+  // A change made while chokidar was still scanning raises no event, and
+  // the answer computed before it started would then stand until the next
+  // edit. Ask git once more when the watcher is actually listening.
+  watcher.on('ready', () => schedule(folder, entry));
   watcher.on('error', () => { /* a folder that vanished is dropped on the next sync */ });
   entry.watcher = watcher;
 }

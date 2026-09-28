@@ -127,3 +127,30 @@ export interface WorkstreamChanges {
   /** More files changed than are listed. */
   truncated: boolean;
 }
+
+// ── Awareness signals (Phase 32 A1.6) ────────────────────────────────
+
+/**
+ * The kinds built so far. `collision` and `stale-base` come from the
+ * footprints; `contract`, `drift`, `rule`, `duplicate` and `decision` follow
+ * (awareness spec §4.3).
+ */
+export type SignalKind = 'collision' | 'stale-base';
+export type SignalSeverity = 'high' | 'medium' | 'low';
+export type SignalState = 'open' | 'acknowledged' | 'intended' | 'resolved';
+
+export interface AwarenessSignal {
+  /** Stable for the same (kind, subject, workstreams): a signal that keeps firing is updated, not re-sent. */
+  id: string;
+  kind: SignalKind;
+  severity: SignalSeverity;
+  /** What it is about: a file, and for a symbol collision the symbol. Stale-base lists its files. */
+  subject: { file?: string; symbol?: string; files?: string[] };
+  /** The workstreams it names, by folder, sorted. */
+  workstreams: string[];
+  /** One line a person can read. Describes the change; never quotes an agent. */
+  summary: string;
+  firstSeen: number;
+  lastSeen: number;
+  state: SignalState;
+}

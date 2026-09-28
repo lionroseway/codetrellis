@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary } from './workstream-strip';
-import type { Workstream, WorkstreamAgent } from '../../shared/types';
+import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signalsFor, chipSeverity, signalWords } from './workstream-strip';
+import type { AwarenessSignal, Workstream, WorkstreamAgent } from '../../shared/types';
 
 const agent = (sessionId: string): WorkstreamAgent => ({ sessionId, agentType: 'claude-code', model: null, source: 'mcp', lastSeen: 0 });
 function ws(root: string, main: boolean, agents: WorkstreamAgent[], changed = 0): Workstream {
@@ -99,5 +99,25 @@ describe('symbolSummary (A1.5)', () => {
   test('nothing to say when unparsed or no symbol moved', () => {
     assert.equal(symbolSummary(undefined), null);
     assert.equal(symbolSummary([]), null);
+  });
+});
+
+describe('signals on the strip (A1.6)', () => {
+  const sig = (severity: AwarenessSignal['severity'], workstreams: string[], state: AwarenessSignal['state'] = 'open'): AwarenessSignal => ({
+    id: `${severity}-${workstreams.join()}`, kind: severity === 'low' ? 'stale-base' : 'collision', severity,
+    subject: {}, workstreams, summary: 's', firstSeen: 0, lastSeen: 0, state,
+  });
+
+  test('only live signals naming the workstream, most severe first', () => {
+    const all = [sig('low', ['/a']), sig('high', ['/a', '/b']), sig('medium', ['/b', '/c']), sig('high', ['/a', '/c'], 'resolved')];
+    assert.deepEqual(signalsFor('/a', all).map((s) => s.severity), ['high', 'low']);
+  });
+
+  test('the chip is marked for high and medium; a stale base alone does not mark it', () => {
+    assert.equal(chipSeverity([sig('low', ['/a']), sig('medium', ['/a'])]), 'medium');
+    assert.equal(chipSeverity([sig('medium', ['/a']), sig('high', ['/a'])]), 'high');
+    assert.equal(chipSeverity([sig('low', ['/a'])]), null);
+    assert.equal(signalWords([sig('low', ['/a'])]), null);
+    assert.equal(signalWords([sig('high', ['/a']), sig('low', ['/a'])]), 'overlaps other work (1 signal)');
   });
 });

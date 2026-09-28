@@ -3,7 +3,7 @@
  * rules are tested without rendering.
  */
 
-import type { ChangedFile, SymbolChange, Workstream } from '@shared/types';
+import type { AwarenessSignal, ChangedFile, SignalSeverity, SymbolChange, Workstream } from '@shared/types';
 
 /** Chips beyond this collapse into "+N", which opens the same list. */
 export const MAX_CHIPS = 5;
@@ -88,4 +88,32 @@ export function symbolSummary(symbols: SymbolChange[] | undefined, max = 3): str
   const shown = sorted.slice(0, max).map((s) => `${MARK[s.change]}${s.name}`);
   const more = sorted.length - shown.length;
   return more > 0 ? `${shown.join('  ')}  +${more} more` : shown.join('  ');
+}
+
+/**
+ * The live signals naming a workstream (A1.6), most severe first. Compared
+ * by folder exactly as both come from git's worktree list.
+ */
+export function signalsFor(root: string, signals: readonly AwarenessSignal[]): AwarenessSignal[] {
+  const rank = { high: 0, medium: 1, low: 2 } as const;
+  return signals
+    .filter((s) => s.state !== 'resolved' && s.workstreams.includes(root))
+    .sort((a, b) => rank[a.severity] - rank[b.severity]);
+}
+
+/**
+ * The severity a chip shows, or null. Low signals (a stale base) are listed
+ * in the details but do not mark the chip: worth knowing, not worth a look.
+ */
+export function chipSeverity(signals: readonly AwarenessSignal[]): Exclude<SignalSeverity, 'low'> | null {
+  if (signals.some((s) => s.severity === 'high')) return 'high';
+  if (signals.some((s) => s.severity === 'medium')) return 'medium';
+  return null;
+}
+
+/** The chip's words for its signals, for its title. */
+export function signalWords(signals: readonly AwarenessSignal[]): string | null {
+  const live = signals.filter((s) => s.severity !== 'low').length;
+  if (live === 0) return null;
+  return `overlaps other work (${live} signal${live === 1 ? '' : 's'})`;
 }

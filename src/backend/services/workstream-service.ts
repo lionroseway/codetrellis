@@ -137,9 +137,10 @@ export function setSymbolParser(parse: SymbolParser | null): void {
 /**
  * The workstreams of the repository `projectRoot` belongs to. The caller has
  * already confined `projectRoot` to an opened project. Idle ones are left
- * out unless asked for.
+ * out unless asked for. `fresh` recomputes folders nothing watches rather
+ * than reusing a recent answer.
  */
-export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boolean } = {}): Workstream[] {
+export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boolean; fresh?: boolean } = {}): Workstream[] {
   let claudeSessions: readonly ClaudeLogSession[] = [];
   try {
     claudeSessions = claudeSource();
@@ -159,7 +160,7 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
     mcpSessions: getActiveSessions(),
     claudeSessions,
     changes: (folder) => {
-      const changes = getChanges(folder, mainRef);
+      const changes = getChanges(folder, mainRef, { fresh: opts.fresh });
       return symbolParser ? withSymbolChanges(folder, changes, symbolParser) : changes;
     },
   });

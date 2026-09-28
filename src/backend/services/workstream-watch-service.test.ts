@@ -138,6 +138,15 @@ describe('watching', () => {
     assert.ok(getChanges(tree, 'main').files.some((f) => f.path === 'src/new-feature.ts'));
   });
 
+  test('a change made while the watcher is still starting is not lost', async () => {
+    const f = path.join(tree, 'src/during-startup.ts');
+    await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
+    write(tree, 'src/during-startup.ts'); // before chokidar is ready: no event for it
+    await settle();
+    assert.ok(getChanges(tree, 'main').files.some((x) => x.path === 'src/during-startup.ts'));
+    fs.rmSync(f);
+  });
+
   test('changes inside ignored folders do not wake it', async () => {
     let calls = 0;
     setWorkstreamChangesListener(() => { calls++; });

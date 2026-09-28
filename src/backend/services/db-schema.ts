@@ -175,6 +175,23 @@ export const SCHEMA_PLANS_CORE = `
     workstream_root TEXT
   );
 
+  -- Phase 32 A1.6: one thing worth knowing about parallel work. Deduplicated
+  -- by id (kind, subject, workstreams); resolved when its cause goes away.
+  CREATE TABLE IF NOT EXISTS awareness_signals (
+    id TEXT PRIMARY KEY,
+    project_root TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    workstreams TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    first_seen INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    state TEXT NOT NULL DEFAULT 'open',
+    resolved_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_awareness_project ON awareness_signals(project_root);
+
   CREATE TABLE IF NOT EXISTS deviations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     plan_uid TEXT NOT NULL REFERENCES plans(uid),
