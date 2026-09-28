@@ -139,6 +139,11 @@ export function setSymbolParser(parse: SymbolParser | null): void {
   symbolParser = parse;
 }
 
+/** The parser set at boot, for others that need a file's functions (B4.2c). */
+export function getSymbolParser(): SymbolParser | null {
+  return symbolParser;
+}
+
 /**
  * The workstreams of the repository `projectRoot` belongs to. The caller has
  * already confined `projectRoot` to an opened project. Idle ones are left

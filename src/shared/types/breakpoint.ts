@@ -34,6 +34,8 @@ export interface BreakpointHit {
   kind: BreakpointKind | null;
   /** The note the person left on the breakpoint. */
   breakpointNote: string | null;
+  /** What the breakpoint is on (for code, a path, or `path#name` for a function). */
+  breakpointTarget: string | null;
   tool: string;
   action: BreakpointAction;
   itemUid: string;

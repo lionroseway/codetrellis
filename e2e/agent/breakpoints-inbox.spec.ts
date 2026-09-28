@@ -112,7 +112,7 @@ test.describe('Breakpoints from the window', () => {
   test('a breach reads as what happened, and is answered carry on or stop', async ({ page }) => {
     const now = Date.now();
     const hits: BreakpointHit[] = [{
-      ref: 'bp-breach', breakpointId: 'bp_x', kind: 'code', breakpointNote: 'Ask me before touching shared', tool: 'edit', action: 'breach',
+      ref: 'bp-breach', breakpointId: 'bp_x', kind: 'code', breakpointNote: 'Ask me before touching shared', breakpointTarget: 'packages/shared/', tool: 'edit', action: 'breach',
       itemUid: '', itemTitle: null, path: 'packages/shared/src/validators.ts', breach: true, signalId: null, planUid: null,
       agent: 'codex', sessionId: 's', workstreamRoot: '/work/acme-exports', hitAt: now - 4 * 60_000, decision: null, note: null,
       answeredAt: null, answeredBy: null, answeredByType: null,

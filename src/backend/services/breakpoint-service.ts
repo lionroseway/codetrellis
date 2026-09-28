@@ -296,17 +296,17 @@ interface HitRow {
   ref: string; breakpoint_id: string; tool: string; action: string; item_uid: string; path: string | null; breach: number | null; signal_id: string | null; plan_uid: string | null;
   agent: string | null; session_id: string | null; workstream_root: string | null; hit_at: number;
   decision: string | null; note: string | null; answered_at: number | null; answered_by: string | null;
-  answered_by_type: string | null; kind: string | null; bp_note: string | null; title: string | null;
+  answered_by_type: string | null; kind: string | null; bp_note: string | null; bp_target: string | null; title: string | null;
 }
 
-export const HIT_SELECT = `SELECT h.*, b.kind, b.note AS bp_note, i.title
+export const HIT_SELECT = `SELECT h.*, b.kind, b.note AS bp_note, b.target AS bp_target, i.title
   FROM breakpoint_hits h LEFT JOIN breakpoints b ON b.id = h.breakpoint_id LEFT JOIN plan_items i ON i.uid = h.item_uid`;
 
 export function toHitRow(r: unknown): BreakpointHit { return toHit(r as HitRow); }
 
 function toHit(r: HitRow): BreakpointHit {
   return {
-    ref: r.ref, breakpointId: r.breakpoint_id, kind: (r.kind as BreakpointKind) ?? null, breakpointNote: r.bp_note ?? null,
+    ref: r.ref, breakpointId: r.breakpoint_id, kind: (r.kind as BreakpointKind) ?? null, breakpointNote: r.bp_note ?? null, breakpointTarget: r.bp_target ?? null,
     tool: r.tool, action: r.action as BreakpointAction, itemUid: r.item_uid, itemTitle: r.title ?? null,
     path: r.path ?? null, breach: Number(r.breach) === 1, signalId: r.signal_id ?? null, planUid: r.plan_uid,
     agent: r.agent, sessionId: r.session_id, workstreamRoot: r.workstream_root, hitAt: Number(r.hit_at),
@@ -492,14 +492,17 @@ export function decisionView(hit: BreakpointHit): Record<string, unknown> {
       message: 'Still waiting for a person. Call await_decision again with the same ref. Do not make the paused call again until they answer.',
     };
   }
+  // A function breakpoint names the function in its file (B4.2c).
+  const fnAt = hit.breakpointTarget ? hit.breakpointTarget.indexOf('#') : -1;
+  const code = fnAt > 0 && hit.breakpointTarget ? `${hit.breakpointTarget.slice(fnAt + 1)} in ${hit.path}` : hit.path;
   const next = hit.breach
     ? (hit.decision === 'stop'
-      ? `Stop changing ${hit.path}. Tell the person what you changed there, so they can review or revert it.`
+      ? `Stop changing ${code}. Tell the person what you changed there, so they can review or revert it.`
       : 'Carry on; the person has seen the change.')
     : hit.action === 'edit_code'
       ? (hit.decision === 'stop'
-        ? `Do not change ${hit.path}. Tell the person what you will do instead.`
-        : `Make the edit again; ${hit.path} is open to you now.`)
+        ? `Do not change ${code}. Tell the person what you will do instead.`
+        : `Make the edit again; ${code} is open to you now.`)
       : hit.decision === 'stop'
         ? 'Do not make the paused call. Stop that work, and tell the person what you will do instead.'
         : 'Make the paused call again; it will go through once.';

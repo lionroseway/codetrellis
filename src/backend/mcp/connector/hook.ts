@@ -50,6 +50,8 @@ export interface HookCall {
   cwd: string;
   /** Absolute path of the file about to be written. */
   filePath: string;
+  /** The text each edit replaces (Edit, MultiEdit); absent for a whole-file write. B4.2c. */
+  oldTexts?: string[];
 }
 
 /** The part of Claude Code's hook input this reads, or null when it is not an edit of a file. */
@@ -60,10 +62,15 @@ export function parseHookInput(raw: string): HookCall | null {
   const { cwd, tool_input: toolInput } = input as { cwd?: unknown; tool_input?: unknown };
   if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) return null;
   if (!toolInput || typeof toolInput !== 'object') return null;
-  const t = toolInput as { file_path?: unknown; notebook_path?: unknown };
+  const t = toolInput as { file_path?: unknown; notebook_path?: unknown; old_string?: unknown; edits?: unknown };
   const filePath = typeof t.file_path === 'string' ? t.file_path : typeof t.notebook_path === 'string' ? t.notebook_path : null;
   if (!filePath) return null;
-  return { cwd, filePath: path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath) };
+  // What each edit replaces, so a breakpoint on one function holds only an edit that touches it.
+  const olds = typeof t.old_string === 'string' ? [t.old_string]
+    : Array.isArray(t.edits) ? t.edits.map((e) => (e && typeof e === 'object' ? (e as { old_string?: unknown }).old_string : null)) : null;
+  const oldTexts = olds && olds.length && olds.length <= 20 && olds.every((o): o is string => typeof o === 'string' && o.length > 0 && o.length <= 20_000)
+    ? olds : undefined;
+  return { cwd, filePath: path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath), ...(oldTexts ? { oldTexts } : {}) };
 }
 
 /**
@@ -195,7 +202,8 @@ export async function runPreToolUseHook(opts: RunHookOptions): Promise<string | 
       return !result || result.isError ? null : result.content?.[0]?.text ?? null;
     };
     // A breakpoint first (B4.2): a held edit goes no further.
-    const held = breakpointAnswer(first(await request(2, 'tools/call', { name: 'check_breakpoint', arguments: { path: repo.rel } })));
+    const bpArgs = call.oldTexts ? { path: repo.rel, old_text: call.oldTexts } : { path: repo.rel };
+    const held = breakpointAnswer(first(await request(2, 'tools/call', { name: 'check_breakpoint', arguments: bpArgs })));
     if (held?.hold) return hookDeny(held.hold);
     const text = first(await request(3, 'tools/call', { name: 'check_footprint', arguments: { paths: [repo.rel] } }));
     const notice = text ? hookNotice(text, repo) : null;

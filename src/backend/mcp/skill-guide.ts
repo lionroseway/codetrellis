@@ -225,9 +225,10 @@ waiting — an answer can take hours, and the wait survives restarts.
 - **steer**: the same, and follow the person's note.
 - **stop**: do not make the call; tell the person what you will do instead.
 
-A breakpoint can also be on code: a file or folder. Claude Code's hook
-asks \`check_breakpoint\` before each edit and holds it; any agent can ask
-it too before editing. If you change such a file with your own editor, your
+A breakpoint can also be on code: a file, a folder, or one function.
+Claude Code's hook asks \`check_breakpoint\` before each edit and holds it;
+any agent can ask it too before editing. Pass \`old_text\` (what the edit
+replaces) and a breakpoint on one function holds only edits that touch it. If you change such a file with your own editor, your
 next tool call says so: that is a **breach**. Stop changing it and wait with
 \`await_decision\` the same way.
 

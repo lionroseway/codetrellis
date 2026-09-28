@@ -20,8 +20,10 @@ const DOING: Record<BreakpointHit['action'], string> = {
   claim: 'claim', done: 'mark done', edit: 'change the description of', delete: 'delete', edit_code: 'change', breach: 'change',
 };
 
-/** What the held call is about, in words. */
-export function subjectOf(hit: Pick<BreakpointHit, 'path' | 'itemTitle' | 'itemUid'>): string {
+/** What the held call is about, in words: a function in its file (B4.2c), a file, or the item. */
+export function subjectOf(hit: Pick<BreakpointHit, 'path' | 'itemTitle' | 'itemUid'> & { breakpointTarget?: string | null }): string {
+  const at = hit.breakpointTarget ? hit.breakpointTarget.indexOf('#') : -1;
+  if (hit.path && at > 0) return `${hit.breakpointTarget!.slice(at + 1)} in ${hit.path}`;
   return hit.path ?? hit.itemTitle ?? hit.itemUid;
 }
 
@@ -60,7 +62,7 @@ export function breakpointLabel(b: Breakpoint): { what: string; when: string } {
     case 'spec': return { what: `Description of ${title}`, when: 'before an agent changes it, or anything under it' };
     case 'code': {
       const [file, fn] = b.target.split('#');
-      if (fn) return { what: `${fn} in ${file}`, when: 'before its file changes' };
+      if (fn) return { what: `${fn} in ${file}`, when: 'before an edit touches it' };
       return { what: file.endsWith('/') ? `Everything in ${file}` : file, when: 'before it changes' };
     }
     case 'signal': return { what: `Any serious ${b.target} signal`, when: 'while one names a workstream' };

@@ -19,7 +19,7 @@ const input = (over: Record<string, unknown> = {}) => JSON.stringify({
 
 describe('reading the edit', () => {
   test('the file an Edit, Write or NotebookEdit is about to write, and where Claude Code runs', () => {
-    assert.deepEqual(parseHookInput(input()), { cwd: '/w/app-auth', filePath: '/w/app-auth/src/session.ts' });
+    assert.deepEqual(parseHookInput(input()), { cwd: '/w/app-auth', filePath: '/w/app-auth/src/session.ts', oldTexts: ['a'] });
     assert.deepEqual(parseHookInput(input({ tool_name: 'NotebookEdit', tool_input: { notebook_path: '/w/app-auth/n.ipynb' } })), { cwd: '/w/app-auth', filePath: '/w/app-auth/n.ipynb' });
   });
 
@@ -169,5 +169,17 @@ describe('running it', () => {
       connect: fakeApp(footprint, [], () => null),
     });
     assert.ok(!('permissionDecision' in JSON.parse(older!).hookSpecificOutput));
+  });
+});
+
+describe('the text an edit replaces (B4.2c)', () => {
+  test('Edit and MultiEdit send what they replace; a whole-file Write sends nothing, so a function breakpoint holds it', () => {
+    const cwd = '/w/app';
+    assert.deepEqual(parseHookInput(input({ cwd, tool_input: { file_path: '/w/app/a.ts', old_string: 'x = 1', new_string: 'x = 2' } }))?.oldTexts, ['x = 1']);
+    assert.deepEqual(parseHookInput(input({ cwd, tool_input: { file_path: '/w/app/a.ts', edits: [{ old_string: 'a', new_string: 'b' }, { old_string: 'c', new_string: 'd' }] } }))?.oldTexts, ['a', 'c']);
+    assert.equal(parseHookInput(input({ cwd, tool_input: { file_path: '/w/app/a.ts', content: 'whole file' } }))?.oldTexts, undefined);
+    // An empty or oversized piece means the whole file.
+    assert.equal(parseHookInput(input({ cwd, tool_input: { file_path: '/w/app/a.ts', old_string: '' } }))?.oldTexts, undefined);
+    assert.equal(parseHookInput(input({ cwd, tool_input: { file_path: '/w/app/a.ts', old_string: 'x'.repeat(20_001) } }))?.oldTexts, undefined);
   });
 });

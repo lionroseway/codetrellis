@@ -177,9 +177,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'said you may. The Claude Code hook calls this before every edit; any agent may call it.',
       inputSchema: {
         path: z.string().min(1).max(300).describe('The file you are about to change, relative to the repository root.'),
+        old_text: z.array(z.string().max(20_000)).max(20).optional().describe(
+          'The text each edit will replace, when you know it. A breakpoint on one function then holds only an edit that touches that function; without it, any edit of the file is held.'),
       },
     },
-    async ({ path: file }) => {
+    async ({ path: file, old_text }) => {
       const root = deps.getActiveProjectPath();
       if (!root) return noProject;
       const session = getActiveSessions().find((s) => s.sessionId === deps.sessionId);
@@ -190,7 +192,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       }
       const result = enforceEdit(root, file, {
         agent: session?.agentType ?? 'mcp-agent', sessionId: deps.sessionId, workstreamRoot: session?.workstreamRoot ?? null,
-      });
+      }, Date.now(), old_text);
       return { content: [{ type: 'text' as const, text: JSON.stringify(editView(result), null, 2) }] };
     },
   );
