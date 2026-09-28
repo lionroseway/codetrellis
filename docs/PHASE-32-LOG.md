@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.3: workstreams and the TopBar strip |
-| **Status** | A1.2 merged (#147). A1.3 done on its branch (unit 16, harness 6, browser 4, screenshots); PR open |
-| **Next action** | Merge A1.3's PR when green; then A1.4 (folder watching: debounced diff and status per workstream) |
+| **Stage / step** | Track A — A1.4: what each workstream has changed |
+| **Status** | A1.3 merged (#148). A1.4 done on its branch (unit 11 + 4, harness +4, browser +3, screenshots); PR open |
+| **Next action** | Merge A1.4's PR when green; then A1.5 (footprint symbols: parse changed files on disk vs the merge base) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-3-workstreams` |
+| **Branch** | `feat/phase-32-a1-4-workstream-changes` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -61,7 +61,7 @@
 - [x] A0 Parallel-work bugs 1–3 (#145)
 - [x] A1.1 Session binding (#146)
 - [x] A1.2 Multi-session Claude watcher (#147)
-- [ ] A1.3 Workstream discovery and strip
+- [x] A1.3 Workstream discovery and strip (#148)
 - [ ] A1.4 Folder watching
 - [ ] A1.5 Footprint symbols
 - [ ] A1.6 Signals engine (collision, stale-base) and tools
