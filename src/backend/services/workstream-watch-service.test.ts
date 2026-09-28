@@ -17,6 +17,7 @@ import {
   parseNameStatusZ,
   combineChanges,
   computeChanges,
+  countStatusEntries,
   getChanges,
   syncWorkstreamWatchers,
   setWorkstreamChangesListener,
@@ -107,6 +108,24 @@ describe('computeChanges', () => {
     assert.ok(!c.files.some((f) => f.path === 'src/main-only.ts'), 'measured from the merge base, not from main\'s tip');
     // And on the main checkout, a commit is not a change: only uncommitted work is.
     assert.deepEqual(computeChanges(main, 'main').files, []);
+  });
+
+  test('how far from main: commits ahead and behind, and files not committed (C5.3b)', () => {
+    // The worktree has one commit of its own; main has one it lacks; three files wait uncommitted.
+    const c = computeChanges(tree, 'main');
+    assert.equal(c.ahead, 1);
+    assert.equal(c.behind, 1);
+    assert.equal(c.uncommitted, 3);
+    const m = computeChanges(main, 'main');
+    assert.deepEqual([m.ahead, m.behind, m.uncommitted], [0, 0, 0]);
+    // Unknown is left out, never zero.
+    const none = computeChanges(path.join(tmp, 'nope'), 'main');
+    assert.deepEqual([none.ahead, none.behind, none.uncommitted], [undefined, undefined, undefined]);
+  });
+
+  test('a rename is one uncommitted file, not two', () => {
+    assert.equal(countStatusEntries('R  new.ts\0old.ts\0 M a.ts\0?? b.ts\0'), 3);
+    assert.equal(countStatusEntries(''), 0);
   });
 
   test('an unsafe ref is never passed to git; it falls back to HEAD', () => {

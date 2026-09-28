@@ -30,6 +30,7 @@ import { usePlanStore } from '../../../stores/plan-store';
 import { useProjectStore } from '../../../stores/project-store';
 import { useTerminalStore, type AgentPreset } from '../../../stores/terminal-store';
 import { suggestSectionBranch, worktreeDirFor } from '@shared/lib/branch-name';
+import { worktreeReadiness } from '../../../lib/section-worktrees';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
 
@@ -825,6 +826,7 @@ function WorkedIn({ item }: { item: PlanItem }) {
           : 'Any agent, in any worktree, can pick these tasks up. Choose a worktree to keep this section to one.'}
       </div>
       {error && <div role="alert" className="mt-1 text-[10px] text-danger">{error}</div>}
+      {view?.section && view.root && <SectionReadiness root={view.root} />}
       {view && !own && <NewWorktree item={item} onMade={load} />}
       {view?.root && view.section && <StartAgentHere root={view.root} branch={view.section.branch} />}
     </div>
@@ -951,6 +953,24 @@ function StartAgentHere({ root, branch }: { root: string; branch: string }) {
           {copied ? 'Copied' : 'Copy the folder'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Is the section's worktree ready to merge (Phase 32 C5.3b): up to date with
+ * main, everything committed, no serious signal open, something to merge.
+ */
+function SectionReadiness({ root }: { root: string }) {
+  const workstreams = useAwarenessStore((s) => s.workstreams);
+  const signals = useAwarenessStore((s) => s.signals);
+  const r = worktreeReadiness(workstreams.find((w) => w.root === root), signals);
+  return (
+    <div data-testid="section-readiness" data-ready={r.ready ? 'true' : 'false'} className="mt-1.5 text-[10px]">
+      <div className={r.ready ? 'text-success' : 'text-warning/90'}>{r.ready ? '✓ Ready to merge' : 'Not ready to merge yet'}</div>
+      <ul className="mt-0.5 space-y-0.5 text-foreground-subtle">
+        {r.lines.map((l) => <li key={l}>{l}</li>)}
+      </ul>
     </div>
   );
 }

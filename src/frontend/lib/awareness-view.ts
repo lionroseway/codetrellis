@@ -95,11 +95,15 @@ export function sideLabel(root: string, workstreams: readonly Workstream[]): str
  * contract has a direction: the side that changed it first, then the side
  * whose work imports it.
  */
-export function sidesOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>, workstreams: readonly Workstream[]): string[] {
-  const roots = s.kind === 'contract' && s.subject.by
+/** The workstreams a signal's sides stand for, in the order `sidesOf` names them (main, for a stale base, not included). */
+export function sideRootsOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>): string[] {
+  return s.kind === 'contract' && s.subject.by
     ? [s.subject.by, ...s.workstreams.filter((r) => r !== s.subject.by)]
-    : s.workstreams;
-  const names = roots.map((r) => sideLabel(r, workstreams));
+    : [...s.workstreams];
+}
+
+export function sidesOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>, workstreams: readonly Workstream[]): string[] {
+  const names = sideRootsOf(s).map((r) => sideLabel(r, workstreams));
   if (s.kind !== 'stale-base') return names;
   const main = workstreams.find((w) => w.main);
   return [...names, main ? chipLabel(main) : 'main'];

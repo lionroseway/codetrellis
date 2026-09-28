@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Radar, ArrowLeftRight, ArrowRight } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useAwarenessStore } from '../../stores/awareness-store';
+import { usePlanItemsStore } from '../../stores/plan-items-store';
+import { usePlanStore } from '../../stores/plan-store';
+import { sectionsByBranch } from '../../lib/section-worktrees';
 import { useToastStore } from '../../stores/toast-store';
 import {
-  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, sideLabel, stateWords, actionsFor, ago, toldWords, reopenedWords,
+  groupSignals, needsYouCount, digestLine, kindWords, sidesOf, sideRootsOf, sideLabel, stateWords, actionsFor, ago, toldWords, reopenedWords,
 } from '../../lib/awareness-view';
 import { buildDigest } from '@shared/lib/awareness-digest';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
@@ -266,6 +269,16 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
   const answered = stateWords(s, now);
   const quiet = s.state !== 'open';
   const sides = sidesOf(s, workstreams);
+  // C5.3b — the open plan's sections on each side, so an overlap between two
+  // sections of one plan says which.
+  const itemsByUid = usePlanItemsStore((st) => st.itemsByUid);
+  const planTitle = usePlanStore((st) => st.plans.find((p) => p.uid === st.activePlanUid)?.title ?? null);
+  const sectionMap = sectionsByBranch(itemsByUid);
+  const sideSections = sideRootsOf(s).map((r) => {
+    const branch = workstreams.find((w) => w.root === r)?.branch;
+    return branch ? sectionMap.get(branch) ?? [] : [];
+  });
+  const namedSections = sideSections.filter((x) => x.length > 0);
 
   const act = async (state: SettableSignalState) => {
     setBusy(true);
@@ -300,6 +313,7 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
               ? <ArrowRight size={9} className="text-foreground-subtle" aria-label="imported by" />
               : <ArrowLeftRight size={9} className="text-foreground-subtle" />)}
             <span className="text-[10px] font-mono px-1.5 py-px rounded border border-border-subtle text-foreground">{name}</span>
+            {sideSections[i]?.length ? <span className="text-[10px] text-sky-300/90">({sideSections[i].join(', ')})</span> : null}
           </span>
         ))}
         {s.subject.file && (
@@ -308,6 +322,12 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
           </span>
         )}
       </div>
+
+      {namedSections.length >= 2 && (
+        <div data-testid="awareness-sections" className="mt-1 text-[10px] text-foreground-muted">
+          Two sections of {planTitle ? <>“{planTitle}”</> : 'this plan'}: {namedSections.map((x) => x.join(', ')).join(' and ')}.
+        </div>
+      )}
 
       {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
       {s.kind === 'drift' && <DriftDetail subject={s.subject} />}

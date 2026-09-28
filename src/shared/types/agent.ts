@@ -192,6 +192,14 @@ export interface WorkstreamChanges {
   files: ChangedFile[];
   /** More files changed than are listed. */
   truncated: boolean;
+  /**
+   * Phase 32 C5.3b — how far it is from main: commits it has that main does
+   * not (`ahead`), commits main has that it does not (`behind`), and files
+   * not yet committed. Absent when git could not say, which is not zero.
+   */
+  ahead?: number;
+  behind?: number;
+  uncommitted?: number;
 }
 
 // ── Awareness signals (Phase 32 A1.6) ────────────────────────────────
