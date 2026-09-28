@@ -143,6 +143,15 @@ const electronAPI = {
     preview: (): Promise<unknown> => ipcRenderer.invoke('claude-desktop:preview'),
     apply: (shownHash: string): Promise<unknown> => ipcRenderer.invoke('claude-desktop:apply', shownHash),
   },
+  /**
+   * Phase 32 A3.4 — the `codetrellis-parallel` skill and the optional hook,
+   * for Claude Code. `apply` takes, for each chosen file, the hash of the
+   * file shown, and writes only those.
+   */
+  claudeCode: {
+    preview: (): Promise<unknown> => ipcRenderer.invoke('claude-code:preview'),
+    apply: (choice: { skill?: string; hook?: string }): Promise<unknown> => ipcRenderer.invoke('claude-code:apply', choice),
+  },
   htmlReport: {
     show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean): Promise<{ ok: boolean; reason?: string }> =>
       ipcRenderer.invoke('artefacts:html:show', uid, bounds, scripts),

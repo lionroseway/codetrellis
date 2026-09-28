@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A3.3: the `parallel` guide flavour |
-| **Status** | A3.3 done on its branch: the `parallel` guide, as `get_app_guide(flavor='parallel')` and `codetrellis://skill/parallel`; `multi-agent` points to it and launches into worktrees; unit and harness tests pass; PR open |
-| **Next action** | Merge A3.3 when green; then A3.4 (the `codetrellis-parallel` skill and an optional hook, offered from Settings) |
+| **Stage / step** | Track A — A3.4: the skill and the optional hook, offered from Settings |
+| **Status** | A3.4 done on its branch: `codetrellis-parallel` skill and the PreToolUse hook (the connector's `--hook pre-tool-use`), offered from Settings with preview, choice and hash check; unit, harness and browser tests pass; PR open |
+| **Next action** | Merge A3.4 when green; then A3.5 (`docs/claude/awareness.md` and the M3 "done when") |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a3-3-parallel-guide` |
+| **Branch** | `feat/phase-32-a3-4-parallel-skill` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -80,7 +80,7 @@
   - [x] A3.1 The digest (#164)
   - [x] A3.2 Intended and cooldown (#165)
   - [ ] A3.3 `parallel` guide flavour (PR open)
-  - [ ] A3.4 User skill and optional hook, offered from Settings
+  - [ ] A3.4 User skill and optional hook, offered from Settings (PR open)
   - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when"
 - [ ] A4 Mobile
 - [ ] A5 Review
@@ -185,10 +185,86 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | The digest lists only open high and medium signals, one line per kind and pair of workstreams (and changing side, for a contract), at most five lines then "and N more"; answered signals are "seen" and low ones are counted. Each line ends with the choice waiting on the person, fixed per kind. "New since you last looked" is kept per browser (A3.1) | A person reads groups, not streams: two worktrees overlapping in four places is one thing to decide. The question per kind is CodeTrellis's wording, never an agent's. Last-looked is a convenience, so browser storage is enough, and a blocked store just means no "new" count |
 | 2026-09-28 | A signal's shape is what it is about, not every edit: for a collision, each side's names in the file (the one symbol, for a symbol collision) with any new signature; for contract, drift and stale-base, their subject. An acknowledged or intended signal reopens when the shape changes, says from what, and agents are told again; dismissed stays dismissed while it lasts (A3.2) | Spec §4.4: cooldown "until its subject changes again", intended "until either side's footprint changes shape". Body edits are the ordinary case and must stay quiet. A declared intent landing as an edit keeps the shape, so A2.4's promise holds. Dismissed means "not worth attention", which a new symbol doesn't change |
 | 2026-09-28 | The collision overlay (spec M2) lands with B3's overlay list, not in A2 | Plan intent is hard-wired through `graph-builder`; the spec itself says to make overlays a list rather than hard-wire a second one, and that list is B3 |
+| 2026-09-28 | The PreToolUse hook only informs: `additionalContext`, never a `permissionDecision`; it fails open and silent (no app, unknown folder, no overlap, over 5 s); it asks over MCP as its own short session named `claude-code-hook` (A3.4) | A hook that blocks or approves would change Claude Code's permission model behind the person's back, and one that gets in the way gets uninstalled. Going through MCP keeps one surface with one capability matrix, and the check is visible in the Timeline; the cost is a connect per edit, which is cheap on loopback |
+| 2026-09-28 | Settings offers the skill ticked and the hook unticked, both written to Claude Code's user folder (`~/.claude` or `$CLAUDE_CONFIG_DIR`), from the app window only (A3.4) | The skill only loads when relevant; the hook runs before every edit, so it is opted into. User scope because parallel work is per developer, not per repository, and the hook is silent outside known workstreams. Window-only because an agent must not install a hook into its own client |
 
 ---
 
 ## Entries
+
+### 2026-09-28: A3.4 — the skill and the optional hook
+- **The hook** is the connector in a second mode,
+  `<connector> --hook pre-tool-use` (`connector/hook.ts`).
+  - Claude Code runs it before `Edit|Write|MultiEdit|NotebookEdit`, with
+    the call on stdin. It finds the file's repository or worktree (a `.git`
+    file counts), connects as the connector does (token and endpoint read
+    fresh, bound to Claude Code's cwd), calls `check_footprint` for that
+    one file, and disconnects.
+  - When another workstream has changed the file, the agent is told who
+    (branch, and the functions), how many files import it, to call
+    `get_awareness`, to ask rather than edit the other side's files, and
+    that it is information, not an instruction.
+  - It answers with `hookSpecificOutput.additionalContext` only, never a
+    `permissionDecision`, so the edit is neither blocked nor approved.
+  - It fails open and silent: no app, a folder CodeTrellis does not know,
+    nobody else on the file, or over 5 s. It always exits 0.
+- **The skill**, `skills/codetrellis-parallel/SKILL.md`, is the A3.3 guide
+  with frontmatter and a note on the `mcp__codetrellis__` tool names. It is
+  generated from the guide, not a copy of it.
+- **The installer** is `claude-code-parallel.ts`, following Add to Claude
+  Desktop point for point.
+  - IPC only, from the app window: `claude-code:preview` /
+    `claude-code:apply`. Content is decided in main: the skill from the
+    guide, the hook from the resolved connector.
+  - The preview shows both diffs. The apply takes, per chosen file, the
+    hash it was shown; if any chosen file changed, nothing is written.
+  - Backups are kept beside the files, writes are atomic, links are
+    refused, and invalid settings are left alone with a reason.
+  - An older hook of ours is replaced in place, never duplicated. The
+    portable build's caveat travels with the hook.
+- **Settings → MCP Server → Connect an agent:** "Add parallel work to
+  Claude Code…". The skill is ticked; the hook ("Check before every edit",
+  optional) is not.
+- **Found by the harness:** `check_footprint`'s `symbols` are SymbolChange
+  objects, not names. The first draft printed `[object Object]`.
+- **Tests.**
+  - Unit: `claude-code-parallel.test.ts` (14):
+    - the folder, and the skill as the guide;
+    - hook quoting;
+    - the merge keeps every other setting and hook, is idempotent,
+      replaces ours in place, and refuses what it does not understand;
+    - the skill alone leaves `settings.json` untouched;
+    - a changed file writes nothing at all;
+    - no connector, the portable caveat, and a planted link.
+  - Unit: `hook.test.ts` (10):
+    - reading the input and the repository;
+    - the notice, and silence for other workstreams;
+    - no decision in the output;
+    - the protocol sent;
+    - silence when down, refused or slow;
+    - a loose file never connects.
+  - Harness: `parallel-hook.test.ts` (4), the real connector as the
+    installed hook runs it, against two real worktrees:
+    - told about `billing-v2`'s `validateCreateUser`;
+    - silent on an untouched file;
+    - silent in an unknown repository;
+    - quick and silent with no app.
+  - Browser: `mcp-server.spec.ts` +2 (not offered outside the desktop app;
+    the ticked-only write), screenshot `claude-code-parallel`.
+- **Not verified here:**
+  - Claude Code on Windows running the hook's POSIX command line; the
+    hook docs say hooks run in a shell, and Git Bash is assumed.
+  - A real Claude Code session loading the skill and firing the hook. The
+    harness runs the hook exactly as Claude Code would, but not from
+    Claude Code.
+- **UX journey:**
+  - A developer about to run two agents opens Settings → MCP Server and
+    clicks "Add parallel work to Claude Code…".
+  - They see where each file goes and the diff, keep the skill ticked,
+    tick "Check before every edit", and click Add.
+  - Their next Claude Code session loads the skill when parallel work
+    starts. Before it edits `validators.ts`, which the billing worktree
+    has changed, the agent is told so and calls `get_awareness`.
 
 ### 2026-09-28: A3.3 — the parallel guide
 - **The guide.** `parallel` is a new flavour in `skill-guide.ts` (awareness

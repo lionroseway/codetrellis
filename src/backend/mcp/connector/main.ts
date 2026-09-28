@@ -16,6 +16,7 @@
 import { ConnectorCore, type JsonRpcMessage } from './core';
 import { connectSseUpstream } from './sse-upstream';
 import { defaultDataDir, readConnectTarget } from './files';
+import { HOOK_FLAG, HOOK_PRE_TOOL_USE, runPreToolUseHook } from './hook';
 
 declare const __CONNECTOR_VERSION__: string | undefined;
 const VERSION = typeof __CONNECTOR_VERSION__ === 'string' ? __CONNECTOR_VERSION__ : 'dev';
@@ -28,65 +29,86 @@ function argValue(flag: string): string | null {
 const dataDir = argValue('--data-dir') ?? defaultDataDir();
 const log = (line: string) => process.stderr.write(`[codetrellis-mcp] ${line}\n`);
 
-const core = new ConnectorCore({
-  version: VERSION,
-  log,
-  send: (msg: JsonRpcMessage) => {
-    process.stdout.write(`${JSON.stringify(msg)}\n`);
-  },
-  connect: async () => {
+/** One connection to the app, the token and endpoint read fresh, bound to `cwd`. */
+const connectFrom = (cwd: string) => {
+  const target = readConnectTarget(dataDir);
+  if (!target.ok) throw new Error(target.reason);
+  return connectSseUpstream({
+    url: target.url,
+    token: target.token,
+    binding: { cwd, hostTerminal: process.env.CODETRELLIS_HOST_TERMINAL ?? null },
+  });
+};
+
+// As a Claude Code PreToolUse hook (A3.4): read the call, answer once, exit.
+// Always exit 0: a hook that fails must never stand in the way of an edit.
+if (argValue(HOOK_FLAG) === HOOK_PRE_TOOL_USE) {
+  let input = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk: string) => { input += chunk; });
+  process.stdin.on('end', () => {
+    void runPreToolUseHook({ stdin: input, connect: async (cwd) => connectFrom(cwd), version: VERSION })
+      .catch(() => null)
+      // Exit once it is written: on macOS a pipe write is asynchronous.
+      .then((out) => { if (out) process.stdout.write(`${out}\n`, () => process.exit(0)); else process.exit(0); });
+  });
+} else {
+  runConnector();
+}
+
+function runConnector(): void {
+  const core = new ConnectorCore({
+    version: VERSION,
+    log,
+    send: (msg: JsonRpcMessage) => {
+      process.stdout.write(`${JSON.stringify(msg)}\n`);
+    },
     // Read both files on EVERY connect. This is the entire point: the token
     // rotates on each launch, and the port moves when a second instance runs.
-    const target = readConnectTarget(dataDir);
-    if (!target.ok) throw new Error(target.reason);
     // The agent launched us in its working directory; a CodeTrellis terminal
     // also names itself. The server binds the session to a workstream from
     // these, re-derived on every connect (Phase 32 A1.1).
-    return connectSseUpstream({
-      url: target.url,
-      token: target.token,
-      binding: { cwd: process.cwd(), hostTerminal: process.env.CODETRELLIS_HOST_TERMINAL ?? null },
-    });
-  },
-});
+    connect: async () => connectFrom(process.cwd()),
+  });
 
-// Newline-delimited JSON-RPC on stdin, per the MCP stdio transport.
-let buffer = '';
-let queue: Promise<void> = Promise.resolve();
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk: string) => {
-  buffer += chunk;
-  let newline: number;
-  while ((newline = buffer.indexOf('\n')) >= 0) {
-    const line = buffer.slice(0, newline).trim();
-    buffer = buffer.slice(newline + 1);
-    if (!line) continue;
-    let msg: JsonRpcMessage;
-    try {
-      msg = JSON.parse(line) as JsonRpcMessage;
-    } catch {
-      log('Ignored a line that was not JSON.');
-      continue;
+  // Newline-delimited JSON-RPC on stdin, per the MCP stdio transport.
+  let buffer = '';
+  let queue: Promise<void> = Promise.resolve();
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk: string) => {
+    buffer += chunk;
+    let newline: number;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line) continue;
+      let msg: JsonRpcMessage;
+      try {
+        msg = JSON.parse(line) as JsonRpcMessage;
+      } catch {
+        log('Ignored a line that was not JSON.');
+        continue;
+      }
+      // In order: an `initialize` that is still deciding must not be
+      // overtaken by the `initialized` notification that follows it.
+      queue = queue.then(() => core.handleClientMessage(msg)).catch((err) => {
+        log(`Error handling a message: ${err instanceof Error ? err.message : String(err)}`);
+      });
     }
-    // In order: an `initialize` that is still deciding must not be
-    // overtaken by the `initialized` notification that follows it.
-    queue = queue.then(() => core.handleClientMessage(msg)).catch((err) => {
-      log(`Error handling a message: ${err instanceof Error ? err.message : String(err)}`);
-    });
-  }
-});
+  });
 
-// The client closing stdin is the only way this process is told to stop.
-const shutdown = () => {
-  core.stop();
-  process.exit(0);
-};
-process.stdin.on('end', shutdown);
-process.stdin.on('close', shutdown);
-// A client that has gone leaves a closed pipe; writing to it raises EPIPE.
-process.stdout.on('error', shutdown);
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+  // The client closing stdin is the only way this process is told to stop.
+  const shutdown = () => {
+    core.stop();
+    process.exit(0);
+  };
+  process.stdin.on('end', shutdown);
+  process.stdin.on('close', shutdown);
+  // A client that has gone leaves a closed pipe; writing to it raises EPIPE.
+  process.stdout.on('error', shutdown);
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
-log(`Starting (data dir ${dataDir}).`);
-core.start();
+  log(`Starting (data dir ${dataDir}).`);
+  core.start();
+}

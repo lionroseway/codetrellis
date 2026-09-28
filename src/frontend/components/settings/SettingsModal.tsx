@@ -28,6 +28,7 @@ import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
+import { AddToClaudeCode } from './AddToClaudeCode';
 
 // --- Per-device access (Phase 19, finding 15) -------------------------------
 
@@ -641,6 +642,7 @@ function McpSection({
           onCopy={copy}
         />
         {setup?.connector && <AddToClaudeDesktop />}
+        {setup && <AddToClaudeCode />}
         {setup?.connector && (
           <details className="mt-2 group">
             <summary className="cursor-pointer text-[10.5px] text-foreground-subtle hover:text-foreground-muted">
