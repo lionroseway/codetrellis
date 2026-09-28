@@ -51,11 +51,13 @@ function rowToSignal(r: unknown[]): AwarenessSignal {
     state: r[8] as SignalState,
     ...(r[9] ? { stateBy: JSON.parse(r[9] as string) as SignalStateBy } : {}),
     ...(r[10] != null ? { stateAt: r[10] as number } : {}),
+    ...(r[11] ? { shape: r[11] as string } : {}),
+    ...(r[12] ? { reopened: { from: r[12] as 'acknowledged' | 'intended', at: r[13] as number } } : {}),
   };
 }
 
 const COLUMNS = 'id, kind, severity, subject, workstreams, summary, first_seen, last_seen, state';
-const READ_COLUMNS = `${COLUMNS}, state_by, state_at`;
+const READ_COLUMNS = `${COLUMNS}, state_by, state_at, shape, reopened_from, reopened_at`;
 
 /** Every signal known for a project, resolved ones included. */
 export function loadSignals(projectRoot: string): AwarenessSignal[] {
@@ -176,25 +178,32 @@ export function declaredFiles(intents: NonNullable<Workstream['intents']>): Arra
  */
 export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
   const drafts = computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot));
-  const { upserts, resolved } = reconcileSignals(loadSignals(projectRoot), drafts, now);
+  const { upserts, resolved, reopened } = reconcileSignals(loadSignals(projectRoot), drafts, now);
   if (upserts.length === 0 && resolved.length === 0) return false;
 
   const db = getDb();
   for (const s of upserts) {
     db.run(
-      `INSERT INTO awareness_signals (${COLUMNS}, project_root, resolved_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      `INSERT INTO awareness_signals (${COLUMNS}, project_root, resolved_at, shape, reopened_from, reopened_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          severity = excluded.severity, subject = excluded.subject, workstreams = excluded.workstreams,
-         summary = excluded.summary, last_seen = excluded.last_seen, resolved_at = NULL,
+         summary = excluded.summary, last_seen = excluded.last_seen, resolved_at = NULL, shape = excluded.shape,
+         -- Set when it reopens (A3.2); kept until the person answers again.
+         reopened_from = COALESCE(excluded.reopened_from, awareness_signals.reopened_from),
+         reopened_at = COALESCE(excluded.reopened_at, awareness_signals.reopened_at),
          -- A signal that resolved and came back is open again: whoever
          -- answered it before answered a different occurrence.
          state_by = CASE WHEN awareness_signals.state = excluded.state THEN awareness_signals.state_by END,
          state_at = CASE WHEN awareness_signals.state = excluded.state THEN awareness_signals.state_at END,
          state = excluded.state`,
       [s.id, s.kind, s.severity, JSON.stringify(s.subject), JSON.stringify(s.workstreams), s.summary,
-        s.firstSeen, s.lastSeen, s.state, projectRoot],
+        s.firstSeen, s.lastSeen, s.state, projectRoot, s.shape ?? null, s.reopened?.from ?? null, s.reopened?.at ?? null],
     );
+  }
+  // Reopened (A3.2): the agents concerned are told again, their notes kept.
+  for (const id of reopened) {
+    db.run('UPDATE awareness_signal_notes SET told_at = NULL WHERE signal_id = ?', [id]);
   }
   for (const id of resolved) {
     db.run(`UPDATE awareness_signals SET state = 'resolved', resolved_at = ?, last_seen = ? WHERE id = ?`, [now, now, id]);
@@ -238,11 +247,13 @@ export function setSignalState(
 ): AwarenessSignal | null {
   const signal = loadSignals(projectRoot).find((s) => s.id === id && s.state !== 'resolved');
   if (!signal) return null;
+  // A new answer replaces the reason it had reopened (A3.2).
   getDb().run(
-    'UPDATE awareness_signals SET state = ?, state_by = ?, state_at = ? WHERE id = ? AND project_root = ?',
+    'UPDATE awareness_signals SET state = ?, state_by = ?, state_at = ?, reopened_from = NULL, reopened_at = NULL WHERE id = ? AND project_root = ?',
     [state, JSON.stringify(by), now, id, projectRoot],
   );
   markDirty();
   onChanged(projectRoot);
-  return { ...signal, state, stateBy: by, stateAt: now };
+  const { reopened: _was, ...rest } = signal;
+  return { ...rest, state, stateBy: by, stateAt: now };
 }

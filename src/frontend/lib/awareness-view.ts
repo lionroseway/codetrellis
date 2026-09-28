@@ -146,6 +146,16 @@ export function toldWords(s: Pick<AwarenessSignal, 'told'>, now: number): string
   return `Told ${who} · ${ago(last, now)}`;
 }
 
+/**
+ * Why an answered signal needs the person again (A3.2): what it is about
+ * changed since they acknowledged it or marked it intended. Null otherwise.
+ */
+export function reopenedWords(s: Pick<AwarenessSignal, 'reopened' | 'state'>, now: number): string | null {
+  if (!s.reopened || s.state !== 'open') return null;
+  const was = s.reopened.from === 'intended' ? 'marked it intended' : 'acknowledged it';
+  return `Back: it changed since you ${was} · ${ago(s.reopened.at, now)}`;
+}
+
 export interface SignalAction { state: SettableSignalState; label: string; hint: string }
 
 const ACK: SignalAction = { state: 'acknowledged', label: 'Acknowledge', hint: 'You have seen it. It stops marking the strip but stays listed while it is true.' };

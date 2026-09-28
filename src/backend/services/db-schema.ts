@@ -196,7 +196,12 @@ export const SCHEMA_PLANS_CORE = `
     resolved_at INTEGER,
     -- A1.8: who set the state (JSON, from actorFrom) and when.
     state_by TEXT,
-    state_at INTEGER
+    state_at INTEGER,
+    -- A3.2: what it is about, fingerprinted; an answer holds while it does.
+    shape TEXT,
+    -- A3.2: it was acknowledged or intended, and opened again when its shape changed.
+    reopened_from TEXT,
+    reopened_at INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_awareness_project ON awareness_signals(project_root);
 

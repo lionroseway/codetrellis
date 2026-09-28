@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupSignals, needsYouCount, digestLine, kindWords, sideLabel, sidesOf, stateWords, actionsFor, ago, toldWords } from './awareness-view';
+import { groupSignals, needsYouCount, digestLine, kindWords, sideLabel, sidesOf, stateWords, actionsFor, ago, toldWords, reopenedWords } from './awareness-view';
 import type { AwarenessSignal, Workstream, WorkstreamAgent } from '../../shared/types';
 
 const NOW = 1_800_000_000_000;
@@ -115,6 +115,13 @@ describe('a signal in words', () => {
     assert.equal(toldWords(sig({ told: [t('codex', NOW - 600_000), t('claude-code', NOW - 60_000)] }), NOW), 'Told codex and claude-code · 1 min ago');
     assert.equal(toldWords(sig({ told: [t('a', NOW), t('b', NOW), t('c', NOW), t('a', NOW)] }), NOW), 'Told a, b and 1 more · just now');
     assert.equal(toldWords(sig({ told: [t('codex', null)] }), NOW), null, 'a note alone is not being told');
+  });
+
+  test('why an answered signal is back (A3.2)', () => {
+    assert.equal(reopenedWords(sig({ reopened: { from: 'intended', at: NOW - 60_000 } }), NOW), 'Back: it changed since you marked it intended · 1 min ago');
+    assert.equal(reopenedWords(sig({ reopened: { from: 'acknowledged', at: NOW } }), NOW), 'Back: it changed since you acknowledged it · just now');
+    assert.equal(reopenedWords(sig({ reopened: { from: 'acknowledged', at: NOW }, state: 'acknowledged' }), NOW), null, 'answered again: no longer "back"');
+    assert.equal(reopenedWords(sig(), NOW), null);
   });
 
   test('ago', () => {

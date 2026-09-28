@@ -100,7 +100,7 @@ describe('deduplication and resolution', () => {
     assert.equal(first.upserts.length, 1);
     assert.equal(first.upserts[0].state, 'open');
     const again = reconcileSignals(first.upserts, computeSignals(two()), 2000);
-    assert.deepEqual(again, { upserts: [], resolved: [] });
+    assert.deepEqual(again, { upserts: [], resolved: [], reopened: [] });
   });
 
   test('a signal whose cause went away is resolved; coming back reopens it with its first-seen kept', () => {
@@ -278,5 +278,67 @@ describe('drift (A2.5)', () => {
     const many = computeSignals([ws('/r/w', 'w', ['a', 'b', 'c', 'd', 'e'].map((n) => file(`${n}.ts`)), { scope: scope() })]);
     assert.match(many[0].summary, /5 files outside .*: a\.ts, b\.ts, c\.ts and 2 more$/);
     assert.equal(many[0].subject.files!.length, 5);
+  });
+});
+
+describe('intended and cooldown (A3.2)', () => {
+  const pair = (auth: SymbolChange[], billing: SymbolChange[]) => [
+    ws('/r/auth', 'auth-refresh', [file('src/session.ts', auth)]),
+    ws('/r/billing', 'billing-v2', [file('src/session.ts', billing)]),
+  ];
+  const answered = (state: 'acknowledged' | 'intended' | 'dismissed', inputs: FootprintInput[]) => {
+    const [d] = computeSignals(inputs);
+    return { ...d, firstSeen: 1, lastSeen: 1, state, stateBy: { actor: 'saif', actorType: 'human' as const, channel: 'desktop' as const }, stateAt: 1 };
+  };
+
+  test('a body edit keeps the shape, so an answer holds', () => {
+    const before = answered('acknowledged', pair([sym('refresh')], [sym('renew')]));
+    const r = reconcileSignals([before], computeSignals(pair([sym('refresh')], [sym('renew')])), 2);
+    assert.deepEqual(r.reopened, []);
+    assert.equal(r.upserts.length, 0, 'nothing moved');
+  });
+
+  test('a new symbol in the file changes the shape: an acknowledged signal opens again, saying from what', () => {
+    const before = answered('acknowledged', pair([sym('refresh')], [sym('renew')]));
+    const r = reconcileSignals([before], computeSignals(pair([sym('refresh'), sym('rotate', 'added')], [sym('renew')])), 2);
+    assert.deepEqual(r.reopened, [before.id]);
+    const [u] = r.upserts;
+    assert.equal(u.state, 'open');
+    assert.deepEqual(u.reopened, { from: 'acknowledged', at: 2 });
+    assert.equal(u.stateBy, undefined, 'the old answer is not carried');
+  });
+
+  test('intended holds until either side changes shape; a new signature is a new shape', () => {
+    const withSig = (sig: string): SymbolChange => ({ ...sym('refreshToken'), signature: { before: '()', after: sig } });
+    const before = answered('intended', pair([sym('refreshToken')], [sym('refreshToken')]));
+    assert.deepEqual(reconcileSignals([before], computeSignals(pair([sym('refreshToken')], [sym('refreshToken')])), 2).reopened, []);
+    const r = reconcileSignals([before], computeSignals(pair([withSig('(force: boolean)')], [sym('refreshToken')])), 2);
+    assert.deepEqual(r.upserts[0].reopened, { from: 'intended', at: 2 });
+  });
+
+  test('a declared intent landing as an edit keeps the shape (the A2.4 promise)', () => {
+    const declared = [ws('/r/auth', 'auth-refresh', [], { intended: [{ path: 'src/session.ts', symbols: ['refreshToken'] }] }), ws('/r/billing', 'billing-v2', [file('src/session.ts', [sym('refreshToken')])])];
+    const before = answered('acknowledged', declared);
+    const r = reconcileSignals([before], computeSignals(pair([sym('refreshToken')], [sym('refreshToken')])), 2);
+    assert.deepEqual(r.reopened, []);
+    assert.equal(r.upserts[0].state, 'acknowledged');
+  });
+
+  test('dismissed stays dismissed while it lasts; a row without a shape takes one quietly', () => {
+    const dismissed = answered('dismissed', pair([sym('refresh')], [sym('renew')]));
+    const r1 = reconcileSignals([dismissed], computeSignals(pair([sym('refresh'), sym('rotate', 'added')], [sym('renew')])), 2);
+    assert.equal(r1.upserts[0].state, 'dismissed');
+    const old = { ...answered('acknowledged', pair([sym('refresh')], [sym('renew')])), shape: undefined as unknown as string };
+    const r2 = reconcileSignals([old], computeSignals(pair([sym('refresh'), sym('rotate', 'added')], [sym('renew')])), 2);
+    assert.deepEqual(r2.reopened, []);
+    assert.equal(r2.upserts[0].state, 'acknowledged');
+    assert.ok(r2.upserts[0].shape);
+  });
+
+  test('drift reopens when another file falls outside the scope', () => {
+    const sc = { paths: ['a.ts'], dirs: [], items: ['i'], declared: false };
+    const before = answered('intended', [ws('/r/w', 'w', [file('a.ts'), file('b.ts')], { scope: sc })]);
+    assert.deepEqual(reconcileSignals([before], computeSignals([ws('/r/w', 'w', [file('a.ts'), file('b.ts')], { scope: sc })]), 2).reopened, []);
+    assert.deepEqual(reconcileSignals([before], computeSignals([ws('/r/w', 'w', [file('a.ts'), file('b.ts'), file('c.ts')], { scope: sc })]), 2).reopened, [before.id]);
   });
 });
