@@ -108,6 +108,12 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     // window's alone (grant-guard.ts). A test of that rule turns this off.
     CODETRELLIS_ALLOW_HTTP_GRANTS: '1',
     CODETRELLIS_DATA_DIR: opts.dataDir,
+    // Claude Code's session records. The backend follows every live Claude
+    // session under a folder it trusts, and left alone it reads the machine's
+    // own ~/.claude — whatever sessions the person running the suite has open
+    // (Phase 32 A1.2). An empty folder per backend; a test of the watcher
+    // plants sessions in its own.
+    CODETRELLIS_CLAUDE_DIR: path.join(opts.dataDir, 'claude-home'),
     CODETRELLIS_BACKEND_PORT: String(backendPort),
     CODETRELLIS_MCP_PORT: String(mcpPort),
     // Every local transport requires a capability token (Phase 19 Gate 1.1).

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A1.1: session binding |
-| **Status** | A0 merged (#145). A1.1 done on its branch: sessions carry `workstreamRoot` and `hostTerminalId`, from the connector's headers or MCP roots; PR open |
-| **Next action** | Merge A1.1's PR when green; then A1.2 (the Claude Code watcher watches every session, keyed by folder) |
+| **Stage / step** | Track A — A1.2: every Claude Code session, keyed by folder |
+| **Status** | A1.1 merged (#146). A1.2 done on its branch (unit 11, harness 2, each new one failing on the old watcher); PR open |
+| **Next action** | Merge A1.2's PR when green; then A1.3 (workstream discovery, `list_workstreams`, the TopBar strip) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-1-session-binding` |
+| **Branch** | `feat/phase-32-a1-2-watcher-sessions` |
 | **Last updated** | 2026-09-27 |
 
 ---
@@ -59,7 +59,7 @@
 - [x] Carried 2: no tool or handler writes a fixed author (structural test; bug 52) (#143)
 - [x] Carried 3: harness and browser suites run in CI, sharded (#144)
 - [x] A0 Parallel-work bugs 1–3 (#145)
-- [ ] A1.1 Session binding
+- [x] A1.1 Session binding (#146)
 - [ ] A1.2 Multi-session Claude watcher
 - [ ] A1.3 Workstream discovery and strip
 - [ ] A1.4 Folder watching
@@ -153,6 +153,59 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-27: A1.2 — the Claude Code watcher follows every session
+- **What was wrong.** The watcher followed one session: the first live one
+  whose cwd equalled the opened project exactly. An agent in a worktree, or
+  one started from a package folder, never reached the Timeline. And its
+  events carried no session, so two Claude sessions merged into one turn.
+- **Now.** It follows every live session whose cwd is inside a folder
+  CodeTrellis trusts: the opened project, every trusted root, and their live
+  worktrees (`candidateWorkstreamRoots`, cached 30 s because it runs git).
+  The cwd is matched with A1.1's `matchWorkstreamRoot`, so the deepest
+  folder wins and the root is recorded as the user opened it. Every event
+  carries `sessionId` and `workstreamRoot`.
+- **Found along the way, fixed:**
+  - A line Claude was still writing was parsed half-way, failed, and was
+    skipped for good. Only complete lines are read now.
+  - Current Claude Code names the jsonl folder with every non-alphanumeric
+    character as `-`, not just `/`, so a path with a `.` in it was never
+    found. Both namings are tried.
+  - The harness backend read the machine's real `~/.claude`. Each backend
+    now gets its own empty Claude folder (same class as §0.4k's update
+    check).
+- **CI caught a latent test fault.** Two `depth-selector` browser tests clicked
+  `graph-store.ts`'s card on the canvas. The canvas mounts only on-screen
+  cards, and this suite's project (the repository) is too big to fit whole
+  at the minimum zoom, so whether the card was mounted came down to the
+  layout. This PR's new files moved it off-screen. They pass locally,
+  where the layout differed. The tests now pick the file in the Explorer,
+  a real path to the same focus that doesn't depend on the viewport. The
+  "adopt the selected file" branch they no longer reach is unit-tested in
+  `symbols-view.test.ts`. No other spec clicks a named canvas card
+  (`reachableNodes` picks whatever is on screen).
+  The next CI run showed that fix was incomplete. With the file focused, the
+  inspector lists its neighbours, including `symbols-view`, and
+  `getByRole('button', { name: 'Symbols' })` (a substring match) found
+  two buttons. Every depth-button locator in the spec is exact now.
+  The same run failed `plan-by-hand` once. Its plan workspace dropped back
+  to the list while `list.spec` created and deleted plans on the other
+  worker. The pair passes 5/5 on the base branch and 5/5 here, and nothing
+  in this diff touches plans. That is a cross-worker race; it's on the
+  follow-up list below and not fixed here.
+- **An agent that exits** is read one last time and dropped, with no event.
+- **`/api/agent/status`** keeps `sessionId` / `jsonlPath` (the one most
+  recently followed) and adds `sessions`, all of them.
+- **UX.** Nothing new to look at yet: the Timeline now keeps two Claude
+  sessions' turns apart, and the strip that shows workstreams is A1.3.
+- **Noted for A1.3/A1.4.** A Claude session connected over MCP too appears
+  as two sessions (its Claude id and its MCP id). Both now carry the same
+  workstream, which is the key to join them on.
+- **Tests.** Unit: 7 new in `claude-code-watcher.test.ts` (two worktrees at
+  once, tagging, nesting, outsiders, new naming, a half-written line, exit).
+  Harness: `claude-watcher-sessions.test.ts` (the running backend builds
+  the folder list from the project and git's worktrees). All fail on the
+  old watcher. Unit 1090 pass / 3 environment skips; lint 0 errors / 295.
 
 ### 2026-09-27: A1.1 — every agent session knows which workstream it is in
 

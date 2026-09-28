@@ -244,10 +244,13 @@ test.describe.serial('Miscellaneous endpoints', () => {
     const res = await h.client.raw('GET', '/api/agent/status');
     expect(res.ok).toBe(true);
     const body = await res.json();
-    // The Claude Code session watcher: whether it is tailing a session, and which.
-    expect(Object.keys(body).sort()).toEqual(['jsonlPath', 'sessionId', 'watching']);
+    // The Claude Code session watcher: whether it is watching, the session it
+    // most recently followed, and every session it follows (Phase 32 A1.2).
+    expect(Object.keys(body).sort()).toEqual(['jsonlPath', 'sessionId', 'sessions', 'watching']);
     expect(typeof body.watching).toBe('boolean');
-    if (!body.watching) expect(body).toMatchObject({ sessionId: null, jsonlPath: null });
+    expect(Array.isArray(body.sessions)).toBe(true);
+    if (!body.watching) expect(body).toMatchObject({ sessionId: null, jsonlPath: null, sessions: [] });
+    for (const s of body.sessions) expect(Object.keys(s).sort()).toEqual(['jsonlPath', 'sessionId', 'workstreamRoot']);
   });
 
   // --- Systems / FS ---
