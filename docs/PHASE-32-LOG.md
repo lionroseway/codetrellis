@@ -228,6 +228,12 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 - **The window** loads the last 400 when it connects, merged by id in time
   order, so a reload or a reconnect keeps the Timeline. The store is capped
   at 2,000 (it had no cap).
+- **CI's secret scan caught a fake.** The redaction test had a made-up
+  AWS-shaped key as a literal, and gitleaks flagged it on #169. The test
+  now assembles its fakes at run time. `.gitleaksignore` (new) clears that
+  one finding by fingerprint in the one pushed commit, with the rule for
+  using it. `.gitleaks.toml`'s allowlist is for published constants and
+  stays so, and nothing was force-pushed.
 - **Noted, for B1.2:** a call the MCP SDK refuses on its arguments (schema
   validation) never reaches the interception, so it has never been
   broadcast and is not recorded. Found by the first draft of the harness
