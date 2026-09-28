@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.3a: breakpoints in the inbox |
-| **Status** | B4.3a done on its branch (B4.2b merged, #181): the waiting list at the top of Awareness with continue / steer / stop; "Ask me first" on a task; the breakpoints set, with Clear and signal rules. Unit and browser pass |
-| **Next action** | Merge B4.3a's PR when green. Then B4.3b (graph node action, ⏸ on nodes, lane spans), B4.4 (phone) |
+| **Stage / step** | Track B — B4.2c: function-level breakpoints |
+| **Status** | B4.3a merged (#182). B4.2c done on its branch: a breakpoint on one function holds only the hook's edits that touch it, and a breach counts only when that function changed. Unit and harness pass |
+| **Next action** | Open B4.2c's PR and merge it when green. Then, subject to the owner's answer on order: B4.3b (graph action, ⏸ on nodes, lane spans), plan sections assigned to worktrees, B3; signatures for more languages as its own step |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b4-3a-waiting-list` |
+| **Branch** | `feat/phase-32-b4-2c-function-breakpoints` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -107,7 +107,8 @@
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
   - [x] B4.2b Signal breakpoints ([#181](https://github.com/lionroseway/codetrellis/pull/181))
-  - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set (PR open)
+  - [x] B4.2c Function-level breakpoints and breaches (PR open)
+  - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
   - [ ] B4.3b Graph node action, ⏸ on nodes, lane spans
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
@@ -219,9 +220,55 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A breach is a change in a workstream's changed files to a file under a code breakpoint, made after the breakpoint was set (file modification time), that the hook did not let through. It is told once per session on its next tool call and recorded as a breach, never a pause. A deletion is not detected (B4.2) | The honest limit in the observability doc §10.3. Without the time check every file already changed in a worktree would be a breach the moment a breakpoint is set. A deleted file leaves no time to compare |
 | 2026-09-28 | A signal breakpoint is a rule row in the database (`kind: signal`, target a signal kind: collision, contract or drift), not a setting in `.codetrellis/config.json`. It holds every workstream a **high, open** signal of that kind names, at its next guarded call (claim, done, spec edit, delete, hooked edit); one hit per signal and workstream. Continue releases that workstream from that signal; stop refuses while it stays open. The person answering the signal in Awareness lets any waiting call through, recorded as CodeTrellis (`system`), never as a person (B4.2b) | The config file is committed and editable by agents, with a tool or an editor, so a rule there could be switched off by the agent it holds. Holding both sides matches the collision and contract signals, which name both. "Open" is the person not having answered the signal yet; once they have, the reason to ask is gone |
 | 2026-09-28 | Breakpoints waiting on the person sit at the top of the Awareness tab, and its count includes them; there is no separate inbox tab yet. The breakpoint types move to `src/shared/types/breakpoint.ts`, shared with the window (B4.3a) | Awareness is already where a person answers what needs them, and the observability doc puts breakpoints first in that list. One count avoids a second badge meaning nearly the same thing. A shared type keeps the window and the backend from drifting |
+| 2026-09-28 | A breakpoint on one function holds only what touches it: the hook's edit when the text it replaces overlaps the function's lines in the workstream's copy, a breach when the function is among the workstream's changed functions. Anything that cannot be told is held as the whole file (B4.2c) | The owner asked for function-level detection in general. Warnings were already per function (A1.5, A2.1); breakpoints were per file because the hook saw only the path. Claude Code's edit carries the replaced text, which places it precisely. Guessing "not this function" when unsure would let a protected change through, so doubt holds |
 ---
 
 ## Entries
+
+### 2026-09-28: B4.2c — breakpoints on one function
+- **Asked for** by the owner ("do we detect inside functions … would need
+  to have that functionality in general"). Warnings about overlapping work
+  were already per function. Breakpoints were per file, because the hook
+  saw only the path.
+- **The hook** sends the text each edit replaces: `old_string` for Edit,
+  and each `old_string` for MultiEdit. That is at most 20 pieces of 20,000
+  characters. `check_breakpoint` takes it as `old_text`.
+- **Holding** (`code-breakpoints.ts`: `editTouches`, `symbolRanges`,
+  `nameMatches`). For a `path#name` breakpoint, the replaced text is found
+  in the workstream's copy of the file, read through the confined helper.
+  The edit is held when that text overlaps the function's lines, as the
+  real parser reports them.
+  - A bare name matches a member by its last part (`renew` →
+    `Session.renew`).
+  - The whole file is held when this cannot be told: a whole-file write,
+    text not found, no parser, or the function not in the file.
+- **Breaches** count only when the function is among the workstream's
+  changed functions (A1.5). A file the parser did not read counts as the
+  whole file.
+- **Wording** names the function in its file everywhere: the agent's pause
+  and breach messages, `await_decision`, and the window's cards and list.
+  Hits carry `breakpointTarget`.
+- **Tests.**
+  - Unit:
+    - `code-breakpoints.test.ts` +5: which function an edit touches, and
+      when that cannot be told; names; the hook's edits held only inside
+      the function; no parser holds the file; a breach only when the
+      function changed;
+    - `hook.test.ts` +1, what Edit, MultiEdit and Write send;
+    - `breakpoint-view.test.ts` +1.
+  - Harness: `function-breakpoints.test.ts` (3), with the real parser and
+    connector.
+    - An edit in `validateCreateOrder` goes ahead; one in
+      `validateCreateUser` is paused, naming it; a Write is held.
+    - Codex changing `validateCreateOrder` is no breach; changing
+      `validateCreateUser` is.
+- **UX journey.**
+  1. Sam sets "ask me before validateCreateUser changes".
+  2. Claude Code edits `validateCreateOrder` in the same file, unhindered.
+  3. When it reaches into `validateCreateUser` it is paused: "before
+     validateCreateUser in packages/shared/src/validators.ts changes".
+  4. Codex, with no hook, changes that function anyway. That is recorded as
+     a breach naming the function.
 
 ### 2026-09-28: B4.3a — breakpoints in the inbox
 - **Waiting on you**, first in the Awareness tab (`components/layout/Breakpoints.tsx`, `stores/breakpoints-store.ts`, wording in `lib/breakpoint-view.ts`).

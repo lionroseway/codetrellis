@@ -21,12 +21,25 @@ for (const root of [project, worktree]) {
   fs.writeFileSync(path.join(root, 'payments', 'refund.ts'), 'export function refund() {}\n');
   fs.writeFileSync(path.join(root, 'payments', 'rates.ts'), 'export const rate = 1;\n');
   fs.writeFileSync(path.join(root, 'README.md'), '# app\n');
+  // Two functions: calculateRefund on lines 1-4, formatRefund on lines 6-8.
+  fs.writeFileSync(path.join(root, 'payments', 'calc.ts'), [
+    'export function calculateRefund(order) {',
+    '  const rate = order.rate;',
+    '  return order.total * rate;',
+    '}',
+    '',
+    'export function formatRefund(n) {',
+    '  return `£${n}`;',
+    '}',
+    '',
+  ].join('\n'));
 }
 
 let db: typeof import('./database');
 let bp: typeof import('./breakpoint-service');
 let code: typeof import('./code-breakpoints');
 let log: typeof import('./agent-event-log');
+let ws: typeof import('./workstream-service');
 const published: Array<{ type: string; payload: Record<string, unknown> }> = [];
 
 const sam = { by: 'Sam', byType: 'human' };
@@ -40,6 +53,7 @@ before(async () => {
   bp = await import('./breakpoint-service');
   code = await import('./code-breakpoints');
   log = await import('./agent-event-log');
+  ws = await import('./workstream-service');
   log.setEventPublisher((type, payload) => {
     const evt = payload as { type: string; payload: Record<string, unknown> };
     if (type === 'agent-event') published.push({ type: evt.type, payload: evt.payload });
@@ -170,3 +184,70 @@ test('each session in the workstream is told of a waiting breach once; an answer
   const view = bp.decisionView(bp.getHit(hit.ref)!);
   assert.match(String(view.message), /Stop changing payments\/refund\.ts\. Tell the person what you changed/);
 });
+
+// ── Function breakpoints (B4.2c) ───────────────────────────────────
+
+/** A parser that knows calc.ts's two functions, as the real one reports them. */
+const fakeParse = (file: string) => (file.endsWith('calc.ts') ? [
+  { name: 'calculateRefund', kind: 'function', startLine: 1, endLine: 4, children: [], modifiers: ['export'] },
+  { name: 'formatRefund', kind: 'function', startLine: 6, endLine: 8, children: [], modifiers: ['export'] },
+] : null) as never;
+
+test('which function an edit touches: by where the replaced text sits; unknown when it cannot be told', () => {
+  const content = fs.readFileSync(path.join(worktree, 'payments', 'calc.ts'), 'utf-8');
+  const ranges = code.symbolRanges(fakeParse('payments/calc.ts'));
+  assert.equal(code.editTouches(content, ['  const rate = order.rate;'], ranges, 'calculateRefund'), true);
+  assert.equal(code.editTouches(content, ['  return `£${n}`;'], ranges, 'calculateRefund'), false);
+  // Spanning both, or one of several edits touching it.
+  assert.equal(code.editTouches(content, ['}\n\nexport function formatRefund'], ranges, 'calculateRefund'), true);
+  assert.equal(code.editTouches(content, ['  return `£${n}`;', 'order.total'], ranges, 'calculateRefund'), true);
+  // Cannot be told: a whole-file write, text not in the file, a function not in it.
+  assert.equal(code.editTouches(content, undefined, ranges, 'calculateRefund'), null);
+  assert.equal(code.editTouches(content, ['not in the file'], ranges, 'calculateRefund'), null);
+  assert.equal(code.editTouches(content, ['order.total'], ranges, 'noSuchFunction'), null);
+});
+
+test('names: a bare name matches a member by its last part; a qualified one only itself', () => {
+  assert.ok(code.nameMatches('Session.renew', 'renew'));
+  assert.ok(code.nameMatches('(Ledger).Post', 'Post'));
+  assert.ok(code.nameMatches('Session.renew', 'Session.renew'));
+  assert.ok(!code.nameMatches('Token.renew', 'Session.renew'));
+  const ranges = code.symbolRanges([{ name: 'Session', kind: 'class', startLine: 1, endLine: 9, modifiers: [], children: [
+    { name: 'renew', kind: 'method', startLine: 2, endLine: 4, modifiers: [], children: [] },
+  ] }] as never);
+  assert.deepEqual(ranges.map((r) => r.name), ['Session', 'Session.renew']);
+});
+
+test('a function breakpoint holds only the hook\'s edits that touch it; unknown edits are held', () => {
+  ws.setSymbolParser(fakeParse);
+  try {
+    setCode('payments/calc.ts', 'calculateRefund');
+    assert.equal(code.enforceEdit(project, 'payments/calc.ts', hook, Date.now(), ['  return `£${n}`;']).kind, 'pass');
+    const held = code.enforceEdit(project, 'payments/calc.ts', hook, Date.now(), ['  const rate = order.rate;']);
+    assert.ok(held.kind === 'paused');
+    assert.match(code.heldEditText(held), /before calculateRefund in payments\/calc\.ts changes/);
+    // A whole-file write says nothing of which function: held, the same wait.
+    const write = code.enforceEdit(project, 'payments/calc.ts', hook, Date.now());
+    assert.ok(write.kind === 'paused' && write.hit.ref === held.hit.ref);
+  } finally {
+    ws.setSymbolParser(null);
+  }
+});
+
+test('with no parser, a function breakpoint holds the whole file: the safe side', () => {
+  setCode('payments/calc.ts', 'calculateRefund');
+  assert.equal(code.enforceEdit(project, 'payments/calc.ts', hook, Date.now(), ['  return `£${n}`;']).kind, 'paused');
+});
+
+test('a function breach counts only when that function changed; an unparsed file counts as the whole file', () => {
+  setCode('payments/calc.ts', 'calculateRefund', 1_000);
+  const later = () => 5_000;
+  assert.deepEqual(code.recordBreaches(project, codex, [{ path: 'payments/calc.ts', symbols: [{ name: 'formatRefund' }] }], 6_000, later), []);
+  const hits = code.recordBreaches(project, codex, [{ path: 'payments/calc.ts', symbols: [{ name: 'calculateRefund' }] }], 6_000, later);
+  assert.equal(hits.length, 1);
+  assert.match(code.breachText(hits), /You changed calculateRefund in payments\/calc\.ts, which has a breakpoint/);
+  code.resetBreachNotices();
+  db.getDb().run('DELETE FROM breakpoint_hits');
+  assert.equal(code.recordBreaches(project, codex, [{ path: 'payments/calc.ts', symbols: null }], 6_000, later).length, 1);
+});
+

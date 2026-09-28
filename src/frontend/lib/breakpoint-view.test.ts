@@ -9,7 +9,7 @@ import type { Breakpoint, BreakpointHit } from '@shared/types';
 import { agentName, hitHeadline, hitWhy, decisionLabels, breakpointLabel } from './breakpoint-view';
 
 const hit = (over: Partial<BreakpointHit> = {}): BreakpointHit => ({
-  ref: 'bp-1', breakpointId: 'bp_1', kind: 'task', breakpointNote: null, tool: 'claim_item', action: 'claim',
+  ref: 'bp-1', breakpointId: 'bp_1', kind: 'task', breakpointNote: null, breakpointTarget: 'i1', tool: 'claim_item', action: 'claim',
   itemUid: 'i1', itemTitle: 'Partial refunds', path: null, breach: false, signalId: null, planUid: 'p1',
   agent: 'codex', sessionId: 's', workstreamRoot: '/w/app-billing', hitAt: 1, decision: null, note: null,
   answeredAt: null, answeredBy: null, answeredByType: null, ...over,
@@ -47,6 +47,13 @@ test('what is set, in a person\'s words', () => {
   assert.deepEqual(breakpointLabel(bp({})), { what: 'Task “Payments”', when: 'before an agent claims or finishes it, or anything under it' });
   assert.deepEqual(breakpointLabel(bp({ kind: 'spec' })).what, 'Description of “Payments”');
   assert.deepEqual(breakpointLabel(bp({ kind: 'code', target: 'packages/shared/' })), { what: 'Everything in packages/shared/', when: 'before it changes' });
-  assert.deepEqual(breakpointLabel(bp({ kind: 'code', target: 'src/a.ts#refund' })), { what: 'refund in src/a.ts', when: 'before its file changes' });
+  assert.deepEqual(breakpointLabel(bp({ kind: 'code', target: 'src/a.ts#refund' })), { what: 'refund in src/a.ts', when: 'before an edit touches it' });
   assert.deepEqual(breakpointLabel(bp({ kind: 'signal', target: 'contract' })), { what: 'Any serious contract signal', when: 'while one names a workstream' });
+});
+
+test('a function breakpoint names the function in its file (B4.2c)', () => {
+  const h = hit({ kind: 'code', action: 'edit_code', path: 'payments/refund.ts', breakpointTarget: 'payments/refund.ts#calculateRefund', agent: 'claude-code-hook' });
+  assert.equal(hitHeadline(h), 'Claude Code wants to change “calculateRefund in payments/refund.ts”');
+  const breach = hit({ kind: 'code', action: 'breach', breach: true, path: 'payments/refund.ts', breakpointTarget: 'payments/refund.ts#calculateRefund' });
+  assert.equal(hitHeadline(breach), 'codex changed calculateRefund in payments/refund.ts past a breakpoint');
 });
