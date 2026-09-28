@@ -168,6 +168,28 @@ function extractImports(node: SyntaxNode): ImportDeclaration[] {
     }
     imports.push({ source, specifiers, isDefault, isNamespace });
   }
+  // `export … from` (A2.2): a dependency on the source that passes names on.
+  // Without it a barrel (`index.ts` of `export * from './x'`) had no edges,
+  // and nothing importing through it was known to import what it re-exports.
+  for (const child of node.children) {
+    if (child.type !== 'export_statement') continue;
+    const sourceNode = child.childForFieldName('source');
+    if (!sourceNode) continue;
+    const source = sourceNode.text.replace(/['"]/g, '');
+    const clause = child.children.find((c: SyntaxNode) => c.type === 'export_clause');
+    const nsExport = child.children.find((c: SyntaxNode) => c.type === 'namespace_export');
+    if (clause) {
+      // `export { a, b as c } from`: the original names, as imports record them.
+      const specifiers = clause.children
+        .filter((c: SyntaxNode) => c.type === 'export_specifier')
+        .map((c: SyntaxNode) => c.childForFieldName('name')?.text ?? c.text);
+      imports.push({ source, specifiers, isDefault: false, isNamespace: false, isReexport: true });
+    } else {
+      // `export * from` / `export * as ns from`: everything it exports.
+      const ns = nsExport?.children.find((c: SyntaxNode) => c.type === 'identifier')?.text;
+      imports.push({ source, specifiers: [ns ?? '*'], isDefault: false, isNamespace: true, isReexport: true });
+    }
+  }
   return imports;
 }
 

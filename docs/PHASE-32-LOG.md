@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.1: signatures (TS/JS, Python) |
-| **Status** | A1 done (A1.8 merged, #155). A2 refined into A2.1–A2.6 (EXECUTION §4). A2.1 done on its branch (unit +20, harness +1, browser +1); PR open |
-| **Next action** | Merge A2.1's PR when green; then A2.2 (import accuracy: Python original names, `export … from`, `resolved_path` index) |
-| **Blockers** | none |
-| **Branch** | `feat/phase-32-a2-1-signatures` |
+| **Stage / step** | Track A — A2.2: import accuracy; then bug 53 |
+| **Status** | A2.1 merged (#156). A2.2 done on its branch (unit +10, harness 4, browser 1); PR open. Bug 53 found while testing it |
+| **Next action** | Merge A2.2 when green; then fix bug 53 (squash-merged branches count as live work) as its own step, `feat/phase-32-a1-7d-merged-branches` |
+| **Blockers** | Bug 53 makes the local browser suite's first tests time out on this repository (not in CI's shallow checkout) |
+| **Branch** | `feat/phase-32-a2-2-imports` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -68,7 +68,8 @@
 - [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)
 - [x] A1.8 Awareness tab (#155)
 - [x] A2.1 Signatures (TS/JS, Python)
-- [ ] A2.2 Import accuracy
+- [x] A2.2 Import accuracy
+- [ ] Bug 53: a squash-merged branch is not live work (A1.7a)
 - [ ] A2.3 `contract` signal
 - [ ] A2.4 `declare_intent`
 - [ ] A2.5 `drift` signal
@@ -171,6 +172,64 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: A2.2 — import accuracy; bug 53 found
+- **Re-exports are recorded.** The TS/JS parser reads `export { a, b as c }
+  from`, `export * from` and `export * as ns from` as imports marked
+  `isReexport`, with the ORIGINAL names (`a`, `b`), stored in the new
+  `imports.is_reexport` column (the reconciler adds it to older databases).
+  Before, a barrel had no edges at all: this repository's
+  `src/shared/types/index.ts` and the sample app's `packages/shared/src/index.ts`
+  linked to nothing, and nothing importing through them was known to use
+  what they re-export.
+- **Python records the original name**: `from app.db import add_order as
+  insert_order` imports `add_order`.
+- **`imports.resolved_path` is indexed** (`idx_imports_resolved`), created
+  where resolution adds the column.
+- **`importersOf(file, names?)`** (`services/importers.ts`) is the one
+  importer lookup: direct importers, then through barrels for the names
+  each passes on (through `export *`, what the file exports; through
+  `export { a }`, just `a`). A types-only importer of a barrel is therefore
+  not a user of its validators. A namespace import is "possibly". Barrels
+  are followed, not listed; cycles end; five levels at most. Python's
+  exported names: no leading underscore (`__all__` is A2.3's).
+- **Surfaces.**
+  - `check_footprint` finds importers through barrels, takes the spec's
+    optional `symbols` to narrow them by name (§6.1), and returns each
+    importer's names, "possibly" and route beside `imported_by`.
+  - The inspector: an importer that re-exports is tagged "re-exports", and
+    a new **Used through re-exports** section lists the files reaching the
+    selected one through a barrel, with the names and "via index.ts".
+    Journey: select `src/shared/types/agent.ts` → Imported by shows
+    `index.ts · re-exports` → Used through re-exports lists the app's
+    files that take its types from the barrel.
+- **Tests.**
+  - Unit: `importers.test.ts` (10) on a real database with the real
+    parsers' output: barrels stored and followed; a types-only importer
+    left out; namespace "possibly"; by name, through a named re-export;
+    a cycle of barrels ends; Python found by original name, not alias;
+    exported names; `throughReexports`; the index exists.
+  - Harness: `import-accuracy.test.ts` (4) on the sample app: the barrel's
+    re-exports; `OrderList` and `UserList` named through it and `api.ts`
+    (types only) not; `check_footprint` through the barrel and by name; an
+    aliased Python import found by the name it imports. All fail on the
+    old code (no re-exports, alias recorded).
+  - Browser: `inspector/reexports.spec.ts` (1), on this repository's own
+    barrel. Not verifiable locally until bug 53 is fixed (below); CI's
+    shallow checkout has no extra branches.
+  - Harness files that read edges or imports pass (168 + 66); unit 1223 /
+    3 environment skips; lint 0 errors / 294.
+- **Bug 53, found here (A1.7a).** On this repository the strip shows ~98
+  branch chips and the Awareness tab 7,602 signals. 151 refs; git counts 2
+  as merged. Every squash-merged PR branch still has commits "ahead", so
+  each is a branch workstream, and since every PR touches this log, every
+  pair collides. The backend is busy enough that the local browser
+  suite's first two tests time out on any spec (seen on the base branch
+  too), and it is exactly what a team that squash-merges and keeps its
+  branches would see. Next step: a branch whose every changed file is, on
+  main, at the version the branch has (or was, since the merge base) is
+  merged and not work — squash, rebase, merge or cherry-pick alike, from
+  one `git log --raw` of main, writing nothing.
 
 ### 2026-09-28: A2 refined; A2.1 — signatures
 - **A2 refined** into A2.1–A2.6 in EXECUTION §4, with the M2 "done when"
