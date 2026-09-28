@@ -204,3 +204,71 @@ describe('what the app records itself (B1.2)', () => {
     try { log.recordBodyEdit(edit); } finally { log.setEventPublisher(null); }
   });
 });
+
+describe('criteria decided and checked, on the lane of the workstream the item is worked in (B2.2)', () => {
+  const seed = () => {
+    const db2 = db.getDb();
+    db2.run(`DELETE FROM item_criteria`);
+    db2.run(`DELETE FROM plan_items`);
+    db2.run(`INSERT OR REPLACE INTO plans (uid, title, author, project_path, created_at, updated_at) VALUES ('p1', 'Plan', 'Sam', '/w/app', 1, 1)`);
+    const item = (uid: string, title: string, session: string | null) => db2.run(
+      `INSERT INTO plan_items (uid, plan_uid, kind, title, author, created_at, updated_at, assignee_session) VALUES (?, 'p1', 'action', ?, 'Sam', 1, 1, ?)`,
+      [uid, title, session],
+    );
+    item('i-auth', 'Rotate tokens', 's-auth');
+    item('i-free', 'Write docs', null);
+    db2.run(`INSERT INTO item_criteria (uid, item_uid, text, author, author_type, created_at, updated_at) VALUES ('c1', 'i-auth', 'Old tokens are refused', 'Sam', 'human', 1, 1)`);
+    session('s-auth', 'codex', AUTH);
+  };
+
+  test('the workstream is read from who holds the item now; nobody, none', () => {
+    seed();
+    assert.equal(log.workstreamOfItem('i-auth'), AUTH);
+    assert.equal(log.workstreamOfItem('i-free'), null);
+    assert.equal(log.workstreamOfItem('nope'), null);
+  });
+
+  test('a decision names the criterion, the item and the workstream, labelled by who decided', () => {
+    seed();
+    const sent: AgentEvent[] = [];
+    log.setEventPublisher((_t, p) => sent.push(p as AgentEvent));
+    try {
+      log.recordCriterionDecision({ criterionUid: 'c1', decision: 'sent_back', actor: 'Sam', actorType: 'human', channel: 'desktop' });
+      log.recordCriterionDecision({ criterionUid: 'missing', decision: 'approved', actor: 'Sam', actorType: 'human', channel: 'desktop' });
+    } finally {
+      log.setEventPublisher(null);
+    }
+    assert.equal(sent.length, 1, 'an unknown criterion records nothing');
+    assert.equal(sent[0].type, 'criterion_decided');
+    assert.deepEqual(sent[0].payload, {
+      criterionUid: 'c1', itemUid: 'i-auth', itemTitle: 'Rotate tokens', planUid: 'p1', text: 'Old tokens are refused',
+      decision: 'sent_back', actor: 'Sam', actorType: 'human', channel: 'desktop', workstreamRoot: AUTH, agentType: 'human',
+    });
+  });
+
+  test('a check run is one event per workstream, counting a failing check or a stale criterion as trouble', () => {
+    seed();
+    const sent: AgentEvent[] = [];
+    log.setEventPublisher((_t, p) => sent.push(p as AgentEvent));
+    try {
+      log.recordCheckRun({
+        runUid: 'r1', planUid: 'p1', trigger: 'manual', by: 'Sam', byType: 'human',
+        outcomes: [
+          { itemUid: 'i-auth', ok: true, state: 'met', text: 'a' },
+          { itemUid: 'i-auth', ok: true, state: 'stale', text: 'b went stale' },
+          { itemUid: 'i-auth', ok: false, state: 'open', text: 'c fails' },
+          { itemUid: 'i-free', ok: true, state: 'open', text: 'd' },
+        ],
+      });
+    } finally {
+      log.setEventPublisher(null);
+    }
+    const byRoot = Object.fromEntries(sent.map((e) => [String(e.payload.workstreamRoot ?? 'none'), e.payload]));
+    assert.deepEqual(Object.keys(byRoot).sort(), [AUTH, 'none'].sort());
+    assert.deepEqual(
+      { passed: byRoot[AUTH].passed, failed: byRoot[AUTH].failed, failing: byRoot[AUTH].failing },
+      { passed: 1, failed: 2, failing: ['b went stale', 'c fails'] },
+    );
+    assert.deepEqual({ passed: byRoot.none.passed, failed: byRoot.none.failed }, { passed: 1, failed: 0 });
+  });
+});

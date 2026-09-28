@@ -344,7 +344,8 @@ test.describe('Workstreams strip', () => {
     await shot(page, 'workstreams-folder-request');
 
     await page.getByTestId('folder-request-include').click();
-    expect(included).toBe(true);
+    // The request is sent by the click, not before it returns: wait for it.
+    await expect.poll(() => included).toBe(true);
     await expect(page.getByText('Clone included')).toBeVisible();
     await expect(chip).toHaveCount(0);
   });
@@ -366,6 +367,6 @@ test.describe('Workstreams strip', () => {
     await expect(page.getByText('other is not a clone of this repository.')).toBeVisible();
     await page.getByTestId('folder-request-chip').click();
     await page.getByTestId('folder-request-dismiss').click();
-    expect(dismissed).toBe(true);
+    await expect.poll(() => dismissed).toBe(true);
   });
 });

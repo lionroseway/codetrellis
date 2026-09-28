@@ -15,6 +15,7 @@
  * channel — it is never stamped as a person's.
  */
 
+import { recordCriterionDecision } from './agent-event-log';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
@@ -630,6 +631,8 @@ function appendSignoff(
       anchor?.attachmentUid ?? null, anchor ? JSON.stringify(anchor.locator) : null, device,
     ],
   );
+  // ✓ or ✗ on the Timeline lane of the workstream the item is worked in (B2.2).
+  recordCriterionDecision({ criterionUid, decision, actor, actorType, channel });
 }
 
 // ── Plan files (export / import) ──────────────────────────────────────

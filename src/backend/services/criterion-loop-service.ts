@@ -18,6 +18,7 @@
  * needs the plan review, and the review reads criteria.
  */
 
+import { recordCheckRun } from './agent-event-log';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -438,5 +439,9 @@ export async function runCheckRun(input: {
     ],
   );
   markDirty();
+  // ✓ / ✗ on the Timeline lanes of the workstreams its items are worked in (B2.2).
+  if (outcomes.length) {
+    recordCheckRun({ runUid: uid, planUid: input.planUid, trigger: input.trigger, by: input.by, byType: input.byType, outcomes });
+  }
   return { uid, planUid: input.planUid, trigger: input.trigger, by: input.by, byType: input.byType, startedAt, finishedAt, outcomes, sinceLast };
 }

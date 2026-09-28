@@ -6,8 +6,10 @@
  *   ●  an agent turn (tool calls and edits, grouped as the turn list does)
  *   ✎  a turn that edited a spec or an item's description (B1.2)
  *   ⚠  a signal raised about it (A1.6–A3), on every lane it names
+ *   ◆  a commit on it, ⧫ a merge (B2.2)
+ *   ✓ / ✗  criteria checked or decided for items worked in it (B2.2)
  *
- * Commits, merges, checks and breakpoints (◆ ✓ ✗ ⏸) are later steps.
+ * Breakpoints (⏸) are B4's.
  *
  * Pure: the component supplies turns, workstreams, signals and the time.
  * A turn is placed on the workstream its events name; failing that, the
@@ -15,13 +17,13 @@
  * work outside any workstream (a spec edited from the app, say).
  */
 
-import type { AgentEvent, AwarenessSignal, SignalSeverity, Workstream } from '@shared/types';
+import type { AgentEvent, AwarenessSignal, SignalSeverity, Workstream, WorkstreamCommit } from '@shared/types';
 import type { AgentTurn } from './agent-turns';
 
-export type LaneMarkKind = 'turn' | 'edit' | 'signal';
+export type LaneMarkKind = 'turn' | 'edit' | 'signal' | 'commit' | 'merge' | 'check-pass' | 'check-fail';
 
 export interface LaneMark {
-  /** The turn's id, or the signal's. */
+  /** The turn's id, the signal's, or the commit's sha. */
   id: string;
   kind: LaneMarkKind;
   at: number;
@@ -82,13 +84,34 @@ export function turnRoot(turn: AgentTurn, workstreams: readonly Workstream[]): s
   return null;
 }
 
+/**
+ * A turn's mark: ✗ if criteria were sent back or failed a check in it, ✓ if
+ * they passed or were approved, ✎ if it edited a spec, else ●.
+ */
+export function turnKind(turn: AgentTurn): LaneMarkKind {
+  let checked = false;
+  for (const e of turn.events) {
+    if (e.type === 'criterion_decided') {
+      checked = true;
+      if (e.payload?.decision !== 'approved') return 'check-fail';
+    } else if (e.type === 'check_run') {
+      checked = true;
+      if (Number(e.payload?.failed) > 0) return 'check-fail';
+    }
+  }
+  if (checked) return 'check-pass';
+  return turn.events.some((e) => e.type === 'spec_edited') ? 'edit' : 'turn';
+}
+
 export function buildLanes(input: {
   turns: readonly AgentTurn[];
   workstreams: readonly Workstream[];
   signals: readonly AwarenessSignal[];
+  /** Each workstream's own commits, by root (B2.2). */
+  commits?: Readonly<Record<string, readonly WorkstreamCommit[]>>;
   now: number;
 }): LanesView {
-  const { turns, workstreams, signals, now } = input;
+  const { turns, workstreams, signals, commits, now } = input;
   const lanes = new Map<string, Lane>();
   for (const w of workstreams) {
     lanes.set(w.root, { key: w.root, root: w.root, label: laneLabel(w), main: w.main, marks: [] });
@@ -106,15 +129,24 @@ export function buildLanes(input: {
   };
 
   for (const turn of turns) {
-    const edited = turn.events.some((e) => e.type === 'spec_edited');
     laneFor(turnRoot(turn, workstreams)).marks.push({
       id: turn.id,
-      kind: edited ? 'edit' : 'turn',
+      kind: turnKind(turn),
       at: turn.startedAt,
       endAt: turn.endedAt,
       text: `${turn.agentType ? `${turn.agentType}: ` : ''}${turn.summary}`,
       ...(turn.hasError ? { error: true } : {}),
     });
+  }
+  for (const [root, list] of Object.entries(commits ?? {})) {
+    // Only for workstreams on the lanes: commits never add a lane of their own.
+    if (!lanes.has(root)) continue;
+    for (const c of list) {
+      laneFor(root).marks.push({
+        id: c.sha, kind: c.merge ? 'merge' : 'commit', at: c.at, endAt: c.at,
+        text: `${c.agent ?? c.author}: ${c.subject} (${c.sha.slice(0, 7)})`,
+      });
+    }
   }
   for (const s of signals) {
     if (s.state === 'resolved') continue;

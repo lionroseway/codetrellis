@@ -301,6 +301,19 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
     return { text: `Edited ${what}${version}${from}`, intent: 'write', tool: null, mutating: true };
   }
 
+  // ── Criteria decided and checked (B2.2) ───────────────────────────
+  if (event.type === 'criterion_decided') {
+    const text = typeof payload.text === 'string' ? payload.text : 'a criterion';
+    const approved = payload.decision === 'approved';
+    return { text: `${approved ? 'Approved' : 'Sent back'} “${text.slice(0, 80)}”`, intent: approved ? 'write' : 'error', tool: null, mutating: true };
+  }
+  if (event.type === 'check_run') {
+    const passed = Number(payload.passed) || 0;
+    const failed = Number(payload.failed) || 0;
+    const words = failed ? `${failed} failing, ${passed} passing` : `all ${passed} passing`;
+    return { text: `Checked criteria: ${words}`, intent: failed ? 'error' : 'read', tool: null, mutating: false };
+  }
+
   // ── Claude Code session-JSONL events ──────────────────────────────
   const file = typeof payload.file === 'string' ? payload.file.split('/').pop() : null;
   switch (payload.action) {

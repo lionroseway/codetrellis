@@ -16,7 +16,11 @@ export type AgentEventType =
   | 'tool_call'
   | 'tool_error'
   /** A spec document's or a plan item's body changed (Phase 32 B1.2). */
-  | 'spec_edited';
+  | 'spec_edited'
+  /** A person approved or sent back a criterion (Phase 32 B2.2). */
+  | 'criterion_decided'
+  /** A plan's criteria were checked (Phase 32 B2.2), per workstream of the items checked. */
+  | 'check_run';
 
 export interface AgentEvent {
   id: string;
@@ -75,6 +79,19 @@ export interface WorkstreamAgent {
   source: 'mcp' | 'claude-log';
   /** Last activity, for MCP sessions. The log gives no liveness beat. */
   lastSeen: number | null;
+}
+
+/** One of a workstream's own commits, for its Timeline lane (Phase 32 B2.2). */
+export interface WorkstreamCommit {
+  sha: string;
+  /** When it was committed, ms. */
+  at: number;
+  author: string;
+  subject: string;
+  /** More than one parent. */
+  merge: boolean;
+  /** The agent named by an `agent: <type>` line in the message, when there is one. */
+  agent: string | null;
 }
 
 export interface Workstream {
