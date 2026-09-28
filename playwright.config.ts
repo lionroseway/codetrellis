@@ -90,6 +90,9 @@ const SERIAL_SPECS = [
   // Changes shared settings — plan visibility, identity — that a parallel
   // spec creating plans would pick up.
   '**/settings/sections-save.spec.ts',
+  // Turns off local API changes, so a parallel spec creating a plan over
+  // REST is refused while it is off (workspace-shell failed on #168).
+  '**/plan/unverified-tag.spec.ts',
   // Answers about whichever project was scanned last.
   '**/mcp-tools/graph-tools.spec.ts',
   // Opens the sample app, which swaps the one project every parallel spec reads.

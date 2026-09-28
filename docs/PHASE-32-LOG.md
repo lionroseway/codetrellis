@@ -218,6 +218,14 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   - Users adds a function to the shared file. Only its three overlaps come
     back, each `reopened.from: 'intended'`; the rest stay as the person
     left them.
+- **CI found a test-isolation bug of mine** (from #159).
+  `unverified-tag.spec.ts` turns off local API changes, a shared setting,
+  while other browser specs run in parallel. `workspace-shell`'s plan
+  creation landed inside that window and was refused (403, 36 ms). The
+  spec now runs in the `serial` project, beside `sections-save` which
+  changes shared settings too. Two other one-off failures on this PR were
+  the known `refs-panel` race and `layout-controls` counting zero nodes
+  while `depth-selector` switched depth in parallel; both are queued.
 - **UX journey.** The person comes back after an hour of five agents. The
   Awareness tab's digest is five lines, most severe first, each saying what
   is waiting on them. They mark what is fine as intended, and it stays out
