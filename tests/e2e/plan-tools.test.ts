@@ -77,8 +77,10 @@ test.describe.serial('Plan tools', () => {
     await json('update_plan', { plan_uid: planUid, title: 'Payments cleanup (phase 1)', status: 'in_progress', description: 'Scope: handlers only' });
     const plan = await json('get_plan', { plan_uid: planUid });
     expect(plan).toMatchObject({ title: 'Payments cleanup (phase 1)', status: 'in_progress', description: 'Scope: handlers only' });
-    const versions = (await (await h.client.raw('GET', `/api/plans/${planUid}/versions`)).json()) as unknown[];
+    const versions = (await (await h.client.raw('GET', `/api/plans/${planUid}/versions`)).json()) as Array<{ author: string; authorType: string | null }>;
     expect(versions.length).toBeGreaterThan(0);
+    // In the agent's own name and type, not the literal "agent" it used to write (carried 2b).
+    expect(versions[0]).toMatchObject({ author: 'plan-agent', authorType: 'mcp' });
   });
 
   test('after a rename, write-through keeps writing to the same directory', async () => {

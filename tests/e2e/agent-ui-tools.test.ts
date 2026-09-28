@@ -155,8 +155,12 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
   test('an agent\'s budget change is recorded and flagged until a person has seen it (owner\'s decision, 0.4g)', async () => {
     const flaggedPlan = (await h.client.createPlan({ title: 'Flagged budget', projectPath: h.fixture.projectPath })).uid;
 
-    // A person sets the ceiling: recorded, not flagged (over HTTP, so tagged local-api).
+    // Set over plain HTTP: recorded as the local API's and flagged, since the
+    // name on it could not be checked (carried 2b). Seen, it stops being.
     await req('PUT', `/api/plans/${flaggedPlan}/budget`, { minutes: 120, costUsd: 5 });
+    const [overHttp] = (await req('GET', `/api/plans/${flaggedPlan}/budget`)).flaggedChanges;
+    expect(overHttp).toMatchObject({ actorType: 'unverified', channel: 'local-api', flagged: true });
+    await req('POST', `/api/plans/${flaggedPlan}/budget/changes/${overHttp.id}/acknowledge`);
     expect((await req('GET', `/api/plans/${flaggedPlan}/budget`)).flaggedChanges).toEqual([]);
 
     // The agent raises it and exempts the plan: allowed, in its own name, flagged.

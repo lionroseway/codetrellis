@@ -7,6 +7,7 @@ import {
   groupSignals, needsYouCount, digestLine, kindWords, sidesOf, stateWords, actionsFor, ago,
 } from '../../lib/awareness-view';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
+import { UnverifiedIf } from '../UnverifiedTag';
 
 /**
  * The Awareness tab (Phase 32 A1.8, awareness spec §7.2): what overlaps
@@ -189,7 +190,7 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
         )}
       </div>
 
-      {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}</div>}
+      {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}<UnverifiedIf type={s.stateBy?.actorType} /></div>}
 
       <div className="mt-1.5 flex items-center gap-1">
         {actionsFor(s.state, s.kind).map((a) => (

@@ -24,7 +24,8 @@ import {
 import { useChannelsStore } from '../../../stores/channels-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { ChannelEvent, ChannelEventStatus, ChannelEventType } from '@shared/types';
-import { authorKind, authorWithSource } from '../../../lib/author-words';
+import { authorKind } from '../../../lib/author-words';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 // All six types are now composable from the UI (Phase 2.1).
 const ASK_TYPES: ChannelEventType[] = ['stuck', 'need-decision', 'need-context'];
@@ -413,7 +414,7 @@ function EventCard({ event, isRoot }: { event: ChannelEvent; isRoot: boolean }) 
         </span>
         <span className="text-[10.5px] text-foreground-subtle">·</span>
         <span className="text-[10.5px] text-foreground-subtle truncate min-w-0">
-          {renderAuthor(event)}
+          {renderAuthor(event)}<UnverifiedIf type={event.authorType} />
         </span>
         <div className="flex-1" />
         {isRoot && (
@@ -602,7 +603,8 @@ function collectDescendants(rootUid: string, childrenByParent: Record<string, Ch
 
 function renderAuthor(event: ChannelEvent): string {
   const kind = authorKind(event.authorType);
-  if (kind === 'unverified') return authorWithSource(event.author, event.authorType);
+  // The tag beside it says unverified (carried item 2b); the name is the name.
+  if (kind === 'unverified') return event.author;
   if (kind === 'agent') {
     const model = event.agentModel ? ` (${event.agentModel})` : '';
     return `${event.author}'s ${event.authorType}${model}`;

@@ -26,6 +26,9 @@ import type { AppSettings } from '../../shared/types';
 const GRANT_FIELDS: Array<[keyof AppSettings, string, string]> = [
   ['mcp', 'capabilities', 'Settings → MCP Server'],
   ['mcp', 'projectScope', 'Settings → MCP Server'],
+  // Who may change things over plain HTTP (carried item 2b). Otherwise a
+  // script refused a change could turn changes back on and try again.
+  ['mcp', 'acceptLocalApiChanges', 'Settings → MCP Server → Local API'],
   ['device', 'exposeMobileApi', 'Settings → Devices'],
   ['device', 'advertise', 'Settings → Devices'],
   ['device', 'shareAudio', 'Settings → Devices'],

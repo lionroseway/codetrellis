@@ -46,11 +46,13 @@ test.describe.serial('Freeze changes are flagged', () => {
     await h?.teardown();
   });
 
-  test('a person freezes: recorded with how it arrived, not flagged', async () => {
+  test('a freeze over plain HTTP: recorded with how it arrived, and flagged until seen (carried 2b)', async () => {
     await req('PUT', '/api/freeze', { projectPath: root, active: true, reason: 'Release 2.0', until: '2030-01-01T00:00:00.000Z' });
+    const [first] = (await status()).flaggedChanges as Change[];
+    expect(first).toMatchObject({ actorType: 'unverified', channel: 'local-api', flagged: true, before: null, after: { active: true } });
+    await req('POST', `/api/freeze/changes/${first.id}/acknowledge`, { projectPath: root });
     expect((await status()).flaggedChanges).toEqual([]);
-    const [first] = await changes();
-    expect(first).toMatchObject({ actorType: 'unverified', channel: 'local-api', flagged: false, before: null, after: { active: true } });
+    expect((await changes())[0]).toMatchObject({ id: first.id, flagged: false });
   });
 
   test('an agent exempts its own plan: allowed, in its name, flagged; an unknown plan is refused', async () => {

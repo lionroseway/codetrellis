@@ -30,6 +30,8 @@ export interface UpdatePlanDocInput {
   docType?: string;
   changeSummary?: string;
   author?: string;
+  /** How the edit arrived, with `author` (carried 2b). */
+  authorType?: string;
   orderHint?: string | null;
   parentDocUid?: string | null;
 }
@@ -49,9 +51,9 @@ export function createPlanDocument(input: CreatePlanDocInput): PlanDocument {
   );
 
   db.run(
-    `INSERT INTO plan_document_versions (doc_uid, version, body, change_summary, author, created_at)
-     VALUES (?, 1, ?, 'Created', ?, ?)`,
-    [uid, input.body, input.author, now]
+    `INSERT INTO plan_document_versions (doc_uid, version, body, change_summary, author, author_type, created_at)
+     VALUES (?, 1, ?, 'Created', ?, ?, ?)`,
+    [uid, input.body, input.author, authorType, now]
   );
 
   markDirty();
@@ -177,11 +179,13 @@ export function updatePlanDocument(docUid: string, updates: UpdatePlanDocInput):
   db.run(`UPDATE plan_documents SET ${sets.join(', ')} WHERE uid = ?`, params);
 
   if (bodyChanged) {
+    // An edit with no author (a plan file re-read from disk) keeps the doc's own.
     const author = updates.author ?? existing.author;
+    const authorType = updates.author !== undefined ? (updates.authorType ?? null) : (existing.authorType ?? null);
     db.run(
-      `INSERT INTO plan_document_versions (doc_uid, version, body, change_summary, author, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [docUid, existing.version + 1, updates.body, updates.changeSummary ?? 'Updated', author, now]
+      `INSERT INTO plan_document_versions (doc_uid, version, body, change_summary, author, author_type, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [docUid, existing.version + 1, updates.body, updates.changeSummary ?? 'Updated', author, authorType, now]
     );
   }
 
@@ -225,7 +229,7 @@ export function searchPlanDocuments(planUid: string, query: string): Array<{
 
 export function getPlanDocumentVersions(docUid: string): PlanDocumentVersion[] {
   const result = getDb().exec(
-    `SELECT id, doc_uid, version, body, change_summary, author, created_at
+    `SELECT id, doc_uid, version, body, change_summary, author, created_at, author_type
      FROM plan_document_versions WHERE doc_uid = ?
      ORDER BY version DESC`,
     [docUid]
@@ -239,6 +243,7 @@ export function getPlanDocumentVersions(docUid: string): PlanDocumentVersion[] {
     changeSummary: (r[4] as string | null) ?? null,
     author: r[5] as string,
     createdAt: r[6] as number,
+    authorType: (r[7] as string | null) ?? null,
   }));
 }
 

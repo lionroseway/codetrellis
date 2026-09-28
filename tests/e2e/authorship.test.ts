@@ -59,9 +59,11 @@ test.describe.serial('Authorship follows how a write arrived', () => {
     });
     expect(doc).toMatchObject({ author: 'sam@example.com', authorType: 'unverified' });
 
-    await req('PUT', `/api/plan-docs/${doc.uid}`, { body: 'Half-up at 2dp.', author: 'the-ceo' });
-    const versions = await req('GET', `/api/plan-docs/${doc.uid}/versions`) as Array<{ author: string }>;
+    await req('PUT', `/api/plan-docs/${doc.uid}`, { body: 'Half-up at 2dp.', author: 'the-ceo', authorType: 'human' });
+    const versions = await req('GET', `/api/plan-docs/${doc.uid}/versions`) as Array<{ author: string; authorType: string | null }>;
     expect(versions.map((v) => v.author)).not.toContain('the-ceo');
+    // Each version keeps how it arrived, so the history can tag it (carried 2b).
+    expect(versions.map((v) => v.authorType)).toEqual(['unverified', 'unverified']);
 
     const made = await req('POST', '/api/plans/from-template', {
       templateId: 'mass-refactor', projectPath: root, title: 'From a template', author: 'the-ceo', authorType: 'human',

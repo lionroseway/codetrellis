@@ -202,6 +202,14 @@ function relTime(ts?: number | null): string {
 
 // --- Component ---------------------------------------------------------------
 
+/**
+ * An agent's change, or one over the desktop's local API, whose name could
+ * not be checked (carried 2b). No tooltip on a phone, so the words say it.
+ */
+function byWords(byType: string): string {
+  return byType === 'unverified' ? '(local API, unverified)' : '(agent)';
+}
+
 export default function PlanDetailScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
   const router = useRouter();
@@ -561,7 +569,7 @@ export default function PlanDetailScreen() {
           {freeze.flaggedChanges.map((c) => (
             <View key={c.id} style={styles.budgetFlag} testID="plan-freeze-flag">
               <Text style={styles.budgetFlagText}>
-                <Text style={styles.budgetFlagWho}>{c.by}</Text> (agent) {c.words}
+                <Text style={styles.budgetFlagWho}>{c.by}</Text> {byWords(c.byType)} {c.words}
               </Text>
               <View style={styles.budgetFlagFooter}>
                 <Text style={styles.budgetSub}>
@@ -597,7 +605,7 @@ export default function PlanDetailScreen() {
           {budget.flaggedChanges.map((c) => (
             <View key={c.id} style={styles.budgetFlag} testID="plan-budget-flag">
               <Text style={styles.budgetFlagText}>
-                <Text style={styles.budgetFlagWho}>{c.by}</Text> (agent) {c.words}
+                <Text style={styles.budgetFlagWho}>{c.by}</Text> {byWords(c.byType)} {c.words}
               </Text>
               <View style={styles.budgetFlagFooter}>
                 <Text style={styles.budgetSub}>

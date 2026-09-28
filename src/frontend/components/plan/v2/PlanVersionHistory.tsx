@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { History, X, Bot, User } from 'lucide-react';
 import type { Plan, PlanVersion } from '@shared/types';
+import { authorKind, versionAuthorType } from '../../../lib/author-words';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 /**
  * Phase 29 §4.8 — plan-level version history.
@@ -171,7 +173,9 @@ export function PlanVersionHistory({
             const changes = diffSnapshots(v.snapshot, previousOf.get(v.version) ?? null);
             const isOpen = open === v.version;
             const isFirst = previousOf.get(v.version) === null;
-            const Icon = v.author === 'human' ? User : Bot;
+            // By the type recorded, not the name: a name is never "human" (carried 2b).
+            const type = versionAuthorType(v);
+            const Icon = authorKind(type) === 'agent' ? Bot : User;
             return (
               <div
                 key={v.id}
@@ -187,7 +191,8 @@ export function PlanVersionHistory({
                   <span className="text-[11.5px] text-foreground-muted truncate flex-1">
                     {isFirst ? 'Plan created' : (v.changeSummary || '—')}
                   </span>
-                  <Icon size={10} className="text-foreground-subtle shrink-0" />
+                  <Icon size={10} className="text-foreground-subtle shrink-0" aria-label={authorKind(type) === 'agent' ? 'by an agent' : undefined} />
+                  <UnverifiedIf type={type} />
                   <span className="text-[10px] text-foreground-subtle shrink-0">
                     {new Date(v.createdAt).toLocaleString()}
                   </span>
@@ -224,7 +229,7 @@ export function PlanVersionHistory({
                       ))
                     )}
                     <p className="text-[9.5px] text-foreground-subtle pt-1">
-                      Recorded by {v.author}.
+                      Recorded by {v.author}{authorKind(type) === 'agent' ? ' (agent)' : ''}<UnverifiedIf type={type} />.
                     </p>
                   </div>
                 )}

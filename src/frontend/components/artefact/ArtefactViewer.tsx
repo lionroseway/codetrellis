@@ -11,6 +11,8 @@ import DOMPurify from 'dompurify';
 import type { XlsxReply } from '../../workers/xlsx-worker';
 import type { DocxReply } from '../../workers/docx-worker';
 import type { PptxReply } from '../../workers/pptx-worker';
+import { authorKind } from '../../lib/author-words';
+import { UnverifiedIf } from '../UnverifiedTag';
 
 /**
  * Phase 31 §7 — the artefact viewer.
@@ -139,9 +141,13 @@ function ViewerDialog({ view }: { view: ArtefactView }) {
                   meta.role,
                   meta.size !== null ? formatBytes(meta.size) : null,
                   meta.sha256 ? `sha256 ${meta.sha256.slice(0, 12)}` : null,
-                  meta.recordedBy ? `recorded by ${meta.recordedBy}${meta.recordedByType === 'mcp' ? ' (agent)' : ''}` : null,
+                  // An agent records under its own type, never 'mcp' (which this
+                  // compared against, so no agent was ever marked). Unverified
+                  // gets the tag after the line (carried item 2b).
+                  meta.recordedBy ? `recorded by ${meta.recordedBy}${authorKind(meta.recordedByType) === 'agent' ? ' (agent)' : ''}` : null,
                   describeLocator(view.locator) ? `at ${describeLocator(view.locator)}` : null,
                 ].filter(Boolean).join(' · ')}
+                <UnverifiedIf type={meta.recordedByType} />
               </div>
             )}
           </div>

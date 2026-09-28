@@ -107,10 +107,11 @@ test.describe('Acceptance criteria', () => {
     const row = page.getByTestId('criterion-row').filter({ hasText: 'Every figure has a source' });
     await expect(row.getByTestId('criterion-origin')).toHaveText(/^added by .+ \(agent\)$/, { timeout: 10_000 });
 
-    // The browser build talks plain HTTP: the approval counts, and says it
-    // came through the local API rather than the app window or a phone.
+    // The browser build talks plain HTTP: the approval counts, and is tagged
+    // as having come through the local API rather than the app window or a
+    // phone (carried 2b).
     await row.getByRole('button', { name: /Approve/ }).click();
     await expect(row).toHaveAttribute('data-state', 'met');
-    await expect(row).toContainText('(local API, unverified)');
+    await expect(row.getByTestId('unverified-tag').first()).toBeVisible();
   });
 });

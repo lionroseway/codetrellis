@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Send, MessageSquare } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import type { Comment } from '../../../shared/types';
-import { authorKind, UNVERIFIED_WORDS } from '../../lib/author-words';
+import { authorKind } from '../../lib/author-words';
+import { UnverifiedIf } from '../UnverifiedTag';
 
 function CommentItem({ comment }: { comment: Comment }) {
   const typeColors: Record<string, string> = {
@@ -18,7 +19,9 @@ function CommentItem({ comment }: { comment: Comment }) {
     <div className={`px-2.5 py-2 rounded-lg border ${style.split(' ')[1]} bg-white/[0.02]`}>
       <div className="flex items-center gap-1.5 mb-1">
         <span className="text-[10px] font-medium text-foreground">{comment.author}</span>
-        <span className="text-[9px] text-foreground-subtle">({authorKind(comment.authorType) === 'unverified' ? UNVERIFIED_WORDS : comment.authorType})</span>
+        {authorKind(comment.authorType) === 'unverified'
+          ? <UnverifiedIf type={comment.authorType} />
+          : <span className="text-[9px] text-foreground-subtle">({comment.authorType})</span>}
         {comment.commentType !== 'comment' && (
           <span className={`text-[8px] font-semibold px-1 rounded ${style.split(' ')[0]}`}>
             {comment.commentType}

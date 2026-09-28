@@ -116,7 +116,8 @@ export function ago(then: number, now: number): string {
  */
 export function stateWords(s: Pick<AwarenessSignal, 'state' | 'stateBy' | 'stateAt'>, now: number): string | null {
   if (s.state === 'open' || s.state === 'resolved' || !s.stateAt) return null;
-  const who = s.stateBy?.actorType === 'human' ? 'by you' : 'over the local API, not verified as you';
+  // Unverified: the name as given, tagged beside it (carried item 2b).
+  const who = s.stateBy?.actorType === 'human' ? 'by you' : `by ${s.stateBy?.actor ?? 'someone'}`;
   return `${STATE_VERB[s.state]} ${who} · ${ago(s.stateAt, now)}`;
 }
 

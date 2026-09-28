@@ -39,7 +39,8 @@ import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
 import type {
   PlanItem, TaskStatus, Comment,
 } from '@shared/types';
-import { authorKind, authorWithSource } from '../../../lib/author-words';
+import { authorKind } from '../../../lib/author-words';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 const STATUS_META: Record<TaskStatus, { label: string; tint: string; Icon: typeof Circle }> = {
   pending: { label: 'Pending', tint: 'text-zinc-400', Icon: Circle },
@@ -345,7 +346,7 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
 
           {item.assignee && (
             <span className="px-2.5 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-300 text-[12px]">
-              👤 {item.assignee}
+              👤 {item.assignee}<UnverifiedIf type={item.assigneeType} />
             </span>
           )}
 
@@ -1178,7 +1179,7 @@ function CommentsBlock({
                   <meta.Icon size={12} className={meta.tint} />
                   <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
                   <span>·</span>
-                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{authorWithSource(c.author, c.authorType)}</span>
+                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}<UnverifiedIf type={c.authorType} /></span>
                   <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
                   <CopyRef kind="comment" uid={c.uid} within={{ kind: isAction ? 'task' : 'page', uid: itemUid }} />
                   <button

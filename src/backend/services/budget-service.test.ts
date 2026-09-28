@@ -20,6 +20,7 @@ import {
   listOpenTurns,
   resetBudgetState,
   getUnattributedTokenReports,
+  isFlaggedActor,
   TURN_GAP_MS,
   type OpenTurn,
   type PlanBudget,
@@ -81,6 +82,15 @@ describe('forecast', () => {
     assert.equal(forecast(60, 0.05), null);
     assert.equal(forecast(60, null), null);
     assert.equal(forecast(0, 0.5), null);
+  });
+});
+
+describe('which changes are flagged', () => {
+  test('only the person in the app window is not flagged: an agent and the local API are (carried 2b)', () => {
+    assert.equal(isFlaggedActor('human'), false);
+    assert.equal(isFlaggedActor('unverified'), true, 'a change over plain HTTP could have come from anything on the machine');
+    assert.equal(isFlaggedActor('mcp'), true);
+    assert.equal(isFlaggedActor('claude-code'), true);
   });
 });
 

@@ -8,6 +8,7 @@ import { openFileAt, absoluteFilePath } from '../../../lib/open-file-at';
 import { openArtefactAt } from '../../../lib/open-artefact-at';
 import { briefState } from '../../../lib/brief-vocabulary';
 import { decisionWords, stateWords, type SignoffRow } from '../../../../shared/lib/signoff';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 /**
  * Reviewing a plan against what actually landed — Phase 29 (surfacing
@@ -451,7 +452,7 @@ function SignoffList({ rows }: { rows: SignoffRow[] }) {
             </div>
             <div className="pl-4 text-[10px] text-foreground-subtle">
               {stateWords(r)}
-              {r.decision && <> · {decisionWords(r)}</>}
+              {r.decision && <> · {decisionWords(r)}<UnverifiedIf type={r.decision.actorType} /></>}
             </div>
             {r.evidence.some((e) => e.attachmentUid) && (
               <div className="pl-4 flex flex-wrap gap-x-2">

@@ -181,7 +181,7 @@ export function applyTemplateToPlan(input: ApplyTemplateToPlanInput): { items: P
   const author = input.author ?? 'human';
   const authorType = input.authorType ?? 'human';
   if (!plan.description?.trim() && template.defaultPlanDescription) {
-    updatePlan(plan.uid, { description: template.defaultPlanDescription }, author);
+    updatePlan(plan.uid, { description: template.defaultPlanDescription }, author, authorType);
   }
 
   const templateAny = template as any;

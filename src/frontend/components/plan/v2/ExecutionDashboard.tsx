@@ -24,6 +24,7 @@ import {
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { PlanItem, AgentSessionInfo } from '@shared/types';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 /**
  * Active task spotlight — items currently being worked on.
@@ -78,7 +79,7 @@ function ActiveTaskRow({ item }: { item: PlanItem }) {
           {item.assignee && (
             <>
               <span>·</span>
-              <span className="text-cyan-300">{item.assignee}</span>
+              <span className="text-cyan-300">{item.assignee}<UnverifiedIf type={item.assigneeType} /></span>
             </>
           )}
           {typeof item.progressPercent === 'number' && (

@@ -112,6 +112,8 @@ export const SCHEMA_PLANS_CORE = `
     snapshot TEXT NOT NULL,
     change_summary TEXT,
     author TEXT NOT NULL,
+    -- How the edit arrived (carried 2b). Null on rows from before it was kept.
+    author_type TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(plan_uid, version)
   );
@@ -266,6 +268,8 @@ export const SCHEMA_PLANS_CORE = `
     body TEXT NOT NULL,
     change_summary TEXT,
     author TEXT NOT NULL,
+    -- How the edit arrived (carried 2b). Null on rows from before it was kept.
+    author_type TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(doc_uid, version)
   );

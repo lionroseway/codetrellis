@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Timer, Info, Flag } from 'lucide-react';
 import type { Plan } from '@shared/types';
+import { authorKind } from '../../../lib/author-words';
+import { UnverifiedIf } from '../../UnverifiedTag';
 import {
   stateOf, formatMinutes, formatCost, describeBudgetChange, type BudgetState, type BudgetCeiling,
 } from '../../../lib/budget-format';
@@ -55,7 +57,7 @@ interface BudgetReport {
   overruns: Array<{ itemUid: string; estimateMinutes: number; spentMinutes: number }>;
   pricingVersion: string;
   pricingVersions?: string[];
-  /** An agent's changes to the ceiling that no person has acknowledged (§0.4g). */
+  /** Changes to the ceiling no person has acknowledged: an agent's (§0.4g) or the local API's (carried 2b). */
   flaggedChanges?: FlaggedChange[];
 }
 
@@ -177,11 +179,11 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
       <button
         onClick={() => setOpen((v) => !v)}
         className={`flex items-center gap-2 px-2.5 py-1 rounded-full border transition-colors ${CHIP_STYLE[state]}`}
-        title={flagged.length ? `An agent changed this plan's budget (${flagged.length}) — open to review` : 'Time and cost recorded against this plan'}
+        title={flagged.length ? `Budget changes to review (${flagged.length}), made by an agent or over the local API — open to review` : 'Time and cost recorded against this plan'}
         data-testid="plan-budget-chip"
       >
         {flagged.length > 0 && (
-          <Flag size={11} className="text-amber-300" aria-label={`${flagged.length} budget change${flagged.length === 1 ? '' : 's'} by an agent to review`} />
+          <Flag size={11} className="text-amber-300" aria-label={`${flagged.length} budget change${flagged.length === 1 ? '' : 's'} to review`} />
         )}
         <Timer size={12} />
         <span className="text-[12.5px] tabular-nums">
@@ -204,13 +206,14 @@ export function PlanBudgetChip({ plan }: { plan: Plan }) {
 
           {flagged.length > 0 && (
             // An agent may change a budget — it is advisory — but a person
-            // sees that it did, until they say they have (§0.4g).
+            // sees that it did, until they say they have (§0.4g). So does a
+            // change over the local API, tagged unverified (carried 2b).
             <div className="mb-2.5 pb-2 border-b border-white/[0.06] space-y-1.5" data-testid="budget-flagged-changes">
               {flagged.map((c) => (
                 <div key={c.id} className="flex items-start gap-1.5 text-amber-200/90 leading-snug" data-testid="budget-flagged-change">
                   <Flag size={11} className="shrink-0 mt-0.5 text-amber-300" />
                   <span className="flex-1">
-                    <span className="font-medium">{c.actor}</span> (agent) {describeBudgetChange(c.before, c.after)}
+                    <span className="font-medium">{c.actor}</span>{authorKind(c.actorType) === 'agent' ? ' (agent)' : <UnverifiedIf type={c.actorType} />} {describeBudgetChange(c.before, c.after)}
                     <span className="text-foreground-subtle"> · {new Date(c.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
                   </span>
                   <button

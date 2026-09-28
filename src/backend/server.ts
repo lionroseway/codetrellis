@@ -88,6 +88,7 @@ import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkP
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
+import { refusesLocalApiChange, LOCAL_API_CHANGES_REFUSAL } from './services/local-api-changes';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
@@ -161,6 +162,18 @@ app.use(express.json());
  * See src/backend/middleware/local-auth.ts for the three layers.
  */
 app.use(localAuthMiddleware);
+
+// Changes over the local API can be turned off (carried item 2b): then only
+// the app window changes anything. Reads, MCP and the phone are unaffected.
+app.use((req, res, next) => {
+  const refused = refusesLocalApiChange(
+    { method: req.method, path: req.path, fromAppWindow: cameFromAppWindow(req) },
+    getSettings().mcp.acceptLocalApiChanges,
+    httpGrantsAllowed(),
+  );
+  if (refused) { res.status(403).json({ error: LOCAL_API_CHANGES_REFUSAL }); return; }
+  next();
+});
 
 /**
  * CONFINED TO OPENED PROJECTS (Phase 19).
@@ -2031,14 +2044,14 @@ function actorFrom(req: express.Request) {
 export function updatePlanAsPerson(
   planUid: string,
   changes: Parameters<typeof planService.updatePlan>[1],
-  author: string,
+  by: { author: string; authorType: string },
 ): void {
   const plan = planService.getPlan(planUid);
   if (!plan) throw new PlanRequestError(404, 'Plan not found');
   if (changes.status !== undefined && !isPlanStatus(changes.status)) {
     throw new PlanRequestError(400, `status must be one of: ${PLAN_STATUSES.join(', ')}`);
   }
-  planService.updatePlan(planUid, changes, author);
+  planService.updatePlan(planUid, changes, by.author, by.authorType);
 
   // A plan made in the window is held back while it is "Untitled plan" and
   // written into the project once it has a name (bug 48).
@@ -2107,7 +2120,7 @@ app.put('/api/plans/:uid', (req, res) => {
     updatePlanAsPerson(
       req.params.uid,
       { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
-      personFrom(req).author,
+      personFrom(req),
     );
   } catch (err) { sendPlanError(res, err); return; }
   res.json({ ok: true });
@@ -2748,20 +2761,17 @@ app.delete('/api/items/:uid', (req, res) => {
 app.post('/api/items/:uid/claim', (req, res) => {
   const { agentId, agentType, model } = req.body || {};
   // The body names who the work is assigned to — a script or test can claim
-  // on an agent's behalf — but the change is recorded as the caller's.
-  const result = planItemService.claimItem(
-    req.params.uid,
-    agentId || personFrom(req).author,
-    agentType || 'human',
-    model,
-    undefined,
-    undefined,
-    personFrom(req),
-  );
+  // on an agent's behalf — but the change is recorded as the caller's. With
+  // no agent named, the caller takes it, as whoever they are: over plain
+  // HTTP that is `unverified`, never `human` (carried 2b).
+  const who = personFrom(req);
+  const assignee = agentId || who.author;
+  const assigneeType = agentType || who.authorType;
+  const result = planItemService.claimItem(req.params.uid, assignee, assigneeType, model, undefined, undefined, who);
   if (result.ok) {
     const item = planItemService.getItem(req.params.uid);
     if (item) {
-      broadcast('plan-item-claimed', { planUid: item.planUid, itemUid: item.uid, agentId: agentId || 'human', agentType: agentType || 'human' });
+      broadcast('plan-item-claimed', { planUid: item.planUid, itemUid: item.uid, agentId: assignee, agentType: assigneeType });
       if (result.conflicts) {
         broadcast('conflict-detected', { planUid: item.planUid, itemUid: item.uid, message: result.conflicts.join('; ') });
       }
@@ -3068,7 +3078,7 @@ app.put('/api/plan-docs/:docUid', (req, res) => {
   // The version's author is whoever made the edit, never a name in the body.
   const { title, body, docType, changeSummary, orderHint, parentDocUid } = req.body || {};
   const doc = updatePlanDocument(req.params.docUid, {
-    title, body, docType, changeSummary, author: personFrom(req).author, orderHint, parentDocUid,
+    title, body, docType, changeSummary, ...personFrom(req), orderHint, parentDocUid,
   });
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
   broadcast('plan-doc-updated', { doc });

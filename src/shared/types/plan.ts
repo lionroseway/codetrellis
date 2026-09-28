@@ -232,6 +232,8 @@ export interface PlanVersion {
   snapshot: string; // JSON blob of full plan + tasks state
   changeSummary: string | null;
   author: string;
+  /** 'human', 'unverified' or an agent's type; null on versions saved before it was kept. */
+  authorType: string | null;
   createdAt: number;
 }
 
@@ -496,6 +498,8 @@ export interface PlanDocumentVersion {
   body: string;
   changeSummary: string | null;
   author: string;
+  /** 'human', 'unverified' or an agent's type; null on versions saved before it was kept. */
+  authorType: string | null;
   createdAt: number;
 }
 
