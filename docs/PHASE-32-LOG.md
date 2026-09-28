@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B4.3a: breakpoints in the inbox |
-| **Status** | B4.3a done on its branch (stacked on B4.2b, #181 in CI): the waiting list at the top of Awareness with continue / steer / stop; "Ask me first" on a task; the breakpoints set, with Clear and signal rules. Unit and browser pass |
-| **Next action** | Merge #181; rebase B4.3a, open its PR, merge when green. Then B4.3b (graph node action, ⏸ on nodes, lane spans), B4.4 (phone) |
+| **Status** | B4.3a done on its branch (B4.2b merged, #181): the waiting list at the top of Awareness with continue / steer / stop; "Ask me first" on a task; the breakpoints set, with Clear and signal rules. Unit and browser pass |
+| **Next action** | Merge B4.3a's PR when green. Then B4.3b (graph node action, ⏸ on nodes, lane spans), B4.4 (phone) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b4-3a-waiting-list` |
 | **Last updated** | 2026-09-28 |
@@ -106,8 +106,8 @@
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
-  - [x] B4.2b Signal breakpoints (PR open)
-  - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set (PR after #181)
+  - [x] B4.2b Signal breakpoints ([#181](https://github.com/lionroseway/codetrellis/pull/181))
+  - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set (PR open)
   - [ ] B4.3b Graph node action, ⏸ on nodes, lane spans
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
