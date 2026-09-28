@@ -39,6 +39,8 @@ import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './services/capability-token';
 import { commitsByWorkstream } from './services/workstream-commits';
+import { normaliseSkills } from './services/skill-model';
+import { listProjectSkills } from './services/skills-service';
 import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -792,6 +794,14 @@ app.get('/api/workstreams/commits', (req, res) => {
   const asked = typeof req.query.since === 'string' && /^\d+$/.test(req.query.since) ? Number(req.query.since) : now - 2 * 60 * 60 * 1000;
   const since = Math.min(now, Math.max(now - 24 * 60 * 60 * 1000, asked));
   res.json({ since, commits: commitsByWorkstream(listWorkstreams(projectRoot, { includeIdle: true }), since) });
+});
+
+// The skills the opened project has (Phase 32 C1): `.claude/skills/*/SKILL.md`,
+// read through confined-fs, name and description from each front-matter.
+app.get('/api/skills', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ skills: listProjectSkills(projectRoot) });
 });
 
 // Branches and the OTHER worktrees of a project's repository, for the
@@ -2666,6 +2676,12 @@ app.put('/api/items/:uid', (req, res) => {
   if (body.visibility !== undefined && !ITEM_VISIBILITIES.has(body.visibility)) {
     res.status(400).json({ error: 'visibility must be shared or local' });
     return;
+  }
+  // Skills are shown to agents (Phase 32 C1), so a bad one is refused here
+  // rather than stored and quietly trimmed.
+  if (body.skills !== undefined) {
+    const { problems } = normaliseSkills(body.skills);
+    if (problems.length) { res.status(400).json({ error: problems.join('; ') }); return; }
   }
   if (body.status !== undefined && !isTaskStatus(body.status)) {
     res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });

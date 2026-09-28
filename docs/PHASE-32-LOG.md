@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B2.2: commits, merges and checks on the lanes |
-| **Status** | B2.2 done on its branch: ◆ each workstream's own commits, ⧫ merges, ✓ / ✗ criteria decided and check runs on the lane of the work; unit and harness tests pass. B2.1 merged (#171) |
-| **Next action** | Validate (inventory, unit, lint, typecheck, browser spec), commit, open and merge B2.2: B2 done. Then C1, B4, B3, direction review, B5, A4 |
+| **Stage / step** | Track C — C1.1: skills reach the agent |
+| **Status** | C1.1 done on its branch (stacked on B2.2): skill fields `use` / `why` / `where`, normalised on every write, the project's skills index, and the skills line in `get_brief`, `claim_item` and `get_next_item`; a link never reaches an agent. Unit and harness pass. B2.2 (#172) in CI |
+| **Next action** | Merge B2.2 when green; rebase C1.1 onto `feat/phase-32`, open its PR; then C1.2 (the picker) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b2-2-commits-checks` |
+| **Branch** | `feat/phase-32-c1-1-skills` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -113,6 +113,10 @@
 
 ### Track C: shared ways of working
 - [ ] C1 Skills on tasks
+  - [ ] C1.1 Fields, index, brief/claim/next delivery, link never to agents (branch ready)
+  - [ ] C1.2 The picker in the routing panel
+  - [ ] C1.3 Proof of use; the skills line in a terminal preset's prompt
+  - [ ] C1.4 A skill arriving in a pulled plan file is flagged once
 - [ ] C2 Team status through git
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
@@ -193,12 +197,84 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Track A ran ahead of the sequence: A2 and A3 were built before B1, B2, C1, B4 and B3, which §2 puts between A1 and A3. Nothing recorded that reorder. From here the sequence is followed again: B1, B2, C1, B4, B3, then the direction review, then B5 and A4 | Found when A3 closed and A4 looked next. Awareness was the owner's stated priority and each A-step stood alone, so no work is wasted; but the Timeline and breakpoints (B1, B2, B4) are what A4's "Needs you" and A5's review lean on, and the direction review is due at A3's end, after those steps |
 | 2026-09-28 | Agent events are kept by a passive tap on `broadcast()`, stamped at the tap, not by changing each producer (B1.1) | Every producer is covered, including ones added later. The tap reads the session row directly, so an MCP call (which names no workstream) and a `session_end` (after the session goes inactive) still get their workstream |
 | 2026-09-28 | The PreToolUse hook only informs: `additionalContext`, never a `permissionDecision`; it fails open and silent (no app, unknown folder, no overlap, over 5 s); it asks over MCP as its own short session named `claude-code-hook` (A3.4) | A hook that blocks or approves would change Claude Code's permission model behind the person's back, and one that gets in the way gets uninstalled. Going through MCP keeps one surface with one capability matrix, and the check is visible in the Timeline; the cost is a connect per edit, which is cheap on loopback |
+| 2026-09-28 | A skill's `link` location never reaches an agent: the skills an agent is told about drop it, and MCP tools read items through an agent view of the item service that removes it from every item they return. People still see and edit it (C1.1) | The shared-work doc's safety rule: a link is shown to people, never to agents. `claim_item`, `get_next_item` and `get_item` all return the raw item, so hiding it only from the skills line would have left it one field away. The item service is where every MCP tool gets items from, so the view is applied once there rather than per tool |
+| 2026-09-28 | Until C1.4, a recommended skill arriving in a pulled plan file is told to agents at once, like the item body beside it. A `repo` location must be a file in the opened project, re-checked through confined-fs before every telling (C1.1) | A pulled file could already put any text in front of an agent through the item body, and a repo skill is repository content from the same git history. C1.4 adds the "flag once before any agent is told" gate the doc asks for |
 | 2026-09-28 | A lane's commits are that workstream's own: `base..HEAD` for a worktree or branch, main's log for main. A decision or check run goes on the lane of the workstream whose session is assigned the item, and a check run counts trouble as the check-run panel does (B2.2) | Otherwise every lane repeats main's history and the one commit that matters is lost among them. The assignee's workstream is the only link from an item to a lane that no one has to declare. Counting a sent-back criterion as a failed check would show it twice, once as ✗ decided and again as ✗ checked |
 | 2026-09-28 | Settings offers the skill ticked and the hook unticked, both written to Claude Code's user folder (`~/.claude` or `$CLAUDE_CONFIG_DIR`), from the app window only (A3.4) | The skill only loads when relevant; the hook runs before every edit, so it is opted into. User scope because parallel work is per developer, not per repository, and the hook is silent outside known workstreams. Window-only because an agent must not install a hook into its own client |
 
 ---
 
 ## Entries
+
+### 2026-09-28: C1.1 — skills reach the agent
+- **C1 refined** into four sub-steps in EXECUTION §6: delivery (C1.1), the
+  picker (C1.2), proof of use (C1.3), and pulled skills flagged (C1.4).
+- **Fields.** `Skill` gains:
+  - `use: 'recommended'`: use this for this task. `required` still gates
+    the claim, as before.
+  - `why`: one line, shown to the agent and to the person.
+  - `where`: repo, plugin, mcp, playbook or link.
+
+  Old files read exactly as before.
+- **Checked on the way in** (`services/skill-model.ts`). Every item
+  write normalises skills, whether it came from the panel, a plan file or
+  a template:
+  - a name is one line with no backticks;
+  - a `repo` path is relative and inside the project, with no `..`, no
+    absolute path and no drive letter, and a folder means its `SKILL.md`;
+  - a link is http(s) only;
+  - there is one entry per name, and at most 30.
+
+  `PUT /api/items/:uid` refuses a bad skill with the reason instead of
+  trimming it quietly.
+- **The index.** `GET /api/skills?project=` lists the project's
+  `.claude/skills/*/SKILL.md`, with the name and one-line description from
+  each front-matter. Every read goes through confined-fs:
+  - a linked `.claude` folder is not read;
+  - a linked skill folder is skipped;
+  - a linked `SKILL.md` is refused at the open.
+- **Delivery.** `get_brief`, `claim_item` and `get_next_item` gain
+  `skills` and a one-line `skills_note`: "Skills for this task: use
+  **pr-review** (`.claude/skills/pr-review/SKILL.md`), because this task
+  ends in a PR; required: **typescript**."
+  - A named skill with no location is found in the index.
+  - The project root comes from the plan's record, and the agent's folder
+    from its bound session, never from arguments.
+  - A repo skill missing from the agent's own checkout (a worktree on a
+    branch from before the skill) says so, and says to bring the branch up
+    to date with main.
+- **A link never reaches an agent.** The skills block drops it. MCP tools
+  read items through an agent view of the item service, which removes link
+  locations from every item they return: `claim_item`, `get_next_item` and
+  `get_item` return the raw item.
+- **Tests.**
+  - Unit:
+    - `skill-model.test.ts` (10): each field, old files, paths out of the
+      project, link protocols, dedupe, `withoutLinks`, `agentView`;
+    - `skills-service.test.ts` (6): front-matter, the index, links refused
+      at three levels, what an agent is told, missing in project and in
+      workstream, a repo path escaping through a link.
+  - Harness: `skills-delivery.test.ts` (5). It uses a real project with a
+    skill and a worktree made before it, and two agents.
+    - The index is served, and a project that is not open is refused.
+    - Bad skills are refused and nothing is stored.
+    - A folder is stored as its `SKILL.md`.
+    - All three tools say the same line.
+    - The required skill still gates the claim.
+    - The link is in none of the four responses, while the person still
+      sees it.
+    - The agent behind is told the skill is missing and how to get it.
+  - The item-tool harness files (agent-loop, plan-items, parallel-claims,
+    task-context, multi-agent, criteria-signoff, full-loop, intake,
+    short-references): 46 pass through the new agent view.
+- **UX journey (agent side; the person's picker is C1.2).**
+  - A person marks pr-review as recommended on "Currency support",
+    because the task ends in a PR.
+  - The agent asks for its next item and claims it. Both answers, and its
+    brief, say "use pr-review (`.claude/skills/pr-review/SKILL.md`),
+    because this task ends in a PR".
+  - An agent in an old worktree is told the skill is not in its checkout,
+    and to update its branch.
 
 ### 2026-09-28: B2.2 — commits, merges and checks on the lanes
 - **◆ Commits.** `services/workstream-commits.ts` reads each workstream's

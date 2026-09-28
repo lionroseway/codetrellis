@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
 import * as taskAttachmentsService from '../services/task-attachments-service';
 import * as planItemService from '../services/plan-item-service';
+import { agentView } from '../services/skill-model';
 import * as planEventService from '../services/plan-event-service';
 import * as planChangesService from '../services/plan-changes-service';
 import * as planFileService from '../services/plan-file-service';
@@ -63,7 +64,7 @@ import {
   ArtefactError,
 } from '../services/artefact-service';
 import { startArtefactWatching } from '../services/artefact-watcher';
-import { getBrief, listMaterials } from '../services/brief-service';
+import { getBrief, listMaterials, skillsBlock } from '../services/brief-service';
 import { readMaterial } from '../services/material-reader/reader-host';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
@@ -284,7 +285,8 @@ function buildToolDeps(sessionId: string): ToolDeps {
 
     // Service modules
     planService,
-    planItemService,
+    // Items as an agent reads them: a skill's `link` location is for people only (Phase 32 C1).
+    planItemService: agentView(planItemService),
     commentService,
     sessionService,
     taskAttachmentsService,
@@ -303,7 +305,7 @@ function buildToolDeps(sessionId: string): ToolDeps {
     criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun },
     artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, getArtefact, ArtefactError },
     startArtefactWatching,
-    briefService: { getBrief, listMaterials },
+    briefService: { getBrief, listMaterials, skillsBlock },
     readMaterial,
 
     // Specific functions

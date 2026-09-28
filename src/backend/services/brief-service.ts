@@ -17,7 +17,8 @@
  */
 
 import path from 'node:path';
-import { getItem, listAllItems } from './plan-item-service';
+import { getItem, listAllItems, resolveSkills } from './plan-item-service';
+import { agentSkills, skillsNote } from './skills-service';
 import { getPlan } from './plan-service';
 import { listArtefacts, refreshArtefactHashes, type Artefact } from './artefact-service';
 import { listCriteria } from './criteria-service';
@@ -145,7 +146,11 @@ function materialsFor(items: PlanItem[], item: PlanItem): MaterialSummary[] {
   return out;
 }
 
-export async function getBrief(itemUid: string) {
+/**
+ * `workstreamRoot` is the folder the asking agent works in, when known, so a
+ * recommended skill missing from its checkout is said to be (Phase 32 C1).
+ */
+export async function getBrief(itemUid: string, opts: { workstreamRoot?: string | null } = {}) {
   const item = getItem(itemUid);
   if (!item) return null;
   const plan = getPlan(item.planUid);
@@ -194,9 +199,20 @@ export async function getBrief(itemUid: string) {
     materials: materialsFor(items, item),
     criteria,
     sent_back: criteria.filter((c) => c.state === 'sent_back').length,
+    ...skillsBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
     how_to_work: HOW_TO_WORK,
     about_materials: ABOUT_MATERIALS,
   };
+}
+
+/**
+ * The task's required and recommended skills, as the agent is told about
+ * them, and the one line that says so (Phase 32 C1). Shared by get_brief,
+ * claim_item and get_next_item so all three say the same thing.
+ */
+export function skillsBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
+  const skills = agentSkills(resolveSkills(item), { projectRoot, workstreamRoot });
+  return { skills, skills_note: skillsNote(skills) };
 }
 
 /** Every recorded file on the plan, item by item in tree order. */
