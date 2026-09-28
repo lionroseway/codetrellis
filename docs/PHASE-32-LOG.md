@@ -12,11 +12,11 @@
 | | |
 |---|---|
 | **Stage / step** | Track A — A1.3: workstreams and the TopBar strip |
-| **Status** | A1.2 PR (#147) in CI. A1.3 built and tested on a local branch off A1.2 (unit 16, harness 6, browser 4, screenshots); it moves to its own branch once #147 merges |
-| **Next action** | Merge #147 when green; cut `feat/phase-32-a1-3-workstreams`, carry A1.3 over, PR it; then A1.4 (folder watching: debounced diff and status per workstream) |
+| **Status** | A1.2 merged (#147). A1.3 done on its branch (unit 16, harness 6, browser 4, screenshots); PR open |
+| **Next action** | Merge A1.3's PR when green; then A1.4 (folder watching: debounced diff and status per workstream) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a1-3-workstreams` (to cut) |
-| **Last updated** | 2026-09-27 |
+| **Branch** | `feat/phase-32-a1-3-workstreams` |
+| **Last updated** | 2026-09-28 |
 
 ---
 
@@ -60,7 +60,7 @@
 - [x] Carried 3: harness and browser suites run in CI, sharded (#144)
 - [x] A0 Parallel-work bugs 1–3 (#145)
 - [x] A1.1 Session binding (#146)
-- [ ] A1.2 Multi-session Claude watcher
+- [x] A1.2 Multi-session Claude watcher (#147)
 - [ ] A1.3 Workstream discovery and strip
 - [ ] A1.4 Folder watching
 - [ ] A1.5 Footprint symbols
@@ -73,6 +73,13 @@
 - [ ] A5 Review
 - [ ] A6 The Brief
 - [ ] A7 Rules
+- [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace
+  dropped back to the plan list while `plan/list.spec.ts` created and
+  deleted plans on the other worker (#147). It doesn't reproduce as a pair
+  (5/5 on base and on the branch). Find which broadcast leaves the
+  workspace, so a person's open plan survives someone else's plan changes.
+- [ ] Follow-up: the browser `serial` project runs in every CI shard;
+  run it in one, to reclaim ~3 min per PR.
 
 ### Track B: observability
 - [ ] B1 Agent event log
@@ -247,7 +254,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   to the list while `list.spec` created and deleted plans on the other
   worker. The pair passes 5/5 on the base branch and 5/5 here, and nothing
   in this diff touches plans. That is a cross-worker race; it's on the
-  follow-up list below and not fixed here.
+  follow-up list in the Track A checklist and not fixed here.
 - **An agent that exits** is read one last time and dropped, with no event.
 - **`/api/agent/status`** keeps `sessionId` / `jsonlPath` (the one most
   recently followed) and adds `sessions`, all of them.
