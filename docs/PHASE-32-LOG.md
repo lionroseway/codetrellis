@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B3.1: line changes per workstream, from git |
-| **Status** | C5.3a merged (#188); C5.3b merged (#190), C5 done. B3.1 done on its branch, stacked on C5.3b: each workstream's changed lines in a file, from git, over REST and MCP `get_line_changes` for any agent. B3.2 (the code view) is built on its branch, stacked on B3.1. Unit and harness pass |
-| **Next action** | Open B3.1's PR and merge when green; then rebase B3.2 (`feat/phase-32-b3-2-code-gutter`), log it, open its PR. Then B3.3 (overlay list in `graph-builder`) |
+| **Stage / step** | Track B — B3.2: line changes in the code view |
+| **Status** | B3.1 merged (#191). B3.2 done on its branch, stacked on it: a workstream gutter in the code view (this copy's own changes, and other workstreams' lines placed through the base, in words on hover), a strip naming who else changes the file, and "Compare with…" another copy, both sides named. Unit, harness and browser pass |
+| **Next action** | Open B3.2's PR and merge when green. Then B3.3 (overlay list in `graph-builder`; line counts on file nodes; a signal chip focuses the graph) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b3-1-line-changes` |
+| **Branch** | `feat/phase-32-b3-2-code-gutter` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -99,6 +99,8 @@
   workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [ ] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait.
+- [ ] Follow-up: listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled "Add to plan"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path.
+- [ ] Follow-up: `graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.
 - [ ] Follow-up: `graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits.
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
@@ -111,8 +113,8 @@
   - [x] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click ([#171](https://github.com/lionroseway/codetrellis/pull/171))
   - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
 - [ ] B3 Line changes and overlays, refined in EXECUTION §5:
-  - [x] B3.1 Line changes per workstream from git: REST and `get_line_changes` (PR open)
-  - [ ] B3.2 The code view: gutter marks, who changed what, Compare with…
+  - [x] B3.1 Line changes per workstream from git: REST and `get_line_changes` ([#191](https://github.com/lionroseway/codetrellis/pull/191))
+  - [x] B3.2 The code view: gutter marks, who changed what, Compare with… (PR open)
   - [ ] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
@@ -245,9 +247,38 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | A section's worktree is "ready to merge" only when it is up to date with main, has nothing uncommitted, no serious (high or medium) signal open, and at least one commit of its own; when git cannot say how far it is from main, it is not ready, and says so (C5.3b) | The person reads it as permission to merge, so every doubt must count against it. Low signals are notes, and an overlap marked intended is a decision already taken; both are left out. "Unknown" read as "fine" would be the confident wrong answer the observability doc warns about |
 | 2026-09-28 | Line changes are asked for as `GET /api/workstreams/changes?path=&workstream=`, not `/api/workstreams/:id/changes` (B3.1) | A workstream's id is its folder, which has slashes in it; the sibling route `/api/workstreams/commits` already takes query parameters. `workstream` names one by id or branch among those `listWorkstreams` found, never a folder to read |
 | 2026-09-28 | A hunk is "committed" only when none of its lines differ between HEAD and the working copy; a committed change edited again reads "not committed" (B3.1) | The question the person asks is "is this safe in a commit yet". Part of it not being so is the answer that matters, and splitting one run of lines in two would make the gutter harder to read than the difference is worth |
+| 2026-09-28 | Another workstream's lines are placed on this copy's lines through the base: their base lines, moved by this copy's own hunks above them (B3.2) | Their hunks are numbered in their copy, which is not the file on screen. Through the base is exact when both branched from the same commit of main and close otherwise; the words on hover keep their own line numbers, which are always exact. Diffing their copy against this one instead would mix in this copy's own changes |
 ---
 
 ## Entries
+
+### 2026-09-28: B3.2 — line changes in the code view; compare with another copy
+- **Journey.** Sam opens `validators.ts`. The strip above the code reads
+  "Also changed in billing-v2 ＋3 −2 · not committed, exports ＋1". The
+  gutter carries a blue bar on 18–19 (billing-v2) and on 12 (exports);
+  hovering says "billing-v2 changed 18–20, in validateCreateOrder, not
+  committed". "Compare with… billing-v2" opens its copy against this one,
+  headed "billing-v2 → this copy". Opening `types.ts`, which no one else
+  changes, says "No other workstream changes this file."
+- **Built.** `lib/line-marks.ts` (`baseToOwn`, `gutterMarks`, `ownGlyph`);
+  a `WorkGutter` column in `CodePreview` (own ＋ ～ −, others a bar, the
+  B3.1 sentence as its title), shown only where the code view passes marks;
+  `CodeWorkstreamStrip` in `CodeWorkspace`, refreshed on `awareness-changed`;
+  `/api/file/at?at=workstream:<branch or id>` reads that workstream's copy
+  inside its own folder through confined-fs (a link out is 403) or at a
+  branch's head; `CodeDiffView` takes `labels`. Opening another file while
+  comparing goes back to source.
+- **Found on the way.** `/api/workstreams/changes` recomputed every folder
+  (`fresh`) on each call; the code view asks on every file and every
+  awareness change, and locally that stalled the backend enough to fail
+  "Add to plan". It now uses the watched listing. The spec calls
+  `navigate_to`, which moves every open page, so it runs in the serial
+  project with `add-to-plan`.
+- **Tests.** Unit `line-marks.test.ts` (placement through the base, own and
+  others' marks, unchanged workstreams). Harness `line-changes.test.ts`
+  (another copy by branch, unknown 404, a link out 403). Browser
+  `e2e/inspector/workstream-gutter.spec.ts` (the journey, screenshots
+  `code-workstream-gutter.png`, `code-compare-with.png`).
 
 ### 2026-09-28: B3.1 — line changes per workstream, from git, for any agent
 - **Journey.** billing-v2 adds a line to `validateCreateOrder` (not

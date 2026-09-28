@@ -39,7 +39,7 @@ import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './services/capability-token';
 import { commitsByWorkstream } from './services/workstream-commits';
-import { lineChangesFor, cleanRelPath } from './services/line-changes';
+import { lineChangesFor, cleanRelPath, readWorkstreamCopy } from './services/line-changes';
 import { normaliseSkills } from './services/skill-model';
 import { listProjectSkills } from './services/skills-service';
 import { skillProof } from './services/skill-use-service';
@@ -814,7 +814,9 @@ app.get('/api/workstreams/changes', (req, res) => {
   const rel = cleanRelPath(req.query.path);
   if (!rel) { res.status(400).json({ error: 'path must be a file relative to the repository root.' }); return; }
   const named = typeof req.query.workstream === 'string' && req.query.workstream ? req.query.workstream : null;
-  const workstreams = listWorkstreams(projectRoot, { includeIdle: true, fresh: true });
+  // The watched listing, not a fresh one: the code view asks on every file
+  // it opens and on every awareness change, and the watchers keep it current.
+  const workstreams = listWorkstreams(projectRoot, { includeIdle: true });
   if (named && !workstreams.some((w) => w.root === named || w.branch === named)) {
     res.status(404).json({ error: `No workstream ${named} in this project.` });
     return;
@@ -3486,6 +3488,14 @@ app.get('/api/file/at', (req, res) => {
   }
 
   try {
+    // Another workstream's copy (Phase 32 B3.2): chosen among the ones this
+    // project's repository has, read inside that workstream's own folder.
+    if (at.startsWith('workstream:')) {
+      const copy = readWorkstreamCopy(listWorkstreams(owningRoot, { includeIdle: true }), at.slice('workstream:'.length), relativePath);
+      if (!copy) { res.status(404).json({ error: `No workstream ${at.slice('workstream:'.length)} in this project.` }); return; }
+      res.json({ ok: true, content: copy.content, label: copy.label });
+      return;
+    }
     res.json(readFileAt(at, owningRoot, relativePath));
   } catch (err) {
     if (err instanceof ConfinementError) {

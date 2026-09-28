@@ -7,6 +7,9 @@ import { PlaybackBar, type PlaybackFrame } from '../inspector/PlaybackBar';
 import type { FileOverlay } from '../../lib/plan-overlay';
 import { resolveSelectedFile } from '../../lib/selected-file';
 import { openItemFromCode } from '../../lib/open-file-at';
+import { gutterMarks } from '../../lib/line-marks';
+import { lineCounts } from '@shared/lib/line-changes';
+import type { WorkstreamLineChanges } from '@shared/types';
 
 const CodeDiffView = lazy(() =>
   import('../inspector/CodeDiffView').then((m) => ({ default: m.CodeDiffView })),
@@ -40,6 +43,11 @@ export function CodeWorkspace() {
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
 
   const [mode, setMode] = useState<Mode>('read');
+  // Phase 32 B3.2 — this file's changed lines in every workstream, and the
+  // copy "Compare with…" picked (null: the usual history diff).
+  const [lineChanges, setLineChanges] = useState<WorkstreamLineChanges[] | null>(null);
+  const [compareWith, setCompareWith] = useState<{ id: string; label: string } | null>(null);
+  const ownBranch = useProjectStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.branch ?? null);
   const [content, setContent] = useState<FileContent | null>(null);
   const [overlay, setOverlay] = useState<FileOverlay | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +95,35 @@ export function CodeWorkspace() {
       .then((data) => setOverlay(data && !data.error ? data : null))
       .catch(() => setOverlay(null));
   }, [absPath, root]);
+
+  // Phase 32 B3.2 — who else changes this file, line by line, from git.
+  // Refetched when awareness changes (a workstream edited, committed, came
+  // or went), which is when the answer can have moved.
+  useEffect(() => {
+    // A comparison is of one file: another file opens as source.
+    setCompareWith((was) => {
+      if (was) setMode('read');
+      return null;
+    });
+    if (!relativePath || !root) { setLineChanges(null); return; }
+    let cancelled = false;
+    const load = () => {
+      fetch(`/api/workstreams/changes?project=${encodeURIComponent(root)}&path=${encodeURIComponent(relativePath)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { changes?: WorkstreamLineChanges[] } | null) => { if (!cancelled) setLineChanges(data?.changes ?? null); })
+        .catch(() => { if (!cancelled) setLineChanges(null); });
+    };
+    load();
+    window.addEventListener('awareness-changed', load);
+    return () => { cancelled = true; window.removeEventListener('awareness-changed', load); };
+  }, [relativePath, root]);
+
+  const workMarks = useMemo(
+    () => (lineChanges ? gutterMarks(lineChanges, root, (c) => c.branch ?? c.workstream.split(/[\\/]/).pop() ?? c.workstream) : null),
+    [lineChanges, root],
+  );
+  // This copy, named for the diff: its branch where known.
+  const ownName = workMarks?.ownChanges?.branch ?? ownBranch;
 
   /**
    * The comparand to diff against when the timeline is closed.
@@ -206,6 +243,15 @@ export function CodeWorkspace() {
         </button>
       </div>
 
+      {relativePath && workMarks && (
+        <CodeWorkstreamStrip
+          marks={workMarks}
+          ownName={ownName}
+          comparing={compareWith?.id ?? null}
+          onCompare={(target) => { setCompareWith(target); setMode(target ? 'diff' : 'read'); }}
+        />
+      )}
+
       {showTimeline && (
         <div className="px-3 py-1.5 border-b border-border-subtle">
           <PlaybackBar frames={frames} index={frameIndex} onIndexChange={setFrameIndex} notes={notes} />
@@ -228,6 +274,7 @@ export function CodeWorkspace() {
             content={content}
             error={error}
             overlay={overlay}
+            workMarks={workMarks}
             // The banner has always been a button. Nothing ever gave it
             // anything to do, so "Rework the ledger wants this file" had
             // hover feedback and no behaviour — worse than not looking
@@ -252,12 +299,93 @@ export function CodeWorkspace() {
             <CodeDiffView
               projectPath={root}
               relativePath={relativePath}
-              before={diffBefore}
+              // Compare with another workstream's copy (B3.2): both sides
+              // named, theirs before and this copy after.
+              before={compareWith ? `workstream:${compareWith.id}` : diffBefore}
               after="live"
+              labels={compareWith ? { after: ownName ? `this copy (${ownName})` : 'this copy' } : undefined}
             />
           </Suspense>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Phase 32 B3.2 — who else changes this file, above the code: each other
+ * workstream with its line counts in words, or that no one else does, and
+ * "Compare with…" to open their copy against this one.
+ */
+function CodeWorkstreamStrip({
+  marks,
+  ownName,
+  comparing,
+  onCompare,
+}: {
+  marks: ReturnType<typeof gutterMarks>;
+  ownName: string | null;
+  comparing: string | null;
+  onCompare: (target: { id: string; label: string } | null) => void;
+}) {
+  const others = marks.otherChanges;
+  const name = (c: WorkstreamLineChanges) => c.branch ?? c.workstream.split(/[\\/]/).pop() ?? c.workstream;
+  // Main is always a choice (unless this copy is main); then each other workstream changing the file.
+  const targets = [
+    ...(ownName && ownName !== 'main' ? [{ id: 'main', label: 'main' }] : []),
+    ...others.filter((c) => c.branch !== 'main').map((c) => ({ id: c.branch ?? c.workstream, label: name(c) })),
+  ];
+  const own = marks.ownChanges;
+  return (
+    <div data-testid="code-workstreams" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1 border-b border-border-subtle text-[10.5px] text-foreground-subtle">
+      {own && own.status === 'changed' && (
+        <span data-testid="code-own-changes" title={`This copy against main: ${lineCounts(own.added, own.removed).words}`}>
+          This copy: <span className="text-foreground-muted">{lineCounts(own.added, own.removed).short}</span>
+        </span>
+      )}
+      {others.length === 0 ? (
+        <span data-testid="code-no-others">No other workstream changes this file.</span>
+      ) : (
+        <span className="flex flex-wrap items-center gap-x-2" data-testid="code-others">
+          <span>Also changed in</span>
+          {others.map((c) => {
+            const counts = lineCounts(c.added, c.removed);
+            const open = c.hunks.some((h) => !h.committed);
+            const what = c.status === 'changed' ? counts.short : c.status.replace('-', ' ');
+            return (
+              <button
+                key={c.workstream}
+                data-testid="code-other"
+                onClick={() => onCompare({ id: c.branch ?? c.workstream, label: name(c) })}
+                title={c.status === 'changed'
+                  ? `${name(c)}: ${counts.words}${open ? ', some not committed' : ''}. Compare its copy with this one.`
+                  : `${name(c)} changes this file (${what}); no lines to show`}
+                className="rounded border border-sky-400/25 bg-sky-500/10 px-1 font-mono text-sky-300 hover:bg-sky-500/20"
+              >
+                {name(c)} <span className="text-sky-200/80">{what}</span>{open ? <span className="text-amber-300/90"> · not committed</span> : null}
+              </button>
+            );
+          })}
+        </span>
+      )}
+      <div className="flex-1" />
+      {targets.length > 0 && (
+        <label className="flex items-center gap-1">
+          <span>Compare with…</span>
+          <select
+            data-testid="compare-with"
+            value={comparing ?? ''}
+            onChange={(e) => {
+              const t = targets.find((x) => x.id === e.target.value) ?? null;
+              onCompare(t);
+            }}
+            className="bg-surface border border-border-subtle rounded px-1 py-0.5 text-[10.5px] text-foreground"
+          >
+            <option value="">(not comparing)</option>
+            {targets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </label>
+      )}
     </div>
   );
 }
