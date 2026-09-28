@@ -42,6 +42,33 @@ interface FlatSymbol {
   body: string;
   /** Its shape, where the parser gives one (A2.1). */
   signature?: string;
+  /** Importable from another file: it, or the top-level symbol it belongs to, is exported (A2.3). */
+  exported?: true;
+}
+
+/**
+ * The names a Python module lists in `__all__` (assigned or extended), from
+ * its source. Pure; a best effort over string literals, which is how
+ * `__all__` is written in practice.
+ */
+export function pythonAll(source: string): Set<string> {
+  const out = new Set<string>();
+  const decl = /^__all__\s*(?::[^=\n]*)?(?:\+)?=\s*[[(]([^\])]*)[\])]/gm;
+  for (const m of source.matchAll(decl)) {
+    for (const lit of m[1].matchAll(/(['"])([A-Za-z_][A-Za-z0-9_]*)\1/g)) out.add(lit[2]);
+  }
+  return out;
+}
+
+/**
+ * Whether a top-level symbol can be imported by another file, by the
+ * language's rule, or undefined where the language marks nothing (A2.3).
+ * TS/JS: `export`. Python: no leading underscore, or listed in `__all__`.
+ */
+export function isExported(filePath: string, s: ParsedSymbol, pyAll: Set<string> | null): boolean | undefined {
+  if (/\.py$/.test(filePath)) return !s.name.startsWith('_') || (pyAll?.has(s.name) ?? false);
+  if (/\.[cm]?[jt]sx?$/.test(filePath)) return s.modifiers.includes('export');
+  return undefined;
 }
 
 /** Already qualified by the language (`(Ledger).Post`, `Invoice#post`, `A.b`). */
@@ -52,17 +79,20 @@ const QUALIFIED = /[.#)]/;
  * Pure. Members a parser nests are qualified with their parent, the way
  * languages that emit flat lists already name them.
  */
-export function flatSymbols(symbols: ParsedSymbol[], source: string): FlatSymbol[] {
+export function flatSymbols(symbols: ParsedSymbol[], source: string, filePath = ''): FlatSymbol[] {
   const lines = source.split('\n');
-  const all: Array<{ name: string; kind: ParsedSymbol['kind']; start: number; end: number; signature?: string }> = [];
-  const visit = (list: ParsedSymbol[], parent: string | null) => {
+  const pyAll = /\.py$/.test(filePath) ? pythonAll(source) : null;
+  const all: Array<{ name: string; kind: ParsedSymbol['kind']; start: number; end: number; signature?: string; exported?: boolean }> = [];
+  // A member is importable when the top-level symbol it belongs to is.
+  const visit = (list: ParsedSymbol[], parent: string | null, exported: boolean | undefined) => {
     for (const s of list) {
       const name = parent && !QUALIFIED.test(s.name) ? `${parent}.${s.name}` : s.name;
-      all.push({ name, kind: s.kind, start: s.startLine, end: s.endLine, signature: s.signature });
-      if (s.children.length) visit(s.children, name);
+      const mine = parent === null ? isExported(filePath, s, pyAll) : exported;
+      all.push({ name, kind: s.kind, start: s.startLine, end: s.endLine, signature: s.signature, exported: mine });
+      if (s.children.length) visit(s.children, name, mine);
     }
   };
-  visit(symbols, null);
+  visit(symbols, null, undefined);
 
   return all.map((s) => {
     // Its OWN text: lines belonging to a symbol nested inside it are left
@@ -79,9 +109,13 @@ export function flatSymbols(symbols: ParsedSymbol[], source: string): FlatSymbol
     return {
       name: s.name, kind: s.kind, line: s.start, body: createHash('sha1').update(own.join('\n')).digest('hex'),
       ...(s.signature ? { signature: s.signature } : {}),
+      ...(s.exported ? { exported: true as const } : {}),
     };
   });
 }
+
+/** `exported` when any version of a symbol is importable. */
+const exportedOf = (...versions: FlatSymbol[]) => (versions.some((v) => v.exported) ? { exported: true as const } : {});
 
 /**
  * What changed between two versions of a file's symbols. Pure. Either side
@@ -95,17 +129,18 @@ export function diffSymbols(before: FlatSymbol[] | null, after: FlatSymbol[] | n
   const changes: SymbolChange[] = [];
   for (const [k, s] of now) {
     const was = old.get(k);
-    if (!was) changes.push({ name: s.name, kind: s.kind, change: 'added', line: s.line });
+    if (!was) changes.push({ name: s.name, kind: s.kind, change: 'added', line: s.line, ...exportedOf(s) });
     else if (was.body !== s.body) {
       // Its shape changed as well as its text (A2.1): what callers see. Only
       // when both versions have one — a parser that gives none says nothing.
       const signature = was.signature && s.signature && was.signature !== s.signature
         ? { signature: { before: was.signature, after: s.signature } } : {};
-      changes.push({ name: s.name, kind: s.kind, change: 'modified', line: s.line, ...signature });
+      // Importable in either version: un-exporting it breaks importers too.
+      changes.push({ name: s.name, kind: s.kind, change: 'modified', line: s.line, ...signature, ...exportedOf(was, s) });
     }
   }
   for (const [k, s] of old) {
-    if (!now.has(k)) changes.push({ name: s.name, kind: s.kind, change: 'removed', line: s.line });
+    if (!now.has(k)) changes.push({ name: s.name, kind: s.kind, change: 'removed', line: s.line, ...exportedOf(s) });
   }
   return changes.sort((a, b) => a.line - b.line || a.name.localeCompare(b.name));
 }
@@ -161,8 +196,8 @@ export function fileSymbolChanges(
   const beforeSyms = before === null ? null : parse(path.join(folder, beforePath), before);
   if (afterSyms === null && beforeSyms === null) return undefined;
   return diffSymbols(
-    beforeSyms && before !== null ? flatSymbols(beforeSyms, before) : null,
-    afterSyms && after !== null ? flatSymbols(afterSyms, after) : null,
+    beforeSyms && before !== null ? flatSymbols(beforeSyms, before, beforePath) : null,
+    afterSyms && after !== null ? flatSymbols(afterSyms, after, file.path) : null,
   );
 }
 

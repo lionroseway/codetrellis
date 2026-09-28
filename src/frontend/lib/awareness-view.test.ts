@@ -76,6 +76,13 @@ describe('a signal in words', () => {
     assert.equal(kindWords(sig()), 'Same function');
     assert.equal(kindWords(sig({ subject: { file: 'a.ts' } })), 'Same file');
     assert.equal(kindWords(sig({ kind: 'stale-base', subject: { files: ['a.ts'] } })), 'Behind main');
+    assert.equal(kindWords(sig({ kind: 'contract', subject: { file: 'a.ts', symbol: 'f', change: 'signature' } })), 'Changed signature');
+    assert.equal(kindWords(sig({ kind: 'contract', subject: { file: 'a.ts', symbol: 'f', change: 'removed' } })), 'Removed export');
+  });
+
+  test('a contract reads in its direction: who changed it, then whose work imports it (A2.3)', () => {
+    const c = sig({ kind: 'contract', subject: { file: 'a.ts', symbol: 'f', by: '/r-billing', change: 'signature' } });
+    assert.deepEqual(sidesOf(c, ROOM), ['billing-v2', 'auth-refresh']);
   });
 
   test('each side by the name the strip gives it; a branch by its name; an unknown folder by its last part', () => {
@@ -114,6 +121,11 @@ describe('actionsFor', () => {
     assert.deepEqual(actionsFor('intended').map((a) => a.state), ['open']);
     assert.deepEqual(actionsFor('dismissed').map((a) => a.state), ['open']);
     assert.deepEqual(actionsFor('resolved'), []);
+  });
+  test('a contract can be intended: the change is meant and the importing side will follow (A2.3)', () => {
+    const open = actionsFor('open', 'contract');
+    assert.deepEqual(open.map((a) => a.state), ['acknowledged', 'intended', 'dismissed']);
+    assert.match(open[1].hint, /side that imports it will follow/);
   });
   test('a stale base has no second side, so it cannot be "intended"', () => {
     assert.deepEqual(actionsFor('open', 'stale-base').map((a) => a.state), ['acknowledged', 'dismissed']);

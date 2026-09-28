@@ -17,7 +17,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { initParser, parseVirtualFile } from './ast-parser';
 import { computeChanges } from './workstream-watch-service';
-import { diffSymbols, flatSymbols, withSymbolChanges, clearSymbolCache, type SymbolParser } from './workstream-symbols';
+import { diffSymbols, flatSymbols, withSymbolChanges, clearSymbolCache, pythonAll, type SymbolParser } from './workstream-symbols';
 import type { ParsedSymbol } from '../../shared/types';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
@@ -223,5 +223,37 @@ describe('safety and cost', () => {
     withSymbolChanges(tree, computeChanges(tree, 'main'), counting);
     assert.ok(first > 0);
     assert.equal(calls, first, 'the second listing hit the cache');
+  });
+});
+
+describe('what another file can import (A2.3)', () => {
+  const syms = (file: string, src: string) => flatSymbols(parse(file, src)!, src, file);
+  const exported = (file: string, src: string) => syms(file, src).filter((s) => s.exported).map((s) => s.name).sort();
+
+  test('TS/JS: what is marked export, and the members of an exported class', () => {
+    const src = 'export function createInvoice(opts: Opts) {}\nfunction helper() {}\nexport class Session { renew() {} }\nclass Hidden { x() {} }\n';
+    assert.deepEqual(exported('/x/billing.ts', src), ['Session', 'Session.renew', 'createInvoice']);
+  });
+
+  test('Python: no leading underscore, or listed in __all__', () => {
+    const src = '__all__ = ["_legacy_total"]\n\ndef total(items):\n    return 1\n\ndef _helper():\n    return 2\n\ndef _legacy_total():\n    return 3\n';
+    assert.deepEqual(exported('/x/db.py', src), ['_legacy_total', 'total']);
+  });
+
+  test('__all__ is read as assigned, annotated, tupled or extended', () => {
+    assert.deepEqual([...pythonAll("__all__ = ['a', \"b\"]\n__all__ += ('_c',)\n__all__: list[str] = [\n    'd',\n]\n")].sort(), ['_c', 'a', 'b', 'd']);
+    assert.deepEqual([...pythonAll('x = ["not_this"]\n')], []);
+  });
+
+  test('a language that marks nothing gives no exported flag, so no contract can come from it', () => {
+    const src = 'package ledger\n\nfunc Post() {}\n';
+    assert.deepEqual(exported('/x/ledger.go', src), []);
+  });
+
+  test('a removed or un-exported symbol keeps the flag: its importers break either way', () => {
+    const was = 'export function createInvoice(opts: Opts) { return 1 }\nexport function old() {}\n';
+    const now = 'function createInvoice(opts: Opts) { return 1 }\n';
+    const changes = diffSymbols(syms('/x/a.ts', was), syms('/x/a.ts', now));
+    assert.deepEqual(changes.map((c) => [c.name, c.change, c.exported ?? false]), [['createInvoice', 'modified', true], ['old', 'removed', true]]);
   });
 });

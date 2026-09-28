@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Radar, ArrowLeftRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Radar, ArrowLeftRight, ArrowRight } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { useToastStore } from '../../stores/toast-store';
@@ -144,6 +144,35 @@ function Summary({ text }: { text: string }) {
   );
 }
 
+/**
+ * What a contract signal changed and where it lands (A2.3): the signature
+ * before and after, or that the export went, and the other side's files
+ * that import it.
+ */
+function ContractDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
+  const files = subject.importers ?? [];
+  return (
+    <div data-testid="awareness-contract" className="mt-1.5 space-y-1">
+      {subject.signature ? (
+        <div className="font-mono text-[10px] leading-snug space-y-px">
+          <div className="text-red-300/70 line-through break-all" data-testid="contract-before">{subject.symbol}{subject.signature.before}</div>
+          <div className="text-emerald-300/90 break-all" data-testid="contract-after">{subject.symbol}{subject.signature.after}</div>
+        </div>
+      ) : subject.change === 'removed' ? (
+        <div className="font-mono text-[10px] text-red-300/70 line-through">{subject.symbol}</div>
+      ) : null}
+      {files.length > 0 && (
+        <div className="text-[10px] text-foreground-subtle">
+          {subject.possibly ? 'Possibly used by (imports the module as a whole)' : 'Imported by'}{' '}
+          {files.map((f, i) => (
+            <span key={f}>{i > 0 && ', '}<code className="font-mono text-foreground-muted" title={f}>{f}</code></span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; workstreams: Workstream[]; now: number }) {
   const answer = useAwarenessStore((st) => st.answer);
   const [busy, setBusy] = useState(false);
@@ -179,7 +208,10 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
       <div data-testid="awareness-sides" className="mt-1.5 flex flex-wrap items-center gap-1">
         {sides.map((name, i) => (
           <span key={`${name}-${i}`} className="flex items-center gap-1">
-            {i > 0 && <ArrowLeftRight size={9} className="text-foreground-subtle" />}
+            {/* A contract runs one way: the change, then who imports it (A2.3). */}
+            {i > 0 && (s.kind === 'contract'
+              ? <ArrowRight size={9} className="text-foreground-subtle" aria-label="imported by" />
+              : <ArrowLeftRight size={9} className="text-foreground-subtle" />)}
             <span className="text-[10px] font-mono px-1.5 py-px rounded border border-border-subtle text-foreground">{name}</span>
           </span>
         ))}
@@ -189,6 +221,8 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
           </span>
         )}
       </div>
+
+      {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
 
       {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}<UnverifiedIf type={s.stateBy?.actorType} /></div>}
 

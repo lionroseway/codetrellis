@@ -10,6 +10,11 @@
  *    different symbols, or in a file we do not parse, `medium` (it will need
  *    reconciling). A file with symbol collisions is not also reported as a
  *    file collision: one precise signal, not two overlapping ones.
+ *  - **contract** (A2.3) — one workstream changes an exported symbol's
+ *    signature, or removes it, and files another workstream changes import
+ *    that name. `high`: it will break a build. When they only import the
+ *    module as a namespace it is `medium`: they possibly use it. A body-only
+ *    edit has no signature change, so it raises nothing.
  *  - **stale-base** — main has changed files this workstream also changes
  *    since it branched. `low`: worth knowing, nothing is broken yet.
  *
@@ -30,6 +35,42 @@ export interface FootprintInput {
   files: ChangedFile[];
   /** Files main changed since this workstream's merge base (empty for the main checkout). */
   mainSinceBase: string[];
+  /**
+   * This workstream's changes to what other files import, each with the
+   * files that import it in the opened project's graph (A2.3). Looked up by
+   * the caller, since that needs the database; empty when there are none.
+   */
+  contracts?: ContractChange[];
+}
+
+/** An exported symbol whose shape changed, or which went, and who imports it. */
+export interface ContractChange {
+  /** The changed file, relative, and the symbol as the footprint names it (`Session.renew`). */
+  file: string;
+  symbol: string;
+  change: 'signature' | 'removed';
+  signature?: { before: string; after: string };
+  /** Relative paths of the files importing it; `possibly` for a namespace import. */
+  importers: Array<{ path: string; possibly: boolean }>;
+}
+
+/** The name another file imports a symbol by: a member is imported with its type. */
+export const importableName = (symbol: string) => symbol.split(/[.#]/)[0];
+
+/**
+ * A footprint's contract changes, before importers are looked up: exported
+ * symbols whose signature changed, or that were removed. Pure.
+ */
+export function contractCandidates(files: readonly ChangedFile[]): Array<Omit<ContractChange, 'importers'>> {
+  const out: Array<Omit<ContractChange, 'importers'>> = [];
+  for (const f of files) {
+    for (const s of f.symbols ?? []) {
+      if (!s.exported) continue;
+      if (s.change === 'modified' && s.signature) out.push({ file: f.path, symbol: s.name, change: 'signature', signature: s.signature });
+      else if (s.change === 'removed') out.push({ file: f.status === 'renamed' && f.from ? f.from : f.path, symbol: s.name, change: 'removed' });
+    }
+  }
+  return out;
 }
 
 /** A signal as computed, before it has a history. */
@@ -37,6 +78,8 @@ export type SignalDraft = Pick<AwarenessSignal, 'id' | 'kind' | 'severity' | 'su
 
 const signalId = (kind: SignalKind, subject: string, workstreams: string[]) =>
   createHash('sha1').update(`${kind}\0${subject}\0${workstreams.join('\0')}`).digest('hex').slice(0, 16);
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** The name a person knows a workstream by: its branch, else its folder. */
 export const workstreamLabel = (w: Pick<FootprintInput, 'root' | 'branch'>) => w.branch ?? path.basename(w.root);
@@ -72,6 +115,31 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
           out.push(draft('collision', 'medium', fa.path, { file: fa.path }, [a.root, b.root],
             `${pair} both change ${fa.path}`));
         }
+      }
+    }
+  }
+
+  // ── contract ──────────────────────────────────────────────────────────
+  for (const a of ordered) {
+    for (const c of a.contracts ?? []) {
+      for (const b of ordered) {
+        if (b === a) continue;
+        const theirs = new Set(b.files.filter((f) => f.status !== 'deleted').map((f) => f.path));
+        const hits = c.importers.filter((i) => theirs.has(i.path) && i.path !== c.file);
+        if (hits.length === 0) continue;
+        const possibly = hits.every((i) => i.possibly);
+        const importers = hits.map((i) => i.path).sort();
+        const what = c.change === 'removed'
+          ? `removed ${c.symbol} from ${c.file}`
+          : `changed ${c.symbol} in ${c.file}: ${c.signature!.before} → ${c.signature!.after}`;
+        const uses = possibly
+          ? `may use it in ${plural(importers.length, 'file')} (it imports the module as a whole)`
+          : `imports it in ${plural(importers.length, 'file')}`;
+        out.push(draft('contract', possibly ? 'medium' : 'high', `${a.root}>${c.file}#${c.symbol}`, {
+          file: c.file, symbol: c.symbol, by: a.root, change: c.change,
+          ...(c.signature ? { signature: c.signature } : {}),
+          importers, ...(possibly ? { possibly: true } : {}),
+        }, [a.root, b.root], `\`${workstreamLabel(a)}\` ${what}. \`${workstreamLabel(b)}\` ${uses}`));
       }
     }
   }

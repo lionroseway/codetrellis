@@ -200,6 +200,50 @@ test.describe('Awareness tab', () => {
     await expect(page.getByTestId('awareness-needs-you').getByTestId('awareness-signal')).toHaveCount(2);
   });
 
+  test('a contract change: what changed, before and after, who imports it, and in which direction (A2.3)', async ({ page }) => {
+    const contract = signal('k1', {
+      kind: 'contract', severity: 'high', workstreams: ['/work/acme-auth', '/work/acme-billing'],
+      subject: {
+        file: 'src/billing/invoice.ts', symbol: 'createInvoice', by: '/work/acme-billing', change: 'signature',
+        signature: { before: '(opts: InvoiceOpts): Invoice', after: '(opts: InvoiceOpts, currency: string): Invoice' },
+        importers: ['src/auth/session.ts', 'src/auth/checkout.ts'],
+      },
+      summary: '`billing-v2` changed createInvoice in src/billing/invoice.ts: (opts: InvoiceOpts): Invoice → (opts: InvoiceOpts, currency: string): Invoice. `auth-refresh` imports it in 2 files',
+    });
+    const removed = signal('k2', {
+      kind: 'contract', severity: 'high', workstreams: ['/work/acme', '/work/acme-billing'],
+      subject: { file: 'src/billing/invoice.ts', symbol: 'formatTotal', by: '/work/acme-billing', change: 'removed', importers: ['src/billing/receipt.ts'] },
+      summary: '`billing-v2` removed formatTotal from src/billing/invoice.ts. `main` imports it in 1 file',
+    });
+    const sent = await serve(page, ROOM, [contract, removed]);
+    await gotoWithProject(page);
+    await tabButton(page).click();
+
+    const c = card(page, 'createInvoice');
+    await expect(c).toHaveAttribute('data-severity', 'high');
+    await expect(c).toContainText('Changed signature');
+    // The side that changed it first, then the side whose work imports it.
+    await expect(c.getByTestId('awareness-sides').locator('span.font-mono').first()).toHaveText('billing-v2');
+    await expect(c.getByTestId('awareness-sides')).toContainText('auth-refresh');
+    await expect(c.getByLabel('imported by')).toBeVisible();
+    await expect(c.getByTestId('contract-before')).toHaveText('createInvoice(opts: InvoiceOpts): Invoice');
+    await expect(c.getByTestId('contract-after')).toHaveText('createInvoice(opts: InvoiceOpts, currency: string): Invoice');
+    await expect(c.getByTestId('awareness-contract')).toContainText('Imported by src/auth/session.ts, src/auth/checkout.ts');
+    await expect(c.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+
+    const r = card(page, 'formatTotal');
+    await expect(r).toContainText('Removed export');
+    await expect(r.getByTestId('awareness-contract')).toContainText('Imported by src/billing/receipt.ts');
+
+    await expandPanel(page);
+    await shot(page, 'awareness-contract');
+
+    // Intended: the change is meant, and the importing side will follow.
+    await c.getByRole('button', { name: 'Intended' }).click();
+    expect(sent).toEqual([{ id: 'k1', state: 'intended', project: expect.any(String) }]);
+    await expect(page.getByTestId('awareness-set-aside')).toContainText('Set aside 1');
+  });
+
   test('calm states: parallel work with nothing to answer, and no parallel work at all', async ({ page }) => {
     await serve(page, ROOM, []);
     await gotoWithProject(page);
