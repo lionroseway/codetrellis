@@ -2246,6 +2246,16 @@ app.get('/api/plans/:planUid/items', (req, res) => {
   res.json(filtered);
 });
 
+/**
+ * The skills in effect on an item, own and inherited, each with the item it
+ * comes from (Phase 32 C1.2). For people: a link location is included.
+ */
+app.get('/api/items/:uid/skills', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json({ skills: planItemService.resolveSkillsWithSource(item) });
+});
+
 /** Plan timeline (plan_events feed). */
 app.get('/api/plans/:planUid/timeline', (req, res) => {
   const sinceMs = typeof req.query.since_ms === 'string' ? Number(req.query.since_ms) : undefined;

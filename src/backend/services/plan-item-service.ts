@@ -1025,6 +1025,30 @@ export function resolveSkills(item: PlanItem): Skill[] {
 }
 
 /**
+ * Phase 32 C1.2 — the skills in effect on an item, each with the item it
+ * comes from, for the routing panel. The panel's own tree holds summaries
+ * without skills, so it cannot resolve inheritance itself.
+ */
+export function resolveSkillsWithSource(item: PlanItem): Array<{ skill: Skill; fromUid: string; fromTitle: string }> {
+  const chain: PlanItem[] = [];
+  let cur: PlanItem | null = item;
+  while (cur) {
+    chain.unshift(cur);
+    cur = cur.parentUid ? getItem(cur.parentUid) : null;
+  }
+  let resolved = new Map<string, { skill: Skill; fromUid: string; fromTitle: string }>();
+  for (const ancestor of chain) {
+    const skills = ancestor.skills ?? [];
+    if (skills.length === 0 && ancestor.skillsMode === 'inherit') continue;
+    const here = skills.map((skill) => [skill.name, { skill, fromUid: ancestor.uid, fromTitle: ancestor.title }] as const);
+    if (ancestor.skillsMode === 'replace') resolved = new Map(here);
+    else if (ancestor.skillsMode === 'none') resolved = new Map();
+    else for (const [k, v] of here) resolved.set(k, v);
+  }
+  return [...resolved.values()];
+}
+
+/**
  * Phase 17.F — Resolve effective constraints by walking up the tree.
  * Constraints merge additively: child exclusions ADD to parent exclusions,
  * boolean flags are OR'd (any ancestor requiring tests = tests required).

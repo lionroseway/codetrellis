@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 226 | 224 | 0 | 0 | 217 | 0 |
+| REST routes | 227 | 225 | 0 | 0 | 217 | 0 |
 | MCP tools | 190 | 190 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 76 | 71 | 0 | 0 | 76 | 0 |
-| Frontend components | 104 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 105 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
@@ -30,7 +30,7 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 17 | 15 | 8 | 10 | 0 | 0 |
-| 0.4c Plans and items | 89 | 51 | 20 | 55 | 0 | 0 |
+| 0.4c Plans and items | 90 | 51 | 20 | 56 | 0 | 0 |
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 9 | 7 | 1 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (226)
+## REST routes (227)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -105,6 +105,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/items/:uid/criteria` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/events` |  | ✗ none | 2 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
 | c | `GET /api/items/:uid/full` |  | ✗ none | 2 | ✓ 0.4c: exercised by item-surface, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:uid/skills` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/items/:uid/versions` |  | ✗ none | 3 | ✓ 0.4c-2: each edit a version (item-surface) |  |  |
 | c | `GET /api/pantry/resolve` |  | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase7, filesystem-sinks, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plan-docs/:docUid` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -555,7 +556,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (104)
+## Frontend components (105)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -621,6 +622,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `plan/v2/PlanTicketSyncChip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanVersionHistory.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanWorkspaceShellV2.tsx` |  | n/a | n/a |  | ✓ 0.5 — no "V2" badge (0.5c) |  |
+| c | `plan/v2/SkillsEditor.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/SlashMenu.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/TargetsStrip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/TeamActivityPanel.tsx` |  | n/a | n/a |  |  |  |

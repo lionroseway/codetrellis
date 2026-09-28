@@ -133,6 +133,21 @@ test.describe.serial('Skills reach the agent', () => {
     expect(person.skills?.find((s) => s.name === 'house-style')?.where).toEqual({ kind: 'link', url: LINK });
   });
 
+  test('the skills in effect on a task, own and inherited, each with the item it comes from (C1.2)', async () => {
+    const parent = ((await (await h.client.raw('POST', `/api/plans/${planUid}/items`, { kind: 'action', title: 'Payments' })).json()) as { uid: string }).uid;
+    await h.client.raw('PUT', `/api/items/${parent}`, { skills: [{ name: 'typescript', source: 'lang', required: true }, { name: 'pr-review', source: 'skill', required: false, why: 'parent reason' }] });
+    const child = ((await (await h.client.raw('POST', `/api/plans/${planUid}/items`, { kind: 'action', title: 'Refunds', parentUid: parent })).json()) as { uid: string }).uid;
+    await h.client.raw('PUT', `/api/items/${child}`, { skills: [{ name: 'pr-review', source: 'skill', required: false, use: 'recommended', why: 'child reason' }] });
+
+    type Row = { skill: { name: string; why?: string }; fromUid: string; fromTitle: string };
+    const { skills } = (await (await h.client.raw('GET', `/api/items/${child}/skills`)).json()) as { skills: Row[] };
+    // Own skills add to inherited ones; the child's own pr-review wins over its parent's.
+    expect(skills.map((r) => [r.skill.name, r.fromTitle, r.skill.why ?? null])).toEqual([
+      ['typescript', 'Payments', null], ['pr-review', 'Refunds', 'child reason'],
+    ]);
+    expect((await h.client.raw('GET', '/api/items/no-such-item/skills')).status).toBe(404);
+  });
+
   test('an agent whose checkout lacks the skill is told so, and how to get it', async () => {
     await bound('codex', old);
     const brief = JSON.parse((await behind.callTool('get_brief', { item_uid: itemUid })).text) as { skills: AgentSkill[]; skills_note: string };
