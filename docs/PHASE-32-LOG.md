@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.2: import accuracy; then bug 53 |
-| **Status** | A2.1 merged (#156). A2.2 done on its branch (unit +13, harness 4, browser 1; tsconfig alias fix added); PR open (#157). Bug 53 found while testing it; its fix is #158 |
-| **Next action** | Merge A2.2 when green; then fix bug 53 (squash-merged branches count as live work) as its own step, `feat/phase-32-a1-7d-merged-branches` |
-| **Blockers** | Bug 53 makes the local browser suite's first tests time out on this repository (not in CI's shallow checkout) |
-| **Branch** | `feat/phase-32-a2-2-imports` |
+| **Stage / step** | Track A — bug 53: squash-merged branches are not live work |
+| **Status** | A2.2 merged (#157). Bug 53 fixed on its branch (unit +5, harness +1); PR open (#158), base merged in |
+| **Next action** | Merge bug 53 when green; then A2.3 (`contract` signal) |
+| **Blockers** | none |
+| **Branch** | `feat/phase-32-a1-7d-merged-branches` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -67,9 +67,9 @@
 - [x] A1.6 Signals engine (collision, stale-base) and tools (#151)
 - [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)
 - [x] A1.8 Awareness tab (#155)
+- [x] Bug 53: a squash-merged branch is not live work (A1.7a, #158)
 - [x] A2.1 Signatures (TS/JS, Python)
-- [x] A2.2 Import accuracy
-- [ ] Bug 53: a squash-merged branch is not live work (A1.7a)
+- [x] A2.2 Import accuracy (#157)
 - [ ] A2.3 `contract` signal
 - [ ] A2.4 `declare_intent`
 - [ ] A2.5 `drift` signal
@@ -172,6 +172,44 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: bug 53 — a squash-merged branch is not live work
+- **Found** while testing A2.2 (its entry has the detail). On this
+  repository: 151 refs, git counts 2 as merged, and the strip showed about
+  98 branch chips and the Awareness tab 7,602 signals. Every squash-merged
+  PR branch stays "ahead" of main forever, since a squash commit has no
+  link to the branch; A1.7a's ancestry test (`rev-list main..branch`)
+  therefore called each one live work, and because every PR touches this
+  log, every pair collided. The backend was busy enough that the first two
+  tests of any local browser run timed out, on the base branch as well.
+- **Fix (`branch-workstreams.ts`).** An ahead branch is merged, and not
+  work, when every file it changes is left by some commit on main since
+  the window opened at exactly the version the branch has (deleted where
+  it deletes): `isMergedInto(branchVersions, mainVersionsSince)`. That is
+  how a squash, rebase, merge or cherry-pick all look from main's side,
+  and it needs no ancestry. One `git log --raw` of main per (main head,
+  window day) and one `git diff --raw` per ahead branch head, both cached;
+  nothing is written to the repository. A branch only partly merged, or
+  merged with one file resolved differently, stays work; a branch that
+  changes nothing is idle, not "merged".
+- **Result on this repository:** 11 branch chips and 57 signals, and the
+  first local browser tests pass (`inspector/file-view.spec.ts` 7/7, where
+  the first two timed out on every run). Screenshot: `bug53-after.png`.
+- **Follow-up (A3, quiet by default).** What remains is real divergence by
+  the model's rule but still noisy: dependabot branches opened against
+  `main` (while this checkout is on `feat/phase-32`) all touch the
+  lockfile, so they collide in pairs. Collisions on generated files, and
+  branches built on another base line, want a quieter treatment.
+- **Tests.**
+  - Unit `branch-workstreams.test.ts` +5 on a real repository: a
+    squash-merged branch is out even after main edits the same file again;
+    so are a cherry-picked one and a matching deletion; a partly merged
+    one, one merged with a different resolution, and an unmerged one stay;
+    raw parsing; `isMergedInto`. The first three fail on the old selection.
+  - Harness `branch-workstreams.test.ts` +1: a real `git merge --squash`
+    into the opened checkout removes the branch workstream and its signal.
+  - Related harness files pass (37); unit 1218 / 3 environment skips; lint
+    0 errors / 295.
 
 ### 2026-09-28: A2.2 — import accuracy; bug 53 found
 - **Re-exports are recorded.** The TS/JS parser reads `export { a, b as c }

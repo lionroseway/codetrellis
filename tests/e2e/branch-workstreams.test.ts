@@ -93,4 +93,17 @@ test.describe.serial('Branch workstreams', () => {
     expect(active.some((w) => w.branch === 'cloud-fix')).toBe(false);
     expect(await signals()).toEqual([]);
   });
+
+  test('a branch squash-merged into the opened checkout is not work, and raises nothing (bug 53)', async () => {
+    // A PR branch that changed the same function the worktree is editing…
+    git(['branch', 'pr-done']);
+    commitOnto('pr-done', original.replace('return EMAIL_RE.test(email);', 'return EMAIL_RE.test(email.trim());'));
+    await expect.poll(async () => (await list()).some((w) => w.branch === 'pr-done'), { timeout: 10_000 }).toBe(true);
+    // …squash-merged, as GitHub does: main gets its content in a new commit
+    // with no link to the branch, which stays "ahead" of main forever.
+    git(['merge', '--squash', 'pr-done']);
+    git(['commit', '-q', '-m', 'Squashed PR']);
+    await expect.poll(async () => (await list()).some((w) => w.branch === 'pr-done'), { timeout: 10_000 }).toBe(false);
+    expect((await signals()).some((x) => x.workstreams.includes('branch:pr-done'))).toBe(false);
+  });
 });
