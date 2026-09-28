@@ -9,7 +9,8 @@
  *   ◆  a commit on it, ⧫ a merge (B2.2)
  *   ✓ / ✗  criteria checked or decided for items worked in it (B2.2)
  *
- * Breakpoints (⏸) are B4's.
+ *   ⏸  a call held at a breakpoint, drawn as a span from the hit to the
+ *      answer (to now while it waits); ⊘ a breach, which was never held (B4.3b)
  *
  * Pure: the component supplies turns, workstreams, signals and the time.
  * A turn is placed on the workstream its events name; failing that, the
@@ -17,10 +18,11 @@
  * work outside any workstream (a spec edited from the app, say).
  */
 
-import type { AgentEvent, AwarenessSignal, SignalSeverity, Workstream, WorkstreamCommit } from '@shared/types';
+import type { AgentEvent, AwarenessSignal, BreakpointHit, SignalSeverity, Workstream, WorkstreamCommit } from '@shared/types';
 import type { AgentTurn } from './agent-turns';
+import { hitHeadline } from './breakpoint-view';
 
-export type LaneMarkKind = 'turn' | 'edit' | 'signal' | 'commit' | 'merge' | 'check-pass' | 'check-fail';
+export type LaneMarkKind = 'turn' | 'edit' | 'signal' | 'commit' | 'merge' | 'check-pass' | 'check-fail' | 'pause' | 'breach';
 
 export interface LaneMark {
   /** The turn's id, the signal's, or the commit's sha. */
@@ -33,6 +35,8 @@ export interface LaneMark {
   text: string;
   error?: boolean;
   severity?: SignalSeverity;
+  /** A pause nobody has answered yet: its span runs to now. */
+  waiting?: boolean;
 }
 
 export interface Lane {
@@ -109,9 +113,11 @@ export function buildLanes(input: {
   signals: readonly AwarenessSignal[];
   /** Each workstream's own commits, by root (B2.2). */
   commits?: Readonly<Record<string, readonly WorkstreamCommit[]>>;
+  /** Calls held at breakpoints, answered or not (B4.3b). */
+  hits?: readonly BreakpointHit[];
   now: number;
 }): LanesView {
-  const { turns, workstreams, signals, commits, now } = input;
+  const { turns, workstreams, signals, commits, hits, now } = input;
   const lanes = new Map<string, Lane>();
   for (const w of workstreams) {
     lanes.set(w.root, { key: w.root, root: w.root, label: laneLabel(w), main: w.main, marks: [] });
@@ -155,6 +161,10 @@ export function buildLanes(input: {
     }
   }
 
+  for (const h of hits ?? []) {
+    laneFor(h.workstreamRoot).marks.push(hitMark(h, now));
+  }
+
   // From the earliest mark, within [MIN_WINDOW, MAX_WINDOW] of now.
   const times = [...lanes.values()].flatMap((l) => l.marks.map((m) => m.at)).filter((t) => t <= now);
   const earliest = times.length ? Math.min(...times) : now;
@@ -174,4 +184,24 @@ export function position(view: Pick<LanesView, 'start' | 'end'>, at: number): nu
   const span = view.end - view.start;
   if (span <= 0) return 1;
   return Math.min(1, Math.max(0, (at - view.start) / span));
+}
+
+// A breach's answers are worded as the waiting card words them: nothing was held, so nothing "continues".
+const DECIDED: Record<string, string> = { continue: 'continued', steer: 'continued with a steer', stop: 'stopped' };
+const DECIDED_BREACH: Record<string, string> = { continue: 'carried on', steer: 'carried on with a note', stop: 'stopped' };
+
+/**
+ * A held call as a lane mark: a ⏸ span from the hit to the answer, or to now
+ * while it waits; a breach is its own mark, since nothing was held (§10.3).
+ */
+export function hitMark(h: BreakpointHit, now: number): LaneMark {
+  const by = h.answeredByType === 'system' ? 'CodeTrellis' : (h.answeredBy ?? 'someone');
+  const outcome = h.decision ? `${(h.breach ? DECIDED_BREACH : DECIDED)[h.decision] ?? h.decision} by ${by}` : 'waiting on you';
+  if (h.breach) return { id: h.ref, kind: 'breach', at: h.hitAt, endAt: h.hitAt, text: `${hitHeadline(h)}; ${outcome}` };
+  const waiting = h.answeredAt === null;
+  return {
+    id: h.ref, kind: 'pause', at: h.hitAt, endAt: waiting ? now : (h.answeredAt as number),
+    text: `${hitHeadline(h)}; ${outcome}`,
+    ...(waiting ? { waiting: true } : {}),
+  };
 }

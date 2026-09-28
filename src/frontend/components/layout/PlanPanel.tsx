@@ -140,6 +140,7 @@ export function PlanPanel() {
               turns={turns}
               onSelectTurn={(turnId) => setFocusTurn((f) => ({ turnId, seq: (f?.seq ?? 0) + 1 }))}
               onSelectSignal={() => setActiveTab('awareness')}
+              onSelectHit={() => setActiveTab('awareness')}
             />
             <AgentTurnList turns={turns} status={status} detectedPlan={detectedPlan} focus={focusTurn} />
           </div>

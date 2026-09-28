@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.2c merging; the next steps refined from the owner's asks |
-| **Status** | B4.2c is PR #183 (CI re-running after a fix to an unrelated test that was sharing the backend). The owner confirmed the order and asked for three things to be key: one plan worked in several worktrees, line changes per workstream, and staying agent-agnostic. Written into EXECUTION as C5, B3.1–B3.3, A8 and A2.7 |
-| **Next action** | Merge #183 when green. Then B4.3b (graph action, ⏸ on nodes, lane spans), then C5.1 (sections assigned to workstreams), C5.2, C5.3, B3.1–B3.3, A8.1–A8.4, A2.7; B4.4 after A8 |
+| **Stage / step** | Track B — B4.3b: breakpoints on the graph and the lanes |
+| **Status** | B4.2c merged (#183); the next steps are refined (#184). B4.3b done on its branch: right-click a file, folder or function to be asked before it changes, ⏸ on the nodes it holds, and ⏸ spans / ⊘ breaches on the Timeline lanes. Unit and browser pass |
+| **Next action** | Open B4.3b's PR and merge it when green. Then C5.1 (sections assigned to workstreams), C5.2, C5.3, B3.1–B3.3, A8.1–A8.4, A2.7; B4.4 after A8 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-plan-refine-worktrees-lines` |
+| **Branch** | `feat/phase-32-b4-3b-graph-breakpoints` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -98,6 +98,7 @@
   (5/5 on base and on the branch). Find which broadcast leaves the
   workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
+- [ ] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait.
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
 
@@ -118,7 +119,7 @@
   - [x] B4.2b Signal breakpoints ([#181](https://github.com/lionroseway/codetrellis/pull/181))
   - [x] B4.2c Function-level breakpoints and breaches ([#183](https://github.com/lionroseway/codetrellis/pull/183))
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
-  - [ ] B4.3b Graph node action, ⏸ on nodes, lane spans
+  - [x] B4.3b Graph node action, ⏸ on nodes, lane spans (PR open)
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
 - [ ] B6 Stack view
@@ -238,6 +239,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: B4.3b — breakpoints on the graph and the lanes
+- **Journey.** Sam right-clicks `refund.ts` in the graph: "Ask me before
+  this changes". A toast says an agent about to change it will wait, and
+  that the answer is given in Awareness. The node now carries ⏸; its
+  hover says "Ask me first: src/pay/refund.ts, before it changes". The
+  breakpoint is listed in Awareness. Right-click again: "Stop asking
+  before this changes" clears it, and the ⏸ goes. A function node offers
+  "Ask me before settle changes" (B4.2c's function breakpoint), a folder
+  node the whole folder.
+- **What a node's ⏸ means:** a file is held by its own breakpoint, one on
+  a folder above it, or one on a function in it; a function by its own or
+  its file's or folder's; a cluster when any file in it is. Clusters are
+  inferred groups, not folders, so the menu offers no breakpoint on one.
+- **Lanes.** A held call is a ⏸ span from the hit to its answer, dashed and
+  running to now while it waits; a breach is its own ⊘ mark at its time,
+  never a span. Hover: "codex wants to claim “Rotate refresh tokens”;
+  continued with a steer by Sam", or "…; waiting on you". A breach's answer
+  reads "carried on", as its card does, and one let through when a signal
+  was answered reads "by CodeTrellis". The span runs along the lane's foot:
+  drawn through the middle it hid ⏸ and whatever happened while it waited
+  (seen in the first screenshot).
+- **Data.** The store reads the latest held calls (`?state=all`, answered
+  or not) beside the waiting list; the waiting list stays its own read, so
+  an old call still waiting never falls off it behind 200 newer ones.
+- **Tests:** unit `breakpoint-view.test.ts` (which breakpoints hold a
+  node, hover words) and `timeline-lanes.test.ts` (4: waiting span to now,
+  answered span and who, breach mark and wording, outside lane and
+  window); browser `graph/graph-breakpoints.spec.ts` (set, ⏸, listed,
+  cleared) and `timeline-lanes.spec.ts` (a steered pause, a waiting pause,
+  a breach). Unit 1,448 pass; typecheck clean; lint warnings unchanged.
+- **Locally**, the first browser test of a run times out on the cold dev
+  server (the whole repository's graph takes longer than its 15 s wait);
+  every such test passed once the server was warm. CI is unaffected.
 
 ### 2026-09-28: Next steps refined — worktrees, line changes, any agent
 - **Asked for** by the owner: "add these steps and functionality … they

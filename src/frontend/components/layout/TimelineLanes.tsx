@@ -8,11 +8,16 @@
  * one line; click a turn to open it in the list below, or a signal to go to
  * the Awareness tab. Live: marks arrive with the events, and "now" moves.
  *
+ * ⏸ is a call held at a breakpoint, a span from the hit to the answer (to
+ * now while it waits); ⊘ is a breach, a change that was never held (B4.3b).
+ * Either opens Awareness, where it is answered.
+ *
  * Words beside glyphs, colour never alone (design rules §2): the hover says
  * what a mark is, and a failed turn is also red and says "failed".
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useAwarenessStore } from '../../stores/awareness-store';
+import { useBreakpointsStore } from '../../stores/breakpoints-store';
 import { buildLanes, position, type LaneMark } from '../../lib/timeline-lanes';
 import type { AgentTurn } from '../../lib/agent-turns';
 
@@ -20,13 +25,17 @@ import type { AgentTurn } from '../../lib/agent-turns';
 // instead of rendering as a yellow emoji whatever the severity.
 const GLYPH: Record<LaneMark['kind'], string> = {
   turn: '●', edit: '✎', signal: '⚠\uFE0E', commit: '◆', merge: '⧫', 'check-pass': '✓', 'check-fail': '✗',
+  pause: '⏸\uFE0E', breach: '⊘',
 };
 
 const NAME: Record<LaneMark['kind'], string> = {
   turn: 'turn', edit: 'edit', signal: 'signal', commit: 'commit', merge: 'merge', 'check-pass': 'checks passed', 'check-fail': 'checks failed',
+  pause: 'paused at a breakpoint', breach: 'breach',
 };
 
 function markClass(m: LaneMark): string {
+  if (m.kind === 'breach') return 'text-danger';
+  if (m.kind === 'pause') return m.waiting ? 'text-warning' : 'text-foreground-muted';
   if (m.kind === 'signal') return m.severity === 'high' ? 'text-danger' : m.severity === 'medium' ? 'text-warning' : 'text-foreground-subtle';
   if (m.kind === 'check-fail' || m.error) return 'text-danger';
   if (m.kind === 'check-pass') return 'text-success';
@@ -54,19 +63,23 @@ export function TimelineLanes({
   turns,
   onSelectTurn,
   onSelectSignal,
+  onSelectHit,
 }: {
   turns: AgentTurn[];
   onSelectTurn: (turnId: string) => void;
   onSelectSignal: (signalId: string) => void;
+  /** A held call or a breach: where it is answered. */
+  onSelectHit: (ref: string) => void;
 }) {
   const workstreams = useAwarenessStore((s) => s.workstreams);
   const signals = useAwarenessStore((s) => s.signals);
   const commits = useAwarenessStore((s) => s.commits);
+  const hits = useBreakpointsStore((s) => s.recent);
   const tick = useNow();
   // A new event is "now" too, so its mark is never drawn past the end.
   const latest = turns.reduce((t, x) => Math.max(t, x.endedAt), 0);
   const now = Math.max(tick, latest);
-  const view = useMemo(() => buildLanes({ turns, workstreams, signals, commits, now }), [turns, workstreams, signals, commits, now]);
+  const view = useMemo(() => buildLanes({ turns, workstreams, signals, commits, hits, now }), [turns, workstreams, signals, commits, hits, now]);
 
   // One lane and nothing on it says nothing the list below doesn't.
   if (view.lanes.length === 0 || (view.lanes.length === 1 && view.lanes[0].marks.length === 0)) return null;
@@ -83,10 +96,24 @@ export function TimelineLanes({
               {lane.label}
             </span>
             <div className="relative flex-1 h-4 border-b border-white/[0.06]">
-              {/* A long turn is also a faint span from start to end. */}
+              {/* A long turn is also a faint span from start to end; a pause, a
+                  line along the lane's foot to its answer, dashed while it waits. */}
               {lane.marks.filter((m) => m.endAt > m.at).map((m) => {
                 const left = position(view, m.at) * 100;
                 const width = position(view, m.endAt) * 100 - left;
+                if (m.kind === 'pause') {
+                  return (
+                    <span
+                      key={`span-${m.id}`}
+                      data-testid="timeline-pause-span"
+                      data-waiting={m.waiting ? 'true' : 'false'}
+                      // Along the lane's foot, under the marks, so ⏸ and anything
+                      // that happened while it waited stay readable.
+                      className={`absolute bottom-0 h-0 border-t-2 pointer-events-none opacity-70 ${m.waiting ? 'border-dashed' : 'border-solid'} ${markClass(m)}`}
+                      style={{ left: `${left}%`, width: `${Math.max(width, 0.5)}%`, borderColor: 'currentColor' }}
+                    />
+                  );
+                }
                 return width > 1.5 ? (
                   <span
                     key={`span-${m.id}`}
@@ -101,6 +128,7 @@ export function TimelineLanes({
                   type="button"
                   onClick={() => {
                     if (m.kind === 'signal') onSelectSignal(m.id);
+                    else if (m.kind === 'pause' || m.kind === 'breach') onSelectHit(m.id);
                     else if (m.kind !== 'commit' && m.kind !== 'merge') onSelectTurn(m.id);
                   }}
                   title={markTitle(m)}

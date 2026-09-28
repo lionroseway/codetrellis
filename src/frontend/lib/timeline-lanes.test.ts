@@ -4,9 +4,9 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AgentEvent, AwarenessSignal, Workstream } from '../../shared/types';
+import type { AgentEvent, AwarenessSignal, BreakpointHit, Workstream } from '../../shared/types';
 import type { AgentTurn } from './agent-turns';
-import { buildLanes, turnRoot, position, laneLabel, OUTSIDE, MAX_WINDOW_MS, MIN_WINDOW_MS } from './timeline-lanes';
+import { buildLanes, turnRoot, position, laneLabel, hitMark, OUTSIDE, MAX_WINDOW_MS, MIN_WINDOW_MS } from './timeline-lanes';
 
 const NOW = 10_000_000;
 const MIN = 60_000;
@@ -135,5 +135,49 @@ describe('commits and checks (B2.2)', () => {
       workstreams: [AUTH], signals: [], now: NOW,
     }).lanes[0].marks.map((m) => [m.id, m.kind]);
     assert.deepEqual(kinds, [['pass', 'check-pass'], ['back', 'check-fail'], ['run', 'check-fail'], ['ok', 'check-pass']]);
+  });
+});
+
+describe('breakpoints on the lanes (B4.3b)', () => {
+  const hit = (over: Partial<BreakpointHit>): BreakpointHit => ({
+    ref: 'bp-1', breakpointId: 'bp_1', kind: 'task', breakpointNote: null, breakpointTarget: 'i1', tool: 'claim_item', action: 'claim',
+    itemUid: 'i1', itemTitle: 'Partial refunds', path: null, breach: false, signalId: null, planUid: 'p1',
+    agent: 'codex', sessionId: 's-b', workstreamRoot: '/w/billing', hitAt: NOW - 20 * MIN, decision: null, note: null,
+    answeredAt: null, answeredBy: null, answeredByType: null, ...over,
+  });
+
+  test('a waiting pause is a ⏸ span on its workstream\'s lane, from the hit to now', () => {
+    const view = buildLanes({ turns: [], workstreams: [AUTH, BILLING], signals: [], hits: [hit({})], now: NOW });
+    const [m] = view.lanes.find((l) => l.label === 'billing-v2')!.marks;
+    assert.equal(m.kind, 'pause');
+    assert.equal(m.at, NOW - 20 * MIN);
+    assert.equal(m.endAt, NOW);
+    assert.equal(m.waiting, true);
+    assert.equal(m.text, 'codex wants to claim “Partial refunds”; waiting on you');
+    assert.deepEqual(view.lanes.find((l) => l.label === 'auth-refresh')!.marks, []);
+  });
+
+  test('an answered pause runs to its answer and says who answered what', () => {
+    const m = hitMark(hit({ decision: 'steer', answeredAt: NOW - 12 * MIN, answeredBy: 'Sam', answeredByType: 'human' }), NOW);
+    assert.equal(m.endAt, NOW - 12 * MIN);
+    assert.equal(m.waiting, undefined);
+    assert.equal(m.text, 'codex wants to claim “Partial refunds”; continued with a steer by Sam');
+    const released = hitMark(hit({ kind: 'signal', decision: 'continue', answeredAt: NOW, answeredBy: 'x', answeredByType: 'system' }), NOW);
+    assert.match(released.text, /continued by CodeTrellis$/);
+  });
+
+  test('a breach is its own mark at its time, never a pause, and its answer is "carried on"', () => {
+    const b = hit({ kind: 'code', action: 'breach', breach: true, path: 'payments/refund.ts', breakpointTarget: 'payments/refund.ts' });
+    const waiting = hitMark(b, NOW);
+    assert.equal(waiting.kind, 'breach');
+    assert.equal(waiting.endAt, waiting.at);
+    assert.equal(waiting.text, 'codex changed payments/refund.ts past a breakpoint; waiting on you');
+    assert.match(hitMark({ ...b, decision: 'continue', answeredAt: NOW, answeredBy: 'Sam', answeredByType: 'human' }, NOW).text, /carried on by Sam$/);
+  });
+
+  test('a hit in no workstream goes on the outside lane; one from before the window is left off', () => {
+    const view = buildLanes({ turns: [], workstreams: [AUTH], signals: [], hits: [hit({ workstreamRoot: null }), hit({ ref: 'old', hitAt: NOW - 3 * 60 * MIN, answeredAt: NOW - 2.9 * 60 * MIN, decision: 'stop', answeredBy: 'Sam' })], now: NOW });
+    const outside = view.lanes.find((l) => l.key === OUTSIDE)!;
+    assert.deepEqual(outside.marks.map((m) => m.id), ['bp-1']);
   });
 });

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Breakpoint, BreakpointHit } from '@shared/types';
-import { agentName, hitHeadline, hitWhy, decisionLabels, breakpointLabel } from './breakpoint-view';
+import { agentName, hitHeadline, hitWhy, decisionLabels, breakpointLabel, nodeBreakpoints, nodeBreakpointTitle, symbolNodeTarget } from './breakpoint-view';
 
 const hit = (over: Partial<BreakpointHit> = {}): BreakpointHit => ({
   ref: 'bp-1', breakpointId: 'bp_1', kind: 'task', breakpointNote: null, breakpointTarget: 'i1', tool: 'claim_item', action: 'claim',
@@ -56,4 +56,27 @@ test('a function breakpoint names the function in its file (B4.2c)', () => {
   assert.equal(hitHeadline(h), 'Claude Code wants to change “calculateRefund in payments/refund.ts”');
   const breach = hit({ kind: 'code', action: 'breach', breach: true, path: 'payments/refund.ts', breakpointTarget: 'payments/refund.ts#calculateRefund' });
   assert.equal(hitHeadline(breach), 'codex changed calculateRefund in payments/refund.ts past a breakpoint');
+});
+
+test('the graph: which breakpoints hold a node, and its ⏸ in words (B4.3b)', () => {
+  const file = bp({ id: 'f', kind: 'code', target: 'src/pay/refund.ts', targetTitle: null });
+  const folder = bp({ id: 'd', kind: 'code', target: 'src/pay/', targetTitle: null });
+  const fn = bp({ id: 'fn', kind: 'code', target: 'src/pay/charge.ts#settle', targetTitle: null });
+  const task = bp({ id: 't', kind: 'task', target: 'src/pay/refund.ts' });
+  const all = [file, folder, fn, task];
+  const ids = (n: Parameters<typeof nodeBreakpoints>[1]) => nodeBreakpoints(all, n).map((b) => b.id).sort();
+
+  assert.deepEqual(ids({ nodeType: 'file', path: 'src/pay/refund.ts' }), ['d', 'f']);
+  assert.deepEqual(ids({ nodeType: 'file', path: 'src/pay/charge.ts' }), ['d', 'fn']);
+  assert.deepEqual(ids({ nodeType: 'file', path: 'src/payroll.ts' }), []);
+  assert.deepEqual(ids({ nodeType: 'directory', path: 'src/pay/sub' }), ['d']);
+  assert.deepEqual(ids({ nodeType: 'directory', path: 'src' }), []);
+  // A function node: its own breakpoint, or its whole file's or folder's; not a sibling's.
+  assert.deepEqual(ids({ nodeType: 'symbol', path: 'src/pay/charge.ts::function:settle' }), ['d', 'fn']);
+  assert.deepEqual(nodeBreakpoints([fn], { nodeType: 'symbol', path: 'src/pay/charge.ts::function:refund' }), []);
+
+  assert.deepEqual(symbolNodeTarget('src/pay/charge.ts::method:Ledger.post'), { file: 'src/pay/charge.ts', kind: 'method', name: 'Ledger.post' });
+  assert.equal(symbolNodeTarget('src/pay/charge.ts'), null);
+  assert.equal(nodeBreakpointTitle([fn]), 'Ask me first: settle in src/pay/charge.ts, before an edit touches it');
+  assert.equal(nodeBreakpointTitle([file, folder]), 'Ask me first: src/pay/refund.ts, before it changes; Everything in src/pay/, before it changes');
 });

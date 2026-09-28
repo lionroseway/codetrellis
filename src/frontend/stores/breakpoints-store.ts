@@ -18,6 +18,8 @@ export type SetBreakpointInput =
 interface BreakpointsState {
   breakpoints: Breakpoint[];
   waiting: BreakpointHit[];
+  /** The latest held calls, answered or not, for the Timeline lanes' ⏸ spans (B4.3b). */
+  recent: BreakpointHit[];
   loaded: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -43,16 +45,21 @@ const json = (body: unknown) => ({ headers: { 'Content-Type': 'application/json'
 export const useBreakpointsStore = create<BreakpointsState>((set, get) => ({
   breakpoints: [],
   waiting: [],
+  recent: [],
   loaded: false,
   error: null,
 
   refresh: async () => {
     try {
-      const [b, h] = await Promise.all([fetch('/api/breakpoints'), fetch('/api/breakpoint-hits')]);
-      if (!b.ok || !h.ok) { set({ error: await errorOf(b.ok ? h : b, 'Server returned'), loaded: true }); return; }
+      // Waiting and recent are separate reads: recent is the latest 200, and
+      // an old call still waiting must never fall off the waiting list.
+      const [b, h, r] = await Promise.all([fetch('/api/breakpoints'), fetch('/api/breakpoint-hits'), fetch('/api/breakpoint-hits?state=all')]);
+      const bad = [b, h, r].find((x) => !x.ok);
+      if (bad) { set({ error: await errorOf(bad, 'Server returned'), loaded: true }); return; }
       const { breakpoints } = (await b.json()) as { breakpoints: Breakpoint[] };
       const { hits } = (await h.json()) as { hits: BreakpointHit[] };
-      set({ breakpoints, waiting: hits, loaded: true, error: null });
+      const { hits: recent } = (await r.json()) as { hits: BreakpointHit[] };
+      set({ breakpoints, waiting: hits, recent, loaded: true, error: null });
     } catch {
       set({ error: UNREACHABLE, loaded: true });
     }
