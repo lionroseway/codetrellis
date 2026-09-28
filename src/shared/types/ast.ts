@@ -62,6 +62,13 @@ export interface ImportDeclaration {
    * only the extractor knows which was written.
    */
   isRelative?: boolean;
+  /**
+   * Phase 32 A2.2 — `export { a } from './x'` / `export * from './x'`: the
+   * file passes the names on instead of using them. A barrel's importers are
+   * the re-exported module's importers too, and an importer lookup follows
+   * it. Specifiers are the ORIGINAL names, as for every import.
+   */
+  isReexport?: boolean;
 }
 
 export interface ExportDeclaration {

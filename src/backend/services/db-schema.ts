@@ -47,7 +47,10 @@ export const SCHEMA_AST = `
     specifiers TEXT,
     is_default INTEGER DEFAULT 0,
     is_namespace INTEGER DEFAULT 0,
-    is_relative INTEGER DEFAULT 0
+    is_relative INTEGER DEFAULT 0,
+    -- Phase 32 A2.2: \`export … from\` — the file passes these names on
+    -- rather than using them, so an importer lookup follows it.
+    is_reexport INTEGER DEFAULT 0
   );
 
   CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);

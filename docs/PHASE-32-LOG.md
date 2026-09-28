@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Track A — bug 53: squash-merged branches are not live work |
-| **Status** | A2.1 merged (#156); A2.2 PR open. Bug 53 fixed on its branch (unit +5, harness +1); PR open |
-| **Next action** | Merge A2.2 and bug 53 when green (the second to merge takes the other's log lines); then A2.3 (`contract` signal) |
+| **Status** | A2.2 merged (#157). Bug 53 fixed on its branch (unit +5, harness +1); PR open (#158), base merged in |
+| **Next action** | Merge bug 53 when green; then A2.3 (`contract` signal) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-a1-7d-merged-branches` |
 | **Last updated** | 2026-09-28 |
@@ -67,9 +67,9 @@
 - [x] A1.6 Signals engine (collision, stale-base) and tools (#151)
 - [x] A1.7 Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)
 - [x] A1.8 Awareness tab (#155)
-- [x] Bug 53: a squash-merged branch is not live work (A1.7a)
+- [x] Bug 53: a squash-merged branch is not live work (A1.7a, #158)
 - [x] A2.1 Signatures (TS/JS, Python)
-- [ ] A2.2 Import accuracy
+- [x] A2.2 Import accuracy (#157)
 - [ ] A2.3 `contract` signal
 - [ ] A2.4 `declare_intent`
 - [ ] A2.5 `drift` signal
@@ -210,6 +210,78 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
     into the opened checkout removes the branch workstream and its signal.
   - Related harness files pass (37); unit 1218 / 3 environment skips; lint
     0 errors / 295.
+
+### 2026-09-28: A2.2 — import accuracy; bug 53 found
+- **Re-exports are recorded.** The TS/JS parser reads `export { a, b as c }
+  from`, `export * from` and `export * as ns from` as imports marked
+  `isReexport`, with the ORIGINAL names (`a`, `b`), stored in the new
+  `imports.is_reexport` column (the reconciler adds it to older databases).
+  Before, a barrel had no edges at all: this repository's
+  `src/shared/types/index.ts` and the sample app's `packages/shared/src/index.ts`
+  linked to nothing, and nothing importing through them was known to use
+  what they re-export.
+- **Python records the original name**: `from app.db import add_order as
+  insert_order` imports `add_order`.
+- **`imports.resolved_path` is indexed** (`idx_imports_resolved`), created
+  where resolution adds the column.
+- **`importersOf(file, names?)`** (`services/importers.ts`) is the one
+  importer lookup: direct importers, then through barrels for the names
+  each passes on (through `export *`, what the file exports; through
+  `export { a }`, just `a`). A types-only importer of a barrel is therefore
+  not a user of its validators. A namespace import is "possibly". Barrels
+  are followed, not listed; cycles end; five levels at most. Python's
+  exported names: no leading underscore (`__all__` is A2.3's).
+- **tsconfig aliases survive an include glob.** `readTsconfigPaths`
+  stripped comments with string-blind regexes: the slash-star in
+  `"@shared/*"` opened a "comment" that the glob `src/**/*` closed, deleting
+  `paths` itself. So every alias in a tsconfig with such a glob resolved
+  nothing — in this repository every frontend import of `@shared/types`,
+  and no edge ran from the frontend to shared types. `stripJsonc` removes
+  comments only outside strings. On this repository: 2,084 of 4,020
+  imports linked, up from 2,021.
+- **Surfaces.**
+  - `check_footprint` finds importers through barrels, takes the spec's
+    optional `symbols` to narrow them by name (§6.1), and returns each
+    importer's names, "possibly" and route beside `imported_by`.
+  - The inspector: an importer that re-exports is tagged "re-exports", and
+    a new **Used through re-exports** section lists the files reaching the
+    selected one through a barrel, with the names and "via index.ts".
+    Journey: select `src/shared/types/agent.ts` → Imported by shows
+    `index.ts · re-exports` → Used through re-exports lists the app's
+    files that take its types from the barrel.
+- **Tests.**
+  - Unit: `importers.test.ts` (10) on a real database with the real
+    parsers' output: barrels stored and followed; a types-only importer
+    left out; namespace "possibly"; by name, through a named re-export;
+    a cycle of barrels ends; Python found by original name, not alias;
+    exported names; `throughReexports`; the index exists.
+  - Harness: `import-accuracy.test.ts` (4) on the sample app: the barrel's
+    re-exports; `OrderList` and `UserList` named through it and `api.ts`
+    (types only) not; `check_footprint` through the barrel and by name; an
+    aliased Python import found by the name it imports. All fail on the
+    old code (no re-exports, alias recorded).
+  - Unit: `tsconfig-paths.test.ts` (3): this repository's tsconfig shape
+    keeps its alias (fails on the old stripping); baseUrl; `stripJsonc`
+    leaves URLs, globs and escaped quotes in strings alone.
+  - Browser: `inspector/reexports.spec.ts` (1), on this repository's own
+    barrel: `agent.ts` shows `index.ts · re-exports` under Imported by and
+    25 files under Used through re-exports, `workstream-strip.ts` (an
+    `@shared/types` importer) among them. Passes locally with bug 53's fix
+    merged in (it could not before: see below). Screenshot:
+    `inspector-reexports.png`.
+  - Harness files that read edges or imports pass (168 + 66); unit 1223 /
+    3 environment skips; lint 0 errors / 294.
+- **Bug 53, found here (A1.7a).** On this repository the strip shows ~98
+  branch chips and the Awareness tab 7,602 signals. 151 refs; git counts 2
+  as merged. Every squash-merged PR branch still has commits "ahead", so
+  each is a branch workstream, and since every PR touches this log, every
+  pair collides. The backend is busy enough that the local browser
+  suite's first two tests time out on any spec (seen on the base branch
+  too), and it is exactly what a team that squash-merges and keeps its
+  branches would see. Next step: a branch whose every changed file is, on
+  main, at the version the branch has (or was, since the merge base) is
+  merged and not work — squash, rebase, merge or cherry-pick alike, from
+  one `git log --raw` of main, writing nothing.
 
 ### 2026-09-28: A2 refined; A2.1 — signatures
 - **A2 refined** into A2.1–A2.6 in EXECUTION §4, with the M2 "done when"

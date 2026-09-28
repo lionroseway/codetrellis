@@ -479,19 +479,43 @@ export function buildAliasMap(systems: DiscoveredSystem[]): AliasMapping[] {
   return map;
 }
 
-function readTsconfigPaths(tsconfigPath: string, configDir: string): AliasMapping[] {
+/**
+ * JSON with comments and trailing commas (what tsconfig.json allows) to
+ * JSON. Comments are removed only OUTSIDE strings (Phase 32 A2.2): the
+ * regexes this replaced saw the slash-star in `"@shared/<star>"` open a block
+ * comment that the star-slash inside an `include` glob (`src/<star><star>/<star>`)
+ * closed, deleted the `paths` between them, and so every alias in a
+ * tsconfig with such a glob resolved nothing — in this repository, every
+ * frontend import of `@shared/types`.
+ */
+export function stripJsonc(raw: string): string {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (inString) {
+      out += c;
+      if (c === '\\') { out += raw[++i] ?? ''; continue; }
+      if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') { inString = true; out += c; continue; }
+    if (c === '/' && raw[i + 1] === '/') { while (i < raw.length && raw[i] !== '\n') i++; out += '\n'; continue; }
+    if (c === '/' && raw[i + 1] === '*') { i += 2; while (i < raw.length && !(raw[i] === '*' && raw[i + 1] === '/')) i++; i++; continue; }
+    out += c;
+  }
+  // Trailing commas, now that no comment can hide one.
+  return out.replace(/,(\s*[}\]])/g, '$1');
+}
+
+/** A tsconfig's `compilerOptions.paths` as alias mappings. Exported for tests. */
+export function readTsconfigPaths(tsconfigPath: string, configDir: string): AliasMapping[] {
   const out: AliasMapping[] = [];
   let raw = '';
   try { raw = fs.readFileSync(tsconfigPath, 'utf-8'); } catch { return out; }
 
-  // tsconfig.json often has comments, which JSON.parse rejects. Strip them.
-  const stripped = raw
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
-    .replace(/,\s*([}\]])/g, '$1'); // tolerate trailing commas
-
   let pkg: any;
-  try { pkg = JSON.parse(stripped); } catch { return out; }
+  try { pkg = JSON.parse(stripJsonc(raw)); } catch { return out; }
 
   const compilerOptions = pkg?.compilerOptions || {};
   const baseUrl: string = typeof compilerOptions.baseUrl === 'string' ? compilerOptions.baseUrl : '.';
