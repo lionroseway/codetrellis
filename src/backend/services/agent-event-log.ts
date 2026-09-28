@@ -133,6 +133,17 @@ export function recordAgentEvent(evt: AgentEvent, known: readonly string[] = [])
   }
 }
 
+/**
+ * A session was bound to its workstream after some of its events were
+ * logged (an MCP client's roots arrive after connect): give those events the
+ * workstream. Only rows that have none are touched. Never throws.
+ */
+export function adoptSessionEvents(sessionId: string, workstreamRoot: string): void {
+  try {
+    getDb().run('UPDATE agent_events SET workstream_root = ? WHERE session_id = ? AND workstream_root IS NULL', [workstreamRoot, sessionId]);
+  } catch { /* the log must never break a binding */ }
+}
+
 export interface AgentEventQuery {
   /** Only events after this time (ms). */
   since?: number;

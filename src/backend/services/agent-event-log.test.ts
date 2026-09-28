@@ -65,6 +65,16 @@ describe('what is kept', () => {
     assert.equal(e.agentType, 'claude-code');
   });
 
+  test('a session bound after its first calls were logged adopts them, and nothing already placed moves', async () => {
+    session('s-late', 'codex', null);
+    log.recordAgentEvent(event({ payload: { tool: 'list_plans', sessionId: 's-late' } }));
+    log.recordAgentEvent(event({ source: 'claude-code-watcher', payload: { sessionId: 's-late', workstreamRoot: '/w/elsewhere' } }));
+    assert.equal(log.listAgentEvents()[0].workstreamRoot, null);
+    const sessions = await import('./session-service');
+    sessions.bindSession('s-late', AUTH);
+    assert.deepEqual(log.listAgentEvents().map((e) => e.workstreamRoot), [AUTH, '/w/elsewhere']);
+  });
+
   test('the same event twice is one row; a malformed one is ignored, never thrown', () => {
     const e = event({});
     log.recordAgentEvent(e);

@@ -228,6 +228,12 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 - **The window** loads the last 400 when it connects, merged by id in time
   order, so a reload or a reconnect keeps the Timeline. The store is capped
   at 2,000 (it had no cap).
+- **CI caught a race.** An MCP client's roots are asked for after connect,
+  so an agent's first calls can be logged before its session is bound, and
+  they kept no workstream. That happened on CI, not locally. Binding a
+  session now gives its earlier unplaced events the workstream
+  (`adoptSessionEvents`, from `bindSession`). A new unit test fails on the
+  old code.
 - **CI's secret scan caught a fake.** The redaction test had a made-up
   AWS-shaped key as a literal, and gitleaks flagged it on #169. The test
   now assembles its fakes at run time. `.gitleaksignore` (new) clears that
@@ -239,7 +245,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   broadcast and is not recorded. Found by the first draft of the harness
   test.
 - **Tests.**
-  - Unit: `agent-event-log.test.ts` (13):
+  - Unit: `agent-event-log.test.ts` (14):
     - stamping, including an ended session and a watcher's own workstream;
     - one row per id, and no throw;
     - launch-unique ids, and truncation;
