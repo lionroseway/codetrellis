@@ -82,11 +82,14 @@ test.describe('planning by hand', () => {
     }
     const taskBtn = page.locator('button:has-text("Task")').first();
     await taskBtn.click();
-    await page.waitForTimeout(900);
 
-    const items = await listItems(page, planUid!);
-    expect(items.filter((i) => i.kind === 'object').length, 'the page').toBeGreaterThanOrEqual(1);
-    expect(items.filter((i) => i.kind === 'action').length, 'the task').toBeGreaterThanOrEqual(1);
+    // Polled, not slept: a fixed 900ms read the items before the create landed
+    // on a loaded CI runner and found no task (PR #188's Browser suite 2/3).
+    let items: Item[] = [];
+    await expect.poll(async () => {
+      items = await listItems(page, planUid!);
+      return items.filter((i) => i.kind === 'object').length >= 1 && items.filter((i) => i.kind === 'action').length >= 1;
+    }, { message: 'the page and the task the user just added should exist', timeout: 10_000 }).toBe(true);
 
     // ── name the task, the way a person would ─────────────────────
     const action = items.find((i) => i.kind === 'action')!;

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C5.2: a new worktree for a section |
-| **Status** | C5.1 merged (#186). C5.2 done on its branch: "New worktree for this section…" makes a worktree beside the project on a branch named for the section and keeps the section to it; "Start an agent" opens Claude Code, Codex, aider or a shell there. Also: the first tool call after connecting waits for the session's roots. Unit, harness and browser pass |
-| **Next action** | Open C5.2's PR and merge it when green. Then C5.3 (workstream chips, progress per worktree, sections named in collisions) |
+| **Stage / step** | Track C — C5.3a: one plan across worktrees, seen |
+| **Status** | C5.2 merged (#187). C5.3a done on its branch: ⎇ worktree on each section in the plan tree, progress per worktree under the header, and the lanes name their sections. Unit and browser pass |
+| **Next action** | Open C5.3a's PR and merge it when green. Then C5.3b (a collision between two sections of one plan names both; readiness to merge per section) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-c5-2-worktree-for-section` |
+| **Branch** | `feat/phase-32-c5-3a-worktree-chips` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -140,8 +140,10 @@
 - [ ] C4 Recurring playbooks
 - [ ] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it ([#186](https://github.com/lionroseway/codetrellis/pull/186))
-  - [x] C5.2 Start a worktree for a section; a start command for any agent (PR open)
-  - [ ] C5.3 Workstream chips, progress per worktree, sections named in collisions
+  - [x] C5.2 Start a worktree for a section; a start command for any agent ([#187](https://github.com/lionroseway/codetrellis/pull/187))
+  - [ ] C5.3 Workstream chips, progress per worktree, sections named in collisions, split in two:
+    - [x] C5.3a ⎇ worktree on each section in the plan tree; progress per worktree; lanes name their sections (PR open)
+    - [ ] C5.3b A collision between two sections of one plan names both; readiness to merge per section
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -243,6 +245,29 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: C5.3a — one plan across worktrees, seen
+- **Split** C5.3 in two: what the person sees of the split (this), and the
+  signals and merge readiness that need backend work (C5.3b).
+- **Journey.** "Checkout v2" is split across two worktrees. In the plan
+  tree, Billing carries `⎇ checkout-v2-billing` and Exports `⎇ exports`
+  (hover: "Worked in … its tasks are offered only to agents working
+  there"); a task under a section does not repeat it. Under the header:
+  "checkout-v2-billing: 1 of 2 · exports: 0 of 1 · any worktree: 0 of 1".
+  On the Timeline, the `checkout-v2-billing` lane says "Billing" under its
+  name, and `exports` "Exports".
+- **Rules** in `lib/section-worktrees.ts` (pure): a task is worked where its
+  nearest section says; done of to-do per worktree, skipped not counted,
+  "any worktree" last; a plan in one place shows no split at all.
+- **Nearly overwrote** `lib/plan-worktrees.ts` (plans grouped by the
+  worktree they live in, used by the plan switcher) by reusing its name;
+  restored from git before anything else ran, and the new code has its own
+  file. Named here so the two are not confused: one groups *plans* by
+  checkout, the other a plan's *sections* by worktree.
+- **Tests:** unit `section-worktrees.test.ts` (4); browser
+  `plan/plan-across-worktrees.spec.ts` (the items and room given; chips,
+  progress, lane sections). Unit 1,458 pass; typecheck clean; lint
+  warnings unchanged; inventory re-run.
 
 ### 2026-09-28: C5.2 — a new worktree for a section; an agent started there
 - **Journey.** In Billing's Routing panel, "New worktree for this
