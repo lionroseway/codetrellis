@@ -3,6 +3,7 @@ import * as _lazy___plan_file_service from './plan-file-service';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
+import { recordBodyEdit } from './agent-event-log';
 import type { PlanDocument, PlanDocumentVersion } from '../../shared/types';
 
 /** Phase 13 §B auto-sync hook — see plan-service for the rationale. */
@@ -187,6 +188,14 @@ export function updatePlanDocument(docUid: string, updates: UpdatePlanDocInput):
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [docUid, existing.version + 1, updates.body, updates.changeSummary ?? 'Updated', author, authorType, now]
     );
+    recordBodyEdit({
+      kind: 'document', planUid: existing.planUid, uid: docUid, title: updates.title ?? existing.title,
+      version: existing.version + 1,
+      author: updates.author !== undefined ? updates.author ?? null : null,
+      // No author: the plan file was re-read from disk.
+      authorType: updates.author !== undefined ? updates.authorType ?? null : 'file',
+      changeSummary: updates.changeSummary ?? null,
+    });
   }
 
   markDirty();

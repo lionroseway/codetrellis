@@ -38,7 +38,7 @@ import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, set
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './services/capability-token';
-import { startAgentEventLog, listAgentEvents, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
+import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -5049,6 +5049,8 @@ export async function initializeBackend(): Promise<void> {
   // Phase 32 B1: keep every agent event that is broadcast, from here on.
   // This launch's token is masked if a tool argument ever carries it.
   startAgentEventLog(addBroadcastTarget, () => [getCapabilityToken()]);
+  // B1.2: what the app records itself (a spec body edited) goes out the same way.
+  setEventPublisher(broadcast);
 
   // Start persistent auto-save for plan data
   startAutoSave(() => exportDatabase(), 30000);

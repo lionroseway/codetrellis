@@ -164,3 +164,43 @@ describe('the tap', () => {
     assert.equal(listener, null);
   });
 });
+
+describe('what the app records itself (B1.2)', () => {
+  const edit = { kind: 'document' as const, planUid: 'p1', uid: 'd1', title: 'Token rotation', version: 3, author: 'Sam', authorType: 'human' };
+
+  test('a body edit is published as a spec_edited event, labelled by who made it', () => {
+    const sent: Array<{ type: string; payload: AgentEvent }> = [];
+    log.setEventPublisher((type, payload) => sent.push({ type, payload: payload as AgentEvent }));
+    try {
+      log.recordBodyEdit(edit);
+      assert.equal(sent.length, 1);
+      assert.equal(sent[0].type, 'agent-event');
+      assert.match(sent[0].payload.id, /^app-[0-9a-f]{8}-\d+$/);
+      assert.equal(sent[0].payload.source, 'app');
+      assert.equal(sent[0].payload.type, 'spec_edited');
+      assert.deepEqual(sent[0].payload.payload, { ...edit, agentType: 'human' });
+    } finally {
+      log.setEventPublisher(null);
+    }
+  });
+
+  test('made inside an MCP tool, it carries that session and agent, so it joins the turn', () => {
+    const sent: AgentEvent[] = [];
+    log.setEventPublisher((_t, p) => sent.push(p as AgentEvent));
+    try {
+      log.withEventContext({ sessionId: 's-9', agentType: 'codex' }, () => log.recordBodyEdit({ ...edit, author: 'codex', authorType: 'agent' }));
+      assert.equal(sent[0].payload.sessionId, 's-9');
+      assert.equal(sent[0].payload.agentType, 'codex');
+      log.recordBodyEdit(edit);
+      assert.equal(sent[1].payload.sessionId, undefined, 'outside the tool, no session');
+    } finally {
+      log.setEventPublisher(null);
+    }
+  });
+
+  test('with nothing to publish to, or a publisher that throws, the edit is not disturbed', () => {
+    log.recordBodyEdit(edit);
+    log.setEventPublisher(() => { throw new Error('down'); });
+    try { log.recordBodyEdit(edit); } finally { log.setEventPublisher(null); }
+  });
+});

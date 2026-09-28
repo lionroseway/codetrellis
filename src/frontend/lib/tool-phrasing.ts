@@ -292,6 +292,15 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
     return { text: humaniseToolName(tool), intent: 'read', tool, mutating: false };
   }
 
+  // ── A spec or item body edited (B1.2) ─────────────────────────────
+  if (event.type === 'spec_edited') {
+    const title = typeof payload.title === 'string' && payload.title.trim() ? payload.title : 'untitled';
+    const what = payload.kind === 'item' ? `the description of “${title}”` : `the spec “${title}”`;
+    const version = typeof payload.version === 'number' ? ` (v${payload.version})` : '';
+    const from = payload.authorType === 'file' ? ', from the plan file' : '';
+    return { text: `Edited ${what}${version}${from}`, intent: 'write', tool: null, mutating: true };
+  }
+
   // ── Claude Code session-JSONL events ──────────────────────────────
   const file = typeof payload.file === 'string' ? payload.file.split('/').pop() : null;
   switch (payload.action) {

@@ -91,5 +91,5 @@ Tools are organised into 18 files under `src/backend/mcp/tools/`. Each file grou
 
 - Each tool file exports a registration function called by the MCP server during startup.
 - Tools are pure functions that operate on service-layer methods — keep MCP layer thin, push logic into `services/`.
-- Every successful call broadcasts on `tool_call`; failures broadcast on `tool_error`. The frontend `PlanPanel` Timeline tab renders both.
+- Every successful call broadcasts on `tool_call`; failures broadcast on `tool_error`. The frontend `PlanPanel` Timeline tab renders both. That includes a call the SDK refuses before any handler runs (an unknown tool, or arguments its schema rejects): `mcp/server.ts` wraps the SDK's `tools/call` handler through the public `setRequestHandler`, and an error result that never reached the interception is broadcast too (Phase 32 B1.2). Every broadcast is also kept in the agent event log (`services/agent-event-log.ts`, B1.1), along with spec and item body edits (`spec_edited`, B1.2).
 - Tools that mutate persistent state (plans, items, system docs) go through the same services as UI mutations — never let MCP and UI take divergent code paths.

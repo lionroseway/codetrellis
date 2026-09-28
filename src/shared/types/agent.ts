@@ -1,7 +1,8 @@
 import type { ArchitectureDiff } from './graph';
 import type { SymbolKind } from './ast';
 
-export type AgentEventSource = 'mcp' | 'claude-code-watcher' | 'file-watcher';
+/** `app`: something recorded by the app itself, e.g. a spec body edited (Phase 32 B1.2). */
+export type AgentEventSource = 'mcp' | 'claude-code-watcher' | 'file-watcher' | 'app';
 
 export type AgentEventType =
   | 'plan_reported'
@@ -13,7 +14,9 @@ export type AgentEventType =
   // Phase 11+ — every MCP tool call broadcasts on this channel with
   // a normalized `{ tool, args, agentType, durationMs }` payload.
   | 'tool_call'
-  | 'tool_error';
+  | 'tool_error'
+  /** A spec document's or a plan item's body changed (Phase 32 B1.2). */
+  | 'spec_edited';
 
 export interface AgentEvent {
   id: string;

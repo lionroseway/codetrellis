@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B1.1: the agent event log |
-| **Status** | B1.1 done on its branch: `agent_events` kept by a passive tap, stamped with session, agent and workstream, secrets masked, 14 days; `GET /api/agent-events`; the Timeline survives a reload; unit, harness (with a restart) and browser tests pass; PR open. A3.5 merged (#168): M3 done |
-| **Next action** | Merge A3.5 and B1.1 when green; then B1.2 (body edits as events, agent-time for watcher events, SDK-refused calls). Then, per the sequence: B2, C1, B4, B3, then the direction review, then B5 and A4 |
+| **Stage / step** | Track B — B1.2: body edits, agent time, refused calls |
+| **Status** | B1.1 merged (#169). B1.2 done on its branch: SDK-refused calls recorded, watcher events at agent time, spec and item body edits as `spec_edited` events; unit, harness and browser tests pass; PR open |
+| **Next action** | Merge B1.2 when green (B1 then done); then B2 (Timeline lanes per workstream), refined into sub-steps first. Sequence after: C1, B4, B3, direction review, B5, A4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b1-1-agent-event-log` |
+| **Branch** | `feat/phase-32-b1-2-edits-and-refusals` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -97,8 +97,8 @@
 
 ### Track B: observability
 - [ ] B1 Agent event log, refined in EXECUTION §5:
-  - [ ] B1.1 `agent_events`, `GET /api/agent-events`, the Timeline survives a reload (PR open)
-  - [ ] B1.2 Body edits as events; agent time; SDK-refused calls
+  - [x] B1.1 `agent_events`, `GET /api/agent-events`, the Timeline survives a reload (#169)
+  - [ ] B1.2 Body edits as events; agent time; SDK-refused calls (PR open)
 - [ ] B2 Timeline lanes
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints
@@ -196,6 +196,66 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: B1.2 — body edits, agent time, refused calls
+- **Refused calls are recorded.** The SDK resolves the tool and validates
+  its arguments before it calls the handler, so an unknown tool or
+  schema-rejected arguments never reached the interception. Found in B1.1:
+  such calls were in neither the Timeline nor the log.
+  - `mcp/server.ts` wraps the SDK's `tools/call` handler through the
+    public `Server.setRequestHandler`. It is wrapped before the SDK
+    registers it, on the first `registerTool`.
+  - `instrument` notes each request id it reached. An error result whose
+    id it never reached is broadcast as a `tool_error`, with the SDK's own
+    message.
+  - A call refused at the interception is still broadcast once, not twice.
+  - The private `validateToolInput` was the other option. It was not used:
+    private SDK methods change without notice.
+- **Watcher events at agent time.** Claude Code stamps every JSONL entry,
+  and the event now carries that stamp, not the poll that read it. A
+  missing, unreadable or future stamp (over a minute ahead) falls back to
+  the read time.
+- **Body edits are events.** A new event type `spec_edited` has a new
+  source, `app`. `recordBodyEdit` publishes it through `broadcast`
+  (`setEventPublisher`), so the window sees it live and the tap records
+  it.
+  - Covers spec documents (`updatePlanDocument`: kind `document`, the new
+    version, the change summary) and plan-item bodies (kind `item`). An
+    item body edit made no `plan_events` row, so it was recorded nowhere
+    but the versions table.
+  - Made inside an MCP tool, the edit carries that tool's session and
+    agent, through an `AsyncLocalStorage` context set in `instrument`
+    (`withEventContext`), so it joins the agent's turn.
+  - From the app window or the local API, it is labelled by who made it
+    (`human`, `unverified`). A plan file re-read from disk is `file`. The
+    author always comes from how the edit arrived.
+  - The Timeline words it as "Edited the spec “Token rotation” (v2)",
+    "Edited the description of “…” (v3)", or "…, from the plan file".
+- **Tests.**
+  - Unit:
+    - `claude-code-watcher.test.ts` +1: entry time, and the fallbacks;
+    - `agent-event-log.test.ts` +3: published and labelled; inside a
+      tool it joins that session; no publisher or a throwing one
+      disturbs nothing;
+    - `tool-phrasing.test.ts` (new, 1): the wording.
+  - Harness: `agent-event-kinds.test.ts` (5):
+    - schema-rejected arguments recorded once, saying why;
+    - an unknown tool recorded;
+    - an interception refusal still once;
+    - an agent's item body edit joins its session with the version, and a
+      status change is not a body edit;
+    - a spec edited over the local API is `unverified` and in no session,
+      and a title change is not a body edit.
+  - Browser: `timeline-history.spec.ts` +1. A spec edited and a refused
+    call, both before the window opened, are in the Timeline. Screenshot
+    `timeline-edits-refusals`.
+- **UX journey.**
+  - Someone edits the spec while the developer is away. An agent also
+    tries a tool with arguments it got wrong.
+  - Back at the desk, the Timeline shows both: "Edited the spec “Token
+    rotation” (v2)" by `unverified` (a script on the local API), and "Get
+    app guide failed: … Invalid arguments …" in the agent's turn.
+  - Neither had left a trace before.
 
 ### 2026-09-28: B1.1 — the agent event log
 - **Sequence.** A3 closed with A4 looking next, but §2 puts B1, B2, C1, B4
