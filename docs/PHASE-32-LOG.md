@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.2: code breakpoints |
-| **Status** | B4.2 done on its branch: code breakpoints on a file, folder or function's file; the Claude Code hook denies a held edit as paused; other clients' changes surface as a breach on the next tool call. Unit, harness and browser pass |
-| **Next action** | Open B4.2's PR and merge it when green. Then B4.2b (signal breakpoints), B4.3 (the person's side), B4.4 (phone) |
+| **Stage / step** | Track B — B4.2b: signal breakpoints |
+| **Status** | B4.2 merged (#180). B4.2b done on its branch: a person's rule on a kind of serious signal holds the named workstreams' next guarded call while the signal is open. Unit and harness pass |
+| **Next action** | Merge B4.2b's PR when green. Then B4.3 (the person's side), B4.4 (phone) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b4-2-code-breakpoints` |
+| **Branch** | `feat/phase-32-b4-2b-signal-breakpoints` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -105,8 +105,8 @@
 - [ ] B3 Overlay list. Also owns, from the owner's question (2026-09-28): a signal chip focuses the graph on its files, and the code view marks the lines another workstream changes
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
-  - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients (PR open)
-  - [ ] B4.2b Signal breakpoints
+  - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
+  - [x] B4.2b Signal breakpoints (PR open)
   - [ ] B4.3 The person's side: set, the waiting list, ⏸ spans
   - [ ] B4.4 The phone and push
 - [ ] B5 Replay
@@ -216,9 +216,50 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | The hook now says no in exactly one case: an edit of a file under a code breakpoint is denied (`permissionDecision: deny`) as "paused: waiting for a decision" with the ref. It still never approves, and still fails open and silent. Settings and the awareness doc say so (B4.2; revises A3.4's "only informs") | A breakpoint is the person's explicit ask, and the hook is the only point before an edit that CodeTrellis can reach. Denying with the reason keeps Claude Code's permission flow untouched otherwise, and the agent reads why and what to wait on |
 | 2026-09-28 | A code breakpoint's answer is per workstream and file, and lasts while the breakpoint stands: continue opens the file to that workstream for every later edit (a steer told once), stop keeps refusing it. A function breakpoint holds edits of its file. The project is the opened one, never the request's (B4.2) | An agent edits one file in several steps; asking for each would teach people to clear breakpoints. The hook asks as its own session, so the workstream is what the edit and the answer share. The hook sees the file, not which function an edit lands in, so a function breakpoint cannot honestly be narrower yet |
 | 2026-09-28 | A breach is a change in a workstream's changed files to a file under a code breakpoint, made after the breakpoint was set (file modification time), that the hook did not let through. It is told once per session on its next tool call and recorded as a breach, never a pause. A deletion is not detected (B4.2) | The honest limit in the observability doc §10.3. Without the time check every file already changed in a worktree would be a breach the moment a breakpoint is set. A deleted file leaves no time to compare |
+| 2026-09-28 | A signal breakpoint is a rule row in the database (`kind: signal`, target a signal kind: collision, contract or drift), not a setting in `.codetrellis/config.json`. It holds every workstream a **high, open** signal of that kind names, at its next guarded call (claim, done, spec edit, delete, hooked edit); one hit per signal and workstream. Continue releases that workstream from that signal; stop refuses while it stays open. The person answering the signal in Awareness lets any waiting call through, recorded as CodeTrellis (`system`), never as a person (B4.2b) | The config file is committed and editable by agents, with a tool or an editor, so a rule there could be switched off by the agent it holds. Holding both sides matches the collision and contract signals, which name both. "Open" is the person not having answered the signal yet; once they have, the reason to ask is gone |
 ---
 
 ## Entries
+
+### 2026-09-28: B4.2b — signal breakpoints
+- **The rule.** `POST /api/breakpoints {kind: "signal", signal: "contract"}`
+  (or collision, drift) makes a kind of serious signal a breakpoint for the
+  opened project. It is stored as a breakpoint row, never in the committed
+  config file an agent could edit.
+- **What it holds.** While a high signal of that kind is open and names a
+  workstream, that workstream's next guarded call is held at the
+  interception (claim, done, spec edit, delete), and so is its hooked file
+  edit. The call returns "paused: waiting for a decision", naming the signal
+  and the person's note on the rule. It is one hit per signal and
+  workstream, and both sides of a contract or collision are held.
+  `services/signal-breakpoints.ts`.
+- **Answers.**
+  - Continue releases the workstream from that signal, with the steer
+    once. Stop refuses its guarded calls while the signal is open.
+  - Marking the signal acknowledged, intended or dismissed in Awareness
+    ends the reason to ask. A waiting call is let through ("the signal was
+    answered in Awareness"), recorded as CodeTrellis, not as a person.
+- **Timeline.** "Paused at a breakpoint on a serious contract signal,
+  before claiming “…”"; "CodeTrellis let claiming “…” through: The signal
+  was answered in Awareness."
+- **Tests.**
+  - Unit: `signal-breakpoints.test.ts` (6), `tool-phrasing.test.ts` +1.
+  - Harness: `signal-breakpoints.test.ts` (6), a real contract change
+    between two worktrees with agents in both.
+    - A claim with no serious signal goes through.
+    - The importer's claim is paused, and a steer rides on its next claim.
+    - The changer is paused too, and marking the signal intended releases
+      it as CodeTrellis.
+    - The Timeline events are checked.
+- **UX journey.**
+  1. Sam: "ask me when there is a contract change".
+  2. Billing changes `validateCreateUser`'s parameters; checkout imports it.
+  3. Codex in checkout goes to claim "Signup form validation" and is told
+     which signal paused it.
+  4. Sam steers "Pass strict: false until billing merges", and the claim
+     goes through with the note.
+  5. Claude Code in billing is paused too. Sam marks the signal intended in
+     Awareness, and CodeTrellis lets it through, saying why.
 
 ### 2026-09-28: B4.2 — breakpoints on code
 - **Setting one.** `POST /api/breakpoints {kind: "code", path, symbol?}`

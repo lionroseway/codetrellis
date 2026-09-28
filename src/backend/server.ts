@@ -43,6 +43,7 @@ import { normaliseSkills } from './services/skill-model';
 import { listProjectSkills } from './services/skills-service';
 import { skillProof } from './services/skill-use-service';
 import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from './services/skill-arrival-service';
+import { releaseSettled } from './services/signal-breakpoints';
 import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
 import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
@@ -2306,16 +2307,17 @@ app.get('/api/breakpoints', (req, res) => {
 });
 
 /**
- * Set a breakpoint: `{ kind: "task" | "spec", itemUid, note? }`, or
+ * Set a breakpoint: `{ kind: "task" | "spec", itemUid, note? }`;
  * `{ kind: "code", path, symbol?, note? }` on a file or folder of the opened
- * project (never a project named in the body). Setting one already set
- * returns it.
+ * project; or `{ kind: "signal", signal: "collision" | "contract" | "drift" }`,
+ * a rule for the opened project (never a project named in the body). Setting
+ * one already set returns it.
  */
 app.post('/api/breakpoints', (req, res) => {
   const who = personFrom(req);
   try {
     const { breakpoint, created } = setBreakpoint({
-      kind: req.body?.kind, itemUid: req.body?.itemUid, path: req.body?.path, symbol: req.body?.symbol, note: req.body?.note,
+      kind: req.body?.kind, itemUid: req.body?.itemUid, path: req.body?.path, symbol: req.body?.symbol, signal: req.body?.signal, note: req.body?.note,
       projectRoot: getActiveProjectPath(), by: who.author, byType: who.authorType,
     });
     if (created) broadcast('breakpoints-changed', { planUid: breakpoint.planUid });
@@ -2339,6 +2341,9 @@ app.delete('/api/breakpoints/:id', (req, res) => {
 /** Held calls: `?state=waiting` (the default) or `all`; `?plan=` narrows to one plan. */
 app.get('/api/breakpoint-hits', (req, res) => {
   const state = req.query.state === 'all' ? 'all' : 'waiting';
+  // A call waiting on a signal the person has since answered in Awareness is let through first (B4.2b).
+  const root = getActiveProjectPath();
+  if (root) { try { releaseSettled(root); } catch { /* the list still answers */ } }
   const plan = typeof req.query.plan === 'string' ? req.query.plan : undefined;
   res.json({ hits: listHits({ state, planUid: plan }) });
 });

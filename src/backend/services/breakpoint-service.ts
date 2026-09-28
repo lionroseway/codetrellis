@@ -30,7 +30,8 @@
  *
  * **code** breakpoints (B4.2) are on a file, a folder or a function's file in
  * the opened project, and are enforced outside the item tools: see
- * `code-breakpoints.ts`. Signal breakpoints are B4.2b.
+ * `code-breakpoints.ts`. **signal** breakpoints (B4.2b) are a project rule
+ * on a kind of serious signal: see `signal-breakpoints.ts`.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -39,7 +40,9 @@ import path from 'node:path';
 import { getDb } from './database';
 import { recordBreakpointEvent } from './agent-event-log';
 
-export const BREAKPOINT_KINDS = ['task', 'spec', 'code'] as const;
+export const BREAKPOINT_KINDS = ['task', 'spec', 'code', 'signal'] as const;
+/** The signal kinds a signal breakpoint can be on: the ones that can be serious. */
+export const SIGNAL_BREAK_KINDS = ['collision', 'contract', 'drift'] as const;
 export type BreakpointKind = typeof BREAKPOINT_KINDS[number];
 export const DECISIONS = ['continue', 'steer', 'stop'] as const;
 export type Decision = typeof DECISIONS[number];
@@ -79,6 +82,8 @@ export interface BreakpointHit {
   path: string | null;
   /** A change seen only after it was made: recorded, never paused. */
   breach: boolean;
+  /** The serious signal that held the call, for a signal breakpoint. */
+  signalId: string | null;
   planUid: string | null;
   agent: string | null;
   sessionId: string | null;
@@ -207,13 +212,14 @@ export class BreakpointError extends Error {
  * never the request. Setting one that is already set returns it.
  */
 export function setBreakpoint(input: {
-  kind: unknown; itemUid?: unknown; path?: unknown; symbol?: unknown; note?: unknown;
+  kind: unknown; itemUid?: unknown; path?: unknown; symbol?: unknown; signal?: unknown; note?: unknown;
   /** The opened project, for a code breakpoint: from the app, never the request. */
   projectRoot?: string | null;
   by: string; byType: string; now?: number;
 }): { breakpoint: Breakpoint; created: boolean } {
   if (!BREAKPOINT_KINDS.includes(input.kind as BreakpointKind)) throw new BreakpointError(`kind must be one of ${BREAKPOINT_KINDS.join(', ')}`, 400);
   if (input.kind === 'code') return setCodeBreakpoint(input);
+  if (input.kind === 'signal') return setSignalBreakpoint(input);
   const item = typeof input.itemUid === 'string' ? itemRow(input.itemUid) : null;
   if (!item) throw new BreakpointError('Item not found', 404);
   const kind = input.kind as BreakpointKind;
@@ -281,6 +287,22 @@ function setCodeBreakpoint(input: { path?: unknown; symbol?: unknown; note?: unk
   return { breakpoint: getBreakpoint(id)!, created: true };
 }
 
+function setSignalBreakpoint(input: { signal?: unknown; note?: unknown; projectRoot?: string | null; by: string; byType: string; now?: number }): { breakpoint: Breakpoint; created: boolean } {
+  if (!input.projectRoot) throw new BreakpointError('No project is open', 409);
+  if (!SIGNAL_BREAK_KINDS.includes(input.signal as typeof SIGNAL_BREAK_KINDS[number])) {
+    throw new BreakpointError(`signal must be one of ${SIGNAL_BREAK_KINDS.join(', ')}`, 400);
+  }
+  const target = input.signal as string;
+  const existing = rowsOf<BreakpointRow>(`${ACTIVE_SELECT} AND b.kind = 'signal' AND b.target = ? AND b.project_root = ?`, [target, input.projectRoot])[0];
+  if (existing) return { breakpoint: toBreakpoint(existing), created: false };
+  const id = `bp_${randomBytes(6).toString('hex')}`;
+  getDb().run(
+    'INSERT INTO breakpoints (id, kind, target, project_root, note, created_at, created_by, created_by_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, 'signal', target, input.projectRoot, cleanNote(input.note), input.now ?? Date.now(), input.by, input.byType],
+  );
+  return { breakpoint: getBreakpoint(id)!, created: true };
+}
+
 /**
  * A person clears a breakpoint. Calls still waiting on it are answered
  * "continue" by the same person: the reason to wait has gone. False when
@@ -317,7 +339,7 @@ function breakpointFor(kind: BreakpointKind, action: BreakpointAction, chain: It
 // ── Hits ───────────────────────────────────────────────────────────
 
 interface HitRow {
-  ref: string; breakpoint_id: string; tool: string; action: string; item_uid: string; path: string | null; breach: number | null; plan_uid: string | null;
+  ref: string; breakpoint_id: string; tool: string; action: string; item_uid: string; path: string | null; breach: number | null; signal_id: string | null; plan_uid: string | null;
   agent: string | null; session_id: string | null; workstream_root: string | null; hit_at: number;
   decision: string | null; note: string | null; answered_at: number | null; answered_by: string | null;
   answered_by_type: string | null; kind: string | null; bp_note: string | null; title: string | null;
@@ -332,7 +354,7 @@ function toHit(r: HitRow): BreakpointHit {
   return {
     ref: r.ref, breakpointId: r.breakpoint_id, kind: (r.kind as BreakpointKind) ?? null, breakpointNote: r.bp_note ?? null,
     tool: r.tool, action: r.action as BreakpointAction, itemUid: r.item_uid, itemTitle: r.title ?? null,
-    path: r.path ?? null, breach: Number(r.breach) === 1, planUid: r.plan_uid,
+    path: r.path ?? null, breach: Number(r.breach) === 1, signalId: r.signal_id ?? null, planUid: r.plan_uid,
     agent: r.agent, sessionId: r.session_id, workstreamRoot: r.workstream_root, hitAt: Number(r.hit_at),
     decision: (r.decision as Decision) ?? null, note: r.note, answeredAt: r.answered_at === null ? null : Number(r.answered_at),
     answeredBy: r.answered_by, answeredByType: r.answered_by_type,
@@ -357,7 +379,7 @@ export function listHits(q: { state?: 'waiting' | 'all'; planUid?: string } = {}
 export function hitPayload(hit: BreakpointHit): Record<string, unknown> {
   return {
     ref: hit.ref, kind: hit.kind, action: hit.action, tool: hit.tool, itemUid: hit.itemUid, itemTitle: hit.itemTitle,
-    ...(hit.path ? { path: hit.path } : {}), ...(hit.breach ? { breach: true } : {}),
+    ...(hit.path ? { path: hit.path } : {}), ...(hit.breach ? { breach: true } : {}), ...(hit.signalId ? { signalId: hit.signalId } : {}),
     planUid: hit.planUid, agent: hit.agent, ...(hit.workstreamRoot ? { workstreamRoot: hit.workstreamRoot } : {}),
   };
 }

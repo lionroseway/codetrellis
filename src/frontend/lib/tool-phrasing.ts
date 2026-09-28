@@ -318,7 +318,13 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
     if (event.type === 'breakpoint_hit') {
       // B4.2: a change seen only after it was made is a breach, never called a pause.
       if (payload.breach === true) return { text: `Changed “${title}” past a breakpoint: a breach, it could not be paused`, intent: 'error', tool: null, mutating: true };
+      // B4.2b: held by a rule on a kind of serious signal.
+      if (typeof payload.signalKind === 'string') return { text: `Paused at a breakpoint on a serious ${payload.signalKind} signal, before ${what}`, intent: 'ask', tool: null, mutating: false };
       return { text: `Paused at a breakpoint before ${what}`, intent: 'ask', tool: null, mutating: false };
+    }
+    if (payload.byType === 'system') {
+      const why = typeof payload.note === 'string' && payload.note ? `: ${payload.note.slice(0, 120)}` : '';
+      return { text: `CodeTrellis let ${what} through${why}`, intent: 'write', tool: null, mutating: false };
     }
     const who = payload.byType === 'human' ? 'You' : payload.byType === 'phone' ? 'You, from the phone,' : 'Someone';
     const note = typeof payload.note === 'string' && payload.note ? `: “${payload.note.slice(0, 120)}”` : '';
