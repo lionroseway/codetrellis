@@ -15,6 +15,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
   //   - codetrellis://skill/ui-nav       → UI navigator for sub-agents
   //   - codetrellis://skill/diagnostics  → logs, settings, baseline, drift
   //   - codetrellis://skill/multi-agent  → terminals, claiming, handoff
+  //   - codetrellis://skill/parallel     → working alongside other worktrees (A3.3)
 
   server.registerResource(
     'codetrellis://skill',
@@ -108,6 +109,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
         uri: 'codetrellis://skill/multi-agent',
         mimeType: 'text/markdown',
         text: deps.buildSkillGuide('multi-agent'),
+      }],
+    }),
+  );
+
+  server.registerResource(
+    'codetrellis://skill/parallel',
+    'codetrellis://skill/parallel',
+    {
+      description: 'CodeTrellis parallel-work skill (Phase 32) — the contract for working alongside agents in other worktrees: get_awareness, declare_intent, check_footprint, acknowledge_signal, and what a notice means.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [{
+        uri: 'codetrellis://skill/parallel',
+        mimeType: 'text/markdown',
+        text: deps.buildSkillGuide('parallel'),
       }],
     }),
   );

@@ -69,6 +69,8 @@ export interface ScriptedMcp {
   callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
   /** Return the registered tool list (useful for introspection in tests). */
   listTools(): Promise<Array<{ name: string; description?: string }>>;
+  /** Read a resource by URI; its text contents, joined. */
+  readResource(uri: string): Promise<string>;
   /** True between `connect()` and `disconnect()`. */
   readonly connected: boolean;
 }
@@ -143,6 +145,14 @@ export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
       }
       const result = await client.listTools();
       return result.tools.map((t) => ({ name: t.name, description: t.description }));
+    },
+
+    async readResource(uri) {
+      if (!client || !connected) {
+        throw new Error('MCP client not connected — call connect() first');
+      }
+      const result = await client.readResource({ uri });
+      return (result.contents ?? []).map((c) => ('text' in c && typeof c.text === 'string' ? c.text : '')).join('\n');
     },
   };
 }
