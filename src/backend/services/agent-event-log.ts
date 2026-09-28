@@ -25,6 +25,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AgentEvent, AgentEventSource, AgentEventType } from '../../shared/types';
 import { getDb } from './database';
 import { markDirty } from './persistence';
@@ -42,6 +43,65 @@ let counter = 0;
 /** An event id unique across launches: `<prefix>-<launch>-<n>`. */
 export function eventId(prefix: string): string {
   return `${prefix}-${LAUNCH}-${++counter}`;
+}
+
+// ── Events the app records itself (B1.2) ────────────────────────────
+
+type Publish = (type: string, payload: unknown) => void;
+let publisher: Publish | null = null;
+
+/** server.ts hands over `broadcast`: a published event reaches the window live, and the tap records it. */
+export function setEventPublisher(fn: Publish | null): void { publisher = fn; }
+
+/** Who is acting, when an MCP tool handler is running: the tool's session. */
+export interface EventContext { sessionId: string; agentType: string | null }
+const context = new AsyncLocalStorage<EventContext>();
+
+/** Run `fn` with `ctx` as the acting session, so what it records joins that session's turn. */
+export function withEventContext<T>(ctx: EventContext, fn: () => T): T {
+  return context.run(ctx, fn);
+}
+
+export interface BodyEdit {
+  kind: 'document' | 'item';
+  planUid: string;
+  uid: string;
+  title: string;
+  /** The version the edit made, where the thing has versions. */
+  version: number | null;
+  /** From how the edit arrived (never a name from the request). */
+  author: string | null;
+  /** `human`, `agent`, `unverified`…; `file` for a plan file re-read from disk. */
+  authorType: string | null;
+  changeSummary?: string | null;
+}
+
+/**
+ * A spec document's or a plan item's body changed. Published as a
+ * `spec_edited` agent event: inside an MCP tool it carries that tool's
+ * session, so it joins the agent's turn; from the app window or a plan file
+ * on disk it stands alone, saying who. Never throws.
+ */
+export function recordBodyEdit(edit: BodyEdit): void {
+  if (!publisher) return;
+  try {
+    const acting = context.getStore();
+    publisher('agent-event', {
+      id: eventId('app'),
+      timestamp: Date.now(),
+      source: 'app',
+      type: 'spec_edited',
+      payload: {
+        kind: edit.kind, planUid: edit.planUid, uid: edit.uid, title: edit.title, version: edit.version,
+        author: edit.author, authorType: edit.authorType,
+        ...(edit.changeSummary ? { changeSummary: edit.changeSummary.slice(0, 200) } : {}),
+        // The turn's label: the acting agent, or who made the edit.
+        ...(acting
+          ? { sessionId: acting.sessionId, agentType: acting.agentType }
+          : { agentType: edit.authorType === 'agent' ? edit.author : edit.authorType }),
+      },
+    });
+  } catch { /* recording an edit must never break it */ }
 }
 
 /** Key names whose values are secrets, in JSON (`"apiKey": "…"`) or `key=value` form. */

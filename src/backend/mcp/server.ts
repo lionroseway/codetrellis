@@ -88,7 +88,7 @@ import {
 } from '../services/recent-projects-service';
 import { buildSkillGuide } from './skill-guide';
 import { agentTypeFromClientInfo } from './client-identity';
-import { eventId } from '../services/agent-event-log';
+import { eventId, withEventContext } from '../services/agent-event-log';
 import { writeEndpointFile, removeEndpointFile } from './connector/files';
 import {
   resolveConnectorCommand,
@@ -439,8 +439,14 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     REGISTERED_TOOL_ARGS.set(name, schema && typeof schema === 'object' ? Object.keys(schema) : []);
   };
 
+  // Requests that reached `instrument`. A tools/call that comes back as an
+  // error without being in here was refused by the SDK itself (an unknown
+  // tool, or arguments its schema rejects) and is broadcast below (B1.2).
+  const reached = new Set<unknown>();
+
   const instrument = (name: string, handler: any) => async (args: any, extra: any) => {
     const start = Date.now();
+    if (extra?.requestId !== undefined) reached.add(extra.requestId);
     // Heartbeat: any tool call counts as activity, push last_seen.
     try { sessionService.heartbeat(sessionId); } catch { /* best-effort */ }
     const agentInfo = inferAgentFromSession(sessionId);
@@ -480,7 +486,8 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     }
 
     try {
-      const result = await handler(args, extra);
+      // What the handler records (a spec body edited, B1.2) is this session's.
+      const result = await withEventContext({ sessionId, agentType: agentInfo.type }, () => handler(args, extra));
       // Being told without asking (A2.6): an unseen high or medium signal for
       // this session's workstream rides on the result it was getting anyway,
       // once, as its own clearly marked block.
@@ -513,6 +520,43 @@ function setupMcpServerInstance(sessionId: string): McpServer {
       });
       throw err;
     }
+  };
+
+  // The SDK validates arguments, and resolves the tool name, BEFORE it calls
+  // a tool's handler, so a call it refuses never reaches `instrument` and
+  // was never in the Timeline or the event log (found in B1.1). Its
+  // tools/call handler is wrapped through the public `setRequestHandler`
+  // (the SDK registers it on the first registerTool, after this line); a
+  // call that comes back as an error without having reached `instrument`
+  // is broadcast as a tool_error, like one refused at the interception.
+  const originalSetRequestHandler = (mcpServer.server.setRequestHandler as any).bind(mcpServer.server);
+  (mcpServer.server as any).setRequestHandler = (schema: any, handler: any) => {
+    const method = schema?.shape?.method?.value ?? schema?.shape?.method?._def?.value;
+    if (method !== 'tools/call') return originalSetRequestHandler(schema, handler);
+    return originalSetRequestHandler(schema, async (request: any, extra: any) => {
+      const start = Date.now();
+      const id = extra?.requestId;
+      try {
+        const result = await handler(request, extra);
+        if (result?.isError && !reached.has(id)) {
+          const agentInfo = inferAgentFromSession(sessionId);
+          const text = Array.isArray(result.content) ? result.content.map((c: any) => (typeof c?.text === 'string' ? c.text : '')).join(' ') : '';
+          broadcastToolEvent({
+            tool: String(request?.params?.name ?? 'unknown'),
+            args: summarizeArgs(request?.params?.arguments ?? {}),
+            phase: 'error',
+            durationMs: Date.now() - start,
+            sessionId,
+            agentType: agentInfo.type,
+            agentModel: agentInfo.model,
+            error: text.slice(0, 1000) || 'Refused by the MCP server before the tool ran.',
+          });
+        }
+        return result;
+      } finally {
+        reached.delete(id);
+      }
+    });
   };
 
   const originalRegisterTool = (mcpServer.registerTool as any).bind(mcpServer);

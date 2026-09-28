@@ -32,6 +32,7 @@
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
+import { recordBodyEdit } from './agent-event-log';
 import { appendPlanEvent } from './plan-event-service';
 import { unmetHumanCriteria } from './criteria-service';
 import * as _lazy___plan_file_service from './plan-file-service';
@@ -463,7 +464,8 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
       kind: 'renamed',
     });
   }
-  if (updates.body !== undefined && updates.body !== before.body) {
+  const bodyChanged = updates.body !== undefined && updates.body !== before.body;
+  if (bodyChanged) {
     sets.push('body = ?'); params.push(updates.body);
     contentChanged = true;
   }
@@ -652,7 +654,15 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
   // re-parent / reorder skips the version log (those are tracked
   // exclusively via plan_events).
   if (contentChanged) {
-    writeVersionRow(after, nextVersionFor(uid), updates.changeSummary ?? null, updates.author, updates.authorType, now);
+    const version = nextVersionFor(uid);
+    writeVersionRow(after, version, updates.changeSummary ?? null, updates.author, updates.authorType, now);
+    // A body edit makes no plan_events row (below); it is recorded as an event (B1.2).
+    if (bodyChanged) {
+      recordBodyEdit({
+        kind: 'item', planUid: after.planUid, uid: after.uid, title: after.title, version,
+        author: updates.author ?? null, authorType: updates.authorType ?? null, changeSummary: updates.changeSummary ?? null,
+      });
+    }
   }
 
   // Emit one plan_events row per structural change. A `body` edit

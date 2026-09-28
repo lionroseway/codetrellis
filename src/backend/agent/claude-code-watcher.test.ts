@@ -173,6 +173,31 @@ describe('Claude Code watcher — every tool call in a message (Phase 32 bug 3)'
   });
 });
 
+describe('Claude Code watcher — the time the agent acted (Phase 32 B1.2)', () => {
+  test('an event carries the entry\'s own time, not when the watcher read it; a missing or future one falls back', async () => {
+    const jsonl = plantSession('session-time');
+    startClaudeCodeWatcher(PROJECT_ROOT);
+    await settle();
+    const edit = (file: string, timestamp?: string) => JSON.stringify({
+      type: 'assistant', ...(timestamp ? { timestamp } : {}),
+      message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: file } }] },
+    });
+    const before = Date.now();
+    fs.appendFileSync(jsonl, [
+      edit('/repo/then.ts', '2026-09-28T09:15:00.000Z'),
+      edit('/repo/unstamped.ts'),
+      edit('/repo/future.ts', new Date(before + 3_600_000).toISOString()),
+    ].join('\n') + '\n');
+    await settle();
+    const at = Object.fromEntries(broadcasted.filter((e) => e.type === 'file_changed')
+      .map((e) => [e.payload?.file, (e as { timestamp?: number }).timestamp]));
+    assert.equal(at['/repo/then.ts'], Date.parse('2026-09-28T09:15:00.000Z'));
+    for (const f of ['/repo/unstamped.ts', '/repo/future.ts']) {
+      assert.ok(at[f]! >= before && at[f]! <= Date.now(), `${f} falls back to when it was read`);
+    }
+  });
+});
+
 describe('Claude Code watcher — every session, keyed by folder (Phase 32 A1.2)', () => {
   // Two worktrees of one repository, as `git worktree add` lays them out: the
   // second lives INSIDE the first's tree, so matching must pick the deepest.

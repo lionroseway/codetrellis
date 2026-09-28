@@ -107,6 +107,25 @@ function findLiveSessions(folders: readonly string[]): LiveSession[] {
 function parseJsonlEntries(line: string): AgentEvent[] {
   try {
     const entry = JSON.parse(line);
+    return parseEntry(entry).map((e) => ({ ...e, timestamp: entryTime(entry, e.timestamp) }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * When the agent did it (B1.2): Claude Code stamps every entry. The event
+ * used to carry the time the watcher read the line, up to a poll later, and
+ * everything a backlog tick read shared one time. A missing, unreadable or
+ * future stamp (a clock that ran ahead) falls back to the time it was read.
+ */
+function entryTime(entry: { timestamp?: unknown }, readAt: number): number {
+  const t = typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : NaN;
+  return Number.isFinite(t) && t <= readAt + 60_000 ? t : readAt;
+}
+
+function parseEntry(entry: any): AgentEvent[] {
+  try {
     const type = entry.type;
 
     if (type === 'assistant') {
