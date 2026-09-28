@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A3.4: the skill and the optional hook, offered from Settings |
-| **Status** | A3.4 done on its branch: `codetrellis-parallel` skill and the PreToolUse hook (the connector's `--hook pre-tool-use`), offered from Settings with preview, choice and hash check; unit, harness and browser tests pass; PR open |
-| **Next action** | Merge A3.4 when green; then A3.5 (`docs/claude/awareness.md` and the M3 "done when") |
+| **Stage / step** | Track A — A3.5: `docs/claude/awareness.md` and the M3 "done when" |
+| **Status** | A3.5 done on its branch: the reference doc, and `awareness-m3.test.ts` passes (five worktrees, a 97-word five-line digest, intended quiet until a side changes shape); PR open. M3 is done when it merges |
+| **Next action** | Merge A3.5 when green; then A4 (mobile: "Needs you", workstreams and signal-detail routes, push for high) — refine it into sub-steps in EXECUTION §4 first |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a3-4-parallel-skill` |
+| **Branch** | `feat/phase-32-a3-5-awareness-doc` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -75,13 +75,13 @@
 - [x] A2.4 `declare_intent` (#161)
 - [x] A2.5 `drift` signal (#162)
 - [x] A2.6 Inline notices, `acknowledge_signal`, the M2 "done when" (#163) — **M2 done**
-- [ ] A2 Meaning (signatures, contract, drift, notices, intent)
+- [x] A2 Meaning (signatures, contract, drift, notices, intent): M2 done (#163)
 - [ ] A3 Distilled (M3), refined in EXECUTION §4:
   - [x] A3.1 The digest (#164)
   - [x] A3.2 Intended and cooldown (#165)
   - [x] A3.3 `parallel` guide flavour (#166)
-  - [ ] A3.4 User skill and optional hook, offered from Settings (PR open)
-  - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when"
+  - [x] A3.4 User skill and optional hook, offered from Settings (#167)
+  - [ ] A3.5 `docs/claude/awareness.md`; M3 "done when" (PR open)
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -91,6 +91,7 @@
   deleted plans on the other worker (#147). It doesn't reproduce as a pair
   (5/5 on base and on the branch). Find which broadcast leaves the
   workspace, so a person's open plan survives someone else's plan changes.
+- [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
 
@@ -191,6 +192,44 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: A3.5 — the awareness doc; M3 done
+- **`docs/claude/awareness.md`** is the map of what exists, for people
+  working on CodeTrellis itself. It covers:
+  - the pipeline, from workstreams to footprints to signals to telling;
+  - where each part lives;
+  - the four signal kinds and how they stay quiet;
+  - the digest, the tab, the tools, notices, the guide, and the Claude
+    Code skill and hook;
+  - the rules to keep, and the tests worth knowing.
+- `CLAUDE.md` lists it with the other reference docs. `mcp-tools.md`
+  points to it and describes the connector's hook mode.
+- **M3 "done when", as a test**: `awareness-m3.test.ts`, five real
+  worktrees.
+  - Four edit `validators.ts`, two of them in `isValidEmail`: six pairs, one
+    of them high. Billing changes `add_order`'s parameters, which
+    checkout's routes import: a contract.
+  - Seven groups make five lines, the two high ones first, then "And 2 more
+    overlaps".
+  - The whole paragraph is 97 words, against a budget of 150 (under a
+    minute at a relaxed pace).
+  - Everything marked intended stays quiet through body edits on four
+    sides: "Nothing overlaps with other work right now."
+  - Users adds a function to the shared file. Only its three overlaps come
+    back, each `reopened.from: 'intended'`; the rest stay as the person
+    left them.
+- **CI found a test-isolation bug of mine** (from #159).
+  `unverified-tag.spec.ts` turns off local API changes, a shared setting,
+  while other browser specs run in parallel. `workspace-shell`'s plan
+  creation landed inside that window and was refused (403, 36 ms). The
+  spec now runs in the `serial` project, beside `sections-save` which
+  changes shared settings too. Two other one-off failures on this PR were
+  the known `refs-panel` race and `layout-controls` counting zero nodes
+  while `depth-selector` switched depth in parallel; both are queued.
+- **UX journey.** The person comes back after an hour of five agents. The
+  Awareness tab's digest is five lines, most severe first, each saying what
+  is waiting on them. They mark what is fine as intended, and it stays out
+  of the way until one of those lines of work changes shape.
 
 ### 2026-09-28: A3.4 — the skill and the optional hook
 - **The hook** is the connector in a second mode,

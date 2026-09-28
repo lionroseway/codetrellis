@@ -27,6 +27,7 @@ Deep-dive docs live in `docs/claude/`:
 - [`docs/claude/peer-network.md`](docs/claude/peer-network.md) — BYO-VPN model, mDNS discovery, WebRTC mesh, the four data channels, QR pairing.
 - [`docs/claude/mobile-companion.md`](docs/claude/mobile-companion.md) — Expo app, routes, RPC/bridge layers, mobile MCP commands, release flow.
 - [`docs/claude/mcp-tools.md`](docs/claude/mcp-tools.md) — the 18 MCP tool categories grouped by domain.
+- [`docs/claude/awareness.md`](docs/claude/awareness.md) — parallel awareness: workstreams, footprints, signals, the digest, notices, and the Claude Code skill and hook.
 
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.
