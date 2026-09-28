@@ -41,6 +41,7 @@ import { initCapabilityToken, getTokenFilePath } from './services/capability-tok
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
+import { listWorkstreams, setClaudeSessionSource } from './services/workstream-service';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
@@ -618,6 +619,17 @@ app.get('/api/git/worktrees', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   res.json(listWorktreesWithPlans(projectRoot));
+});
+
+// The lines of parallel work in the project's repository: each working tree
+// and the agents in it (Phase 32 A1.3). The TopBar strip reads this. Idle
+// ones (no agent) only with ?idle=1. The root is confined like the route
+// above; the folders come from git.
+setClaudeSessionSource(() => getWatcherStatus().sessions);
+app.get('/api/workstreams', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(listWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
 });
 
 // Branches and the OTHER worktrees of a project's repository, for the

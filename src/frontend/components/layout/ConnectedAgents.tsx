@@ -30,7 +30,7 @@ import type { AgentSessionInfo } from '@shared/types';
  * honest project-level one.
  */
 
-function agentBadge(agentType: string): { Icon: typeof Cpu; tint: string; label: string } {
+export function agentBadge(agentType: string): { Icon: typeof Cpu; tint: string; label: string } {
   const t = agentType.toLowerCase();
   if (t.includes('claude')) return { Icon: Sparkles, tint: 'text-amber-300', label: 'Claude Code' };
   if (t.includes('codex')) return { Icon: Bot, tint: 'text-emerald-300', label: 'Codex' };
@@ -40,7 +40,7 @@ function agentBadge(agentType: string): { Icon: typeof Cpu; tint: string; label:
   return { Icon: Cpu, tint: 'text-foreground-muted', label: agentType };
 }
 
-function formatLastSeen(ts: number): string {
+export function formatLastSeen(ts: number): string {
   const ageMs = Date.now() - ts;
   if (ageMs < 5_000) return 'now';
   if (ageMs < 60_000) return `${Math.floor(ageMs / 1000)}s ago`;

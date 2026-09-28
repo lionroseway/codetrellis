@@ -337,6 +337,10 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   get_remote_audio: 'capture',
   list_remote_input_requests: 'read',
   respond_remote_input: 'write',
+
+  // ── awareness-tools ─────────────────────────────────────────────────
+  // Phase 32 A1.3. Reads only: who else is working, and where.
+  list_workstreams: 'read',
 });
 
 export class McpAuthorizationError extends Error {

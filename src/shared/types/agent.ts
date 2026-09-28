@@ -47,3 +47,41 @@ export interface AgentPlan {
 }
 
 export type AgentStatus = 'idle' | 'active' | 'paused';
+
+// ── Workstreams (Phase 32 A1.3) ──────────────────────────────────────
+
+/**
+ * How a line of parallel work is isolated. A1.3 finds the two shapes that
+ * need no consent and no refs watcher: a git worktree (the main checkout is
+ * one too), and a shared checkout — two or more agents in one folder. Clones
+ * and branch-only work are A1.7.
+ */
+export type WorkstreamShape = 'worktree' | 'shared';
+
+export interface WorkstreamAgent {
+  sessionId: string;
+  agentType: string;
+  model: string | null;
+  /**
+   * How we know it is there: an MCP connection, or only Claude Code's own
+   * session log (a Claude session that never connected to CodeTrellis).
+   */
+  source: 'mcp' | 'claude-log';
+  /** Last activity, for MCP sessions. The log gives no liveness beat. */
+  lastSeen: number | null;
+}
+
+export interface Workstream {
+  /** The working tree's folder, as git lists it. Also its id. */
+  root: string;
+  /** Short branch name, or null when detached. */
+  branch: string | null;
+  /** The commit checked out, when git reports one. */
+  head: string | null;
+  /** The repository's main working tree, rather than a linked one. */
+  main: boolean;
+  shape: WorkstreamShape;
+  agents: WorkstreamAgent[];
+  /** No agent in it. Hidden unless asked for (it has no changes to show yet — A1.4). */
+  idle: boolean;
+}

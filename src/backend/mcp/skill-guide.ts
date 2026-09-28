@@ -159,6 +159,9 @@ Register with \`register_session\` so you appear in the timeline. Claim
 work rather than assuming it. \`post_channel_event\` raises a question,
 decision or blocker the human (or another agent) can answer, and
 \`get_channel_thread\` reads the replies.
+\`list_workstreams\` shows every worktree with agents in it, and which one
+is yours: if you share a folder with another agent, say so, because your
+edits can't be told apart from theirs.
 
 ### 10. Steer from a phone
 The desktop pairs with a mobile app over a peer mesh.
@@ -499,6 +502,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 |------|-------------|
 | \`register_session(agent_type, model?, capabilities?, host_terminal_id?)\` | Identify yourself; declare skills for task routing. Pass host_terminal_id from \`$CODETRELLIS_HOST_TERMINAL\` env var if running inside a CodeTrellis terminal |
 | \`set_active_plan(plan_uid)\` | Declare which plan you're working on |
+| \`list_workstreams(project_path?, include_idle?)\` | Every worktree of the repo with the agents in it; \`yours\` marks your own, \`shared\` means two or more agents in one folder |
 | \`setup_agent_permissions(project_path)\` | Auto-approve all CodeTrellis MCP tools for this project (writes .claude/settings.local.json) |
 
 ### UI control

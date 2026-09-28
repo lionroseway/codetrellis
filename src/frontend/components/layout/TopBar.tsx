@@ -8,6 +8,7 @@ import { getAPI } from '../../bridge';
 import { openWorktreeTab } from '../../lib/plan-worktrees';
 import type { ViewDepth, PowerStatus } from '../../../shared/types';
 import { ConnectedAgents } from './ConnectedAgents';
+import { WorkstreamStrip } from './WorkstreamStrip';
 import { DeviceIndicator } from '../pairing/DeviceIndicator';
 import { SettingsModal } from '../settings/SettingsModal';
 
@@ -484,6 +485,7 @@ export function TopBar() {
         Connect Agent
       </button>
 
+      <WorkstreamStrip />
       <ConnectedAgents />
       <AwakeIndicator />
       <DeviceIndicator
