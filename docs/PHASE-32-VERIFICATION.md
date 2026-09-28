@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 238 | 236 | 0 | 0 | 217 | 0 |
 | MCP tools | 194 | 194 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 76 | 71 | 0 | 0 | 76 | 0 |
-| Frontend components | 107 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 109 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
@@ -29,7 +29,7 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 17 | 15 | 8 | 11 | 0 | 0 |
+| 0.4b Graph | 17 | 15 | 8 | 13 | 0 | 0 |
 | 0.4c Plans and items | 95 | 52 | 20 | 56 | 0 | 0 |
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
@@ -216,7 +216,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 8 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
-| g | `GET /api/workstreams` |  | ✗ none | 7 |  |  |  |
+| g | `GET /api/workstreams` |  | ✗ none | 8 |  |  |  |
 | g | `GET /api/workstreams/changes` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
@@ -571,7 +571,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (107)
+## Frontend components (109)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -581,6 +581,8 @@ records that — but "✗ none" is proof of a gap.
 | b | `graph/nodes/FileNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/PackageNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/SymbolNode.tsx` |  | n/a | n/a |  |  |  |
+| b | `graph/nodes/WorkOverlayMarks.tsx` |  | n/a | n/a |  |  |  |
+| b | `graph/OverlaysMenu.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/SelectionActionBar.tsx` |  | n/a | n/a |  |  |  |
 | b | `inspector/AddToTaskPopover.tsx` |  | n/a | n/a |  |  |  |
 | b | `inspector/CodeDiffView.tsx` |  | n/a | n/a |  |  |  |

@@ -15,6 +15,7 @@ process.env.CODETRELLIS_WORKSTREAM_DEBOUNCE_MS = '100';
 
 import {
   parseNameStatusZ,
+  parseNumstatZ,
   combineChanges,
   computeChanges,
   countStatusEntries,
@@ -80,6 +81,15 @@ describe('parsing git output', () => {
   });
 });
 
+describe('line counts (B3.3)', () => {
+  test('numstat -z: counts per file, a rename by its new path, binary left out', () => {
+    const out = '3\t1\tsrc/a.ts\0' + '-\t-\timg.png\0' + '2\t0\t\0old/b.ts\0new/b.ts\0' + '0\t4\tsrc/c d.ts\0';
+    assert.deepEqual([...parseNumstatZ(out)], [
+      ['src/a.ts', { added: 3, removed: 1 }], ['new/b.ts', { added: 2, removed: 0 }], ['src/c d.ts', { added: 0, removed: 4 }],
+    ]);
+  });
+});
+
 describe('computeChanges', () => {
   test('a clean checkout has changed nothing', () => {
     const c = computeChanges(main, 'main');
@@ -98,6 +108,11 @@ describe('computeChanges', () => {
     assert.deepEqual(summary(c.files), [
       'deleted README.md', 'modified src/billing.ts', 'added src/refresh.ts', 'modified src/session.ts',
     ]);
+    // Each tracked file carries its line counts (B3.3); a file git does not track yet does not.
+    const counts = Object.fromEntries(c.files.map((f) => [f.path, f.added === undefined ? null : [f.added, f.removed]]));
+    assert.deepEqual(counts['src/session.ts'], [1, 1]);
+    assert.deepEqual(counts['src/billing.ts'], [1, 1]);
+    assert.equal(counts['src/refresh.ts'], null);
   });
 
   test('work landing on main after the worktree branched is not the worktree\'s change', () => {

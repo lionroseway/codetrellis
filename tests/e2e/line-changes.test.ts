@@ -74,6 +74,15 @@ test.describe.serial('Line changes per workstream', () => {
     expect(byBranch['billing-v2'].diff).toBeUndefined();
   });
 
+  test('the workstream listing carries each changed file\'s line counts, for the graph (B3.3)', async () => {
+    const res = await h.client.raw('GET', `/api/workstreams?project=${encodeURIComponent(root)}&idle=1`);
+    const list = (await res.json()) as Array<{ branch: string | null; changes: { files: Array<{ path: string; added?: number; removed?: number }> } }>;
+    const fileIn = (branch: string) => list.find((w) => w.branch === branch)?.changes.files.find((f) => f.path === REL);
+    expect(fileIn('exports')).toBeDefined();
+    expect([fileIn('exports')?.added, fileIn('exports')?.removed]).toEqual([1, 1]);
+    expect([fileIn('billing-v2')?.added, fileIn('billing-v2')?.removed]).toEqual([1, 0]);
+  });
+
   test('one workstream by branch, with the diff text when asked; one leaving the file alone says so', async () => {
     const one = await h.client.raw('GET', `/api/workstreams/changes?project=${encodeURIComponent(root)}&path=${encodeURIComponent(REL)}&workstream=exports&diff=1`);
     expect(one.status).toBe(200);

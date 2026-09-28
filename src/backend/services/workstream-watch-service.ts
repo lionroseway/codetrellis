@@ -79,6 +79,32 @@ export function parseNameStatusZ(out: string): ChangedFile[] {
 }
 
 /**
+ * Lines added and removed per file, from `git diff --numstat -z`. Pure. A
+ * binary file (`-\t-`) has no count; a rename is keyed by its new path.
+ */
+export function parseNumstatZ(out: string): Map<string, { added: number; removed: number }> {
+  const counts = new Map<string, { added: number; removed: number }>();
+  const fields = out.split('\0');
+  for (let i = 0; i < fields.length; i++) {
+    const m = /^(\d+|-)\t(\d+|-)\t(.*)$/s.exec(fields[i]);
+    if (!m) continue;
+    // A rename leaves the path empty and gives the old and new paths next.
+    let p = m[3];
+    if (p === '') { p = fields[i + 2] ?? ''; i += 2; }
+    if (p && m[1] !== '-' && m[2] !== '-') counts.set(p, { added: Number(m[1]), removed: Number(m[2]) });
+  }
+  return counts;
+}
+
+/** The files with their line counts attached, where git gave one. Pure. */
+export function withLineCounts(files: ChangedFile[], counts: Map<string, { added: number; removed: number }>): ChangedFile[] {
+  return files.map((f) => {
+    const c = counts.get(f.path);
+    return c ? { ...f, added: c.added, removed: c.removed } : f;
+  });
+}
+
+/**
  * Combine the tracked changes with untracked files, sorted by path, capped.
  * Pure. An untracked file is new work, so it is `added`.
  */
@@ -115,6 +141,8 @@ export function computeChanges(folder: string, mainRef: string | null): Workstre
   if (base) {
     try {
       tracked = parseNameStatusZ(git(folder, ['diff', '--name-status', '-z', '-M', base, '--']));
+      // How many lines each changed, for the graph's file nodes (B3.3).
+      tracked = withLineCounts(tracked, parseNumstatZ(git(folder, ['diff', '--numstat', '-z', '-M', base, '--'])));
     } catch { /* leave empty */ }
   }
   let untracked: string[] = [];
