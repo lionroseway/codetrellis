@@ -64,3 +64,11 @@ test('a code breakpoint: a paused edit and a breach read differently, and a brea
   const check: AgentEvent = { id: 'e', timestamp: 1, source: 'mcp', type: 'tool_call', payload: { tool: 'check_breakpoint', args: { path: 'payments/refund.ts' } } };
   assert.equal(phraseEvent(check).text, 'Checked for a breakpoint on `payments/refund.ts`');
 });
+
+test('a signal breakpoint names the signal; a release by CodeTrellis is never said to be a person\'s (B4.2b)', () => {
+  const hit: AgentEvent = { id: 'e', timestamp: 1, source: 'app', type: 'breakpoint_hit', payload: { action: 'claim', itemTitle: 'Signup form', signalKind: 'contract' } };
+  assert.equal(phraseEvent(hit).text, 'Paused at a breakpoint on a serious contract signal, before claiming “Signup form”');
+  const released = phraseEvent({ ...hit, type: 'breakpoint_answered', payload: { action: 'claim', itemTitle: 'Invoice currency', decision: 'continue', byType: 'system', note: 'The signal was answered in Awareness.' } });
+  assert.equal(released.text, 'CodeTrellis let claiming “Invoice currency” through: The signal was answered in Awareness.');
+  assert.ok(!/^You|Someone/.test(released.text));
+});

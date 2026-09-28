@@ -93,6 +93,7 @@ import { agentTypeFromClientInfo } from './client-identity';
 import { eventId, withEventContext } from '../services/agent-event-log';
 import { enforce as enforceBreakpoints, pausedResult, stoppedResult, steerText } from '../services/breakpoint-service';
 import { breachNoticeFor } from '../services/code-breakpoints';
+import { attemptOf, enforceSignalsForSession, signalHeldResult, signalSteerText } from '../services/signal-breakpoints';
 import { writeEndpointFile, removeEndpointFile } from './connector/files';
 import {
   resolveConnectorCommand,
@@ -509,12 +510,20 @@ function setupMcpServerInstance(sessionId: string): McpServer {
         // before the handler, so a held call does nothing, for every tool that
         // claims, finishes or edits an item. The pause is an ordinary result,
         // broadcast and logged below like any other.
+        // A signal rule first (B4.2b): a serious open signal naming this
+        // session's workstream holds its next guarded call.
+        const attempt = attemptOf(name, args);
+        const bySignal = attempt ? enforceSignalsForSession(getActiveProjectPath(), sessionId, attempt) : { kind: 'pass' as const };
+        if (bySignal.kind === 'paused' || bySignal.kind === 'stop') return signalHeldResult(bySignal);
         const held = enforceBreakpoints(name, args, { agent: agentInfo.type ?? 'mcp-agent', sessionId });
         if (held.kind === 'paused') return pausedResult(held.hit);
         if (held.kind === 'stop') return stoppedResult(held.hit);
         const out = await handler(args, extra);
-        const steer = held.kind === 'continue' ? steerText(held.hit) : null;
-        if (steer && out && !out.isError && Array.isArray(out.content)) out.content.push({ type: 'text', text: steer });
+        const steers = [
+          bySignal.kind === 'continue' && bySignal.steer ? signalSteerText(bySignal.hit) : null,
+          held.kind === 'continue' ? steerText(held.hit) : null,
+        ].filter((x): x is string => !!x);
+        if (steers.length && out && !out.isError && Array.isArray(out.content)) for (const text of steers) out.content.push({ type: 'text', text });
         return out;
       });
       // Being told without asking (A2.6): an unseen high or medium signal for

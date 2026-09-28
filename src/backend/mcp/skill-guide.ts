@@ -231,6 +231,11 @@ it too before editing. If you change such a file with your own editor, your
 next tool call says so: that is a **breach**. Stop changing it and wait with
 \`await_decision\` the same way.
 
+A person can also make a kind of serious signal a breakpoint (a contract
+change, say). While one that names your workstream is open, your next
+claim, finish, spec edit or hooked file edit pauses the same way, and the
+message says which signal.
+
 Never work around a breakpoint (another tool, a different item or file):
 it is the person's explicit ask.`;
 

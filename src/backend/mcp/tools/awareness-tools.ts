@@ -23,6 +23,7 @@ import {
 import { getActiveSessions } from '../../services/session-service';
 import { importersOf, type Importer } from '../../services/importers';
 import { enforceEdit, editView } from '../../services/code-breakpoints';
+import { enforceSignalsForSession, signalHeldText } from '../../services/signal-breakpoints';
 
 /** The workstream this connection is bound to (A1.1), or null. */
 function callerWorkstream(sessionId: string): string | null {
@@ -182,6 +183,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const root = deps.getActiveProjectPath();
       if (!root) return noProject;
       const session = getActiveSessions().find((s) => s.sessionId === deps.sessionId);
+      // A signal rule (B4.2b) holds a hooked edit like any other guarded call.
+      const bySignal = enforceSignalsForSession(root, deps.sessionId, { tool: 'check_breakpoint', action: 'edit_code', path: file });
+      if (bySignal.kind === 'paused' || bySignal.kind === 'stop') {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ status: bySignal.kind, ref: bySignal.hit.ref, message: signalHeldText(bySignal) }, null, 2) }] };
+      }
       const result = enforceEdit(root, file, {
         agent: session?.agentType ?? 'mcp-agent', sessionId: deps.sessionId, workstreamRoot: session?.workstreamRoot ?? null,
       });
