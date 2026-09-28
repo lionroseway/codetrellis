@@ -50,6 +50,7 @@ import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStat
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
+import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked } from './services/section-workstreams';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
 import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
 import { withTold, setNoticeListener } from './services/awareness-notices';
@@ -2265,6 +2266,56 @@ app.get('/api/items/:uid/skills', (req, res) => {
   const waiting = new Map<string, Map<string, SkillArrival>>();
   const pendingOf = (uid: string) => { if (!waiting.has(uid)) waiting.set(uid, pendingArrivals(uid)); return waiting.get(uid)!; };
   res.json({ skills: rows.map((r) => ({ ...r, proof: proof?.get(r.skill.name) ?? null, pending: pendingOf(r.fromUid).get(r.skill.name) ?? null })) });
+});
+
+/**
+ * Which worktree an item is worked in (Phase 32 C5.1): its own branch, and
+ * the section's in effect (its own or inherited), with where that is.
+ */
+app.get('/api/items/:uid/workstream', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const root = getActiveProjectPath();
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+  const section = resolveSection(item, planItemService.getItem);
+  res.json({
+    own: item.workstream ?? null,
+    section,
+    where: section ? whereWorked(section.branch, workstreams) : null,
+    root: section ? workstreamOfBranch(section.branch, workstreams)?.root ?? null : null,
+  });
+});
+
+/**
+ * Set or clear the worktree a section is worked in: `{ workstream: "<branch>" | null }`.
+ * The branch must be a workstream CodeTrellis knows; the root is never the
+ * request's. The author is how the call arrived.
+ */
+app.put('/api/items/:uid/workstream', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const raw = req.body?.workstream;
+  let branch: string | null = null;
+  if (raw !== null) {
+    const root = getActiveProjectPath();
+    let workstreams: ReturnType<typeof listWorkstreams> = [];
+    try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+    branch = cleanBranch(raw);
+    if (!branch || !workstreamOfBranch(branch, workstreams)) {
+      res.status(400).json({ error: 'workstream must be the branch of a known workstream, or null' });
+      return;
+    }
+  }
+  const updated = planItemService.updateItem(item.uid, {
+    workstream: branch,
+    changeSummary: branch ? `Worked on ${branch}` : 'Worked in any worktree',
+    ...personFrom(req),
+  });
+  if (!updated) { res.status(404).json({ error: 'Item not found' }); return; }
+  broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: { workstream: branch } });
+  saveNow(() => exportDatabase());
+  res.json({ own: updated.workstream ?? null, section: resolveSection(updated, planItemService.getItem) });
 });
 
 /**

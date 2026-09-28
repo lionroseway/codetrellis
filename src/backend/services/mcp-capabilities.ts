@@ -155,6 +155,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   move_item: 'write',
   delete_item: 'write',
   claim_item: 'write',
+  // Phase 32 C5.1 — which worktree a section is worked in: a plan edit.
+  assign_workstream: 'write',
   get_next_item: 'read',
   // Retired in Phase 31.1 — it refuses. Kept one release so an agent that
   // learned it gets a direction rather than a missing tool.

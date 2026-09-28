@@ -66,6 +66,7 @@ import type {
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
 import { getEffectiveDefaultVisibility } from './project-config-service';
 import { heldByAnotherCheckout } from './checkout-identity';
+import { cleanBranch } from './section-workstreams';
 
 // --- Public surface ---
 
@@ -665,6 +666,8 @@ function upsertItem(
       skillsMode: raw.skillsMode ?? undefined,
       claimPolicy: raw.claimPolicy ?? undefined,
       claimPolicyMode: raw.claimPolicyMode ?? undefined,
+      // Phase 32 C5.1 — a branch name, or nothing: a file is anyone's text.
+      workstream: cleanBranch(raw.workstream),
       executionConfig: raw.executionConfig ?? undefined,
       executionConfigMode: raw.executionConfigMode ?? undefined,
       constraints: raw.constraints ?? undefined,
@@ -704,6 +707,7 @@ function upsertItem(
       skillsMode: raw.skillsMode ?? 'inherit',
       claimPolicy: raw.claimPolicy ?? null,
       claimPolicyMode: raw.claimPolicyMode ?? 'inherit',
+      workstream: cleanBranch(raw.workstream),
       executionConfig: raw.executionConfig ?? null,
       executionConfigMode: raw.executionConfigMode ?? 'inherit',
       constraints: raw.constraints ?? null,
@@ -1352,6 +1356,7 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
     obj.skills = item.skills;
     if (item.skillsMode && item.skillsMode !== 'inherit') obj.skillsMode = item.skillsMode;
   }
+  if (item.workstream) obj.workstream = item.workstream;
   if (item.claimPolicy) {
     obj.claimPolicy = item.claimPolicy;
     if (item.claimPolicyMode && item.claimPolicyMode !== 'inherit') obj.claimPolicyMode = item.claimPolicyMode;

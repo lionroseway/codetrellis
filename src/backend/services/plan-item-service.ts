@@ -71,7 +71,7 @@ const ITEM_COLUMNS = `uid, plan_uid, parent_uid, sort_order, kind,
   skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
   constraints, constraints_mode, requires_approval,
   author, author_type, created_at, updated_at, migrated_from,
-  visibility, visibility_override, assignee_session`;
+  visibility, visibility_override, assignee_session, workstream`;
 
 function rowToItem(r: any[]): PlanItem {
   return {
@@ -116,6 +116,7 @@ function rowToItem(r: any[]): PlanItem {
     visibility: ((r[34] as string | null) ?? 'shared') as 'shared' | 'local',
     overrideParentVisibility: !!(r[35] as number),
     assigneeSession: (r[36] as string | null) ?? null,
+    workstream: (r[37] as string | null) ?? null,
   };
 }
 
@@ -176,6 +177,8 @@ function metaSnapshotOf(item: PlanItem): Record<string, unknown> {
     // Phase 3.2
     visibility: item.visibility,
     overrideParentVisibility: item.overrideParentVisibility,
+    // Phase 32 C5.1
+    workstream: item.workstream ?? null,
   };
 }
 
@@ -322,7 +325,7 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
         skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
         constraints, constraints_mode, requires_approval,
         author, author_type, created_at, updated_at, migrated_from,
-        visibility, visibility_override)
+        visibility, visibility_override, workstream)
      VALUES (?, ?, ?, ?, ?,
              ?, ?, ?,
              ?, ?, ?, ?,
@@ -331,7 +334,7 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?,
              ?, ?, ?, ?, ?,
-             ?, ?)`,
+             ?, ?, ?)`,
     [
       uid, input.planUid, input.parentUid ?? null, sortOrder, input.kind,
       input.title, input.body ?? '', input.template ?? null,
@@ -367,6 +370,8 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
       // Phase 3.2 — per-item sharing
       input.visibility ?? 'shared',
       input.overrideParentVisibility ? 1 : 0,
+      // Phase 32 C5.1
+      input.workstream ?? null,
     ],
   );
 
@@ -570,6 +575,11 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
   }
   if (updates.skillsMode !== undefined && updates.skillsMode !== before.skillsMode) {
     sets.push('skills_mode = ?'); params.push(updates.skillsMode);
+    contentChanged = true;
+  }
+  // Phase 32 C5.1 — which worktree a section is worked in
+  if (updates.workstream !== undefined && (updates.workstream ?? null) !== (before.workstream ?? null)) {
+    sets.push('workstream = ?'); params.push(updates.workstream ?? null);
     contentChanged = true;
   }
   if (updates.claimPolicy !== undefined) {
@@ -1232,7 +1242,12 @@ export interface NextItemResult {
  * chain + sortOrder). Returns `gated` info when the next item
  * exists but can't be started due to an approval gate.
  */
-export function getNextItem(planUid: string, parentUid?: string | null): NextItemResult {
+export function getNextItem(
+  planUid: string,
+  parentUid?: string | null,
+  /** Phase 32 C5.1 — leave out what this caller may not be offered (a section worked in another worktree). */
+  accept?: (item: PlanItem) => boolean,
+): NextItemResult {
   const all = listAllItems(planUid);
   const itemMap = Object.fromEntries(all.map((i) => [i.uid, i]));
 
@@ -1240,7 +1255,8 @@ export function getNextItem(planUid: string, parentUid?: string | null): NextIte
   let candidates = all.filter((i) =>
     i.kind === 'action' &&
     i.status === 'pending' &&
-    !i.assignee,
+    !i.assignee &&
+    (!accept || accept(i)),
   );
 
   // Scope to a parent if provided

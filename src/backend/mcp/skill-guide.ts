@@ -406,6 +406,7 @@ edges.
 | \`delete_item(uid, cascade?)\` | Soft-delete with subtree snapshot for restore |
 | \`claim_item(uid, ...)\` | Atomically claim an Action; returns full context + file conflicts |
 | \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates |
+| \`assign_workstream(item_uid, workstream)\` | Which worktree a section is worked in (its branch, inherited below). Agents elsewhere are not offered its tasks and cannot claim them; \`get_next_item\` says how many were left out, and \`get_brief\` says where a task is worked |
 | \`get_brief(item_uid)\` | One read: the item, the guide, its materials, each criterion and what it still needs, any note sent back |
 | \`list_materials(plan_uid)\` | Every recorded file on a plan, and how read_material returns each |
 | \`read_material(attachment_uid, locator?)\` | A material's content as quoted text — CSV per sheet, markdown, text per page or slide, numbered lines — or the image itself; a Word document or deck already opened in CodeTrellis reads as the pages the person saw; logged on the item |

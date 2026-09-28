@@ -35,8 +35,18 @@ test.describe('Breakpoints on the graph', () => {
     await gotoWithProject(page);
     await page.getByRole('button', { name: 'Files', exact: true }).click();
 
-    // Any file node on screen: other specs share the backend and the graph's
-    // layout is not fixed, so the test picks what is visible, by its path.
+    // Close enough to read: the whole repository's graph opens zoomed far out.
+    // Zoom first, at the canvas's centre, and only then pick a node: a node
+    // picked before zooming can end up under the toolbar, which then takes
+    // the right-click.
+    await reachableNodes(page);
+    const canvas = (await page.locator('.react-flow').boundingBox())!;
+    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(120); }
+    await page.waitForTimeout(400);
+
+    // Any file node that can be clicked where it is: other specs share the
+    // backend and the layout is not fixed, so the test picks what is there.
     let node: Locator | null = null;
     await expect.poll(async () => {
       for (const n of await reachableNodes(page)) {
@@ -47,12 +57,6 @@ test.describe('Breakpoints on the graph', () => {
     }, { timeout: 20_000 }).not.toBeNull();
     const file = node!;
     const name = target!.split('/').pop()!;
-    // Close enough to read: the whole repository's graph opens zoomed far out.
-    // Zooming follows the cursor, so the node stays under it.
-    const box = (await file.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(120); }
-    await page.waitForTimeout(400);
     await expect(file.getByTestId('node-breakpoint')).toHaveCount(0);
 
     await file.click({ button: 'right' });

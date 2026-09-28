@@ -459,6 +459,10 @@ export const SCHEMA_PLAN_ITEMS = `
     -- The MCP session that claimed it (Phase 32 bug 1): two agents of one
     -- type are two claimants. Runtime only, never written to plan files.
     assignee_session TEXT,
+    -- Phase 32 C5.1 — the branch this section is worked on, inherited by
+    -- everything under it. A branch, not a folder: plan files are shared
+    -- across checkouts and machines, and a folder means nothing on another.
+    workstream       TEXT,
     progress_percent INTEGER,
     blocked_reason   TEXT,
     scope_path       TEXT,

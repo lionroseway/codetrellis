@@ -25,6 +25,7 @@ import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { SkillsEditor } from './SkillsEditor';
 import type { PlanItem, Skill, ClaimPolicy, ExecutionConfig, ItemConstraints } from '@shared/types';
 import { useBreakpointsStore, itemBreakpoint } from '../../../stores/breakpoints-store';
+import { useAwarenessStore } from '../../../stores/awareness-store';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
 
@@ -267,6 +268,9 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
               <option value="match-skills">Match by skills</option>
             </select>
           </div>
+
+          {/* ── Worked in: one plan, several worktrees (Phase 32 C5.1) ── */}
+          <WorkedIn item={item} />
 
           {/* ── Ask me first: breakpoints (Phase 32 B4.3) ── */}
           <AskMeFirst item={item} />
@@ -735,3 +739,86 @@ function AskMeFirst({ item }: { item: PlanItem }) {
   );
 }
 
+
+interface SectionView {
+  own: string | null;
+  section: { branch: string; fromUid: string; fromTitle: string } | null;
+  where: string | null;
+}
+
+/**
+ * Which worktree this item is worked in (Phase 32 C5.1): its branch, set
+ * here or inherited from the section above it. Agents in another worktree
+ * are not offered its tasks and cannot claim them, whatever client they are.
+ */
+function WorkedIn({ item }: { item: PlanItem }) {
+  const workstreams = useAwarenessStore((s) => s.workstreams);
+  const [view, setView] = useState<SectionView | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.uid)}/workstream`);
+      if (res.ok) setView((await res.json()) as SectionView);
+    } catch { /* shown as unknown below */ }
+  }, [item.uid]);
+  useEffect(() => { void load(); }, [load, item.workstream]);
+
+  const choose = async (value: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.uid)}/workstream`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workstream: value || null }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(body.error ?? `Not saved (${res.status})`);
+      }
+    } catch {
+      setError('Could not reach CodeTrellis.');
+    }
+    await load();
+    setBusy(false);
+  };
+
+  // Every branch a workstream is on, the main checkout first; a folder name beside a worktree's.
+  const options = workstreams
+    .filter((w) => w.branch)
+    .sort((a, b) => Number(b.main) - Number(a.main) || (a.branch ?? '').localeCompare(b.branch ?? ''))
+    .map((w) => ({ branch: w.branch as string, label: w.root.startsWith('branch:') ? `${w.branch} (branch only)` : `${w.branch} — ${w.root.split(/[\\/]/).pop()}` }));
+  const own = view?.own ?? null;
+  if (own && !options.some((o) => o.branch === own)) options.push({ branch: own, label: `${own} (no workstream here now)` });
+  const inherited = view && !own && view.section ? view.section : null;
+
+  return (
+    <div data-testid="worked-in">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[11px] font-medium text-foreground-muted">Worked in</span>
+        {inherited && (
+          <span className="text-[10px] text-foreground-subtle italic">(inherited from “{inherited.fromTitle}”)</span>
+        )}
+      </div>
+      <select
+        value={own ?? ''}
+        disabled={busy || !view}
+        onChange={(e) => void choose(e.target.value)}
+        data-testid="worked-in-select"
+        aria-label="Which worktree this is worked in"
+        className="w-full text-[12px] px-2.5 py-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] text-foreground focus:outline-none focus:border-accent/30"
+      >
+        <option value="">{inherited ? `As its section: ${inherited.branch}` : 'Any worktree (default)'}</option>
+        {options.map((o) => <option key={o.branch} value={o.branch}>{o.label}</option>)}
+      </select>
+      <div className="mt-1 text-[10px] text-foreground-subtle" data-testid="worked-in-note">
+        {view?.section
+          ? `Only agents working on ${view.where} are offered these tasks or can claim them, whichever agent they are.`
+          : 'Any agent, in any worktree, can pick these tasks up. Choose a worktree to keep this section to one.'}
+      </div>
+      {error && <div role="alert" className="mt-1 text-[10px] text-danger">{error}</div>}
+    </div>
+  );
+}
