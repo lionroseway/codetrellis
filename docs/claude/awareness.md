@@ -163,6 +163,10 @@ event, for the active project.
   pairing and are audited. A high signal opening pushes a phone that is away
   (`pushForSignal`, `newlySerious`, A4.4): ids only, one per kind per minute.
   `workstreams.list` / `.detail` give the strip and each line's turns (A4.3).
+  The phone shows them in "Needs you" at the top of Activity, in the
+  overlap's detail (where the push lands), and in the lines of work (A4.5b).
+  The whole journey, a push to an asleep phone through to the agent reading
+  the reply, is the M4 "done when" (`awareness-m4`, A4.6).
   See `docs/claude/mobile-companion.md`.
 - **The guide**: `get_app_guide(flavor='parallel')` /
   `codetrellis://skill/parallel` (A3.3) is the contract an agent follows:
@@ -256,6 +260,13 @@ run as a plain `codex` client with no hook and no watcher in
   - `parallel-hook`, `check-edit`, `gemini-hook`;
   - `awareness-m3`, the M3 "done when": five workstreams, seven overlaps,
     a five-line digest well under a minute to read, and intended staying
-    quiet until a side changes shape.
+    quiet until a side changes shape;
+  - `awareness-m4`, the M4 "done when": a contract pushes Sam's asleep phone
+    once, with only the id. The phone opens the signal by that id and
+    replies. The reply is the person's, from their phone, and it is posted
+    as a steer on the task the other agent holds. That agent reads it once
+    on its next call and finds the steer on its task.
+- Phone screens: `tests/phone/awareness.spec.ts` (`npm run test:phone`)
+  photographs Needs you, the overlap and its reply, and the lines of work.
 - Browser: `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
   `e2e/settings/mcp-server.spec.ts`.
