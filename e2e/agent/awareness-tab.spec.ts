@@ -280,9 +280,12 @@ test.describe('Awareness tab', () => {
         importers: ['src/auth/checkout.ts'],
       },
       summary: '`billing-v2` changed createInvoice in src/billing/invoice.ts: (opts: InvoiceOpts): Invoice → (opts: InvoiceOpts, currency: string): Invoice. `auth-refresh` imports it in 1 file',
+      // Early in their minute, as the others in this file are: "ago" rounds
+      // down, and loading the page takes seconds. The last told was at 170 s,
+      // which read "3 min ago" once the load passed 10 s (#194, Browser 1/3).
       told: [
-        { sessionId: 's2', agentType: 'codex', toldAt: Date.now() - 180_000, note: 'Seen. I will pass currency: "GBP" until billing-v2 merges.', notedAt: Date.now() - 120_000 },
-        { sessionId: 's3', agentType: 'claude-code', toldAt: Date.now() - 170_000 },
+        { sessionId: 's2', agentType: 'codex', toldAt: Date.now() - 135_000, note: 'Seen. I will pass currency: "GBP" until billing-v2 merges.', notedAt: Date.now() - 120_000 },
+        { sessionId: 's3', agentType: 'claude-code', toldAt: Date.now() - 130_000 },
       ],
     });
     await serve(page, ROOM, [told]);
