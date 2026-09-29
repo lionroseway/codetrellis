@@ -33,11 +33,12 @@
 
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { currentBranch } from './git-checkout';
 import { readLiveGraph, type TrellisSnapshotData } from './trellis-service';
-import { listWorkstreams } from './workstream-service';
+import { watchRefs } from './workstream-watch-service';
 import { RETENTION_DAYS } from './agent-event-log';
 import { TURN_GAP_MS } from '../../shared/lib/turn-gap';
 
@@ -137,15 +138,45 @@ export function frameRefusal(projectPath: string, now: HeldProject): FrameSkip |
 
 // ── Taking a frame ──────────────────────────────────────────────────
 
-function headSha(root: string): string | null {
+function git(root: string, args: string[]): string | null {
   try {
-    const out = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], {
-      encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
-    }).trim();
-    return /^[0-9a-f]{40,64}$/.test(out) ? out : null;
+    return execFileSync('git', ['-C', root, ...args], {
+      encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000, maxBuffer: 4 * 1024 * 1024,
+    });
   } catch {
     return null;
   }
+}
+
+function headSha(root: string): string | null {
+  const out = git(root, ['rev-parse', 'HEAD'])?.trim() ?? '';
+  return /^[0-9a-f]{40,64}$/.test(out) ? out : null;
+}
+
+const canonical = (p: string): string => {
+  try { return fs.realpathSync(p); } catch { return trimRoot(p); }
+};
+
+/**
+ * Each checkout of the repository at `project`, with its HEAD, from
+ * `git worktree list`. Read from git alone on purpose: `listWorkstreams`
+ * also reads the project's config, and doing that during a scan cached it
+ * before a config written just after could be seen (webhook-ssrf's control
+ * test caught it).
+ */
+export function parseWorktreeList(porcelain: string): Map<string, string> {
+  const heads = new Map<string, string>();
+  for (const block of porcelain.split(/\n\s*\n/)) {
+    const root = /^worktree (.+)$/m.exec(block)?.[1];
+    const head = /^HEAD ([0-9a-f]{40,64})$/m.exec(block)?.[1];
+    if (root && head && !/^bare$/m.test(block)) heads.set(root, head);
+  }
+  return heads;
+}
+
+function checkoutHeads(project: string): Map<string, string> {
+  const out = git(project, ['worktree', 'list', '--porcelain']);
+  return out ? parseWorktreeList(out) : new Map();
 }
 
 /** Take a frame now, if the server holds `m.projectPath` and is not scanning. */
@@ -237,11 +268,8 @@ function heldProjectOf(root: string | null): string | null {
   const project = held().path;
   if (!project) return null;
   if (!root || trimRoot(root) === trimRoot(project)) return project;
-  try {
-    return listWorkstreams(project, { includeIdle: true }).some((w) => trimRoot(w.root) === trimRoot(root)) ? project : null;
-  } catch {
-    return null;
-  }
+  const target = canonical(root);
+  return [...checkoutHeads(project).keys()].some((r) => canonical(r) === target) ? project : null;
 }
 
 /**
@@ -273,22 +301,14 @@ export function noteAgentActivity(e: { sessionId: string | null; agentType: stri
 /** Each checkout's HEAD as last seen, for the held project. */
 const heads = new Map<string, string>();
 
-function checkoutHeads(project: string): Map<string, string> {
-  const seen = new Map<string, string>();
-  try {
-    for (const w of listWorkstreams(project, { includeIdle: true, fresh: true })) {
-      // Branch workstreams have no folder; a fetch moves them, nobody committed here.
-      if (w.head && !w.root.startsWith('branch:')) seen.set(w.root, w.head);
-    }
-  } catch { /* not a git project */ }
-  return seen;
-}
-
 /** The held project changed: note each checkout's HEAD, so the next move is a commit. */
 export function seedHeads(project: string | null): void {
   heads.clear();
   if (!project) return;
   for (const [root, head] of checkoutHeads(project)) heads.set(root, head);
+  // The refs watcher starts when workstreams are first listed; a commit
+  // frame should not wait for someone to open the strip.
+  try { watchRefs(project); } catch { /* not a git project */ }
 }
 
 /**

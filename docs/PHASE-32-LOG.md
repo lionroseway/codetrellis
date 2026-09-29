@@ -297,6 +297,14 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   a turn end with its session and commit, a status change from the window and
   from an agent, a commit, no frame while another project is held and frames
   again once it is scanned back, the route's 400 and 403.
+- **Found in CI (#209's first run).** Two harness tests failed: webhook-ssrf's
+  control (an approved webhook never delivered) and any-agent-parity (the
+  other worktree missing from `list_workstreams`). Both came from noting each
+  checkout's HEAD with `listWorkstreams` during a scan: it caches the list
+  and reads the project's config, so a config written or a worktree edited
+  just after the scan was not seen. Replay now reads HEADs from
+  `git worktree list` alone and starts the refs watcher itself, and never
+  calls `listWorkstreams`.
 - **The person's side** comes in B5.3; this step has no screen.
 
 ### 2026-09-29: B5 refined — replay

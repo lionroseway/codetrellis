@@ -89,6 +89,17 @@ describe('moments close together', () => {
   });
 });
 
+describe('checkouts and their HEADs', () => {
+  test('read from git worktree list: every checkout with a HEAD, a bare repository left out', () => {
+    const porcelain = [
+      'worktree /w/app', 'HEAD ' + 'a'.repeat(40), 'branch refs/heads/main', '',
+      'worktree /w/app-feature', 'HEAD ' + 'b'.repeat(40), 'detached', '',
+      'worktree /w/app.git', 'bare', '',
+    ].join('\n');
+    assert.deepEqual([...frames.parseWorktreeList(porcelain)], [['/w/app', 'a'.repeat(40)], ['/w/app-feature', 'b'.repeat(40)]]);
+  });
+});
+
 describe('only the held project, never while scanning', () => {
   test('a frame of a project the server does not hold is refused, not taken', () => {
     assert.equal(frames.takeFrame({ projectPath: OTHER, reason: 'status' }), 'other-project');
