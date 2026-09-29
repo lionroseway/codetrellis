@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A8.2: a pre-edit check any client can run |
-| **Status** | A8.1 merged (#200). A8.2 in review: `--check-edit <path> [--old-text-file f]` in the connector exits 2 with the reason when the edit is held, 0 otherwise and on any failure, so any client's hook or a wrapper script gets the pause. A8.4, A8.3 (Gemini CLI's hook) and A2.7 are stacked after it, rebased on #200 |
-| **Next action** | Merge A8.2's PR when green; then A8.4, A8.3, A2.7 in turn (each rebased on the last merged). Then B4.4 |
+| **Stage / step** | Track A — A8.4: proof of skill use for any client |
+| **Status** | A8.2 merged (#201). A8.4 in review: a `get_skill` read counts as proof a skill was used, for any client, and each proof says where it came from, so "unknown" is left only where nothing was seen. A8.3 (Gemini CLI's hook) and A2.7 are stacked after it, rebased on #201 |
+| **Next action** | Merge A8.4's PR when green; then A8.3 and A2.7 in turn (each rebased on the last merged). Then B4.4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a8-2-check-edit` |
+| **Branch** | `feat/phase-32-a8-4-proof-any-client` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -85,7 +85,7 @@
 - [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
-  - [x] A8.2 Client-neutral pre-edit check in the connector
+  - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
   - [ ] A8.3 Hook adapters for other clients, each checked against its docs
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source
 - [ ] A4 Mobile
