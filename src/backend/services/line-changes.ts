@@ -264,3 +264,29 @@ export function lineChangesFor(
     : workstreams.filter((w) => w.changes.files.some((f) => f.path === rel) && !opts.exclude?.(w));
   return chosen.map((w) => lineChangesOf(w, repo, rel, parse, { diff: opts.diff }));
 }
+
+/**
+ * A workstream's copy of one file, for "Compare with…" (B3.2): the comparand
+ * `workstream:<id or branch>`. A worktree's copy is read through confined-fs
+ * with its folder as the root; a branch with no folder at its head. Null
+ * when no such workstream; `content: null` when its copy has no such file.
+ */
+export function readWorkstreamCopy(
+  workstreams: readonly Workstream[],
+  id: string,
+  rel: string,
+): { content: string | null; label: string } | null {
+  const w = workstreams.find((x) => x.root === id) ?? workstreams.find((x) => x.branch === id);
+  if (!w) return null;
+  const label = w.branch ?? path.basename(w.root);
+  if (w.root.startsWith('branch:')) {
+    const repo = workstreams.find((x) => x.main)?.root;
+    const head = w.head && SHA.test(w.head) ? w.head : null;
+    assertSafeGitPathArg(rel, 'workstream copy');
+    return { content: repo && head ? showAt(repo, head, rel) : null, label };
+  }
+  const abs = resolveWithin(w.root, rel, 'workstream copy');
+  if (!fs.existsSync(abs)) return { content: null, label };
+  if (fs.statSync(abs).size > MAX_FILE_BYTES) throw new Error(`${label}'s copy of ${rel} is too large to compare`);
+  return { content: readFileWithin(w.root, rel, 'workstream copy').toString('utf-8'), label };
+}

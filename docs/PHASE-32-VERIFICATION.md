@@ -77,7 +77,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/dependencies` |  | ✗ none | 3 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
 | b | `GET /api/dependencies/file` |  | ✗ none | 4 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
 | b | `GET /api/diff` |  | ✗ none | 4 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
-| b | `GET /api/file/at` |  | ✗ none | 2 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
+| b | `GET /api/file/at` |  | ✗ none | 3 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
 | b | `GET /api/file/content` |  | ✗ none | 2 | ✓ 0.4b: returns the file's exact content; outside opened projects 403 (misc-endpoints, filesystem-boundary) |  |  |
 | b | `GET /api/file/overlay` |  | ✗ none | 2 | ✓ 0.4b: plan edits mapped onto lines (plan-overlay) |  |  |
 | b | `GET /api/playback` |  | ✗ none | 2 | ✓ 0.4b: discrete frames between comparands (playback) |  |  |

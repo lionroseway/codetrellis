@@ -12,6 +12,7 @@ import {
   type FileOverlay, type OverlayIndex, type OverlayMarker,
 } from '../../lib/plan-overlay';
 import { lineVerdict, verdictTooltip, VERDICT_STYLE } from '../../lib/line-verdict';
+import { ownGlyph, type GutterMark, type GutterMarks } from '../../lib/line-marks';
 
 export type LineAnnotation = 'unchanged' | 'added' | 'modified';
 
@@ -56,9 +57,14 @@ interface Props {
   overlay?: FileOverlay | null;
   /** Open the plan item a marker belongs to. */
   onOpenItem?: (itemUid: string, planUid: string) => void;
+  /**
+   * Phase 32 B3.2 — the workstream gutter: this copy's own changes against
+   * its merge base, and other workstreams' changes. Absent, no column.
+   */
+  workMarks?: GutterMarks | null;
 }
 
-export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem }: Props) {
+export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem, workMarks }: Props) {
 
   if (error) {
     return (
@@ -82,6 +88,7 @@ export function CodePreview({ content, error, highlightLine, onClose, overlay, o
       onClose={onClose}
       overlay={overlay}
       onOpenItem={onOpenItem}
+      workMarks={workMarks}
     />
   );
 }
@@ -92,12 +99,14 @@ function CodePreviewInner({
   onClose,
   overlay,
   onOpenItem,
+  workMarks,
 }: {
   content: FileContent;
   highlightLine?: number;
   onClose?: () => void;
   overlay?: FileOverlay | null;
   onOpenItem?: (itemUid: string, planUid: string) => void;
+  workMarks?: GutterMarks | null;
 }) {
   /**
    * Scroll the highlighted line into view.
@@ -214,6 +223,7 @@ function CodePreviewInner({
                       planMarkers={overlayIndex.get(lineNum)}
                     fileClaim={overlay?.fileLevel?.[0]}
                       onOpenItem={onOpenItem}
+                      work={workMarks ? { own: workMarks.own.get(lineNum), others: workMarks.others.get(lineNum) } : undefined}
                     />
                   </Fragment>
                 );
@@ -445,6 +455,35 @@ function DeletedGap({ count }: { count: number }) {
   );
 }
 
+const OWN_INK: Record<GutterMark['kind'], string> = {
+  added: 'text-emerald-400', changed: 'text-amber-300', removed: 'text-rose-400',
+};
+
+function WorkGutter({ own, others }: { own?: GutterMark[]; others?: GutterMark[] }) {
+  const glyph = ownGlyph(own);
+  const ownKind = own?.find((m) => m.kind === 'changed')?.kind ?? own?.[0]?.kind;
+  return (
+    <span className="select-none flex shrink-0 w-6 items-stretch text-[10.5px] leading-snug">
+      <span
+        data-testid={glyph ? 'work-mark-own' : undefined}
+        data-kind={ownKind}
+        title={own?.map((m) => m.sentence).join('\n')}
+        className={`w-3.5 text-center font-semibold ${ownKind ? OWN_INK[ownKind] : ''}`}
+      >
+        {glyph}
+      </span>
+      <span
+        data-testid={others?.length ? 'work-mark-other' : undefined}
+        data-who={others?.length ? [...new Set(others.map((m) => m.who))].join(',') : undefined}
+        title={others?.map((m) => m.sentence).join('\n')}
+        className="w-2.5 flex justify-center"
+      >
+        {others?.length ? <span className="w-[3px] rounded-full bg-sky-400/80" /> : null}
+      </span>
+    </span>
+  );
+}
+
 function LineRow({
   lineNum,
   annotation,
@@ -458,6 +497,7 @@ function LineRow({
   planMarkers,
   fileClaim,
   onOpenItem,
+  work,
 }: {
   lineNum: number;
   annotation: LineAnnotation | undefined;
@@ -472,6 +512,8 @@ function LineRow({
   /** A plan item claiming the whole file, when no line span applies. */
   fileClaim?: OverlayMarker;
   onOpenItem?: (itemUid: string, planUid: string) => void;
+  /** Phase 32 B3.2 — present when the workstream gutter is shown. */
+  work?: { own?: GutterMark[]; others?: GutterMark[] };
 }) {
   const lineProps = getLineProps({ line });
   const marker = planMarkers && planMarkers.length > 0 ? planMarkers[0] : null;
@@ -534,6 +576,11 @@ function LineRow({
         in the tooltip now, which is where someone goes when the glyph is
         not enough.
       */}
+      {/* Phase 32 B3.2 — the workstream gutter: this copy's own change
+          (＋ added, ～ changed, − lines removed below), then a bar for lines
+          another workstream changes. Who, which lines, which function and
+          whether it is committed are in words on hover. */}
+      {work && <WorkGutter own={work.own} others={work.others} />}
       {/* line number */}
       <span className="select-none text-foreground-subtle/50 w-10 text-right pr-2 shrink-0 border-r border-white/[0.04]">
         {lineNum}

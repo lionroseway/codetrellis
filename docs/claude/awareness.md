@@ -123,6 +123,12 @@ event, for the active project.
   each run is committed; `services/line-changes.ts`, also
   `GET /api/workstreams/changes`). The tools are in
   `mcp/tools/awareness-tools.ts`.
+- **The code view** (B3.2, `CodeWorkspace` + `lib/line-marks.ts`): a gutter
+  marks the lines this copy changed against its merge base (＋ ～ −) and,
+  separately, lines other workstreams change, placed through the base, with
+  the same sentence on hover. The strip above names each other workstream
+  with its line counts; "Compare with…" opens their copy (`/api/file/at`
+  with `at=workstream:<branch>`) against this one in `CodeDiffView`.
 - **Agents, not asked** (`awareness-notices.ts`, A2.6): an unseen high or
   medium signal for the caller's workstream is appended once to its next
   tool result as a "── CodeTrellis awareness ──" block. This happens at the

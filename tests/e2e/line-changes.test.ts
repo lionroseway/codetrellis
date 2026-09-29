@@ -109,6 +109,28 @@ test.describe.serial('Line changes per workstream', () => {
     }
   });
 
+  test('another workstream\'s copy, for Compare with…, named by its branch', async () => {
+    const at = (spec: string, rel = REL) => h.client.raw('GET', `/api/file/at?project=${encodeURIComponent(root)}&path=${encodeURIComponent(rel)}&at=${encodeURIComponent(spec)}`);
+    const theirs = (await (await at('workstream:exports')).json()) as { ok: boolean; content: string; label: string };
+    expect(theirs.label).toBe('exports');
+    expect(theirs.content).toContain('name is required and must be text');
+    const mine = (await (await at('workstream:billing-v2')).json()) as { content: string; label: string };
+    expect(mine.label).toBe('billing-v2');
+    expect(mine.content).toContain('currency is required');
+    expect((await at('workstream:nope')).status).toBe(404);
+    // A link out of a worktree is refused there too.
+    fs.writeFileSync(`${root}-outside.txt`, 'not yours\n');
+    fs.symlinkSync(`${root}-outside.txt`, path.join(billing, 'linked.txt'));
+    try {
+      const res = await at('workstream:billing-v2', 'linked.txt');
+      expect(res.status).toBe(403);
+      expect(await res.text()).not.toContain('not yours');
+    } finally {
+      fs.rmSync(path.join(billing, 'linked.txt'), { force: true });
+      fs.rmSync(`${root}-outside.txt`, { force: true });
+    }
+  });
+
   test('an agent with no hook is told the other side\'s lines, in words, and not its own', async () => {
     const res = await agent.callTool('get_line_changes', { path: REL });
     expect(res.isError).toBeFalsy();

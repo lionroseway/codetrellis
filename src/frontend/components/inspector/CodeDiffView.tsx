@@ -36,9 +36,14 @@ interface Props {
   projectPath: string;
   /** Project-relative path. */
   relativePath: string;
-  /** Comparand specs — `live`, `commit:<ref>`, `checkpoint:<id>`, `baseline`. */
+  /**
+   * Comparand specs — `live`, `commit:<ref>`, `checkpoint:<id>`, `baseline`,
+   * or another workstream's copy, `workstream:<branch or id>` (Phase 32 B3.2).
+   */
   before: string;
   after: string;
+  /** Names for the sides in place of the comparands' own, e.g. "this copy (billing-v2)". */
+  labels?: { before?: string; after?: string };
   /** Language tag; inferred from the path when omitted. */
   language?: string | null;
   authHeaders?: Record<string, string>;
@@ -89,6 +94,7 @@ export function CodeDiffView({
   after,
   language,
   authHeaders,
+  labels,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mergeRef = useRef<MergeView | null>(null);
@@ -112,7 +118,10 @@ export function CodeDiffView({
     ])
       .then(([b, a]) => {
         if (cancelled) return;
-        setSides({ before: b, after: a });
+        setSides({
+          before: labels?.before ? { ...b, label: labels.before } : b,
+          after: labels?.after ? { ...a, label: labels.after } : a,
+        });
         setLoading(false);
       })
       .catch(() => {
@@ -121,7 +130,7 @@ export function CodeDiffView({
     return () => {
       cancelled = true;
     };
-  }, [projectPath, relativePath, before, after, authHeaders]);
+  }, [projectPath, relativePath, before, after, authHeaders, labels?.before, labels?.after]);
 
   useEffect(() => {
     if (!host.current || !sides) return;
