@@ -121,6 +121,22 @@ in the snapshot.
   device, carry the phone as the channel (`phoneActor()`), and tell the
   desktop.
 
+### A serious overlap, pushed (Phase 32 A4.4)
+
+When a high signal opens (new, back after resolving, reopened after the
+person answered it, or raised to high while open: `newlySerious` in
+`awareness-signals.ts`), `refreshSignals` calls `pushForSignal`. A phone that
+is not connected gets "Needs you" with one sentence naming the kind of
+overlap and nothing else. No file, function, branch or agent reaches Expo.
+The data is `{ type: 'signal', id }`. One push per kind per minute per
+device, never to a phone watching live, whose `openSignals` count moves
+instead. The watchers run this with no window open, which is the point.
+
+`CODETRELLIS_PUSH_URL` can point pushes at a receiver on this machine
+(`127.0.0.1` or `localhost` only; anything else is ignored), which is how the
+harness sees them. The tap's route to the signal's screen comes with the
+screens in A4.5.
+
 ### The lines of work (Phase 32 A4.3)
 
 `src/backend/services/mobile-workstreams.ts`, read-only:

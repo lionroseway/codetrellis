@@ -322,3 +322,18 @@ export function reconcileSignals(previous: readonly AwarenessSignal[], drafts: r
   const resolved = previous.filter((s) => s.state !== 'resolved' && !live.has(s.id)).map((s) => s.id);
   return { upserts, resolved, reopened };
 }
+
+/**
+ * The signals that just became serious (A4.4): high and open, where before
+ * they were absent, resolved, answered and now reopened, or open at a lower
+ * severity. What the person is pushed about when away; a signal that keeps
+ * firing, or one they have set aside, is not.
+ */
+export function newlySerious(previous: readonly AwarenessSignal[], upserts: readonly AwarenessSignal[], reopened: readonly string[]): AwarenessSignal[] {
+  const was = new Map(previous.map((s) => [s.id, s]));
+  return upserts.filter((u) => {
+    if (u.severity !== 'high' || u.state !== 'open') return false;
+    const p = was.get(u.id);
+    return !p || p.state === 'resolved' || reopened.includes(u.id) || (p.state === 'open' && p.severity !== 'high');
+  });
+}
