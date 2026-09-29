@@ -1,5 +1,6 @@
 import type { AgentEvent } from '@shared/types';
 import { phraseEvent, type PhrasedEvent, type PhraseVocabulary } from './tool-phrasing';
+import { TURN_GAP_MS } from '@shared/lib/turn-gap';
 
 /**
  * Turn grouping — Phase 22, change A.
@@ -17,12 +18,8 @@ import { phraseEvent, type PhrasedEvent, type PhraseVocabulary } from './tool-ph
  * complete — so every turn keeps its events for the disclosure.
  */
 
-/**
- * A gap longer than this starts a new turn. Deliberately a constant and
- * not a setting: it is a rendering heuristic, and a user asked to tune
- * it would be being asked to debug our grouping.
- */
-export const TURN_GAP_MS = 30_000;
+/** A gap longer than this starts a new turn (shared with the backend's turn ends). */
+export { TURN_GAP_MS };
 
 export interface AgentTurn {
   /** Stable id — the first event's id. */

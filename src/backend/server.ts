@@ -46,7 +46,8 @@ import { skillProof, skillUseSources, sourceOf } from './services/skill-use-serv
 import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from './services/skill-arrival-service';
 import { releaseSettled } from './services/signal-breakpoints';
 import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
-import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
+import { startAgentEventLog, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
+import { startReplayFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -668,6 +669,8 @@ setWorkstreamChangesListener((folder, changes) => {
 setRefsChangedListener((repo) => {
   broadcast('workstreams-changed', { root: repo, refs: true });
   scheduleSignalRefresh();
+  // B5.1: a checkout whose HEAD moved has had a commit land; replay takes a frame.
+  noteRefsChanged();
 });
 
 // Signals follow the footprints (A1.6): recomputed shortly after a
@@ -755,6 +758,22 @@ app.get('/api/agent-events', (req, res) => {
       sessionId: text(req.query.session),
       workstreamRoot: text(req.query.workstream),
       limit: num(req.query.limit) ?? AGENT_EVENTS_DEFAULT_LIMIT,
+    }),
+  });
+});
+
+// Phase 32 B5.1: a project's replay frames between two times, oldest
+// first: why each was taken, by which session, at which commit, and whether
+// its graph is the one before's. The graph itself is /api/trellis/:id.
+app.get('/api/replay/frames', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const num = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  res.json({
+    frames: listFrames(projectRoot, {
+      from: num(req.query.from),
+      to: num(req.query.to),
+      limit: num(req.query.limit) ?? DEFAULT_FRAME_LIMIT,
     }),
   });
 });
@@ -1234,6 +1253,8 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     // Publish to trusted-roots, which cannot import this module (cycle).
     // Anything deriving a project root from trusted state reads it there.
     setActiveProjectRoot(projectPath);
+    // B5.1: each checkout's HEAD now, so the next move reads as a commit.
+    seedHeads(projectPath);
 
     const systems = discoverSystems(projectPath);
     const aliasMap = buildAliasMap(systems);
@@ -5360,6 +5381,22 @@ export async function initializeBackend(): Promise<void> {
   startAgentEventLog(addBroadcastTarget, () => [getCapabilityToken()]);
   // B1.2: what the app records itself (a spec body edited) goes out the same way.
   setEventPublisher(broadcast);
+  // B5.1: replay frames, at a turn's end, a status change and a commit, for
+  // the project the server holds and never while it scans.
+  setHeldProject(() => ({ path: lastScannedProject, scanning: scanInFlight ? scanInFlight.path : null }));
+  setFramePublisher(broadcast);
+  startReplayFrames();
+  setRecordedListener((evt) => noteAgentActivity(evt));
+  planItemService.setStatusChangeListener(({ planUid, itemUid }) => {
+    const plan = planService.getPlan(planUid);
+    if (!plan?.projectPath) return;
+    const acting = actingSession();
+    requestFrame({
+      projectPath: plan.projectPath, reason: 'status', ref: itemUid,
+      sessionId: acting?.sessionId ?? null, agentType: acting?.agentType ?? null,
+      workstreamRoot: workstreamOfItem(itemUid),
+    });
+  });
 
   // Start persistent auto-save for plan data
   startAutoSave(() => exportDatabase(), 30000);
@@ -5451,6 +5488,7 @@ export async function initializeBackend(): Promise<void> {
       if (restore) {
         lastScannedProject = restore.path;
         setActiveProjectRoot(restore.path);
+        seedHeads(restore.path);
         console.log(`[Backend] Restored active project: ${restore.path}`);
       }
     }

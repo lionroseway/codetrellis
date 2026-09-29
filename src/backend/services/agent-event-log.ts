@@ -62,6 +62,16 @@ export function withEventContext<T>(ctx: EventContext, fn: () => T): T {
   return context.run(ctx, fn);
 }
 
+/** The session acting now, inside an MCP tool handler; null anywhere else. */
+export function actingSession(): EventContext | null {
+  return context.getStore() ?? null;
+}
+
+/** Told of every event once it is written (replay's turn ends, B5.1). */
+type RecordedListener = (evt: StoredAgentEvent) => void;
+let recordedListener: RecordedListener | null = null;
+export function setRecordedListener(fn: RecordedListener | null): void { recordedListener = fn; }
+
 export interface BodyEdit {
   kind: 'document' | 'item';
   planUid: string;
@@ -266,7 +276,9 @@ export function recordAgentEvent(evt: AgentEvent, known: readonly string[] = [])
       [evt.id, at, evt.source, evt.type, sessionId, agentType, workstreamRoot, json],
     );
     markDirty();
-    return { ...evt, timestamp: at, payload: JSON.parse(json), sessionId, agentType, workstreamRoot };
+    const stored: StoredAgentEvent = { ...evt, timestamp: at, payload: JSON.parse(json), sessionId, agentType, workstreamRoot };
+    try { recordedListener?.(stored); } catch { /* a listener must not undo the record */ }
+    return stored;
   } catch {
     return null;
   }

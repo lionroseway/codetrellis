@@ -434,6 +434,15 @@ export function assertValidParent(planUid: string, itemUid: string | null, paren
   }
 }
 
+/**
+ * Told when an action's status changes, from anywhere (REST, an MCP tool, a
+ * plan file re-read): replay takes a frame then (Phase 32 B5.1). Called in
+ * the caller's async context, so an MCP tool's session is still the acting one.
+ */
+export type StatusChangeListener = (change: { planUid: string; itemUid: string; status: string | null }) => void;
+let statusListener: StatusChangeListener | null = null;
+export function setStatusChangeListener(fn: StatusChangeListener | null): void { statusListener = fn; }
+
 function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
   const db = getDb();
   const before = getItem(uid);
@@ -692,6 +701,9 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
       author: updates.author,
       authorType: updates.authorType,
     });
+  }
+  if (statusListener && structuralEvents.some((ev) => ev.kind === 'status_changed')) {
+    try { statusListener({ planUid: after.planUid, itemUid: after.uid, status: after.status ?? null }); } catch { /* never undoes the change */ }
   }
 
   return after;

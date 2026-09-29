@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { TURN_GAP_MS } from '../../shared/lib/turn-gap';
 import { markDirty } from './persistence';
 import { costOf, PRICING_VERSION, type TokenCounts } from './pricing';
 
@@ -37,7 +38,7 @@ import { costOf, PRICING_VERSION, type TokenCounts } from './pricing';
  */
 
 /** Same threshold as the Timeline's turn grouping, for the same reason. */
-export const TURN_GAP_MS = 30_000;
+export { TURN_GAP_MS };
 
 /**
  * A turn left open by an agent that simply stopped is flushed after
