@@ -6,11 +6,11 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, reachableNodes } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Node context menu', () => {
   test('right-clicking a node opens context menu', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
@@ -25,7 +25,7 @@ test.describe('Node context menu', () => {
   });
 
   test('context menu has "Plan a change" option when no plan active', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
@@ -36,7 +36,7 @@ test.describe('Node context menu', () => {
   });
 
   test('context menu has "Explain with agent" option', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
@@ -47,7 +47,7 @@ test.describe('Node context menu', () => {
   });
 
   test('context menu has "Scope plan to this" for cluster nodes', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     // Default depth is Clusters, so nodes should be package/directory type
@@ -59,7 +59,7 @@ test.describe('Node context menu', () => {
   });
 
   test('clicking outside context menu closes it', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
@@ -83,7 +83,7 @@ test.describe('Node context menu', () => {
   });
 
   test('Escape closes context menu', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];

@@ -7,7 +7,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWelcome, gotoWithProject, seedPlan, openPlan, cleanupPlans, API } from '../helpers/setup';
+import { gotoWelcome, gotoWithProject, seedPlan, openPlan, cleanupPlans, API, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Onboarding → Plan journey', () => {
   const PLAN_TITLE = 'E2E Onboarding Journey Plan';
@@ -28,7 +28,7 @@ test.describe('Onboarding → Plan journey', () => {
     expect(welcomeVisible || brandVisible).toBe(true);
 
     // --- Step 2: Open project (via test helper — skips folder picker) ---
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // --- Step 3: Graph renders ---
     await expect(page.locator('.react-flow').first()).toBeVisible({ timeout: 15000 });
@@ -79,6 +79,7 @@ test.describe('Onboarding → Plan journey', () => {
 
   test('plan workspace → click items → canvas detail → switch between', async ({ page, request }) => {
     await seedPlan(request, {
+      projectPath: FIXTURE_PATH,
       title: PLAN_TITLE,
       actions: [
         { title: 'First task', body: 'Do the first thing' },
@@ -86,7 +87,7 @@ test.describe('Onboarding → Plan journey', () => {
       ],
     });
 
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await openPlan(page, PLAN_TITLE);
 
     // --- Step 1: Both items should be in the tree ---
@@ -123,11 +124,12 @@ test.describe('Onboarding → Plan journey', () => {
     request,
   }) => {
     await seedPlan(request, {
+      projectPath: FIXTURE_PATH,
       title: PLAN_TITLE,
       actions: [{ title: 'API-created task', body: 'Created externally' }],
     });
 
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Open plans panel
     await page.getByRole('button', { name: 'Plans', exact: true }).click();

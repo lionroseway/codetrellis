@@ -7,7 +7,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, seedPlan, openPlan, cleanupPlans, reachableNodes, API } from '../helpers/setup';
+import { gotoWithProject, seedPlan, openPlan, cleanupPlans, reachableNodes, API, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Plan → Graph flow', () => {
   // gotoWithProject alone may wait 30 s for the canvas on a slow machine.
@@ -20,17 +20,18 @@ test.describe('Plan → Graph flow', () => {
 
   test('plan with file targets → open plan → graph still renders', async ({ page, request }) => {
     const plan = await seedPlan(request, {
+      projectPath: FIXTURE_PATH,
       title: PLAN_TITLE,
       actions: [
         {
           title: 'Refactor server entry',
           body: 'Break up server.ts',
-          fileSpecs: [{ path: 'src/backend/server.ts', action: 'modify' }],
+          fileSpecs: [{ path: 'services/api/app/main.py', action: 'modify' }],
         },
       ],
     });
 
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await openPlan(page, PLAN_TITLE);
 
     // Plan workspace should show the action
@@ -45,12 +46,13 @@ test.describe('Plan → Graph flow', () => {
 
   test('plan projection API returns data for plan with file targets', async ({ request }) => {
     const plan = await seedPlan(request, {
+      projectPath: FIXTURE_PATH,
       title: PLAN_TITLE,
       actions: [
         {
           title: 'Add auth middleware',
           body: 'New file',
-          fileSpecs: [{ path: 'src/backend/server.ts', action: 'modify' }],
+          fileSpecs: [{ path: 'services/api/app/main.py', action: 'modify' }],
         },
       ],
     });
@@ -63,11 +65,12 @@ test.describe('Plan → Graph flow', () => {
 
   test('split view shows plan workspace + graph side by side', async ({ page, request }) => {
     const plan = await seedPlan(request, {
+      projectPath: FIXTURE_PATH,
       title: PLAN_TITLE,
       actions: [{ title: 'Split view action', body: 'Testing split' }],
     });
 
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await openPlan(page, PLAN_TITLE);
 
     // Toggle split view via keyboard
@@ -89,7 +92,7 @@ test.describe('Plan → Graph flow', () => {
   });
 
   test('context menu "Plan a change" creates action with file target', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // A node whose centre is on screen and not covered (the DiffSummary, a
     // toast), polled until the layout has settled: the first node in the DOM
@@ -112,7 +115,7 @@ test.describe('Plan → Graph flow', () => {
   });
 
   test('multi-select → "Plan these" creates action with multiple files', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Switch to file depth so we get file-level nodes
     const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -137,10 +140,7 @@ test.describe('Plan → Graph flow', () => {
       return nodes.length;
     });
 
-    if (selected < 2) {
-      test.skip();
-      return;
-    }
+    expect(selected).toBeGreaterThanOrEqual(2);
 
     await page.waitForTimeout(800);
 
@@ -167,7 +167,7 @@ test.describe('Plan → Graph flow', () => {
   });
 
   test('right-click after multi-select still opens context menu', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Real clicks on nodes that can be clicked, found once the layout has
     // settled (see reachableNodes); synthetic events on the first two nodes in
@@ -181,10 +181,8 @@ test.describe('Plan → Graph flow', () => {
     for (const n of await reachableNodes(page)) {
       if ((await n.getAttribute('data-id')) !== firstId) { second = n; break; }
     }
-    if (!second) {
-      test.skip();
-      return;
-    }
+    expect(second, 'a second reachable node').toBeTruthy();
+    if (!second) return;
     await second.click({ modifiers: ['Shift'] });
     // The right-click goes to the node itself: the selection panel may now
     // cover its centre, and a menu is what is under test, not hit-testing.

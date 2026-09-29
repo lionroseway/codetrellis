@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Locator } from '@playwright/test';
-import { gotoWithProject, reachableNodes, PROJECT_PATH } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 const OUT = path.join('test-results', 'ux-audit');
 
@@ -31,27 +31,26 @@ test.describe('Overlays on the graph', () => {
     });
     await page.route('**/api/workstreams?*', (route) => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify(target ? [
-        ws(PROJECT_PATH, 'main', [], true),
-        ws(`${PROJECT_PATH}-billing`, 'billing-v2', [{ path: target, added: 12, removed: 3 }]),
-        ws(`${PROJECT_PATH}-exports`, 'exports', [{ path: target, added: 4, removed: 0 }]),
-      ] : [ws(PROJECT_PATH, 'main', [], true)]),
+        ws(FIXTURE_PATH, 'main', [], true),
+        ws(`${FIXTURE_PATH}-billing`, 'billing-v2', [{ path: target, added: 12, removed: 3 }]),
+        ws(`${FIXTURE_PATH}-exports`, 'exports', [{ path: target, added: 4, removed: 0 }]),
+      ] : [ws(FIXTURE_PATH, 'main', [], true)]),
     }));
     await page.route('**/api/awareness?*', (route) => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify({ signals: target ? [{
         id: 'b33-sig', kind: 'collision', severity: 'medium', subject: { file: target },
-        workstreams: [`${PROJECT_PATH}-billing`, `${PROJECT_PATH}-exports`],
+        workstreams: [`${FIXTURE_PATH}-billing`, `${FIXTURE_PATH}-exports`],
         summary: `\`billing-v2\` and \`exports\` both change ${target}`, firstSeen: Date.now(), lastSeen: Date.now(), state: 'open',
       }] : [] }),
     }));
     await page.route('**/api/workstreams/commits?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ since: Date.now(), commits: {} }) }));
 
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await page.getByRole('button', { name: 'Files', exact: true }).click();
+    // The sample app's graph opens at a size to read (HD2); no zooming in, which
+    // put every node's centre off the canvas there.
     await reachableNodes(page);
     const canvas = (await page.locator('.react-flow').boundingBox())!;
-    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
-    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(120); }
-    await page.waitForTimeout(400);
 
     // Whichever file node is reachable: the layout is not fixed.
     let node: Locator | null = null;

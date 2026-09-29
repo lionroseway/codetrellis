@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Locator } from '@playwright/test';
-import { gotoWithProject, reachableNodes, API, authHeaders } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, API, authHeaders, FIXTURE_PATH } from '../helpers/setup';
 import type { Breakpoint } from '../../src/shared/types';
 
 const OUT = path.join('test-results', 'ux-audit');
@@ -32,18 +32,13 @@ test.describe('Breakpoints on the graph', () => {
   });
 
   test('right-click a file: ask me before this changes, ⏸ on it, listed, then cleared', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await page.getByRole('button', { name: 'Files', exact: true }).click();
 
-    // Close enough to read: the whole repository's graph opens zoomed far out.
-    // Zoom first, at the canvas's centre, and only then pick a node: a node
-    // picked before zooming can end up under the toolbar, which then takes
-    // the right-click.
+    // The sample app's graph opens at a size to read (HD2). This repository's
+    // opened far out and was zoomed first; on the sample app zooming in put
+    // every node's centre off the canvas.
     await reachableNodes(page);
-    const canvas = (await page.locator('.react-flow').boundingBox())!;
-    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
-    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(120); }
-    await page.waitForTimeout(400);
 
     // Any file node that can be clicked where it is: other specs share the
     // backend and the layout is not fixed, so the test picks what is there.

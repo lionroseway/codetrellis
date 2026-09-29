@@ -23,11 +23,15 @@ import { FIXTURE_PATH } from './live-agent/helpers/fixture-reset';
 // them — and the app offers each as an import in the Plans panel, burying
 // the plan a spec is looking for. Only directories named the way specs name
 // them are removed; a person's own plans are never touched.
+// The sample app gets the same: the graph specs open it (HD2), and
+// `.codetrellis/` is gitignored, so resetting the fixture never removed them.
 setup('clear plan directories earlier runs exported', () => {
-  const plansDir = path.join(PROJECT_PATH, '.codetrellis', 'plans');
-  if (!fs.existsSync(plansDir)) return;
-  for (const name of fs.readdirSync(plansDir)) {
-    if (/^(e2e-|mcp-e2e-)/.test(name)) fs.rmSync(path.join(plansDir, name), { recursive: true, force: true });
+  for (const root of [PROJECT_PATH, FIXTURE_PATH]) {
+    const plansDir = path.join(root, '.codetrellis', 'plans');
+    if (!fs.existsSync(plansDir)) continue;
+    for (const name of fs.readdirSync(plansDir)) {
+      if (/^(e2e-|mcp-e2e-)/.test(name)) fs.rmSync(path.join(plansDir, name), { recursive: true, force: true });
+    }
   }
 });
 

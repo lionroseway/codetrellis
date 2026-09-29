@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — HD1: a project's diff is its own |
-| **Status** | HD1 built: `/api/diff` answers only for the project whose files and baseline it holds; while a scan runs or after another project's scan it says so, and the canvas keeps its diff. The extra ghost nodes are gone (3 cluster nodes on this repository's graph before). Harness and browser pass |
-| **Next action** | Open HD1's PR after the review PR merges; then HD2: the browser specs that click graph nodes onto the sample app |
+| **Stage / step** | Wave 2 — HD2: graph specs on the sample app |
+| **Status** | HD1 built (a project's diff is its own). HD2 built on it: the 16 browser specs that click or lay out graph nodes open `tests/fixtures/sample-app`, not this repository; their files, plans and workstream roots are the sample app's; three silent skips are failures; the sample app's leftover spec plans are cleared before a run. The 16 pass locally (77 tests) |
+| **Next action** | Open HD1's PR, then HD2's (stacked), each merged when green; then B5 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-hd1-diff-own-project` |
+| **Branch** | `feat/phase-32-hd2-graph-specs-fixture` (on `feat/phase-32-hd1-diff-own-project`) |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -131,7 +131,7 @@
   - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
   - [x] B4.4 The phone and push ([#205](https://github.com/lionroseway/codetrellis/pull/205))
 - [x] HD1 The extra graph nodes after another project's scan (Wave 2 hardening)
-- [ ] HD2 Browser graph specs on the sample app (Wave 2 hardening)
+- [x] HD2 Browser graph specs on the sample app (Wave 2 hardening)
 - [ ] B5 Replay
 - [ ] B6 Stack view
 - [ ] B7 Conferring
@@ -263,6 +263,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: HD2 — the graph specs open the sample app
+- **Why.** Most browser failures since #194 were specs clicking a graph of this
+  repository, which every PR changes: a node that moved under the toolbar, a
+  card scrolled off, a layout still settling (#195, #196, #197, #205).
+- **Moved** (`gotoWithProject(page, { projectPath: FIXTURE_PATH })`, 16 specs):
+  context-menu, depth-selector, graph-breakpoints, graph-overlays,
+  layout-controls, multi-select, node-click, node-visuals, signal-to-lines,
+  the three inspector specs, keyboard shortcuts, project scan, and the two
+  golden-chain plan specs. `FIXTURE_PATH` is exported from `helpers/setup.ts`.
+- **This repository's names became the sample app's:** `database.ts` →
+  `services/api/app/db.py` (signal-to-lines), `graph-store.ts` →
+  `packages/web/src/api.ts` (depth-selector), `src/backend/server.ts` →
+  `services/api/app/main.py` (plan-to-graph's file target). The plan specs seed
+  their plans in the sample app, since the plan list shows the open project's.
+  The mocked workstream roots are the sample app's.
+- **Stayed on this repository:** graph-own-project (it needs two projects, on
+  purpose) and git-indicators (it clicks no nodes, and asserts nothing
+  repository-specific).
+- **Also.** The zoom-in in graph-breakpoints and graph-overlays is gone: this
+  repository's graph opened far out; the sample app's opens readable, and
+  zooming in put every node's centre off the canvas. Three `test.skip()`s for
+  "fewer than two nodes" (multi-select, node-click, plan-to-graph) now fail
+  instead: on the sample app that would be a bug. The setup step clears the
+  sample app's spec-made plan folders too, as it did this repository's:
+  `.codetrellis/` is gitignored, so resetting the fixture left nine behind.
+- **Tests.** The 16 specs, 77 tests, pass locally.
 
 ### 2026-09-29: HD1 — a project's diff is its own
 - **Found.** The follow-up's guess was right. `/api/diff?project=A` diffs the

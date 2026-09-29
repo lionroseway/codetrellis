@@ -9,7 +9,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, reachableNodes } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Inspector file view', () => {
   /** Scope selectors to the right-side inspector panel (border-l) */
@@ -32,7 +32,7 @@ test.describe('Inspector file view', () => {
   }
 
   test('file view shows file heading', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -43,7 +43,7 @@ test.describe('Inspector file view', () => {
   });
 
   test('file view shows relative path in mono font', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -53,7 +53,7 @@ test.describe('Inspector file view', () => {
   });
 
   test('View source button is visible', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -61,7 +61,7 @@ test.describe('Inspector file view', () => {
   });
 
   test('clicking View source loads code preview', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -73,7 +73,7 @@ test.describe('Inspector file view', () => {
   });
 
   test('Symbols section appears with count', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -87,7 +87,7 @@ test.describe('Inspector file view', () => {
   });
 
   test('Imports section appears for files with imports', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -98,7 +98,7 @@ test.describe('Inspector file view', () => {
   });
 
   test('breadcrumb shows file icon and name', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);

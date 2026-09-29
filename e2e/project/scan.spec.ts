@@ -6,17 +6,17 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Project scan', () => {
   test('graph canvas renders after scan', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await expect(page.locator('.react-flow')).toBeVisible();
   });
 
   test('graph has nodes after scan', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Wait for nodes to appear (dagre layout takes a moment)
     await page.waitForTimeout(2000);
@@ -26,7 +26,7 @@ test.describe('Project scan', () => {
   });
 
   test('sidebar shows file tree after scan', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await expect(page.getByText('Explorer')).toBeVisible();
     // The search input should be present
@@ -34,13 +34,13 @@ test.describe('Project scan', () => {
   });
 
   test('StatusBar shows "Ready" after scan', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await expect(page.getByText('Ready', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
   test('plan panel tabs are visible', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await expect(page.getByRole('button', { name: 'Plans', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Timeline/ })).toBeVisible();
@@ -49,7 +49,7 @@ test.describe('Project scan', () => {
   });
 
   test('depth selector shows Clusters as default active', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Clusters is the default depth
     const clustersBtn = page.getByRole('button', { name: 'Clusters' });
@@ -57,14 +57,14 @@ test.describe('Project scan', () => {
   });
 
   test('trellis mode buttons are visible', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await expect(page.getByRole('button', { name: 'Live', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Baseline', exact: true })).toBeVisible();
   });
 
   test('layout toggle (Map/Tree) is visible', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Both Map and Tree buttons exist — check one of them is visible
     await expect(page.locator('button[title="Map view (force-directed)"]')).toBeVisible();

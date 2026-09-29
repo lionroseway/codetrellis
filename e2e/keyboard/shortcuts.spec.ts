@@ -7,14 +7,14 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, FIXTURE_PATH } from '../helpers/setup';
 
 const isMac = process.platform === 'darwin';
 const mod = isMac ? 'Meta' : 'Control';
 
 test.describe('Keyboard shortcuts', () => {
   test('Cmd+1 switches to package depth', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.keyboard.press(`${mod}+1`);
     await page.waitForTimeout(500);
@@ -35,7 +35,7 @@ test.describe('Keyboard shortcuts', () => {
   });
 
   test('Cmd+2 switches to file depth', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // First switch to package to ensure we're not already at file
     await page.keyboard.press(`${mod}+1`);
@@ -58,7 +58,7 @@ test.describe('Keyboard shortcuts', () => {
   });
 
   test('Cmd+3 switches to symbol depth', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.keyboard.press(`${mod}+3`);
     await page.waitForTimeout(500);
@@ -77,7 +77,7 @@ test.describe('Keyboard shortcuts', () => {
   });
 
   test('Cmd+B toggles sidebar visibility', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Check initial sidebar state — should be visible by default
     const initiallyVisible = await page.evaluate(() => {
@@ -109,7 +109,7 @@ test.describe('Keyboard shortcuts', () => {
   });
 
   test('Cmd+J toggles agent panel', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Get initial state
     const initial = await page.evaluate(() => {
@@ -132,7 +132,7 @@ test.describe('Keyboard shortcuts', () => {
   });
 
   test('Escape clears node selection', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Click on a node to select it — use evaluate to click the first node
     // (avoids strict mode violation when multiple nodes exist)
@@ -165,7 +165,7 @@ test.describe('Keyboard shortcuts', () => {
   });
 
   test('Cmd+\\ toggles split view', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     const initial = await page.evaluate(() => {
       return (window as any).__ZUSTAND_STORES__?.ui?.getState()?.splitView;
@@ -188,7 +188,7 @@ test.describe('Keyboard shortcuts', () => {
   });
 
   test('depth shortcuts cycle correctly: 1→2→3→1', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Press Cmd+1 → package
     await page.keyboard.press(`${mod}+1`);

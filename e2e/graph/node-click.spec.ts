@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, reachableNodes } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Node click', () => {
   /** Scope selectors to the right-side inspector panel */
@@ -14,7 +14,7 @@ test.describe('Node click', () => {
     page.locator('.glass-panel.border-l');
 
   test('clicking a node shows Inspector panel content', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
@@ -31,7 +31,7 @@ test.describe('Node click', () => {
   });
 
   test('Inspector empty state shown when no node is selected', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // By default, no node is selected — Inspector shows empty state
     const inspector = inspectorPanel(page);
@@ -41,16 +41,14 @@ test.describe('Node click', () => {
   });
 
   test('clicking another node switches Inspector content', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const nodes = await reachableNodes(page);
     const count = nodes.length;
 
-    if (count < 2) {
-      test.skip();
-      return;
-    }
+    // The sample app always has more than two clusters: fewer is a failure, not a pass.
+    expect(count).toBeGreaterThanOrEqual(2);
 
     // Click first node
     await nodes[0].click();
@@ -68,7 +66,7 @@ test.describe('Node click', () => {
   });
 
   test('Escape key deselects node', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
