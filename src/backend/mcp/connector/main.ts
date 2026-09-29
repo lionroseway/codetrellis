@@ -16,7 +16,8 @@
 import { ConnectorCore, type JsonRpcMessage } from './core';
 import { connectSseUpstream } from './sse-upstream';
 import { defaultDataDir, readConnectTarget } from './files';
-import { HOOK_FLAG, HOOK_PRE_TOOL_USE, runPreToolUseHook } from './hook';
+import fs from 'node:fs';
+import { HOOK_FLAG, HOOK_PRE_TOOL_USE, runPreToolUseHook, CHECK_EDIT_FLAG, OLD_TEXT_FILE_FLAG, runCheckEdit } from './hook';
 
 declare const __CONNECTOR_VERSION__: string | undefined;
 const VERSION = typeof __CONNECTOR_VERSION__ === 'string' ? __CONNECTOR_VERSION__ : 'dev';
@@ -52,6 +53,20 @@ if (argValue(HOOK_FLAG) === HOOK_PRE_TOOL_USE) {
       // Exit once it is written: on macOS a pipe write is asynchronous.
       .then((out) => { if (out) process.stdout.write(`${out}\n`, () => process.exit(0)); else process.exit(0); });
   });
+} else if (argValue(CHECK_EDIT_FLAG) !== null) {
+  // Any client's pre-edit check (A8.2): exit 0 go ahead, 2 held (reason on
+  // stderr), and 0 with nothing printed on any failure.
+  const file = argValue(CHECK_EDIT_FLAG)!;
+  const oldTextFile = argValue(OLD_TEXT_FILE_FLAG);
+  let oldText: string | null = null;
+  try { oldText = oldTextFile ? fs.readFileSync(oldTextFile, 'utf8').slice(0, 20_000) : null; } catch { oldText = null; }
+  void runCheckEdit({ file, cwd: process.cwd(), oldText, connect: async (cwd) => connectFrom(cwd), version: VERSION })
+    .catch(() => ({ code: 0 as const, stdout: null, stderr: null }))
+    .then((r) => {
+      // Exit once both are written: on macOS a pipe write is asynchronous.
+      const out = () => (r.stdout ? process.stdout.write(`${r.stdout}\n`, () => process.exit(r.code)) : process.exit(r.code));
+      if (r.stderr) process.stderr.write(`${r.stderr}\n`, out); else out();
+    });
 } else {
   runConnector();
 }

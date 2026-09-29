@@ -221,8 +221,8 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/state` |  | ✗ none | 4 |  |  |  |
-| g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 4 |  |  |  |
-| g | `POST /api/breakpoints` |  | ✗ none | 5 |  |  |  |
+| g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 5 |  |  |  |
+| g | `POST /api/breakpoints` |  | ✗ none | 6 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | g | `POST /api/workstreams/folder-requests/:id/dismiss` |  | ✗ none | 1 |  |  |  |

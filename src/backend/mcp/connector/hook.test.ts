@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { hookNotice, hookOutput, parseHookInput, repoOf, runPreToolUseHook } from './hook';
+import { hookNotice, hookOutput, parseHookInput, repoOf, runPreToolUseHook, runCheckEdit, CHECK_EDIT_HELD } from './hook';
 import type { JsonRpcMessage, Upstream } from './core';
 
 const input = (over: Record<string, unknown> = {}) => JSON.stringify({
@@ -169,6 +169,64 @@ describe('running it', () => {
       connect: fakeApp(footprint, [], () => null),
     });
     assert.ok(!('permissionDecision' in JSON.parse(older!).hookSpecificOutput));
+  });
+});
+
+describe('a pre-edit check any client can run (A8.2)', () => {
+  const worktree = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-check-'));
+    fs.writeFileSync(path.join(root, '.git'), 'gitdir: /elsewhere\n');
+    return root;
+  };
+  /** Answers check_breakpoint with `answer`; records the calls and the folder it was bound to. */
+  const app = (answer: string | null, sent: JsonRpcMessage[], bound: string[]) => async (cwd: string): Promise<Upstream> => {
+    bound.push(cwd);
+    const up: Upstream = {
+      async send(m) {
+        sent.push(m);
+        const reply = (msg: Omit<JsonRpcMessage, 'jsonrpc'>) => setImmediate(() => up.onmessage?.({ jsonrpc: '2.0', ...msg }));
+        if (m.method === 'initialize') reply({ id: m.id, result: { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'ct', version: '1' } } });
+        if (m.method === 'tools/call') reply({ id: m.id, result: answer === null ? { isError: true, content: [{ type: 'text', text: 'no' }] } : { content: [{ type: 'text', text: answer }] } });
+      },
+      close() { up.onclose?.(); },
+    };
+    return up;
+  };
+
+  test('held: exit 2 with the reason on stderr; asked in the file\'s own worktree, by its path there, with the text it replaces', async () => {
+    const root = worktree();
+    const sent: JsonRpcMessage[] = [];
+    const bound: string[] = [];
+    const r = await runCheckEdit({
+      file: 'src/refund.ts', cwd: root, oldText: 'return total;', version: 't',
+      connect: app(JSON.stringify({ status: 'paused', ref: 'bp-1', message: 'paused: waiting for a decision (ref "bp-1")' }), sent, bound),
+    });
+    assert.deepEqual(r, { code: CHECK_EDIT_HELD, stdout: null, stderr: 'paused: waiting for a decision (ref "bp-1")' });
+    assert.deepEqual(bound, [root]);
+    assert.equal((sent[0].params as { clientInfo: { name: string } }).clientInfo.name, 'codetrellis-check-edit');
+    assert.deepEqual(sent[2].params, { name: 'check_breakpoint', arguments: { path: 'src/refund.ts', old_text: ['return total;'] } });
+  });
+
+  test('go ahead: exit 0, the person\'s steer on stdout when they left one', async () => {
+    const root = worktree();
+    assert.deepEqual(await runCheckEdit({ file: path.join(root, 'a.ts'), cwd: '/', version: 't', connect: app('{"status":"pass"}', [], []) }),
+      { code: 0, stdout: null, stderr: null });
+    const steer = await runCheckEdit({ file: path.join(root, 'a.ts'), cwd: '/', version: 't', connect: app('{"status":"continue","ref":"bp-1","steer":"only the wording"}', [], []) });
+    assert.equal(steer.code, 0);
+    assert.match(steer.stdout ?? '', /continue, with this steer: only the wording$/);
+  });
+
+  test('every failure is a silent exit 0: no app, a refusal, a slow answer, a file outside any repository', async () => {
+    const root = worktree();
+    const quiet = { code: 0, stdout: null, stderr: null };
+    assert.deepEqual(await runCheckEdit({ file: 'a.ts', cwd: root, version: 't', connect: async () => { throw new Error('not running'); } }), quiet);
+    assert.deepEqual(await runCheckEdit({ file: 'a.ts', cwd: root, version: 't', connect: app(null, [], []) }), quiet);
+    const hanging = async (): Promise<Upstream> => { const up: Upstream = { send: async () => {}, close() { up.onclose?.(); } }; return up; };
+    assert.deepEqual(await runCheckEdit({ file: 'a.ts', cwd: root, version: 't', connect: hanging, timeoutMs: 100 }), quiet);
+    const sent: JsonRpcMessage[] = [];
+    const loose = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-check-loose-'));
+    assert.deepEqual(await runCheckEdit({ file: 'x.ts', cwd: loose, version: 't', connect: app('{}', sent, []) }), quiet);
+    assert.deepEqual(sent, []);
   });
 });
 

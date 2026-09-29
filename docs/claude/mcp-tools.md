@@ -53,6 +53,13 @@ and proxies to the SSE server.
   exits 0, and asks as its own short session named `claude-code-hook`.
   Settings installs it, with the `codetrellis-parallel` skill, only on a
   click (`services/claude-code-parallel.ts`); see `docs/claude/awareness.md`.
+- A third, for any client: `--check-edit <path> [--old-text-file f]`
+  (Phase 32 A8.2, `runCheckEdit` in `connector/hook.ts`). It asks
+  `check_breakpoint` about one file in the worktree it is in and answers
+  with an exit code: 0 go ahead (a person's steer on stdout), 2 held (the
+  reason on stderr), 0 and silent on any failure. Any client whose hooks can
+  run a command, or a wrapper script, gets the pause with no format of its
+  own to know.
 - Built by `npm run build:connector` (its own Vite config, one
   self-contained file). Every `package:*` script and `predev` run it.
 

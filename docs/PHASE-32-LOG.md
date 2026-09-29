@@ -85,7 +85,7 @@
 - [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
-  - [ ] A8.2 Client-neutral pre-edit check in the connector
+  - [x] A8.2 Client-neutral pre-edit check in the connector
   - [ ] A8.3 Hook adapters for other clients, each checked against its docs
   - [ ] A8.4 Proof of use and session signals from MCP calls
 - [ ] A4 Mobile
@@ -256,6 +256,23 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A8.2 — a pre-edit check any client can run
+- **Journey.** Sam asks to be asked before `validateCreateUser` changes.
+  A client whose hook runs a command (or a wrapper script) runs
+  `<connector> --check-edit packages/shared/src/validators.ts
+  --old-text-file old.txt` before an edit: exit 2 with "paused: waiting for
+  a decision … before validateCreateUser … changes. Their note: User rules
+  are frozen" for an edit of that function, exit 0 for another function of
+  the file; after Sam's steer, exit 0 with the steer on stdout. With the app
+  not running: exit 0, nothing printed.
+- **Built.** `runCheckEdit` in `connector/hook.ts`, bound to the file's own
+  worktree and asking as `codetrellis-check-edit`; the hook's session code
+  shared as `withToolSession`; `--check-edit` / `--old-text-file` in
+  `connector/main.ts`, exiting only once stderr and stdout are written.
+- **Tests.** Unit `hook.test.ts` (held, go ahead, steer, every failure
+  silent, outside any repository); harness `tests/e2e/check-edit.test.ts`
+  (the real connector: held, another function, released, app not running).
 
 ### 2026-09-29: A8.1 — any agent: the parity table and the journeys with no hook
 - **Journey.** Two Codex sessions, no hook and no watcher, one in billing-v2
