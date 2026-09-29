@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { fetchGraphAnswer } from '../../lib/graph-answer';
 import {
   ReactFlow,
   Background,
@@ -116,6 +117,9 @@ export function MainCanvas() {
     setDepEdgesRaw((prev) => (sameJson(prev, next) ? prev : next));
   }, []);
   const [loadingGraph, setLoadingGraph] = useState(false);
+  // Whether a graph is on screen, for loaders that must not blank it.
+  const hasGraphRef = useRef(false);
+  hasGraphRef.current = depEdges.length > 0;
   const [symbolsMap, setSymbolsMap] = useState<Map<string, FileSymbol[]>>(new Map());
   const [diffData, setDiffDataRaw] = useState<{
     addedFiles: string[];
@@ -358,35 +362,47 @@ export function MainCanvas() {
 
   const loadDepEdges = useCallback((forRoot: string) => {
     let cancelled = false;
-    setLoadingGraph(true);
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let tries = 0;
     setGraphLoadError(null);
+    // Only a canvas with nothing to show says it is loading: one showing a
+    // graph keeps it on screen while it asks again.
+    setLoadingGraph(!hasGraphRef.current);
 
-    fetch('/api/dependencies?include=cross_system')
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`the server answered ${r.status}`);
-        const body = await r.json();
-        // Only an array is a graph. Anything else is an error shape that
-        // happens to parse.
-        if (!Array.isArray(body)) throw new Error('the response was not a list of edges');
-        return body as DependencyEdge[];
-      })
-      .then((edges) => {
+    const attempt = () => {
+      void fetchGraphAnswer(forRoot).then((answer) => {
         // A late answer for a project we have already left is not ours.
         if (cancelled || useProjectStore.getState().root !== forRoot) return;
-        setDepEdges(edges);
-        hasFetchedRef.current = forRoot;   // only a SUCCESS counts as fetched
-        setLoadingGraph(false);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
+        if (answer.kind === 'edges') {
+          setDepEdges(answer.edges as DependencyEdge[]);
+          hasFetchedRef.current = forRoot;   // only a SUCCESS counts as fetched
+          setLoadingGraph(false);
+          return;
+        }
+        if (answer.kind === 'scanning' && tries++ < 120) {
+          // A scan is running (this project's or another window's): ask
+          // again shortly, keeping what is on screen.
+          retry = setTimeout(attempt, 1000);
+          return;
+        }
+        if (answer.kind === 'other-project') {
+          // The backend holds another project's graph. This one's stays on
+          // screen; with none yet, say why the canvas is empty.
+          hasFetchedRef.current = null;
+          setLoadingGraph(false);
+          if (!hasGraphRef.current) setGraphLoadError(`the app is holding another project's graph (${answer.project}); rescan this project to see its own`);
+          return;
+        }
+        const message = answer.kind === 'error' ? answer.message : 'a scan did not finish in two minutes';
         console.error('[Graph] Could not load dependency edges:', message);
         setGraphLoadError(message);
         hasFetchedRef.current = null;      // so a retry is allowed
         setLoadingGraph(false);
       });
+    };
+    attempt();
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (retry) clearTimeout(retry); };
   }, [setDepEdges, setLoadingGraph]);
 
   // Bumped whenever the backend says the graph data changed, so the
@@ -552,14 +568,12 @@ export function MainCanvas() {
           nextDiffHasChanges ||
           nextGitHasChanges
         ) {
-          fetch('/api/dependencies?include=cross_system')
-            .then((r) => r.json())
-            .then((edges) => {
-              if (Array.isArray(edges) && edges.length > 0) {
-                setDepEdges(edges);
-              }
-            })
-            .catch(() => {});
+          const forRoot = root;
+          void fetchGraphAnswer(forRoot).then((answer) => {
+            if (answer.kind === 'edges' && answer.edges.length > 0 && useProjectStore.getState().root === forRoot) {
+              setDepEdges(answer.edges as DependencyEdge[]);
+            }
+          });
         }
 
         if (
@@ -580,14 +594,12 @@ export function MainCanvas() {
                   git: previous?.git || null,
                 }));
 
-                fetch('/api/dependencies?include=cross_system')
-                  .then((r) => r.json())
-                  .then((edges) => {
-                    if (Array.isArray(edges)) {
-                      setDepEdges(edges);
-                    }
-                  })
-                  .catch(() => {});
+                const forRoot = root;
+                void fetchGraphAnswer(forRoot).then((answer) => {
+                  if (answer.kind === 'edges' && useProjectStore.getState().root === forRoot) {
+                    setDepEdges(answer.edges as DependencyEdge[]);
+                  }
+                });
 
                 // Force subscribers (sidebar, etc.) to re-poll immediately so
                 // they pick up the post-commit clean state instead of waiting

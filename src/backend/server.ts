@@ -1805,6 +1805,17 @@ app.get('/api/dependencies', (req, res) => {
   // `kind` discriminator. Default keeps the legacy import-only shape
   // so existing callers don't change.
   if (req.query.include === 'cross_system') {
+    // The canvas's call. A scan truncates the tables before it refills them,
+    // so while one runs "no edges" is not an answer: say so, and the canvas
+    // keeps the graph it has. And say whose edges these are: the tables hold
+    // one project at a time, and another window may have opened another
+    // (frontend/lib/graph-answer.ts).
+    if (scanInFlight) {
+      res.status(503).set('Retry-After', '1').json({ scanning: true, project: scanInFlight.path });
+      return;
+    }
+    const project = getActiveProjectPath();
+    if (project) res.set('X-CodeTrellis-Project', encodeURIComponent(project));
     res.json(getAllGraphEdges());
     return;
   }
