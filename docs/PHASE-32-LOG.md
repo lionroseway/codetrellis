@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A8.1: any agent, the parity table |
-| **Status** | B3 done: B3.3b merged (#199). A8.1 in review: the parity table, `check_breakpoint` in the guide for every agent, and the journeys run by a client with no hook. A8.2, A8.4, A8.3 (Gemini CLI's hook) and A2.7 are built on branches stacked after it, rebased on #199 |
-| **Next action** | Merge A8.1's PR when green; then A8.2, A8.4, A8.3, A2.7 in turn (each rebased on the last merged). Then B4.4 |
+| **Stage / step** | Track A — A8.2: a pre-edit check any client can run |
+| **Status** | A8.1 merged (#200). A8.2 in review: `--check-edit <path> [--old-text-file f]` in the connector exits 2 with the reason when the edit is held, 0 otherwise and on any failure, so any client's hook or a wrapper script gets the pause. A8.4, A8.3 (Gemini CLI's hook) and A2.7 are stacked after it, rebased on #200 |
+| **Next action** | Merge A8.2's PR when green; then A8.4, A8.3, A2.7 in turn (each rebased on the last merged). Then B4.4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a8-1-parity` |
+| **Branch** | `feat/phase-32-a8-2-check-edit` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -84,7 +84,7 @@
   - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
 - [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
-  - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
+  - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
   - [x] A8.2 Client-neutral pre-edit check in the connector
   - [ ] A8.3 Hook adapters for other clients, each checked against its docs
   - [ ] A8.4 Proof of use and session signals from MCP calls
