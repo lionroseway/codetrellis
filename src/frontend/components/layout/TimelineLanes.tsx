@@ -20,6 +20,8 @@ import { useAwarenessStore } from '../../stores/awareness-store';
 import { useBreakpointsStore } from '../../stores/breakpoints-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { sectionsByBranch } from '../../lib/section-worktrees';
+import { useReplayState } from '../../stores/replay-store';
+import { hhmm, hitsAsOf, signalsAsOf } from '../../lib/replay';
 import { buildLanes, position, type LaneMark } from '../../lib/timeline-lanes';
 import type { AgentTurn } from '../../lib/agent-turns';
 
@@ -83,8 +85,16 @@ export function TimelineLanes({
   const tick = useNow();
   // A new event is "now" too, so its mark is never drawn past the end.
   const latest = turns.reduce((t, x) => Math.max(t, x.endedAt), 0);
-  const now = Math.max(tick, latest);
-  const view = useMemo(() => buildLanes({ turns, workstreams, signals, commits, hits, now }), [turns, workstreams, signals, commits, hits, now]);
+  // B5.3: while replaying, the lanes end at the cursor's moment, with the
+  // signals open then and each hit as it stood then.
+  const replay = useReplayState();
+  const now = replay ? replay.at : Math.max(tick, latest);
+  const shownSignals = useMemo(() => (replay ? signalsAsOf(replay) : signals), [replay, signals]);
+  const shownHits = useMemo(() => (replay ? hitsAsOf(hits, replay.at) : hits), [replay, hits]);
+  const view = useMemo(
+    () => buildLanes({ turns, workstreams, signals: shownSignals, commits, hits: shownHits, now }),
+    [turns, workstreams, shownSignals, commits, shownHits, now],
+  );
 
   // One lane and nothing on it says nothing the list below doesn't.
   if (view.lanes.length === 0 || (view.lanes.length === 1 && view.lanes[0].marks.length === 0)) return null;
@@ -158,7 +168,7 @@ export function TimelineLanes({
         <span className="w-28 shrink-0" />
         <div className="flex-1 flex justify-between text-[9px] text-foreground-subtle font-mono">
           <span>{new Date(view.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-          <span>now</span>
+          <span data-testid="timeline-lanes-end">{replay ? `at ${hhmm(replay.at)}` : 'now'}</span>
         </div>
       </div>
     </div>

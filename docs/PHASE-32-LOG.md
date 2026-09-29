@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B5.2: the state at a moment |
-| **Status** | B5.1 merged (#209): replay frames. B5.2 in review: `GET /api/replay/state` answers the frame, task statuses, what was waiting and the signals open at a moment; signal openings kept as spans |
-| **Next action** | Merge B5.2's PR when green; then B5.3, one clock in the window (the transport bar drives the Timeline, graph, plan list and inbox) |
+| **Stage / step** | Wave 2 — B5.3: one clock in the window |
+| **Status** | B5.1 (#209) and B5.2 (#210) merged. B5.3 in review: a replay bar on every tab, the Timeline, inbox, task statuses and canvas at the cursor's moment, read-only, and back to live |
+| **Next action** | Merge B5.3's PR when green; then B5.4, catch-up from when the person last looked, and `get_state_at` for any MCP client |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b5-2-state` |
+| **Branch** | `feat/phase-32-b5-3-one-clock` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -134,7 +134,7 @@
 - [x] HD2 Browser graph specs on the sample app (Wave 2 hardening) ([#208](https://github.com/lionroseway/codetrellis/pull/208))
 - [ ] B5 Replay
   - [x] B5.1 Frames: project, SHA, session; turn end, status change, commit ([#209](https://github.com/lionroseway/codetrellis/pull/209))
-  - [ ] B5.2 The state at a moment
+  - [x] B5.2 The state at a moment ([#210](https://github.com/lionroseway/codetrellis/pull/210))
   - [ ] B5.3 One clock in the window
   - [ ] B5.4 Catch-up, and `get_state_at`
 - [ ] B6 Stack view
@@ -270,6 +270,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: B5.3 — one clock in the window
+- **The journey (G1).** On the Timeline tab, "Replay the last two hours". A
+  bar above every tab says "Replaying 10:02 → 12:04 · at 10:40", steps and
+  plays the recorded moments with the transport bar the code view already
+  had, says what each moment was ("Codex's turn ended · 1 signal open · 1
+  waiting on you"), and has "Back to live". Nothing recorded yet says what
+  makes a moment.
+- **What follows the cursor** (`stores/replay-store.ts`, helpers in
+  `lib/replay.ts`):
+  - the Timeline lanes end at the cursor, with the signals open then and each
+    hit as it stood then (a hit answered later still waiting);
+  - the inbox shows the signals open and the calls waiting then, read-only: a
+    held call says how it was answered later, and no answer buttons show,
+    since an answer is for now;
+  - the plan tree shows each task's status then; a task made later is faded;
+  - the canvas draws the frame's graph frozen, with "As it was at 10:40".
+  Live events keep arriving into the other stores; back to live shows them.
+  Another project opened ends replay.
+- **B5.2's answer widened.** A waiting hit comes back whole (the inbox card
+  needs its note, title and wording) and a signal carries its subject.
+- **Frames step, never animate** (observability §6.2): each step reads the
+  state at that frame's time; a frame pointing at another reuses its graph.
+- **Tests.** Unit (5): the words for a frame and the range, signals and
+  statuses then, hits as they stood, the frames as the transport bar steps
+  them. Browser (2, with screenshots `replay-start.png`, `replay-inbox.png`):
+  stepping through a served hour moves the moment's words, the inbox shows
+  the held call read-only with its later answer, the last moment clears it,
+  back to live removes the bar and the canvas note; and nothing recorded.
 
 ### 2026-09-29: B5.2 — the state at a moment
 - **Built.** `services/replay-state.ts` and `GET /api/replay/state?project&at`

@@ -10,6 +10,7 @@ import { AgentTurnList, useAgentTurns } from './AgentTurns';
 import { AwarenessTab, useAwarenessFeed } from './AwarenessTab';
 import { useBreakpointsFeed } from './Breakpoints';
 import { TimelineLanes } from './TimelineLanes';
+import { ReplayBar, ReplayStart } from './ReplayBar';
 
 type Tab = PlanPanelTab;
 
@@ -129,6 +130,7 @@ export function PlanPanel() {
         </button>
       </div>
 
+      <ReplayBar />
       <div className="flex-1 overflow-y-auto p-2">
         {activeTab === 'plans' && (
           <PlanList />
@@ -136,6 +138,7 @@ export function PlanPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
+            <ReplayStart />
             <TimelineLanes
               turns={turns}
               onSelectTurn={(turnId) => setFocusTurn((f) => ({ turnId, seq: (f?.seq ?? 0) + 1 }))}

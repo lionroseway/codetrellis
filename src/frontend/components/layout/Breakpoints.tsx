@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Pause, OctagonAlert, X } from 'lucide-react';
+import { useReplayState } from '../../stores/replay-store';
+import { hhmm } from '../../lib/replay';
 import { useBreakpointsStore } from '../../stores/breakpoints-store';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { useProjectStore } from '../../stores/project-store';
@@ -48,9 +50,14 @@ function Heading({ title, count }: { title: string; count: number }) {
 }
 
 /** The calls waiting on the person: the top of the inbox. Nothing when none wait. */
-export function BreakpointsWaiting({ now }: { now: number }) {
-  const waiting = useBreakpointsStore((s) => s.waiting);
-  const error = useBreakpointsStore((s) => s.error);
+export function BreakpointsWaiting({ now: liveNow }: { now: number }) {
+  const live = useBreakpointsStore((s) => s.waiting);
+  const storeError = useBreakpointsStore((s) => s.error);
+  // B5.3: while replaying, what was waiting at the cursor's moment, read-only.
+  const replay = useReplayState();
+  const waiting = replay ? replay.waiting : live;
+  const error = replay ? null : storeError;
+  const now = replay ? replay.at : liveNow;
   if (waiting.length === 0 && !error) return null;
   return (
     <section data-testid="breakpoints-waiting">
@@ -59,13 +66,13 @@ export function BreakpointsWaiting({ now }: { now: number }) {
         <div role="alert" className="text-[10px] text-danger px-1 mb-1">Could not refresh the breakpoints ({error}). What is shown may be out of date.</div>
       )}
       <div className="space-y-1.5">
-        {waiting.map((h) => <WaitingCard key={h.ref} hit={h} now={now} />)}
+        {waiting.map((h) => <WaitingCard key={h.ref} hit={h} now={now} replayed={!!replay} />)}
       </div>
     </section>
   );
 }
 
-function WaitingCard({ hit, now }: { hit: BreakpointHit; now: number }) {
+function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: number; replayed?: boolean }) {
   const answer = useBreakpointsStore((s) => s.answer);
   const workstreams = useAwarenessStore((s) => s.workstreams);
   const [note, setNote] = useState('');
@@ -101,6 +108,13 @@ function WaitingCard({ hit, now }: { hit: BreakpointHit; now: number }) {
           Your note on the breakpoint: <span className="italic text-foreground-muted">&ldquo;{hit.breakpointNote}&rdquo;</span>
         </div>
       )}
+      {replayed ? (
+        <div data-testid="breakpoint-replayed" className="mt-1.5 text-[10px] text-foreground-subtle">
+          {hit.answeredAt
+            ? `Answered later, at ${hhmm(hit.answeredAt)}: ${labels[hit.decision ?? 'continue']}${hit.note ? `, “${hit.note}”` : ''}.`
+            : 'Not answered yet. Go back to live to answer it.'}
+        </div>
+      ) : (<>
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
@@ -125,6 +139,7 @@ function WaitingCard({ hit, now }: { hit: BreakpointHit; now: number }) {
         ))}
         {error && <span role="alert" className="text-[10px] text-danger">{error}</span>}
       </div>
+      </>)}
     </div>
   );
 }

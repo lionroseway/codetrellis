@@ -25,6 +25,8 @@
 import { getDb } from './database';
 import { computeTrellisDiff, type TrellisDiff } from './trellis-service';
 import { listFrames, type ReplayFrame } from './replay-frames';
+import { getHit } from './breakpoint-service';
+import type { AwarenessSignal, BreakpointHit } from '../../shared/types';
 
 export interface TaskAt {
   uid: string;
@@ -37,22 +39,14 @@ export interface TaskAt {
   statusNow?: string | null;
 }
 
-export interface WaitingAt {
-  ref: string;
-  breach: boolean;
-  action: string;
-  itemUid: string;
-  path: string | null;
-  agent: string | null;
-  workstreamRoot: string | null;
-  hitAt: number;
-  /** When it was answered, if it has been since. */
-  answeredAt: number | null;
-}
+/** A hit as the inbox shows one; `answeredAt` says when it was answered, if it has been since. */
+export type WaitingAt = BreakpointHit;
 
 export interface SignalAt {
   id: string;
   kind: string;
+  /** What it is about, from its row (the id is derived from it, so it does not change). */
+  subject: AwarenessSignal['subject'];
   severity: string;
   summary: string;
   workstreams: string[];
@@ -133,47 +127,37 @@ function tasksAt(projectPath: string, at: number): TaskAt[] {
 /** Breakpoint hits in the project made by `at` and not answered by then. */
 function waitingAt(projectPath: string, at: number): WaitingAt[] {
   return rows(
-    `SELECT h.ref, h.breach, h.action, h.item_uid, h.path, h.agent, h.workstream_root, h.hit_at, h.answered_at
-     FROM breakpoint_hits h JOIN breakpoints b ON b.id = h.breakpoint_id
+    `SELECT h.ref FROM breakpoint_hits h JOIN breakpoints b ON b.id = h.breakpoint_id
      LEFT JOIN plans p ON p.uid = COALESCE(h.plan_uid, b.plan_uid)
      WHERE (b.project_root IN (?, ?) OR p.project_path IN (?, ?))
        AND h.hit_at <= ? AND (h.answered_at IS NULL OR h.answered_at > ?)
      ORDER BY h.hit_at`,
     [projectPath, trimRoot(projectPath), projectPath, trimRoot(projectPath), at, at],
-  ).map((r) => ({
-    ref: r[0] as string,
-    breach: Boolean(r[1]),
-    action: r[2] as string,
-    itemUid: r[3] as string,
-    path: (r[4] as string | null) ?? null,
-    agent: (r[5] as string | null) ?? null,
-    workstreamRoot: (r[6] as string | null) ?? null,
-    hitAt: r[7] as number,
-    answeredAt: (r[8] as number | null) ?? null,
-  }));
+  ).map((r) => getHit(r[0] as string)).filter((h): h is BreakpointHit => h !== null);
 }
 
 /** The project's signals open at `at`. */
 function signalsAt(projectPath: string, at: number): SignalAt[] {
   const roots = [projectPath, trimRoot(projectPath)];
   const spans = rows(
-    `SELECT signal_id, kind, severity, summary, workstreams, opened_at, closed_at FROM awareness_signal_spans
-     WHERE project_root IN (?, ?) AND opened_at <= ? AND (closed_at IS NULL OR closed_at > ?)`,
+    `SELECT p.signal_id, p.kind, p.severity, p.summary, p.workstreams, p.opened_at, p.closed_at, s.subject
+     FROM awareness_signal_spans p LEFT JOIN awareness_signals s ON s.id = p.signal_id
+     WHERE p.project_root IN (?, ?) AND p.opened_at <= ? AND (p.closed_at IS NULL OR p.closed_at > ?)`,
     [...roots, at, at],
   ).map((r) => ({
-    id: r[0] as string, kind: r[1] as string, severity: r[2] as string, summary: r[3] as string,
-    workstreams: parse<string[]>(r[4], []), openedAt: r[5] as number, closedAt: (r[6] as number | null) ?? null,
+    id: r[0] as string, kind: r[1] as string, subject: parse<AwarenessSignal['subject']>(r[7], {}), severity: r[2] as string,
+    summary: r[3] as string, workstreams: parse<string[]>(r[4], []), openedAt: r[5] as number, closedAt: (r[6] as number | null) ?? null,
   }));
   // A signal with no span at all opened before spans were kept: its row's
   // first sighting and resolution are the one span known.
   const older = rows(
-    `SELECT s.id, s.kind, s.severity, s.summary, s.workstreams, s.first_seen, s.resolved_at FROM awareness_signals s
+    `SELECT s.id, s.kind, s.severity, s.summary, s.workstreams, s.first_seen, s.resolved_at, s.subject FROM awareness_signals s
      WHERE s.project_root IN (?, ?) AND s.first_seen <= ? AND (s.resolved_at IS NULL OR s.resolved_at > ?)
        AND NOT EXISTS (SELECT 1 FROM awareness_signal_spans p WHERE p.signal_id = s.id)`,
     [...roots, at, at],
   ).map((r) => ({
-    id: r[0] as string, kind: r[1] as string, severity: r[2] as string, summary: r[3] as string,
-    workstreams: parse<string[]>(r[4], []), openedAt: r[5] as number, closedAt: (r[6] as number | null) ?? null,
+    id: r[0] as string, kind: r[1] as string, subject: parse<AwarenessSignal['subject']>(r[7], {}), severity: r[2] as string,
+    summary: r[3] as string, workstreams: parse<string[]>(r[4], []), openedAt: r[5] as number, closedAt: (r[6] as number | null) ?? null,
   }));
   return [...spans, ...older].sort((a, b) => a.openedAt - b.openedAt);
 }

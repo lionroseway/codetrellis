@@ -37,13 +37,19 @@ interface Props {
   index: number;
   onIndexChange: (index: number) => void;
   notes?: string[];
+  /**
+   * The line under the slider for a frame. By default the file delta from
+   * the frame before ("Starting point" for the first); replay says what the
+   * moment was elsewhere and passes one that returns nothing.
+   */
+  summaryOf?: (frame: PlaybackFrame) => string;
 }
 
 /** Milliseconds per frame, by speed multiplier. */
 const BASE_INTERVAL_MS = 1200;
 const SPEEDS = [0.5, 1, 2, 4] as const;
 
-export function PlaybackBar({ frames, index, onIndexChange, notes }: Props) {
+export function PlaybackBar({ frames, index, onIndexChange, notes, summaryOf }: Props) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -76,6 +82,7 @@ export function PlaybackBar({ frames, index, onIndexChange, notes }: Props) {
   const current = frames[index];
 
   const summary = useMemo(() => {
+    if (current && summaryOf) return summaryOf(current);
     if (!current?.delta) return 'Starting point';
     const { added, modified, removed } = current.delta;
     const parts: string[] = [];
@@ -83,7 +90,7 @@ export function PlaybackBar({ frames, index, onIndexChange, notes }: Props) {
     if (modified) parts.push(`~${modified}`);
     if (removed) parts.push(`−${removed}`);
     return parts.length > 0 ? `${parts.join('  ')} files` : 'No file changes';
-  }, [current]);
+  }, [current, summaryOf]);
 
   if (frames.length === 0) {
     return (
