@@ -301,6 +301,13 @@ export interface WorkspaceSnapshot {
   waitingBreakpoints?: number;
 
   /**
+   * Phase 32 A4.2 — signals that need the person in the desktop's opened
+   * project (open, high or medium). Read them over `awareness.needsYou`.
+   * Optional for older desktops.
+   */
+  openSignals?: number;
+
+  /**
    * Desktop's reachable IPv4 addresses (LAN + Tailscale/VPN), LAN-first.
    * Optional for back-compat with older desktops. The companion persists
    * these into the paired-desktop record so a LAN pairing auto-upgrades to

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A4.1: message the agents about a signal |
-| **Status** | A4 refined (#214). A4.1 built: "Message the agents" on each signal; each agent in its workstreams reads it once on its next call; a steer on the plan of a task held there. Unit, harness (5) and browser (2) green locally |
-| **Next action** | Merge #214, then A4.1 when green; then A4.2, the phone's signal RPC (`awareness.needsYou`, `.signal`, `.answer`, `.reply`) and the `openSignals` count |
+| **Stage / step** | Wave 2 — A4.2: the phone's signal RPC |
+| **Status** | A4 refined (#214, re-running a browser shard that failed on two known tests). A4.1 in review (#215). A4.2 built: `openSignals` in the snapshot; `awareness.needsYou` / `.signal` / `.answer` / `.reply`; the coverage guard now credits typed `rpc<T>()` calls |
+| **Next action** | Merge #214, #215, then A4.2; then A4.3, workstreams on the phone (`workstreams.list`, `workstreams.detail`) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-1-reply` (stacked on `feat/phase-32-a4-refine`) |
+| **Branch** | `feat/phase-32-a4-2-phone-signals` (stacked on A4.1) |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -90,7 +90,7 @@
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile, refined in EXECUTION §4:
   - [ ] A4.1 Reply to the agents about a signal (shared by desktop and phone) — in review
-  - [ ] A4.2 The phone's signal RPC and live count
+  - [ ] A4.2 The phone's signal RPC and live count — in review
   - [ ] A4.3 Workstreams on the phone
   - [ ] A4.4 Push for a high signal
   - [ ] A4.5 The phone's screens, and a way to render them
@@ -278,6 +278,42 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A4.2 — the phone's signal RPC and live count
+The desktop half of journey **C2** on the phone. The approvals flow is the
+template: lists and details pulled over RPC, a count in the snapshot.
+
+- **The count.** `openSignals` in the snapshot: open high and medium signals
+  in the opened project, as the desktop tab counts them, by one indexed count
+  (`countNeedsYou`), cheap at the snapshot's 100 ms. A contract change on the
+  desktop moves it with no window open. The folder and ref watchers keep the
+  stored signals current (`scheduleSignalRefresh`), so the phone reads what is
+  stored rather than recomputing on each pull. A first draft did recompute,
+  and in the unit test's folder with no git it resolved every signal. That was
+  a sign the pull had no business changing state.
+- **The words.** `src/shared/lib/signal-words.ts` now holds the tab's
+  `kindWords` and `sideRootsOf`, plus `sideWords`: each side in one plain
+  sentence, from git and the parser ("billing-v2 changed validateCreateUser's
+  signature in …: … is now …", "checkout-fix imports it, in 1 file: …"). The
+  phone gets the digest's own lines and questions.
+- **The methods.** `awareness.needsYou` and `awareness.signal` (read);
+  `awareness.answer` and `awareness.reply` (write, and a confirmed pairing,
+  audited, the phone as the channel, the desktop told). A reply takes A4.1's
+  path, passed in so `mobile-awareness.ts` imports no server. A
+  `peer-capabilities` row each.
+- **Found: the coverage guard never credited typed calls.** `phone.rpc<T>(…)`
+  did not match its call pattern, so every typed phone call in the harness
+  counted for nothing. `breakpoint.waiting` looked tested only through its
+  unit test. `callsOf` now reads type arguments, a comparison
+  (`rpc < limit`) still does not count, and `inventory.test.ts` pins both.
+  The matrix gains the harness references it had been missing.
+- **Tests.** Unit: `mobile-awareness.test.ts` (9), `signal-words.test.ts` (4),
+  and the inventory guard (+1). Harness: `phone-awareness` (7) with a real
+  contract between two worktrees, a paired phone, a reply the codex agent
+  reads as from the phone, and an acknowledgement that is the person's; a
+  read-only phone sees but cannot answer. The phone parity, grants and
+  breakpoint harness tests still pass (39).
+- **Not yet.** No phone screen reads any of this; that is A4.5.
 
 ### 2026-09-29: A4.1 — message the agents about a signal
 Journey **C2**'s reply, built first for the desktop because the spec's "message

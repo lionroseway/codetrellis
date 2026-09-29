@@ -243,6 +243,19 @@ export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
   return true;
 }
 
+/**
+ * How many signals need the person (A4.2): open, high or medium, as the
+ * tab's count. One indexed count, cheap enough for the phone's snapshot,
+ * which is built every 100 ms.
+ */
+export function countNeedsYou(projectRoot: string): number {
+  const res = getDb().exec(
+    `SELECT COUNT(*) FROM awareness_signals WHERE project_root = ? AND state = 'open' AND severity IN ('high', 'medium')`,
+    [projectRoot],
+  );
+  return Number(res[0]?.values[0]?.[0] ?? 0);
+}
+
 const RANK = { high: 0, medium: 1, low: 2 } as const;
 
 /**

@@ -48,6 +48,7 @@ import { getHistorySize } from './terminal-history-service';
 import * as deviationService from './deviation-service';
 import * as remoteInteractionService from './remote-interaction-service';
 import { countWaitingHits } from './breakpoint-service';
+import { countNeedsYou } from './awareness-service';
 import { getAllAddresses } from './pairing-server';
 import { getCurrentPowerStatus } from './power-service';
 import { getActiveProjectPath } from '../server';
@@ -93,6 +94,12 @@ export interface SyncStateSnapshot {
    * when it moves. Live, so a phone already open sees a new one without a push.
    */
   waitingBreakpoints: number;
+  /**
+   * Phase 32 A4.2 — signals in the opened project that need the person
+   * (open, high or medium), as the desktop tab counts them. A count only:
+   * the phone reads them over `awareness.needsYou`.
+   */
+  openSignals: number;
   /**
    * All IPv4 addresses this desktop is reachable on (LAN + Tailscale/VPN),
    * ordered LAN-first. The companion persists these so a pairing made on the
@@ -467,6 +474,13 @@ export function collectSnapshot(): SyncStateSnapshot {
   let waitingBreakpoints = 0;
   try { waitingBreakpoints = countWaitingHits(); } catch { /* database not ready */ }
 
+  // --- A4.2: signals that need the person, in the opened project ---
+  let openSignals = 0;
+  try {
+    const root = getActiveProjectPath();
+    if (root) openSignals = countNeedsYou(root);
+  } catch { /* database not ready */ }
+
   // --- 11.1: power status (replaces mobile 4s poll) ---
   const powerStatus = getCurrentPowerStatus();
 
@@ -485,6 +499,7 @@ export function collectSnapshot(): SyncStateSnapshot {
     walkthroughActive,
     deviationCounts,
     waitingBreakpoints,
+    openSignals,
     deviceAddresses: safeAddresses(),
     powerStatus,
   };

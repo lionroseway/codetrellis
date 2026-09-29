@@ -69,31 +69,16 @@ export function digestLine(workstreams: readonly Workstream[], signals: readonly
   };
 }
 
-/** What a signal is, in two or three words. */
-export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string {
-  if (s.kind === 'stale-base') return 'Behind main';
-  if (s.kind === 'drift') return 'Outside its scope';
-  if (s.kind === 'contract') return s.subject.change === 'removed' ? 'Removed export' : 'Changed signature';
-  // Declared, not yet edited, on at least one side (A2.4).
-  const declared = s.subject.intended?.length ? ' · declared' : '';
-  return (s.subject.symbol ? 'Same function' : 'Same file') + declared;
-}
-
+// What a signal is and its sides' order are shared with the phone (A4.2).
 import { sideLabel } from '../../shared/lib/workstream-words';
-export { sideLabel };
+import { kindWords, sideRootsOf } from '../../shared/lib/signal-words';
+export { sideLabel, kindWords, sideRootsOf };
 
 /**
- * The sides a signal shows. A stale base is one workstream against main. A
- * contract has a direction: the side that changed it first, then the side
- * whose work imports it.
+ * The sides a signal shows, by name. A stale base is one workstream against
+ * main. A contract has a direction: the side that changed it first, then the
+ * side whose work imports it.
  */
-/** The workstreams a signal's sides stand for, in the order `sidesOf` names them (main, for a stale base, not included). */
-export function sideRootsOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>): string[] {
-  return s.kind === 'contract' && s.subject.by
-    ? [s.subject.by, ...s.workstreams.filter((r) => r !== s.subject.by)]
-    : [...s.workstreams];
-}
-
 export function sidesOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>, workstreams: readonly Workstream[]): string[] {
   const names = sideRootsOf(s).map((r) => sideLabel(r, workstreams));
   if (s.kind !== 'stale-base') return names;

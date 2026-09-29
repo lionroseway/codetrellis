@@ -186,6 +186,15 @@ describe('a test is credited with what it sends, not what it mentions (bug 49)',
     assert.deepEqual([...names].sort(), ['budget.get', 'create_plan', 'list_recent_projects', 'plan.delete', 'plan.list']);
   });
 
+  test('a call with type arguments is a call: phone.rpc<T>(…) is credited, a comparison is not (A4.2)', () => {
+    const names = invokedNames(`
+      const got = await phone.rpc<{ hits: Hit[]; map: Map<string, (x: number) => void> }>('awareness.needsYou');
+      const one = await phone.rpc<Detail>('awareness.signal', { id });
+      if (rpc < limit) log('not.a.call');
+    `);
+    assert.deepEqual([...names].sort(), ['awareness.needsYou', 'awareness.signal']);
+  });
+
   test("a test's own wrappers around callTool are callers, a wrapper of a wrapper too", () => {
     const names = invokedNames(`
       const json = async (tool: string, args: Record<string, unknown>) => {

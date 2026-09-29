@@ -68,6 +68,7 @@ const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   walkthroughActive: false,
   deviationCounts: { pending: 0, byPlan: [] },
   waitingBreakpoints: 0,
+  openSignals: 0,
 };
 
 // --- Dedupe helper -----------------------------------------------------------
