@@ -172,13 +172,42 @@ export function declaredFiles(intents: NonNullable<Workstream['intents']>): Arra
 }
 
 /**
+ * Each opening of a signal as a span, for replay (B5.2). A signal that is
+ * new, or came back after resolving, opens a span; one already open keeps
+ * its span, with the latest wording; a resolved one closes it. A signal
+ * open since before spans were kept opens its span at its first sighting.
+ */
+function recordSignalSpans(projectRoot: string, previous: readonly AwarenessSignal[], upserts: readonly AwarenessSignal[], resolved: readonly string[], now: number): void {
+  const db = getDb();
+  const before = new Map(previous.map((s) => [s.id, s]));
+  for (const s of upserts) {
+    const open = db.exec('SELECT opened_at FROM awareness_signal_spans WHERE signal_id = ? AND closed_at IS NULL', [s.id])[0]?.values[0];
+    if (open) {
+      db.run('UPDATE awareness_signal_spans SET severity = ?, summary = ?, workstreams = ? WHERE signal_id = ? AND opened_at = ?',
+        [s.severity, s.summary, JSON.stringify(s.workstreams), s.id, open[0]]);
+      continue;
+    }
+    const cameBack = before.get(s.id)?.state === 'resolved';
+    db.run(
+      `INSERT OR IGNORE INTO awareness_signal_spans (signal_id, project_root, kind, severity, summary, workstreams, opened_at, closed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [s.id, projectRoot, s.kind, s.severity, s.summary, JSON.stringify(s.workstreams), cameBack ? now : s.firstSeen],
+    );
+  }
+  for (const id of resolved) {
+    db.run('UPDATE awareness_signal_spans SET closed_at = ? WHERE signal_id = ? AND closed_at IS NULL', [now, id]);
+  }
+}
+
+/**
  * Recompute a project's signals and store what changed. Returns true when
  * anything did, after telling the listener. `projectRoot` is already
  * confined by the caller.
  */
 export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
   const drafts = computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot));
-  const { upserts, resolved, reopened } = reconcileSignals(loadSignals(projectRoot), drafts, now);
+  const previous = loadSignals(projectRoot);
+  const { upserts, resolved, reopened } = reconcileSignals(previous, drafts, now);
   if (upserts.length === 0 && resolved.length === 0) return false;
 
   const db = getDb();
@@ -208,6 +237,7 @@ export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
   for (const id of resolved) {
     db.run(`UPDATE awareness_signals SET state = 'resolved', resolved_at = ?, last_seen = ? WHERE id = ?`, [now, now, id]);
   }
+  recordSignalSpans(projectRoot, previous, upserts, resolved, now);
   markDirty();
   onChanged(projectRoot);
   return true;

@@ -47,6 +47,7 @@ import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from 
 import { releaseSettled } from './services/signal-breakpoints';
 import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
 import { startAgentEventLog, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
+import { stateAt } from './services/replay-state';
 import { startReplayFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
@@ -776,6 +777,22 @@ app.get('/api/replay/frames', (req, res) => {
       limit: num(req.query.limit) ?? DEFAULT_FRAME_LIMIT,
     }),
   });
+});
+
+// Phase 32 B5.2: the project as it was at a moment: the frame then and how
+// the graph differs from it now, each task's status, what was waiting on
+// the person, and the signals open. `at` defaults to now.
+app.get('/api/replay/state', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const raw = req.query.at;
+  if (raw !== undefined && (typeof raw !== 'string' || !/^\d+$/.test(raw))) {
+    res.status(400).json({ error: 'at must be a time in milliseconds' });
+    return;
+  }
+  const trim = (p: string) => p.replace(/[\\/]+$/, '');
+  const holds = !scanInFlight && !!lastScannedProject && trim(lastScannedProject) === trim(projectRoot);
+  res.json(stateAt(projectRoot, raw ? Number(raw) : Date.now(), holds));
 });
 
 app.get('/api/awareness', (req, res) => {

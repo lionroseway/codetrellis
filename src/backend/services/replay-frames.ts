@@ -332,9 +332,9 @@ export function noteRefsChanged(): void {
 
 // ── Reading frames ──────────────────────────────────────────────────
 
-export interface FrameQuery { from?: number; to?: number; limit?: number }
+export interface FrameQuery { from?: number; to?: number; limit?: number; newestFirst?: boolean }
 
-/** A project's frames between two times, oldest first. */
+/** A project's frames between two times, oldest first (or newest first). */
 export function listFrames(projectPath: string, q: FrameQuery = {}): ReplayFrame[] {
   const where = [`t.snapshot_type = 'frame'`, 't.project_path = ?'];
   const params: Array<string | number> = [trimRoot(projectPath)];
@@ -347,7 +347,7 @@ export function listFrames(projectPath: string, q: FrameQuery = {}): ReplayFrame
             t.commit_sha, t.git_branch, t.digest, t.same_as,
             json_array_length(COALESCE(o.files_json, t.files_json)), json_array_length(COALESCE(o.edges_json, t.edges_json))
      FROM trellis_snapshots t LEFT JOIN trellis_snapshots o ON o.id = t.same_as
-     WHERE ${where.join(' AND ')} ORDER BY t.created_at ASC, t.id ASC LIMIT ?`,
+     WHERE ${where.join(' AND ')} ORDER BY t.created_at ${q.newestFirst ? 'DESC' : 'ASC'}, t.id ${q.newestFirst ? 'DESC' : 'ASC'} LIMIT ?`,
     params,
   )[0]?.values ?? [];
   return rows.map((r: unknown[]) => ({
@@ -381,6 +381,8 @@ export function pruneFrames(now = Date.now()): number {
     [cutoff, cutoff],
   );
   const after = Number(db.exec(`SELECT COUNT(*) FROM trellis_snapshots WHERE snapshot_type = 'frame'`)[0]?.values[0]?.[0]) || 0;
+  // Signal spans (B5.2) last as long, counted from when they closed.
+  db.run('DELETE FROM awareness_signal_spans WHERE closed_at IS NOT NULL AND closed_at < ?', [cutoff]);
   if (after !== before) markDirty();
   return before - after;
 }
