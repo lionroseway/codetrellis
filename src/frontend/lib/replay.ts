@@ -58,7 +58,7 @@ export interface ReplayState {
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 /** 24-hour HH:MM, the same in every locale, so the chrome reads the same everywhere. */
-const hhmm = (t: number): string => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+export const hhmm = (t: number): string => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 
 /** The signals open then, as the inbox and the lanes read signals: all open at that moment. */
 export function signalsAsOf(state: ReplayState): AwarenessSignal[] {

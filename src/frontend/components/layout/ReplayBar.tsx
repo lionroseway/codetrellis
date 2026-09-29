@@ -16,6 +16,9 @@ import { useReplayStore } from '../../stores/replay-store';
 import { useProjectStore } from '../../stores/project-store';
 import { frameWords, replayRangeWords, toPlaybackFrames } from '../../lib/replay';
 
+/** The moment's words sit under the bar; the transport bar's own line stays empty. */
+const noSummary = (): string => '';
+
 export function ReplayStart() {
   const root = useProjectStore((s) => s.root);
   const active = useReplayStore((s) => s.active);
@@ -71,7 +74,7 @@ export function ReplayBar() {
       )}
       {frames.length > 0 && (
         <>
-          <PlaybackBar frames={playback} index={index} onIndexChange={(i) => { void setIndex(i); }} />
+          <PlaybackBar frames={playback} index={index} onIndexChange={(i) => { void setIndex(i); }} summaryOf={noSummary} />
           {frame && (
             <div className="text-[10.5px] text-foreground-muted" data-testid="replay-moment">
               {frameWords(frame)}

@@ -23,6 +23,7 @@ import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
 import { useReplayStore } from '../../stores/replay-store';
+import { hhmm } from '../../lib/replay';
 import { useGraphStore } from '../../stores/graph-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
@@ -1119,7 +1120,7 @@ export function MainCanvas() {
     <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
       {replayAt !== null && (
         <div data-testid="replay-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-accent/40 bg-background/80 px-3 py-1 text-[11px] text-accent shadow">
-          As it was at {new Date(replayAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          As it was at {hhmm(replayAt)}
           {replayGraph ? ` · ${replayGraph.files.length} files` : ''} · replaying
         </div>
       )}

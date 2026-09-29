@@ -21,7 +21,7 @@ import { useBreakpointsStore } from '../../stores/breakpoints-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { sectionsByBranch } from '../../lib/section-worktrees';
 import { useReplayState } from '../../stores/replay-store';
-import { hitsAsOf, signalsAsOf } from '../../lib/replay';
+import { hhmm, hitsAsOf, signalsAsOf } from '../../lib/replay';
 import { buildLanes, position, type LaneMark } from '../../lib/timeline-lanes';
 import type { AgentTurn } from '../../lib/agent-turns';
 
@@ -168,7 +168,7 @@ export function TimelineLanes({
         <span className="w-28 shrink-0" />
         <div className="flex-1 flex justify-between text-[9px] text-foreground-subtle font-mono">
           <span>{new Date(view.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-          <span data-testid="timeline-lanes-end">{replay ? `at ${new Date(replay.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'now'}</span>
+          <span data-testid="timeline-lanes-end">{replay ? `at ${hhmm(replay.at)}` : 'now'}</span>
         </div>
       </div>
     </div>

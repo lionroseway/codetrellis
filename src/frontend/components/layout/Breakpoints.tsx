@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Pause, OctagonAlert, X } from 'lucide-react';
 import { useReplayState } from '../../stores/replay-store';
+import { hhmm } from '../../lib/replay';
 import { useBreakpointsStore } from '../../stores/breakpoints-store';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { useProjectStore } from '../../stores/project-store';
@@ -110,7 +111,7 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
       {replayed ? (
         <div data-testid="breakpoint-replayed" className="mt-1.5 text-[10px] text-foreground-subtle">
           {hit.answeredAt
-            ? `Answered later, at ${new Date(hit.answeredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${labels[hit.decision ?? 'continue']}${hit.note ? `, “${hit.note}”` : ''}.`
+            ? `Answered later, at ${hhmm(hit.answeredAt)}: ${labels[hit.decision ?? 'continue']}${hit.note ? `, “${hit.note}”` : ''}.`
             : 'Not answered yet. Go back to live to answer it.'}
         </div>
       ) : (<>

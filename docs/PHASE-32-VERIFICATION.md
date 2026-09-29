@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 240 | 238 | 0 | 0 | 217 | 0 |
 | MCP tools | 195 | 195 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 78 | 71 | 1 | 0 | 78 | 0 |
-| Frontend components | 110 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 111 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 32 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 24 | 31 | 4 | 25 | 0 | 0 |
+| 0.4g Agents and MCP | 24 | 31 | 4 | 26 | 0 | 0 |
 | 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 32 | 0 |
@@ -576,7 +576,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (110)
+## Frontend components (111)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -670,6 +670,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/InspectorPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: sparse file view (m21) |  |
 | g | `layout/MainCanvas.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: change summary covered the toolbar; now one quiet line (M1). Minor: 4-row toolbar at 1024 (m23) |  |
 | g | `layout/PlanPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: "Agent active" vs "No agents" (M3) |  |
+| g | `layout/ReplayBar.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/Sidebar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/StatusBar.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: "1852/3680 linked" (m16) |  |
 | g | `layout/TimelineLanes.tsx` |  | n/a | n/a |  |  |  |
