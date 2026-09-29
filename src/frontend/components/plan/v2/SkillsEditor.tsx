@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plug, RotateCcw, Pencil, X, Link2, CheckCircle2, Circle } from 'lucide-react';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { useProjectStore } from '../../../stores/project-store';
-import type { PlanItem, ProjectSkill, Skill, SkillProof } from '@shared/types';
+import type { PlanItem, ProjectSkill, Skill, SkillProof, SkillProofSource } from '@shared/types';
 import {
   USE_LABEL, WHERE_LABEL, skillUse, withUse, withWhy, withWhere, whereText, whereValue,
   matchProjectSkills, fromProjectSkill, fromName, type SkillUse, type WhereKind,
@@ -52,7 +52,7 @@ export function SkillsEditor({
 
   // What is in effect comes from the server: the plan's tree holds summaries
   // without skills, so an ancestor's skills cannot be resolved here.
-  const [effective, setEffective] = useState<Array<{ skill: Skill; fromUid: string; fromTitle: string; proof?: SkillProof | null; pending?: { addedBy: string | null; commit: string | null } | null }> | null>(null);
+  const [effective, setEffective] = useState<Array<{ skill: Skill; fromUid: string; fromTitle: string; proof?: SkillProof | null; proofSource?: SkillProofSource | null; pending?: { addedBy: string | null; commit: string | null } | null }> | null>(null);
   const [refresh, setRefresh] = useState(0);
   const ownKey = JSON.stringify([item.skills ?? [], item.skillsMode, item.parentUid]);
   useEffect(() => {
@@ -71,6 +71,7 @@ export function SkillsEditor({
   const isOwn = (name: string) => own.some((s) => s.name === name);
   const fromOf = (name: string) => rows.find((r) => r.skill.name === name)?.fromTitle ?? null;
   const proofOf = (name: string) => effective?.find((r) => r.skill.name === name)?.proof ?? null;
+  const sourceOf = (name: string) => effective?.find((r) => r.skill.name === name)?.proofSource ?? null;
   const pendingOf = (name: string) => effective?.find((r) => r.skill.name === name)?.pending ?? null;
   const accept = async (name: string) => {
     const r = await fetch(`/api/items/${item.uid}/skill-arrivals/accept`, {
@@ -152,7 +153,7 @@ export function SkillsEditor({
                 )}
                 {/* Outside the location, so a long URL never truncates it away. */}
                 {where?.peopleOnly && <span className="text-[10.5px] italic text-foreground-subtle whitespace-nowrap" data-testid="skill-people-only">people only</span>}
-                <ProofBadge proof={proofOf(s.name)} use={use} />
+                <ProofBadge proof={proofOf(s.name)} source={sourceOf(s.name)} use={use} />
                 {!mine && <span className="text-[10px] text-foreground-subtle italic ml-auto" data-testid="skill-inherited">inherited from {fromOf(s.name)}</span>}
                 {mine && (
                   <span className="ml-auto flex items-center gap-1">
@@ -293,14 +294,17 @@ function SkillDetails({ skill, onSave }: { skill: Skill; onSave: (s: Skill) => v
  * Whether the skill was used (C1.3), once an agent has worked the task.
  * "Unknown" for agents that record no such thing, never "not used" on a guess.
  */
-function ProofBadge({ proof, use }: { proof: SkillProof | null; use: SkillUse }) {
+function ProofBadge({ proof, source, use }: { proof: SkillProof | null; source?: SkillProofSource | null; use: SkillUse }) {
   if (!proof) return null;
   const text = proof === 'used' ? '✓ used' : proof === 'not_used' ? `○ ${use === 'required' ? 'required' : 'recommended'}, not used` : 'use unknown';
   const tone = proof === 'used' ? 'text-success' : proof === 'not_used' ? 'text-warning' : 'text-foreground-subtle';
+  // A8.4: how the use was seen, since any client can now show one.
   const title = proof === 'used'
-    ? 'The agent working this task loaded this skill'
+    ? source === 'mcp'
+      ? 'The agent working this task read this skill through CodeTrellis (get_skill)'
+      : 'Claude Code\'s session log shows the agent working this task loaded this skill'
     : proof === 'not_used'
       ? 'A Claude Code agent is working this task and has not loaded this skill'
-      : 'This agent does not report which skills it loads';
-  return <span className={`text-[10.5px] whitespace-nowrap ${tone}`} title={title} data-testid="skill-proof" data-proof={proof}>{text}</span>;
+      : 'Nothing seen: this agent has not read the skill through CodeTrellis, and may have read the file itself';
+  return <span className={`text-[10.5px] whitespace-nowrap ${tone}`} title={title} data-testid="skill-proof" data-proof={proof} data-source={source ?? undefined}>{text}</span>;
 }

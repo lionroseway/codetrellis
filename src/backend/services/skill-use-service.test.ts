@@ -98,3 +98,28 @@ test('a plugin\'s skill loaded as plugin:name counts for the skill of that name'
   svc.recordSkillUse({ skill: 'pr-toolkit:pr-review', sessionId: 'cc-1', workstreamRoot: AUTH });
   assert.equal(svc.skillProof({ uid: 'cc' }, wanted)!.get('pr-review'), 'used');
 });
+
+test('any client (A8.4): a get_skill read is stored against that session\'s own working tasks, labelled mcp', () => {
+  session('codex-1', 'codex', AUTH);
+  session('codex-2', 'codex', AUTH);
+  item('t1', 'in_progress', 'codex-1');
+  item('t2', 'done', 'codex-1');
+  item('t3', 'in_progress', 'codex-2');
+  assert.deepEqual(svc.recordSkillRead({ skill: 'pr-review', sessionId: 'codex-1', workstreamRoot: AUTH }), ['t1']);
+  assert.equal(svc.skillProof({ uid: 't1' }, wanted)?.get('pr-review'), 'used');
+  assert.equal(svc.skillProof({ uid: 't3' }, wanted)?.get('pr-review'), 'unknown');
+  assert.deepEqual([...svc.skillUseSources('t1')], [['pr-review', 'mcp']]);
+  // Nothing claimed: nothing stored.
+  assert.deepEqual(svc.recordSkillRead({ skill: 'pr-review', sessionId: 'nobody', workstreamRoot: AUTH }), []);
+});
+
+test('how a use was seen: the first source, by name or as a plugin\'s', () => {
+  session('cc', 'claude-code', BILL);
+  item('t9', 'in_progress', 'cc');
+  svc.recordSkillUse({ skill: 'house:pr-review', sessionId: 'cc', workstreamRoot: BILL, at: 1 });
+  svc.recordSkillRead({ skill: 'pr-review', sessionId: 'cc', workstreamRoot: BILL, at: 2 });
+  const sources = svc.skillUseSources('t9');
+  assert.equal(svc.sourceOf(sources, 'pr-review'), 'mcp');
+  assert.equal(svc.sourceOf(new Map([['house:pr-review', 'session_log']]), 'pr-review'), 'session_log');
+  assert.equal(svc.sourceOf(sources, 'nope'), null);
+});

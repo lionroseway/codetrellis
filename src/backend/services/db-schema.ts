@@ -207,7 +207,10 @@ export const SCHEMA_PLANS_CORE = `
     skill TEXT NOT NULL,
     session_id TEXT,
     workstream_root TEXT,
-    at INTEGER NOT NULL
+    at INTEGER NOT NULL,
+    -- Phase 32 A8.4: how it was seen. 'session_log' (Claude Code's own log,
+    -- read by the watcher) or 'mcp' (read through get_skill, any client).
+    source TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_skill_uses_item ON skill_uses(item_uid, skill);
 

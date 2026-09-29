@@ -53,7 +53,7 @@ test.describe('Skill use', () => {
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ skills: [
         { skill: { name: 'typescript', source: 'lang', required: true }, fromUid: parent.uid, fromTitle: 'Payments', proof: 'not_used' },
-        { skill: { name: 'codetrellis-pr-review', source: 'skill', required: false, use: 'recommended', why: 'this task ends in a PR', where: { kind: 'repo', path: '.claude/skills/codetrellis-pr-review/SKILL.md' } }, fromUid: task.uid, fromTitle: 'Currency support', proof: 'used' },
+        { skill: { name: 'codetrellis-pr-review', source: 'skill', required: false, use: 'recommended', why: 'this task ends in a PR', where: { kind: 'repo', path: '.claude/skills/codetrellis-pr-review/SKILL.md' } }, fromUid: task.uid, fromTitle: 'Currency support', proof: 'used', proofSource: 'mcp' },
         { skill: { name: 'house-style', source: 'skill', required: false, use: 'recommended', where: { kind: 'link', url: 'https://wiki.example.com/style' } }, fromUid: task.uid, fromTitle: 'Currency support', proof: 'unknown' },
       ] }),
     }));
@@ -68,7 +68,9 @@ test.describe('Skill use', () => {
     await expect(proof('codetrellis-pr-review')).toHaveText('✓ used');
     await expect(proof('typescript')).toHaveText('○ required, not used');
     await expect(proof('house-style')).toHaveText('use unknown');
-    await expect(proof('house-style')).toHaveAttribute('title', /does not report which skills it loads/);
+    await expect(proof('house-style')).toHaveAttribute('title', /Nothing seen: this agent has not read the skill through CodeTrellis/);
+    // A8.4: how the use was seen, here a read through get_skill by a client with no session log.
+    await expect(proof('codetrellis-pr-review')).toHaveAttribute('title', 'The agent working this task read this skill through CodeTrellis (get_skill)');
 
     fs.mkdirSync(OUT, { recursive: true });
     await editor.screenshot({ path: path.join(OUT, 'skill-use.png') });

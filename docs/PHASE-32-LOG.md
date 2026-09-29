@@ -87,7 +87,7 @@
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
   - [x] A8.2 Client-neutral pre-edit check in the connector
   - [ ] A8.3 Hook adapters for other clients, each checked against its docs
-  - [ ] A8.4 Proof of use and session signals from MCP calls
+  - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -256,6 +256,28 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A8.4 — proof of skill use for any client
+- **Journey.** Codex, with no session watcher, claims a task recommending
+  `pr-review` and `migrations`; its claim says "Load each with
+  get_skill(name): pr-review, migrations." Before, both read "use unknown"
+  (nothing seen). It loads `pr-review`: the instructions come back, and the
+  task reads "✓ used" (hover: "read this skill through CodeTrellis
+  (get_skill)"); `migrations` still reads unknown, never "not used". The
+  sign-off pack says "✓ used (read through CodeTrellis)"; a Claude Code use
+  says "(Claude Code session log)".
+- **Built.** MCP `get_skill(name)` (capability `read`): the skill found in
+  the caller's own worktree through the project skills index (confined-fs;
+  a linked skill folder is never read), its use stored against that
+  session's working tasks with `source = 'mcp'` (`recordSkillRead`); the
+  watcher's rows are `session_log`. `skillUseSources` / `sourceOf`;
+  `proofSource` on `/api/items/:uid/skills` and in the sign-off pack;
+  `skills_load` in the skills block. Session signals beyond skills are
+  already derived from every MCP call (the Timeline's tool events), so this
+  step keeps to proof of use.
+- **Tests.** Unit `skill-use-service.test.ts`; harness
+  `tests/e2e/skill-proof-any-client.test.ts`; C1.3's harness and browser
+  specs updated for the labelled wording.
 
 ### 2026-09-29: A8.2 — a pre-edit check any client can run
 - **Journey.** Sam asks to be asked before `validateCreateUser` changes.

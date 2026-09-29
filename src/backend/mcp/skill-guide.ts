@@ -412,6 +412,7 @@ edges.
 | \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates |
 | \`assign_workstream(item_uid, workstream)\` | Which worktree a section is worked in (its branch, inherited below). Agents elsewhere are not offered its tasks and cannot claim them; \`get_next_item\` says how many were left out, and \`get_brief\` says where a task is worked |
 | \`get_brief(item_uid)\` | One read: the item, the guide, its materials, each criterion and what it still needs, any note sent back |
+| \`get_skill(name)\` | Load a project skill the task names (\`.claude/skills/<name>/SKILL.md\`) and follow it; reading it here shows the person the skill was used, whatever your client |
 | \`list_materials(plan_uid)\` | Every recorded file on a plan, and how read_material returns each |
 | \`read_material(attachment_uid, locator?)\` | A material's content as quoted text — CSV per sheet, markdown, text per page or slide, numbered lines — or the image itself; a Word document or deck already opened in CodeTrellis reads as the pages the person saw; logged on the item |
 | \`record_artefact(item_uid, path, role)\` | Record a file the item read (material), produced (output) or captured (evidence); hashed so approvals notice changes |
