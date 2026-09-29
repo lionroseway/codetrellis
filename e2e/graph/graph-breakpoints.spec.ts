@@ -59,7 +59,15 @@ test.describe('Breakpoints on the graph', () => {
     const name = target!.split('/').pop()!;
     await expect(file.getByTestId('node-breakpoint')).toHaveCount(0);
 
-    await file.click({ button: 'right' });
+    // The right-click goes to the node itself. It was clear when picked, but a
+    // layout still settling can slide it under the toolbar, which then took
+    // every click for two minutes (#196, Browser suite 1/3). The menu is what
+    // is under test, not hit-testing.
+    const rightClick = async (n: Locator) => {
+      const box = (await n.boundingBox())!;
+      await n.dispatchEvent('contextmenu', { bubbles: true, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 });
+    };
+    await rightClick(file);
     const ask = page.getByTestId('node-menu-breakpoint');
     await expect(ask).toHaveText('Ask me before this changes');
     await ask.click();
@@ -81,7 +89,7 @@ test.describe('Breakpoints on the graph', () => {
     await expect(set.getByTestId('breakpoint-set').filter({ hasText: target! })).toContainText('before it changes');
 
     // The same menu clears it.
-    await file.click({ button: 'right' });
+    await rightClick(file);
     await expect(ask).toHaveText('Stop asking before this changes');
     await page.screenshot({ path: path.join(OUT, 'graph-breakpoint-menu.png') });
     await ask.click();

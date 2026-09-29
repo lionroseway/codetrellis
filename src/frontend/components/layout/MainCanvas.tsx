@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { getAPI } from '../../bridge';
 import { fetchGraphAnswer } from '../../lib/graph-answer';
 import {
   ReactFlow,
@@ -386,11 +387,23 @@ export function MainCanvas() {
           return;
         }
         if (answer.kind === 'other-project') {
-          // The backend holds another project's graph. This one's stays on
-          // screen; with none yet, say why the canvas is empty.
+          // The backend holds another project's graph (another window opened
+          // it). One showing this project's graph keeps it: nothing to do.
+          if (hasGraphRef.current) { hasFetchedRef.current = null; setLoadingGraph(false); return; }
+          // With nothing on screen, scan this project again, which is what
+          // opening it did, and ask once that lands. Only an empty canvas
+          // does this, so two windows never take the scanner from each other
+          // over and over. A scan of the other project still running refuses
+          // ours: wait a second and try again.
+          if (tries++ < 120) {
+            void getAPI().scanProject(forRoot)
+              .then(() => { if (!cancelled) attempt(); })
+              .catch(() => { if (!cancelled) retry = setTimeout(attempt, 1000); });
+            return;
+          }
           hasFetchedRef.current = null;
           setLoadingGraph(false);
-          if (!hasGraphRef.current) setGraphLoadError(`the app is holding another project's graph (${answer.project}); rescan this project to see its own`);
+          setGraphLoadError(`the app is holding another project's graph (${answer.project}); rescan this project to see its own`);
           return;
         }
         const message = answer.kind === 'error' ? answer.message : 'a scan did not finish in two minutes';
