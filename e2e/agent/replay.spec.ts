@@ -126,6 +126,30 @@ test.describe('Replay', () => {
     await expect(page.getByTestId('replay-start')).toHaveCount(0); // it lives on the Timeline tab
   });
 
+  test('catch-up (B5.4): back after an hour, the inbox offers to play it at 4×, and it plays to now', async ({ page }) => {
+    await serve(page);
+    // Sam last looked at the inbox an hour ago.
+    await page.addInitScript((at: number) => {
+      window.localStorage.setItem('codetrellis.awareness.lastViewed', String(at));
+    }, now - 60 * MIN);
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: /^Awareness( \d+)?$/ }).click();
+
+    const catchUp = page.getByTestId('catch-up');
+    await expect(catchUp).toHaveText(/^Watch what happened since \d\d:\d\d at 4×$/);
+    await page.screenshot({ path: path.join(OUT, 'replay-catch-up.png') });
+    await catchUp.click();
+
+    // It plays on its own, at 4×, and stops at the last moment.
+    await expect(page.getByTestId('replay-bar')).toBeVisible();
+    await expect(page.getByTestId('replay-moment')).toHaveText(/^A commit landed \(c0ffee1\)/, { timeout: 10_000 });
+    await expect(page.getByTestId('replay-bar').getByTitle('Playback speed')).toHaveText(/4×/);
+    // The canvas's views wait while replaying.
+    await expect(page.getByRole('button', { name: 'Live', exact: true }).first()).toBeDisabled();
+    await page.getByTestId('replay-live').click();
+    await expect(page.getByRole('button', { name: 'Live', exact: true }).first()).toBeEnabled();
+  });
+
   test('nothing recorded yet: the bar says what makes a moment', async ({ page }) => {
     await serve(page);
     await page.route('**/api/replay/frames?*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ frames: [] }) }));

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B5.3: one clock in the window |
-| **Status** | B5.1 (#209) and B5.2 (#210) merged. B5.3 in review: a replay bar on every tab, the Timeline, inbox, task statuses and canvas at the cursor's moment, read-only, and back to live |
-| **Next action** | Merge B5.3's PR when green; then B5.4, catch-up from when the person last looked, and `get_state_at` for any MCP client |
+| **Stage / step** | Wave 2 — B5.4: catch-up and `get_state_at` |
+| **Status** | B5.1–B5.3 merged or in review (#209, #210, #211). B5.4 in review: the inbox offers "Watch what happened since 14:50 at 4×", which plays the moments since the last visit; `get_state_at` gives any MCP client the same moment. B5 is done when it merges |
+| **Next action** | Merge B5.3 (#211) and B5.4 when green; tick B5; status page; then A4 (the phone) per EXECUTION §2 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b5-3-one-clock` |
+| **Branch** | `feat/phase-32-b5-4-catch-up` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -135,7 +135,7 @@
 - [ ] B5 Replay
   - [x] B5.1 Frames: project, SHA, session; turn end, status change, commit ([#209](https://github.com/lionroseway/codetrellis/pull/209))
   - [x] B5.2 The state at a moment ([#210](https://github.com/lionroseway/codetrellis/pull/210))
-  - [ ] B5.3 One clock in the window
+  - [x] B5.3 One clock in the window ([#211](https://github.com/lionroseway/codetrellis/pull/211))
   - [ ] B5.4 Catch-up, and `get_state_at`
 - [ ] B6 Stack view
 - [ ] B7 Conferring
@@ -270,6 +270,30 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: B5.4 — catch-up, and the same moment for any agent
+- **The journey (G1, finished).** Sam comes back after an hour. The inbox's
+  digest offers "Watch what happened since 14:50 at 4×" (when the last visit
+  was more than five minutes ago; the visit time is the one the digest's
+  "new since you last looked" already kept). It opens replay from that
+  moment and plays at once at 4×, stopping at the last recorded moment.
+- **`get_state_at(at, project_path?)`** (capability `read`, in
+  `awareness-tools.ts`): the answer replay shows, for any MCP client: the
+  frame then (reasons, commit, branch, agent), how the graph differs now
+  (counts and up to 20 files), each task's status then with `status_now`,
+  the calls waiting then, the signals open then. `at` is ISO 8601 or
+  milliseconds; anything else is an error naming both. The graph difference
+  is given only when the server holds the project and is not scanning
+  (`holdsProject`, from the frames service).
+- **Also.** While replaying, the canvas's Live / Baseline / Planned / Diff
+  buttons are disabled and none shows as pressed (B5.3 left Live lit beside
+  "As it was at…"). `PlaybackBar` takes `autoPlaySpeed`.
+- **Tests.** Harness: `get_state_at` at the held moment (the call waiting,
+  answered later, the collision open, a frame), an ISO time before
+  everything (the task pending, no signals), a time that is not one.
+  Browser: the catch-up offer after an hour away (screenshot
+  `replay-catch-up.png`), it plays at 4× to the last moment, the canvas
+  views disabled while replaying and back after.
 
 ### 2026-09-29: B5.3 — one clock in the window
 - **The journey (G1).** On the Timeline tab, "Replay the last two hours". A

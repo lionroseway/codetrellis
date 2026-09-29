@@ -18,7 +18,7 @@ records that — but "✗ none" is proof of a gap.
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
 | REST routes | 240 | 238 | 0 | 0 | 217 | 0 |
-| MCP tools | 195 | 195 | 0 | 0 | 185 | 0 |
+| MCP tools | 196 | 196 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 78 | 71 | 1 | 0 | 78 | 0 |
 | Frontend components | 111 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 32 | n/a | n/a | n/a | 0 | 0 |
@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 24 | 31 | 4 | 26 | 0 | 0 |
+| 0.4g Agents and MCP | 24 | 32 | 4 | 26 | 0 | 0 |
 | 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 32 | 0 |
@@ -43,8 +43,8 @@ records that — but "✗ none" is proof of a gap.
 
 ## MCP tools: registry vs capability matrix
 
-- Registered by the server: **195**
-- Rows in `TOOL_CAPABILITIES`: **195**
+- Registered by the server: **196**
+- Rows in `TOOL_CAPABILITIES`: **196**
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
@@ -293,7 +293,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 1 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
 | l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
-## MCP tools (195)
+## MCP tools (196)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -412,6 +412,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `get_log_path` | ui · read | ✗ none | 1 | ✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28 |  |  |
 | g | `get_logs` | ui · read | ✗ none | 1 | ✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28 |  |  |
 | g | `get_settings` | ui · read | ✗ none | 1 | ✓ 0.4g: reads back what update_settings wrote; no secrets in settings (cdev-phase5) |  |  |
+| g | `get_state_at` | awareness · read | ✗ none | 1 |  |  |  |
 | g | `list_workstreams` | awareness · read | ✗ none | 3 |  |  |  |
 | g | `navigate_item_back` | session · write | ✗ none | 1 | ✓ 0.4g: selection steps back (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `navigate_item_forward` | session · write | ✗ none | 1 | ✓ 0.4g: and forward (agent-ui-tools, mcp-ui-tools.spec) |  |  |

@@ -358,6 +358,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   declare_intent: 'write',
   // A2.6: the agent's own note beside a signal; it never sets the person's answer.
   acknowledge_signal: 'write',
+  // B5.4: the project as it was at a moment. Reads only, like replay.
+  get_state_at: 'read',
 });
 
 export class McpAuthorizationError extends Error {

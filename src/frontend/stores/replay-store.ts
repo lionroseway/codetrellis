@@ -33,15 +33,17 @@ interface ReplayStore {
   statuses: Record<string, string | null>;
   loading: boolean;
   error: string | null;
+  /** Catch-up (B5.4): play at once at this speed, from where the person left off. */
+  autoplay: 4 | null;
   /** Start replaying the project's recorded moments since `from` (default: the last two hours). */
-  enter: (root: string, from?: number) => Promise<void>;
+  enter: (root: string, from?: number, opts?: { catchUp?: boolean }) => Promise<void>;
   /** Move the cursor to a frame. */
   setIndex: (index: number) => Promise<void>;
   /** Back to live. */
   exit: () => void;
 }
 
-const EMPTY = { frames: [] as ReplayFrameInfo[], index: 0, state: null, graph: null, statuses: {} as Record<string, string | null>, loading: false, error: null };
+const EMPTY = { frames: [] as ReplayFrameInfo[], index: 0, state: null, graph: null, statuses: {} as Record<string, string | null>, loading: false, error: null, autoplay: null };
 
 /** Each cursor move numbers its reads; a slower earlier read never replaces a later one. */
 let generation = 0;
@@ -51,9 +53,9 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   root: null,
   ...EMPTY,
 
-  enter: async (root, from) => {
+  enter: async (root, from, opts) => {
     const mine = ++generation;
-    set({ active: true, root, ...EMPTY, loading: true });
+    set({ active: true, root, ...EMPTY, loading: true, autoplay: opts?.catchUp ? 4 : null });
     try {
       const since = from ?? Date.now() - REPLAY_WINDOW_MS;
       const res = await fetch(`/api/replay/frames?project=${encodeURIComponent(root)}&from=${since}`);

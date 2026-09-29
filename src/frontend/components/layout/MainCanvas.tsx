@@ -1202,13 +1202,15 @@ export function MainCanvas() {
                   <button
                     key={mode}
                     onClick={() => setTrellisMode(mode)}
-                    aria-pressed={trellisMode === mode}
-                    className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
-                      trellisMode === mode
+                    // While replaying (B5.3), the canvas is none of these: it is the frame's graph.
+                    disabled={replayAt !== null}
+                    aria-pressed={replayAt === null && trellisMode === mode}
+                    className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all disabled:opacity-40 ${
+                      replayAt === null && trellisMode === mode
                         ? `bg-white/[0.08] ${color} shadow-[0_0_6px_currentColor]`
                         : 'text-zinc-500 hover:text-zinc-300'
                     }`}
-                    title={`${label} view`}
+                    title={replayAt !== null ? 'Replaying: go back to live to change the view' : `${label} view`}
                   >
                     <Icon size={11} />
                     {label}

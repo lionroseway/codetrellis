@@ -23,6 +23,8 @@ import {
   MAX_INTENT_PATHS, MAX_INTENT_SYMBOLS, MAX_INTENT_SUMMARY,
 } from '../../services/intent-service';
 import { getActiveSessions } from '../../services/session-service';
+import { stateAt } from '../../services/replay-state';
+import { holdsProject } from '../../services/replay-frames';
 import { importersOf, type Importer } from '../../services/importers';
 import { enforceEdit, editView } from '../../services/code-breakpoints';
 import { enforceSignalsForSession, signalHeldText } from '../../services/signal-breakpoints';
@@ -127,6 +129,64 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+
+  // Phase 32 B5.4: the project as it was at a moment, for any MCP client —
+  // the same answer replay shows the person (B5.2).
+  server.registerTool(
+    'get_state_at',
+    {
+      description:
+        'The project as it was at a past moment: the replay frame at or before it (why it was taken: a turn ended, a ' +
+        'task changed status, a commit landed; and at which commit), how the code graph now differs from that frame, ' +
+        'each task\'s status then (with its status now when that differs), the calls that were waiting on the person ' +
+        'then, and the signals open then. Use it to answer "what was going on when…" or to see what changed while ' +
+        'you were away. `at` is an ISO 8601 time or milliseconds since the epoch. Read-only.',
+      inputSchema: {
+        at: z.union([z.string().min(1), z.number()]).describe('The moment: an ISO 8601 time, or milliseconds since the epoch.'),
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ at, project_path }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return noProject;
+      const when = typeof at === 'number' ? at : Date.parse(at);
+      if (!Number.isFinite(when)) {
+        return { isError: true, content: [{ type: 'text' as const, text: 'at must be an ISO 8601 time or milliseconds since the epoch.' }] };
+      }
+      const state = stateAt(root, when, holdsProject(root));
+      const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
+      const since = state.sinceFrame;
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            project_path: root,
+            at: iso(when),
+            frame: state.frame && {
+              at: iso(state.frame.at), reasons: state.frame.reasons, commit: state.frame.commitSha,
+              branch: state.frame.branch, agent: state.frame.agentType,
+            },
+            since_frame: since && {
+              added: since.addedFiles.length, removed: since.removedFiles.length, modified: since.modifiedFiles.length,
+              files: [...since.addedFiles, ...since.modifiedFiles, ...since.removedFiles].slice(0, 20),
+            },
+            tasks: state.tasks.map((t) => ({
+              uid: t.uid, title: t.title, plan: t.planTitle, status: t.status,
+              ...(t.statusNow !== undefined ? { status_now: t.statusNow } : {}),
+            })),
+            waiting: state.waiting.map((h) => ({
+              ref: h.ref, agent: h.agent, action: h.action, item: h.itemTitle, path: h.path, breach: h.breach,
+              waiting_since: iso(h.hitAt), answered_at: iso(h.answeredAt),
+            })),
+            signals: state.signals.map((s) => ({
+              id: s.id, kind: s.kind, severity: s.severity, summary: s.summary, workstreams: s.workstreams,
+              opened_at: iso(s.openedAt), closed_at: iso(s.closedAt),
+            })),
+          }, null, 2),
+        }],
+      };
+    },
+  );
   server.registerTool(
     'check_footprint',
     {

@@ -136,6 +136,11 @@ export function frameRefusal(projectPath: string, now: HeldProject): FrameSkip |
   return null;
 }
 
+/** Whether the server's graph is `projectPath`'s now (held, and no scan running). */
+export function holdsProject(projectPath: string): boolean {
+  return frameRefusal(projectPath, held()) === null;
+}
+
 // ── Taking a frame ──────────────────────────────────────────────────
 
 function git(root: string, args: string[]): string | null {

@@ -43,15 +43,17 @@ interface Props {
    * moment was elsewhere and passes one that returns nothing.
    */
   summaryOf?: (frame: PlaybackFrame) => string;
+  /** Start playing at once at this speed (catch-up, B5.4). */
+  autoPlaySpeed?: (typeof SPEEDS)[number];
 }
 
 /** Milliseconds per frame, by speed multiplier. */
 const BASE_INTERVAL_MS = 1200;
 const SPEEDS = [0.5, 1, 2, 4] as const;
 
-export function PlaybackBar({ frames, index, onIndexChange, notes, summaryOf }: Props) {
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
+export function PlaybackBar({ frames, index, onIndexChange, notes, summaryOf, autoPlaySpeed }: Props) {
+  const [playing, setPlaying] = useState(autoPlaySpeed !== undefined);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(autoPlaySpeed ?? 1);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const atEnd = index >= frames.length - 1;

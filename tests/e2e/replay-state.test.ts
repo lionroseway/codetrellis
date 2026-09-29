@@ -148,6 +148,29 @@ test.describe.serial('The state at a moment', () => {
     for (const f of [...started.sinceFrame!.addedFiles, ...started.sinceFrame!.modifiedFiles]) expect(f.startsWith('/')).toBe(false);
   });
 
+  test('any MCP client asks the same with get_state_at (B5.4)', async () => {
+    const ask = async (at: number | string) => codex.callTool('get_state_at', { at });
+    const held = JSON.parse((await ask(moments.held)).answer) as {
+      at: string; frame: { reasons: string[] } | null; tasks: Array<{ uid: string; status: string; status_now?: string }>;
+      waiting: Array<{ ref: string; agent: string; answered_at: string | null }>; signals: Array<{ kind: string; closed_at: string | null }>;
+    };
+    expect(held.at).toBe(new Date(moments.held).toISOString());
+    expect(held.waiting).toHaveLength(1);
+    expect(held.waiting[0].agent).toBe('codex');
+    expect(held.waiting[0].answered_at).not.toBeNull();
+    expect(held.signals.map((x) => x.kind)).toEqual(['collision']);
+    expect(held.frame).not.toBeNull();
+
+    // An ISO time works as well as milliseconds.
+    const before = JSON.parse((await ask(new Date(moments.before).toISOString())).answer) as typeof held;
+    expect(before.tasks.find((t) => t.uid === itemUid)).toMatchObject({ status: 'pending' });
+    expect(before.signals).toEqual([]);
+
+    const bad = await ask('last tuesday');
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toMatch(/ISO 8601/);
+  });
+
   test('refused: no project, a project not opened, an `at` that is not a time', async () => {
     expect((await raw('GET', '/api/replay/state')).status).toBe(400);
     expect((await raw('GET', `/api/replay/state?project=${encodeURIComponent('/not/opened')}`)).status).toBe(403);

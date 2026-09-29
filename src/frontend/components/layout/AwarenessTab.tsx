@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Radar, ArrowLeftRight, ArrowRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Radar, ArrowLeftRight, ArrowRight, History } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
-import { useReplayState } from '../../stores/replay-store';
-import { signalsAsOf } from '../../lib/replay';
+import { useReplayState, useReplayStore } from '../../stores/replay-store';
+import { hhmm, signalsAsOf } from '../../lib/replay';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { usePlanStore } from '../../stores/plan-store';
@@ -62,6 +62,9 @@ export function useAwarenessFeed(): number {
 
 /** When the person last had the tab open, per browser (A3.1). Unreadable storage just means "no last visit". */
 const LAST_VIEWED_KEY = 'codetrellis.awareness.lastViewed';
+/** A visit sooner than this after the last is not worth catching up on. */
+const CATCH_UP_AFTER_MS = 5 * 60 * 1000;
+
 function readLastViewed(): number | null {
   try {
     const v = Number(window.localStorage.getItem(LAST_VIEWED_KEY));
@@ -116,6 +119,18 @@ export function AwarenessTab() {
             <div data-testid="awareness-new-since" className="mt-0.5 text-[10px] text-warning">
               {distilled.newSince} new since you last looked ({new Date(lastViewed).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})
             </div>
+          )}
+          {/* Catch-up (B5.4): what happened since the last visit, played at 4×. */}
+          {!replay && lastViewed && liveNow - lastViewed > CATCH_UP_AFTER_MS && (
+            <button
+              type="button"
+              data-testid="catch-up"
+              onClick={() => { if (root) void useReplayStore.getState().enter(root, lastViewed, { catchUp: true }); }}
+              className="mt-1 flex items-center gap-1 text-[10px] text-accent hover:underline"
+              title="Step through every recorded moment since then: the graph, the tasks and this inbox as they were"
+            >
+              <History size={10} />Watch what happened since {hhmm(lastViewed)} at 4×
+            </button>
           )}
           {/* The digest (A3.1): what needs you, a line per pair of workstreams, not a stream. */}
           {distilled.lines.length > 0 && (
