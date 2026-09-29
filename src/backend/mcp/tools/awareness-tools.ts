@@ -11,7 +11,9 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import fs from 'node:fs';
-import { listWorkstreams } from '../../services/workstream-service';
+import { listWorkstreams, getSymbolParser } from '../../services/workstream-service';
+import { lineChangesFor, cleanRelPath } from '../../services/line-changes';
+import { hunkSentence } from '../../../shared/lib/line-changes';
 import { refreshSignals, listSignals, filesDefining } from '../../services/awareness-service';
 import { markTold, recordNote, toldFor, MAX_NOTE } from '../../services/awareness-notices';
 import { buildDigest, digestText } from '../../../shared/lib/awareness-digest';
@@ -164,6 +166,58 @@ export function register(server: McpServer, deps: ToolDeps): void {
         };
       });
       return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, your_workstream: mine, paths: report }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'get_line_changes',
+    {
+      description:
+        'Which lines of a file other workstreams have changed, from git: for each workstream changing it (yours left out), ' +
+        'the runs of lines added, changed or removed against its merge base with main, the functions they fall in, and ' +
+        'whether each is committed yet, with a sentence per run ("billing-v2 changed 40–52, in validateCreateOrder, not ' +
+        'committed"). Name a workstream (branch or id) to see just that one, yours included. Pass diff: true for the diff ' +
+        'text as well. Binary and very large files say so instead of lines. Use it before editing a file check_footprint ' +
+        'says someone else is changing, to keep clear of their lines.',
+      inputSchema: {
+        path: z.string().min(1).max(300).describe('The file, relative to the repository root.'),
+        workstream: z.string().max(300).optional().describe('One workstream, by branch name or id (its folder, or branch:<name>).'),
+        diff: z.boolean().optional().describe('Also return the unified diff text (cut at 20,000 characters).'),
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ path: file, workstream, diff, project_path }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return noProject;
+      const rel = cleanRelPath(file);
+      if (!rel) return { isError: true, content: [{ type: 'text' as const, text: 'path must be a file relative to the repository root.' }] };
+      const mine = callerWorkstream(deps.sessionId);
+      const canon = (p: string) => { try { return fs.realpathSync.native(p); } catch { return p; } };
+      const workstreams = listWorkstreams(root, { includeIdle: true, fresh: true });
+      if (workstream && !workstreams.some((w) => w.root === workstream || w.branch === workstream)) {
+        return { isError: true, content: [{ type: 'text' as const, text: `No workstream ${workstream} in this project. list_workstreams names them.` }] };
+      }
+      const changes = lineChangesFor(workstreams, rel, getSymbolParser(), {
+        workstream: workstream ?? null,
+        exclude: (w) => !!mine && canon(w.root) === canon(mine),
+        diff: diff === true,
+      });
+      const nameOf = (c: { branch: string | null; workstream: string }) => c.branch ?? path.basename(c.workstream);
+      const says = changes.flatMap((c) => c.status === 'changed'
+        ? c.hunks.map((h) => hunkSentence(nameOf(c), h))
+        : c.status === 'unchanged' ? [`${nameOf(c)} does not change ${rel}`] : [`${nameOf(c)} changes ${rel}: ${c.status.replace('-', ' ')}, no lines shown`]);
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            project_path: root,
+            path: rel,
+            your_workstream: mine,
+            says: says.length ? says : [`No other workstream changes ${rel}.`],
+            changes,
+          }, null, 2),
+        }],
+      };
     },
   );
 

@@ -202,6 +202,48 @@ export interface WorkstreamChanges {
   uncommitted?: number;
 }
 
+// ── Line changes (Phase 32 B3.1) ─────────────────────────────────────
+
+/**
+ * One run of changed lines in a workstream's copy of a file, against its
+ * merge base with main. From git, never from an agent's report.
+ */
+export interface LineHunk {
+  /** `added`: no base lines replaced; `removed`: no lines in its copy; else `changed`. */
+  kind: 'added' | 'changed' | 'removed';
+  /** In the base version: first line and how many (0 for `added`; start is the line before). */
+  old: { start: number; lines: number };
+  /** In its copy: first line and how many (0 for `removed`; start is the line before). */
+  new: { start: number; lines: number };
+  /** The innermost functions, methods or types the lines fall in (base side for `removed`). */
+  functions: string[];
+  /** False when any of it is not committed yet. */
+  committed: boolean;
+}
+
+/** One workstream's changed lines in one file (B3.1). */
+export interface WorkstreamLineChanges {
+  /** The workstream's id (its folder, or `branch:<name>`). */
+  workstream: string;
+  branch: string | null;
+  /** Relative to the repository root. */
+  path: string;
+  /**
+   * `changed` with hunks; `unchanged` when it does not change the file;
+   * `binary` and `too-large` say so instead of lines; `unreadable` when the
+   * copy could not be read inside its folder (a link out of it, say).
+   */
+  status: 'changed' | 'unchanged' | 'binary' | 'too-large' | 'unreadable';
+  hunks: LineHunk[];
+  /** Lines added and removed, as `git diff --numstat` counts them. */
+  added: number;
+  removed: number;
+  /** The unified diff, only when asked for. */
+  diff?: string;
+  /** The diff was cut short. */
+  diffTruncated?: boolean;
+}
+
 // ── Awareness signals (Phase 32 A1.6) ────────────────────────────────
 
 /**

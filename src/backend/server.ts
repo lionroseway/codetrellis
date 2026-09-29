@@ -39,6 +39,7 @@ import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
 import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './services/capability-token';
 import { commitsByWorkstream } from './services/workstream-commits';
+import { lineChangesFor, cleanRelPath } from './services/line-changes';
 import { normaliseSkills } from './services/skill-model';
 import { listProjectSkills } from './services/skills-service';
 import { skillProof } from './services/skill-use-service';
@@ -49,7 +50,7 @@ import { startAgentEventLog, listAgentEvents, setEventPublisher, DEFAULT_LIMIT a
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
-import { listWorkstreams, setClaudeSessionSource, setSymbolParser } from './services/workstream-service';
+import { listWorkstreams, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
 import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked, worktreeDirFor, usableBase } from './services/section-workstreams';
 import { suggestSectionBranch } from '../shared/lib/branch-name';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
@@ -800,6 +801,25 @@ app.get('/api/workstreams/commits', (req, res) => {
   const asked = typeof req.query.since === 'string' && /^\d+$/.test(req.query.since) ? Number(req.query.since) : now - 2 * 60 * 60 * 1000;
   const since = Math.min(now, Math.max(now - 24 * 60 * 60 * 1000, asked));
   res.json({ since, commits: commitsByWorkstream(listWorkstreams(projectRoot, { includeIdle: true }), since) });
+});
+
+// One file's changed lines in each workstream (Phase 32 B3.1): hunks against
+// the merge base with main, the functions they fall in, committed or not.
+// `workstream` picks one by id or branch among those listWorkstreams found,
+// never a folder from the request; without it, every workstream changing the
+// file. The copy is read through confined-fs with its folder as the root.
+app.get('/api/workstreams/changes', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const rel = cleanRelPath(req.query.path);
+  if (!rel) { res.status(400).json({ error: 'path must be a file relative to the repository root.' }); return; }
+  const named = typeof req.query.workstream === 'string' && req.query.workstream ? req.query.workstream : null;
+  const workstreams = listWorkstreams(projectRoot, { includeIdle: true, fresh: true });
+  if (named && !workstreams.some((w) => w.root === named || w.branch === named)) {
+    res.status(404).json({ error: `No workstream ${named} in this project.` });
+    return;
+  }
+  res.json({ path: rel, changes: lineChangesFor(workstreams, rel, getSymbolParser(), { workstream: named, diff: req.query.diff === '1' }) });
 });
 
 // The skills the opened project has (Phase 32 C1): `.claude/skills/*/SKILL.md`,
