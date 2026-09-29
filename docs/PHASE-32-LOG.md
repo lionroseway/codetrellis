@@ -292,6 +292,11 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   `human` not `unverified`, audited, the live count moves, a read-only phone
   cannot answer). The mobile app has no test runner; its code is typechecked
   and linted.
+- **Found in CI (#205).** Five browser specs clicked `reachableNodes()[0]`
+  and timed out: the node was reachable when sampled, mid-layout, then settled
+  under the canvas's "Check now" button (the new files moved this repository's
+  graph). `reachableNodes` now counts a node only when two samples 250 ms apart
+  put it in the same place with its centre uncovered.
 
 ### 2026-09-29: A2.7 — signatures for the other eight languages
 - **Journey.** `billing-v2` gives `ReconcileJob.runCount` a parameter

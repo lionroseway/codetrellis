@@ -381,20 +381,28 @@ export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Lo
   // Polled: right after load the layout is still settling (nodes placed
   // off-screen, then fitted), and a toast or a broadcast-opened workspace can
   // cover the canvas for a moment. Sampled once, that returned no nodes.
+  //
+  // And only once it has stopped moving: a node reachable mid-animation can
+  // settle under the canvas's own controls ("Check now", top right), which
+  // then take the click (#205). So a node counts when two samples 250 ms
+  // apart put it in the same place with its centre uncovered both times.
   const deadline = Date.now() + timeoutMs;
   let ids: string[] = [];
+  let previous = new Map<string, string>();
   for (;;) {
-    ids = await page.evaluate(() =>
+    const sample = await page.evaluate(() =>
       Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node'))
-        .filter((n) => {
+        .map((n) => {
           const r = n.getBoundingClientRect();
-          if (r.width === 0 || r.height === 0) return false;
+          if (r.width === 0 || r.height === 0 || typeof n.dataset.id !== 'string') return null;
           const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          return hit !== null && n.contains(hit);
+          if (hit === null || !n.contains(hit)) return null;
+          return { id: n.dataset.id, at: [r.left, r.top, r.width, r.height].map((v) => Math.round(v)).join(',') };
         })
-        .map((n) => n.dataset.id)
-        .filter((id): id is string => typeof id === 'string'),
+        .filter((x): x is { id: string; at: string } => x !== null),
     );
+    ids = sample.filter((s) => previous.get(s.id) === s.at).map((s) => s.id);
+    previous = new Map(sample.map((s) => [s.id, s.at]));
     if (ids.length > 0 || Date.now() > deadline) break;
     await page.waitForTimeout(250);
   }
