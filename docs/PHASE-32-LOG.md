@@ -98,7 +98,7 @@
   - [x] A4.6 M4 done-when, end to end, and docs (#221)
 - [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
   - [ ] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch — in review
-  - [ ] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft`
+  - [ ] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` — built, PR after A5.1
   - [ ] A5.3 The opt-in "no open high signals" check
   - [ ] A5.4 The review queue and `get_review_queue`
   - [ ] A5.5 The Review tab
@@ -287,6 +287,42 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A5.2 — other work in flight, in the review and the PR body
+A review said nothing about any other work. Now `review_plan` (JSON and
+markdown) and `get_pr_draft` carry "Other work in flight" for the workstream
+under review.
+
+- **Which workstream is under review.** In order:
+  1. the branch the review's `after` side names;
+  2. the branch the plan's items name;
+  3. the opened checkout.
+
+  A branch with a worktree is that folder, as signals name it
+  (`review-other-work.ts`).
+- **What it says.** Each overlap naming that workstream, in the desktop's
+  words (`src/shared/lib/other-work.ts`, pure, so the tab and the phone can
+  show the same). For each, what happened to it:
+  - open, or open again;
+  - acknowledged, with each agent's note;
+  - marked intended, written down as "a decision, not an accident", with who
+    made it (the person, from their phone, or unverified through the local
+    API);
+  - set aside;
+  - fixed (the five most recent).
+
+  A contract says what merging means, in the direction that matters. For
+  the changer: "Merging this changes validateCreateUser; checkout-fix imports
+  it and will need updating". For the importer: merge after it.
+- **The PR draft** warns while a high overlap is open. `openHigh` is also on
+  the section, ready for A5.3's check and A5.4's readiness.
+- **Tests.**
+  - Unit: `other-work.test.ts` (7).
+  - Harness: `review-other-work` (4). billing-v2's committed signature
+    change shows in its branch review and its PR body with the merge line
+    and a warning. Marked intended, it reads as a decision. A review of the
+    opened checkout names it.
+  - The 37 existing review tests still pass.
 
 ### 2026-09-29: A5 refined, and A5.1 — branch reviews get their dependencies back
 A5 is the Review feature (awareness spec §9, M5), not a review of the work.
