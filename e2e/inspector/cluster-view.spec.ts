@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, reachableNodes } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Inspector cluster view', () => {
   /** Scope selectors to the right-side inspector panel (border-l) */
@@ -14,7 +14,7 @@ test.describe('Inspector cluster view', () => {
     page.locator('.glass-panel.border-l');
 
   test('selecting a cluster node shows cluster details', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Default depth is Clusters — click the first node
     await page.waitForTimeout(2000);
@@ -28,7 +28,7 @@ test.describe('Inspector cluster view', () => {
   });
 
   test('cluster view shows file count', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
@@ -42,7 +42,7 @@ test.describe('Inspector cluster view', () => {
   });
 
   test('cluster view lists files as clickable items', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];
@@ -58,7 +58,7 @@ test.describe('Inspector cluster view', () => {
   });
 
   test('clicking a file in cluster view switches to file view', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const firstNode = (await reachableNodes(page))[0];

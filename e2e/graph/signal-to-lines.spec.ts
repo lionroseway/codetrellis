@@ -14,10 +14,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, PROJECT_PATH } from '../helpers/setup';
+import { gotoWithProject, FIXTURE_PATH } from '../helpers/setup';
 
 const OUT = path.join('test-results', 'ux-audit');
-const FILE = 'src/backend/services/database.ts';
+const FILE = 'services/api/app/db.py';
 
 test.describe('From an overlap to its lines', () => {
   test.setTimeout(120_000);
@@ -29,18 +29,18 @@ test.describe('From an overlap to its lines', () => {
     });
     await page.route('**/api/workstreams?*', (route) => route.fulfill({
       status: 200, contentType: 'application/json',
-      body: JSON.stringify([ws(PROJECT_PATH, 'main', true), ws(`${PROJECT_PATH}-billing`, 'billing-v2'), ws(`${PROJECT_PATH}-exports`, 'exports')]),
+      body: JSON.stringify([ws(FIXTURE_PATH, 'main', true), ws(`${FIXTURE_PATH}-billing`, 'billing-v2'), ws(`${FIXTURE_PATH}-exports`, 'exports')]),
     }));
     await page.route('**/api/awareness?*', (route) => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify({ signals: [{
         id: 'b33b-sig', kind: 'collision', severity: 'medium', subject: { file: FILE },
-        workstreams: [`${PROJECT_PATH}-billing`, `${PROJECT_PATH}-exports`],
+        workstreams: [`${FIXTURE_PATH}-billing`, `${FIXTURE_PATH}-exports`],
         summary: `\`billing-v2\` and \`exports\` both change ${FILE}`, firstSeen: Date.now() - 60_000, lastSeen: Date.now(), state: 'open',
       }] }),
     }));
     await page.route('**/api/workstreams/commits?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ since: Date.now(), commits: {} }) }));
 
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await page.getByRole('button', { name: 'Files', exact: true }).click();
     const node = page.locator(`.react-flow__node[data-id="${FILE}"]`);
     await expect(node).toHaveCount(1, { timeout: 20_000 });

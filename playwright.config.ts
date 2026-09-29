@@ -74,8 +74,39 @@ const MARKETING_IGNORE = process.env.E2E_MARKETING ? [] : ['**/marketing/**'];
  */
 const TARGETED = process.argv.some((a) => /\.(spec|setup)\.ts(:\d+)*$/.test(a) || /(^|\/)e2e\/[^-]/.test(a));
 
+/**
+ * Specs that graph the sample app (tests/fixtures/sample-app) rather than
+ * this repository (Phase 32 HD2). The backend holds one project at a time,
+ * so a spec scanning the sample app beside one scanning the repository
+ * swaps the project under both: on #208 a repository spec's inspector read
+ * the sample app's dependencies, and a plan seeded in the sample app went
+ * missing from the list while the repository was the one held.
+ */
+const FIXTURE_SPECS = [
+  '**/golden-chain/onboarding-to-plan.spec.ts',
+  '**/golden-chain/plan-to-graph.spec.ts',
+  '**/graph/context-menu.spec.ts',
+  '**/graph/depth-selector.spec.ts',
+  '**/graph/graph-breakpoints.spec.ts',
+  '**/graph/graph-overlays.spec.ts',
+  '**/graph/layout-controls.spec.ts',
+  '**/graph/multi-select.spec.ts',
+  '**/graph/node-click.spec.ts',
+  '**/graph/node-visuals.spec.ts',
+  '**/graph/signal-to-lines.spec.ts',
+  '**/inspector/cluster-view.spec.ts',
+  '**/inspector/file-view.spec.ts',
+  '**/inspector/symbol-view.spec.ts',
+  '**/keyboard/shortcuts.spec.ts',
+  '**/project/scan.spec.ts',
+  // Scans the sample app over REST; beside it, the repository's re-exports
+  // spec found its inspector empty (#208's second run).
+  '**/live-agent/file-watcher-pipeline.spec.ts',
+];
+
 /** Specs that need the backend to themselves — see the `serial` project. */
 const SERIAL_SPECS = [
+  ...FIXTURE_SPECS,
   // Their agents navigate every open page.
   '**/live-agent/preseeded-execution.spec.ts',
   '**/live-agent/preseeded-deviation.spec.ts',
@@ -109,6 +140,8 @@ const SERIAL_SPECS = [
   '**/plan/brief-mode.spec.ts',
   // They read the graph of whichever project was scanned last.
   '**/parsers/**',
+  // Opens a temporary git worktree as the project.
+  '**/git/worktree-checkout.spec.ts',
 ];
 
 export default defineConfig({
@@ -205,6 +238,8 @@ export default defineConfig({
     //    are the graph of whichever project was scanned LAST. Any other
     //    worker's scan between their scan and their read replaced it, and
     //    "the fixture has an HTTP pairing" read zero edges.
+    //  - The graph specs open the sample app (FIXTURE_SPECS), and every
+    //    parallel spec reads whichever project was scanned last.
     {
       name: 'serial',
       use: { browserName: 'chromium' },

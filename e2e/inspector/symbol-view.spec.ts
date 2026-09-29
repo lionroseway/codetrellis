@@ -10,7 +10,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, reachableNodes } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Inspector symbol view', () => {
   /** Scope selectors to the right-side inspector panel (border-l) */
@@ -34,7 +34,7 @@ test.describe('Inspector symbol view', () => {
   }
 
   test('file view lists symbols with line numbers', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -46,7 +46,7 @@ test.describe('Inspector symbol view', () => {
   });
 
   test('Symbols section label is visible in file view', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);
@@ -60,7 +60,7 @@ test.describe('Inspector symbol view', () => {
   });
 
   test('symbol entries show kind icons', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
     await navigateToFileView(page);
 
     const inspector = inspectorPanel(page);

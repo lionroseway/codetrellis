@@ -6,11 +6,11 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Layout controls', () => {
   test('Map and Tree layout buttons are visible', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await expect(page.locator('button[title="Map view (force-directed)"]')).toBeVisible();
     await expect(page.locator('button[title="Tree view (hierarchical)"]')).toBeVisible();
@@ -27,7 +27,7 @@ test.describe('Layout controls', () => {
     expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 20_000 }).toBeGreaterThan(0);
 
   test('clicking Tree switches to hierarchical layout', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.locator(tree).click();
     await expect(page.locator(tree)).toHaveAttribute('aria-pressed', 'true');
@@ -36,7 +36,7 @@ test.describe('Layout controls', () => {
   });
 
   test('clicking Map switches to force-directed layout', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Switch to Tree first, then back to Map
     await page.locator(tree).click();
@@ -49,7 +49,7 @@ test.describe('Layout controls', () => {
   });
 
   test('scope filter dropdown is visible', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // The scope filter container has a title attribute
     const scopeContainer = page.locator(
@@ -59,7 +59,7 @@ test.describe('Layout controls', () => {
   });
 
   test('scope filter has "All systems" default', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     const scopeSelect = page.locator(
       '[title="Filter the graph to a single system / directory"] select',
@@ -70,7 +70,7 @@ test.describe('Layout controls', () => {
   });
 
   test('Auto-refresh toggle is visible and defaults to Auto', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     const autoBtn = page.locator(
       'button[title="Pause automatic refresh checks"]',
@@ -80,7 +80,7 @@ test.describe('Layout controls', () => {
   });
 
   test('clicking Auto pauses refresh', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     // Click to pause
     await page
@@ -97,7 +97,7 @@ test.describe('Layout controls', () => {
   });
 
   test('Check now button is visible', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await expect(
       page.locator('button[title="Check for changes now"]'),
@@ -105,7 +105,7 @@ test.describe('Layout controls', () => {
   });
 
   test('refresh interval selector has 5s/10s/30s options', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     const intervalSelect = page.locator(
       'select[title="Automatic refresh interval"]',

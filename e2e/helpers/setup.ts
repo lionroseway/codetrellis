@@ -16,6 +16,13 @@ import { type Page, type Locator, type APIRequestContext, expect } from '@playwr
 
 export const API = 'http://localhost:3001/api';
 export const PROJECT_PATH = process.cwd();
+/**
+ * The committed sample app (`tests/fixtures/sample-app`), opened with this
+ * repository before any spec runs. Specs that click graph nodes open it
+ * rather than this repository (Phase 32 HD2): its graph is small and stays
+ * put, where this repository's changes with every PR that adds a file.
+ */
+export const FIXTURE_PATH = path.join(PROJECT_PATH, 'tests', 'fixtures', 'sample-app');
 
 /**
  * Every API call from a test needs the per-launch capability token.

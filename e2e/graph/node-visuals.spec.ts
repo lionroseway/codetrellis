@@ -6,11 +6,11 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Node visuals', () => {
   test('package nodes render with labels', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     // At Clusters depth (default), nodes should be package/directory type
@@ -25,7 +25,7 @@ test.describe('Node visuals', () => {
   });
 
   test('nodes have visible content in Clusters view', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const nodes = page.locator('.react-flow__node');
@@ -35,7 +35,7 @@ test.describe('Node visuals', () => {
   });
 
   test('file nodes render at Files depth', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.getByRole('button', { name: 'Files' }).click();
     await page.waitForTimeout(2000);
@@ -46,7 +46,7 @@ test.describe('Node visuals', () => {
   });
 
   test('nodes show file count badge in Clusters view', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     // Package nodes typically show "N files" badge

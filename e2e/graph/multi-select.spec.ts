@@ -7,20 +7,18 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, reachableNodes } from '../helpers/setup';
+import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Multi-select', () => {
   test('shift-clicking a second node keeps first visually selected', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const nodes = await reachableNodes(page);
     const count = nodes.length;
 
-    if (count < 2) {
-      test.skip();
-      return;
-    }
+    // The sample app always has more than two clusters: fewer is a failure, not a pass.
+    expect(count).toBeGreaterThanOrEqual(2);
 
     // Click first node normally
     await nodes[0].click();
@@ -40,16 +38,14 @@ test.describe('Multi-select', () => {
   });
 
   test('single click after multi-select deselects others', async ({ page }) => {
-    await gotoWithProject(page);
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
     const nodes = await reachableNodes(page);
     const count = nodes.length;
 
-    if (count < 2) {
-      test.skip();
-      return;
-    }
+    // The sample app always has more than two clusters: fewer is a failure, not a pass.
+    expect(count).toBeGreaterThanOrEqual(2);
 
     // Multi-select two nodes
     await nodes[0].click();
