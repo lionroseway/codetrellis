@@ -384,7 +384,9 @@ export async function getStoreState(page: Page, storeName: string) {
  * only. A node counts when the element at its centre is inside it.
  */
 export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Locator[]> {
-  await page.locator('.react-flow__node').first().waitFor({ timeout: timeoutMs });
+  // A visible node: the first in the DOM can be a cluster node that stays
+  // hidden (node-click on #224 waited on one for all 15 s).
+  await page.locator('.react-flow__node:visible').first().waitFor({ timeout: timeoutMs });
   // Polled: right after load the layout is still settling (nodes placed
   // off-screen, then fitted), and a toast or a broadcast-opened workspace can
   // cover the canvas for a moment. Sampled once, that returned no nodes.
