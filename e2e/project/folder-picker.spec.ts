@@ -28,6 +28,38 @@ test.describe('Folder picker modal', () => {
     await expect(input).toBeVisible({ timeout: 3000 });
   });
 
+  test('a slow opening listing does not put its folder back over a typed path', async ({ page }) => {
+    await gotoWelcome(page, { skipLearnTrellis: true });
+    // The opening browse answers late, after the person has typed and pressed Go.
+    let first = true;
+    await page.route('**/api/fs/browse*', async (route) => {
+      if (first) { first = false; await new Promise((r) => setTimeout(r, 1500)); }
+      await route.continue();
+    });
+    await page.getByRole('button', { name: 'Open Project' }).first().click();
+    const input = page.locator('.fixed.inset-0.z-50 input[type="text"]');
+    await expect(input).toBeVisible({ timeout: 3000 });
+    await input.fill('/tmp');
+    await page.locator('.fixed.inset-0.z-50').getByRole('button', { name: 'Go' }).click();
+    await expect(input).toHaveValue('/tmp');
+    await page.waitForTimeout(2000);
+    await expect(input).toHaveValue('/tmp');
+  });
+
+  test('a path typed while the listing loads is kept', async ({ page }) => {
+    await gotoWelcome(page, { skipLearnTrellis: true });
+    await page.route('**/api/fs/browse*', async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+    await page.getByRole('button', { name: 'Open Project' }).first().click();
+    const input = page.locator('.fixed.inset-0.z-50 input[type="text"]');
+    await expect(input).toBeVisible({ timeout: 3000 });
+    await input.fill('/tmp/elsewhere');
+    await page.waitForTimeout(2500);
+    await expect(input).toHaveValue('/tmp/elsewhere');
+  });
+
   test('Go button browses to typed path', async ({ page }) => {
     await gotoWelcome(page, { skipLearnTrellis: true });
 
