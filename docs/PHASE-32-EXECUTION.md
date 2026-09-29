@@ -408,6 +408,21 @@ a second overlay now.
 | A3.4 | A `codetrellis-parallel` Claude Code skill and an optional `PreToolUse` hook that runs `check_footprint`, offered from Settings with the Add to Claude Desktop pattern, never installed silently | unit; harness (install writes only what was confirmed); browser |
 | A3.5 | `docs/claude/awareness.md`; M3 "done when" as a test: five workstreams' worth of signals produce a digest readable in under a minute (a line budget), and intended stays quiet until a side changes shape | harness end to end |
 
+### A4: Mobile (M4)
+
+Refined 2026-09-29 (log entry "A4 refined"). The phone's approvals flow is
+the template (awareness spec §8): lists and details are pulled over RPC, and
+only a count rides in the live snapshot.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A4.1 | Reply to the agents about a signal, one path for desktop and phone: `POST /api/awareness/:id/reply {message}` keeps the person's words beside the signal (author from `actorFrom`), and each session placed in one of the signal's workstreams reads it once, on its next tool call, as a clearly marked message from the person (the notice interception, A2.6). Where an agent there holds a task, the reply is also a `steer` on that plan's channel, so it shows where plan messages do. The Awareness tab gains "Message the agents" on each signal, and shows the replies and who has read them | unit (the delivery text, once per session); harness: a reply reaches the scripted agent on its next call, once, and not an agent in another workstream; the steer is on the plan; browser, with a screenshot |
+| A4.2 | The phone's signal RPC, as approvals do it (list and detail pulled, a count in the snapshot): `awareness.needsYou` (the digest's lines and the high and medium signals, in the desktop's words, both sides named with `sideLabel`), `awareness.signal` (one signal: both sides, the files, who was told and what they said, the replies), `awareness.answer` (acknowledge or intended) and `awareness.reply` (A4.1's path), both needing a pairing confirmed on the desktop, audited, the author `phonePerson()`. The snapshot's `openSignals` counts live high and medium signals not set aside. A `peer-capabilities` row for each method | unit (the words); harness: list, detail, answer, reply from a paired phone; a read-only phone sees but cannot answer; the count moves |
+| A4.3 | Workstreams on the phone: `workstreams.list` (branch, agents, task, signal count) and `workstreams.detail` (its changed files and its recent turns from `agent_events`), the folder never from the request | harness |
+| A4.4 | Push for a high signal: when a high signal opens or reopens, a phone that is not watching live is told, with ids only (the words load over the mesh), at most one push per kind per minute, through the existing service; the tap opens that signal. The harness can point pushes at a local receiver | unit (rate, ids only); harness: a contract signal pushes once; an open phone is not pushed |
+| A4.5 | The phone's screens: a "Needs you" section at the top of Activity (the digest line, then breakpoints and signals, one count as the Home badge implies), `signal-detail.tsx` (both sides in plain words, the files, Acknowledge, Intended, Reply to agent), `workstreams.tsx` with its detail, and the push tap routed. A way to render phone screens for screenshots (Expo web, the bridge answered from fixtures), so they are seen, not only typechecked | mobile typecheck and lint; screenshots of each screen through the render path, or the reason it could not be built logged |
+| A4.6 | M4 done-when as a test: a contract signal on the desktop reaches the phone as a push; the phone reads it and replies; the reply reaches the agent as a steer on its next step. `docs/claude/awareness.md` and `docs/claude/mobile-companion.md` gain the phone's part | harness end to end |
+
 ### A3–A7
 
 Refined into sub-steps when next. Scope is per the awareness spec:
