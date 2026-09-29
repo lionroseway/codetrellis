@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — HD2: graph specs on the sample app |
-| **Status** | HD1 built (a project's diff is its own). HD2 built on it: the 16 browser specs that click or lay out graph nodes open `tests/fixtures/sample-app`, not this repository; their files, plans and workstream roots are the sample app's; three silent skips are failures; the sample app's leftover spec plans are cleared before a run. The 16 pass locally (77 tests) |
-| **Next action** | Open HD1's PR, then HD2's (stacked), each merged when green; then B5 |
+| **Status** | HD1 merged (#207): a project's diff is its own. HD2 in review: the 16 browser specs that click or lay out graph nodes open `tests/fixtures/sample-app`, not this repository; their files, plans and workstream roots are the sample app's; three silent skips are failures; the sample app's leftover spec plans are cleared before a run. The 16 pass locally (77 tests) |
+| **Next action** | Merge HD2's PR when green; then B5 (replay), refined into sub-steps first |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-hd2-graph-specs-fixture` (on `feat/phase-32-hd1-diff-own-project`) |
+| **Branch** | `feat/phase-32-hd2-graph-specs-fixture` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -130,7 +130,7 @@
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
   - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
   - [x] B4.4 The phone and push ([#205](https://github.com/lionroseway/codetrellis/pull/205))
-- [x] HD1 The extra graph nodes after another project's scan (Wave 2 hardening)
+- [x] HD1 The extra graph nodes after another project's scan (Wave 2 hardening) ([#207](https://github.com/lionroseway/codetrellis/pull/207))
 - [x] HD2 Browser graph specs on the sample app (Wave 2 hardening)
 - [ ] B5 Replay
 - [ ] B6 Stack view
