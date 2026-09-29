@@ -18,7 +18,8 @@ import { isSafeGitRef } from './git-safety';
 import { listWorkstreams } from './workstream-service';
 import { importersOf } from './importers';
 import { intentFiles } from './intent-service';
-import { computeSignals, contractCandidates, importableName, reconcileSignals, type ContractChange, type FootprintInput, type WorkstreamScope } from './awareness-signals';
+import { computeSignals, contractCandidates, importableName, reconcileSignals, newlySerious, type ContractChange, type FootprintInput, type WorkstreamScope } from './awareness-signals';
+import { pushForSignal } from './push-notification-service';
 import type { FileSpec } from '../../shared/types';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -240,6 +241,8 @@ export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
   recordSignalSpans(projectRoot, previous, upserts, resolved, now);
   markDirty();
   onChanged(projectRoot);
+  // A person away from the desk is told of a serious one (A4.4).
+  for (const s of newlySerious(previous, upserts, reopened)) void pushForSignal(s).catch(() => {});
   return true;
 }
 

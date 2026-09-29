@@ -160,7 +160,10 @@ event, for the active project.
   snapshot, and `awareness.needsYou` / `.signal` / `.answer` / `.reply` over
   RPC, in the desktop's words (`src/shared/lib/signal-words.ts`). A reply from
   the phone takes the desktop's path; answers and replies need a confirmed
-  pairing and are audited. See `docs/claude/mobile-companion.md`.
+  pairing and are audited. A high signal opening pushes a phone that is away
+  (`pushForSignal`, `newlySerious`, A4.4): ids only, one per kind per minute.
+  `workstreams.list` / `.detail` give the strip and each line's turns (A4.3).
+  See `docs/claude/mobile-companion.md`.
 - **The guide**: `get_app_guide(flavor='parallel')` /
   `codetrellis://skill/parallel` (A3.3) is the contract an agent follows:
   awareness, then intent, then footprint, then fix or ask.
@@ -244,6 +247,9 @@ run as a plain `codex` client with no hook and no watcher in
   - `awareness-cooldown`;
   - `awareness-replies`: a message read once by each agent in either
     workstream and never by a third, and the steer on the plan;
+  - `phone-signal-push`: a contract opening with no window pushes an asleep
+    phone once, in words naming nothing, and not an open one;
+  - `phone-workstreams`: the list and a line's files and turns;
   - `phone-awareness`: the live count, the list and a side-by-side detail on
     a paired phone, a reply the agent reads as from the phone, and an answer
     that is the person's;

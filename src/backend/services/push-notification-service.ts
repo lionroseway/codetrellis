@@ -16,7 +16,7 @@
  * Rate limit: max 1 push per event type per minute per device.
  */
 
-import type { BreakpointHit, ChannelEvent } from '../../shared/types';
+import type { AwarenessSignal, BreakpointHit, ChannelEvent } from '../../shared/types';
 import { agentName } from '../../shared/lib/breakpoint-words';
 import { getPeerConnection } from './webrtc-service';
 
@@ -68,6 +68,16 @@ const RATE_LIMIT_MS = 60_000;
 
 /** Expo Push API endpoint. */
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+/**
+ * Where pushes go: Expo, unless `CODETRELLIS_PUSH_URL` names a receiver on
+ * this machine (the harness's, Phase 32 A4.4). Anything else is ignored, so
+ * the setting can never send a push off the machine to a host of its own.
+ */
+export function pushUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const u = env.CODETRELLIS_PUSH_URL;
+  return u && /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//.test(u) ? u : EXPO_PUSH_URL;
+}
 
 /** Event types that trigger push notifications. */
 const PUSH_WORTHY_EVENTS: ReadonlySet<string> = new Set([
@@ -282,6 +292,43 @@ export async function pushForBreakpoint(hit: Pick<BreakpointHit, 'ref' | 'breach
   if (payloads.length > 0) await sendExpoPush(payloads);
 }
 
+/** What kind of overlap, in words that name no file, function or agent. */
+const SIGNAL_WORDS: Record<AwarenessSignal['kind'], string> = {
+  contract: 'An exported function another line of work uses has changed.',
+  collision: 'Two lines of work are changing the same code.',
+  drift: 'A line of work is changing files outside its task.',
+  'stale-base': 'A line of work is behind main on files it changes.',
+};
+
+/**
+ * A serious overlap opened while the person is away (Phase 32 A4.4, awareness
+ * spec §8.4): high severity only, one push per kind per minute per device,
+ * never to a phone watching live. The words say what kind of overlap it is
+ * and nothing more; both sides load over WebRTC when the tap opens the
+ * signal. The data carries the signal's id.
+ */
+export async function pushForSignal(signal: Pick<AwarenessSignal, 'id' | 'kind' | 'severity'>): Promise<void> {
+  if (!started || signal.severity !== 'high') return;
+  const tokens = Array.from(pushTokens.values());
+  if (tokens.length === 0) return;
+  const kind = `signal:${signal.kind}`;
+  const payloads: PushPayload[] = [];
+  for (const { token, fingerprint } of tokens) {
+    if (isDeviceActive(fingerprint)) continue; // already watching live — don't push
+    if (isRateLimited(fingerprint, kind)) continue;
+    markSent(fingerprint, kind);
+    payloads.push({
+      to: token,
+      title: 'Needs you',
+      body: SIGNAL_WORDS[signal.kind],
+      data: { type: 'signal', id: signal.id },
+      sound: 'default',
+      channelId: 'codetrellis-events',
+    });
+  }
+  if (payloads.length > 0) await sendExpoPush(payloads);
+}
+
 // --- Internals ---------------------------------------------------------------
 
 function channelEventTitle(event: ChannelEvent): string {
@@ -325,7 +372,7 @@ async function sendExpoPush(payloads: PushPayload[]): Promise<void> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
-      const res = await fetch(EXPO_PUSH_URL, {
+      const res = await fetch(pushUrl(), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payloads),
