@@ -173,6 +173,13 @@ export interface AwarenessSensorConfig {
    * (A2.6, awareness spec §6.2). Default: true.
    */
   inlineNotices?: boolean;
+  /**
+   * A `code` criterion fails while the plan's workstream has an open high
+   * overlap with other work, so sign-off waits the way it would for a
+   * failing test (A5.3, awareness spec §9.2). Awareness never blocks a tool
+   * call; this is the one mechanical check, and it is opt-in. Default: false.
+   */
+  holdSignOffOnHighSignals?: boolean;
 }
 
 export interface SensorConfig {
@@ -188,7 +195,7 @@ export const SENSOR_DEFAULTS = {
   drift: { enabled: true, channelEvents: true, debounceMs: 2000 },
   docs: { enabled: true, channelEvents: true },
   stuck: { enabled: false, repetitionThreshold: 8, errorLoopThreshold: 5, idleMinutes: 15 },
-  awareness: { branchWindowDays: 7, inlineNotices: true },
+  awareness: { branchWindowDays: 7, inlineNotices: true, holdSignOffOnHighSignals: false },
 } as const;
 
 /** Phase 6.5 — freeze-period governance. */

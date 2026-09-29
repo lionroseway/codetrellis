@@ -99,7 +99,7 @@
 - [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
   - [x] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)
   - [ ] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` — in review
-  - [ ] A5.3 The opt-in "no open high signals" check
+  - [ ] A5.3 The opt-in "no open high signals" check — built, PR after A5.2
   - [ ] A5.4 The review queue and `get_review_queue`
   - [ ] A5.5 The Review tab
   - [ ] A5.6 The queue on the phone
@@ -287,6 +287,38 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A5.3 — sign-off can wait for an open high overlap
+The one place awareness can hold anything up, and only when a project asks.
+It is a check inside the existing `code` criterion kind, not a new kind, so
+it gates sign-off through the loop a failing test already uses. It never
+blocks a tool call.
+
+- **The setting.** `sensors.awareness.holdSignOffOnHighSignals`, off by
+  default; only an explicit `true` turns it on. It is read from the
+  project's `.codetrellis/config.json`, and settable through
+  `update_project_config`, which gains an `awareness` block
+  (`branchWindowDays`, `inlineNotices` and this flag). That tool needs the
+  `settings` capability, so an agent cannot turn it on without the person's
+  grant.
+- **The check.** When on, the plan review's "Other work in flight" (A5.2)
+  supplies the open high overlaps. `runChecks` fails a `code` criterion once
+  per overlap, in the desktop's words: "A high overlap with other work is
+  still open (Changed signature): billing-v2 changed validateCreateUser's
+  signature… Answer it on the Awareness tab, or fix it, and check again."
+  Answered (acknowledged, intended) or fixed, it no longer holds.
+- **Found and fixed: awareness settings were dropped on merge.**
+  `mergeSensorConfig` merged drift, docs and stuck but not `awareness`, so
+  any sensor update to a project that already had awareness settings lost
+  them. Both are covered by the unit test.
+- **Tests.**
+  - Unit: `hold-on-high-signals.test.ts` (5): off by default, held and
+    named, nothing open passes, a manual criterion not held, and the
+    setting kept through another sensor's update.
+  - Harness: `hold-on-high-signals` (2). With the setting on, billing-v2's
+    `code` criterion fails naming the contract overlap, and no longer does
+    once the person marks it intended.
+  - The criteria and sign-off harness tests (10) still pass.
 
 ### 2026-09-29: A5.2 — other work in flight, in the review and the PR body
 A review said nothing about any other work. Now `review_plan` (JSON and

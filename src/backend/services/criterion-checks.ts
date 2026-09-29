@@ -66,6 +66,12 @@ export interface CheckContext {
   materialsRead?: ReadonlySet<string>;
   /** A `code` criterion's review verdict; undefined when not computed. */
   code?: { verdict: 'landed' | 'partial' | 'untouched' | 'no-targets'; missing: string[] } | { unavailable: string };
+  /**
+   * The open high overlaps with other work, each in the desktop's words,
+   * when the project holds sign-off on them (A5.3). Undefined when it does
+   * not, or when they were not gathered.
+   */
+  openHighSignals?: Array<{ heading: string; words: string }>;
 }
 
 const pass = (message: string, attachmentUid: string | null = null): CheckFinding => ({ status: 'pass', message, attachmentUid });
@@ -424,6 +430,9 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
       else if (code.verdict === 'no-targets') findings.push(unverified('This item names no files, so its changes cannot be checked'));
       else if (code.verdict === 'untouched') findings.push(fail(`None of this item's files have changed yet: ${code.missing.join(', ')}`));
       else findings.push(fail(`Not changed yet: ${code.missing.join(', ')}`));
+      for (const s of ctx.openHighSignals ?? []) {
+        findings.push(fail(`A high overlap with other work is still open (${s.heading}): ${s.words} Answer it on the Awareness tab, or fix it, and check again.`));
+      }
       break;
     }
   }
