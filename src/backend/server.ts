@@ -310,6 +310,16 @@ function optionalProjectRoot(
 }
 
 const server = http.createServer(app);
+// A kept-alive socket is closed by the server after `keepAliveTimeout`
+// (Node's default: 5 s). A client that sends on it at that moment gets
+// ECONNRESET: the browser suite's request context did, on a PUT sent about
+// five seconds after its last call (#211). The window and the harness hold
+// sockets open between calls, so the server keeps them for a minute; the
+// header timeout must stay above it, or Node would close a slow request's
+// socket first.
+export const KEEP_ALIVE_MS = 65_000;
+server.keepAliveTimeout = KEEP_ALIVE_MS;
+server.headersTimeout = KEEP_ALIVE_MS + 1_000;
 
 // WebSocket servers — use `noServer` mode so we can manually route
 // the HTTP upgrade event.  Two WSS instances bound to the same
