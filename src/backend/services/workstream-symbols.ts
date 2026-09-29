@@ -61,14 +61,42 @@ export function pythonAll(source: string): Set<string> {
 }
 
 /**
- * Whether a top-level symbol can be imported by another file, by the
+ * Whether a top-level symbol can be used from another file, by the
  * language's rule, or undefined where the language marks nothing (A2.3).
  * TS/JS: `export`. Python: no leading underscore, or listed in `__all__`.
+ * The other eight (A2.7): Go, a capital initial (the parser's `exported`,
+ * for a method too, which is listed flat); Rust, `pub`; Ruby and PHP, all
+ * of them; Java, C#, Kotlin and Swift, anything not `private` (C#'s default
+ * `internal` and Swift's are visible across the module, Java's package
+ * default across the package).
  */
 export function isExported(filePath: string, s: ParsedSymbol, pyAll: Set<string> | null): boolean | undefined {
   if (/\.py$/.test(filePath)) return !s.name.startsWith('_') || (pyAll?.has(s.name) ?? false);
   if (/\.[cm]?[jt]sx?$/.test(filePath)) return s.modifiers.includes('export');
+  if (/\.go$/.test(filePath)) return s.modifiers.includes('exported');
+  if (/\.rs$/.test(filePath)) return s.modifiers.includes('pub');
+  if (/\.(rb|php)$/.test(filePath)) return true;
+  // C#'s parser lists members flat (`Ledger.Post`), and they are private unless they say otherwise.
+  if (/\.cs$/.test(filePath) && s.name.includes('.')) return CSHARP_VISIBLE.some((m) => s.modifiers.includes(m));
+  if (/\.(java|cs|kts?|swift)$/.test(filePath)) return !isPrivate(s);
   return undefined;
+}
+
+const CSHARP_VISIBLE = ['public', 'internal', 'protected'];
+
+const isPrivate = (s: ParsedSymbol) => s.modifiers.includes('private') || s.modifiers.includes('fileprivate');
+
+/**
+ * Whether a member is usable from another file when its type is (A2.7).
+ * TS and Python keep A2.3's rule, the type's. C#'s members are private
+ * unless they say otherwise; Java's, Kotlin's, Swift's and PHP's are
+ * visible unless they say `private`.
+ */
+function memberExported(filePath: string, s: ParsedSymbol, typeExported: boolean | undefined): boolean | undefined {
+  if (!typeExported) return typeExported;
+  if (/\.cs$/.test(filePath)) return CSHARP_VISIBLE.some((m) => s.modifiers.includes(m));
+  if (/\.(java|kts?|swift|php)$/.test(filePath)) return !isPrivate(s);
+  return typeExported;
 }
 
 /** Already qualified by the language (`(Ledger).Post`, `Invoice#post`, `A.b`). */
@@ -87,7 +115,7 @@ export function flatSymbols(symbols: ParsedSymbol[], source: string, filePath = 
   const visit = (list: ParsedSymbol[], parent: string | null, exported: boolean | undefined) => {
     for (const s of list) {
       const name = parent && !QUALIFIED.test(s.name) ? `${parent}.${s.name}` : s.name;
-      const mine = parent === null ? isExported(filePath, s, pyAll) : exported;
+      const mine = parent === null ? isExported(filePath, s, pyAll) : memberExported(filePath, s, exported);
       all.push({ name, kind: s.kind, start: s.startLine, end: s.endLine, signature: s.signature, exported: mine });
       if (s.children.length) visit(s.children, name, mine);
     }
@@ -133,8 +161,10 @@ export function diffSymbols(before: FlatSymbol[] | null, after: FlatSymbol[] | n
     else if (was.body !== s.body) {
       // Its shape changed as well as its text (A2.1): what callers see. Only
       // when both versions have one — a parser that gives none says nothing.
-      const signature = was.signature && s.signature && was.signature !== s.signature
-        ? { signature: { before: was.signature, after: s.signature } } : {};
+      const signature = was.signature && s.signature
+        ? (was.signature !== s.signature ? { signature: { before: was.signature, after: s.signature } } : {})
+        // Without both, whether its shape changed is not known (A2.7).
+        : { signatureUnknown: true as const };
       // Importable in either version: un-exporting it breaks importers too.
       changes.push({ name: s.name, kind: s.kind, change: 'modified', line: s.line, ...signature, ...exportedOf(was, s) });
     }

@@ -206,14 +206,17 @@ function Summary({ text }: { text: string }) {
  * before and after, or that the export went, and the other side's files
  * that import it.
  */
+/** A signature after its name: Java's and C#'s begin with the return type, so a space (A2.7). */
+const afterName = (signature: string) => (/^[(<[]/.test(signature) ? signature : ` ${signature}`);
+
 function ContractDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
   const files = subject.importers ?? [];
   return (
     <div data-testid="awareness-contract" className="mt-1.5 space-y-1">
       {subject.signature ? (
         <div className="font-mono text-[10px] leading-snug space-y-px">
-          <div className="text-red-300/70 line-through break-all" data-testid="contract-before">{subject.symbol}{subject.signature.before}</div>
-          <div className="text-emerald-300/90 break-all" data-testid="contract-after">{subject.symbol}{subject.signature.after}</div>
+          <div className="text-red-300/70 line-through break-all" data-testid="contract-before">{subject.symbol}{afterName(subject.signature.before)}</div>
+          <div className="text-emerald-300/90 break-all" data-testid="contract-after">{subject.symbol}{afterName(subject.signature.after)}</div>
         </div>
       ) : subject.change === 'removed' ? (
         <div className="font-mono text-[10px] text-red-300/70 line-through">{subject.symbol}</div>

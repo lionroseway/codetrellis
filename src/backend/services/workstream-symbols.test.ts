@@ -246,8 +246,29 @@ describe('what another file can import (A2.3)', () => {
   });
 
   test('a language that marks nothing gives no exported flag, so no contract can come from it', () => {
-    const src = 'package ledger\n\nfunc Post() {}\n';
-    assert.deepEqual(exported('/x/ledger.go', src), []);
+    assert.deepEqual(exported('/x/query.sql', 'SELECT 1;\n'), []);
+  });
+
+  test('the other eight, by their own rules (A2.7)', () => {
+    assert.deepEqual(exported('/x/ledger.go', 'package ledger\n\nfunc Post() {}\nfunc reset() {}\nfunc (l *Ledger) Total() int { return 0 }\nfunc (l *Ledger) add() {}\n'),
+      ['(Ledger).Total', 'Post']);
+    assert.deepEqual(exported('/x/ledger.rs', 'pub fn post() {}\nfn helper() {}\npub(crate) struct Ledger {}\n'), ['Ledger', 'post']);
+    assert.deepEqual(exported('/x/Ledger.java', 'public class Ledger {\n  public void post() {}\n  void pkg() {}\n  private void helper() {}\n}\n'),
+      ['Ledger', 'Ledger.pkg', 'Ledger.post']);
+    // C#: members are private unless they say otherwise.
+    assert.deepEqual(exported('/x/Ledger.cs', 'public class Ledger {\n  public void Post() {}\n  internal void Near() {}\n  void Helper() {}\n}\n'),
+      ['Ledger', 'Ledger.Near', 'Ledger.Post']);
+    assert.deepEqual(exported('/x/Ledger.kt', 'class Ledger {\n  fun post() {}\n  private fun helper() {}\n}\nprivate fun local() {}\n'), ['Ledger', 'Ledger.post']);
+    assert.deepEqual(exported('/x/Ledger.swift', 'class Ledger {\n  func post() {}\n  private func helper() {}\n  fileprivate func near() {}\n}\n'), ['Ledger', 'Ledger.post']);
+    assert.deepEqual(exported('/x/Ledger.php', '<?php\nclass Ledger {\n  public function post() {}\n  function open() {}\n  private function helper() {}\n}\n'), ['Ledger', 'Ledger.open', 'Ledger.post']);
+    assert.deepEqual(exported('/x/ledger.rb', 'class Ledger\n  def post\n  end\nend\n'), ['Ledger', 'Ledger#post']);
+  });
+
+  test('a change whose shape cannot be compared says so, never "unchanged" (A2.7)', () => {
+    const was = 'package ledger\n\ntype Entry struct { Amount int }\n\nfunc Post(a int) error { return nil }\n';
+    const now = 'package ledger\n\ntype Entry struct { Amount int; Memo string }\n\nfunc Post(a int) error { return log(a) }\n';
+    const changes = diffSymbols(syms('/x/ledger.go', was), syms('/x/ledger.go', now));
+    assert.deepEqual(changes.map((c) => [c.name, c.change, c.signatureUnknown ?? false, !!c.signature]), [['Entry', 'modified', true, false], ['Post', 'modified', false, false]]);
   });
 
   test('a removed or un-exported symbol keeps the flag: its importers break either way', () => {

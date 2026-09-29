@@ -202,6 +202,7 @@ describe('contract (A2.3)', () => {
     assert.equal(contractCandidates([moved])[0].file, 'src/old.ts');
     assert.equal(importableName('Session.renew'), 'Session');
     assert.equal(importableName('Invoice#post'), 'Invoice');
+    assert.equal(importableName('(Ledger).Post'), 'Ledger');
   });
 });
 

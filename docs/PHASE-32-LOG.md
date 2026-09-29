@@ -82,7 +82,7 @@
   - [x] A3.3 `parallel` guide flavour (#166)
   - [x] A3.4 User skill and optional hook, offered from Settings (#167)
   - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
-- [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
+- [x] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
   - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
@@ -256,6 +256,36 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A2.7 — signatures for the other eight languages
+- **Journey.** `billing-v2` gives `ReconcileJob.runCount` a parameter
+  (Kotlin); `checkout-fix` edits `Scheduler.kt`, which imports
+  `ReconcileJob`. The Awareness tab shows a high contract signal:
+  `ReconcileJob.runCount(): Int` struck through, `ReconcileJob.runCount(since:
+  Long): Int` below, imported by `Scheduler.kt`. In Go, `(Ledger).Post` gains
+  a parameter while `checkout-fix` edits `main.go`, which imports the ledger
+  package: medium, "Possibly used by", because a Go import is the whole
+  package. A body edit, a comment or a reformat raises nothing in either.
+  A Go struct or a Kotlin class that changed says `signatureUnknown`, never a
+  silent "unchanged".
+- **Built.** `headerSignature` / `shapeOfNodes` in `parsers/base.ts`: every
+  token of a declaration but its name, body, modifiers and keyword, so one
+  rule reads every grammar (Java's return type before the name, Kotlin's
+  receiver, Swift's `throws`, Go's receiver left out as identity); literals,
+  PHP's `$x`, Ruby's splats and Rust's references read as one word; every
+  grammar's comment types dropped. Signatures on functions and methods in
+  all eight parsers; visibility recorded for Rust (`pub`), Java and PHP.
+  `isExported` / `memberExported` per language; `signatureUnknown` on
+  `SymbolChange`; Go importers through the package (`importers.ts`);
+  `importableName('(Ledger).Post')` is `Ledger`; the tab spaces a signature
+  that starts with a return type.
+- **Tests.** Unit `signatures.test.ts` (per language: the signature, a body
+  edit + comment + reformat keeps it, a parameter / return / type parameter
+  changes it), `workstream-symbols.test.ts` (each language's export rule,
+  `signatureUnknown`), `importers.test.ts` (Go through the package, not its
+  tests or sub-packages); harness `awareness-contract-languages.test.ts`
+  (Kotlin high, Go medium, body edits quiet). The awareness harness tests
+  (73) pass unchanged.
 
 ### 2026-09-29: A8.3 — a breakpoint hook for Gemini CLI, checked against its source
 - **Journey.** Sam uses Gemini CLI. In Settings → MCP Server they click

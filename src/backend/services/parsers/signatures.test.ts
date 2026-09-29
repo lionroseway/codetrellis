@@ -114,8 +114,134 @@ describe('Python', () => {
   });
 });
 
-describe('languages without signature support', () => {
-  test('give none, so they can raise no contract signal (spec §4.2: no body-hash fallback)', () => {
-    assert.equal(sig('ledger/post.go', 'package ledger\n\nfunc Post(amount int) error { return nil }\n', 'Post'), undefined);
+/**
+ * The other eight languages (A2.7), each held to the same contract: a body
+ * edit, a comment and a reformat keep the signature; a parameter, a return
+ * type and a type parameter change it. `base` is the function as written,
+ * `same` the same function edited inside its body, commented and
+ * reformatted, and each of `changed` alters its shape.
+ */
+const CASES: Array<{ lang: string; file: string; name: string; base: string; expect: string; same: string; changed: string[] }> = [
+  {
+    lang: 'Go', file: 'ledger/post.go', name: 'Post',
+    base: 'package ledger\n\nfunc Post(amount int, memo string) (int, error) { return amount, nil }\n',
+    expect: '(amount int, memo string) (int, error)',
+    same: 'package ledger\n\n// Post records it.\nfunc Post(\n\tamount int, // cents\n\tmemo string,\n) (int, error) {\n\tlog(memo)\n\treturn amount * 2, nil\n}\n',
+    changed: [
+      'package ledger\n\nfunc Post(amount int64, memo string) (int, error) { return 0, nil }\n',
+      'package ledger\n\nfunc Post(amount int, memo string) error { return nil }\n',
+      'package ledger\n\nfunc Post[T any](amount int, memo string) (int, error) { return amount, nil }\n',
+    ],
+  },
+  {
+    lang: 'Go, a method (its receiver is its name, not its shape)', file: 'ledger/post.go', name: '(Ledger).Post',
+    base: 'package ledger\n\nfunc (l *Ledger) Post(amount int) error { return nil }\n',
+    expect: '(amount int) error',
+    same: 'package ledger\n\nfunc (led *Ledger) Post(amount int) error {\n\treturn led.add(amount)\n}\n',
+    changed: ['package ledger\n\nfunc (l *Ledger) Post(amount int, at time.Time) error { return nil }\n'],
+  },
+  {
+    lang: 'Rust', file: 'src/ledger.rs', name: 'post',
+    base: 'pub fn post(amount: i64, memo: &str) -> Result<i64, Error> { Ok(amount) }\n',
+    expect: '(amount: i64, memo: &str) -> Result<i64, Error>',
+    same: '/// Posts it.\npub fn post(\n    amount: i64, // cents\n    memo: &str,\n) -> Result<i64, Error> {\n    Ok(amount * 2)\n}\n',
+    changed: [
+      'pub fn post(amount: i32, memo: &str) -> Result<i64, Error> { Ok(0) }\n',
+      'pub fn post(amount: i64, memo: &str) -> i64 { amount }\n',
+      'pub fn post<T: Into<i64>>(amount: T, memo: &str) -> Result<i64, Error> { Ok(0) }\n',
+    ],
+  },
+  {
+    lang: 'Java', file: 'src/Ledger.java', name: 'Ledger.post',
+    base: 'public class Ledger {\n  public int post(int amount, String memo) throws IOException { return amount; }\n}\n',
+    expect: 'int (int amount, String memo) throws IOException',
+    same: 'public class Ledger {\n  /** Posts it. */\n  @Override\n  public int post(\n      int amount, // cents\n      String memo) throws IOException {\n    return amount * 2;\n  }\n}\n',
+    changed: [
+      'public class Ledger {\n  public int post(long amount, String memo) throws IOException { return 0; }\n}\n',
+      'public class Ledger {\n  public long post(int amount, String memo) throws IOException { return 0; }\n}\n',
+      'public class Ledger {\n  public int post(int amount, String memo) { return 0; }\n}\n',
+    ],
+  },
+  {
+    lang: 'C#', file: 'src/Ledger.cs', name: 'Ledger.Post',
+    base: 'public class Ledger {\n  public int Post(int amount, string memo = "") { return amount; }\n}\n',
+    expect: 'int (int amount, string memo = "")',
+    same: 'public class Ledger {\n  /// <summary>Posts it.</summary>\n  [Obsolete]\n  public int Post(\n    int amount, // cents\n    string memo = "") => amount * 2;\n}\n',
+    changed: [
+      'public class Ledger {\n  public int Post(decimal amount, string memo = "") { return 0; }\n}\n',
+      'public class Ledger {\n  public Task<int> Post(int amount, string memo = "") { return null; }\n}\n',
+      'public class Ledger {\n  public int Post<T>(int amount, string memo = "") { return 0; }\n}\n',
+    ],
+  },
+  {
+    lang: 'Kotlin', file: 'src/Ledger.kt', name: 'Ledger.post',
+    base: 'class Ledger {\n  fun post(amount: Int, memo: String = ""): Int { return amount }\n}\n',
+    expect: '(amount: Int, memo: String = ""): Int',
+    same: 'class Ledger {\n  // Posts it.\n  fun post(\n    amount: Int, // cents\n    memo: String = "",\n  ): Int = amount * 2\n}\n',
+    changed: [
+      'class Ledger {\n  fun post(amount: Long, memo: String = ""): Int { return 0 }\n}\n',
+      'class Ledger {\n  fun post(amount: Int, memo: String = ""): Long { return 0 }\n}\n',
+      'class Ledger {\n  fun <T> post(amount: Int, memo: String = ""): Int { return 0 }\n}\n',
+    ],
+  },
+  {
+    lang: 'Swift', file: 'Sources/Ledger.swift', name: 'Ledger.post',
+    base: 'class Ledger {\n  func post(amount: Int, memo: String) throws -> Int { return amount }\n}\n',
+    expect: '(amount: Int, memo: String) throws -> Int',
+    same: 'class Ledger {\n  /// Posts it.\n  func post(\n    amount: Int, // cents\n    memo: String\n  ) throws -> Int {\n    return amount * 2\n  }\n}\n',
+    changed: [
+      'class Ledger {\n  func post(_ amount: Int, memo: String) throws -> Int { return 0 }\n}\n',
+      'class Ledger {\n  func post(amount: Int, memo: String) -> Int { return 0 }\n}\n',
+      'class Ledger {\n  func post<T>(amount: Int, memo: String) throws -> Int { return 0 }\n}\n',
+    ],
+  },
+  {
+    lang: 'Ruby', file: 'lib/ledger.rb', name: 'Ledger#post',
+    base: 'class Ledger\n  def post(amount, memo = nil)\n    amount\n  end\nend\n',
+    expect: '(amount, memo = nil)',
+    same: 'class Ledger\n  # Posts it.\n  def post(amount, # cents\n           memo = nil)\n    log(memo)\n    amount * 2\n  end\nend\n',
+    changed: [
+      'class Ledger\n  def post(amount, memo: nil)\n    amount\n  end\nend\n',
+      'class Ledger\n  def post(amount)\n    amount\n  end\nend\n',
+    ],
+  },
+  {
+    lang: 'PHP', file: 'src/Ledger.php', name: 'Ledger.post',
+    base: '<?php\nclass Ledger {\n  public function post(int $amount, string $memo = ""): int { return $amount; }\n}\n',
+    expect: '(int $amount, string $memo = ""): int',
+    same: '<?php\nclass Ledger {\n  /** Posts it. */\n  public function post(\n    int $amount, // cents\n    string $memo = "",\n  ): int {\n    return $amount * 2;\n  }\n}\n',
+    changed: [
+      '<?php\nclass Ledger {\n  public function post(float $amount, string $memo = ""): int { return 0; }\n}\n',
+      '<?php\nclass Ledger {\n  public function post(int $amount, string $memo = ""): ?int { return 0; }\n}\n',
+    ],
+  },
+];
+
+for (const c of CASES) {
+  describe(c.lang, () => {
+    test('its parameters, return type and type parameters make the signature', () => {
+      assert.equal(sig(c.file, c.base, c.name), c.expect);
+    });
+    test('a body edit, a comment and a reformat keep it', () => {
+      assert.equal(sig(c.file, c.same, c.name), c.expect);
+    });
+    test('a parameter, the return type or a type parameter changes it', () => {
+      for (const changed of c.changed) {
+        const got = sig(c.file, changed, c.name);
+        assert.ok(got, `no signature for: ${changed}`);
+        assert.notEqual(got, c.expect, changed);
+      }
+    });
+  });
+}
+
+describe('what has no signature', () => {
+  test('a type in these languages gives none, so a change to it reads "signature unknown", never unchanged', () => {
+    assert.equal(sig('ledger/types.go', 'package ledger\n\ntype Entry struct { Amount int }\n', 'Entry'), undefined);
+    assert.equal(sig('src/Ledger.kt', 'data class Entry(val amount: Int)\n', 'Entry'), undefined);
+  });
+  test('a Ruby method with no brackets or parameters still has one', () => {
+    assert.equal(sig('lib/ledger.rb', 'def total\n  1\nend\n', 'total'), '()');
+    assert.equal(sig('lib/ledger.rb', 'def post amount, memo\n  1\nend\n', 'post'), '(amount, memo)');
   });
 });

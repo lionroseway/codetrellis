@@ -1,5 +1,8 @@
 import type { ParserPlugin, SyntaxNode } from './base';
-import { flattenSymbols } from './base';
+import { flattenSymbols, headerSignature } from './base';
+/** Only a symbol that has a signature carries the key (A2.7). */
+const sig = (node: SyntaxNode, skip: string[] = []) => { const signature = headerSignature(node, skip); return signature ? { signature } : {}; };
+
 import type { ParsedSymbol, ImportDeclaration, SymbolKind } from '../../../shared/types';
 
 /**
@@ -99,16 +102,16 @@ function memberSymbol(node: SyntaxNode, owner: string): ParsedSymbol | null {
     case 'local_function_statement': {
       const name = nameOf(node);
       if (!name) return null;
-      return { name: `${owner}.${name}`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node) };
+      return { name: `${owner}.${name}`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node), ...sig(node) };
     }
     case 'constructor_declaration': {
       const name = nameOf(node) ?? owner;
-      return { name: `${owner}.${name}`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'constructor') };
+      return { name: `${owner}.${name}`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'constructor'), ...sig(node) };
     }
     case 'destructor_declaration':
       return { name: `${owner}.~${owner}`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'destructor') };
     case 'operator_declaration':
-      return { name: `${owner}.operator`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'operator') };
+      return { name: `${owner}.operator`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'operator'), ...sig(node) };
     case 'property_declaration':
     case 'indexer_declaration': {
       const name = nameOf(node) ?? (node.type === 'indexer_declaration' ? 'this[]' : null);
