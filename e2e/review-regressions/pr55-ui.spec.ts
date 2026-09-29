@@ -467,7 +467,9 @@ test.describe('Linked ticket chip (m8)', () => {
     );
 
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
-    await page.getByText('ct-m8 ticket chip').first().click();
+    // The row's own button: "ct-m8 ticket chip" is also the text of the
+    // "New plan created" toast, which `getByText(...).first()` could click.
+    await page.getByTitle('Click to open the plan workspace').filter({ hasText: 'ct-m8 ticket chip' }).first().click();
 
     const chip = page.getByTitle('Linked tickets and whether they have drifted from this plan');
     await chip.waitFor({ timeout: 20_000 });
