@@ -5,6 +5,10 @@ import { useAwarenessStore } from '../../stores/awareness-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { sectionsByBranch } from '../../lib/section-worktrees';
+import { projectPrefix, toProjectPath } from '../../lib/graph-overlays';
+import { openFileAt } from '../../lib/open-file-at';
+import { useGraphStore } from '../../stores/graph-store';
+import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
 import {
   groupSignals, needsYouCount, digestLine, kindWords, sidesOf, sideRootsOf, sideLabel, stateWords, actionsFor, ago, toldWords, reopenedWords,
@@ -263,6 +267,46 @@ function AgentsTold({ signal: s, now }: { signal: AwarenessSignal; now: number }
   );
 }
 
+/**
+ * Phase 32 B3.3b — from a signal to where it is: "Show on graph" switches to
+ * the graph and focuses the file's node (or the cluster holding it); "Show
+ * lines" opens it in the code view, where each workstream's lines are marked.
+ * The signal's path is the repository's; the graph and the code view take the
+ * project's.
+ */
+function SignalFileChips({ signal: s, workstreams }: { signal: AwarenessSignal; workstreams: Workstream[] }) {
+  const root = useProjectStore((st) => st.root);
+  const file = s.subject.file ?? s.subject.files?.[0];
+  if (!file) return null;
+  const prefix = projectPrefix(root, workstreams);
+  const here = prefix === null ? file : toProjectPath(file, prefix);
+  if (here === null) return null; // outside the open project: nothing here to show
+  const chip = 'text-[10px] px-1.5 py-px rounded border border-sky-400/30 text-sky-300 hover:bg-sky-500/10';
+  return (
+    <span className="ml-auto flex items-center gap-1">
+      <button
+        data-testid="signal-show-on-graph"
+        className={chip}
+        title={`Focus the graph on ${here}`}
+        onClick={() => {
+          useUiStore.getState().setWorkspaceMode('graph');
+          useGraphStore.getState().focusNode(here);
+        }}
+      >
+        Show on graph
+      </button>
+      <button
+        data-testid="signal-show-lines"
+        className={chip}
+        title={`Open ${here} with each workstream's changed lines marked`}
+        onClick={() => { void openFileAt(here); }}
+      >
+        Show lines
+      </button>
+    </span>
+  );
+}
+
 function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; workstreams: Workstream[]; now: number }) {
   const answer = useAwarenessStore((st) => st.answer);
   const [busy, setBusy] = useState(false);
@@ -341,17 +385,21 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
       {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}<UnverifiedIf type={s.stateBy?.actorType} /></div>}
 
       <div className="mt-1.5 flex items-center gap-1">
-        {actionsFor(s.state, s.kind).map((a) => (
-          <button
-            key={a.state}
-            onClick={() => act(a.state)}
-            disabled={busy}
-            title={a.hint}
-            className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50 transition-colors"
-          >
-            {a.label}
-          </button>
-        ))}
+        <span data-testid="awareness-actions" className="flex items-center gap-1">
+          {actionsFor(s.state, s.kind).map((a) => (
+            <button
+              key={a.state}
+              onClick={() => act(a.state)}
+              disabled={busy}
+              title={a.hint}
+              className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50 transition-colors"
+            >
+              {a.label}
+            </button>
+          ))}
+        </span>
+        {/* Where it is, beside what to do about it (B3.3b). */}
+        <SignalFileChips signal={s} workstreams={workstreams} />
       </div>
     </div>
   );

@@ -137,7 +137,7 @@ test.describe('Awareness tab', () => {
     await expect(low.getByTestId('awareness-signal')).toContainText('Behind main');
     await expect(low.getByTestId('awareness-sides')).toContainText('billing-v2');
     await expect(low.getByTestId('awareness-sides')).toContainText('main');
-    await expect(low.getByTestId('awareness-signal').getByRole('button')).toHaveText(['Acknowledge', 'Dismiss']);
+    await expect(low.getByTestId('awareness-signal').getByTestId('awareness-actions').getByRole('button')).toHaveText(['Acknowledge', 'Dismiss']);
 
     await expandPanel(page);
     await shot(page, 'awareness-tab');
@@ -184,7 +184,7 @@ test.describe('Awareness tab', () => {
     await expect(set).toHaveAttribute('data-state', 'intended');
     await expect(set.getByTestId('awareness-answered')).toContainText('Marked intended by you');
     // Only one answer is left to give: take it back.
-    await expect(set.getByRole('button')).toHaveText(['Reopen']);
+    await expect(set.getByTestId('awareness-actions').getByRole('button')).toHaveText(['Reopen']);
 
     await set.getByRole('button', { name: 'Reopen' }).click();
     await expect(aside).toHaveCount(0);
@@ -231,7 +231,7 @@ test.describe('Awareness tab', () => {
     await expect(c.getByTestId('contract-before')).toHaveText('createInvoice(opts: InvoiceOpts): Invoice');
     await expect(c.getByTestId('contract-after')).toHaveText('createInvoice(opts: InvoiceOpts, currency: string): Invoice');
     await expect(c.getByTestId('awareness-contract')).toContainText('Imported by src/auth/session.ts, src/auth/checkout.ts');
-    await expect(c.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expect(c.getByTestId('awareness-actions').getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
 
     const r = card(page, 'formatTotal');
     await expect(r).toContainText('Removed export');
@@ -263,7 +263,7 @@ test.describe('Awareness tab', () => {
     await expect(d.getByTestId('awareness-drift')).toContainText('Outside the scope of its claimed item:');
     await expect(d.getByTestId('awareness-drift')).toContainText('config/shared.ts');
     await expect(d.getByTestId('awareness-drift')).toContainText('src/auth/session.ts');
-    await expect(d.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expect(d.getByTestId('awareness-actions').getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
     await expandPanel(page);
     await shot(page, 'awareness-drift');
 
@@ -299,7 +299,7 @@ test.describe('Awareness tab', () => {
     // The agent's note is not the person's answer: it is still open, and theirs to give.
     await expect(c).toHaveAttribute('data-state', 'open');
     await expect(c.getByTestId('awareness-answered')).toHaveCount(0);
-    await expect(c.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expect(c.getByTestId('awareness-actions').getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
     await expandPanel(page);
     await shot(page, 'awareness-told');
   });
@@ -351,7 +351,7 @@ test.describe('Awareness tab', () => {
     // Back where it needs the person, not under "Set aside".
     await expect(page.getByTestId('awareness-needs-you').getByTestId('awareness-signal')).toHaveCount(1);
     await expect(c.getByTestId('awareness-reopened')).toHaveText('Back: it changed since you marked it intended · 1 min ago');
-    await expect(c.getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expect(c.getByTestId('awareness-actions').getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
     await expandPanel(page);
     await shot(page, 'awareness-reopened');
   });

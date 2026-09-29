@@ -42,6 +42,7 @@ import { useTerminalStore } from '../../stores/terminal-store';
 import type { GraphNode, GraphEdge } from '@shared/types';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { OverlaysMenu } from '../graph/OverlaysMenu';
+import { openFileAt } from '../../lib/open-file-at';
 import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix } from '../../lib/graph-overlays';
 
 const nodeTypes = {
@@ -1765,6 +1766,18 @@ function NodeContextMenu({
           {existingBreakpoint
             ? `Stop asking before ${breakTarget.symbol ?? 'this'} changes`
             : `Ask me before ${breakTarget.symbol ?? 'this'} changes`}
+        </button>
+      )}
+      {/* Phase 32 B3.3b — the file's lines, and who else changes them, in the code view (B3.2). */}
+      {nodeType === 'file' && (
+        <button
+          onClick={() => { void openFileAt(nodePath); onClose(); }}
+          data-testid="node-menu-show-changes"
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-sky-500/10 text-foreground-muted hover:text-foreground transition-colors"
+          title="Open the file with each workstream's changed lines marked"
+        >
+          <GitCompare size={13} className="text-sky-400" />
+          Show line changes
         </button>
       )}
       <div className="h-px bg-white/[0.06] mx-1.5 my-1" />
