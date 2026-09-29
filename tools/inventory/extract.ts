@@ -164,7 +164,7 @@ const RPC_DOMAINS: Record<string, DomainKey> = {
   criteria: 'd', criterion: 'd',
   artefact: 'e',
   channel: 'f', input: 'f',
-  budget: 'g', breakpoint: 'g',
+  budget: 'g', breakpoint: 'g', awareness: 'g',
   deviation: 'h', review: 'h', freeze: 'h',
   terminal: 'i',
   settings: 'k', power: 'k',
@@ -487,13 +487,42 @@ export function invokedRoutes(source: string): { method: string; arg: string }[]
 /** The top-level argument texts of every call to a name `isInvoker` accepts. */
 function callsOf(src: string, isInvoker: (name: string) => boolean): string[][] {
   const out: string[][] = [];
-  for (const m of src.matchAll(/([a-zA-Z_$][\w$]*)\s*\(/g)) {
+  // `rpc(…)`, and `rpc<{ hits: Hit[] }>(…)`: a call with type arguments is a
+  // call too (A4.2 found every typed `phone.rpc<T>(…)` uncredited).
+  for (const m of src.matchAll(/([a-zA-Z_$][\w$]*)\s*(?=[(<])/g)) {
     if (!isInvoker(m[1])) continue;
-    const open = m.index! + m[0].length - 1;
+    let open = m.index! + m[0].length;
+    if (src[open] === '<') {
+      const end = matchAngle(src, open);
+      if (end < 0) continue;
+      open = end + 1;
+      while (/\s/.test(src[open] ?? '')) open++;
+      if (src[open] !== '(') continue;
+    }
     const close = matchParen(src, open);
     if (close > 0) out.push(splitArgs(src.slice(open + 1, close)));
   }
   return out;
+}
+
+/**
+ * The `>` closing the type arguments that open at `open`, or -1 when they do
+ * not close: `rpc < limit)` is a comparison, not a call. Brackets nest, `=>`
+ * is not a closer, strings are skipped, and a type is never 500 characters.
+ */
+function matchAngle(src: string, open: number): number {
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { '>': '<', ')': '(', '}': '{', ']': '[' };
+  for (let i = open; i < src.length && i < open + 500; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === '`') { i = skipString(src, i); continue; }
+    if (c === '<' || c === '(' || c === '{' || c === '[') stack.push(c);
+    else if (c in pairs && !(c === '>' && src[i - 1] === '=')) {
+      if (stack.pop() !== pairs[c]) return -1;
+      if (stack.length === 0) return i;
+    }
+  }
+  return -1;
 }
 
 function splitArgs(s: string): string[] {

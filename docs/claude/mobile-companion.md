@@ -95,6 +95,32 @@ An agent held at a breakpoint the person set is answered from the phone as it is
   The first answer stands wherever it was given. A late answer from the phone gets back the answer that stood, marked `alreadyAnswered`.
   The desktop half is `src/backend/services/mobile-breakpoints.ts`.
 
+### What overlaps (Phase 32 A4.2)
+
+The desktop half is `src/backend/services/mobile-awareness.ts`; the screens
+come in A4.5. It follows the approvals pattern: pulled over RPC, with a count
+in the snapshot.
+
+- **The count.** The snapshot carries `openSignals`: open high and medium
+  signals in the opened project, as the desktop's Awareness tab counts them
+  (`countNeedsYou`, one indexed count). The folder and ref watchers keep the
+  stored signals current, window open or not.
+- **What it calls.**
+  - `awareness.needsYou` (read) returns the digest's lines (`awareness-digest.ts`)
+    and the high and medium signals still in play: open first, then seen. Low
+    and set-aside signals are left to the desktop.
+  - `awareness.signal` (read) returns one signal with each side in plain words
+    (`src/shared/lib/signal-words.ts`, the desktop's words), its files, the
+    agents told and what they said, and the replies.
+  - `awareness.answer` (write) acknowledges, marks intended, dismisses or
+    reopens.
+  - `awareness.reply` (write) sends the person's words to the agents in the
+    signal's workstreams, the desktop's own path (`replyToSignalAsPerson`,
+    A4.1). The agent reads it as "from the person, from their phone".
+  Both writes need a pairing confirmed on the desktop, are audited against the
+  device, carry the phone as the channel (`phoneActor()`), and tell the
+  desktop.
+
 ## State sync
 
 Desktop pushes a full snapshot of relevant workspace state on connect over the `ui` channel, then streams `fast-json-patch` diffs. Mobile applies them into `useWorkspaceStore`. This is the same pattern used for plan state, terminal scrollback metadata, presence, and channel events.

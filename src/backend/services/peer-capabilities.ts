@@ -124,6 +124,9 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'freeze.get': 'read',
   // Phase 32 B4.4 — what is held for the person (mobile-breakpoints.ts).
   'breakpoint.waiting': 'read',
+  // Phase 32 A4.2 — what overlaps, in the desktop's words (mobile-awareness.ts).
+  'awareness.needsYou': 'read',
+  'awareness.signal': 'read',
 
   // ── write ───────────────────────────────────────────────────────────
   'channel.post': 'write',
@@ -136,6 +139,9 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'freeze.acknowledge': 'write',
   // Answering a held call: also needs a CONFIRMED pairing, and is audited.
   'breakpoint.answer': 'write',
+  // Answering a signal or replying to its agents: also a CONFIRMED pairing, audited.
+  'awareness.answer': 'write',
+  'awareness.reply': 'write',
   'channel.resolve': 'write',
   'comment.add': 'write',
   'deviation.resolve': 'write',

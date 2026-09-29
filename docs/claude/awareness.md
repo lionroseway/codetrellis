@@ -155,7 +155,12 @@ event, for the active project.
   call arrived (plain HTTP says it was not verified as the person). Where an
   agent there holds a task, `replyToSignalAsPerson` in `server.ts` also
   posts it as a `steer` on that task's plan. The tab lists each message and
-  which agents have read it. The phone uses the same path (A4.2).
+  which agents have read it.
+- **The phone** (`mobile-awareness.ts`, A4.2): `openSignals` in the live
+  snapshot, and `awareness.needsYou` / `.signal` / `.answer` / `.reply` over
+  RPC, in the desktop's words (`src/shared/lib/signal-words.ts`). A reply from
+  the phone takes the desktop's path; answers and replies need a confirmed
+  pairing and are audited. See `docs/claude/mobile-companion.md`.
 - **The guide**: `get_app_guide(flavor='parallel')` /
   `codetrellis://skill/parallel` (A3.3) is the contract an agent follows:
   awareness, then intent, then footprint, then fix or ask.
@@ -226,7 +231,8 @@ run as a plain `codex` client with no hook and no watcher in
 - Unit:
   - `awareness-signals.test.ts` (the rules);
   - `awareness-digest.test.ts`;
-  - `awareness-notices.test.ts`, `awareness-replies.test.ts`;
+  - `awareness-notices.test.ts`, `awareness-replies.test.ts`, `mobile-awareness.test.ts`;
+  - `src/shared/lib/signal-words.test.ts`;
   - `workstream-*.test.ts`;
   - `claude-code-parallel.test.ts`, `gemini-cli-hook.test.ts`;
   - `connector/hook.test.ts`.
@@ -238,6 +244,9 @@ run as a plain `codex` client with no hook and no watcher in
   - `awareness-cooldown`;
   - `awareness-replies`: a message read once by each agent in either
     workstream and never by a third, and the steer on the plan;
+  - `phone-awareness`: the live count, the list and a side-by-side detail on
+    a paired phone, a reply the agent reads as from the phone, and an answer
+    that is the person's;
   - `parallel-hook`, `check-edit`, `gemini-hook`;
   - `awareness-m3`, the M3 "done when": five workstreams, seven overlaps,
     a five-line digest well under a minute to read, and intended staying

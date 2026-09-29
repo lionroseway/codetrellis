@@ -86,8 +86,10 @@ import {
   deletePlanAsPerson,
   postChannelEventAsPerson,
   setChannelEventStatusAsPerson,
+  replyToSignalAsPerson,
 } from '../server';
 import { handleBreakpointMethod } from './mobile-breakpoints';
+import { handleAwarenessMethod } from './mobile-awareness';
 import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
 import { grantChange, grantRefusal } from './grant-guard';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
@@ -450,6 +452,17 @@ async function routeMethod(
         send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
         broadcast,
       }, { who: phonePerson(), projectRoot: getActiveProjectPath() });
+
+    // --- What overlaps, answered and replied to from the phone (A4.2) -------
+    case 'awareness.needsYou':
+    case 'awareness.signal':
+    case 'awareness.answer':
+    case 'awareness.reply':
+      return handleAwarenessMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { who: phoneActor(), projectRoot: getActiveProjectPath(), reply: replyToSignalAsPerson });
 
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {
