@@ -365,7 +365,6 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
             {s.subject.file}{s.subject.symbol ? ` · ${s.subject.symbol}` : ''}
           </span>
         )}
-        <SignalFileChips signal={s} workstreams={workstreams} />
       </div>
 
       {namedSections.length >= 2 && (
@@ -386,17 +385,21 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
       {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}<UnverifiedIf type={s.stateBy?.actorType} /></div>}
 
       <div className="mt-1.5 flex items-center gap-1">
-        {actionsFor(s.state, s.kind).map((a) => (
-          <button
-            key={a.state}
-            onClick={() => act(a.state)}
-            disabled={busy}
-            title={a.hint}
-            className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50 transition-colors"
-          >
-            {a.label}
-          </button>
-        ))}
+        <span data-testid="awareness-actions" className="flex items-center gap-1">
+          {actionsFor(s.state, s.kind).map((a) => (
+            <button
+              key={a.state}
+              onClick={() => act(a.state)}
+              disabled={busy}
+              title={a.hint}
+              className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50 transition-colors"
+            >
+              {a.label}
+            </button>
+          ))}
+        </span>
+        {/* Where it is, beside what to do about it (B3.3b). */}
+        <SignalFileChips signal={s} workstreams={workstreams} />
       </div>
     </div>
   );
