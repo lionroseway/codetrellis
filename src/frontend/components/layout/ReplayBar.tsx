@@ -39,7 +39,7 @@ export function ReplayStart() {
 }
 
 export function ReplayBar() {
-  const { active, root: replayRoot, frames, index, state, loading, error, setIndex, exit } = useReplayStore();
+  const { active, root: replayRoot, frames, index, state, loading, error, autoplay, setIndex, exit } = useReplayStore();
   const root = useProjectStore((s) => s.root);
   const playback = useMemo(() => toPlaybackFrames(frames), [frames]);
   // Another project opened: its moments are not these.
@@ -74,7 +74,14 @@ export function ReplayBar() {
       )}
       {frames.length > 0 && (
         <>
-          <PlaybackBar frames={playback} index={index} onIndexChange={(i) => { void setIndex(i); }} summaryOf={noSummary} />
+          <PlaybackBar
+            key={`${frames[0]?.id ?? 0}:${autoplay ?? 'still'}`}
+            frames={playback}
+            index={index}
+            onIndexChange={(i) => { void setIndex(i); }}
+            summaryOf={noSummary}
+            autoPlaySpeed={autoplay ?? undefined}
+          />
           {frame && (
             <div className="text-[10.5px] text-foreground-muted" data-testid="replay-moment">
               {frameWords(frame)}
