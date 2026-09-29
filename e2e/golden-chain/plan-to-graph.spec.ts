@@ -7,9 +7,11 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWithProject, seedPlan, openPlan, cleanupPlans, API } from '../helpers/setup';
+import { gotoWithProject, seedPlan, openPlan, cleanupPlans, reachableNodes, API } from '../helpers/setup';
 
 test.describe('Plan → Graph flow', () => {
+  // gotoWithProject alone may wait 30 s for the canvas on a slow machine.
+  test.setTimeout(60_000);
   const PLAN_TITLE = 'E2E Plan Graph Chain';
 
   test.afterEach(async ({ request }) => {
@@ -88,38 +90,25 @@ test.describe('Plan → Graph flow', () => {
 
   test('context menu "Plan a change" creates action with file target', async ({ page }) => {
     await gotoWithProject(page);
-    await page.waitForTimeout(2000);
 
-    // Right-click a graph node via evaluate to avoid DiffSummary overlap
-    const rightClicked = await page.evaluate(() => {
-      const node = document.querySelector('.react-flow__node') as HTMLElement;
-      if (!node) return false;
-      const rect = node.getBoundingClientRect();
-      const event = new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: rect.x + rect.width / 2,
-        clientY: rect.y + rect.height / 2,
-      });
-      node.dispatchEvent(event);
-      return true;
-    });
-    expect(rightClicked).toBe(true);
-    await page.waitForTimeout(500);
+    // A node whose centre is on screen and not covered (the DiffSummary, a
+    // toast), polled until the layout has settled: the first node in the DOM
+    // right after load can be off-screen or about to be replaced.
+    const node = (await reachableNodes(page))[0];
+    await node.click({ button: 'right' });
 
     // "Plan a change" should be visible
     const planChangeBtn = page.getByText('Plan a change');
-    await expect(planChangeBtn).toBeVisible({ timeout: 2000 });
+    await expect(planChangeBtn).toBeVisible({ timeout: 5000 });
 
     // Click it — should create a plan + action
     await planChangeBtn.click();
-    await page.waitForTimeout(2000);
 
     // Should switch to plan workspace mode
-    const hasWorkspace = await page.evaluate(() => {
+    await expect.poll(() => page.evaluate(() => {
       const text = document.body.textContent || '';
       return text.includes('Change ') || text.includes('Untitled plan');
-    });
-    expect(hasWorkspace).toBe(true);
+    }), { timeout: 10_000 }).toBe(true);
   });
 
   test('multi-select → "Plan these" creates action with multiple files', async ({ page }) => {
@@ -179,49 +168,31 @@ test.describe('Plan → Graph flow', () => {
 
   test('right-click after multi-select still opens context menu', async ({ page }) => {
     await gotoWithProject(page);
-    await page.waitForTimeout(2000);
 
-    // Use evaluate for all clicks to avoid DiffSummary overlap
-    const result = await page.evaluate(() => {
-      const nodes = document.querySelectorAll('.react-flow__node');
-      if (nodes.length < 2) return { count: nodes.length, menuOpened: false };
-
-      // Click first node
-      (nodes[0] as HTMLElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      );
-
-      // Shift-click second
-      (nodes[1] as HTMLElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true, shiftKey: true }),
-      );
-
-      // Right-click second node
-      const rect = (nodes[1] as HTMLElement).getBoundingClientRect();
-      (nodes[1] as HTMLElement).dispatchEvent(
-        new MouseEvent('contextmenu', {
-          bubbles: true,
-          clientX: rect.x + rect.width / 2,
-          clientY: rect.y + rect.height / 2,
-        }),
-      );
-
-      return { count: nodes.length, menuOpened: true };
-    });
-
-    if (result.count < 2) {
+    // Real clicks on nodes that can be clicked, found once the layout has
+    // settled (see reachableNodes); synthetic events on the first two nodes in
+    // the DOM missed whenever those were off-screen or being replaced.
+    const [first] = await reachableNodes(page);
+    const firstId = await first.getAttribute('data-id');
+    await first.click();
+    // Picked after the first click: selecting a node opens a panel that can
+    // cover part of the canvas.
+    let second = null;
+    for (const n of await reachableNodes(page)) {
+      if ((await n.getAttribute('data-id')) !== firstId) { second = n; break; }
+    }
+    if (!second) {
       test.skip();
       return;
     }
-
-    await page.waitForTimeout(500);
+    await second.click({ modifiers: ['Shift'] });
+    // The right-click goes to the node itself: the selection panel may now
+    // cover its centre, and a menu is what is under test, not hit-testing.
+    const box = (await second.boundingBox())!;
+    await second.dispatchEvent('contextmenu', { bubbles: true, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 });
 
     // Context menu should open
-    const hasMenu = await page.evaluate(() => {
-      const text = document.body.textContent || '';
-      return text.includes('Explain with agent') || text.includes('Plan a change') || text.includes('New task');
-    });
-    expect(hasMenu).toBe(true);
+    await expect(page.getByText(/Explain with agent|Plan a change|New task/).first()).toBeVisible({ timeout: 5000 });
 
     await page.keyboard.press('Escape');
   });
