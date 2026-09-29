@@ -173,6 +173,8 @@ export interface NotificationData {
   itemUid?: string;
   /** Phase 32 B4.4 — an agent held at a breakpoint: the hit's ref. */
   ref?: string;
+  /** Phase 32 A4.4 — a serious overlap: the signal's id. */
+  id?: string;
 }
 
 function extract(data: Record<string, unknown> | undefined): NotificationData {
@@ -185,6 +187,7 @@ function extract(data: Record<string, unknown> | undefined): NotificationData {
     criterionUid: data?.criterionUid as string | undefined,
     itemUid: data?.itemUid as string | undefined,
     ref: data?.ref as string | undefined,
+    id: data?.id as string | undefined,
   };
 }
 
@@ -198,6 +201,10 @@ export function routeForNotification(d: NotificationData): string | null {
   // An agent is held until the person answers: the tap opens the answers.
   if (d.type === 'breakpoint') {
     return '/breakpoints';
+  }
+  // A serious overlap (A4.4): the tap opens both sides and the answers.
+  if (d.type === 'signal' && d.id) {
+    return `/signal-detail?id=${encodeURIComponent(d.id)}`;
   }
   if (d.type === 'input-request' && d.requestId) {
     return `/input-request?requestId=${encodeURIComponent(d.requestId)}`;

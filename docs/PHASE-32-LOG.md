@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A4.4: push for a high signal |
-| **Status** | A4.1–A4.3 merged (#215, #216, #217), A4.5a merged (#218). A4.4 in review (#219): `pushForSignal` when a high signal opens (`newlySerious`), ids only, one per kind per minute, never to a connected phone; a loopback-only push URL for the harness. A4.5b built on its own branch |
-| **Next action** | Merge #219 when green; then merge the base into A4.5b and open its PR |
+| **Stage / step** | Wave 2 — A4.5b: the phone's new screens |
+| **Status** | A4.1–A4.3 (#215–#217), A4.5a (#218) and A4.4 (#219) merged. A4.5b in review: Needs you on Activity, signal detail, workstreams, the push tap, each photographed |
+| **Next action** | Merge A4.5b when green; then A4.6 (M4 done-when end to end, and docs) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-4-signal-push` |
+| **Branch** | `feat/phase-32-a4-5b-phone-screens` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -92,9 +92,9 @@
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
   - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
   - [x] A4.3 Workstreams on the phone ([#217](https://github.com/lionroseway/codetrellis/pull/217))
-  - [ ] A4.4 Push for a high signal — in review (#219)
+  - [x] A4.4 Push for a high signal (#219)
   - [x] A4.5a A way to see the phone's screens (#218)
-  - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap)
+  - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) — in review
   - [ ] A4.6 M4 done-when, end to end, and docs
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -116,6 +116,7 @@
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
 - [ ] Follow-up: `e2e/golden-chain/onboarding-to-plan.spec.ts` imports `API` and never uses it, a lint error that predates #213. `npm run lint` covers `src/` only, so nothing reports it; either lint `e2e/` too or drop the import the next time the spec is touched.
+- [ ] Follow-up: #219 (A4.4, backend only) failed browser 3/3 on `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip again, after #195/#196 were thought to fix it) and `golden-chain/onboarding-to-plan.spec.ts:80` (the canvas task detail never appeared, even with #213's 10 s poll; 3 of 3 locally on its own). Neither touches an A4 file. Both need the page captured before `afterEach` clears it, so the next failure shows what was on screen instead of only the missing element.
 - [ ] Follow-up: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
 
 ### Track B: observability
@@ -280,30 +281,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
-### 2026-09-29: A4.4 — a serious overlap, pushed
-Journey **C2**'s first moment: Sam is out and the phone is asleep.
+### 2026-09-29: A4.5b — the phone's new screens
+Journey C2 on the phone. Sam is away from the desk. Activity opens with
+"Needs you": the agent held at a breakpoint, the digest's line with its
+question, then each overlap. Sam taps the high one, or the push that
+announced it. It shows both sides in plain words, the files and what the
+agent said. Sam replies, "Keep the old signature until checkout-fix has moved
+its callers", and each agent in either line reads it on its next step. The
+lines of work open from the same section.
 
-- **When.** `refreshSignals` pushes for each signal that just became serious
-  (`newlySerious`, pure). That means high and open, where before it was
-  absent, resolved, answered and now reopened, or open at a lower severity.
-  A signal that keeps firing, or one the person set aside, is not news. The
-  folder and ref watchers run the refresh, so this works with no window open.
-- **What.** `pushForSignal`: "Needs you", and one sentence for the kind of
-  overlap ("An exported function another line of work uses has changed.").
-  No file, function, branch or agent reaches the push service. The data is
-  `{ type: 'signal', id }`. One per kind per minute per device (the spec's
-  rate), and never to a phone that is connected: its `openSignals` count
-  moves instead.
-- **Seen, not assumed.** `CODETRELLIS_PUSH_URL` points pushes at a receiver on
-  this machine, loopback only. Any other value is ignored, so the setting
-  cannot redirect pushes off the machine.
-- **Tests.** Unit: `push-signal.test.ts` (6: off, high only, the words, the
-  per-kind limit, the URL's loopback rule, and what counts as newly serious).
-  Harness: `phone-signal-push` (3). A contract opens with no window asking
-  and an asleep phone is pushed once, with the signal's id and none of its
-  words. A connected phone is not pushed, and its count moves instead.
-- **Not yet.** The tap's route to the signal screen comes with the screens
-  (A4.5).
+- **Screens.** `components/NeedsYou.tsx` (the top of Activity),
+  `signal-detail.tsx`, `workstreams.tsx`, `workstream-detail.tsx`. The types
+  and calls are in `mobile/lib/awareness.ts`. The Home badge now adds
+  `openSignals` to the breakpoints, so it counts what the section counts.
+  The push's `{ type: 'signal', id }` opens that signal.
+- **Words.** Every sentence is the desktop's (A4.2 and A4.3). The phone adds
+  only its own states: nothing waiting, a reply not read yet, a signal that
+  has gone ("It may have resolved"). Intended is not offered for stale-base.
+- **Seen.** `tests/phone/awareness.spec.ts`, 8 specs with screenshots:
+  - Needs you, busy and quiet, and where each card goes;
+  - the overlap, acknowledged;
+  - Reply to agent, whose Send waits for words, then the reply "not read yet";
+  - a signal that has gone;
+  - the lines of work;
+  - one line's files and turns;
+  - the push route.
+  The screenshots changed three things:
+  - the same agent seen over MCP and in its own log was listed twice
+    ("claude-code, claude-code") and is now named once;
+  - a turn's call count was shown twice;
+  - FILES ran into SAID with no gap.
+- **Render path.** New stand-ins for `expo-notifications` and
+  `mobile/lib/webrtc.ts` let `push.ts` load in the preview. A fixture can now
+  refuse: `{ __error: 'words' }`, because an Error cannot cross into the page.
+  Both are in `docs/claude/mobile-companion.md`, as are the screens.
 
 ### 2026-09-29: A4.5a — the phone's screens, seen
 The Wave 1 review's point 4: "the phone is unseen". B4.4's screens and 31
@@ -334,6 +345,31 @@ new ones and photographs them the same way.
   that open it; a screen the preview cannot show stays n/a.
 - **What it is not.** A web build of the app: the WebRTC mesh, the camera,
   push and the terminal never run here. A web view shows a placeholder.
+### 2026-09-29: A4.4 — a serious overlap, pushed
+Journey **C2**'s first moment: Sam is out and the phone is asleep.
+
+- **When.** `refreshSignals` pushes for each signal that just became serious
+  (`newlySerious`, pure). That means high and open, where before it was
+  absent, resolved, answered and now reopened, or open at a lower severity.
+  A signal that keeps firing, or one the person set aside, is not news. The
+  folder and ref watchers run the refresh, so this works with no window open.
+- **What.** `pushForSignal`: "Needs you", and one sentence for the kind of
+  overlap ("An exported function another line of work uses has changed.").
+  No file, function, branch or agent reaches the push service. The data is
+  `{ type: 'signal', id }`. One per kind per minute per device (the spec's
+  rate), and never to a phone that is connected: its `openSignals` count
+  moves instead.
+- **Seen, not assumed.** `CODETRELLIS_PUSH_URL` points pushes at a receiver on
+  this machine, loopback only. Any other value is ignored, so the setting
+  cannot redirect pushes off the machine.
+- **Tests.** Unit: `push-signal.test.ts` (6: off, high only, the words, the
+  per-kind limit, the URL's loopback rule, and what counts as newly serious).
+  Harness: `phone-signal-push` (3). A contract opens with no window asking
+  and an asleep phone is pushed once, with the signal's id and none of its
+  words. A connected phone is not pushed, and its count moves instead.
+- **Not yet.** The tap's route to the signal screen comes with the screens
+  (A4.5).
+
 ### 2026-09-29: A4.3 — workstreams on the phone
 The strip, pulled over RPC, for "who is doing what" away from the desk.
 

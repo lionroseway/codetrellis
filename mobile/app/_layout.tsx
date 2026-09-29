@@ -133,6 +133,27 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="signal-detail"
+          options={{
+            title: 'Overlap',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="workstreams"
+          options={{
+            title: 'Lines of work',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="workstream-detail"
+          options={{
+            title: 'Line of work',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
           name="approvals"
           options={{
             title: 'Waiting for you',

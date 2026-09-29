@@ -305,13 +305,18 @@ export function useWaitingBreakpointCount(): number {
   return useWorkspaceStore((s) => s.snapshot?.waitingBreakpoints ?? 0);
 }
 
+/** Overlaps that need the person: open, high or medium (A4.2). */
+export function useOpenSignalCount(): number {
+  return useWorkspaceStore((s) => s.snapshot?.openSignals ?? 0);
+}
+
 export function useAudio(): { capturing: boolean; bufferedSeconds: number } {
   return useWorkspaceStore((s) => s.snapshot?.audio ?? EMPTY_AUDIO);
 }
 
 // --- Attention badge helpers -------------------------------------------------
 
-/** Total attention items: held calls, pending deviations, input requests, stuck and need-decision events. */
+/** Total attention items: held calls, overlaps that need the person, pending deviations, input requests, stuck and need-decision events. */
 export function useAttentionCount(): number {
   return useWorkspaceStore((s) => {
     const snap = s.snapshot;
@@ -327,7 +332,8 @@ export function useAttentionCount(): number {
     ).length ?? 0;
 
     const held = snap.waitingBreakpoints ?? 0;
+    const overlaps = snap.openSignals ?? 0;
 
-    return held + deviations + inputRequests + stuckEvents + needDecision;
+    return held + overlaps + deviations + inputRequests + stuckEvents + needDecision;
   });
 }
