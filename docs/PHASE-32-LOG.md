@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B4.4: breakpoints on the phone |
-| **Status** | Wave 1 done (A2.7 merged, #204). B4.4 built: the phone lists what is held first, in the desktop's words, and answers it as the person (confirmed pairing only, audited); a live count in the snapshot; a push naming the agent only when the phone is away. Unit, harness pass |
-| **Next action** | Open B4.4's PR; merge when green. Then the Wave 1 direction review |
+| **Stage / step** | Wave 1 direction review |
+| **Status** | Wave 1 done: B4.4 merged (#205), so B4 is done, after C5, B3, A8 and A2.7. The direction review is written below; its proposal for Wave 2's order (a hardening step, then A4 before B5) is with the owner |
+| **Next action** | The owner's answer on Wave 2's order; then EXECUTION §2 updated in the same PR as this review, and the first Wave 2 step started |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b4-4-phone` |
+| **Branch** | `feat/phase-32-review-wave-1` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -102,6 +102,7 @@
 - [ ] Follow-up: listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled "Add to plan"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path.
 - [ ] Follow-up: `graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.
 - [ ] Follow-up: with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route.
+- [ ] Follow-up: `agent/workstream-strip.spec.ts:89` failed once on #205 (653c3e1): the chip read `[expanded]`, but `workstream-popover` never appeared and the test ran out of its 30 s (36.1 s; its siblings took about 9 s). Nothing in #205 touches the strip; it passed on the previous commit, locally 18 of 18 twice, and on the one re-run. Its cause is not found: the failure snapshot CI prints is cut at 20 KB, before the end of `<body>` where the popover is portalled. Next time it fails, keep the whole error context (raise the `head -c` limit in CI for that file).
 - [ ] Follow-up: on this container, several browser specs fail on the base too and pass in CI: `awareness-tab.spec` (the served signals never render), `context-menu.spec:12` and `plan/create.spec:16` (the first test of a spec on a cold start), and `graph-breakpoints`' clear toast. Worth one look at why this machine differs, so local runs can be trusted again.
 - [x] Browser robustness, 2026-09-29 (#195, #197, #198, all on base): guide Escape attached before paint; plan-to-graph right-clicks on reachable nodes; graph-breakpoints right-click on the node itself; awareness-tab told times early in their minute; plan create waits for the workspace and the save; recents never re-add a removed project after a late load; New plan opens before the list refreshes.
 - [x] Follow-up: `graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
@@ -121,14 +122,14 @@
   - [x] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph (split in two, EXECUTION §5)
     - [x] B3.3a Overlays turned on and off; each other workstream's line counts and collision zones on file nodes
     - [x] B3.3b A signal chip focuses the graph; "Show changes" on a file node (#199)
-- [ ] B4 Breakpoints, refined in EXECUTION §5:
+- [x] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
   - [x] B4.2b Signal breakpoints ([#181](https://github.com/lionroseway/codetrellis/pull/181))
   - [x] B4.2c Function-level breakpoints and breaches ([#183](https://github.com/lionroseway/codetrellis/pull/183))
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
   - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
-  - [x] B4.4 The phone and push
+  - [x] B4.4 The phone and push ([#205](https://github.com/lionroseway/codetrellis/pull/205))
 - [ ] B5 Replay
 - [ ] B6 Stack view
 - [ ] B7 Conferring
@@ -259,6 +260,74 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: Wave 1 direction review (§1.7)
+
+Wave 1 is A0–A3, B1, B2, C1, B4, C5, B3, A8 and A2.7: #141–#205.
+
+*Which journeys can be demonstrated end to end now?* Fourteen in full, one
+in part:
+- **A1** five agents at a glance (A1.1, A1.3); **A2** two agents in one
+  folder (A1.2, A1.6).
+- **B1** two agents change the same function; **B2** a change others
+  depend on, now in 13 languages (A2.3, A2.7); **B3** an agent off its
+  ticket (A2.5); **B4** main moves under you (A1.6); **B5** "who is
+  affected?" before an edit (A1.6, A2.2).
+- **C1** back from lunch, the digest (A3); **C3** "that's on purpose"
+  (A3.2).
+- **K1** "ask me before touching payments", from the window or the phone
+  (B4.1–B4.4); **K2** the honest breach (B4.2, B4.3).
+- **C5** one plan across worktrees; **B3.2** which lines they changed
+  (B3.1–B3.3).
+- **A8** any MCP client runs every one of these with no hook
+  (`any-agent-parity.test.ts`).
+- In part: **G1** catch-up (lanes and the kept record; replay is B5).
+- Not yet: C2 beyond breakpoints (A4), D1–D3 (A5), E1–E3 (A6), G2 (B10),
+  G3 (B9), H1 (B6), I1 (B7), J1–J2 (B8).
+
+*What did we learn that changes the plan?*
+1. **Every agent alike** (owner, 28 September). A feature ships with the
+   path every MCP client has; a hook only makes it earlier. A8 proved it
+   for Wave 1, and Wave 2's steps are written to it.
+2. **The server holds one project at a time**, and it keeps showing:
+   the blank graph during another project's scan (#195, #196), and about
+   20 ghost nodes still appear when another project was scanned last. B5
+   (snapshots) and B6 (every plan together) lean on it.
+3. **The browser suite graphs this repository itself**, so a PR that adds
+   files moves the layout. #205 found a helper choosing nodes before the
+   layout settled; #195–#198 found four more timing-dependent tests. Each
+   was fixed at its cause, but the class stays open while the suite reads
+   a moving project.
+4. **The phone is unseen.** B4.4 added phone screens that are typechecked
+   and linted but never rendered: the app has no test runner and no
+   screenshot path, and the 31 phone screens were deferred at Stage 0. A4
+   is all phone.
+5. **Two limits worth knowing**, both written down: Gemini CLI's hook can
+   hold an edit but not carry a note to one it allows; a Go contract
+   warning can only say "possibly", because a Go import is a whole package.
+6. **Languages:** TS/JS and Python are deepest; Rust, Java and PHP give no
+   HTTP calls to the cross-system map (Phase 28's gap, not this phase's).
+
+*Is anything getting noisier, slower or harder to read?*
+- **Slower:** harness 814 tests, about 4–5 minutes in four shards; the
+  browser suite 717 tests, about 15–19 minutes per shard of three, up
+  from about 15.
+- **Noisier in CI:** one browser test failure in most PRs since #194, each
+  traced and fixed except `workstream-strip.spec.ts:89` on #205 (re-run
+  once; see #205).
+- **Quieter for the person:** breakpoints and warnings share one "needs
+  you" list; the strip stays hidden for one agent in the main checkout.
+- **Harder to read:** lint warnings 303, up from 297 at Stage 0.
+
+**Proposed for Wave 2** (the owner decides; EXECUTION §2 changes in the
+same PR):
+- Before B5, a short hardening step: the ghost nodes (one project at a
+  time), a phone render path for screenshots (Expo web or
+  react-native-web, enough to see a screen), and the browser suite on a
+  fixed fixture project instead of this repository.
+- A4 (the phone) before B5: it builds straight on B4.4's list, answer and
+  push, which are fresh.
+- Rust, Java and PHP call sites as a small step after A4, if wanted.
 
 ### 2026-09-29: B4.4 — breakpoints on the phone
 - **Journey (K1, away from the desk).** Sam asked to be asked before an agent
