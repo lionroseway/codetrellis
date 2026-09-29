@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A8.3: a breakpoint hook for Gemini CLI |
-| **Status** | A8.4 merged (#202). A8.3 in review: Settings offers Gemini CLI's BeforeTool hook, diff first and unticked, written only from the app window; its format checked against `@google/gemini-cli-core` 0.61.0. A2.7 is stacked after it, rebased on #202 |
-| **Next action** | Merge A8.3's PR when green; then A2.7 (rebased on it). Then B4.4 |
+| **Stage / step** | Track A — A2.7: signatures for the other eight languages |
+| **Status** | A8 done: A8.3 merged (#203), after A8.1 (#200), A8.2 (#201) and A8.4 (#202). A2.7 in review: signatures and visibility for Go, Rust, Java, C#, Kotlin, Swift, Ruby and PHP, so the contract signal works there too; a Go importer is "possibly", because a Go import is the whole package |
+| **Next action** | Merge A2.7's PR when green; update the status page. Then B4.4 (the phone): waiting breakpoints first, answer from the phone, push |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a8-3-gemini-hook` |
+| **Branch** | `feat/phase-32-a2-7-signatures` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -83,10 +83,10 @@
   - [x] A3.4 User skill and optional hook, offered from Settings (#167)
   - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
 - [x] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
-- [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
+- [x] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
   - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
-  - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check)
+  - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check) (#203)
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile
 - [ ] A5 Review
