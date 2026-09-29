@@ -95,28 +95,26 @@ test.describe('Onboarding → Plan journey', () => {
     await expect(page.getByText('Second task').first()).toBeVisible({ timeout: 3000 });
 
     // --- Step 2: Click an item to see its canvas detail ---
+    // Polled, not a fixed wait: on a loaded runner the canvas detail took
+    // longer than the one second this used to allow (#208, #212). A failed
+    // page's snapshot is taken after afterEach has deleted the plan, so a
+    // failure here looks like the plan vanished; it had not.
     await page.getByText('First task').first().click();
-    await page.waitForTimeout(1000);
-
-    // Canvas should show the item detail
-    const hasDetail = await page.evaluate(() => {
-      const text = document.body.textContent || '';
+    const bodyText = () => page.evaluate(() => document.body.textContent || '');
+    await expect.poll(async () => {
+      const text = await bodyText();
       return text.includes('First task') && (
         text.includes('Do the first thing') ||
         text.includes('pending') ||
         text.includes('Status')
       );
-    });
-    expect(hasDetail).toBe(true);
+    }, { timeout: 10_000, message: 'the first task\'s detail shows on the canvas' }).toBe(true);
 
     // --- Step 3: Switch between items ---
     await page.getByText('Second task').first().click();
-    await page.waitForTimeout(500);
-
-    const switchedToSecond = await page.evaluate(() => {
-      return document.body.textContent?.includes('Second task');
-    });
-    expect(switchedToSecond).toBe(true);
+    await expect.poll(async () => (await bodyText()).includes('Do the second thing'), {
+      timeout: 10_000, message: 'the second task\'s detail shows on the canvas',
+    }).toBe(true);
   });
 
   test('plan created via API → visible in UI → open → items → close → graph', async ({
