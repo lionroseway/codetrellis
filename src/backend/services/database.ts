@@ -609,6 +609,12 @@ export function setImportResolutionContext(projectRoot: string, aliasMap: AliasM
   resolutionContext = { projectRoot, aliasMap, systems };
 }
 
+/** The alias map and systems the last scan of this project resolved with (empty for another project). */
+export function getImportResolutionContext(projectRoot: string): { aliasMap: AliasMapping[]; systems: DiscoveredSystem[] } {
+  const ctx = resolutionContext?.projectRoot === projectRoot ? resolutionContext : null;
+  return { aliasMap: ctx?.aliasMap ?? [], systems: ctx?.systems ?? [] };
+}
+
 /**
  * Resolve the imports a watcher re-parse stored (they arrive with no
  * `resolved_path`), using the last scan's alias map and systems.

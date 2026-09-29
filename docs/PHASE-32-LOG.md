@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A4.6: the M4 "done when" |
-| **Status** | A4.1–A4.5b merged (#215–#220). A4.6 in review: `awareness-m4`, from the push to an asleep phone to the agent reading the reply and finding the steer; the phone's part in `awareness.md` and `mobile-companion.md` |
-| **Next action** | Merge A4.6 when green, which closes A4 (M4); update the status page (v12); then A5, the review |
+| **Stage / step** | Wave 2 — A5.1: branch reviews get their dependencies back |
+| **Status** | A4 done: M4 met (#215–#221). A5 (the Review feature, M5) refined into seven steps in EXECUTION §4. A5.1 in review: `commit:` sides carry their dependency edges, and the picker offers each line of work's branch |
+| **Next action** | Merge A5.1 when green; update the status page (v12); then A5.2, "Other work in flight" in `review_plan` and `get_pr_draft` |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-6-m4-done-when` |
+| **Branch** | `feat/phase-32-a5-1-commit-edges` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -88,15 +88,22 @@
   - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
   - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check) (#203)
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
-- [ ] A4 Mobile, refined in EXECUTION §4:
+- [x] A4 Mobile, refined in EXECUTION §4: done (#215–#221)
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
   - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
   - [x] A4.3 Workstreams on the phone ([#217](https://github.com/lionroseway/codetrellis/pull/217))
   - [x] A4.4 Push for a high signal (#219)
   - [x] A4.5a A way to see the phone's screens (#218)
   - [x] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) (#220)
-  - [ ] A4.6 M4 done-when, end to end, and docs — in review
-- [ ] A5 Review
+  - [x] A4.6 M4 done-when, end to end, and docs (#221)
+- [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
+  - [ ] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch — in review
+  - [ ] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft`
+  - [ ] A5.3 The opt-in "no open high signals" check
+  - [ ] A5.4 The review queue and `get_review_queue`
+  - [ ] A5.5 The Review tab
+  - [ ] A5.6 The queue on the phone
+  - [ ] A5.7 M5 done-when, end to end, and docs
 - [ ] A6 The Brief
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace
@@ -280,6 +287,43 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A5 refined, and A5.1 — branch reviews get their dependencies back
+A5 is the Review feature (awareness spec §9, M5), not a review of the work.
+It is split into seven steps in EXECUTION §4. Review already works for one
+change at a time; A5 adds the other work in flight.
+
+A5.1 comes first because it fixes a bug. The default review compares
+against the newest commit, and a `commit:` side had files but no import
+edges. So "dependencies nobody planned" and blast radius were switched off
+in the common case, and for every branch review.
+
+- **How.** `commit-edges.ts` builds a commit side's edges:
+  - a file whose bytes match the working tree, and whose imports all land
+    on files that exist at the commit, keeps the graph's edges;
+  - any other file is parsed at the commit with its imports kept, and
+    resolved by the project's own resolvers (with the last scan's alias map)
+    against the files that exist there.
+
+  Parsed imports are cached by blob id, so playback's run of up to 100
+  commits parses each distinct blob once. Past 400 files to parse, the edges
+  stay unknown and the note says how many files differ.
+- **The picker** (`list_comparands`) offers each line of work's branch as
+  `commit:<branch>`. It uses a new `workstreamBranches`, which reads git only.
+  The first version called `listWorkstreams`, which starts folder and ref
+  watchers, and a unit test hung on the open handles. A picker must not be
+  the discovery pass.
+- **Tests.**
+  - Unit: `commit-edges.test.ts`, 6 tests.
+  - Harness, new: `review-commit-edges` (3). A branch review against main
+    names the new file's import as a dependency nobody planned, in JSON and
+    in the markdown an agent posts. The picker lists the branch.
+  - Harness, updated: `plan-review` and `playback` asserted the old
+    absence. Now a commit compared with itself has no edge changes (its
+    rebuilt edges are the graph's own), a new import is an added edge, and
+    commit frames count their edges.
+- **Words.** The review tools' help, and the comments in plan review,
+  playback and comparison, no longer say a commit has files only.
 
 ### 2026-09-29: A4.6 — M4, away from the desk
 The M4 "done when" (awareness spec §10) as one test,

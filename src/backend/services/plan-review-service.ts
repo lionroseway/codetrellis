@@ -131,10 +131,9 @@ function edgeKey(source: string, target: string): string {
  * Review a plan against the change between two points.
  *
  * Defaults to baseline → live, which is "what has happened since I
- * pinned the baseline". Any two comparands work — including a commit
- * range, though a commit contributes files only (see
- * `snapshot-compare-service`), so edge findings need a checkpoint on
- * both sides.
+ * pinned the baseline". Any two comparands work, including a commit
+ * range: a commit side carries its dependency edges since Phase 32 A5.1
+ * (`commit-edges.ts`), so edge findings come back for branch reviews.
  */
 /**
  * What to compare against when the caller does not say.

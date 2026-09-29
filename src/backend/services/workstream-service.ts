@@ -195,6 +195,25 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
 }
 
 /**
+ * The branches of the lines of work, for a picker (Phase 32 A5.1): each
+ * linked worktree's branch, then each branch with committed work and no
+ * checkout here. Git reads only. Unlike `listWorkstreams` it starts no
+ * watchers and places no agents, so a picker asking does not become the
+ * discovery pass.
+ */
+export function workstreamBranches(projectRoot: string): string[] {
+  const worktrees = listWorktrees(projectRoot);
+  const main = worktrees.find((w) => w.isMain);
+  if (!main) return [];
+  const mainRef = main.branch ?? main.head ?? null;
+  const out = worktrees.filter((w) => !w.isMain && w.branch).map((w) => w.branch as string);
+  for (const b of branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot)) {
+    if (!b.idle && b.branch && !out.includes(b.branch)) out.push(b.branch);
+  }
+  return out;
+}
+
+/**
  * Each workstream with the intents its agents declared (A2.4). Only a
  * session placed in a workstream, so still active, counts: an intent
  * belongs to the work in progress, not to an agent that has gone.

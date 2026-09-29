@@ -83,29 +83,35 @@ test.describe('Comparison + review (Phase 25)', () => {
     }
   });
 
-  test('a commit comparand reports files but says edges were not compared', async () => {
+  // Phase 32 A5.1. A commit side used to carry files only, which switched off
+  // edge findings for the default review and every branch review.
+  test('a commit comparand carries its edges: none change at the same point, and a new import is an added edge', async () => {
     const h = await setupHarness('review-commit-edges');
     try {
-      await h.client.scanProject(h.fixture.projectPath);
+      const root = h.fixture.projectPath;
+      await h.client.scanProject(root);
 
       const comparands = (await (
-        await h.client.raw('GET', `/api/comparands?project=${encodeURIComponent(h.fixture.projectPath)}`)
+        await h.client.raw('GET', `/api/comparands?project=${encodeURIComponent(root)}`)
       ).json()) as Comparand[];
       const commit = comparands.find((c) => c.kind === 'commit')!;
+      const compare = async () => (await (
+        await h.client.raw('GET', `/api/compare?project=${encodeURIComponent(root)}&before=${encodeURIComponent(commit.spec)}&after=live`)
+      ).json()) as Comparison & { diff: { removedEdges: unknown[] } };
 
-      const cmp = (await (
-        await h.client.raw(
-          'GET',
-          `/api/compare?project=${encodeURIComponent(h.fixture.projectPath)}` +
-            `&before=${encodeURIComponent(commit.spec)}&after=live`,
-        )
-      ).json()) as Comparison;
+      // Nothing changed since the commit: its edges, rebuilt, are the graph's own.
+      const same = await compare();
+      expect(same.before.edgesKnown).toBe(true);
+      expect(same.edgesComparable).toBe(true);
+      expect(same.diff.addedEdges).toEqual([]);
+      expect(same.diff.removedEdges).toEqual([]);
+      expect(same.notes.join(' ')).not.toContain('Edges were not compared');
 
-      expect(cmp.edgesComparable).toBe(false);
-      // Zero edge changes must not be reported as a finding when the
-      // comparison never looked at edges.
-      expect(cmp.diff.addedEdges).toHaveLength(0);
-      expect(cmp.notes.join(' ')).toContain('Edges were not compared');
+      fs.writeFileSync(path.join(root, 'packages/web/src/Extra.ts'), "import { listUsers } from './api';\nexport const extra = listUsers;\n");
+      await h.client.scanProject(root);
+      const moved = await compare();
+      expect(moved.edgesComparable).toBe(true);
+      expect(moved.diff.addedEdges).toEqual([{ source: 'packages/web/src/Extra.ts', target: 'packages/web/src/api.ts' }]);
     } finally {
       await h.teardown();
     }

@@ -21,8 +21,8 @@ import { buildPrDraft } from '../../services/pr-draft-service';
 
 const COMPARAND_HELP =
   'One of: "live" (working tree), "baseline" (the pinned baseline), "checkpoint:<id>", or ' +
-  '"commit:<ref>". A commit contributes its FILE LIST only — reconstructing its edges would mean ' +
-  'checking the tree out and re-parsing it — so edge findings need a checkpoint on both sides.';
+  '"commit:<ref>" (a sha or a branch; list_comparands offers each line of work\'s branch). A commit ' +
+  'carries its dependency edges, so dependencies nobody planned are found for branch reviews too.';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- list_comparands ---

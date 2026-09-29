@@ -424,6 +424,26 @@ only a count rides in the live snapshot.
 | A4.5b | The phone's new screens, seen through A4.5a: a "Needs you" section at the top of Activity (the digest line, then breakpoints and signals, one count as the Home badge implies), `signal-detail.tsx` (both sides in plain words, the files, Acknowledge, Intended, Reply to agent), `workstreams.tsx` with its detail, and the push tap routed | phone specs with screenshots; mobile typecheck and lint |
 | A4.6 | M4 done-when as a test: a contract signal on the desktop reaches the phone as a push; the phone reads it and replies; the reply reaches the agent as a steer on its next step. `docs/claude/awareness.md` and `docs/claude/mobile-companion.md` gain the phone's part | harness end to end |
 
+### A5: Review (M5)
+
+Refined 2026-09-29 (log entry "A5 refined"). Review already exists for one
+change at a time (`review_plan`, `get_pr_draft`, criteria and sign-off,
+Phases 25 and 31). A5 adds the work that is not under review. A5.1 comes
+first because it is a bug as much as a feature. The default review compares
+against the newest commit, and a `commit:` side has files but no import
+edges. So "dependencies nobody planned" is switched off in the common case,
+and it is off for every branch review parallel work produces.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A5.1 | A `commit:` side gets its dependency edges. Its unchanged files keep the opened graph's edges. The files that differ from the working tree are parsed at that ref with their imports kept, not only their symbols, and resolved by the project's own resolvers, the path the footprint engine already reads through (`showAt`, `withSymbolChanges`). The side is then `edgesKnown`, so unplanned dependencies and blast radius come back for commit and branch reviews. `list_comparands` also lists each workstream branch, as `commit:<ref>` with its name | unit (edges for a commit side; a file changed at the ref); harness: `review_plan` against a commit reports a dependency nobody planned that it suppressed before |
+| A5.2 | "Other work in flight" in `review_plan` and `get_pr_draft`, for the workstream under review (the branch the plan's items name, else the current branch). It lists:<br>• the open signals involving that workstream, and what happened to each: fixed, acknowledged with the agent's note, or marked intended by the person, written down as a decision;<br>• the other open workstreams that import what it changes ("merging this changes `createInvoice`; `checkout-fix` imports it and will need updating").<br>A PR draft with an open high signal gains a warning. The words come from `signal-words.ts` | unit (the section's words); harness: a branch that changes a function another workstream imports says so in the review and in the PR body |
+| A5.3 | The opt-in "no open high signals" check, inside the existing `code` criterion kind rather than a new kind. It is a project setting, off by default. When on, `runChecks` fails a `code` criterion while the item's workstream has an open high signal, naming it in the desktop's words. It gates sign-off the way a failing test does, and never blocks a tool call | unit (`runChecks` with and without the setting); harness: the check fails while the signal is open and passes once it is answered or fixed |
+| A5.4 | The review queue, keyed by (plan, branch): each workstream that has plan items, ready or nearly ready. For each: criteria status, blast radius (`diff-engine`), unplanned dependencies (A5.1), open signals, and whether it is ready (criteria pass and no open high signal). A suggested merge order: when A changes something B imports, A goes first and B gets a heads-up, with the reason shown. It is never enforced. `GET /api/review-queue`, and a read-only `get_review_queue` MCP tool with its `TOOL_CAPABILITIES` row | unit (the order and its reasons, including a cycle); harness: the queue lists two branches, and orders the one whose change the other imports first |
+| A5.5 | A Review tab next to Awareness in `PlanPanel`: the queue, in order, with each reason. Opening a line shows its review (the existing `PlanReviewPanel`) with the new section. It is empty when nothing is in review, and says so | browser, with a screenshot of the queue and of one review |
+| A5.6 | The queue on the phone: a `review.queue` RPC with its `peer-capabilities` row, and a screen listing the queue with the order and reasons. It opens to the existing `plan-review` and approvals screens (31.6b) | harness (the RPC from a paired phone); phone spec with a screenshot |
+| A5.7 | M5 done-when as a test: reviewing a branch that changes a function another open workstream imports says so in the review and in the PR body, and the queue puts it first with that reason. `docs/claude/awareness.md`, `docs/claude/mcp-tools.md` and `docs/claude/mobile-companion.md` gain review | harness end to end |
+
 ### A3–A7
 
 Refined into sub-steps when next. Scope is per the awareness spec:
