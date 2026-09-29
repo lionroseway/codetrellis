@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 1 direction review |
-| **Status** | Wave 1 done (B4 closed by #205). The direction review is below, with the owner's answer: HD1 (the extra graph nodes) and HD2 (graph specs on the sample app) open Wave 2, then B5; the phone stays after B5 |
-| **Next action** | Merge this review PR when green; then HD1: find which route answers for another project after its scan, and scope it to the opened project |
+| **Stage / step** | Wave 2 — HD1: a project's diff is its own |
+| **Status** | HD1 built: `/api/diff` answers only for the project whose files and baseline it holds; while a scan runs or after another project's scan it says so, and the canvas keeps its diff. The extra ghost nodes are gone (3 cluster nodes on this repository's graph before). Harness and browser pass |
+| **Next action** | Open HD1's PR after the review PR merges; then HD2: the browser specs that click graph nodes onto the sample app |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-review-wave-1` |
+| **Branch** | `feat/phase-32-hd1-diff-own-project` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -101,7 +101,7 @@
 - [x] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
 - [ ] Follow-up: listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled "Add to plan"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path.
 - [ ] Follow-up: `graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.
-- [ ] Follow-up: with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route.
+- [x] Follow-up: with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route. **Fixed by HD1:** it was `/api/diff`: after another project's scan it diffed that project's files against this one and sent them, 45 added and 45 removed on the sample app.
 - [ ] Follow-up: `agent/workstream-strip.spec.ts:89` failed once on #205 (653c3e1): the chip read `[expanded]`, but `workstream-popover` never appeared and the test ran out of its 30 s (36.1 s; its siblings took about 9 s). Nothing in #205 touches the strip; it passed on the previous commit, locally 18 of 18 twice, and on the one re-run. Its cause is not found: the failure snapshot CI prints is cut at 20 KB, before the end of `<body>` where the popover is portalled. Next time it fails, keep the whole error context (raise the `head -c` limit in CI for that file).
 - [ ] Follow-up: on this container, several browser specs fail on the base too and pass in CI: `awareness-tab.spec` (the served signals never render), `context-menu.spec:12` and `plan/create.spec:16` (the first test of a spec on a cold start), and `graph-breakpoints`' clear toast. Worth one look at why this machine differs, so local runs can be trusted again.
 - [x] Browser robustness, 2026-09-29 (#195, #197, #198, all on base): guide Escape attached before paint; plan-to-graph right-clicks on reachable nodes; graph-breakpoints right-click on the node itself; awareness-tab told times early in their minute; plan create waits for the workspace and the save; recents never re-add a removed project after a late load; New plan opens before the list refreshes.
@@ -130,7 +130,7 @@
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
   - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
   - [x] B4.4 The phone and push ([#205](https://github.com/lionroseway/codetrellis/pull/205))
-- [ ] HD1 The extra graph nodes after another project's scan (Wave 2 hardening)
+- [x] HD1 The extra graph nodes after another project's scan (Wave 2 hardening)
 - [ ] HD2 Browser graph specs on the sample app (Wave 2 hardening)
 - [ ] B5 Replay
 - [ ] B6 Stack view
@@ -263,6 +263,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: HD1 — a project's diff is its own
+- **Found.** The follow-up's guess was right. `/api/diff?project=A` diffs the
+  `files` table against `getBaseline()`, and both hold the project scanned
+  last. After another project's scan it answered with that project's files:
+  45 added (`../../other/sample-app/…`) and 45 removed on the sample app,
+  drawn as ghost nodes. On this repository's graph in the browser suite it was
+  three cluster nodes: `codemirror-lang`, `hook` and `spellcheck`. The same
+  happened while a scan ran, when the table is truncated and refilled.
+- **Built.** `/api/diff` names the project it holds in `X-CodeTrellis-Project`,
+  as `/api/dependencies` does (#195). While a scan runs it answers
+  `{ scanning: true }`; for a project other than the one whose files and
+  baseline it holds, `{ otherProject: true, project }`. Both carry `error`, so
+  the canvas keeps the diff it has, which it already did for an error answer.
+- **Tests.** Harness `diff-own-project.test.ts`: its own diff and whose it is;
+  after another project's scan, "other project" and none of its files; that
+  project still gets its own; scanned again, the first has its own back.
+  Browser `graph-own-project.spec.ts` now also asks for the diff at once
+  ("Check now") and requires no node to arrive. It fails without the fix
+  (3 extra cluster nodes) and passes with it.
 
 ### 2026-09-29: Wave 1 direction review (§1.7)
 
