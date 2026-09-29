@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { SignalStateBy } from '../../shared/types';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-phone-aw-'));
 process.env.CODETRELLIS_DATA_DIR = path.join(tmp, 'data');
@@ -35,7 +36,7 @@ const replies: Array<{ projectRoot: string; id: string; message: string; by: unk
 const CTX = {
   who: WHO,
   projectRoot: PROJECT,
-  reply: (projectRoot: string, id: string, message: string, by: typeof WHO) => {
+  reply: (projectRoot: string, id: string, message: string, by: SignalStateBy) => {
     replies.push({ projectRoot, id, message, by });
     return { id: 1, message, by, at: 1, readBy: [], signalId: id, steers: ['e1'] };
   },
