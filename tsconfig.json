@@ -16,5 +16,5 @@
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/**/*", "tools/inventory/**/*"]
+  "include": ["src/**/*", "tools/inventory/**/*", "tests/phone/**/*"]
 }

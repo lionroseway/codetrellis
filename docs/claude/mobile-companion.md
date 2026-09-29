@@ -154,6 +154,28 @@ screens in A4.5.
   not by the `mcp-client` guess a session carries until its client names
   itself.
 
+## Seeing the screens (Phase 32 A4.5a)
+
+`npm run test:phone` renders the real screens from `mobile/` in a browser and
+photographs them to `test-results/phone/`. `tools/phone-preview` is a Vite
+page: `react-native` is react-native-web, `expo-router` and the native
+modules are stand-ins in `tools/phone-preview/stubs/`, and `mobile/lib/rpc.ts`
+answers from fixtures. A spec (`tests/phone/*.spec.ts`) opens one screen with
+the desktop's side given:
+
+```ts
+await openScreen(page, 'breakpoints', {
+  state: { waitingBreakpoints: 2 },                  // typed as WorkspaceSnapshot
+  rpc: { 'breakpoint.waiting': { hits: [HELD] } },   // answers to the phone's calls
+});
+expect(await calls(page)).toContainEqual(...);        // what a tap sent
+expect(await navigations(page)).toContainEqual(...);  // where it asked to go
+```
+
+A new screen joins the preview's table in `tools/phone-preview/main.tsx` (name,
+title, import). CI runs the specs and uploads the screenshots. It is a way to
+see screens, not a web build: WebRTC, the camera, push and the terminal never
+run there.
 ## State sync
 
 Desktop pushes a full snapshot of relevant workspace state on connect over the `ui` channel, then streams `fast-json-patch` diffs. Mobile applies them into `useWorkspaceStore`. This is the same pattern used for plan state, terminal scrollback metadata, presence, and channel events.

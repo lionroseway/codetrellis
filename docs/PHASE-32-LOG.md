@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — A4.4: push for a high signal |
-| **Status** | A4.1–A4.3 merged (#215, #216, #217). A4.4 in review: `pushForSignal` when a high signal opens (`newlySerious`), ids only, one per kind per minute, never to a connected phone; a loopback-only push URL for the harness. A4.5a in review (#218) |
-| **Next action** | Merge A4.4 and A4.5a (#218) as each goes green; then A4.5b, the new screens |
+| **Status** | A4.1–A4.3 merged (#215, #216, #217), A4.5a merged (#218). A4.4 in review (#219): `pushForSignal` when a high signal opens (`newlySerious`), ids only, one per kind per minute, never to a connected phone; a loopback-only push URL for the harness. A4.5b built on its own branch |
+| **Next action** | Merge #219 when green; then merge the base into A4.5b and open its PR |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-a4-4-signal-push` |
 | **Last updated** | 2026-09-29 |
@@ -92,8 +92,9 @@
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
   - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
   - [x] A4.3 Workstreams on the phone ([#217](https://github.com/lionroseway/codetrellis/pull/217))
-  - [ ] A4.4 Push for a high signal — in review
-  - [ ] A4.5 The phone's screens, and a way to render them
+  - [ ] A4.4 Push for a high signal — in review (#219)
+  - [x] A4.5a A way to see the phone's screens (#218)
+  - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap)
   - [ ] A4.6 M4 done-when, end to end, and docs
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -304,6 +305,35 @@ Journey **C2**'s first moment: Sam is out and the phone is asleep.
 - **Not yet.** The tap's route to the signal screen comes with the screens
   (A4.5).
 
+### 2026-09-29: A4.5a — the phone's screens, seen
+The Wave 1 review's point 4: "the phone is unseen". B4.4's screens and 31
+others were typechecked and linted and never looked at, because the app had
+no way to render off a device. The owner's answer put the render path with
+A4. A4.5 is split: this step makes the screens visible, and A4.5b builds the
+new ones and photographs them the same way.
+
+- **How.** `tools/phone-preview` is a Vite page that renders the real screen
+  components from `mobile/` through react-native-web (a root dev dependency,
+  pinned at 0.21.3). The mobile app's own dependencies are untouched. What
+  cannot run in a browser is replaced: `expo-router` records navigation
+  instead of performing it and takes route params from the query; the other
+  `expo-*` and native modules are small stand-ins; `mobile/lib/rpc.ts`
+  answers from fixtures the test puts on the page and records every call.
+  One React for the page: the screens would otherwise find mobile's copy.
+- **Tests.** `npm run test:phone` (`playwright.phone.config.ts`, `tests/phone/`).
+  A fixture's `state` is typed as the phone's own `WorkspaceSnapshot`, and the
+  root typecheck now includes `tests/phone`. The first Home fixture used a
+  field the snapshot does not have, and the screenshot showed the project
+  with no name, which is how the typing came in.
+- **Seen, with screenshots:** Waiting on you (held and breach, empty, and a
+  steer whose Send waits for a note), Home (the held agents card, which opens
+  the list), Plans, Activity (busy and quiet), Waiting for you. 8 specs.
+- **CI.** A "Phone screens (rendered)" job runs them and uploads the
+  screenshots on every run, and "CI passed" needs it.
+- **Inventory.** A mobile screen's "Harness" cell now counts the phone specs
+  that open it; a screen the preview cannot show stays n/a.
+- **What it is not.** A web build of the app: the WebRTC mesh, the camera,
+  push and the terminal never run here. A web view shows a placeholder.
 ### 2026-09-29: A4.3 — workstreams on the phone
 The strip, pulled over RPC, for "who is doing what" away from the desk.
 
