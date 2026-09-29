@@ -90,6 +90,32 @@ async function registeredTools(): Promise<string[]> {
   }
 }
 
+/**
+ * The phone specs that render each screen, by screen file (relative to
+ * mobile/app). A screen in the preview's table with no spec opening it gets
+ * an empty list: renderable, and not yet looked at.
+ */
+function phoneSpecsByScreen(): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const table = fs.existsSync(path.join(ROOT, 'tools/phone-preview/main.tsx')) ? read('tools/phone-preview/main.tsx') : '';
+  const fileOf = new Map<string, string>();
+  for (const m of table.matchAll(/['"]?([\w-]+)['"]?\s*:\s*\{[^}]*?import\(['"]\.\.\/\.\.\/mobile\/app\/([^'"]+)['"]\)/g)) {
+    fileOf.set(m[1], `${m[2]}.tsx`);
+    out.set(`${m[2]}.tsx`, []);
+  }
+  const dir = path.join(ROOT, 'tests', 'phone');
+  if (!fs.existsSync(dir)) return out;
+  for (const f of walk(dir, (x) => x.endsWith('.spec.ts'))) {
+    const src = fs.readFileSync(f, 'utf-8');
+    const rel = path.relative(ROOT, f);
+    for (const m of src.matchAll(/openScreen\(\s*page\s*,\s*['"]([\w-]+)['"]/g)) {
+      const file = fileOf.get(m[1]);
+      if (file && !out.get(file)!.includes(rel)) out.get(file)!.push(rel);
+    }
+  }
+  return out;
+}
+
 function cell(tests: string[] | null): string {
   if (tests === null) return 'n/a';
   return tests.length === 0 ? '✗ none' : String(tests.length);
@@ -176,10 +202,15 @@ export async function collect(): Promise<Collected> {
     rows.push({ surface: 'component', id: rel, domain: domainForComponent(rel) as DomainKey, unitTests: null, harnessTests: null });
   }
 
-  // Mobile screens
+  // Mobile screens. Since A4.5a a screen can be rendered in the phone
+  // preview: its "Harness" cell counts the tests/phone specs that open it
+  // (`openScreen(page, '<name>')`, the name mapped to a file by the preview's
+  // screen table); a screen the preview cannot show stays n/a.
   const mobileDir = path.join(ROOT, 'mobile', 'app');
+  const rendered = phoneSpecsByScreen();
   for (const f of walk(mobileDir, (x) => x.endsWith('.tsx'))) {
-    rows.push({ surface: 'mobile', id: path.relative(mobileDir, f), domain: 'j', unitTests: null, harnessTests: null });
+    const id = path.relative(mobileDir, f);
+    rows.push({ surface: 'mobile', id, domain: 'j', unitTests: null, harnessTests: rendered.get(id) ?? null });
   }
 
   // Settings sections
