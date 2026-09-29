@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — HD2: graph specs on the sample app |
-| **Status** | HD1 merged (#207): a project's diff is its own. HD2 in review: the 16 browser specs that click or lay out graph nodes open `tests/fixtures/sample-app`, not this repository; their files, plans and workstream roots are the sample app's; three silent skips are failures; the sample app's leftover spec plans are cleared before a run. They run in the serial project, because the backend holds one project at a time (#208's first CI run) |
-| **Next action** | Merge HD2's PR when green; then B5 (replay), refined into sub-steps first |
+| **Stage / step** | Wave 2 — B5.1: replay frames |
+| **Status** | HD1 (#207) and HD2 (#208) merged: a project's diff is its own, and the browser graph specs run on the sample app in the serial project. B5 refined into four sub-steps (entry below); B5.1 under way |
+| **Next action** | B5.1: frames carry project, SHA, session, workstream, reason and a digest; taken at turn end, status change and commit, only for the held project |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-hd2-graph-specs-fixture` |
+| **Branch** | `feat/phase-32-b5-1-frames` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -131,8 +131,12 @@
   - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
   - [x] B4.4 The phone and push ([#205](https://github.com/lionroseway/codetrellis/pull/205))
 - [x] HD1 The extra graph nodes after another project's scan (Wave 2 hardening) ([#207](https://github.com/lionroseway/codetrellis/pull/207))
-- [x] HD2 Browser graph specs on the sample app (Wave 2 hardening)
+- [x] HD2 Browser graph specs on the sample app (Wave 2 hardening) ([#208](https://github.com/lionroseway/codetrellis/pull/208))
 - [ ] B5 Replay
+  - [ ] B5.1 Frames: project, SHA, session; turn end, status change, commit
+  - [ ] B5.2 The state at a moment
+  - [ ] B5.3 One clock in the window
+  - [ ] B5.4 Catch-up, and `get_state_at`
 - [ ] B6 Stack view
 - [ ] B7 Conferring
 - [ ] B8 Grounding
@@ -260,9 +264,48 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-29 | A breakpoint push names the agent only ("Claude Code is held at one of your breakpoints until you answer."); the file, task and note load over WebRTC when the app wakes. Pauses and breaches both push, rate-limited per device like every push (B4.4) | A push passes through Expo and the platform's push service; which file an agent was stopped at is the project's, not theirs. Nothing else in a push needs to say more to get the person to open the app |
 | 2026-09-29 | The snapshot carries `waitingBreakpoints`, a count; the calls come from `breakpoint.waiting` when it moves. The breakpoint and workstream words move to `src/shared/lib` so the phone is sent the desktop's wording (B4.4) | An open phone gets no push, so it needs a live signal; a count is one indexed query per tick where the full list would repeat the words every 100 ms. One wording, like `freeze-words.ts`, so a held call reads the same in both places |
 | 2026-09-29 | Wave 2 opens with HD1 (the extra graph nodes after another project's scan) and HD2 (the browser specs that click graph nodes move to the committed sample app); B5 follows, and the phone (A4) stays after it. The Rust, Java and PHP call sites are not scheduled | The owner's answer to the Wave 1 direction review. The extra nodes are the one-project-at-a-time class #195 and #196 fixed on other routes; most CI noise since #194 came from specs clicking a graph of this repository, which every PR changes |
+| 2026-09-29 | Replay frames are taken only when a turn ends, an item's status changes or a commit lands, only for the project the server holds, and a frame whose graph is unchanged points at the last one | Replay steps between recorded moments (observability §6.2); a timer would copy graphs nothing changed, and a capture must never switch the held project under the window |
+
 ---
 
 ## Entries
+
+### 2026-09-29: B5 refined — replay
+Journey **G1** ("what happened while I was in that meeting?"), the part left
+after B1–B4: the graph, the stack and the inbox as they were at a moment, one
+clock driving all three, and catch-up from where the person left off.
+
+*What exists.* `agent_events` (B1) keeps every agent event with session,
+agent and workstream. `plan_events` keeps each item change with its before and
+after state, so an item's status at any moment is a lookup. Breakpoint hits
+carry `hit_at` and `answered_at`. Signals carry `first_seen` and
+`resolved_at`, but one signal id is reopened in place, so only its latest
+opening is kept, and signals are not in `agent_events`.
+The scan baseline is saved (`project_baselines`). The transport bar exists
+(`PlaybackBar.tsx`: step, play, 0.5–4×) and drives one file's diff. Graph
+snapshots exist (`trellis_snapshots`), but only on Checkpoint or plan approval.
+
+*What is missing, found reading `trellis-service.ts`.*
+- A snapshot copies whichever project the server holds, and has no project
+  column; the request's project names only the branch. With one project held
+  at a time, an automatic snapshot could file one project's graph under
+  another.
+- Each snapshot is a full copy of files and edges, with one symbol count query
+  per file. At every turn end that is too much data and too slow.
+- No commit SHA, no session, and nothing in the backend knows when a turn ends.
+  The window's grouper does: a 30 s quiet gap (`TURN_GAP_MS`), for any agent.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B5.1 | Frames: `trellis_snapshots` gains project, commit SHA, session, workstream, reason and a digest. A frame is taken when a session's turn ends (30 s quiet, the window's rule, moved to `src/shared`), an item's status changes, or a commit lands on a workstream; only when the server holds that project; one per project at most every 10 s; a frame whose graph matches the last one points at it instead of copying. Symbol counts in one query. 14 days kept, as `agent_events`. A signal's raising and resolving are kept as app events beside `breakpoint_hit`, so a reopened signal keeps its earlier spans. `GET /api/replay/frames?project&from&to` | unit (digest, debounce, the held-project refusal); harness: a turn end, a status change and a commit each make a frame with its SHA and session; another project held makes none |
+| B5.2 | The state at a moment: `GET /api/replay/state?project&at` answers the graph of the frame at or before `at` (with what differs from now), each item's status, the breakpoint hits waiting and the signals open at `at`, and the lanes up to it. Everything from the records above; nothing new is kept | harness: states at three moments of one scripted run, each matching what the window showed live |
+| B5.3 | One clock in the window: a replay store holds the cursor; the transport bar drives the Timeline cursor, the graph (frames step, never animate), the plan list's statuses and the inbox. The chrome says "Replaying 10:02 → 12:04" with a way back to live; live events keep arriving underneath | browser, with screenshots: step, play, back to live |
+| B5.4 | Catch-up: the window remembers when the person last looked; the digest (C1) offers "Watch at 4×" from there to now. Any MCP client gets the same moment with `get_state_at` | browser: G1 end to end; harness: the MCP tool |
+
+*Decided.* Frames only at those three moments, never on a timer: replay steps
+between recorded moments (observability §6.2), and a frame on a timer would
+copy a graph nothing changed. The held-project rule refuses rather than scans:
+a frame must never make the server switch projects under the window.
 
 ### 2026-09-29: HD2 — the graph specs open the sample app
 - **Why.** Most browser failures since #194 were specs clicking a graph of this
@@ -305,6 +348,10 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   It joins `FIXTURE_SPECS`. The one other parallel spec opening a project of
   its own, git/worktree-checkout (a temporary worktree), joins the serial list
   too. No parallel spec now scans anything but this repository.
+- **Green on the third run** (#208, merged). The browser shards took 16, 20
+  and 24 minutes, up from about 15–19: the serial project is longer by the
+  moved specs. Worth watching; a fixture-only parallel project after the
+  repository's is the next step if it grows.
 
 ### 2026-09-29: HD1 — a project's diff is its own
 - **Found.** The follow-up's guess was right. `/api/diff?project=A` diffs the
