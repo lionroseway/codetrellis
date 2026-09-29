@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A2.7: signatures for the other eight languages |
-| **Status** | A8 done: A8.3 merged (#203), after A8.1 (#200), A8.2 (#201) and A8.4 (#202). A2.7 in review: signatures and visibility for Go, Rust, Java, C#, Kotlin, Swift, Ruby and PHP, so the contract signal works there too; a Go importer is "possibly", because a Go import is the whole package |
-| **Next action** | Merge A2.7's PR when green; update the status page. Then B4.4 (the phone): waiting breakpoints first, answer from the phone, push |
+| **Stage / step** | Track B — B4.4: breakpoints on the phone |
+| **Status** | Wave 1 done: A2.7 merged (#204), after A8 (#200–#203) and B3.3b (#199). B4.4 started: mapping the phone's list, its RPC methods and the push path before building |
+| **Next action** | Build B4.4: waiting breakpoints first in the phone's list, answered from the phone (author the phone), a push when an agent is held. Then the direction review |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a2-7-signatures` |
+| **Branch** | `feat/phase-32-b4-4-phone` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -82,7 +82,7 @@
   - [x] A3.3 `parallel` guide flavour (#166)
   - [x] A3.4 User skill and optional hook, offered from Settings (#167)
   - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
-- [x] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
+- [x] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28) (#204)
 - [x] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
   - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
