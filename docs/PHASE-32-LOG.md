@@ -103,7 +103,7 @@
   - [ ] A5.4 The review queue and `get_review_queue` — built, PR after A5.3
   - [ ] A5.5 The Review tab — built, PR after A5.4
   - [ ] A5.6 The queue on the phone — built, PR after A5.5
-  - [ ] A5.7 M5 done-when, end to end, and docs
+  - [ ] A5.7 M5 done-when, end to end, and docs — built, PR after A5.6
 - [ ] A6 The Brief
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace
@@ -287,6 +287,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A5.7 — M5 done-when, and the docs
+**M5 is met.** Review knows what else is in flight.
+
+`tests/e2e/awareness-m5.test.ts` sets up two real worktrees with committed
+work: billing-v2 changes `validateCreateUser`'s signature, and
+checkout-fix's work imports it. There is one plan, with an item on each
+branch, and every comparison is commit to commit against main's branch.
+- A `claude-code` agent's `review_plan` of billing-v2 says, in JSON and in
+  markdown: "Merging this changes validateCreateUser; checkout-fix imports
+  it and will need updating."
+- A `codex` agent's `get_pr_draft` carries the same line and warns while
+  the overlap is open.
+- A `cursor` agent's `get_review_queue` puts billing-v2 first, with the
+  reason "Before checkout-fix: it imports validateCreateUser, which this
+  changes, and will need updating after." Both lines are held.
+- A paired phone gets the same queue and the same review. Once the overlap
+  is marked intended, both lines are ready and the order stands.
+
+**Docs.**
+- `docs/claude/awareness.md` gains "Review: what else is in flight":
+  - commit-side edges, other work in flight, the opt-in hold, the queue
+    and its order, and where each shows;
+  - a row in the any-agent table;
+  - the new tests.
+- `docs/claude/mcp-tools.md` gains the `review-tools.ts` row, which it
+  never had.
+- `docs/claude/mobile-companion.md` gains the review queue's RPC, both
+  screens and their routes.
 
 ### 2026-09-29: A5.6 — the queue on the phone
 The phone asks "what should merge next, and why" too.
