@@ -116,6 +116,9 @@ export default function PlansTab() {
         <Text style={styles.newRowTitle}>PLANS</Text>
         {!creating && (
           <View style={styles.newBtnGroup}>
+            <TouchableOpacity style={styles.newBtnGhost} onPress={() => router.push('/review-queue')} accessibilityLabel="Review queue: what to merge first">
+              <Text style={styles.newBtnGhostText}>Review queue</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.newBtnGhost} onPress={() => router.push('/plan-templates')}>
               <Text style={styles.newBtnGhostText}>Template</Text>
             </TouchableOpacity>

@@ -7,13 +7,14 @@
  * checkout-fix imports what it changes and will need updating after. Both are
  * held while the high overlap is open. Once the person marks it intended they
  * are ready, and the order stands, because checkout-fix still has to update.
+ * A paired phone gets the same queue (A5.6), for an opened project only.
  */
 
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { setupHarness, type Harness } from '../harness';
+import { setupHarness, pairPhone, type Harness } from '../harness';
 
 const VALIDATORS = 'packages/shared/src/validators.ts';
 const USER_LIST = 'packages/web/src/UserList.tsx';
@@ -108,5 +109,17 @@ test.describe.serial('The review queue', () => {
     expect(r.isError, r.text).toBeFalsy();
     const got = JSON.parse(r.text) as Queue;
     expect(got.lines.map((l) => l.branch)).toEqual(['billing-v2', 'checkout-fix']);
+  });
+
+  test('a paired phone gets the same queue, for an opened project only (A5.6)', async () => {
+    const phone = await pairPhone(h.client, { alias: 'Queue phone' });
+    try {
+      const got = await phone.rpc('review.queue', { projectPath: root }) as Queue;
+      expect(got).toEqual(await queue());
+      expect(got.lines.map((l) => [l.position, l.branch, l.status])).toEqual([[1, 'billing-v2', 'ready'], [2, 'checkout-fix', 'ready']]);
+      expect(await phone.rpcError('review.queue', { projectPath: '/etc' })).toMatch(/not|trusted|opened/i);
+    } finally {
+      await phone.close();
+    }
   });
 });
