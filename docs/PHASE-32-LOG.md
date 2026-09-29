@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A4.5a: the phone's screens, seen |
-| **Status** | A4.1–A4.3 merged (#215, #216, #217). A4.4 in review (#219). A4.5a in review (#218): the real phone screens rendered through react-native-web and photographed (`npm run test:phone`), a CI job for them |
-| **Next action** | Merge #218 and #219 as each goes green; then A4.5b, the new screens |
+| **Stage / step** | Wave 2 — A4.4: push for a high signal |
+| **Status** | A4.1–A4.3 merged (#215, #216, #217), A4.5a merged (#218). A4.4 in review (#219): `pushForSignal` when a high signal opens (`newlySerious`), ids only, one per kind per minute, never to a connected phone; a loopback-only push URL for the harness. A4.5b built on its own branch |
+| **Next action** | Merge #219 when green; then merge the base into A4.5b and open its PR |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-5a-phone-render` |
+| **Branch** | `feat/phase-32-a4-4-signal-push` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -93,7 +93,7 @@
   - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
   - [x] A4.3 Workstreams on the phone ([#217](https://github.com/lionroseway/codetrellis/pull/217))
   - [ ] A4.4 Push for a high signal — in review (#219)
-  - [ ] A4.5a A way to see the phone's screens — in review
+  - [x] A4.5a A way to see the phone's screens (#218)
   - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap)
   - [ ] A4.6 M4 done-when, end to end, and docs
 - [ ] A5 Review
@@ -279,6 +279,31 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A4.4 — a serious overlap, pushed
+Journey **C2**'s first moment: Sam is out and the phone is asleep.
+
+- **When.** `refreshSignals` pushes for each signal that just became serious
+  (`newlySerious`, pure). That means high and open, where before it was
+  absent, resolved, answered and now reopened, or open at a lower severity.
+  A signal that keeps firing, or one the person set aside, is not news. The
+  folder and ref watchers run the refresh, so this works with no window open.
+- **What.** `pushForSignal`: "Needs you", and one sentence for the kind of
+  overlap ("An exported function another line of work uses has changed.").
+  No file, function, branch or agent reaches the push service. The data is
+  `{ type: 'signal', id }`. One per kind per minute per device (the spec's
+  rate), and never to a phone that is connected: its `openSignals` count
+  moves instead.
+- **Seen, not assumed.** `CODETRELLIS_PUSH_URL` points pushes at a receiver on
+  this machine, loopback only. Any other value is ignored, so the setting
+  cannot redirect pushes off the machine.
+- **Tests.** Unit: `push-signal.test.ts` (6: off, high only, the words, the
+  per-kind limit, the URL's loopback rule, and what counts as newly serious).
+  Harness: `phone-signal-push` (3). A contract opens with no window asking
+  and an asleep phone is pushed once, with the signal's id and none of its
+  words. A connected phone is not pushed, and its count moves instead.
+- **Not yet.** The tap's route to the signal screen comes with the screens
+  (A4.5).
 
 ### 2026-09-29: A4.5a — the phone's screens, seen
 The Wave 1 review's point 4: "the phone is unseen". B4.4's screens and 31
