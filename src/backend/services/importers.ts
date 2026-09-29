@@ -18,6 +18,7 @@
  * any of them, and is reported as "possibly".
  */
 
+import path from 'node:path';
 import { getDb } from './database';
 
 export interface Importer {
@@ -37,14 +38,35 @@ const MAX_DEPTH = 5;
 
 interface Row { path: string; rel: string; specifiers: string[]; namespace: boolean; reexport: boolean }
 
+/**
+ * A Go file is imported through its package (A2.7): an import names a
+ * directory, and the resolver stores one representative file of it. So a
+ * Go file's importers are its package's, and each is a namespace import
+ * (`ledger.Post`), which may use any of the package's names.
+ */
+const isGo = (file: string) => /\.go$/.test(file) && !/_test\.go$/.test(file);
+
 function rowsImporting(target: string): Row[] {
-  const res = getDb().exec(
-    `SELECT f.path, f.relative_path, i.specifiers, i.is_namespace, i.is_reexport
-       FROM imports i JOIN files f ON i.file_id = f.id
-      WHERE i.resolved_path = ?`,
-    [target],
-  );
-  return (res[0]?.values ?? []).map((r) => ({
+  const go = isGo(target);
+  const dir = path.dirname(target);
+  const res = go
+    ? getDb().exec(
+      `SELECT f.path, f.relative_path, i.specifiers, i.is_namespace, i.is_reexport, i.resolved_path
+         FROM imports i JOIN files f ON i.file_id = f.id
+        WHERE i.resolved_path LIKE ? ESCAPE '\\'`,
+      [`${dir.replace(/[\\%_]/g, (c) => `\\${c}`)}${path.sep}%.go`],
+    )
+    : getDb().exec(
+      `SELECT f.path, f.relative_path, i.specifiers, i.is_namespace, i.is_reexport
+         FROM imports i JOIN files f ON i.file_id = f.id
+        WHERE i.resolved_path = ?`,
+      [target],
+    );
+  const rows = (res[0]?.values ?? []).filter((r) => !go || (path.dirname(r[5] as string) === dir && isGo(r[5] as string)));
+  if (go) {
+    return rows.map((r) => ({ path: r[0] as string, rel: r[1] as string, specifiers: [], namespace: true, reexport: false }));
+  }
+  return rows.map((r) => ({
     path: r[0] as string,
     rel: r[1] as string,
     specifiers: JSON.parse((r[2] as string) || '[]') as string[],

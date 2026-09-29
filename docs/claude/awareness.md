@@ -62,8 +62,19 @@ graph.
   `CODETRELLIS_WORKSTREAM_DEBOUNCE_MS` in tests).
 - **Symbols**: only the changed files are parsed, current vs merge base,
   giving added / removed / modified (`workstream-symbols.ts`, A1.5).
-- **Signatures and exports**: TS/JS and Python (A2.1). `SymbolChange.exported`
-  follows `export`, or for Python no leading underscore or `__all__`.
+- **Signatures and exports**: TS/JS and Python (A2.1); Go, Rust, Java, C#,
+  Kotlin, Swift, Ruby and PHP for functions and methods (A2.7), from each
+  declaration's header (`headerSignature` in `parsers/base.ts`: every token
+  but the name, body, modifiers and keyword, comments and layout dropped).
+  `SymbolChange.exported` follows `export`, or for Python no leading
+  underscore or `__all__`; for the others each language's own rule
+  (`isExported` in `workstream-symbols.ts`: Go's capital, Rust's `pub`, not
+  `private` elsewhere, C#'s members only when they say so). A modified symbol
+  with no shape to compare (a Go struct, a Kotlin class) carries
+  `signatureUnknown`, never a silent "unchanged".
+- **Go imports a package**, so a Go file's importers are its package's, each
+  as a namespace import: a Go contract signal is medium, "possibly used"
+  (`importers.ts`).
 - **Importers**: through barrels (`export … from`), with the names imported
   (`importers.ts`, A2.2).
 - **Declared intent**: what an agent says it is about to change, per MCP
@@ -209,7 +220,8 @@ run as a plain `codex` client with no hook and no watcher in
   - `connector/hook.test.ts`.
 - Harness, all on real worktrees:
   - `awareness` (M1: collisions and stale base), `awareness-answers`;
-  - `awareness-contract`, `awareness-drift`, `declare-intent`;
+  - `awareness-contract`, `awareness-contract-languages` (Go and Kotlin),
+    `awareness-drift`, `declare-intent`;
   - `awareness-notices`, the M2 "done when";
   - `awareness-cooldown`;
   - `parallel-hook`, `check-edit`, `gemini-hook`;

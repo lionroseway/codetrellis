@@ -1,4 +1,4 @@
-import type { ParserPlugin, SyntaxNode } from './base';
+import { headerSignature, type ParserPlugin, type SyntaxNode } from './base';
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -18,10 +18,17 @@ function lineOf(node: SyntaxNode): { startLine: number; endLine: number } {
   return { startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1 };
 }
 
+/** `public`, `private`, `protected`, `static` (A2.7). */
+const visibility = (node: SyntaxNode): string[] =>
+  node.children.filter((c: SyntaxNode) => c.type === 'visibility_modifier' || c.type === 'static_modifier').map((c: SyntaxNode) => c.text);
+
+/** Only a symbol that has a signature carries the key (A2.7). */
+const sig = (node: SyntaxNode, skip: string[] = []) => { const signature = headerSignature(node, skip); return signature ? { signature } : {}; };
+
 function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
   switch (node.type) {
     case 'function_definition':
-      return { name: nameOf(node), kind: 'function', ...lineOf(node), children: [], modifiers: [] };
+      return { name: nameOf(node), kind: 'function', ...lineOf(node), children: [], modifiers: [], ...sig(node) };
     case 'class_declaration': {
       const body = node.childForFieldName('body');
       const children = body ? extractClassMembers(body) : [];
@@ -42,7 +49,7 @@ function extractClassMembers(body: SyntaxNode): ParsedSymbol[] {
   const out: ParsedSymbol[] = [];
   for (const child of body.children) {
     if (child.type === 'method_declaration') {
-      out.push({ name: nameOf(child), kind: 'method', ...lineOf(child), children: [], modifiers: [] });
+      out.push({ name: nameOf(child), kind: 'method', ...lineOf(child), children: [], modifiers: visibility(child), ...sig(child) });
     }
   }
   return out;

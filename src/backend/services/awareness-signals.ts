@@ -93,8 +93,8 @@ export interface ContractChange {
   importers: Array<{ path: string; possibly: boolean }>;
 }
 
-/** The name another file imports a symbol by: a member is imported with its type. */
-export const importableName = (symbol: string) => symbol.split(/[.#]/)[0];
+/** The name another file imports a symbol by: a member is imported with its type (Go's `(Ledger).Post` by `Ledger`). */
+export const importableName = (symbol: string) => symbol.replace(/^\((\w+)\)/, '$1').split(/[.#]/)[0];
 
 /**
  * A footprint's contract changes, before importers are looked up: exported

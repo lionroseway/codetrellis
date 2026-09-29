@@ -42,7 +42,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'Every line of parallel work in the repository: each git worktree (the main checkout included), and each recent ' +
         'branch with commits but no checkout on this machine (shape "branch", e.g. a cloud agent\'s pushed work), with the ' +
         'agents working in it and the files it has changed since it branched (committed, uncommitted and new), each ' +
-        'with the symbols the change touches (added, removed, modified) where the language is parsed. ' +
+        'with the symbols the change touches (added, removed, modified) where the language is parsed; a modified one carries ' +
+        '`signature` (before, after) when its shape changed, and `signatureUnknown` when its shape cannot be compared. ' +
         'A folder with two or more agents is a "shared" checkout, where their edits cannot be told apart — prefer a ' +
         'worktree of your own. `yours` marks the workstream this connection is bound to. Check the others\' changed ' +
         'files before editing the same ones. Idle worktrees (no agent, nothing changed) are left out unless ' +

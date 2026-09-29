@@ -175,15 +175,21 @@ export interface SymbolChange {
   line: number;
   /**
    * Set on a `modified` symbol whose shape changed too — parameters, return
-   * type, a type's members (A2.1). Absent for a body-only edit, and for a
-   * language whose parser gives no signatures.
+   * type, a type's members (A2.1). Absent for a body-only edit.
    */
   signature?: { before: string; after: string };
   /**
+   * Set on a `modified` symbol when its shape cannot be compared (A2.7): the
+   * parser gives none for it (a Go struct, a Kotlin class). Then it is not
+   * known whether its signature changed, which is never read as "unchanged".
+   */
+  signatureUnknown?: true;
+  /**
    * Another file can import it (A2.3): it, or for a member the type it
    * belongs to, is exported. TS/JS: marked `export`. Python: no leading
-   * underscore, or listed in `__all__`. Absent where the language marks
-   * nothing, so no contract signal can come from it.
+   * underscore, or listed in `__all__`. The other languages by their own
+   * rule (A2.7, `isExported` in workstream-symbols.ts). Absent where the
+   * language marks nothing, so no contract signal can come from it.
    */
   exported?: true;
 }

@@ -1,4 +1,4 @@
-import type { ParserPlugin, SyntaxNode } from './base';
+import { headerSignature, type ParserPlugin, type SyntaxNode } from './base';
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -17,16 +17,22 @@ function lineOf(node: SyntaxNode): { startLine: number; endLine: number } {
   return { startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1 };
 }
 
+/** `pub`, `pub(crate)`: visible outside its module (A2.7). */
+const pub = (node: SyntaxNode) => (node.children.some((c: SyntaxNode) => c.type === 'visibility_modifier') ? ['pub'] : []);
+
+/** Only a symbol that has a signature carries the key (A2.7). */
+const sig = (node: SyntaxNode, skip: string[] = []) => { const signature = headerSignature(node, skip); return signature ? { signature } : {}; };
+
 function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
   switch (node.type) {
     case 'function_item':
-      return { name: nameOf(node), kind: 'function', ...lineOf(node), children: [], modifiers: [] };
+      return { name: nameOf(node), kind: 'function', ...lineOf(node), children: [], modifiers: pub(node), ...sig(node) };
     case 'struct_item':
-      return { name: nameOf(node), kind: 'class', ...lineOf(node), children: [], modifiers: ['struct'] };
+      return { name: nameOf(node), kind: 'class', ...lineOf(node), children: [], modifiers: ['struct', ...pub(node)] };
     case 'enum_item':
-      return { name: nameOf(node), kind: 'enum', ...lineOf(node), children: [], modifiers: [] };
+      return { name: nameOf(node), kind: 'enum', ...lineOf(node), children: [], modifiers: pub(node) };
     case 'trait_item':
-      return { name: nameOf(node), kind: 'interface', ...lineOf(node), children: [], modifiers: ['trait'] };
+      return { name: nameOf(node), kind: 'interface', ...lineOf(node), children: [], modifiers: ['trait', ...pub(node)] };
     case 'impl_item': {
       const typeNode = node.childForFieldName('type');
       const name = typeNode ? typeNode.text : 'impl';
@@ -35,7 +41,7 @@ function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
     case 'mod_item':
       return { name: nameOf(node), kind: 'class', ...lineOf(node), children: [], modifiers: ['mod'] };
     case 'type_item':
-      return { name: nameOf(node), kind: 'type', ...lineOf(node), children: [], modifiers: [] };
+      return { name: nameOf(node), kind: 'type', ...lineOf(node), children: [], modifiers: pub(node) };
     default:
       return null;
   }

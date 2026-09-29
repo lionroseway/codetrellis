@@ -1,4 +1,4 @@
-import type { ParserPlugin, SyntaxNode } from './base';
+import { headerSignature, type ParserPlugin, type SyntaxNode } from './base';
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -87,12 +87,15 @@ function typeSpecToSymbol(spec: SyntaxNode): ParsedSymbol | null {
   }
 }
 
+/** Only a symbol that has a signature carries the key (A2.7). */
+const sig = (node: SyntaxNode, skip: string[] = []) => { const signature = headerSignature(node, skip); return signature ? { signature } : {}; };
+
 function nodeToSymbols(node: SyntaxNode): ParsedSymbol[] {
   switch (node.type) {
     case 'function_declaration': {
       const name = node.childForFieldName('name')?.text;
       if (!name) return [];
-      return [{ name, kind: 'function', ...lineOf(node), children: [], modifiers: modifiersFor(name) }];
+      return [{ name, kind: 'function', ...lineOf(node), children: [], modifiers: modifiersFor(name), ...sig(node) }];
     }
 
     case 'method_declaration': {
@@ -108,6 +111,8 @@ function nodeToSymbols(node: SyntaxNode): ParsedSymbol[] {
         // Exportedness is a property of the method name, not the
         // qualified form.
         modifiers: modifiersFor(name, 'method'),
+        // The receiver is in the name; its variable is not shape.
+        ...sig(node, ['receiver']),
       }];
     }
 

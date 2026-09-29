@@ -1,5 +1,8 @@
 import type { ParserPlugin, SyntaxNode } from './base';
-import { flattenSymbols } from './base';
+import { flattenSymbols, headerSignature } from './base';
+/** Only a symbol that has a signature carries the key (A2.7). */
+const sig = (node: SyntaxNode, skip: string[] = []) => { const signature = headerSignature(node, skip); return signature ? { signature } : {}; };
+
 import type { ParsedSymbol, ImportDeclaration, SymbolKind } from '../../../shared/types';
 
 /**
@@ -101,14 +104,14 @@ function memberSymbol(node: SyntaxNode, owner: string): ParsedSymbol | null {
     case 'protocol_function_declaration': {
       const name = node.children.find((c: SyntaxNode) => c.type === 'simple_identifier')?.text;
       if (!name) return null;
-      return { name: `${owner}.${name}`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node) };
+      return { name: `${owner}.${name}`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node), ...sig(node) };
     }
     case 'init_declaration':
-      return { name: `${owner}.init`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'initializer') };
+      return { name: `${owner}.init`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'initializer'), ...sig(node) };
     case 'deinit_declaration':
       return { name: `${owner}.deinit`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'deinitializer') };
     case 'subscript_declaration':
-      return { name: `${owner}.subscript`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'subscript') };
+      return { name: `${owner}.subscript`, kind: 'method', ...lineOf(node), children: [], modifiers: modifiersOf(node, 'subscript'), ...sig(node) };
     case 'typealias_declaration': {
       const name = node.children.find((c: SyntaxNode) => c.type === 'type_identifier')?.text;
       if (!name) return null;
@@ -201,7 +204,7 @@ function collectTopLevel(root: SyntaxNode): ParsedSymbol[] {
     if (child.type === 'function_declaration') {
       const name = child.children.find((c: SyntaxNode) => c.type === 'simple_identifier')?.text;
       if (name) {
-        out.push({ name, kind: 'function', ...lineOf(child), children: [], modifiers: modifiersOf(child) });
+        out.push({ name, kind: 'function', ...lineOf(child), children: [], modifiers: modifiersOf(child), ...sig(child) });
       }
       continue;
     }

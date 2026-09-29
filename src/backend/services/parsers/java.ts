@@ -1,5 +1,5 @@
 import type { ParserPlugin, SyntaxNode } from './base';
-import { flattenSymbols } from './base';
+import { flattenSymbols, headerSignature } from './base';
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -30,6 +30,14 @@ function lineOf(node: SyntaxNode): { startLine: number; endLine: number } {
  * symbol count while being findable in search — half-present, in the
  * way nothing reported. See `flattenSymbols`.
  */
+/** The words of a declaration's `modifiers` (`public`, `static`, …), annotations left out (A2.7). */
+const modifiersOf = (node: SyntaxNode): string[] =>
+  (node.children.find((c: SyntaxNode) => c.type === 'modifiers')?.children ?? [])
+    .filter((c: SyntaxNode) => !/annotation/.test(c.type)).map((c: SyntaxNode) => c.text);
+
+/** Only a symbol that has a signature carries the key (A2.7). */
+const sig = (node: SyntaxNode, skip: string[] = []) => { const signature = headerSignature(node, skip); return signature ? { signature } : {}; };
+
 function extractMembers(body: SyntaxNode | null, owner: string): ParsedSymbol[] {
   if (!body) return [];
   const out: ParsedSymbol[] = [];
@@ -40,7 +48,8 @@ function extractMembers(body: SyntaxNode | null, owner: string): ParsedSymbol[] 
         kind: 'method',
         ...lineOf(child),
         children: [],
-        modifiers: child.type === 'constructor_declaration' ? ['constructor'] : [],
+        modifiers: [...modifiersOf(child), ...(child.type === 'constructor_declaration' ? ['constructor'] : [])],
+        ...sig(child),
       });
     }
   }
@@ -51,13 +60,13 @@ function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
   const name = nameOf(node);
   switch (node.type) {
     case 'class_declaration':
-      return { name, kind: 'class', ...lineOf(node), children: extractMembers(node.childForFieldName('body'), name), modifiers: [] };
+      return { name, kind: 'class', ...lineOf(node), children: extractMembers(node.childForFieldName('body'), name), modifiers: modifiersOf(node) };
     case 'interface_declaration':
-      return { name, kind: 'interface', ...lineOf(node), children: extractMembers(node.childForFieldName('body'), name), modifiers: [] };
+      return { name, kind: 'interface', ...lineOf(node), children: extractMembers(node.childForFieldName('body'), name), modifiers: modifiersOf(node) };
     case 'enum_declaration':
-      return { name: nameOf(node), kind: 'enum', ...lineOf(node), children: [], modifiers: [] };
+      return { name: nameOf(node), kind: 'enum', ...lineOf(node), children: [], modifiers: modifiersOf(node) };
     case 'record_declaration':
-      return { name: nameOf(node), kind: 'class', ...lineOf(node), children: [], modifiers: ['record'] };
+      return { name: nameOf(node), kind: 'class', ...lineOf(node), children: [], modifiers: ['record', ...modifiersOf(node)] };
     default:
       return null;
   }

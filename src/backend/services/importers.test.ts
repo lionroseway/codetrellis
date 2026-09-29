@@ -35,6 +35,12 @@ const FILES: Record<string, { src: string; resolves?: Record<string, string> }> 
   'web/viaLoop.ts': { src: "import { isValidEmail } from '../src/loop-b'\nexport const l = 1\n", resolves: { '../src/loop-b': 'src/loop-b.ts' } },
   'app/db.py': { src: 'def add_order(o):\n    pass\n\ndef _private():\n    pass\n' },
   'app/routes.py': { src: 'from app.db import add_order as insert_order\n\ndef create(o):\n    insert_order(o)\n', resolves: { 'app.db': 'app/db.py' } },
+  // Go (A2.7): the import names the package; the resolver stored ledger.go as its representative.
+  'billing/ledger/ledger.go': { src: 'package ledger\n\ntype Ledger struct{}\n' },
+  'billing/ledger/post.go': { src: 'package ledger\n\nfunc (l *Ledger) Post(amount int) error { return nil }\n' },
+  'billing/ledger/post_test.go': { src: 'package ledger\n' },
+  'billing/ledger/audit/audit.go': { src: 'package audit\n' },
+  'billing/main.go': { src: 'package main\n\nimport "example.com/billing/ledger"\n\nfunc main() { _ = ledger.Ledger{} }\n', resolves: { 'example.com/billing/ledger': 'billing/ledger/ledger.go' } },
 };
 
 const ROOT = '/repo';
@@ -124,5 +130,18 @@ describe('the lookup is indexed', () => {
     db.resolveImports(ROOT); // adds the column and the index, as a scan does
     const idx = db.getDb().exec(`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'imports'`)[0]?.values.map((r) => r[0]);
     assert.ok(idx?.includes('idx_imports_resolved'), `indexes: ${idx}`);
+  });
+});
+
+describe('Go: through the package (A2.7)', () => {
+  test("any file of a package has the package's importers, as a namespace import", () => {
+    const found = importers.importersOf('billing/ledger/post.go', ['Ledger']);
+    assert.deepEqual(found.map((i) => [i.relativePath, i.possibly, i.names]), [['billing/main.go', true, ['Ledger']]]);
+    assert.deepEqual(rels(importers.importersOf('billing/ledger/ledger.go')), ['billing/main.go']);
+  });
+
+  test('a test file, and a package nested inside it, are not that package', () => {
+    assert.deepEqual(rels(importers.importersOf('billing/ledger/post_test.go')), []);
+    assert.deepEqual(rels(importers.importersOf('billing/ledger/audit/audit.go')), []);
   });
 });
