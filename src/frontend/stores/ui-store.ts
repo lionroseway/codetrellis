@@ -42,7 +42,7 @@ export interface SelectedNodeMeta {
 export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code' | 'brief';
 
 /** The bottom panel's tabs (`PlanPanel`). */
-export type PlanPanelTab = 'plans' | 'timeline' | 'awareness' | 'changes' | 'proposed' | 'comments';
+export type PlanPanelTab = 'plans' | 'timeline' | 'awareness' | 'review' | 'changes' | 'proposed' | 'comments';
 
 interface UiState {
   sidebarVisible: boolean;

@@ -101,7 +101,7 @@
   - [x] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` (#223)
   - [ ] A5.3 The opt-in "no open high signals" check — in review
   - [ ] A5.4 The review queue and `get_review_queue` — built, PR after A5.3
-  - [ ] A5.5 The Review tab
+  - [ ] A5.5 The Review tab — built, PR after A5.4
   - [ ] A5.6 The queue on the phone
   - [ ] A5.7 M5 done-when, end to end, and docs
 - [ ] A6 The Brief
@@ -287,6 +287,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A5.5 — the Review tab
+Next to Awareness in `PlanPanel` (`ReviewTab.tsx`). The queue is shown in
+the suggested order, each line with:
+- its branch and plan;
+- a status chip: Ready, Held, Waiting for sign-off, In progress, Not
+  reviewed;
+- the reason for its place, in the queue's words;
+- its facts: criteria met, files changed, files affected, unplanned
+  dependencies, open overlaps.
+
+The heading says what each line is reviewed against, and that the order is
+a suggestion with nothing enforced.
+
+Opening a line reviews its branch against the main checkout's branch, the
+same review an agent gets. It shows "Other work in flight" (each overlap in
+the desktop's words, the merge line, what happened to it, the agents'
+notes), the dependencies nobody planned, and what changed. Nothing in
+review says how a line gets there: "A line of work shows here once a plan's
+items name its branch."
+
+- **Shared types.** `ReviewQueue` and `ReviewQueueLine` moved to
+  `src/shared/types/review.ts`, so the tab and the phone (A5.6) read the
+  same shape the backend builds.
+- **Screenshots changed two things.** A line with no criteria said so twice,
+  and "3 affected" did not say what; it reads "3 files affected" now.
+- **Tests.** Browser: `e2e/agent/review-tab.spec.ts` (3), with screenshots
+  (`review-tab`, `review-tab-line`, `review-tab-empty`): the queue in order
+  with reasons and facts, a line opened (the branch reviewed against main,
+  the other work in flight, the unplanned dependency, the files), and the
+  empty state.
 
 ### 2026-09-29: A5.4 — the review queue, with a suggested merge order
 "What should merge next, and why", answered in one place:
